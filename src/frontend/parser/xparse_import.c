@@ -63,31 +63,10 @@ static char *extract_quoted_path(Parser *parser) {
 }
 
 /*
- * Classify quoted import type based on path
- *
- * Classification rules:
- * - Starts with "./" or "../" -> IMPORT_FILE (single file import, script mode only)
- * - Otherwise                  -> IMPORT_DIR (directory import, project mode only)
+ * Parse unquoted module name (bare stdlib identifier).
+ * Rejects bare owner/name form; packages must use quoted paths.
  */
-static ImportType classify_quoted_import(const char *path) {
-    if (strncmp(path, "./", 2) == 0 || strncmp(path, "../", 3) == 0) {
-        return IMPORT_FILE;
-    }
-    return IMPORT_DIR;
-}
-
-/*
- * Parse unquoted module name (stdlib or third-party package)
- *
- * Classification rules:
- * - Word form (no /)       -> IMPORT_STDLIB (standard library)
- * - owner/name format      -> IMPORT_PACKAGE (third-party package)
- *
- * @param parser       Parser
- * @param out_name     Output: module name (caller must free)
- * @param out_type     Output: import type
- */
-static void parse_unquoted_module(Parser *parser, char **out_name, ImportType *out_type) {
+static void parse_bare_module_name(Parser *parser, char **out_name) {
     xr_parser_consume(parser, TK_NAME, "expected module name");
 
     char first_part[256];
@@ -99,11 +78,9 @@ static void parse_unquoted_module(Parser *parser, char **out_name, ImportType *o
         xr_parser_error(parser, "bare 'import owner/name' is not supported; "
                                 "use 'import \"owner/name\"' with quotes");
         *out_name = ast_strdup(parser->X, first_part);
-        *out_type = IMPORT_STDLIB;
         return;
     }
     *out_name = ast_strdup(parser->X, first_part);
-    *out_type = IMPORT_STDLIB;
 }
 
 /*
@@ -111,13 +88,12 @@ static void parse_unquoted_module(Parser *parser, char **out_name, ImportType *o
  *
  * Extraction rules:
  * 1. Take last segment of path (/ separated)
- * 2. Remove .xr extension
- * 3. Convert - and . to _
+ * 2. Convert - and . to _
  *
  * Examples:
  * - "time"           -> time
  * - "alice/utils"    -> utils
- * - "./helper.xr"    -> helper
+ * - "./helper"       -> helper
  * - "models/user"    -> user
  */
 static char *extract_default_alias(Parser *parser, const char *module_name) {
@@ -230,27 +206,20 @@ static bool parse_import_members(Parser *parser, ImportMember **out_members, int
 /*
  * Parse import declaration
  *
- * Supports five import syntaxes:
+ * Three orthogonal import forms:
  *
- * 1. Named import (for tree-shaking)
- *    import { add, multiply } from "utils"
- *    import { greet as sayHello } from time
- *
- * 2. Single file import (script mode only, needs quotes, starts with ./ or ../)
- *    import "./helper.xr"
- *    import "../utils/math.xr" as math
- *
- * 3. Directory import (project mode only, needs quotes, relative to project root)
- *    import "models/user"
- *    import "services/auth" as auth
- *
- * 4. Standard library (both modes, no quotes, word form)
+ * 1. Bare name (stdlib only):
  *    import time
  *    import json as j
  *
- * 5. Third-party package (both modes, no quotes, owner/name format)
- *    import alice/utils
- *    import bob/http-client as http
+ * 2. Quoted path (file, directory, or package):
+ *    import "./helper" as h
+ *    import "models/user"
+ *    import "alice/utils"
+ *
+ * 3. Named / selective import:
+ *    import { add, multiply } from "utils"
+ *    import { greet as sayHello } from time
  */
 AstNode *xr_parse_import_declaration(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_import_declaration: NULL parser");
@@ -258,7 +227,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
 
     char *module_name = NULL;
     char *alias = NULL;
-    ImportType import_type = IMPORT_STDLIB;
+    bool is_quoted = false;
     ImportMember *members = NULL;
     int member_count = 0;
 
@@ -276,31 +245,31 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
             return NULL;
         }
 
-        // Parse module path (can be quoted path or unquoted module name)
+        // Parse module path (can be quoted path or bare module name)
         if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             xr_parser_advance(parser);
             module_name = extract_quoted_path(parser);
             if (!validate_import_specifier(parser, module_name))
                 return NULL;
-            import_type = classify_quoted_import(module_name);
+            is_quoted = true;
         } else {
-            parse_unquoted_module(parser, &module_name, &import_type);
+            parse_bare_module_name(parser, &module_name);
         }
 
         // Named import doesn't need overall alias
         alias = NULL;
     }
-    // ========== 2/3. Quoted import (single file or directory) ==========
+    // ========== 2/3. Quoted import (file, directory, or package) ==========
     else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
         xr_parser_advance(parser);
         module_name = extract_quoted_path(parser);
         if (!validate_import_specifier(parser, module_name))
             return NULL;
-        import_type = classify_quoted_import(module_name);
+        is_quoted = true;
     }
-    // ========== 4/5. Unquoted import (stdlib or third-party package) ==========
+    // ========== 4. Bare import (stdlib only) ==========
     else {
-        parse_unquoted_module(parser, &module_name, &import_type);
+        parse_bare_module_name(parser, &module_name);
     }
 
     // Detect JS-style default import: import fs from "fs"
@@ -334,7 +303,7 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     }
 
     // ========== Create AST node ==========
-    AstNode *node = xr_ast_import_stmt_ex(parser->X, module_name, alias, import_type, members,
+    AstNode *node = xr_ast_import_stmt_ex(parser->X, module_name, alias, is_quoted, members,
                                           member_count, line);
 
     // Clean up temporary memory (members are taken over by AST node)

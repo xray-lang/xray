@@ -261,12 +261,12 @@ XR_FUNC void xr_program_destroy(AstNode *program);
 
 // Create import statement node
 XR_FUNC AstNode *xr_ast_import_stmt(XrayIsolate *X, const char *module_name, const char *alias,
-                                    ImportType import_type, int line);
+                                    bool is_quoted, int line);
 
 // Create import statement node (extended, supports named imports)
 XR_FUNC AstNode *xr_ast_import_stmt_ex(XrayIsolate *X, const char *module_name, const char *alias,
-                                       ImportType import_type, ImportMember *members,
-                                       int member_count, int line);
+                                       bool is_quoted, ImportMember *members, int member_count,
+                                       int line);
 
 // Create export statement node
 XR_FUNC AstNode *xr_ast_export_stmt(XrayIsolate *X, AstNode *declaration, const char *export_name,

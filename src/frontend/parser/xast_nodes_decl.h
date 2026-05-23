@@ -246,9 +246,9 @@ typedef struct ImportMember {
 //   1. import "module" as name      (whole module import)
 //   2. import { a, b as c } from "module"  (selective import)
 typedef struct ImportStmtNode {
-    char *module_name;  // Module path/name
-    char *alias;        // Alias for whole module import
-    ImportType import_type;
+    char *module_name;      // Module path/name (without quotes)
+    char *alias;            // Alias for whole module import
+    bool is_quoted;         // true if the specifier was a string literal (needs quotes in output)
     ImportMember *members;  // Selective import member list
     int member_count;       // 0 means whole module import
     uint32_t symbol_id;     // Analyzer-assigned unique ID (whole-module import)
