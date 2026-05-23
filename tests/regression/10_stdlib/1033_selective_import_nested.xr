@@ -1,0 +1,69 @@
+// 1033_selective_import_nested.xr
+// 作者：xingleixu@gmail.com
+// 测试：跨文件选择性 import 在嵌套作用域中可用（BUG-1 回归）
+//
+// BUG-1 现象：非 REPL 模式下 lower_import_stmt 选择性分支只发 XI_SET_GLOBAL，
+// 而 lower_variable 读取顶层 shared 变量时走 XI_GET_SHARED，
+// 导致嵌套函数里看到的导入名永远是 null（typeof 为 null，new 报 405）。
+// 修复后嵌套作用域应能正常使用 selective import 的 class / fn / const。
+
+import { Box, makeBox, BOX_VERSION } from "./modules/sel_lib.xr"
+
+@test
+fn test_selective_class_top_level() {
+    // baseline：顶层使用，旧实现也工作
+    let b = Box(4, 5)
+    assert_eq(b.area(), 20)
+}
+
+@test
+fn test_selective_fn_top_level() {
+    let b = makeBox(2, 3)
+    assert_eq(b.area(), 6)
+}
+
+@test
+fn test_selective_const_top_level() {
+    assert_eq(BOX_VERSION, "1.0")
+}
+
+@test
+fn test_selective_class_nested() {
+    // BUG-1 触发点：嵌套函数体内引用 selective import 的 class。
+    // 嵌套函数返回基础类型 int 以绕过 analyzer 跨模块类型 unknown 问题，
+    // 让运行时实际命中 lower_import_stmt 的写读不对称路径。
+    fn make() -> int {
+        let b = Box(7, 6)
+        return b.area()
+    }
+    assert_eq(make(), 42)
+}
+
+@test
+fn test_selective_fn_nested() {
+    fn build() -> int {
+        let b = makeBox(8, 9)
+        return b.area()
+    }
+    assert_eq(build(), 72)
+}
+
+@test
+fn test_selective_const_nested() {
+    fn version() -> string {
+        return BOX_VERSION
+    }
+    assert_eq(version(), "1.0")
+}
+
+@test
+fn test_selective_typeof_nested() {
+    // typeof 在嵌套作用域里看到的应是真实 class，不是 null
+    fn check() -> string {
+        return typeof(Box)
+    }
+    let t = check()
+    // 修复前：t == "null" — slot 永远为 null
+    // 修复后：t 是 class 的 typeof（"function" / "class" 等），不是 "null"
+    assert_eq(t != "null", true)
+}
