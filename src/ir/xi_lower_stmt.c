@@ -1621,14 +1621,22 @@ static void lower_return(XiLower *l, AstNode *node) {
         /* Tail-call detection: mark calls in return position so the emitter
          * uses OP_TAILCALL / OP_INVOKE_TAIL (constant-space recursion).
          *
+         * IMPORTANT: only apply when the AST return expression is directly
+         * a call (AST_CALL_EXPR). If the return expression is a variable
+         * that was assigned from a call, SSA propagation makes val->op
+         * appear as XI_CALL_METHOD/XI_CALL, but intervening statements
+         * (print, assignments) between the call and return make tail-call
+         * optimization incorrect — it would discard those side effects.
+         *
          * XI_CALL_METHOD → always safe (OP_INVOKE_TAIL handles all types).
          * XI_CALL with self_call flag → always safe (same closure).
          * XI_CALL with callee typed as function → safe.
          * Other XI_CALL (class constructors, etc.) → NOT safe; OP_TAILCALL
          * only handles closures and would fail on class objects. */
-        if (val && val->op == XI_CALL_METHOD) {
+        bool is_direct_call = (ret->values[0]->type == AST_CALL_EXPR);
+        if (is_direct_call && val && val->op == XI_CALL_METHOD) {
             val->flags |= XI_FLAG_TAIL;
-        } else if (val && val->op == XI_CALL) {
+        } else if (is_direct_call && val && val->op == XI_CALL) {
             bool is_self = (val->aux_int & 0xFF) == 1;
             bool callee_is_func = val->nargs >= 1 && val->args[0] && val->args[0]->type &&
                                   val->args[0]->type->kind == XR_KIND_FUNCTION;
