@@ -5,8 +5,8 @@
 // 2. 同名的私有函数/变量不会冲突
 // 3. export 的函数能正确访问模块内部状态
 
-import "./modules/mod_a.xr" as a
-import "./modules/mod_b.xr" as b
+import "./modules/mod_a" as a
+import "./modules/mod_b" as b
 
 @test
 fn test_mod_a_works() {

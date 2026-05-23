@@ -26,6 +26,4 @@ fn makeBox(w: int, h: int) -> Box {
     return Box(w, h)
 }
 
-export Box
-export makeBox
-export BOX_VERSION
+export { Box, makeBox, BOX_VERSION }
