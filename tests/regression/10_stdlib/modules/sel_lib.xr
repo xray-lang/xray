@@ -1,0 +1,31 @@
+/*
+** sel_lib.xr
+** Library used by 1033_selective_import_nested.xr
+**
+** Exports: Box class, makeBox factory, BOX_VERSION constant.
+** Used to verify cross-file selective import works inside nested function bodies.
+*/
+
+const BOX_VERSION = "1.0"
+
+class Box {
+    width: int
+    height: int
+
+    constructor(w: int, h: int) {
+        this.width = w
+        this.height = h
+    }
+
+    area() -> int {
+        return this.width * this.height
+    }
+}
+
+fn makeBox(w: int, h: int) -> Box {
+    return Box(w, h)
+}
+
+export Box
+export makeBox
+export BOX_VERSION

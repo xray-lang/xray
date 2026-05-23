@@ -2053,13 +2053,29 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
         int var_id = xi_lower_var_create(l, m->symbol_id, local_name, type);
         xi_lower_braun_write(l, var_id, l->cur_block, v);
 
-        /* Store into globals dict so nested functions can access */
+        /* Store into backing store so nested functions can access.
+         * The read path (lower_variable) branches on repl_mode: REPL
+         * goes through the globals dict (XI_GET_GLOBAL), compiled
+         * modules go through the shared array (XI_GET_SHARED). The
+         * write path here must mirror the same split, otherwise
+         * selective-import names appear as null in any nested scope. */
         if (l->is_program && l->shared_map[var_id] >= 0) {
-            XiValue *store = xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
-            if (store) {
-                store->args[0] = v;
-                store->aux = (void *) l->vars[var_id].name;
-                store->flags |= XI_FLAG_SIDE_EFFECT;
+            if (l->repl_mode) {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_GLOBAL, l->type_unit, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux = (void *) l->vars[var_id].name;
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
+            } else {
+                XiValue *store =
+                    xi_value_new(l->func, l->cur_block, XI_SET_SHARED, l->type_unit, 1);
+                if (store) {
+                    store->args[0] = v;
+                    store->aux_int = l->shared_map[var_id];
+                    store->flags |= XI_FLAG_SIDE_EFFECT;
+                }
             }
         }
     }
