@@ -733,105 +733,27 @@ static bool prescan_is_user_owned_decl(AstNode *s) {
 }
 
 /*
- * REPL top-level prescan: create SSA variable entries and sentinel
- * shared_map entries (>= 0) for all top-level declarations so the
- * lowerer recognizes them and emits OP_GETGLOBAL/OP_SETGLOBAL.
- * Also populates slot_owned_names/consts for REPL symbol collection.
- * No real shared slot allocation — values live in the globals dict.
+ * Top-level binding prescan: allocate a shared slot for every top-level
+ * declaration (var / const / fn / class / enum / struct / import member)
+ * and record per-slot metadata used by REPL symbol collection and module
+ * export emission.
+ *
+ * The same pass serves both REPL incremental compilation and script /
+ * module compilation: the only mode-dependent piece is how the lowerer
+ * eventually emits loads / stores against these slots (XI_GET/SET_GLOBAL
+ * in REPL, XI_GET/SET_SHARED otherwise), and that decision belongs to
+ * xi_lower_emit_top_load / _store — not here.  Allocating slots in REPL
+ * mode is harmless (the emit helper ignores them when it picks
+ * XI_GET_GLOBAL) and lets all downstream code treat top bindings
+ * uniformly.
+ *
+ * Populates: l->shared_map[var_id], l->func->nshared,
+ *            l->func->slot_owned_names, l->func->slot_owned_consts,
+ *            l->func->export_names (for AST_EXPORT_STMT list form).
  */
-static void prescan_top_level_names(XiLower *l, AstNode **stmts, int count, uint16_t start_slot) {
-    XR_DCHECK(l->is_program, "prescan_top_level_names: not a program context");
-    uint16_t next_slot = start_slot;
-
-    /* Per-slot owned name for REPL symbol collection */
-    const char *owned_name_flags[512];
-    memset(owned_name_flags, 0, sizeof(owned_name_flags));
-    uint8_t owned_const_flags[512];
-    memset(owned_const_flags, 0, sizeof(owned_const_flags));
-
-    for (int i = 0; i < count; i++) {
-        const char *name = NULL;
-        uint32_t sid = 0;
-        struct XrType *type = NULL;
-        bool is_const = false;
-        bool is_exported = false;
-        AstNode *s = prescan_extract_decl(l, stmts[i], &name, &sid, &type, &is_const, &is_exported);
-
-        /* Handle selective imports: each member gets its own entry */
-        if (s && s->type == AST_IMPORT_STMT) {
-            if (s->as.import_stmt.member_count == 0) {
-                name = s->as.import_stmt.alias ? s->as.import_stmt.alias
-                                               : s->as.import_stmt.module_name;
-                sid = s->as.import_stmt.symbol_id;
-            } else {
-                for (int mi = 0; mi < s->as.import_stmt.member_count; mi++) {
-                    ImportMember *m = &s->as.import_stmt.members[mi];
-                    const char *mname = m->alias ? m->alias : m->name;
-                    if (!mname)
-                        continue;
-                    int vid = xi_lower_var_create(l, m->symbol_id, mname, l->type_any);
-                    XR_DCHECK(vid >= 0 && vid < XI_LOWER_MAX_VARS,
-                              "prescan_top_level_names: var_id overflow");
-                    l->shared_map[vid] = (int16_t) next_slot;
-                    next_slot++;
-                }
-                continue;
-            }
-        }
-        if (!name)
-            continue;
-
-        int var_id = xi_lower_var_create(l, sid, name, type);
-        XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
-                  "prescan_top_level_names: var_id overflow");
-        l->shared_map[var_id] = (int16_t) next_slot;
-        if (prescan_is_user_owned_decl(s) && next_slot < 512) {
-            owned_name_flags[next_slot] = name;
-            owned_const_flags[next_slot] = is_const ? 1u : 0u;
-        }
-        next_slot++;
-    }
-    l->func->nshared = next_slot;
-
-    /* Populate slot_owned_names/consts for REPL symbol collection.
-     * No export_names needed — REPL has no module exports. */
-    if (next_slot > 0) {
-        const char **owned = (const char **) xi_func_arena_alloc(
-            l->func, (uint32_t) (next_slot * sizeof(const char *)));
-        uint8_t *consts =
-            (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_slot * sizeof(uint8_t)));
-        for (uint16_t si = 0; si < next_slot; si++) {
-            if (owned) {
-                const char *src = (si < 512) ? owned_name_flags[si] : NULL;
-                if (src) {
-                    uint32_t slen = (uint32_t) strlen(src);
-                    char *copy = (char *) xi_func_arena_alloc(l->func, slen + 1);
-                    if (copy)
-                        memcpy(copy, src, slen + 1);
-                    owned[si] = copy;
-                } else {
-                    owned[si] = NULL;
-                }
-            }
-        }
-        if (consts) {
-            for (uint16_t si = 0; si < next_slot; si++)
-                consts[si] = (si < 512) ? owned_const_flags[si] : 0u;
-        }
-        if (owned)
-            l->func->slot_owned_names = owned;
-        if (consts)
-            l->func->slot_owned_consts = consts;
-    }
-}
-
-/*
- * Module/script top-level prescan: assign real shared variable indices
- * for OP_GETSHARED/OP_SETSHARED access.  Also builds export metadata
- * and slot_owned_names for module export and REPL collection.
- */
-static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t start_shared) {
-    XR_DCHECK(l->is_program, "prescan_shared_vars: not a program context");
+static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
+                                       uint16_t start_shared) {
+    XR_DCHECK(l->is_program, "prescan_top_level_bindings: not a program context");
     uint16_t next_shared = start_shared;
 
     const char *export_flags[512];
@@ -884,7 +806,7 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
                         continue;
                     int vid = xi_lower_var_create(l, m->symbol_id, mname, l->type_any);
                     XR_DCHECK(vid >= 0 && vid < XI_LOWER_MAX_VARS,
-                              "prescan_shared_vars: var_id overflow (import member)");
+                              "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
                     next_shared++;
                 }
@@ -896,7 +818,7 @@ static void prescan_shared_vars(XiLower *l, AstNode **stmts, int count, uint16_t
 
         int var_id = xi_lower_var_create(l, sid, name, type);
         XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
-                  "prescan_shared_vars: var_id overflow");
+                  "prescan_top_level_bindings: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
         if (prescan_is_user_owned_decl(s) && next_shared < 512) {
             owned_name_flags[next_shared] = name;
@@ -1125,9 +1047,10 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         }
     }
 
-    /* Pre-scan: register top-level declarations.
-     * REPL mode: name-only prescan (values live in globals dict).
-     * Module/script mode: assign real shared slot indices. */
+    /* Pre-scan: register every top-level declaration and assign it a
+     * shared slot.  REPL and module/script modes share this pass; the
+     * mode only affects how loads / stores are emitted later, never
+     * how slots are allocated. */
     AstNode **stmts;
     int count;
     if (program_node->type == AST_BLOCK) {
@@ -1137,10 +1060,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
         stmts = program_node->as.program.statements;
         count = program_node->as.program.count;
     }
-    if (repl_mode)
-        prescan_top_level_names(&l, stmts, count, next_shared_start);
-    else
-        prescan_shared_vars(&l, stmts, count, next_shared_start);
+    prescan_top_level_bindings(&l, stmts, count, next_shared_start);
 
     /* Lower top-level declaration values before executable code so forward
      * references see initialized bindings, not shared-slot null values. */
