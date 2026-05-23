@@ -1,0 +1,23 @@
+// Regression: module-level regex.compile() in an imported (non-entry)
+// module must succeed.
+//
+// Before fix: stdlib/regex/xregex_binding.c wrap_regex passed an
+// XrCoroutine* where xr_instance_new expects XrayIsolate*. During
+// multi-module preload (no worker thread running yet), this caused
+// xr_current_coro to dereference garbage and xr_alloc to FATAL on
+// the coroutine type check.
+
+import "./modules/regex_compile_mod" as rx
+
+@test
+fn test_module_regex_compiled_at_load() {
+    assert_true(rx.isDigit("12345"))
+    assert_false(rx.isDigit("abc"))
+}
+
+@test
+fn test_module_regex_word() {
+    assert_true(rx.isWord("hello"))
+    assert_true(rx.isWord("_x123"))
+    assert_false(rx.isWord("1abc"))
+}
