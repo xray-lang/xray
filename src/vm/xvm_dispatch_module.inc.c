@@ -14,7 +14,7 @@
  * the surrounding scope. CMake excludes *.inc.c from the
  * VM_SRC glob.
  *
- * Owns: OP_IMPORT, OP_EXPORT, OP_EXPORT_ALL.
+ * Owns: OP_IMPORT, OP_EXPORT, OP_EXPORT_ALL, OP_LOAD_MODULE_SLOT.
  */
 
 vmcase(OP_IMPORT) {
@@ -78,6 +78,30 @@ vmcase(OP_EXPORT) {
 
     // Add to current module export table (pass const flag)
     xr_module_add_current_export(isolate, name->data, value, is_const != 0);
+    vmbreak;
+}
+
+vmcase(OP_LOAD_MODULE_SLOT) {
+    /* R[A] = modules[B].shared[C] — graph-resolved cross-module import.
+     * module_table is populated during topo-order initialization; B is the
+     * module's topo index, C is the export slot within that module. */
+    int dest = GETARG_A(i);
+    int mod_idx = GETARG_B(i);
+    int slot = GETARG_C(i);
+
+    XrModuleRegistry *mreg = isolate->module_registry;
+    if (!mreg || !mreg->module_table || mod_idx >= mreg->module_table_count) {
+        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED,
+                         "LOAD_MODULE_SLOT: module_table not initialized (mod=%d, slot=%d)",
+                         mod_idx, slot);
+    }
+    XrModule *target = mreg->module_table[mod_idx];
+    if (!target || slot >= target->export_count) {
+        VM_RUNTIME_ERROR(XR_ERR_MOD_LOAD_FAILED,
+                         "LOAD_MODULE_SLOT: invalid module or slot (mod=%d, slot=%d)", mod_idx,
+                         slot);
+    }
+    R(dest) = target->export_values[slot];
     vmbreak;
 }
 

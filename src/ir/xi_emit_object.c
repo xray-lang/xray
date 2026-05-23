@@ -719,13 +719,27 @@ XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_class_create_impl(ctx, v, cdata, dst);
 }
 
-/* Module import */
+/* Module import.
+ * When the graph-based resolution pass has filled resolved_mod_index and
+ * resolved_shared_slot, emit a single OP_LOAD_MODULE_SLOT (direct indexed
+ * access) instead of the runtime OP_IMPORT + OP_GETPROP pair. */
 XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiImportRef *ref = (XiImportRef *) v->aux;
     if (!ref || !ref->module_path || !ctx->isolate) {
         emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
         return;
     }
+
+    /* Fast path: graph-resolved import → single OP_LOAD_MODULE_SLOT */
+    if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
+        XR_DCHECK(ref->resolved_mod_index <= 255, "module index exceeds ABC B field");
+        XR_DCHECK(ref->resolved_shared_slot <= 255, "shared slot exceeds ABC C field");
+        emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, (uint8_t) ref->resolved_mod_index,
+                                  (uint8_t) ref->resolved_shared_slot));
+        return;
+    }
+
+    /* Slow path: runtime OP_IMPORT + OP_GETPROP */
     int mod_idx = add_const_string(ctx, ref->module_path);
     if (ctx->status != XI_EMIT_OK)
         return;

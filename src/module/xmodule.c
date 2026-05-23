@@ -398,6 +398,11 @@ static void destroy_registry(XrModuleRegistry *registry) {
         xr_free(registry->stdlib_path);
     }
 
+    // Free topo-ordered module table (pointers only; modules freed via loaded_modules)
+    if (registry->module_table) {
+        xr_free(registry->module_table);
+    }
+
     // Free resolver
     if (registry->resolver) {
         xr_module_resolver_free(registry->resolver);
