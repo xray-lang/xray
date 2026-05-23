@@ -4014,7 +4014,7 @@ ImportStmt ::= 'import' ImportMembers 'from' ImportModule
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | ModuleName
-ModuleName    ::= Identifier ('/' Identifier)?
+ModuleName    ::= Identifier
 ```
 
 ```xray
@@ -4023,27 +4023,27 @@ import time
 import datetime
 import http as httpClient
 
-// 2. third-party packages: owner/name form
-import alice/utils
-import bob/http_client as httpClient
+// 2. third-party packages: quoted owner/name form
+import "alice/utils"
+import "bob/http_client" as httpClient
 
-// 3. file-path or directory-path: string literal, optional explicit alias, otherwise inferred from the trailing path segment
-import "./modules/mod_a.xr" as a
-import "../utils/string_utils.xr" as utils
+// 3. file-path or directory-path: string literal, optional explicit alias, otherwise inferred from the trailing path segment (no .xr extension)
+import "./modules/mod_a" as a
+import "../utils/string_utils" as utils
 import "models/user" as user
 
 // 4. named imports: members may be renamed; the `from` operand may be a quoted path or a bare module name
 import { readFile, writeFile as write } from io
-import { publicFn } from "./modules/mod_a.xr"
+import { publicFn } from "./modules/mod_a"
 ```
 
 JavaScript-style default import (`import name from "module"`) is **not supported**. In Xray, use `import "module" as name`, `import module`, or `import { name } from module`.
 
 **Resolution algorithm** (in priority order):
 1. **stdlib name resolution**: a bare identifier `import time` → the built-in stdlib module table.
-2. **Relative path**: `"./xxx.xr"` and `"../xxx.xr"` are resolved relative to the current file.
+2. **Relative path**: `"./xxx"` and `"../xxx"` are resolved relative to the current file (auto-appends `.xr` extension or `index.xr` directory entry).
 3. **Project-root path**: a quoted path that does not start with `./` or `../` is resolved as a project-relative directory import.
-4. **Third-party packages**: `owner/name` is resolved through the `[dependencies]` section in `xray.toml`.
+4. **Third-party packages**: `"owner/name"` is resolved through the `[dependencies]` section in `xray.toml`.
 
 **Source of truth**: `xparse_import.c` and `xmodule_resolve_path()`.
 
@@ -4053,7 +4053,7 @@ Xray supports three export forms:
 
 ```ebnf
 ExportStmt ::= 'export' Declaration                              // export the declaration directly
-            |  'export' Identifier                               // export an already-declared identifier
+            |  'export' '{' Identifier (',' Identifier)* '}'     // export already-declared identifiers
             |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
             |  'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
@@ -4068,10 +4068,10 @@ export class MyClass {
 }
 export const VERSION = "1.0"
 
-// 2. export an already-declared identifier (declare internally first, expose at the end)
+// 2. export already-declared identifiers (declare internally first, expose at the end)
 fn _helper() -> string { return "..." }
 fn publicFn() -> string { return _helper() }
-export publicFn
+export { publicFn }
 
 // 3. re-export (with optional renaming)
 export { getUser, getUserAge as getAge } from "./user"

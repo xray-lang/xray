@@ -3,7 +3,7 @@
 ** 模块冲突测试 - 模块 A
 **
 ** 作者：xingleixu@gmail.com
-** 
+**
 ** 测试：模块内部函数和变量不会与其他模块冲突
 */
 
@@ -21,4 +21,4 @@ fn publicFn() -> string {
     return _helper() + "-" + _VERSION
 }
 
-export publicFn
+export { publicFn }

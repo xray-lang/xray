@@ -4015,7 +4015,7 @@ ImportStmt ::= 'import' ImportMembers 'from' ImportModule
 ImportMembers ::= '{' ImportMember (',' ImportMember)* ','? '}'
 ImportMember  ::= Identifier ('as' Identifier)?
 ImportModule  ::= StringLiteral | ModuleName
-ModuleName    ::= Identifier ('/' Identifier)?
+ModuleName    ::= Identifier
 ```
 
 ```xray
@@ -4024,27 +4024,27 @@ import time
 import datetime
 import http as httpClient
 
-// 2. 第三方包：owner/name 形式
-import alice/utils
-import bob/http_client as httpClient
+// 2. 第三方包：引号 + owner/name 形式
+import "alice/utils"
+import "bob/http_client" as httpClient
 
-// 3. 文件路径或目录路径：字符串字面量，可显式 alias，也可从路径尾段推导
-import "./modules/mod_a.xr" as a
-import "../utils/string_utils.xr" as utils
+// 3. 文件路径或目录路径：字符串字面量，可显式 alias，也可从路径尾段推导（不含 .xr 扩展名）
+import "./modules/mod_a" as a
+import "../utils/string_utils" as utils
 import "models/user" as user
 
 // 4. 命名 import：成员可重命名；`from` 后可接字符串路径或裸模块名
 import { readFile, writeFile as write } from io
-import { publicFn } from "./modules/mod_a.xr"
+import { publicFn } from "./modules/mod_a"
 ```
 
 **不支持** JavaScript 默认导入 `import name from "module"`。在 Xray 中使用 `import "module" as name`、`import module` 或 `import { name } from module`。
 
 **解析算法**（按优先级）：
 1. **stdlib 命名解析**：裸标识符 `import time` → 内置 stdlib 模块表。
-2. **相对路径**：`"./xxx.xr"` 与 `"../xxx.xr"` 相对当前文件解析。
+2. **相对路径**：`"./xxx"` 与 `"../xxx"` 相对当前文件解析（自动补 `.xr` 扩展名或 `index.xr` 目录入口）。
 3. **项目根目录路径**：不以 `./` 或 `../` 开头的 quoted path 作为项目目录 import。
-4. **第三方包**：`owner/name` 由 `xray.toml` 的 `[dependencies]` 解析。
+4. **第三方包**：`"owner/name"` 由 `xray.toml` 的 `[dependencies]` 解析。
 
 **真值源**：`xparse_import.c` 与 `xmodule_resolve_path()`。
 
@@ -4054,7 +4054,7 @@ xray 支持三种 export 形式：
 
 ```ebnf
 ExportStmt ::= 'export' Declaration                              // 直接 export 声明
-            |  'export' Identifier                               // export 已声明的标识符
+            |  'export' '{' Identifier (',' Identifier)* '}'     // export 已声明的标识符
             |  'export' '{' ExportSpec (',' ExportSpec)* '}' 'from' StringLiteral
             |  'export' '*' 'from' StringLiteral
 ExportSpec ::= Identifier ('as' Identifier)?
@@ -4072,7 +4072,7 @@ export const VERSION = "1.0"
 // 2. export 已声明的标识符（用于内部先声明、最后统一暴露）
 fn _helper() -> string { return "..." }
 fn publicFn() -> string { return _helper() }
-export publicFn
+export { publicFn }
 
 // 3. 重导出（带可选重命名）
 export { getUser, getUserAge as getAge } from "./user"

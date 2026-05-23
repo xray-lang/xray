@@ -7,7 +7,7 @@
 // 导致嵌套函数里看到的导入名永远是 null（typeof 为 null，new 报 405）。
 // 修复后嵌套作用域应能正常使用 selective import 的 class / fn / const。
 
-import { Box, makeBox, BOX_VERSION } from "./modules/sel_lib.xr"
+import { Box, makeBox, BOX_VERSION } from "./modules/sel_lib"
 
 @test
 fn test_selective_class_top_level() {

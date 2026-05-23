@@ -377,11 +377,13 @@ void xfmt_emit_statement(XrFmtContext *ctx, AstNode *node) {
                 }
                 xfmt_write_newline(ctx);
             } else if (exp->export_count > 0) {
+                xfmt_write_str(ctx, "{ ");
                 for (int i = 0; i < exp->export_count; i++) {
                     if (i > 0)
                         xfmt_write_str(ctx, ", ");
                     xfmt_write_str(ctx, exp->export_names[i]);
                 }
+                xfmt_write_str(ctx, " }");
                 xfmt_write_newline(ctx);
             }
             break;

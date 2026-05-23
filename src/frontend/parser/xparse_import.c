@@ -16,6 +16,40 @@
 #include "../../base/xchecks.h"
 
 /*
+ * Validate an import specifier and report errors for disallowed patterns.
+ * Returns true if valid, false if an error was reported.
+ */
+static bool validate_import_specifier(Parser *parser, const char *path) {
+    size_t len = strlen(path);
+
+    /* Reject .xr extension */
+    if (len >= 3 && strcmp(path + len - 3, ".xr") == 0) {
+        xr_parser_error(parser, "do not include '.xr' extension in import path");
+        return false;
+    }
+
+    /* Reject trailing slash */
+    if (len > 0 && path[len - 1] == '/') {
+        xr_parser_error(parser, "do not include trailing '/' in import path");
+        return false;
+    }
+
+    /* Reject explicit /index suffix */
+    if (len >= 6 && strcmp(path + len - 6, "/index") == 0) {
+        xr_parser_error(parser, "do not specify 'index' explicitly in import path");
+        return false;
+    }
+
+    /* Reject absolute paths */
+    if (path[0] == '/' || (len >= 2 && path[1] == ':') || (len >= 3 && path[2] == ':')) {
+        xr_parser_error(parser, "absolute paths are not supported in imports");
+        return false;
+    }
+
+    return true;
+}
+
+/*
  * Extract path content from double-quoted string
  * Input: "path/to/module" (with quotes)
  * Output: path/to/module (without quotes)
@@ -60,18 +94,16 @@ static void parse_unquoted_module(Parser *parser, char **out_name, ImportType *o
     memcpy(first_part, parser->previous.start, parser->previous.length);
     first_part[parser->previous.length] = '\0';
 
-    // Check if has / indicating third-party package (owner/name)
-    if (xr_parser_match(parser, TK_SLASH)) {
-        xr_parser_consume(parser, TK_NAME, "expected package name");
-        int name_len = parser->previous.length;
-        int total_len = (int) strlen(first_part) + 1 + name_len;
-        *out_name = (char *) ast_alloc(parser->X, (size_t) total_len + 1);
-        snprintf(*out_name, total_len + 1, "%s/%.*s", first_part, name_len, parser->previous.start);
-        *out_type = IMPORT_PACKAGE;
-    } else {
+    /* Reject bare owner/name form — use import "owner/name" instead */
+    if (xr_parser_check(parser, TK_SLASH)) {
+        xr_parser_error(parser, "bare 'import owner/name' is not supported; "
+                                "use 'import \"owner/name\"' with quotes");
         *out_name = ast_strdup(parser->X, first_part);
         *out_type = IMPORT_STDLIB;
+        return;
     }
+    *out_name = ast_strdup(parser->X, first_part);
+    *out_type = IMPORT_STDLIB;
 }
 
 /*
@@ -248,6 +280,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
         if (xr_parser_check(parser, TK_LITERAL_STRING)) {
             xr_parser_advance(parser);
             module_name = extract_quoted_path(parser);
+            if (!validate_import_specifier(parser, module_name))
+                return NULL;
             import_type = classify_quoted_import(module_name);
         } else {
             parse_unquoted_module(parser, &module_name, &import_type);
@@ -260,6 +294,8 @@ AstNode *xr_parse_import_declaration(Parser *parser) {
     else if (xr_parser_check(parser, TK_LITERAL_STRING)) {
         xr_parser_advance(parser);
         module_name = extract_quoted_path(parser);
+        if (!validate_import_specifier(parser, module_name))
+            return NULL;
         import_type = classify_quoted_import(module_name);
     }
     // ========== 4/5. Unquoted import (stdlib or third-party package) ==========
@@ -397,29 +433,37 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             return NULL;
         }
 
-        // Must have from
-        if (!xr_parser_match_name(parser, "from")) {
-            xr_parser_error(parser, "expected 'from \"path\"' after export { }");
-            free_reexport_members(members, count);
-            return NULL;
+        /* Decide: re-export (has 'from') or post-hoc export list (no 'from') */
+        if (xr_parser_check_name(parser, "from")) {
+            /* Re-export: export { a, b as c } from "..." */
+            xr_parser_advance(parser);
+            if (!xr_parser_match(parser, TK_LITERAL_STRING)) {
+                xr_parser_error(parser, "expected string path after 'from'");
+                free_reexport_members(members, count);
+                return NULL;
+            }
+            size_t path_len = parser->previous.length - 2;
+            char *from_path = (char *) ast_alloc(parser->X, (size_t) path_len + 1);
+            memcpy(from_path, parser->previous.start + 1, path_len);
+            from_path[path_len] = '\0';
+            AstNode *node =
+                xr_ast_export_reexport(parser->X, from_path, members, count, false, line);
+            return node;
         }
 
-        if (!xr_parser_match(parser, TK_LITERAL_STRING)) {
-            xr_parser_error(parser, "expected string path after 'from'");
-            free_reexport_members(members, count);
-            return NULL;
+        /* Post-hoc export list: export { a, b, c } */
+        for (int i = 0; i < count; i++) {
+            if (members[i].alias) {
+                xr_parser_error(parser, "'as' alias in 'export { }' requires 'from' "
+                                        "(re-export); for post-hoc export, use the original name");
+                free_reexport_members(members, count);
+                return NULL;
+            }
         }
-
-        // Extract path
-        size_t path_len = parser->previous.length - 2;
-        char *from_path = (char *) ast_alloc(parser->X, (size_t) path_len + 1);
-        memcpy(from_path, parser->previous.start + 1, path_len);
-        from_path[path_len] = '\0';
-
-        // xr_ast_export_reexport strdups from_path; release our copy. The
-        // members array is transferred into the AST node.
-        AstNode *node = xr_ast_export_reexport(parser->X, from_path, members, count, false, line);
-        return node;
+        char **names = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) count);
+        for (int i = 0; i < count; i++)
+            names[i] = members[i].name;
+        return xr_ast_export_list(parser->X, names, count, line);
     }
 
     // Parse exported declaration
@@ -449,14 +493,9 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
         if (declaration && declaration->type == AST_STRUCT_DECL) {
             export_name = declaration->as.struct_decl.name;
         }
-    } else if (xr_parser_match(parser, TK_LET)) {
-        // export let PI = 3.14
-        declaration = xr_parse_single_var_declaration(parser, 0);
-
-        // Extract variable name from declaration
-        if (declaration && declaration->type == AST_VAR_DECL) {
-            export_name = declaration->as.var_decl.name;
-        }
+    } else if (xr_parser_check(parser, TK_LET)) {
+        xr_parser_error(parser, "mutable export is not supported; use 'export const' instead");
+        return NULL;
     } else if (xr_parser_match(parser, TK_CONST)) {
         // export const PI = 3.14
         declaration = xr_parse_single_var_declaration(parser, 1);
@@ -473,37 +512,9 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             export_name = declaration->as.type_alias.name;
         }
     } else if (xr_parser_check(parser, TK_NAME)) {
-        // export a, b, c - export already defined variable list
-        char **names = NULL;
-        int count = 0;
-        int capacity = 4;
-        names = (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) capacity);
-
-        do {
-            if (!xr_parser_match(parser, TK_NAME)) {
-                xr_parser_error_expected_name(parser, "expected variable name after 'export'");
-                return NULL;
-            }
-
-            // Expand capacity
-            if (count >= capacity) {
-                capacity *= 2;
-                char **new_names =
-                    (char **) ast_alloc_array(parser->X, sizeof(char *), (size_t) capacity);
-                memcpy(new_names, names, count * sizeof(char *));
-                names = new_names;
-            }
-
-            // Copy variable name
-            size_t len = parser->previous.length;
-            char *name = (char *) ast_alloc(parser->X, (size_t) len + 1);
-            memcpy(name, parser->previous.start, len);
-            name[len] = '\0';
-            names[count++] = name;
-        } while (xr_parser_match(parser, TK_COMMA));
-
-        // Create export list node
-        return xr_ast_export_list(parser->X, names, count, line);
+        xr_parser_error(parser, "bare 'export name' is not supported; "
+                                "use 'export { name1, name2 }' with braces");
+        return NULL;
     } else {
         xr_parser_error_expected_name(
             parser, "expected fn, class, let, const or variable name after 'export'");
