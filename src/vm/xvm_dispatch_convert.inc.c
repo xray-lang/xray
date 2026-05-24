@@ -76,6 +76,7 @@ vmcase(OP_PRINT) {
                 XrProto *proto = closure->proto;
 
                 // Setup call: R[a+1] = this (instance)
+                VM_STACK_CHECK(a + 1 + proto->maxstacksize);
                 R(a + 1) = val;
 
                 // Save current PC (continue after return)

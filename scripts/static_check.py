@@ -438,6 +438,69 @@ class StaticChecker:
         ))
 
     # ================================================================
+    # 4.2 P0: frame push must be preceded by stack capacity check
+    # ================================================================
+    def check_frame_push_has_stack_check(self):
+        """Raw frame_count++ must be preceded by vm_ensure_call_stack / VM_STACK_CHECK / vm_push_bc_frame."""
+        scan_dirs = [
+            os.path.join(PROJECT_ROOT, "src/vm"),
+            os.path.join(PROJECT_ROOT, "src/jit"),
+            os.path.join(PROJECT_ROOT, "src/coro"),
+            os.path.join(PROJECT_ROOT, "src/runtime"),
+        ]
+        safe_patterns = [
+            'vm_ensure_call_stack', 'VM_STACK_CHECK', 'vm_push_bc_frame',
+            'xr_coro_grow_stack', 'frame_capacity', 'stack_capacity',
+        ]
+        issues = []
+
+        for scan_dir in scan_dirs:
+            for root, dirs, files in os.walk(scan_dir):
+                for fname in files:
+                    if not (fname.endswith('.c') or fname.endswith('.inc.c') or fname.endswith('.h')):
+                        continue
+                    fpath = os.path.join(root, fname)
+                    lines = self.read_lines(fpath)
+                    rel_path = os.path.relpath(fpath, PROJECT_ROOT)
+
+                    for i, line in enumerate(lines, 1):
+                        stripped = line.strip()
+                        # Detect raw frame_count++ or VM_INC_FRAME_COUNT
+                        if not (re.search(r'frame_count\s*\+\+', stripped) or
+                                re.search(r'VM_INC_FRAME_COUNT', stripped)):
+                            continue
+                        # Skip if inside a #define macro definition
+                        if stripped.startswith('#define'):
+                            continue
+                        # Skip comments
+                        if stripped.startswith('*') or stripped.startswith('//') or stripped.startswith('/*'):
+                            continue
+                        # Skip lines inside multi-line #define (backslash continuation)
+                        in_macro = False
+                        for j in range(i - 2, max(0, i - 60) - 1, -1):
+                            prev = lines[j].rstrip()
+                            if not prev.endswith('\\'):
+                                break
+                            if lines[j].lstrip().startswith('#define'):
+                                in_macro = True
+                                break
+                        if in_macro:
+                            continue
+                        # Look back up to 80 lines for a safe pattern
+                        lookback = '\n'.join(lines[max(0, i - 81):i - 1])
+                        has_check = any(pat in lookback for pat in safe_patterns)
+                        if not has_check:
+                            issues.append(f"{rel_path}:{i}: {stripped}")
+
+        passed = len(issues) == 0
+        self.add_result(CheckResult(
+            "4.2", "frame push preceded by stack check", "P0", passed,
+            "All frame pushes have capacity checks" if passed else
+            f"Found {len(issues)} frame push(es) without stack capacity check",
+            issues
+        ))
+
+    # ================================================================
     # 7.1 P1: Type singleton immutability
     # ================================================================
     def check_type_singleton_immutability(self):
@@ -1245,6 +1308,7 @@ class StaticChecker:
             ],
             'frame': [
                 self.check_call_closure_frame_zeroed,
+                self.check_frame_push_has_stack_check,
             ],
             'compiler': [
                 self.check_inheritance_field_count,

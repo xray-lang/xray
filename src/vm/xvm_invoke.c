@@ -646,30 +646,13 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
                 VM_THROW(frame, pc, XR_ERR_WRONG_ARG_COUNT,
                          "constructor expects %d arguments, got %d", proto->numparams - 1, nargs);
             }
-            if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
 
             base[a + 1] = inst_val;  // this
 
-            frame->pc = pc;  // savepc
-
-            /* Stack/frames capacity check before frame push: prevents
-             * the constructor's register file from overflowing into
-             * frames[] in the combined slab layout. */
-            int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
-            if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+            if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {
                 VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
-                         "stack overflow: grow failed before constructor call");
+                         "stack overflow before constructor call");
             }
-
-            int fidx = vm_ctx->frame_count;
-            memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
-            vm_ctx->frame_count++;
-            XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
             return XR_DISP_RESTART;
         }
@@ -699,10 +682,6 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
             XrClosure *closure = method->as.closure;
             XrProto *proto = closure->proto;
 
-            if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
-
             // Move args: from base[a+2] to base[a+1] (static methods have no 'this')
             for (int pi = 0; pi < nargs; pi++) {
                 base[a + 1 + pi] = base[a + 2 + pi];
@@ -723,22 +702,10 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
                 return XR_DISP_RESTART;
             }
 
-            frame->pc = pc;  // savepc
-
-            /* Stack/frames capacity check before frame push. */
-            int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
-            if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+            if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {
                 VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
-                         "stack overflow: grow failed before static method call");
+                         "stack overflow before static method call");
             }
-
-            int fidx = vm_ctx->frame_count;
-            memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
-            vm_ctx->frame_count++;
-            XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
 
             return XR_DISP_RESTART;
         } else {
@@ -833,10 +800,6 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
                  proto->numparams - 1, nargs);
     }
 
-    if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
-        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
-    }
-
     if (is_ctor_call) {
         int current_param_count = frame->closure->proto->numparams;
         int call_base_offset = current_param_count + 1;
@@ -853,22 +816,10 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
         isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
         isolate->vm.ctor_call_depth++;
 
-        frame->pc = pc;  // savepc
-
-        /* Stack/frames capacity check before frame push. */
-        int needed = (int) (base - vm_ctx->stack) + call_base_offset + proto->maxstacksize;
-        if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+        if (vm_push_bc_frame(vm_ctx, closure, call_base_offset, &base, &frame, pc) == NULL) {
             VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
-                     "stack overflow: grow failed before super constructor call");
+                     "stack overflow before super constructor call");
         }
-
-        int fidx = vm_ctx->frame_count;
-        memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
-        vm_ctx->frame_count++;
-        XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
-        new_frame->closure = closure;
-        new_frame->pc = PROTO_CODE_BASE(proto);
-        new_frame->base_offset = (int) ((base + call_base_offset) - vm_ctx->stack);
     } else {
         if (isolate->vm.ctor_call_depth >= XR_CTOR_CALL_STACK_MAX) {
             VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "super call depth exceeded");
@@ -877,22 +828,9 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
         isolate->vm.ctor_call_stack[isolate->vm.ctor_call_depth].frame_count = vm_ctx->frame_count;
         isolate->vm.ctor_call_depth++;
 
-        frame->pc = pc;  // savepc
-
-        /* Stack/frames capacity check before frame push. */
-        int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
-        if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
-            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
-                     "stack overflow: grow failed before super method call");
+        if (vm_push_bc_frame(vm_ctx, closure, a + 1, &base, &frame, pc) == NULL) {
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow before super method call");
         }
-
-        int fidx = vm_ctx->frame_count;
-        memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
-        vm_ctx->frame_count++;
-        XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
-        new_frame->closure = closure;
-        new_frame->pc = PROTO_CODE_BASE(proto);
-        new_frame->base_offset = (int) ((base + a + 1) - vm_ctx->stack);
     }
 
     return XR_DISP_RESTART;

@@ -215,6 +215,14 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
 #define VM_RUNTIME_WARN(fmt, ...) fprintf(stderr, "[xray] warn: " fmt "\n", ##__VA_ARGS__)
 #define VM_INC_FRAME_COUNT                                                                         \
     do {                                                                                           \
+        /* Sentinel guard: if we are about to write past frame_capacity,                           \
+         * a prior callsite forgot VM_STACK_CHECK / vm_ensure_call_stack.                          \
+         * In Debug build this aborts immediately so the offending site                            \
+         * is named in the trace rather than crashing later in OP_RETURN                           \
+         * with a corrupted frame.closure pointer. */                                              \
+        XR_DCHECK(                                                                                 \
+            vm_ctx->frame_count < vm_ctx->frame_capacity,                                          \
+            "VM_INC_FRAME_COUNT: frame_count >= frame_capacity — caller missed stack check");      \
         memset(&vm_ctx->frames[vm_ctx->frame_count], 0, sizeof(XrBcCallFrame));                    \
         vm_ctx->frame_count++;                                                                     \
     } while (0)

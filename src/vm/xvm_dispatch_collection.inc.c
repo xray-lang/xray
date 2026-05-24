@@ -388,6 +388,7 @@ vmcase(OP_ARRAY_GET) {
                 if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                     XrClosure *_cl = _m->as.closure;
                     XrProto *_p = _cl->proto;
+                    VM_STACK_CHECK(a + 1 + _p->maxstacksize);
                     R(a + 1) = obj_val;
                     R(a + 2) = R(c);
                     savepc();
@@ -510,6 +511,7 @@ vmcase(OP_ARRAY_GETC) {
             if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                 XrClosure *_cl = _m->as.closure;
                 XrProto *_p = _cl->proto;
+                VM_STACK_CHECK(a + 1 + _p->maxstacksize);
                 R(a + 1) = obj_val;
                 R(a + 2) = xr_int(c);
                 savepc();
@@ -606,6 +608,7 @@ vmcase(OP_ARRAY_SET) {
             if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                 XrClosure *_cl = _m->as.closure;
                 XrProto *_p = _cl->proto;
+                VM_STACK_CHECK(a + 2 + _p->maxstacksize);
                 XrValue _key = R(b), _val = R(c);
                 R(a + 2) = obj_val;
                 R(a + 3) = _key;
@@ -702,6 +705,7 @@ vmcase(OP_ARRAY_SETC) {
             if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                 XrClosure *_cl = _m->as.closure;
                 XrProto *_p = _cl->proto;
+                VM_STACK_CHECK(a + 2 + _p->maxstacksize);
                 XrValue _val = R(c);
                 R(a + 2) = obj_val;
                 R(a + 3) = xr_int(b);
@@ -1091,6 +1095,7 @@ vmcase(OP_INDEX_GET) {
             if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                 XrClosure *_cl = _m->as.closure;
                 XrProto *_p = _cl->proto;
+                VM_STACK_CHECK(a + 1 + _p->maxstacksize);
                 R(a + 1) = obj_val;
                 R(a + 2) = key_val;
                 savepc();
@@ -1218,6 +1223,7 @@ vmcase(OP_INDEX_SET) {
             if (_m && _m->type == XMETHOD_OPERATOR && _m->as.closure) {
                 XrClosure *_cl = _m->as.closure;
                 XrProto *_p = _cl->proto;
+                VM_STACK_CHECK(a + 2 + _p->maxstacksize);
                 R(a + 2) = obj_val;
                 R(a + 3) = key_val;
                 R(a + 4) = val;
