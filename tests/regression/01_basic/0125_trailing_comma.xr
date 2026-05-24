@@ -1,0 +1,74 @@
+// Test trailing commas in all supported positions
+
+// 1. Function declaration with trailing comma in params
+fn add(a: int, b: int,) -> int {
+    return a + b
+}
+
+// 2. Function call with trailing comma in args
+@test
+fn test_call_trailing_comma() {
+    let result = add(1, 2,)
+    assert(result == 3)
+}
+
+// 3. Array literal (already supported, verify still works)
+@test
+fn test_array_trailing_comma() {
+    let arr = [1, 2, 3,]
+    assert(arr.length == 3)
+    assert(arr[2] == 3)
+}
+
+// 4. Object literal (already supported, verify still works)
+@test
+fn test_object_trailing_comma() {
+    let obj = {name: "Alice", age: 18,}
+    assert(obj.name == "Alice")
+    assert(obj.age == 18)
+}
+
+// 5. Struct literal with trailing comma
+struct Point {
+    x: float
+    y: float
+}
+
+@test
+fn test_struct_literal_trailing_comma() {
+    let p = Point{x: 1.0, y: 2.0,}
+    assert(p.x == 1.0)
+    assert(p.y == 2.0)
+}
+
+// 6. Generic function with trailing comma in type params
+fn identity<T,>(val: T,) -> T {
+    return val
+}
+
+@test
+fn test_generic_trailing_comma() {
+    let x = identity<int,>(42,)
+    assert(x == 42)
+}
+
+// 7. new expression with trailing comma
+class Box {
+    value: int
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+@test
+fn test_new_trailing_comma() {
+    let b = new Box(100,)
+    assert(b.value == 100)
+}
+
+// 8. Arrow function with trailing comma in params
+@test
+fn test_arrow_trailing_comma() {
+    let f = (a: int, b: int,) -> a + b
+    assert(f(3, 4) == 7)
+}

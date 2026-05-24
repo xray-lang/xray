@@ -1,0 +1,58 @@
+// 0791_string_slice_operator.xr - String slice operator s[a:b]
+
+// ===== Basic slice operator =====
+
+@test
+fn test_slice_operator_basic() {
+    let s = "Hello World"
+    assert_eq(s[0:5], "Hello")
+    assert_eq(s[6:11], "World")
+    assert_eq(s[0:11], "Hello World")
+}
+
+// ===== Negative indices =====
+
+@test
+fn test_slice_operator_negative() {
+    let s = "Hello World"
+    assert_eq(s[0:-1], "Hello Worl")
+    assert_eq(s[-5:-1], "Worl")
+}
+
+// ===== Boundary cases =====
+
+@test
+fn test_slice_operator_boundary() {
+    let s = "Hello"
+    assert_eq(s[0:100], "Hello")
+    assert_eq(s[3:2], "")
+    assert_eq(s[0:0], "")
+}
+
+// ===== Single character =====
+
+@test
+fn test_slice_operator_single_char() {
+    let s = "abcdef"
+    assert_eq(s[0:1], "a")
+    assert_eq(s[2:3], "c")
+    assert_eq(s[5:6], "f")
+}
+
+// ===== Empty string =====
+
+@test
+fn test_slice_operator_empty() {
+    let s = ""
+    assert_eq(s[0:0], "")
+}
+
+// ===== Consistency with .slice() method =====
+
+@test
+fn test_slice_operator_vs_method() {
+    let s = "Hello World"
+    assert_eq(s[0:5], s.slice(0, 5))
+    assert_eq(s[6:11], s.slice(6, 11))
+    assert_eq(s[-5:-1], s.slice(-5, -1))
+}

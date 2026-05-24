@@ -63,6 +63,47 @@ fn test_optional_array_chain() {
     assert_eq(vals[1], 20)
 }
 
+// ===== ?[ optional index access =====
+
+@test
+fn test_optional_index_on_array() {
+    let arr = [10, 20, 30]
+    let val = arr?[1]
+    assert_eq(val, 20)
+}
+
+@test
+fn test_optional_index_on_null() {
+    let arr = null
+    let val = arr?[0]
+    assert_eq(val, null)
+}
+
+@test
+fn test_optional_index_nested() {
+    let data = {
+        items: [100, 200, 300]
+    }
+    let val = data?.items?[2]
+    assert_eq(val, 300)
+}
+
+@test
+fn test_optional_index_null_nested() {
+    let data = {
+        items: null
+    }
+    let val = data?.items?[0]
+    assert_eq(val, null)
+}
+
+@test
+fn test_optional_index_with_nullish() {
+    let arr = null
+    let val = arr?[0] ?? "fallback"
+    assert_eq(val, "fallback")
+}
+
 // ===== 与空值合并组合 =====
 
 @test

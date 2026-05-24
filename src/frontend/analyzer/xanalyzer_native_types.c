@@ -271,6 +271,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"Task", XR_TID_COROUTINE, TYPE_NAME_COROUTINE},
     {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
     {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
+    {"DateTime", XR_TID_DATETIME, "DateTime"},
 };
 
 #define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -350,6 +351,10 @@ static void load_one_source(const char *source) {
     }
 }
 
+/* Generated type member tables for types whose single source of truth
+ * is the C source (via XR_DEFINE_BUILTIN), not a .xr declaration. */
+#include "xanalyzer_builtins_generated.h"
+
 XR_FUNC void xa_native_types_init(void) {
     if (native_types_initialized)
         return;
@@ -360,6 +365,13 @@ XR_FUNC void xa_native_types_init(void) {
 #define LOAD_NATIVE(file_name, source_var) load_one_source(source_var);
     XR_NATIVE_TYPE_DEFS(LOAD_NATIVE)
 #undef LOAD_NATIVE
+
+    /* Inject type members generated from C source (single source of truth). */
+#ifdef GEN_DATETIME_MEMBER_COUNT
+    native_builtin_types[XR_TID_DATETIME].name = "DateTime";
+    native_builtin_types[XR_TID_DATETIME].members = g_gen_datetime_members;
+    native_builtin_types[XR_TID_DATETIME].member_count = GEN_DATETIME_MEMBER_COUNT;
+#endif
 
     native_types_initialized = true;
 }

@@ -356,6 +356,8 @@ AstNode *xr_parse_export_declaration(Parser *parser) {
             parser->X, sizeof(ReexportMember), (size_t) capacity);
 
         do {
+            if (xr_parser_check(parser, TK_RBRACE))
+                break;
             if (!xr_parser_match(parser, TK_NAME)) {
                 xr_parser_error_expected_name(parser, "expected member name in export { }");
                 free_reexport_members(members, count);

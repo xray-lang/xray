@@ -600,40 +600,44 @@ typedef struct WsRecvState {
 static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *ws,
                                 XrWsMessage *msg) {
     XrCoroutine *coro = xr_current_coro(X);
-
-    if (!msg) {
-        // Error result; class transition cache reuses the same hidden class
-        // for repeated allocations, no manual shape cache needed.
-        XrJson *result = xr_json_new(coro);
-        if (!result)
-            return xr_null();
-        const char *err_msg =
-            (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
-        xr_json_set(X, result, ctx ? ctx->sym_error : 0, xrs_string_value_c(X, err_msg));
-        return xr_json_value(result);
-    }
-
     XrJson *result = xr_json_new(coro);
     if (!result) {
-        xr_ws_message_free(msg);
+        if (msg)
+            xr_ws_message_free(msg);
         return xr_null();
     }
 
-    XrValue data_val;
-    if (msg->is_text) {
-        data_val = ws_make_string(X, msg->data, msg->len);
-    } else {
-        XrArray *bytes_arr = xr_array_with_capacity_typed(coro, (int) msg->len, XR_ELEM_U8);
-        if (bytes_arr && msg->len > 0) {
-            memcpy(bytes_arr->data, msg->data, msg->len);
-            bytes_arr->length = (int32_t) msg->len;
+    /* Always populate every WsMessage field so callers can read msg.data /
+     * msg.binary / msg.error without null guards. data is null when there
+     * is no payload (error or empty frame), error is null on success. The
+     * class transition cache makes repeated allocations cheap by reusing
+     * the same hidden class. */
+    XrValue data_val = xr_null();
+    bool is_binary = false;
+    XrValue error_val = xr_null();
+
+    if (msg) {
+        if (msg->is_text) {
+            data_val = ws_make_string(X, msg->data, msg->len);
+        } else {
+            is_binary = true;
+            XrArray *bytes_arr = xr_array_with_capacity_typed(coro, (int) msg->len, XR_ELEM_U8);
+            if (bytes_arr && msg->len > 0) {
+                memcpy(bytes_arr->data, msg->data, msg->len);
+                bytes_arr->length = (int32_t) msg->len;
+            }
+            data_val = bytes_arr ? xr_value_from_array(bytes_arr) : xr_null();
         }
-        data_val = bytes_arr ? xr_value_from_array(bytes_arr) : xr_null();
+        xr_ws_message_free(msg);
+    } else {
+        const char *err_msg =
+            (!ws || xr_ws_get_state(ws) != WS_STATE_OPEN) ? "Connection closed" : "Receive failed";
+        error_val = xrs_string_value_c(X, err_msg);
     }
 
     xr_json_set(X, result, ctx ? ctx->sym_data : 0, data_val);
-    xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(!msg->is_text));
-    xr_ws_message_free(msg);
+    xr_json_set(X, result, ctx ? ctx->sym_binary : 0, xr_bool(is_binary));
+    xr_json_set(X, result, ctx ? ctx->sym_error : 0, error_val);
 
     return xr_json_value(result);
 }
@@ -1069,10 +1073,13 @@ static XrValue ws_is_open(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== WebSocket Server API Implementation ========== */
 
 /*
- * Create server connection object from upgraded WebSocket
- * Used by ws.serve() when a client connects
+ * Create server connection object from upgraded WebSocket.
+ * url_str/url_len carries the request path (e.g. "/chat") so user handlers
+ * can route on it; pass NULL/0 if no URL info is available.
+ * Used by ws.serve() when a client connects.
  */
-static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws) {
+static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws, const char *url_str,
+                                   size_t url_len) {
     if (!ws)
         return xr_null();
 
@@ -1084,6 +1091,9 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws) {
 
     XrJson *result = xr_json_new(xr_current_coro(X));
     xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
+    XrValue url_val =
+        (url_str && url_len > 0) ? ws_make_string(X, url_str, url_len) : ws_make_string(X, "", 0);
+    xr_json_set(X, result, ctx->sym_url, url_val);
     xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
     xr_json_set(X, result, ctx->sym_is_svr, xr_bool(true));
 
@@ -1411,13 +1421,31 @@ static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, void *user
 
     // Upgrade to WebSocket
     {
+        /* Extract request path from the request line ("GET /chat HTTP/1.1")
+         * before xr_ws_upgrade consumes the buffer, so the server-side conn
+         * object can expose conn.url to the handler. */
+        const char *url_str = NULL;
+        size_t url_len = 0;
+        {
+            const char *p = ctx->upgrade_buf;
+            const char *sp1 = strchr(p, ' ');
+            if (sp1) {
+                const char *path_start = sp1 + 1;
+                const char *sp2 = strchr(path_start, ' ');
+                if (sp2 && sp2 > path_start) {
+                    url_str = path_start;
+                    url_len = (size_t) (sp2 - path_start);
+                }
+            }
+        }
         XrWebSocket *ws = xr_ws_upgrade(X, ctx->fd, ctx->upgrade_buf);
+        XrValue conn_val = ws_wrap_server_conn(X, ws, url_str, url_len);
         xr_free(ctx->upgrade_buf);
         ctx->upgrade_buf = NULL;
         if (!ws)
             goto cleanup;
 
-        ctx->conn = ws_wrap_server_conn(X, ws);
+        ctx->conn = conn_val;
         if (XR_IS_NULL(ctx->conn)) {
             xr_ws_close(ws, WS_CLOSE_SERVER_ERROR, NULL);
             xr_ws_free(ws);
@@ -1815,10 +1843,26 @@ static XrValue ws_is_server_running(XrayIsolate *X, XrValue *args, int argc) {
  * identical to what ws._acceptWs() returns.
  */
 XrValue xr_ws_upgrade_and_wrap(XrayIsolate *X, int fd, const char *request_headers) {
+    /* Extract request path from "METHOD /path HTTP/1.1" before the upgrade
+     * consumes/mutates the buffer; pass through to wrap so conn.url exists
+     * for handlers routed via http.route + ws upgrade. */
+    const char *url_str = NULL;
+    size_t url_len = 0;
+    if (request_headers) {
+        const char *sp1 = strchr(request_headers, ' ');
+        if (sp1) {
+            const char *path_start = sp1 + 1;
+            const char *sp2 = strchr(path_start, ' ');
+            if (sp2 && sp2 > path_start) {
+                url_str = path_start;
+                url_len = (size_t) (sp2 - path_start);
+            }
+        }
+    }
     XrWebSocket *ws = xr_ws_upgrade(X, fd, request_headers);
     if (!ws)
         return xr_null();
-    return ws_wrap_server_conn(X, ws);
+    return ws_wrap_server_conn(X, ws, url_str, url_len);
 }
 
 /* ========== Module Registration ========== */
@@ -1829,7 +1873,7 @@ XrValue xr_ws_upgrade_and_wrap(XrayIsolate *X, int fd, const char *request_heade
 
 // @module ws
 // @handle WsConn { const wsid: int, url: string, state: string }
-// @handle WsMessage { const data: string, const binary: bool }
+// @handle WsMessage { const data: string, const binary: bool, const error: string }
 
 XR_DEFINE_BUILTIN(ws_connect, "connect", "(url: string, options?: Json): WsConn?",
                   "Connect to a WebSocket server")

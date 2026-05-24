@@ -391,4 +391,11 @@ XR_FUNC XrCFuncResult xr_yield_call_closure(struct XrayIsolate *X, struct XrClos
 // by the closure that was called via xr_yield_call_closure.
 XR_FUNC XrValue xr_get_closure_result(struct XrayIsolate *X);
 
+// xr_get_closure_error - Retrieve closure exception inside on_complete
+//
+// Call this when the on_complete continuation is invoked with
+// XR_RESUME_CLOSURE_ERROR. Returns the uncaught exception value from
+// the closure that was called via xr_yield_call_closure.
+XR_FUNC XrValue xr_get_closure_error(struct XrayIsolate *X);
+
 #endif  // XYIELDABLE_H

@@ -853,6 +853,9 @@ Token xr_scanner_scan(Scanner *scanner) {
             if (match(scanner, '.')) {
                 return make_token(scanner, TK_QUESTION_DOT);
             }
+            if (match(scanner, '[')) {
+                return make_token(scanner, TK_QUESTION_LBRACKET);
+            }
             if (match(scanner, '?')) {
                 return make_token(scanner, TK_NULLISH_COALESCE);
             }
@@ -1004,6 +1007,7 @@ static const char *token_names[] = {
     // Type operators / special
     [TK_QUESTION] = "?",
     [TK_QUESTION_DOT] = "?.",
+    [TK_QUESTION_LBRACKET] = "?[",
     [TK_PIPE] = "|",
     [TK_ARROW] = "->",
     [TK_DOT_DOT_DOT] = "...",

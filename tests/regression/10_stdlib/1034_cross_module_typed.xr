@@ -31,6 +31,15 @@ fn test_imported_class() {
 }
 
 @test
+fn test_imported_class_with_new() {
+    // Regression: previously threw "method 'constructor' called on unsupported type"
+    // when constructing an imported class with the `new` keyword.
+    let p = new Point(7, 24)
+    assert_eq(p.x, 7)
+    assert_eq(p.y, 24)
+}
+
+@test
 fn test_imported_in_nested_fn() {
     fn inner() -> int {
         return double_it(10)

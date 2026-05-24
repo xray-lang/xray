@@ -112,7 +112,12 @@ def parse_handle_fields(fields_str):
 
 
 def scan_file(filepath):
-    """Scan a C file for builtin definitions."""
+    """Scan a C file for builtin definitions.
+
+    When a file contains both ``// @module`` and ``// @type`` annotations,
+    XR_DEFINE_BUILTIN entries *before* the ``@type`` marker are module-level
+    functions, and entries *after* it are instance methods on the type.
+    """
     try:
         with open(filepath, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -125,13 +130,16 @@ def scan_file(filepath):
         'module': None,        # @module annotation (for C modules)
         'handles': [],         # @handle annotations
         'methods': [],         # XR_DEFINE_BUILTIN entries (module-level functions)
+        'type_methods': [],    # XR_DEFINE_BUILTIN entries after @type (instance methods)
         'handle_methods': {},  # TypeName -> [methods] from "TypeName.method" convention
         'constants': [],       # xr_module_add_export(...) entries (typed constants)
     }
 
-    # Find @type annotation
+    # Find @type annotation (record position for method splitting)
+    type_pos = None
     for match in TYPE_CLASS_PATTERN.finditer(content):
         result['type'] = match.group(1)
+        type_pos = match.start()
 
     # Find @module annotation
     for match in MODULE_PATTERN.finditer(content):
@@ -149,6 +157,8 @@ def scan_file(filepath):
     # Find XR_DEFINE_BUILTIN entries.
     # Names containing a dot (e.g. "SqliteDB.exec") denote instance methods
     # on a handle type; they are grouped under handle_methods[TypeName].
+    # When both @module and @type are present, entries after @type go into
+    # type_methods (instance methods) rather than methods (module functions).
     for match in METHOD_PATTERN.finditer(content):
         func_name, method_name, signature, doc = match.groups()
         if '.' in method_name:
@@ -160,12 +170,16 @@ def scan_file(filepath):
                 'doc': doc,
             })
         else:
-            result['methods'].append({
+            entry = {
                 'func': func_name,
                 'name': method_name,
                 'signature': signature,
                 'doc': doc,
-            })
+            }
+            if type_pos is not None and match.start() > type_pos:
+                result['type_methods'].append(entry)
+            else:
+                result['methods'].append(entry)
 
     # Find xr_module_add_export(...) constant registrations and surface them
     # as analyzer-visible members. These are *not* methods, so signature is
@@ -189,7 +203,8 @@ def scan_file(filepath):
             'doc': '',
         })
 
-    if (not result['methods'] and not result['handles']
+    if (not result['methods'] and not result['type_methods']
+            and not result['handles']
             and not result['constants'] and not result['handle_methods']):
         return None
 
@@ -402,14 +417,26 @@ def main():
                       f"{hm_count} handle methods, "
                       f"{len(result['constants'])} constants, "
                       f"{len(result['handles'])} handles in {filepath.name}", file=sys.stderr)
-            elif result['type']:
-                # Builtin type (Array, String, etc.)
+
+            # When a file has both @module and @type, instance methods
+            # (after @type) are split into type_results separately.
+            if result['type'] and result['type_methods']:
+                type_name = result['type']
+                if type_name not in type_results:
+                    type_results[type_name] = []
+                type_results[type_name].extend(result['type_methods'])
+                print(f"  Type '{type_name}': {len(result['type_methods'])} methods in "
+                      f"{filepath.name}", file=sys.stderr)
+
+            if result['type'] and not result['module']:
+                # Pure type file (Array, String, etc.) — no @module
                 type_name = result['type']
                 if type_name not in type_results:
                     type_results[type_name] = []
                 type_results[type_name].extend(result['methods'])
-                print(f"  Type '{type_name}': {len(result['methods'])} methods in {filepath.name}",
-                      file=sys.stderr)
+                if result['methods']:
+                    print(f"  Type '{type_name}': {len(result['methods'])} methods in "
+                          f"{filepath.name}", file=sys.stderr)
 
     total_types = len(type_results)
     total_modules = len(module_results)

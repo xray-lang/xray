@@ -133,10 +133,10 @@ static XrValue result_to_json(XrayIsolate *X, XrHttpResult *result) {
     // status
     xr_json_set_by_key(X, json, "status", xr_int(result->status_code));
 
-    // statusText
-    if (result->status_text) {
-        xr_json_set_by_key(X, json, "statusText", xrs_string_value_c(X, result->status_text));
-    }
+    // statusText — always present so callers can rely on the field existing.
+    xr_json_set_by_key(X, json, "statusText",
+                       result->status_text ? xrs_string_value_c(X, result->status_text)
+                                           : xrs_string_value_c(X, ""));
 
     // headers - Shape transition for flexible header names
     XrJson *headers_json = xr_json_new(xr_current_coro(X));
@@ -475,8 +475,9 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
 
         XrJson *json = xr_json_new(xr_current_coro(X));
         xr_json_set_by_key(X, json, "status", xr_int(sr->status_code));
-        if (sr->status_text)
-            xr_json_set_by_key(X, json, "statusText", xrs_string_value_c(X, sr->status_text));
+        xr_json_set_by_key(X, json, "statusText",
+                           sr->status_text ? xrs_string_value_c(X, sr->status_text)
+                                           : xrs_string_value_c(X, ""));
         XrJson *hdrs = xr_json_new(xr_current_coro(X));
         for (int i = 0; i < sr->header_count; i++) {
             char buf[128];
@@ -490,9 +491,13 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
                 xrs_string_value_n(X, sr->headers[i].value, sr->headers[i].value_len));
         }
         xr_json_set_by_key(X, json, "headers", xr_json_value(hdrs));
+        /* Stream response body is read incrementally via http.streamRead, so
+         * body starts empty here; error mirrors the non-streaming path. */
+        xr_json_set_by_key(X, json, "body", xrs_string_value_c(X, ""));
+        xr_json_set_by_key(X, json, "error", xr_null());
+        xr_json_set_by_key(X, json, "ok", xr_bool(sr->status_code >= 200 && sr->status_code < 300));
         xr_json_set_by_key(X, json, "streaming", xr_bool(true));
         xr_json_set_by_key(X, json, "_streamId", xr_int(slot));
-        xr_json_set_by_key(X, json, "ok", xr_bool(sr->status_code >= 200 && sr->status_code < 300));
         ret = xr_json_value(json);
     } else {
         ret = result_to_json(X, &result);
@@ -1165,9 +1170,10 @@ static XrValue http_download(XrayIsolate *X, XrValue *args, int argc) {
     xr_json_set_by_key(X, json, "downloaded", xr_int((int64_t) result.downloaded));
     xr_json_set_by_key(X, json, "total", xr_int((int64_t) result.total_size));
     xr_json_set_by_key(X, json, "completed", xr_bool(result.completed));
-    if (result.error_msg) {
-        xr_json_set_by_key(X, json, "error", xrs_string_value_c(X, result.error_msg));
-    }
+    /* error is always present (null on success) so callers can check
+     * `if (r.error != null)` without surprises. */
+    xr_json_set_by_key(X, json, "error",
+                       result.error_msg ? xrs_string_value_c(X, result.error_msg) : xr_null());
 
     xr_stream_result_free(&result);
 
@@ -1363,7 +1369,7 @@ static XrValue http_clear_proxy(XrayIsolate *X, XrValue *args, int argc) {
 // @handle HttpResponse { const status: int, const statusText: string, const headers: Json, const
 // body: string, const error: string, const ok: bool }
 // @handle HttpRequest { const method: string, const path: string, const query: Json, const headers:
-// Json, const contentLength: int, const bodyOffset: int }
+// Json, const body: string, const contentLength: int, const params: Json, const streaming: bool }
 // @handle DownloadResult { const status: int, const downloaded: int, const total: int, const
 // completed: bool, const error: string }
 

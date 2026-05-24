@@ -46,7 +46,6 @@ vmcase(OP_GETSHARED) {
     int a = GETARG_A(i);
     int shared_index = GETARG_Bx(i) + cl->proto->shared_offset;
     R(a) = xr_shared_array_get(&isolate->vm.shared, shared_index);
-
     vmbreak;
 }
 

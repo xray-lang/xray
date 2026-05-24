@@ -432,7 +432,8 @@ Only the **postfix** form `x++` / `x--` is supported; the prefix form `++x` / `-
 | Token | Use |
 |--|--|
 | `?` | nullable type (`T?`), ternary, optional-chain prefix |
-| `?.` | optional chain (`obj?.prop`) |
+| `?.` | optional chain property/method (`obj?.prop`, `obj?.method()`) |
+| `?[` | optional chain index (`arr?[0]`) |
 | `??` | null coalescing (`a ?? b`) |
 | `!` | force unwrap (postfix, `expr!`) / logical not (prefix) |
 | `\|` | union type (`int \| string`) / bitwise or |
@@ -905,7 +906,7 @@ Full precedence table (highest → lowest; operators at the same level share ass
 
 | Level | Operators | Assoc. | Description |
 |--|--|--|--|
-| 17 | `(...)` `[...]` `.x` `?.x` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
+| 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | left | postfix: grouping, index, member, optional chain, call, force unwrap |
 | 16 | prefix `-` `+` `!` `~` `new` `move` `await` `go` | right | unary prefix + coroutine operators (`++` / `--` are postfix only) |
 | 15 | `as` `is` | left | type cast / check (`as T?` is the safe form via a nullable target type, not a separate `as?` operator) |
 | 14 | `*` `/` `%` | left | multiplication / division / modulo |
@@ -1056,26 +1057,28 @@ let max = a > b ? a : b
 - The condition must be `bool`.
 - The two branches share a unified type (taken as the common supertype or a union).
 
-### 3.6 Null Coalescing `??` and Optional Chaining `?.`
+### 3.6 Null Coalescing `??` and Optional Chaining `?.` / `?[`
 
-See §3.3.5 (`??`) and below (`?.`).
+See §3.3.5 (`??`) and below (`?.` / `?[`).
 
-#### Optional chaining `?.`
+#### Optional chaining `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' (Identifier | '[' Expr ']'))+
+OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
 ```
 
 ```xray
 let len = name?.length          // returns null when name is null
-let item = arr?.[0]             // optional index
+let item = arr?[0]              // optional index
 ```
 
 **Semantics**:
-- If the LHS of `?.` is `null`, the entire expression short-circuits to `null`.
+- If the LHS of `?.` or `?[` is `null`, the entire expression short-circuits to `null`.
+- `?.` is for property access and method calls: `obj?.prop`, `obj?.method()`.
+- `?[` is for index access: `arr?[0]`. Symmetric with regular indexing `arr[0]` — just add `?` before `[`.
 - **Propagation**: in `a?.b.c.d`, if `a` is null the whole chain returns null; intermediate `.` operations are not re-checked.
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
-- Currently `?.` supports property and index access; optional function call `func?.()` is not part of the current grammar.
+- Optional function call `func?.()` is not part of the current grammar.
 
 ### 3.7 Force Unwrap `!` / `try?` / `try!` / `catch!`
 
@@ -2151,7 +2154,7 @@ class Counter {
 }
 ```
 
-**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?:` `??` `,` `.`
+**Cannot** be overloaded: `&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
 #### 5.3.6 Custom iterators
 
@@ -5181,7 +5184,9 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
              |  '.' Identifier                 // member
-             |  '?.' (Identifier | '(' ArgList? ')')  // optional chain
+             |  '?.' Identifier                 // optional chain property
+             |  '?.' Identifier '(' ArgList? ')'  // optional chain method
+             |  '?[' Expression ']'            // optional chain index
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
@@ -5220,7 +5225,7 @@ CatchBlock  ::= 'catch!' Block
 
 ThrowExpr   ::= 'throw' Expression                // operand's static type must be Exception-derived (E0370)
 
-ArgList ::= Expression (',' Expression)*
+ArgList ::= Expression (',' Expression)* ','?
 ```
 
 ### A.4 Patterns
@@ -5323,14 +5328,14 @@ BindingPattern ::= Identifier
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ParamList ::= Param (',' Param)*
+ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'in' | 'ref' | 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
               // public/override are accepted but never required (default/implicit behavior)
 
-TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // constraints use ':', multiple use '&'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
@@ -5459,7 +5464,7 @@ The complete operator listing organized by purpose is in [§1.7](#17-operators-a
 | Comparison | `==` `!=` `===` `!==` `<` `<=` `>` `>=` |
 | Logical | `&&` `\|\|` `!` |
 | Assignment | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
-| Other | `..` `??` `?.` `!` `->` |
+| Other | `..` `??` `?.` `?[` `!` `->` |
 
 ---
 

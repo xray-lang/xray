@@ -34,6 +34,8 @@
 #include "xsched_trace.h"
 #include "xjit_hooks.h"
 #include "../runtime/object/xexception.h"
+#include "xyieldable.h"
+#include "../runtime/xexec_frame.h"
 
 // ========== Forward Declarations ==========
 
@@ -47,6 +49,10 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
                                   XrVMContext *ctx, XrVMContext *coro_ctx);
 
 static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate);
+
+static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
+                                                       XrCoroutine *coro, XrVMContext *ctx,
+                                                       XrVMContext *coro_ctx);
 
 /*
  * post-check after setting BLOCKED flag.
@@ -535,6 +541,19 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
         result = run_cfunc_resume(isolate, coro, coro_ctx, cur_flags);
     }
 
+    /* If a user closure called via xr_yield_call_closure threw uncaught,
+     * route the exception to the deepest pending C continuation so the
+     * native state machine can clean up (send 500, close fd, free buffers)
+     * before the coroutine dies. Without this hook, every framework-level
+     * cfunc coroutine would leak resources whenever a handler throws. */
+    while (result == XR_VM_RUNTIME_ERROR) {
+        XrVMResult recovered =
+            try_recover_via_closure_continuation(isolate, worker, coro, ctx, coro_ctx);
+        if (recovered == XR_VM_RUNTIME_ERROR)
+            break;
+        result = recovered;
+    }
+
     // ========== Shared Result Handling ==========
     // Handle result
     if (result == XR_VM_OK) {
@@ -574,6 +593,75 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 // a thin dispatch shell that hands to run_first_exec / run_resume_path /
 // run_cfunc_coro / run_finalize. See bottom of file for the shell.
 
+// Recover from an uncaught exception by routing it to the deepest C frame
+// that called xr_yield_call_closure. The pending continuation is invoked
+// with XR_RESUME_CLOSURE_ERROR so the C state machine can release resources
+// (e.g. an HTTP server can send a 500 response and close the connection)
+// instead of leaking the coroutine + any fds/buffers it owned.
+//
+// Returns the new XrVMResult to use for finalization, or XR_VM_RUNTIME_ERROR
+// if no pending closure frame existed (caller falls through to error path).
+static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
+                                                       XrCoroutine *coro, XrVMContext *ctx,
+                                                       XrVMContext *coro_ctx) {
+    (void) worker;
+    /* Find the deepest frame waiting on xr_yield_call_closure completion. */
+    int target_fc = -1;
+    for (int i = coro_ctx->frame_count - 1; i >= 0; i--) {
+        if (coro_ctx->frames[i].call_status & XR_CALL_CLOSURE_PENDING) {
+            target_fc = i;
+            break;
+        }
+    }
+    if (target_fc < 0)
+        return XR_VM_RUNTIME_ERROR; /* no recovery possible */
+
+    XrBcCallFrame *frame = &coro_ctx->frames[target_fc];
+    XrContinuation cont = (XrContinuation) frame->u.c.continuation;
+    void *user_ctx = frame->u.c.continuation_ctx;
+    if (!cont)
+        return XR_VM_RUNTIME_ERROR;
+
+    /* Pop the closure frame(s) above the pending C frame and adjust stack_top
+     * so the C continuation sees a coherent state. */
+    coro_ctx->frame_count = target_fc + 1;
+    if (frame->closure && frame->closure->proto) {
+        coro_ctx->stack_top =
+            coro_ctx->stack + frame->base_offset + frame->closure->proto->maxstacksize;
+    }
+
+    /* Hand the exception over to the continuation; clear VM-wide pending
+     * exception so subsequent dispatch starts clean. */
+    coro->pending_closure_error = coro_ctx->current_exception;
+    coro_ctx->current_exception = xr_null();
+    frame->call_status &= ~XR_CALL_CLOSURE_PENDING;
+
+    ctx->current_coro = coro;
+
+    XrValue cresult = xr_null();
+    XrCFuncResult cstatus = cont(isolate, XR_RESUME_CLOSURE_ERROR, user_ctx, &cresult);
+
+    /* Translate continuation outcome back into a VM result. The continuation
+     * may have yielded (e.g. queued an async write of a 500 response) or
+     * pushed another closure (e.g. invoking a user-level error handler). */
+    switch (cstatus) {
+        case XR_CFUNC_DONE:
+            if (coro_ctx->stack_capacity > 0)
+                coro_ctx->stack[0] = cresult;
+            return XR_VM_OK;
+        case XR_CFUNC_YIELD:
+            return XR_VM_YIELD;
+        case XR_CFUNC_BLOCKED:
+            return XR_VM_BLOCKED;
+        case XR_CFUNC_CALL_CLOSURE:
+            coro_ctx->module_base_frame = 0;
+            return run(isolate, coro_ctx);
+        case XR_CFUNC_ERROR:
+        default:
+            return XR_VM_RUNTIME_ERROR;
+    }
+}
+
 // ========== run_finalize: Result Handling ==========
 //
 // Centralises the post-run state transitions and result/error copy-outs that
@@ -583,6 +671,16 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
                                XrVMContext *ctx, XrVMContext *coro_ctx, XrVMResult result) {
     (void) worker;
+    /* Iteratively drain pending closure continuations on uncaught exception:
+     * each invocation may complete cleanly, yield, block, or re-throw. We loop
+     * to avoid recursion and to surface the final state once recovery settles. */
+    while (result == XR_VM_RUNTIME_ERROR) {
+        XrVMResult recovered =
+            try_recover_via_closure_continuation(isolate, worker, coro, ctx, coro_ctx);
+        if (recovered == XR_VM_RUNTIME_ERROR)
+            break; /* no more pending continuations, or continuation re-threw */
+        result = recovered;
+    }
     if (result == XR_VM_GO_CHILD) {
         // Continuation stealing: parent saved state, child ready to run inline.
         ctx->current_coro = NULL;

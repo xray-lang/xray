@@ -1250,13 +1250,19 @@ vmcase(OP_SLICE) {
     int64_t start = XR_TO_INT(R(c));
     int64_t end = XR_TO_INT(R(c + 1));
 
-    // Array/slice: zero-copy, shared data
+    // Array slice: zero-copy, shared data
     if (XR_IS_ARRAY(source)) {
         XrArray *arr = XR_TO_ARRAY(source);
-
-        // Use slice function
         XrArray *slice = xr_array_slice(VM_CURRENT_CORO, arr, (int32_t) start, (int32_t) end);
         R(a) = slice ? XR_FROM_PTR(slice) : xr_null();
+        vmbreak;
+    }
+
+    // String slice
+    if (XR_IS_STRING(source)) {
+        XrString *str = XR_TO_STRING(source);
+        XrString *slice = xr_string_slice(isolate, str, start, end);
+        R(a) = slice ? xr_string_value(slice) : xr_null();
         vmbreak;
     }
 

@@ -2,10 +2,14 @@
 
 @native
 class Channel<T> {
+    length: int
+    capacity: int
+    isClosed: bool
     send(value: T)
     recv() -> T
     trySend(value: T) -> bool
     tryRecv(): (T, bool)
+    sendTimeout(value: T, timeout: int) -> bool
+    recvTimeout(timeout: int): (T, bool)
     close()
-    closed: bool
 }

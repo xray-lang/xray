@@ -352,3 +352,11 @@ XrValue xr_get_closure_result(XrayIsolate *X) {
     }
     return xr_null();
 }
+
+XrValue xr_get_closure_error(XrayIsolate *X) {
+    XrCoroutine *coro = get_current_coro(X);
+    if (coro) {
+        return coro->pending_closure_error;
+    }
+    return xr_null();
+}

@@ -315,6 +315,7 @@ typedef struct XrCoroutine {
     XrValue result;
     XrValue error;
     XrValue pending_closure_result;  // return value from xr_yield_call_closure
+    XrValue pending_closure_error;   // exception from xr_yield_call_closure (CLOSURE_ERROR)
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)

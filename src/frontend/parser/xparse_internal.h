@@ -146,6 +146,7 @@ XR_FUNC AstNode *xr_parse_range(Parser *parser, AstNode *start);
 XR_FUNC AstNode *xr_parse_ternary(Parser *parser, AstNode *condition);
 XR_FUNC AstNode *xr_parse_nullish_coalesce(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object);
+XR_FUNC AstNode *xr_parse_optional_index(Parser *parser, AstNode *object);
 XR_FUNC AstNode *xr_parse_inc_dec(Parser *parser);
 XR_FUNC AstNode *xr_parse_postfix_inc_dec(Parser *parser, AstNode *left);
 XR_FUNC AstNode *xr_parse_arrow_function_body(Parser *parser, XrParamNode **params, int param_count,

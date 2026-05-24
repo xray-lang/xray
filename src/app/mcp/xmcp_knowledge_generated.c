@@ -50,32 +50,47 @@ static const XmcpGeneratedStdlibSymbol _symbols_base64[] = {
 static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     {
         .name = "call",
-        .signature = "(node: string, service: string, data: Json): Json",
+        .signature = "(service: string, args: Json, timeout?: int): Json",
         .summary = "Call remote service",
     },
     {
         .name = "channel",
-        .signature = "(name: string): Channel",
-        .summary = "Get distributed channel",
+        .signature = "(name: string, size?: int): Channel",
+        .summary = "Create or get named distributed channel",
+    },
+    {
+        .name = "discover",
+        .signature = "(): ()",
+        .summary = "Start LAN auto-discovery",
+    },
+    {
+        .name = "info",
+        .signature = "(): Json",
+        .summary = "Get cluster status info",
     },
     {
         .name = "join",
-        .signature = "(host: string, port: int): bool",
-        .summary = "Join cluster",
+        .signature = "(addr: string): bool",
+        .summary = "Join cluster by address",
     },
     {
         .name = "monitor",
-        .signature = "(node: string): Channel",
-        .summary = "Monitor node health",
+        .signature = "(name: string, coro_name?: string): Channel",
+        .summary = "Monitor node or remote coroutine",
     },
     {
         .name = "nodes",
         .signature = "(): Array<string>",
-        .summary = "List cluster nodes",
+        .summary = "List cluster node names",
+    },
+    {
+        .name = "publish",
+        .signature = "(topic: string, value: Json): bool",
+        .summary = "Publish to topic",
     },
     {
         .name = "reply",
-        .signature = "(req: Json, result: Json): ()",
+        .signature = "(req: Json, result: Json): bool",
         .summary = "Reply to service request",
     },
     {
@@ -85,8 +100,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
     },
     {
         .name = "serve",
-        .signature = "(name: string, handler: fn): ()",
-        .summary = "Register service handler",
+        .signature = "(name: string): Channel",
+        .summary = "Register service and return request channel",
     },
     {
         .name = "start",
@@ -97,6 +112,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_cluster[] = {
         .name = "stop",
         .signature = "(): ()",
         .summary = "Stop cluster node",
+    },
+    {
+        .name = "subscribe",
+        .signature = "(pattern: string): Channel",
+        .summary = "Subscribe to topic pattern",
     },
 };
 
@@ -246,11 +266,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_csv[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
     {
-        .name = "add",
-        .signature = "(amount: int, unit: string): DateTime",
-        .summary = "Add duration to datetime",
-    },
-    {
         .name = "create",
         .signature = "(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime",
         .summary = "Create local datetime",
@@ -261,31 +276,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
         .summary = "Create UTC datetime",
     },
     {
-        .name = "day",
-        .signature = "(): int",
-        .summary = "Get day (1-31)",
-    },
-    {
-        .name = "daysInMonth",
-        .signature = "(): int",
-        .summary = "Get days in current month",
-    },
-    {
-        .name = "diff",
-        .signature = "(other: DateTime, unit?: string): int",
-        .summary = "Difference between datetimes",
-    },
-    {
-        .name = "equals",
-        .signature = "(other: DateTime): bool",
-        .summary = "Check if equal to other datetime",
-    },
-    {
-        .name = "format",
-        .signature = "(pattern?: string): string",
-        .summary = "Format datetime to string",
-    },
-    {
         .name = "fromTimestamp",
         .signature = "(ts: int): DateTime",
         .summary = "Create datetime from Unix timestamp (seconds)",
@@ -294,41 +284,6 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
         .name = "fromTimestampMs",
         .signature = "(ts: int): DateTime",
         .summary = "Create datetime from Unix timestamp (milliseconds)",
-    },
-    {
-        .name = "hour",
-        .signature = "(): int",
-        .summary = "Get hour (0-23)",
-    },
-    {
-        .name = "isAfter",
-        .signature = "(other: DateTime): bool",
-        .summary = "Check if after other datetime",
-    },
-    {
-        .name = "isBefore",
-        .signature = "(other: DateTime): bool",
-        .summary = "Check if before other datetime",
-    },
-    {
-        .name = "isLeapYear",
-        .signature = "(): bool",
-        .summary = "Check if leap year",
-    },
-    {
-        .name = "millisecond",
-        .signature = "(): int",
-        .summary = "Get millisecond (0-999)",
-    },
-    {
-        .name = "minute",
-        .signature = "(): int",
-        .summary = "Get minute (0-59)",
-    },
-    {
-        .name = "month",
-        .signature = "(): int",
-        .summary = "Get month (1-12)",
     },
     {
         .name = "now",
@@ -346,49 +301,9 @@ static const XmcpGeneratedStdlibSymbol _symbols_datetime[] = {
         .summary = "Parse datetime string",
     },
     {
-        .name = "second",
-        .signature = "(): int",
-        .summary = "Get second (0-59)",
-    },
-    {
-        .name = "timestamp",
-        .signature = "(): int",
-        .summary = "Get Unix timestamp (seconds)",
-    },
-    {
-        .name = "toISOString",
-        .signature = "(): string",
-        .summary = "Convert to ISO 8601 string",
-    },
-    {
-        .name = "toLocal",
-        .signature = "(): DateTime",
-        .summary = "Convert to local time",
-    },
-    {
-        .name = "toUTC",
-        .signature = "(): DateTime",
-        .summary = "Convert to UTC",
-    },
-    {
         .name = "utc",
         .signature = "(): DateTime",
         .summary = "Get current UTC datetime",
-    },
-    {
-        .name = "weekday",
-        .signature = "(): int",
-        .summary = "Get weekday (0=Sunday)",
-    },
-    {
-        .name = "year",
-        .signature = "(): int",
-        .summary = "Get year",
-    },
-    {
-        .name = "yearday",
-        .signature = "(): int",
-        .summary = "Get day of year (1-366)",
     },
 };
 
@@ -2872,7 +2787,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "```\n"
             "```xray\n"
             "let len = name?.length          // returns null when name is null\n"
-            "let item = arr?.[0]             // optional index\n"
+            "let item = arr?[0]              // optional index\n"
             "```\n"
             "",
     },
@@ -3292,16 +3207,20 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `cluster.call` | `(node: string, service: string, data: Json): Json` | Call remote service |\n"
-            "| `cluster.channel` | `(name: string): Channel` | Get distributed channel |\n"
-            "| `cluster.join` | `(host: string, port: int): bool` | Join cluster |\n"
-            "| `cluster.monitor` | `(node: string): Channel` | Monitor node health |\n"
-            "| `cluster.nodes` | `(): Array<string>` | List cluster nodes |\n"
-            "| `cluster.reply` | `(req: Json, result: Json): ()` | Reply to service request |\n"
+            "| `cluster.call` | `(service: string, args: Json, timeout?: int): Json` | Call remote service |\n"
+            "| `cluster.channel` | `(name: string, size?: int): Channel` | Create or get named distributed channel |\n"
+            "| `cluster.discover` | `(): ()` | Start LAN auto-discovery |\n"
+            "| `cluster.info` | `(): Json` | Get cluster status info |\n"
+            "| `cluster.join` | `(addr: string): bool` | Join cluster by address |\n"
+            "| `cluster.monitor` | `(name: string, coro_name?: string): Channel` | Monitor node or remote coroutine |\n"
+            "| `cluster.nodes` | `(): Array<string>` | List cluster node names |\n"
+            "| `cluster.publish` | `(topic: string, value: Json): bool` | Publish to topic |\n"
+            "| `cluster.reply` | `(req: Json, result: Json): bool` | Reply to service request |\n"
             "| `cluster.self` | `(): string` | Get own node name |\n"
-            "| `cluster.serve` | `(name: string, handler: fn): ()` | Register service handler |\n"
+            "| `cluster.serve` | `(name: string): Channel` | Register service and return request channel |\n"
             "| `cluster.start` | `(config: Json): ()` | Start cluster node |\n"
             "| `cluster.stop` | `(): ()` | Stop cluster node |\n"
+            "| `cluster.subscribe` | `(pattern: string): Channel` | Subscribe to topic pattern |\n"
             "",
         .symbols = _symbols_cluster,
         .symbol_count = (int)(sizeof(_symbols_cluster) / sizeof(_symbols_cluster[0])),
@@ -3401,35 +3320,14 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `datetime.add` | `(amount: int, unit: string): DateTime` | Add duration to datetime |\n"
             "| `datetime.create` | `(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime` | Create local datetime |\n"
             "| `datetime.createUTC` | `(year: int, month?: int, day?: int, hour?: int, minute?: int, second?: int): DateTime` | Create UTC datetime |\n"
-            "| `datetime.day` | `(): int` | Get day (1-31) |\n"
-            "| `datetime.daysInMonth` | `(): int` | Get days in current month |\n"
-            "| `datetime.diff` | `(other: DateTime, unit?: string): int` | Difference between datetimes |\n"
-            "| `datetime.equals` | `(other: DateTime): bool` | Check if equal to other datetime |\n"
-            "| `datetime.format` | `(pattern?: string): string` | Format datetime to string |\n"
             "| `datetime.fromTimestamp` | `(ts: int): DateTime` | Create datetime from Unix timestamp (seconds) |\n"
             "| `datetime.fromTimestampMs` | `(ts: int): DateTime` | Create datetime from Unix timestamp (milliseconds) |\n"
-            "| `datetime.hour` | `(): int` | Get hour (0-23) |\n"
-            "| `datetime.isAfter` | `(other: DateTime): bool` | Check if after other datetime |\n"
-            "| `datetime.isBefore` | `(other: DateTime): bool` | Check if before other datetime |\n"
-            "| `datetime.isLeapYear` | `(): bool` | Check if leap year |\n"
-            "| `datetime.millisecond` | `(): int` | Get millisecond (0-999) |\n"
-            "| `datetime.minute` | `(): int` | Get minute (0-59) |\n"
-            "| `datetime.month` | `(): int` | Get month (1-12) |\n"
             "| `datetime.now` | `(): DateTime` | Get current local datetime |\n"
             "| `datetime.offset` | `(): int` | Get UTC offset in minutes |\n"
             "| `datetime.parse` | `(s: string, format?: string): DateTime?` | Parse datetime string |\n"
-            "| `datetime.second` | `(): int` | Get second (0-59) |\n"
-            "| `datetime.timestamp` | `(): int` | Get Unix timestamp (seconds) |\n"
-            "| `datetime.toISOString` | `(): string` | Convert to ISO 8601 string |\n"
-            "| `datetime.toLocal` | `(): DateTime` | Convert to local time |\n"
-            "| `datetime.toUTC` | `(): DateTime` | Convert to UTC |\n"
             "| `datetime.utc` | `(): DateTime` | Get current UTC datetime |\n"
-            "| `datetime.weekday` | `(): int` | Get weekday (0=Sunday) |\n"
-            "| `datetime.year` | `(): int` | Get year |\n"
-            "| `datetime.yearday` | `(): int` | Get day of year (1-366) |\n"
             "",
         .symbols = _symbols_datetime,
         .symbol_count = (int)(sizeof(_symbols_datetime) / sizeof(_symbols_datetime[0])),
