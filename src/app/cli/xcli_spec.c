@@ -50,7 +50,10 @@ static const XrCliOptionSpec test_options[] = {
 static const XrCliOptionSpec check_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Show all checked files"},
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Show errors only"},
-    {"strict", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Enable type checking"},
+    {"syntax-only", 'S', XR_CLI_VALUE_NONE, false, false, NULL,
+     "Skip semantic analysis (parse only)"},
+    {"strict", 's', XR_CLI_VALUE_NONE, false, false, NULL,
+     "Enable strict analyzer mode (extra checks)"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec fmt_options[] = {

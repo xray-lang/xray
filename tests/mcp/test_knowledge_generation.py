@@ -182,7 +182,12 @@ def check_xray_fences(root: Path, xray: Path) -> list[str]:
                 tmp.write(code)
                 tmp_path = Path(tmp.name)
             try:
-                proc = run([str(xray), "check", str(tmp_path)], root)
+                # --syntax-only: knowledge-base fences are illustrative
+                # snippets that frequently reference placeholder identifiers
+                # (`identity`, `nullable_expr`, etc.). The intent of this
+                # check is to ensure they at least parse; semantic
+                # resolution is not expected to succeed in isolation.
+                proc = run([str(xray), "check", "--syntax-only", str(tmp_path)], root)
                 if proc.returncode != 0:
                     errors.append(
                         f"{path.relative_to(root)} fence #{idx} failed\n{proc.stdout}{proc.stderr}"

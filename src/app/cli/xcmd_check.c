@@ -47,7 +47,7 @@ static int check_file(XrayIsolate *X, XaAnalyzer *analyzer, const char *path, in
     if (has_error) {
         // Error message already printed by parser
     } else if (analyzer) {
-        // --strict mode: run analyzer type checking
+        // Run semantic analysis (default for `xray check`)
         xa_analyzer_analyze(analyzer, path, (XrAstNode *) ast);
         int diag_count = 0;
         XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
@@ -215,6 +215,7 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
 
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
     bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
+    bool syntax_only = xr_cli_opt_bool(&inv->options, "syntax-only");
     bool strict = xr_cli_opt_bool(&inv->options, "strict");
 
     /* Create shared isolate for all checks */
@@ -224,11 +225,15 @@ XR_FUNC int cmd_check(const XrCliInvocation *inv) {
         return XR_CLI_EXIT_INTERNAL;
     }
 
-    /* Create analyzer for --strict mode */
+    /* Default: run the analyzer so semantic errors (e.g. throw on a
+     * non-Exception value, type mismatches) are caught alongside syntax
+     * errors. --syntax-only opts out for fast pre-flight checks; --strict
+     * additionally enables stricter analyzer modes. */
     XaAnalyzer *analyzer = NULL;
-    if (strict) {
+    if (!syntax_only) {
         analyzer = xa_analyzer_new(X);
-        xa_analyzer_set_strict_mode(analyzer, true);
+        if (strict)
+            xa_analyzer_set_strict_mode(analyzer, true);
     }
 
     int total_files = 0;
