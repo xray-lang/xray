@@ -102,6 +102,17 @@ vmcase(OP_CLINIT_CALL) {
     clinit_closure->proto = clinit_proto;
 
     cls->flags |= XR_CLASS_INITIALIZED;
+
+    /* Frame depth limit and stack capacity must both be checked before
+     * pushing a new frame. Without VM_STACK_CHECK, when stack and frames
+     * share a combined slab allocation the callee's register file can
+     * silently overflow into frames[] and corrupt frame.closure. */
+    if (XR_UNLIKELY(VM_FRAME_COUNT >= XR_FRAMES_MAX)) {
+        VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow: recursion exceeds %d levels",
+                         XR_FRAMES_MAX);
+    }
+    VM_STACK_CHECK(a + 1 + clinit_proto->maxstacksize);
+
     savepc();
     int _fidx = VM_FRAME_COUNT;
     VM_INC_FRAME_COUNT;

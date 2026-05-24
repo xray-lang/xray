@@ -126,6 +126,54 @@ static inline bool vm_ensure_call_stack(XrVMContext *vm_ctx, int needed_slots, X
     return true;
 }
 
+/* ========== Unified Frame Push API ==========
+ *
+ * Single entry point for pushing a new bytecode call frame from external
+ * dispatch helpers (xvm_invoke.c, xvm_props.c, ...). Subsumes:
+ *   - frame depth limit check (XR_FRAMES_MAX)
+ *   - stack/frames capacity grow (vm_ensure_call_stack)
+ *   - savepc into the caller frame
+ *   - frame_count increment (with debug-mode bounds DCHECK)
+ *   - mandatory field init (closure / pc / base_offset)
+ *
+ * Why exist: every caller that pushes a frame must do exactly the above.
+ * Splitting the check across N callsites makes it trivial to forget one
+ * (root cause of the OP_INVOKE/vm_invoke_module overflow into frames[]).
+ *
+ * Pointers may move on grow — base_inout / frame_inout are refreshed.
+ *
+ * Returns: pointer to the new frame on success; caller may set optional
+ *          fields (result_offset / call_status / u.l.* / flags). Returns
+ *          NULL on failure; caller must surface it via VM_THROW. */
+#include "../base/xconstants.h"
+static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *closure,
+                                              int new_base_off_from_caller, XrValue **base_inout,
+                                              XrBcCallFrame **frame_inout, XrInstruction *pc) {
+    if (XR_UNLIKELY(vm_ctx->frame_count >= XR_FRAMES_MAX))
+        return NULL;
+
+    XrProto *proto = closure->proto;
+    int abs_base_off = (int) (*base_inout - vm_ctx->stack) + new_base_off_from_caller;
+    int needed = abs_base_off + proto->maxstacksize;
+
+    /* savepc into caller frame so a re-entry resumes correctly. */
+    (*frame_inout)->pc = pc;
+
+    if (!vm_ensure_call_stack(vm_ctx, needed, base_inout, frame_inout, pc))
+        return NULL;
+
+    int fidx = vm_ctx->frame_count;
+    XR_DCHECK(fidx < vm_ctx->frame_capacity,
+              "vm_push_bc_frame: frame_count >= frame_capacity post-grow");
+    memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
+    vm_ctx->frame_count++;
+    XrBcCallFrame *new_frame = &vm_ctx->frames[fidx];
+    new_frame->closure = closure;
+    new_frame->pc = PROTO_CODE_BASE(proto);
+    new_frame->base_offset = abs_base_off;
+    return new_frame;
+}
+
 /* ========== Channel Deep Copy Helpers ========== */
 #include "../coro/xchannel_ops.h"
 
