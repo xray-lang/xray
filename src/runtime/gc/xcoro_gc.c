@@ -921,10 +921,9 @@ static void mark_coro_roots(XrCoroGC *gc) {
         xr_coro_gc_markvalue(gc, sc->first_error);
     }
 
-    // Mark coroutine result/error/pending_closure_result
+    // Mark coroutine result/error
     xr_coro_gc_markvalue(gc, coro->result);
     xr_coro_gc_markvalue(gc, coro->error);
-    xr_coro_gc_markvalue(gc, coro->pending_closure_result);
 
     // Mark send_value: kept alive while coroutine is blocked on channel send
     if (coro->wait_channel && coro->wait_send) {

@@ -432,7 +432,8 @@ typedef struct WsSendState {
 static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *result);
 
 // Continuation for send
-static XrCFuncResult ws_send_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult ws_send_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                      XrValue *result) {
     WsSendState *state = (WsSendState *) ctx;
 
     // Handle timeout/cancel
@@ -646,7 +647,8 @@ static XrValue make_recv_result(XrayIsolate *X, XrWsContext *ctx, XrWebSocket *w
 static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *result);
 
 // Continuation function for ws.recv (matches XrContinuation signature)
-static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, void *cont_ctx, XrValue *result) {
+static XrCFuncResult ws_recv_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                      void *cont_ctx, XrValue *result) {
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
@@ -799,8 +801,8 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
 /*
  * ws.recvData continuation: returns string directly (no Json wrapper).
  */
-static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, void *cont_ctx,
-                                          XrValue *result) {
+static XrCFuncResult ws_recvdata_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *cont_ctx, XrValue *result) {
     WsRecvState *state = (WsRecvState *) cont_ctx;
 
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED || status == XR_RESUME_ERROR) {
@@ -1114,10 +1116,12 @@ extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
 /* ========== Pure C Echo Server (ws.echoServe) — Stackless ========== */
 
 // Forward declarations for echo continuations
-static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, void *ctx,
-                                               XrValue *result);
-static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *ctx, XrValue *result);
+static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                       XrValue *result);
+static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *ctx, XrValue *result);
 
 /*
  * Context for echo connection — persists across yields.
@@ -1165,15 +1169,15 @@ static XrCFuncResult ws_echo_conn_init(XrayIsolate *X, XrValue *args, int argc, 
     ctx->upgrade_buf_used = 0;
 
     // Start reading upgrade request
-    return ws_echo_conn_upgrade_cont(X, XR_RESUME_IO_READY, ctx, result);
+    return ws_echo_conn_upgrade_cont(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
 /*
  * Continuation: read HTTP upgrade headers, then upgrade to WebSocket.
  * On EAGAIN, yields for read and re-enters this function.
  */
-static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, void *user_ctx,
-                                               XrValue *result) {
+static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *user_ctx, XrValue *result) {
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto fail;
@@ -1223,7 +1227,7 @@ static XrCFuncResult ws_echo_conn_upgrade_cont(XrayIsolate *X, int status, void 
     ctx->ws_ctx = get_ws_context(X);
 
     // Enter echo loop
-    return ws_echo_conn_loop(X, XR_RESUME_IO_READY, ctx, result);
+    return ws_echo_conn_loop(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 
 fail:
     xr_free(ctx->upgrade_buf);
@@ -1248,8 +1252,8 @@ cleanup: {
  *   recv() → parse WS frame → unmask → send() WS frame
  *   No XrJson, no XrString, no bytecode, no context switch.
  */
-static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, void *user_ctx,
-                                       XrValue *result) {
+static XrCFuncResult ws_echo_conn_loop(XrayIsolate *X, int status, XrValue resume_value,
+                                       void *user_ctx, XrValue *result) {
     WsEchoConnCtx *ctx = (WsEchoConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto cleanup;
@@ -1321,9 +1325,12 @@ cleanup:
 /* ========== WebSocket Server (ws.serve) — Stackless ========== */
 
 // Forward declarations for conn handler continuations
-static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result);
+static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result);
+static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result);
 
 /*
  * Context for WS connection handler — persists across yields.
@@ -1379,15 +1386,15 @@ static XrCFuncResult ws_conn_init(XrayIsolate *X, XrValue *args, int argc, XrVal
     ctx->upgrade_buf_used = 0;
 
     // Start reading upgrade request
-    return ws_conn_upgrade_cont(X, XR_RESUME_IO_READY, ctx, result);
+    return ws_conn_upgrade_cont(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
 /*
  * Continuation: read HTTP upgrade headers, validate, upgrade to WS,
- * then call user handler closure via xr_yield_call_closure.
+ * then call user handler closure via xr_call_closure.
  */
-static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, void *user_ctx,
-                                          XrValue *result) {
+static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *user_ctx, XrValue *result) {
     WsConnCtx *ctx = (WsConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto fail;
@@ -1453,8 +1460,7 @@ static XrCFuncResult ws_conn_upgrade_cont(XrayIsolate *X, int status, void *user
         }
 
         // Call user handler closure — resumes ws_conn_handler_done on return
-        return xr_yield_call_closure(X, ctx->handler, &ctx->conn, 1, ws_conn_handler_done, ctx,
-                                     result);
+        return xr_call_closure(X, ctx->handler, &ctx->conn, 1, ws_conn_handler_done, ctx, result);
     }
 
 fail:
@@ -1476,8 +1482,8 @@ cleanup: {
  * Continuation: called when user handler closure returns.
  * Cleans up WebSocket connection and frees context.
  */
-static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, void *user_ctx,
-                                          XrValue *result) {
+static XrCFuncResult ws_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *user_ctx, XrValue *result) {
     (void) status;
     (void) result;
     WsConnCtx *ctx = (WsConnCtx *) user_ctx;
@@ -1542,8 +1548,8 @@ static XrCFuncResult ws_serve_listen_init(XrayIsolate *X, XrValue *args, int arg
  * WS serve accept loop continuation — accepts connections,
  * spawns a cfunc conn coroutine per client, then yields for next batch.
  */
-static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, void *user_ctx,
-                                          XrValue *result) {
+static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *user_ctx, XrValue *result) {
     WsServeListenCtx *ctx = (WsServeListenCtx *) user_ctx;
 
     XrWsContext *ws_ctx = get_ws_context(X);
@@ -1588,8 +1594,8 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, void *user
 }
 
 // Continuation: keep caller coroutine blocked while server is running
-static XrCFuncResult ws_serve_wait_cont(XrayIsolate *X, int status, void *cont_ctx,
-                                        XrValue *result) {
+static XrCFuncResult ws_serve_wait_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                        void *cont_ctx, XrValue *result) {
     (void) status;
     XrWsContext *ctx = (XrWsContext *) cont_ctx;
     if (!ctx || !ctx->server_running) {
@@ -1631,8 +1637,8 @@ static XrCFuncResult ws_echo_listen_init(XrayIsolate *X, XrValue *args, int argc
  * Echo accept loop continuation — accepts all pending connections,
  * spawns a cfunc coroutine per connection, then yields for next batch.
  */
-static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, void *user_ctx,
-                                         XrValue *result) {
+static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *user_ctx, XrValue *result) {
     WsEchoListenCtx *ctx = (WsEchoListenCtx *) user_ctx;
 
     XrWsContext *ws_ctx = get_ws_context(X);

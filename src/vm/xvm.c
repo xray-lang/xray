@@ -264,6 +264,11 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     XrInstruction i;
     int invoke_is_tail = 0;  // shared flag: OP_INVOKE_TAIL sets 1, OP_INVOKE sets 0
     XrBcCallFrame *frame;
+    // Return value carried from a closure invoked via xr_call_closure() back
+    // to handle_closure_pending. Set by the OP_RETURN family in
+    // xvm_dispatch_call.inc.c just before goto handle_closure_pending; the
+    // label forwards it to the C continuation as resume_value.
+    XrValue closure_pending_value = xr_null();
 
     /* Resolve the active per-isolate profiler once. NULL is the
      * default for builds compiled without XR_ENABLE_VM_PROFILER and
@@ -777,7 +782,9 @@ startfunc:
 #undef vmbreak
 #endif  // ========== Closure Pending Handler ==========
 /* Jumped to from OP_RETURN/RETURN0/RETURN1 when caller frame has
- * XR_CALL_CLOSURE_PENDING set by xr_yield_call_closure(). */
+ * XR_CALL_CLOSURE_PENDING set by xr_call_closure(). The closure's return
+ * value lives in `closure_pending_value`, populated by the OP_RETURN family
+ * just before the goto. */
 handle_closure_pending: {
     XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
     XrContinuation _cont = (XrContinuation) ci->u.c.continuation;
@@ -786,13 +793,14 @@ handle_closure_pending: {
     // Clear pending flag before calling continuation
     ci->call_status &= ~XR_CALL_CLOSURE_PENDING;
 
-    // No continuation registered — just return result via pending_closure_result.
+    // No continuation registered — closure return value is unused.
     if (!_cont) {
         return XR_VM_OK;
     }
 
     XrValue _cresult;
-    XrCFuncResult _cstatus = _cont(isolate, XR_RESUME_CLOSURE_DONE, _uctx, &_cresult);
+    XrCFuncResult _cstatus =
+        _cont(isolate, XR_RESUME_CLOSURE_DONE, closure_pending_value, _uctx, &_cresult);
 
     switch (_cstatus) {
         case XR_CFUNC_DONE:

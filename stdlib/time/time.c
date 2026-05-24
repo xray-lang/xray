@@ -70,7 +70,8 @@ static XrValue xr_time_micros(XrayIsolate *isolate, XrValue *args, int nargs) {
 /*
  * Continuation for time.sleep — the timer has fired, just return null.
  */
-static XrCFuncResult time_sleep_done(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult time_sleep_done(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                     XrValue *result) {
     (void) X;
     (void) status;
     (void) ctx;

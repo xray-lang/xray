@@ -56,12 +56,15 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
         // Check if C function frame with continuation
         if ((frame->call_status & XR_CALL_C) && (frame->call_status & XR_CALL_HAS_CONT) &&
             frame->u.c.continuation) {
-            // Call continuation (new signature includes result parameter)
+            // Call continuation. Unroll-driven resumes are I/O / timer / channel
+            // events whose data lives in dedicated structures (recv_slot,
+            // wait_*); resume_value is xr_null() — closure return values are
+            // delivered by VM RETURN handling, not via this path.
             XrContinuation cont = (XrContinuation) frame->u.c.continuation;
             void *user_ctx = frame->u.c.continuation_ctx;
             XrValue cfunc_result = xr_null();
 
-            XrCFuncResult status = cont(X, resume_status, user_ctx, &cfunc_result);
+            XrCFuncResult status = cont(X, resume_status, xr_null(), user_ctx, &cfunc_result);
 
             XR_DBG_CORO("unroll: continuation returned %d, frame_count=%d", status,
                         coro->vm_ctx.frame_count);
@@ -107,7 +110,7 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
                     return XR_VM_YIELD;
 
                 case XR_CFUNC_CALL_CLOSURE:
-                    // Continuation called xr_yield_call_closure, closure frame pushed.
+                    // Continuation called xr_call_closure, closure frame pushed.
                     // Return OK so run_cfunc_coro calls run() to execute the closure.
                     return XR_VM_OK;
 

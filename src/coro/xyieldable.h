@@ -70,8 +70,8 @@ typedef enum XrResumeStatus {
     XR_RESUME_ERROR,           // Error
     XR_RESUME_DEBUG,           // Debug break resume (skip unroll)
     XR_RESUME_CONTINUATION,    // Continuation stealing resume (vm_ctx already set, skip unroll)
-    XR_RESUME_CLOSURE_DONE,    // Closure called via xr_yield_call_closure returned normally
-    XR_RESUME_CLOSURE_ERROR    // Closure called via xr_yield_call_closure threw exception
+    XR_RESUME_CLOSURE_DONE,    // Closure called via xr_call_closure returned normally
+    XR_RESUME_CLOSURE_ERROR    // Closure called via xr_call_closure threw exception
 } XrResumeStatus;
 
 // ========== Continuation Function Type ==========
@@ -84,17 +84,23 @@ typedef enum XrResumeStatus {
 // Parameters:
 //   X: Isolate pointer
 //   status: resume status (XrResumeStatus)
+//   resume_value: value carried by the resume event:
+//     - XR_RESUME_CLOSURE_DONE  : closure return value
+//     - XR_RESUME_CLOSURE_ERROR : uncaught exception value
+//     - all other statuses      : xr_null() (I/O / timer / channel deliver
+//                                 their data via dedicated mechanisms)
 //   ctx: user context data (points to object in coroutine heap)
 //   result: return value output parameter (set when DONE)
 //
 // Returns:
 //   XrCFuncResult indicating next action
 //
-// Design note:
-//   Added result parameter for clearer return value passing, unroll mechanism handles storage.
-//   Continuation only needs to focus on business logic, no manual frame manipulation.
-typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, void *ctx,
-                                        XrValue *result);
+// Passing resume_value as a parameter (rather than via implicit per-coroutine
+// fields) keeps the protocol stateless: a continuation receives everything it
+// needs via its arguments, which is what an AOT-compiled runtime can deliver
+// without a VM coroutine object.
+typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, XrValue resume_value,
+                                        void *ctx, XrValue *result);
 
 // ========== Blocking Context ==========
 
@@ -313,7 +319,7 @@ static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
                 break;
 
             case XR_CFUNC_CALL_CLOSURE:
-                // State function called xr_yield_call_closure
+                // State function called xr_call_closure
                 return XR_CFUNC_CALL_CLOSURE;
 
             case XR_CFUNC_ERROR:
@@ -325,15 +331,15 @@ static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
     return sm->error_code ? XR_CFUNC_ERROR : XR_CFUNC_DONE;
 }
 
-// xr_sm_continuation - State machine continuation (new signature: added result param)
+// xr_sm_continuation - State machine continuation
 //
 // Generic continuation function, for resuming state machine execution from blocked state.
 // Can be passed directly to xr_yield_for_io etc.
-static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status, void *state,
-                                               XrValue *result) {
-    // State machine can get status via xr_get_resume_status
-    (void) status;  // Ignore status for now, state machine gets from X
-    (void) result;  // State machine doesn't use return value
+static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status,
+                                               XrValue resume_value, void *state, XrValue *result) {
+    (void) status;        // State machine routes via its own state field
+    (void) resume_value;  // SM resumes do not carry a value
+    (void) result;        // State machine doesn't use return value
     return xr_sm_run(X, state);
 }
 
@@ -373,29 +379,18 @@ static inline XrCFuncResult xr_sm_continuation(struct XrayIsolate *X, int status
 
 // ========== Closure Call from C Layer ==========
 
-// xr_yield_call_closure - Call a user closure from C yieldable function
+// xr_call_closure - Call a user closure from C yieldable function
 //
 // The closure may yield (channel/await/sleep). When the closure finally
-// returns, on_complete is called with XR_RESUME_CLOSURE_DONE.
-// The closure return value is accessible via xr_get_closure_result(X).
+// returns or throws, on_complete is invoked with the closure's return value
+// (status XR_RESUME_CLOSURE_DONE) or the uncaught exception value
+// (status XR_RESUME_CLOSURE_ERROR) delivered through the resume_value
+// parameter — no implicit per-coroutine state.
 //
 // Must be called from a yieldable C function or continuation.
 // Always returns XR_CFUNC_CALL_CLOSURE.
-XR_FUNC XrCFuncResult xr_yield_call_closure(struct XrayIsolate *X, struct XrClosure *closure,
-                                            XrValue *args, int nargs, XrContinuation on_complete,
-                                            void *user_ctx, XrValue *result);
-
-// xr_get_closure_result - Retrieve closure return value inside on_complete
-//
-// Call this in the on_complete continuation to get the value returned
-// by the closure that was called via xr_yield_call_closure.
-XR_FUNC XrValue xr_get_closure_result(struct XrayIsolate *X);
-
-// xr_get_closure_error - Retrieve closure exception inside on_complete
-//
-// Call this when the on_complete continuation is invoked with
-// XR_RESUME_CLOSURE_ERROR. Returns the uncaught exception value from
-// the closure that was called via xr_yield_call_closure.
-XR_FUNC XrValue xr_get_closure_error(struct XrayIsolate *X);
+XR_FUNC XrCFuncResult xr_call_closure(struct XrayIsolate *X, struct XrClosure *closure,
+                                      XrValue *args, int nargs, XrContinuation on_complete,
+                                      void *user_ctx, XrValue *result);
 
 #endif  // XYIELDABLE_H

@@ -44,7 +44,8 @@ static _Atomic int64_t g_counter = 0;
 // Scenario 1: Basic yield test
 /* ========================================================================== */
 
-static XrCFuncResult test_yield_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult test_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *ctx, XrValue *result) {
     (void) X;
     (void) ctx;
     (void) status;
@@ -68,8 +69,8 @@ typedef struct {
     int64_t b;
 } AddState;
 
-static XrCFuncResult test_yield_add_continue(XrayIsolate *X, int status, void *ctx,
-                                             XrValue *result) {
+static XrCFuncResult test_yield_add_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                             void *ctx, XrValue *result) {
     (void) X;
     (void) status;
     AddState *state = (AddState *) ctx;
@@ -119,7 +120,8 @@ typedef struct {
     int max_steps;  // Maximum number of steps
 } MultiYieldState;
 
-static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result);
 
 static XrCFuncResult multi_yield_step(XrayIsolate *X, MultiYieldState *state, XrValue *result) {
     state->step++;
@@ -137,7 +139,8 @@ static XrCFuncResult multi_yield_step(XrayIsolate *X, MultiYieldState *state, Xr
     return xr_yield(X, multi_yield_continue, state);
 }
 
-static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult multi_yield_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result) {
     (void) status;
     MultiYieldState *state = (MultiYieldState *) ctx;
     return multi_yield_step(X, state, result);
@@ -177,7 +180,8 @@ typedef struct {
     int64_t accumulated;  // Accumulated value
 } ChainState;
 
-static XrCFuncResult chain_continue(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult chain_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                    XrValue *result);
 
 static XrCFuncResult chain_step(XrayIsolate *X, ChainState *state, XrValue *result) {
     if (state->n <= 0) {
@@ -194,7 +198,8 @@ static XrCFuncResult chain_step(XrayIsolate *X, ChainState *state, XrValue *resu
     return xr_yield(X, chain_continue, state);
 }
 
-static XrCFuncResult chain_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult chain_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                    XrValue *result) {
     (void) status;
     ChainState *state = (ChainState *) ctx;
     return chain_step(X, state, result);
@@ -232,7 +237,8 @@ typedef struct {
     int error_code;
 } ErrorState;
 
-static XrCFuncResult error_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult error_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                    XrValue *result) {
     (void) X;
     ErrorState *state = (ErrorState *) ctx;
 
@@ -283,7 +289,8 @@ typedef struct {
     int64_t resource_id;
 } CancelState;
 
-static XrCFuncResult cancel_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult cancel_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                     XrValue *result) {
     (void) X;
     CancelState *state = (CancelState *) ctx;
 
@@ -324,7 +331,8 @@ static XrCFuncResult test_yield_cancel(XrayIsolate *X, XrValue *args, int argc, 
 // Scenario 8: Concurrent counter
 /* ========================================================================== */
 
-static XrCFuncResult counter_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult counter_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                      XrValue *result) {
     (void) X;
     (void) status;
     (void) ctx;
@@ -381,7 +389,8 @@ typedef struct {
     int64_t inner_val;
 } NestedState;
 
-static XrCFuncResult nested_continue(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult nested_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                     XrValue *result);
 
 static XrCFuncResult nested_step(XrayIsolate *X, NestedState *state, XrValue *result) {
     switch (state->phase) {
@@ -409,7 +418,8 @@ static XrCFuncResult nested_step(XrayIsolate *X, NestedState *state, XrValue *re
     }
 }
 
-static XrCFuncResult nested_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult nested_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                     XrValue *result) {
     (void) status;
     NestedState *state = (NestedState *) ctx;
     return nested_step(X, state, result);
@@ -446,7 +456,8 @@ typedef struct {
     int64_t result;
 } LongTaskState;
 
-static XrCFuncResult long_task_continue(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult long_task_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                        XrValue *result);
 
 static XrCFuncResult long_task_step(XrayIsolate *X, LongTaskState *state, XrValue *result) {
     if (state->current >= state->iterations) {
@@ -464,7 +475,8 @@ static XrCFuncResult long_task_step(XrayIsolate *X, LongTaskState *state, XrValu
     return xr_yield(X, long_task_continue, state);
 }
 
-static XrCFuncResult long_task_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult long_task_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                        XrValue *result) {
     (void) status;
     LongTaskState *state = (LongTaskState *) ctx;
     return long_task_step(X, state, result);

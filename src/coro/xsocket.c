@@ -481,9 +481,11 @@ XrCFuncResult xr_socket_accept_yieldable(XrayIsolate *X, XrAcceptState *state) {
     return XR_CFUNC_ERROR;
 }
 
-// Accept continuation (new signature: added result param)
-XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
-    (void) result;  // accept returns result via state->result_fd
+// Accept continuation
+XrCFuncResult xr_socket_accept_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                        XrValue *result) {
+    (void) resume_value;  // accept resume carries no value
+    (void) result;        // accept returns result via state->result_fd
     XrAcceptState *state = (XrAcceptState *) ctx;
     if (!state)
         return XR_CFUNC_ERROR;
