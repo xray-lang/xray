@@ -454,6 +454,8 @@ AstNode *xr_parse_grouping(Parser *parser) {
         param_count++;
 
         while (xr_parser_match(parser, TK_COMMA)) {
+            if (xr_parser_check(parser, TK_RPAREN))
+                break;
             xr_parser_consume(parser, TK_NAME, "expected parameter name");
             Token param = parser->previous;
             snprintf(name_buf, sizeof(name_buf), "%.*s", param.length, param.start);
@@ -593,7 +595,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
             gp->constraints = constraints;
             gp->constraint_count = constraint_count;
             XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
 
@@ -629,7 +631,7 @@ AstNode *xr_parse_fn_expression(Parser *parser) {
             }
 
             XR_PARSE_PUSH(parser, params, param_count, param_capacity, param);
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after parameter list");
@@ -720,7 +722,7 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
         }
         type_args[type_arg_count++] = type;
 
-    } while (xr_parser_match(parser, TK_COMMA));
+    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
     // Must have '>' followed by '('
     if (!xr_parser_match(parser, TK_GT)) {
@@ -757,7 +759,7 @@ static AstNode *try_parse_generic_call(Parser *parser, AstNode *callee) {
         do {
             XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
                           xr_parse_call_argument(parser));
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
@@ -979,7 +981,7 @@ AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {
     return xr_ast_as_expr(parser->X, left, (XrType *) target_type, is_safe, line);
 }
 
-// Parse optional chain: obj?.prop, obj?.[index], obj?.method()
+// Parse optional chain: obj?.prop, obj?.method()
 AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
     XR_DCHECK(parser != NULL, "parse_optional_chain: NULL parser");
     int line = parser->previous.line;
@@ -999,16 +1001,21 @@ AstNode *xr_parse_optional_chain(Parser *parser, AstNode *object) {
         }
 
         return xr_ast_optional_chain(parser->X, object, name_str, NULL, 0, line);
-    } else if (parser->current.type == TK_LBRACKET) {
-        // Index access: obj?.[index]
-        xr_parser_advance(parser);
-        AstNode *index = xr_parse_expression(parser);
-        xr_parser_consume(parser, TK_RBRACKET, "expected ']' in optional chain index");
-        return xr_ast_optional_chain(parser->X, object, NULL, index, 1, line);
     } else {
-        xr_parser_error(parser, "expected property name or index after '?.'");
+        xr_parser_error(parser, "expected property name after '?.'");
         return NULL;
     }
+}
+
+// Parse optional index access: obj?[index]
+AstNode *xr_parse_optional_index(Parser *parser, AstNode *object) {
+    XR_DCHECK(parser != NULL, "parse_optional_index: NULL parser");
+    int line = parser->previous.line;
+
+    // '[' already consumed by lexer as part of '?[' token
+    AstNode *index = xr_parse_expression(parser);
+    xr_parser_consume(parser, TK_RBRACKET, "expected ']' after optional index expression");
+    return xr_ast_optional_chain(parser->X, object, NULL, index, 1, line);
 }
 
 // Parse range expression: start..end

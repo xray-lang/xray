@@ -35,6 +35,7 @@
 #include "../../src/runtime/object/xjson_serde.h"
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/gc/xgc_internal.h"
+#include "../../src/runtime/object/xexception.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/base/xarena.h"
 #include "../../src/base/xmalloc.h"
@@ -498,7 +499,12 @@ typedef struct HttpConnCtx {
     int body_total;
 } HttpConnCtx;
 
-// Free context and close connection
+/* Free context and close connection. Internal 1-arg helper; see
+ * http_conn_cleanup_cont for the XrContinuation-shaped wrapper used as a
+ * write-done callback. Keeping the two separate avoids the historical bug
+ * of casting a 1-arg function to XrContinuation — the resulting signature
+ * mismatch made the call site put the isolate pointer in the ctx register
+ * and corrupt memory whenever the write path completed synchronously. */
 static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
     int fd = ctx->fd;
     if (ctx->arena_inited)
@@ -526,6 +532,15 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
         atomic_fetch_sub(&ctx->http_ctx->current_conns, 1);
     xr_free(ctx);
     return XR_CFUNC_DONE;
+}
+
+/* XrContinuation-shaped wrapper for use as a write_done_cont. */
+static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, void *user_ctx,
+                                            XrValue *result) {
+    (void) X;
+    (void) status;
+    (void) result;
+    return http_conn_cleanup((HttpConnCtx *) user_ctx);
 }
 
 /*
@@ -583,8 +598,8 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                                  &path_len, &minor_ver, headers, &num_headers, 0);
 
     if (parsed <= 0) {
-        return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1,
-                                     (XrContinuation) http_conn_cleanup, result);
+        return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1, http_conn_cleanup_cont,
+                                     result);
     }
     ctx->parsed = parsed;
 
@@ -622,12 +637,12 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         char *hdr_copy = xr_arena_strndup(&ctx->req_arena, ctx->read_buf, ctx->buf_used);
         if (!hdr_copy) {
             return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
-                                         (XrContinuation) http_conn_cleanup, result);
+                                         http_conn_cleanup_cont, result);
         }
         XrValue ws_conn = xr_ws_upgrade_and_wrap(X, ctx->fd, hdr_copy);
         if (XR_IS_NULL(ws_conn)) {
             return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1,
-                                         (XrContinuation) http_conn_cleanup, result);
+                                         http_conn_cleanup_cont, result);
         }
         XrClosure *ws_handler = (XrClosure *) user_data;
         return xr_yield_call_closure(X, ws_handler, &ws_conn, 1, http_conn_ws_handler_done, ctx,
@@ -641,7 +656,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         XrJson *req = xr_json_new(coro);
         if (!req) {
             return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
-                                         (XrContinuation) http_conn_cleanup, result);
+                                         http_conn_cleanup_cont, result);
         }
         ctx->req_json = req;
 
@@ -654,6 +669,41 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         if (pbuf) {
             xr_json_set_by_key(X, req, "path", make_cstring_val(X, pbuf));
         }
+
+        /* Parse query string into req.query Json object.
+         * Query starts after '?' in the original path_str. */
+        XrJson *query_json = xr_json_new(coro);
+        if (query_json && pure_path_len < path_len) {
+            const char *qs = path_str + pure_path_len + 1;
+            size_t qs_len = path_len - pure_path_len - 1;
+            const char *end = qs + qs_len;
+            while (qs < end) {
+                const char *amp = (const char *) memchr(qs, '&', end - qs);
+                if (!amp)
+                    amp = end;
+                const char *eq = (const char *) memchr(qs, '=', amp - qs);
+                if (eq) {
+                    char key[256];
+                    size_t kl = (size_t) (eq - qs);
+                    if (kl >= sizeof(key))
+                        kl = sizeof(key) - 1;
+                    memcpy(key, qs, kl);
+                    key[kl] = '\0';
+                    XrValue val = make_string_val(X, eq + 1, (size_t) (amp - eq - 1));
+                    xr_json_set_by_key(X, query_json, key, val);
+                } else {
+                    char key[256];
+                    size_t kl = (size_t) (amp - qs);
+                    if (kl >= sizeof(key))
+                        kl = sizeof(key) - 1;
+                    memcpy(key, qs, kl);
+                    key[kl] = '\0';
+                    xr_json_set_by_key(X, query_json, key, xr_null());
+                }
+                qs = amp + 1;
+            }
+        }
+        xr_json_set_by_key(X, req, "query", xr_json_value(query_json));
 
         XrJson *hdrs = xr_json_new(coro);
         ctx->content_length = -1;
@@ -677,12 +727,20 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         }
         xr_json_set_by_key(X, req, "headers", xr_json_value(hdrs));
 
+        /* Default body fields. body is overwritten below (and in async body
+         * read continuations) when actual content arrives. contentLength is
+         * -1 when neither Content-Length nor Transfer-Encoding is present.
+         * streaming flips to true only for bodies > MAX_BODY_SIZE. */
+        xr_json_set_by_key(X, req, "body", make_string_val(X, "", 0));
+        xr_json_set_by_key(X, req, "contentLength", XR_FROM_INT((int64_t) ctx->content_length));
+        xr_json_set_by_key(X, req, "streaming", xr_bool(false));
+
         // Read body if needed, then call handler
         if (is_chunked && parsed > 0) {
             ctx->chunk_buf = xr_netbuf_acquire(8192);
             if (!ctx->chunk_buf) {
                 return http_conn_start_write(X, ctx, RESP_500, sizeof(RESP_500) - 1,
-                                             (XrContinuation) http_conn_cleanup, result);
+                                             http_conn_cleanup_cont, result);
             }
             int body_in_buf = ctx->buf_used - parsed;
             if (body_in_buf > 0) {
@@ -726,8 +784,10 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                 }
             }
         } else if (ctx->content_length > MAX_BODY_SIZE) {
+            /* contentLength already populated above; flip streaming and stash
+             * stream-only fields (fd + buffered prefix) for handler-driven
+             * incremental consumption. */
             xr_json_set_by_key(X, req, "streaming", xr_bool(true));
-            xr_json_set_by_key(X, req, "contentLength", XR_FROM_INT((int64_t) ctx->content_length));
             xr_json_set_by_key(X, req, "_fd", xr_int(ctx->fd));
             int body_in_buf = ctx->buf_used - parsed;
             if (body_in_buf > 0) {
@@ -736,8 +796,10 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
             }
         }
 
-        if (params.count > 0) {
-            XrJson *params_obj = xr_json_new(coro);
+        /* params is always present so handlers can iterate / read without
+         * null checks; empty Json when the matched route has no captures. */
+        XrJson *params_obj = xr_json_new(coro);
+        if (params_obj && params.count > 0) {
             for (int i = 0; i < params.count && i < XR_ROUTER_MAX_PARAMS; i++) {
                 if (params.params[i].key && params.params[i].value) {
                     char kb[64];
@@ -751,8 +813,8 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                         make_string_val(X, params.params[i].value, params.params[i].value_len));
                 }
             }
-            xr_json_set_by_key(X, req, "params", xr_json_value(params_obj));
         }
+        xr_json_set_by_key(X, req, "params", xr_json_value(params_obj));
 
         // Call handler closure — resumes http_conn_handler_done on return
         XrValue req_val = xr_json_value(req);
@@ -856,8 +918,8 @@ chunk_error:
         xr_netbuf_release(ctx->chunk_buf);
         ctx->chunk_buf = NULL;
     }
-    return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1,
-                                 (XrContinuation) http_conn_cleanup, result);
+    return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1, http_conn_cleanup_cont,
+                                 result);
 }
 
 /*
@@ -899,11 +961,35 @@ static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, void 
  */
 static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *user_ctx,
                                             XrValue *result) {
-    (void) status;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
-    XrValue closure_result = xr_get_closure_result(X);
-
     xr_free(ctx->response_data);
+    ctx->response_data = NULL;
+
+    /* Handler threw an uncaught exception. Surface it as a 500 response with
+     * the exception message in the body — handlers are responsible for their
+     * own try/catch + custom responses; this is the last-resort framework
+     * fallback that prevents fd leaks and client hangs. Connection: close is
+     * forced because the request lifecycle was aborted mid-flight. */
+    if (status == XR_RESUME_CLOSURE_ERROR) {
+        XrValue exc = xr_get_closure_error(X);
+        const char *msg = NULL;
+        if (xr_value_is_exception(X, exc))
+            msg = xr_exception_get_message(X, exc);
+        char body[512];
+        int body_len = snprintf(body, sizeof(body), "Internal Server Error: %s",
+                                msg ? msg : "uncaught exception");
+        if (body_len < 0)
+            body_len = 0;
+        if ((size_t) body_len >= sizeof(body))
+            body_len = (int) sizeof(body) - 1;
+        HttpRawResponse r =
+            format_response_arena(&ctx->req_arena, 500, "text/plain", body, (size_t) body_len);
+        if (!r.data)
+            return http_conn_cleanup(ctx);
+        return http_conn_start_write(X, ctx, r.data, r.len, http_conn_cleanup_cont, result);
+    }
+
+    XrValue closure_result = xr_get_closure_result(X);
     HttpRawResponse r = process_handler_result_raw(X, closure_result);
     ctx->response_data = r.data;
     if (!r.data)
@@ -1038,7 +1124,7 @@ static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *us
     for (;;) {
         if (ctx->buf_used >= CONN_READ_BUF_SIZE) {
             return http_conn_start_write(X, ctx, RESP_413, sizeof(RESP_413) - 1,
-                                         (XrContinuation) http_conn_cleanup, result);
+                                         http_conn_cleanup_cont, result);
         }
         int old_used = ctx->buf_used;
         ssize_t n = xr_socket_recv((xr_socket_t) ctx->fd, ctx->read_buf + ctx->buf_used,

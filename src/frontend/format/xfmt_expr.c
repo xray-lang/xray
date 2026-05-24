@@ -687,13 +687,17 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
         case AST_OPTIONAL_CHAIN: {
             OptionalChainNode *oc = &node->as.optional_chain;
             xfmt_emit_expression(ctx, oc->object);
-            xfmt_write_str(ctx, "?.");
-            if (oc->name) {
-                xfmt_write_str(ctx, oc->name);
-            } else if (oc->index) {
-                xfmt_write_char(ctx, '[');
+            if (oc->index) {
+                // Optional index: obj?[index]
+                xfmt_write_str(ctx, "?[");
                 xfmt_emit_expression(ctx, oc->index);
                 xfmt_write_char(ctx, ']');
+            } else {
+                // Optional property/method: obj?.name
+                xfmt_write_str(ctx, "?.");
+                if (oc->name) {
+                    xfmt_write_str(ctx, oc->name);
+                }
             }
             break;
         }

@@ -98,6 +98,7 @@ static ParseRule rules[] = {
     [TK_QUESTION] = {NULL, xr_parse_ternary, PREC_TERNARY},
     [TK_NULLISH_COALESCE] = {NULL, xr_parse_nullish_coalesce, PREC_NULLISH_COALESCE},
     [TK_QUESTION_DOT] = {NULL, xr_parse_optional_chain, PREC_CALL},
+    [TK_QUESTION_LBRACKET] = {NULL, xr_parse_optional_index, PREC_CALL},
 
     // Assignment
     [TK_ASSIGN] = {NULL, xr_parse_assignment, PREC_ASSIGNMENT},
@@ -1219,7 +1220,7 @@ static int try_parse_generic_type_args(Parser *parser, XrType **type_args, int c
 
         type_args[count++] = type;
 
-    } while (xr_parser_match(parser, TK_COMMA));
+    } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
     // Must end with >
     if (!xr_parser_match(parser, TK_GT)) {
@@ -1352,7 +1353,7 @@ AstNode *xr_parse_variable(Parser *parser) {
                     xr_parser_consume(parser, TK_COLON, "expected ':' after field name");
                     field_values[field_count] = xr_parse_expression(parser);
                     field_count++;
-                } while (xr_parser_match(parser, TK_COMMA));
+                } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
             }
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");
@@ -1384,7 +1385,7 @@ AstNode *xr_parse_variable(Parser *parser) {
             do {
                 XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity,
                               xr_parse_call_argument(parser));
-            } while (xr_parser_match(parser, TK_COMMA));
+            } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
         }
 
         xr_parser_consume(parser, TK_RPAREN, "expected ')' after argument list");
@@ -1468,7 +1469,7 @@ AstNode *xr_parse_variable(Parser *parser) {
                     xr_parser_consume(parser, TK_COLON, "expected ':' after field name");
                     field_values[field_count] = xr_parse_expression(parser);
                     field_count++;
-                } while (xr_parser_match(parser, TK_COMMA));
+                } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RBRACE));
             }
 
             xr_parser_consume(parser, TK_RBRACE, "expected '}' to end struct literal");

@@ -433,7 +433,8 @@ RegexFlag ::= 'g' | 'i' | 'm' | 's'
 | Token | 用途 |
 |--|--|
 | `?` | 可空类型 (`T?`)、ternary、可选链前缀 |
-| `?.` | 可选链 (`obj?.prop`) |
+| `?.` | 可选链属性/方法 (`obj?.prop`, `obj?.method()`) |
+| `?[` | 可选链索引 (`arr?[0]`) |
 | `??` | 空值合并 (`a ?? b`) |
 | `!` | 强制解包（后缀，`expr!`）/ 逻辑非（前缀） |
 | `\|` | union 类型 (`int \| string`) / 位或 |
@@ -906,7 +907,7 @@ Reflect.getAllTypes()       // 所有已注册类型
 
 | 级 | 运算符 | 结合性 | 说明 |
 |--|--|--|--|
-| 17 | `(...)` `[...]` `.x` `?.x` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
+| 17 | `(...)` `[...]` `.x` `?.x` `?[...]` `f()` `e!` | 左 | 后缀：分组、索引、成员、可选链、调用、强制解包 |
 | 16 | 前缀 `-` `+` `!` `~` `new` `move` `await` `go` | 右 | 一元前缀 + 协程操作（`++` / `--` 仅后缀） |
 | 15 | `as` `is` | 左 | 类型转换 / 检查（`as T?` 安全形式靠目标类型可空，非独立 `as?` 运算符） |
 | 14 | `*` `/` `%` | 左 | 乘除取模 |
@@ -1057,26 +1058,28 @@ let max = a > b ? a : b
 - 条件必须是 `bool`。
 - 两分支类型统一：取共同超类型（或 union）。
 
-### 3.6 空合并 `??` 与可选链 `?.`
+### 3.6 空合并 `??` 与可选链 `?.` / `?[`
 
-详见 §3.3.5（`??`）与下方（`?.`）。
+详见 §3.3.5（`??`）与下方（`?.` / `?[`）。
 
-#### 可选链 `?.`
+#### 可选链 `?.` / `?[`
 
 ```ebnf
-OptionalChain ::= Primary ('?.' (Identifier | '[' Expr ']'))+
+OptionalChain ::= Primary ('?.' Identifier | '?[' Expr ']')+
 ```
 
 ```xray
 let len = name?.length          // null 时返回 null
-let item = arr?.[0]             // 可选索引
+let item = arr?[0]              // 可选索引
 ```
 
 **语义**：
-- 若 `?.` 左侧为 `null`，整个表达式短路返回 `null`。
+- 若 `?.` 或 `?[` 左侧为 `null`，整个表达式短路返回 `null`。
+- `?.` 用于属性访问和方法调用：`obj?.prop`、`obj?.method()`。
+- `?[` 用于索引访问：`arr?[0]`。与普通索引 `arr[0]` 对称，只需在 `[` 前加 `?`。
 - **传播**：`a?.b.c.d` 中，若 `a` 为 null，整个链返回 null；中间 `.` 不重新检查。
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
-- 当前 `?.` 支持属性访问与索引访问；函数可选调用 `func?.()` 不属于当前语法。
+- 函数可选调用 `func?.()` 不属于当前语法。
 
 ### 3.7 强制解包 `!` / `try?` / `try!` / `catch!`
 
@@ -2152,7 +2155,7 @@ class Counter {
 }
 ```
 
-**不能**重载：`&&` `\|\|` `=` `?.` `?:` `??` `,` `.`
+**不能**重载：`&&` `\|\|` `=` `?.` `?[` `?:` `??` `,` `.`
 
 #### 5.3.6 自定义迭代器
 
@@ -5182,7 +5185,9 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
 PostfixExpr ::= Primary PostfixOp*
 PostfixOp   ::= '(' ArgList? ')'              // call
              |  '.' Identifier                 // member
-             |  '?.' (Identifier | '(' ArgList? ')')  // optional chain
+             |  '?.' Identifier                 // optional chain property
+             |  '?.' Identifier '(' ArgList? ')'  // optional chain method
+             |  '?[' Expression ']'            // optional chain index
              |  '[' Expression ']'             // index
              |  '[' Expression? ':' Expression? ']'  // slice
              |  '!'                            // force unwrap
@@ -5221,7 +5226,7 @@ CatchBlock  ::= 'catch!' Block
 
 ThrowExpr   ::= 'throw' Expression                // operand 静态类型必须是 Exception 派生（E0370）
 
-ArgList ::= Expression (',' Expression)*
+ArgList ::= Expression (',' Expression)* ','?
 ```
 
 ### A.4 模式
@@ -5324,14 +5329,14 @@ BindingPattern ::= Identifier
                 |  '{' Identifier (',' Identifier)* ','? '}'
 
 FnDecl ::= AttrList? Modifier* 'fn' Identifier TypeParams? '(' ParamList? ')' ReturnType? Block
-ParamList ::= Param (',' Param)*
+ParamList ::= Param (',' Param)* ','?
 Param     ::= Modifier* Identifier ':' Type ('=' Expression)?
            |  '...' Identifier ':' Type
 ReturnType ::= '->' Type | '->' '(' Type (',' Type)+ ')'
 Modifier  ::= 'in' | 'ref' | 'private' | 'public' | 'static' | 'final' | 'abstract' | 'override'
               // public/override 合法但实际从不使用（默认/隐式行为）
 
-TypeParams ::= '<' TypeParam (',' TypeParam)* '>'
+TypeParams ::= '<' TypeParam (',' TypeParam)* ','? '>'
 TypeParam  ::= Identifier (':' Type ('&' Type)*)?         // 约束用 ':' ，多约束用 '&'
 
 ClassDecl ::= Modifier* 'class' Identifier TypeParams?
@@ -5460,7 +5465,7 @@ OperatorToken ::= '+' | '-' | '*' | '/' | '%'
 | 比较 | `==` `!=` `===` `!==` `<` `<=` `>` `>=` |
 | 逻辑 | `&&` `\|\|` `!` |
 | 赋值 | `=` `+=` `-=` `*=` `/=` `%=` `&=` `\|=` `^=` `<<=` `>>=` |
-| 其他 | `..` `??` `?.` `!` `->` |
+| 其他 | `..` `??` `?.` `?[` `!` `->` |
 
 ---
 

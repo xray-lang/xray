@@ -10,6 +10,34 @@
 
 #include "xanalyzer_builtins.h"
 
+// ======== Builtin Type Members ========
+
+// DateTime methods
+static const XaBuiltinMember g_gen_datetime_members[] = {
+    {"format", "(pattern?: string): string", "Format datetime to string", true, false},
+    {"toISOString", "(): string", "Convert to ISO 8601 string", true, false},
+    {"year", "(): int", "Get year", true, false},
+    {"month", "(): int", "Get month (1-12)", true, false},
+    {"day", "(): int", "Get day (1-31)", true, false},
+    {"hour", "(): int", "Get hour (0-23)", true, false},
+    {"minute", "(): int", "Get minute (0-59)", true, false},
+    {"second", "(): int", "Get second (0-59)", true, false},
+    {"millisecond", "(): int", "Get millisecond (0-999)", true, false},
+    {"weekday", "(): int", "Get weekday (0=Sunday)", true, false},
+    {"yearday", "(): int", "Get day of year (1-366)", true, false},
+    {"timestamp", "(): int", "Get Unix timestamp (seconds)", true, false},
+    {"add", "(amount: int, unit: string): DateTime", "Add duration to datetime", true, false},
+    {"diff", "(other: DateTime, unit?: string): int", "Difference between datetimes", true, false},
+    {"toUTC", "(): DateTime", "Convert to UTC", true, false},
+    {"toLocal", "(): DateTime", "Convert to local time", true, false},
+    {"isBefore", "(other: DateTime): bool", "Check if before other datetime", true, false},
+    {"isAfter", "(other: DateTime): bool", "Check if after other datetime", true, false},
+    {"equals", "(other: DateTime): bool", "Check if equal to other datetime", true, false},
+    {"isLeapYear", "(): bool", "Check if leap year", true, false},
+    {"daysInMonth", "(): int", "Get days in current month", true, false},
+};
+#define GEN_DATETIME_MEMBER_COUNT 21
+
 // ======== C Module Declarations ========
 
 // base64 module functions
@@ -23,6 +51,29 @@ static const XaBuiltinMember g_gen_base64_functions[] = {
     {"isValid", "(data: string): bool", "Check if valid base64", true, false},
 };
 #define GEN_BASE64_FUNCTION_COUNT 7
+
+// cluster module functions
+static const XaBuiltinMember g_gen_cluster_functions[] = {
+    {"start", "(config: Json): ()", "Start cluster node", true, false},
+    {"join", "(addr: string): bool", "Join cluster by address", true, false},
+    {"self", "(): string", "Get own node name", true, false},
+    {"nodes", "(): Array<string>", "List cluster node names", true, false},
+    {"channel", "(name: string, size?: int): Channel", "Create or get named distributed channel",
+     true, false},
+    {"serve", "(name: string): Channel", "Register service and return request channel", true,
+     false},
+    {"reply", "(req: Json, result: Json): bool", "Reply to service request", true, false},
+    {"call", "(service: string, args: Json, timeout?: int): Json", "Call remote service", true,
+     false},
+    {"monitor", "(name: string, coro_name?: string): Channel", "Monitor node or remote coroutine",
+     true, false},
+    {"discover", "(): ()", "Start LAN auto-discovery", true, false},
+    {"stop", "(): ()", "Stop cluster node", true, false},
+    {"info", "(): Json", "Get cluster status info", true, false},
+    {"publish", "(topic: string, value: Json): bool", "Publish to topic", true, false},
+    {"subscribe", "(pattern: string): Channel", "Subscribe to topic pattern", true, false},
+};
+#define GEN_CLUSTER_FUNCTION_COUNT 14
 
 // compress module functions
 static const XaBuiltinMember g_gen_compress_functions[] = {
@@ -89,29 +140,8 @@ static const XaBuiltinMember g_gen_datetime_functions[] = {
      true, false},
     {"parse", "(s: string, format?: string): DateTime?", "Parse datetime string", true, false},
     {"offset", "(): int", "Get UTC offset in minutes", true, false},
-    {"format", "(pattern?: string): string", "Format datetime to string", true, false},
-    {"toISOString", "(): string", "Convert to ISO 8601 string", true, false},
-    {"year", "(): int", "Get year", true, false},
-    {"month", "(): int", "Get month (1-12)", true, false},
-    {"day", "(): int", "Get day (1-31)", true, false},
-    {"hour", "(): int", "Get hour (0-23)", true, false},
-    {"minute", "(): int", "Get minute (0-59)", true, false},
-    {"second", "(): int", "Get second (0-59)", true, false},
-    {"millisecond", "(): int", "Get millisecond (0-999)", true, false},
-    {"weekday", "(): int", "Get weekday (0=Sunday)", true, false},
-    {"yearday", "(): int", "Get day of year (1-366)", true, false},
-    {"timestamp", "(): int", "Get Unix timestamp (seconds)", true, false},
-    {"add", "(amount: int, unit: string): DateTime", "Add duration to datetime", true, false},
-    {"diff", "(other: DateTime, unit?: string): int", "Difference between datetimes", true, false},
-    {"toUTC", "(): DateTime", "Convert to UTC", true, false},
-    {"toLocal", "(): DateTime", "Convert to local time", true, false},
-    {"isBefore", "(other: DateTime): bool", "Check if before other datetime", true, false},
-    {"isAfter", "(other: DateTime): bool", "Check if after other datetime", true, false},
-    {"equals", "(other: DateTime): bool", "Check if equal to other datetime", true, false},
-    {"isLeapYear", "(): bool", "Check if leap year", true, false},
-    {"daysInMonth", "(): int", "Get days in current month", true, false},
 };
-#define GEN_DATETIME_FUNCTION_COUNT 29
+#define GEN_DATETIME_FUNCTION_COUNT 8
 
 // encoding module functions
 static const XaBuiltinMember g_gen_encoding_functions[] = {
@@ -548,6 +578,7 @@ static const XaBuiltinMember g_gen_yaml_functions[] = {
 // Module registry
 static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"base64", g_gen_base64_functions, GEN_BASE64_FUNCTION_COUNT, NULL, 0},
+    {"cluster", g_gen_cluster_functions, GEN_CLUSTER_FUNCTION_COUNT, NULL, 0},
     {"compress", g_gen_compress_functions, GEN_COMPRESS_FUNCTION_COUNT, NULL, 0},
     {"crypto", g_gen_crypto_functions, GEN_CRYPTO_FUNCTION_COUNT, NULL, 0},
     {"csv", g_gen_csv_functions, GEN_CSV_FUNCTION_COUNT, NULL, 0},
@@ -570,6 +601,6 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},
 };
-#define GEN_BUILTIN_MODULE_COUNT 21
+#define GEN_BUILTIN_MODULE_COUNT 22
 
 #endif  // XANALYZER_BUILTINS_GENERATED_H

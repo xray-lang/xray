@@ -93,7 +93,7 @@ AstNode *xr_parse_class_declaration(Parser *parser) {
             gp->constraint_count = constraint_count;
             XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
@@ -327,7 +327,7 @@ AstNode *xr_parse_struct_declaration(Parser *parser) {
             gp->constraint_count = constraint_count;
             XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         xr_parser_consume(parser, TK_GT, "expected '>' to close generic params");
     }
@@ -658,7 +658,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
                 int dummy = 0;
                 xr_parse_constraint_list(parser, &dummy);
             }
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         // Consume closing '>'
         xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
@@ -722,7 +722,7 @@ AstNode *xr_parse_method_declaration(Parser *parser, const char *name, int name_
             }
 
             param_count++;
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end parameter list");
@@ -847,7 +847,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
                 break;
             }
             type_args[type_arg_count++] = type;
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         // Consume closing '>' (handle >> as two > for nested generics like Box<Array<int>>)
         if (xr_parser_check(parser, TK_GT)) {
@@ -877,7 +877,7 @@ AstNode *xr_parse_new_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end argument list");
@@ -940,7 +940,7 @@ AstNode *xr_parse_super_expression(Parser *parser) {
     if (!xr_parser_check(parser, TK_RPAREN)) {
         do {
             XR_PARSE_PUSH(parser, arguments, arg_count, arg_capacity, xr_parse_expression(parser));
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to end argument list");
@@ -1600,7 +1600,7 @@ AstNode *xr_parse_interface_member(Parser *parser) {
             param_types[param_count] = param_type;
             param_count++;
 
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_RPAREN));
     }
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')'");
@@ -1652,7 +1652,7 @@ static XrTypeRef *build_type_from_consumed_name(Parser *parser, Token *name_tok)
         do {
             if (type_arg_count < 16)
                 type_args[type_arg_count++] = xr_parse_type_annotation(parser);
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
         xr_parser_consume(parser, TK_GT, "expected '>' in generic type");
         result = xr_tref_generic(parser->X, temp_name, type_args, type_arg_count);
     } else if (parser->type_scope) {
@@ -1790,7 +1790,7 @@ AstNode *xr_parse_enum_declaration(Parser *parser) {
             gp->constraint_count = constraint_count;
             XR_PARSE_PUSH(parser, type_params, type_param_count, type_param_capacity, gp);
 
-        } while (xr_parser_match(parser, TK_COMMA));
+        } while (xr_parser_match(parser, TK_COMMA) && !xr_parser_check(parser, TK_GT));
 
         xr_parser_consume(parser, TK_GT, "expected '>' after type parameters");
     }

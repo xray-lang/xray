@@ -6,13 +6,13 @@ static const char xr_native_def_bigint[] = "// Built-in BigInt type — implemen
 
 static const char xr_native_def_bool[] = "// Built-in bool type — implementation in src/runtime/value/xbool_methods.c\n\n@native\nclass bool {\n    toString() -> string\n}\n";
 
-static const char xr_native_def_channel[] = "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\n@native\nclass Channel<T> {\n    send(value: T)\n    recv() -> T\n    trySend(value: T) -> bool\n    tryRecv(): (T, bool)\n    close()\n    closed: bool\n}\n";
+static const char xr_native_def_channel[] = "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\n@native\nclass Channel<T> {\n    length: int\n    capacity: int\n    isClosed: bool\n    send(value: T)\n    recv() -> T\n    trySend(value: T) -> bool\n    tryRecv(): (T, bool)\n    sendTimeout(value: T, timeout: int) -> bool\n    recvTimeout(timeout: int): (T, bool)\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] = "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\n@native\nclass Task {\n    done: bool\n    cancelled: bool\n    result: Json\n    error: string?\n    cancel()\n}\n";
 
 static const char xr_native_def_enum[] = "// Built-in enum value/type runtime info\n\n@native\nclass EnumValue {\n    name: string\n    value: Json\n    ordinal: int\n    toString() -> string\n}\n\n@native\nclass EnumType {\n    memberCount: int\n    getMember(index: int) -> EnumValue\n}\n";
 
-static const char xr_native_def_exception[] = "// Built-in Exception type — implementation in src/runtime/object/xexception.c\n\n@native\nclass Exception {\n    message: string\n    stack: string\n    cause: Exception?\n    constructor(message: string = \"\", cause: Exception? = null)\n    toString() -> string\n}\n";
+static const char xr_native_def_exception[] = "// Built-in Exception class.\n//\n// Field layout matches xclass_system.h EXCEPTION_FIELD_* indices and the\n// XrClass built by xr_register_exception_class in xclass_system.c. The\n// constructor and toString bodies are PRIMITIVE on the C side; this\n// declaration exists for analyzer / LSP awareness so user code can write\n// `class HttpError extends Exception { ... }` and reference fields by\n// name from any module.\n\nclass Exception {\n    message: string\n    stack: Array<string>\n    cause: Exception?\n    code: int\n    data: Json?\n    constructor(message: string = \"\", cause: Exception? = null)\n    toString() -> string\n}\n";
 
 static const char xr_native_def_float[] = "// Built-in float type — implementation in src/runtime/value/xfloat_methods.c\n\n@native\nclass float {\n    abs() -> float\n    toString() -> string\n    toFixed(decimals?: int) -> string\n    toInt() -> int\n    floor() -> int\n    ceil() -> int\n    round() -> int\n    sqrt() -> float\n    pow(exp: float) -> float\n}\n";
 

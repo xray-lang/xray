@@ -1618,6 +1618,14 @@ XrJitResult xr_jit_slice(XrCoroutine *coro, int64_t unused) {
     int32_t end = (int32_t) coro->jit_ctx->call_args[2];
     if (!src)
         return XR_JIT_NULL();
+
+    XrGCHeader *hdr = (XrGCHeader *) src;
+    if (hdr->type == XR_TSTRING) {
+        XrString *str = (XrString *) src;
+        XrString *slice = xr_string_slice(coro->isolate, str, start, end);
+        return slice ? XR_JIT_PTR(slice) : XR_JIT_NULL();
+    }
+
     XrArray *arr = (XrArray *) src;
     XrArray *slice = xr_array_slice(coro, arr, start, end);
     return slice ? XR_JIT_PTR(slice) : XR_JIT_NULL();

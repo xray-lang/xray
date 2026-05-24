@@ -60,6 +60,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_COROUTINE;
     if (xr_type_is_named_class(type, "Atomic"))
         return XR_TID_ATOMIC;
+    if (xr_type_is_named_class(type, "DateTime"))
+        return XR_TID_DATETIME;
     return XR_TID_NULL;
 }
 
@@ -517,9 +519,8 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
 static const XaBuiltinModule *builtin_modules = g_gen_builtin_modules;
 static const int builtin_module_count = GEN_BUILTIN_MODULE_COUNT;
 
-// Manually defined module signatures.
-// Global objects: Coro, CoroPool, Reflect, Type
-// Stdlib modules not yet in auto-generated registry: cluster
+// Manually defined module signatures for VM-intrinsic global objects.
+// These use special opcodes (OP_CORO_CTRL etc.), not module XRS_EXPORT.
 
 static const XaBuiltinMember g_rt_coro_functions[] = {
     {"stats", "(): Json", "Get coroutine statistics", true, true},
@@ -562,28 +563,12 @@ static const XaBuiltinMember g_rt_reflect_functions[] = {
 };
 #define RT_REFLECT_FUNCTION_COUNT 10
 
-static const XaBuiltinMember g_rt_cluster_functions[] = {
-    {"start", "(config: Json): ()", "Start cluster node", true, true},
-    {"join", "(host: string, port: int): bool", "Join cluster", true, true},
-    {"self", "(): string", "Get own node name", true, true},
-    {"nodes", "(): Array<string>", "List cluster nodes", true, true},
-    {"channel", "(name: string): Channel", "Get distributed channel", true, true},
-    {"serve", "(name: string, handler: fn): ()", "Register service handler", true, true},
-    {"call", "(node: string, service: string, data: Json): Json", "Call remote service", true,
-     true},
-    {"reply", "(req: Json, result: Json): ()", "Reply to service request", true, true},
-    {"monitor", "(node: string): Channel", "Monitor node health", true, true},
-    {"stop", "(): ()", "Stop cluster node", true, true},
-};
-#define RT_CLUSTER_FUNCTION_COUNT 10
-
 static const XaBuiltinModule g_rt_builtin_modules[] = {
     {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0},
     {"CoroPool", g_rt_coropool_functions, RT_COROPOOL_FUNCTION_COUNT, NULL, 0},
     {"Reflect", g_rt_reflect_functions, RT_REFLECT_FUNCTION_COUNT, NULL, 0},
-    {"cluster", g_rt_cluster_functions, RT_CLUSTER_FUNCTION_COUNT, NULL, 0},
 };
-#define RT_BUILTIN_MODULE_COUNT 4
+#define RT_BUILTIN_MODULE_COUNT 3
 
 // Script directory for .xrd search (set by analyzer or LSP)
 static const char *g_script_dir = NULL;
