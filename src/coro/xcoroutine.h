@@ -314,8 +314,6 @@ typedef struct XrCoroutine {
     struct XrayIsolate *isolate;   // JIT runtime helpers use 22+ times
     XrValue result;
     XrValue error;
-    XrValue pending_closure_result;  // return value from xr_yield_call_closure
-    XrValue pending_closure_error;   // exception from xr_yield_call_closure (CLOSURE_ERROR)
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)

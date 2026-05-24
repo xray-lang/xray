@@ -434,17 +434,24 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
  * ====================================================================== */
 
 // Forward declarations
-static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, void *ctx,
-                                               XrValue *result);
-static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, void *ctx, XrValue *result);
-static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, void *ctx,
-                                               XrValue *result);
-static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *ctx, XrValue *result);
+static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                    XrValue *result);
+static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result);
+static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result);
+static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result);
+static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *ctx, XrValue *result);
+static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *ctx, XrValue *result);
+static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result);
+static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *ctx, XrValue *result);
+static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                      XrValue *result);
 
 /*
  * Connection context — all state that survives across yield points.
@@ -535,8 +542,8 @@ static XrCFuncResult http_conn_cleanup(HttpConnCtx *ctx) {
 }
 
 /* XrContinuation-shaped wrapper for use as a write_done_cont. */
-static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, void *user_ctx,
-                                            XrValue *result) {
+static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *user_ctx, XrValue *result) {
     (void) X;
     (void) status;
     (void) result;
@@ -547,8 +554,8 @@ static XrCFuncResult http_conn_cleanup_cont(XrayIsolate *X, int status, void *us
  * Generic async write helper. Writes ctx->write_ptr / write_remaining,
  * yields for EAGAIN, then calls ctx->write_done_cont when complete.
  */
-static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *user_ctx,
-                                          XrValue *result) {
+static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -569,7 +576,7 @@ static XrCFuncResult http_conn_write_cont(XrayIsolate *X, int status, void *user
         return http_conn_cleanup(ctx);
     }
     // Write complete — call the stored return continuation
-    return ctx->write_done_cont(X, XR_RESUME_IO_READY, ctx, result);
+    return ctx->write_done_cont(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
 // Start an async write, calling done_cont when finished
@@ -578,7 +585,7 @@ static XrCFuncResult http_conn_start_write(XrayIsolate *X, HttpConnCtx *ctx, con
     ctx->write_ptr = data;
     ctx->write_remaining = len;
     ctx->write_done_cont = done_cont;
-    return http_conn_write_cont(X, XR_RESUME_IO_READY, ctx, result);
+    return http_conn_write_cont(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
 /*
@@ -645,8 +652,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                                          http_conn_cleanup_cont, result);
         }
         XrClosure *ws_handler = (XrClosure *) user_data;
-        return xr_yield_call_closure(X, ws_handler, &ws_conn, 1, http_conn_ws_handler_done, ctx,
-                                     result);
+        return xr_call_closure(X, ws_handler, &ws_conn, 1, http_conn_ws_handler_done, ctx, result);
     }
 
     if (user_data) {
@@ -752,13 +758,13 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
             }
             memset(&ctx->decoder, 0, sizeof(ctx->decoder));
             ctx->decoder.consume_trailer = true;
-            return http_conn_read_chunked(X, XR_RESUME_IO_READY, ctx, result);
+            return http_conn_read_chunked(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
         } else if (ctx->content_length > 0 && ctx->content_length <= MAX_BODY_SIZE && parsed > 0) {
             int total_needed = parsed + ctx->content_length;
             if (total_needed <= CONN_READ_BUF_SIZE) {
                 if (ctx->buf_used < total_needed) {
                     ctx->body_total = total_needed;
-                    return http_conn_read_body(X, XR_RESUME_IO_READY, ctx, result);
+                    return http_conn_read_body(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
                 }
                 if (ctx->buf_used >= total_needed) {
                     ctx->header_end = total_needed;
@@ -777,7 +783,8 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
                     ctx->body_read = body_in_buf;
                     ctx->body_total = ctx->content_length;
                     if (ctx->body_read < ctx->body_total) {
-                        return http_conn_read_large_body(X, XR_RESUME_IO_READY, ctx, result);
+                        return http_conn_read_large_body(X, XR_RESUME_IO_READY, xr_null(), ctx,
+                                                         result);
                     }
                     xr_json_set_by_key(X, req, "body",
                                        make_string_val(X, ctx->body_buf, ctx->content_length));
@@ -818,8 +825,7 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
 
         // Call handler closure — resumes http_conn_handler_done on return
         XrValue req_val = xr_json_value(req);
-        return xr_yield_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx,
-                                     result);
+        return xr_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
     }
 
     // No route matched
@@ -829,8 +835,8 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
 /*
  * Continuation: read content-length body into read_buf.
  */
-static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, void *user_ctx,
-                                         XrValue *result) {
+static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -858,14 +864,14 @@ static XrCFuncResult http_conn_read_body(XrayIsolate *X, int status, void *user_
     }
     // Body read complete — call handler
     XrValue req_val = xr_json_value(ctx->req_json);
-    return xr_yield_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
+    return xr_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
 }
 
 /*
  * Continuation: read chunked transfer-encoded body.
  */
-static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, void *user_ctx,
-                                            XrValue *result) {
+static XrCFuncResult http_conn_read_chunked(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         goto chunk_error;
@@ -909,8 +915,7 @@ chunk_done:
     ctx->chunk_buf = NULL;
     {
         XrValue req_val = xr_json_value(ctx->req_json);
-        return xr_yield_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx,
-                                     result);
+        return xr_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
     }
 
 chunk_error:
@@ -925,8 +930,8 @@ chunk_error:
 /*
  * Continuation: read large body (> read_buf size) into arena buffer.
  */
-static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, void *user_ctx,
-                                               XrValue *result) {
+static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY)
         return http_conn_cleanup(ctx);
@@ -952,15 +957,15 @@ static XrCFuncResult http_conn_read_large_body(XrayIsolate *X, int status, void 
                            make_string_val(X, ctx->body_buf, ctx->body_total));
     }
     XrValue req_val = xr_json_value(ctx->req_json);
-    return xr_yield_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
+    return xr_call_closure(X, ctx->handler, &req_val, 1, http_conn_handler_done, ctx, result);
 }
 
 /*
  * Continuation: called when user handler closure returns.
  * Process result and write HTTP response.
  */
-static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *user_ctx,
-                                            XrValue *result) {
+static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     xr_free(ctx->response_data);
     ctx->response_data = NULL;
@@ -971,10 +976,9 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *us
      * fallback that prevents fd leaks and client hangs. Connection: close is
      * forced because the request lifecycle was aborted mid-flight. */
     if (status == XR_RESUME_CLOSURE_ERROR) {
-        XrValue exc = xr_get_closure_error(X);
         const char *msg = NULL;
-        if (xr_value_is_exception(X, exc))
-            msg = xr_exception_get_message(X, exc);
+        if (xr_value_is_exception(X, resume_value))
+            msg = xr_exception_get_message(X, resume_value);
         char body[512];
         int body_len = snprintf(body, sizeof(body), "Internal Server Error: %s",
                                 msg ? msg : "uncaught exception");
@@ -989,8 +993,7 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *us
         return http_conn_start_write(X, ctx, r.data, r.len, http_conn_cleanup_cont, result);
     }
 
-    XrValue closure_result = xr_get_closure_result(X);
-    HttpRawResponse r = process_handler_result_raw(X, closure_result);
+    HttpRawResponse r = process_handler_result_raw(X, resume_value);
     ctx->response_data = r.data;
     if (!r.data)
         return http_conn_cleanup(ctx);
@@ -1003,10 +1006,11 @@ static XrCFuncResult http_conn_handler_done(XrayIsolate *X, int status, void *us
  * Continuation: called when WS handler closure returns.
  * Connection lifecycle is over — cleanup.
  */
-static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, void *user_ctx,
-                                               XrValue *result) {
+static XrCFuncResult http_conn_ws_handler_done(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *user_ctx, XrValue *result) {
     (void) X;
     (void) status;
+    (void) resume_value;
     (void) result;
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     return http_conn_cleanup(ctx);
@@ -1066,7 +1070,7 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
     ctx->arena_inited = true;
 
     // Start the main request loop
-    return http_conn_loop(X, XR_RESUME_IO_READY, ctx, result);
+    return http_conn_loop(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
 /*
@@ -1074,7 +1078,8 @@ static XrCFuncResult http_conn_init(XrayIsolate *X, XrValue *args, int argc, XrV
  * Reads headers, dispatches to prebuilt or dynamic route.
  * Called after: init, write complete (keep-alive), batch yield.
  */
-static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, XrValue *result) {
+static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, XrValue resume_value,
+                                    void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
         return http_conn_cleanup(ctx);
@@ -1106,11 +1111,11 @@ static XrCFuncResult http_conn_loop(XrayIsolate *X, int status, void *user_ctx, 
         return xr_yield(X, http_conn_read_request, ctx);
     }
 
-    return http_conn_read_request(X, XR_RESUME_IO_READY, ctx, result);
+    return http_conn_read_request(X, XR_RESUME_IO_READY, xr_null(), ctx, result);
 }
 
-static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, void *user_ctx,
-                                            XrValue *result) {
+static XrCFuncResult http_conn_read_request(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *user_ctx, XrValue *result) {
     HttpConnCtx *ctx = (HttpConnCtx *) user_ctx;
     if (status != XR_RESUME_IO_READY && status != XR_RESUME_OK)
         return http_conn_cleanup(ctx);
@@ -1200,7 +1205,8 @@ static XrCFuncResult http_listen_init(XrayIsolate *X, XrValue *args, int argc, X
  * Accept loop continuation — accepts connections,
  * spawns cfunc conn coroutine per client, then yields for next batch.
  */
-static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx, XrValue *result) {
+static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                      void *user_ctx, XrValue *result) {
     HttpListenCtx *lctx = (HttpListenCtx *) user_ctx;
     XrHttpContext *ctx = lctx->ctx;
 
@@ -1267,7 +1273,8 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, void *user_ctx
 
 /* Continuation: keep caller coroutine blocked while server is running.
  * Polls every second — acceptable for a server lifetime check. */
-static XrCFuncResult http_listen_wait_cont(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult http_listen_wait_cont(XrayIsolate *X, int status, XrValue resume_value,
+                                           void *ctx, XrValue *result) {
     (void) status;
     XrHttpContext *hctx = (XrHttpContext *) ctx;
     if (!hctx || !hctx->server || !hctx->server->running) {

@@ -148,7 +148,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                                     return XR_CFUNC_ERROR;
                                 return XR_CFUNC_YIELD;
                             }
-                            return cont(X, XR_RESUME_IO_READY, user_data, result);
+                            return cont(X, XR_RESUME_IO_READY, xr_null(), user_data, result);
                         }
                         continue;
                     }
@@ -255,22 +255,21 @@ bool xr_coro_has_continuation(XrCoroutine *coro) {
     return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
 }
 
-// ========== Yield-Style Call Closure ==========
+// ========== Call Closure from C Layer ==========
 //
-// xr_yield_call_closure() allows C-layer code to invoke a user closure
-// that may itself yield (channel/await/sleep). The closure is pushed as a
-// new call frame on the coroutine's VM stack. When the closure returns,
-// the VM detects CLOSURE_PENDING on the caller frame and invokes the
-// continuation with XR_RESUME_CLOSURE_DONE.
-//
-// Previously this lived in its own 131-line xyield_closure.c — folded in
-// here in this file; it shares get_current_coro with the wait helpers above.
-XrCFuncResult xr_yield_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args, int nargs,
-                                    XrContinuation on_complete, void *user_ctx, XrValue *result) {
-    XR_DCHECK(X != NULL, "yield_call_closure: NULL isolate");
-    XR_DCHECK(closure != NULL, "yield_call_closure: NULL closure");
-    XR_DCHECK(closure->proto != NULL, "yield_call_closure: NULL proto");
-    XR_DCHECK(on_complete != NULL, "yield_call_closure: NULL continuation");
+// xr_call_closure() allows C-layer code to invoke a user closure that may
+// itself yield (channel/await/sleep). The closure is pushed as a new call
+// frame on the coroutine's VM stack. When the closure returns, the VM
+// detects CLOSURE_PENDING on the caller frame and invokes the continuation
+// with XR_RESUME_CLOSURE_DONE and the closure's return value delivered
+// through the resume_value parameter (or XR_RESUME_CLOSURE_ERROR plus the
+// uncaught exception value on failure).
+XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args, int nargs,
+                              XrContinuation on_complete, void *user_ctx, XrValue *result) {
+    XR_DCHECK(X != NULL, "call_closure: NULL isolate");
+    XR_DCHECK(closure != NULL, "call_closure: NULL closure");
+    XR_DCHECK(closure->proto != NULL, "call_closure: NULL proto");
+    XR_DCHECK(on_complete != NULL, "call_closure: NULL continuation");
 
     XrCoroutine *coro = get_current_coro(X);
     /* No current coroutine is a real misuse, but the C API surface
@@ -343,20 +342,4 @@ XrCFuncResult xr_yield_call_closure(XrayIsolate *X, XrClosure *closure, XrValue 
 
     (void) result;
     return XR_CFUNC_CALL_CLOSURE;
-}
-
-XrValue xr_get_closure_result(XrayIsolate *X) {
-    XrCoroutine *coro = get_current_coro(X);
-    if (coro) {
-        return coro->pending_closure_result;
-    }
-    return xr_null();
-}
-
-XrValue xr_get_closure_error(XrayIsolate *X) {
-    XrCoroutine *coro = get_current_coro(X);
-    if (coro) {
-        return coro->pending_closure_error;
-    }
-    return xr_null();
 }

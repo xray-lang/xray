@@ -256,7 +256,7 @@ op_call_cfunc:
                     return XR_VM_YIELD;
 
                 case XR_CFUNC_CALL_CLOSURE:
-                    /* Closure frame pushed by xr_yield_call_closure,
+                    /* Closure frame pushed by xr_call_closure,
                      * execute it via normal VM path */
                     goto startfunc;
 
@@ -1064,10 +1064,10 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
     // Restore caller frame
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
-    // Closure called via xr_yield_call_closure returned
+    // Closure called via xr_call_closure returned: hand the value to the
+    // C continuation through the run-loop local closure_pending_value.
     if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
-        XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
-        _pcoro->pending_closure_result = return_slot ? *return_slot : xr_null();
+        closure_pending_value = return_slot ? *return_slot : xr_null();
         goto handle_closure_pending;
     }
 
@@ -1141,10 +1141,9 @@ vmcase(OP_RETURN0) {
     // Restore caller frame
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
-    // Closure called via xr_yield_call_closure returned
+    // Closure called via xr_call_closure returned (RETURN0 — no value).
     if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
-        XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
-        _pcoro->pending_closure_result = xr_null();
+        closure_pending_value = xr_null();
         goto handle_closure_pending;
     }
 
@@ -1271,10 +1270,9 @@ vmcase(OP_RETURN1) {
     // Restore caller frame
     ci = &VM_FRAMES[VM_FRAME_COUNT - 1];
 
-    // Closure called via xr_yield_call_closure returned
+    // Closure called via xr_call_closure returned (RETURN1).
     if (XR_UNLIKELY(ci->call_status & XR_CALL_CLOSURE_PENDING)) {
-        XrCoroutine *_pcoro = (XrCoroutine *) vm_ctx->current_coro;
-        _pcoro->pending_closure_result = ret_val;
+        closure_pending_value = ret_val;
         goto handle_closure_pending;
     }
 

@@ -508,7 +508,8 @@ static XrValue os_kill(XrayIsolate *X, XrValue *args, int argc) {
 }
 
 // Continuation for os.sleep — timer fired, return null.
-static XrCFuncResult os_sleep_done(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult os_sleep_done(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                   XrValue *result) {
     (void) X;
     (void) status;
     (void) ctx;

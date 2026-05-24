@@ -351,7 +351,8 @@ typedef struct {
 
 static XrCFuncResult net_dial_step(XrayIsolate *X, NetDialState *state, XrValue *result);
 
-static XrCFuncResult net_dial_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult net_dial_continue(XrayIsolate *X, int status, XrValue resume_value, void *ctx,
+                                       XrValue *result) {
     NetDialState *state = (NetDialState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_close_fd(X, state->fd);
@@ -426,7 +427,8 @@ typedef struct {
 
 static XrCFuncResult net_accept_step(XrayIsolate *X, NetAcceptState *state, XrValue *result);
 
-static XrCFuncResult net_accept_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult net_accept_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *ctx, XrValue *result) {
     NetAcceptState *state = (NetAcceptState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
@@ -515,8 +517,8 @@ typedef struct {
 static XrCFuncResult net_read_handle_step(XrayIsolate *X, NetReadHandleState *state,
                                           XrValue *result);
 
-static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, void *ctx,
-                                              XrValue *result) {
+static XrCFuncResult net_read_handle_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                              void *ctx, XrValue *result) {
     NetReadHandleState *state = (NetReadHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
@@ -645,8 +647,8 @@ typedef struct {
 static XrCFuncResult net_write_handle_step(XrayIsolate *X, NetWriteHandleState *state,
                                            XrValue *result);
 
-static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, void *ctx,
-                                               XrValue *result) {
+static XrCFuncResult net_write_handle_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                               void *ctx, XrValue *result) {
     NetWriteHandleState *state = (NetWriteHandleState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);
@@ -860,7 +862,8 @@ static void net_dial_tls_cleanup(XrayIsolate *X, NetDialTLSState *state) {
     }
 }
 
-static XrCFuncResult net_dial_tls_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult net_dial_tls_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                           void *ctx, XrValue *result) {
     NetDialTLSState *state = (NetDialTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         net_dial_tls_cleanup(X, state);
@@ -990,8 +993,8 @@ typedef struct {
 static XrCFuncResult net_upgrade_tls_step(XrayIsolate *X, NetUpgradeTLSState *state,
                                           XrValue *result);
 
-static XrCFuncResult net_upgrade_tls_continue(XrayIsolate *X, int status, void *ctx,
-                                              XrValue *result) {
+static XrCFuncResult net_upgrade_tls_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                              void *ctx, XrValue *result) {
     NetUpgradeTLSState *state = (NetUpgradeTLSState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         // Cleanup TLS
@@ -1160,7 +1163,8 @@ typedef struct {
 
 static XrCFuncResult net_send_to_step(XrayIsolate *X, NetSendToState *state, XrValue *result);
 
-static XrCFuncResult net_send_to_continue(XrayIsolate *X, int status, void *ctx, XrValue *result) {
+static XrCFuncResult net_send_to_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                          void *ctx, XrValue *result) {
     NetSendToState *state = (NetSendToState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state->data);
@@ -1274,8 +1278,8 @@ typedef struct {
 
 static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state, XrValue *result);
 
-static XrCFuncResult net_recv_from_continue(XrayIsolate *X, int status, void *ctx,
-                                            XrValue *result) {
+static XrCFuncResult net_recv_from_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                            void *ctx, XrValue *result) {
     NetRecvFromState *state = (NetRecvFromState *) ctx;
     if (status == XR_RESUME_TIMEOUT || status == XR_RESUME_CANCELLED) {
         xr_free(state);

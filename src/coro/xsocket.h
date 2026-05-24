@@ -138,9 +138,9 @@ typedef struct XrAcceptState {
 //   XR_CFUNC_ERROR: error
 XR_FUNC XrCFuncResult xr_socket_accept_yieldable(struct XrayIsolate *X, XrAcceptState *state);
 
-// Accept continuation (new signature: added result param)
-XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrayIsolate *X, int status, void *ctx,
-                                                XrValue *result);
+// Accept continuation
+XR_FUNC XrCFuncResult xr_socket_accept_continue(struct XrayIsolate *X, int status,
+                                                XrValue resume_value, void *ctx, XrValue *result);
 
 // ========== Non-blocking Try API (hybrid: C-level try + xray yield) ==========
 

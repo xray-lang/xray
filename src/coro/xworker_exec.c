@@ -450,7 +450,7 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
         case XR_CFUNC_YIELD:
             return XR_VM_YIELD;
         case XR_CFUNC_CALL_CLOSURE:
-            // Closure frame pushed by xr_yield_call_closure, execute via VM.
+            // Closure frame pushed by xr_call_closure, execute via VM.
             coro_ctx->module_base_frame = 0;
             return run(isolate, coro_ctx);
         default:
@@ -481,7 +481,9 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
             XrContinuation cont = (XrContinuation) frame->u.c.continuation;
             void *user_ctx = frame->u.c.continuation_ctx;
             XrValue cfunc_result;
-            XrCFuncResult status = cont(isolate, resume_status, user_ctx, &cfunc_result);
+            // Fast-path resume: I/O / timer wakeup. resume_value carries no data
+            // for these events (status alone is informative).
+            XrCFuncResult status = cont(isolate, resume_status, xr_null(), user_ctx, &cfunc_result);
             switch (status) {
                 case XR_CFUNC_DONE:
                     coro_ctx->stack[0] = cfunc_result;
@@ -541,7 +543,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
         result = run_cfunc_resume(isolate, coro, coro_ctx, cur_flags);
     }
 
-    /* If a user closure called via xr_yield_call_closure threw uncaught,
+    /* If a user closure called via xr_call_closure threw uncaught,
      * route the exception to the deepest pending C continuation so the
      * native state machine can clean up (send 500, close fd, free buffers)
      * before the coroutine dies. Without this hook, every framework-level
@@ -594,7 +596,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 // run_cfunc_coro / run_finalize. See bottom of file for the shell.
 
 // Recover from an uncaught exception by routing it to the deepest C frame
-// that called xr_yield_call_closure. The pending continuation is invoked
+// that called xr_call_closure. The pending continuation is invoked
 // with XR_RESUME_CLOSURE_ERROR so the C state machine can release resources
 // (e.g. an HTTP server can send a 500 response and close the connection)
 // instead of leaking the coroutine + any fds/buffers it owned.
@@ -605,7 +607,7 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx) {
     (void) worker;
-    /* Find the deepest frame waiting on xr_yield_call_closure completion. */
+    /* Find the deepest frame waiting on xr_call_closure completion. */
     int target_fc = -1;
     for (int i = coro_ctx->frame_count - 1; i >= 0; i--) {
         if (coro_ctx->frames[i].call_status & XR_CALL_CLOSURE_PENDING) {
@@ -630,16 +632,17 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
             coro_ctx->stack + frame->base_offset + frame->closure->proto->maxstacksize;
     }
 
-    /* Hand the exception over to the continuation; clear VM-wide pending
-     * exception so subsequent dispatch starts clean. */
-    coro->pending_closure_error = coro_ctx->current_exception;
+    /* Hand the exception over to the continuation. Capture the value before
+     * clearing VM-wide pending exception so subsequent dispatch starts
+     * clean and the cont call sees a coherent state. */
+    XrValue exc_value = coro_ctx->current_exception;
     coro_ctx->current_exception = xr_null();
     frame->call_status &= ~XR_CALL_CLOSURE_PENDING;
 
     ctx->current_coro = coro;
 
     XrValue cresult = xr_null();
-    XrCFuncResult cstatus = cont(isolate, XR_RESUME_CLOSURE_ERROR, user_ctx, &cresult);
+    XrCFuncResult cstatus = cont(isolate, XR_RESUME_CLOSURE_ERROR, exc_value, user_ctx, &cresult);
 
     /* Translate continuation outcome back into a VM result. The continuation
      * may have yielded (e.g. queued an async write of a 500 response) or
