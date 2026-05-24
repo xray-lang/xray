@@ -530,6 +530,10 @@ vmcase(OP_UNM) {
             if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
             }
+            /* Stack/frames capacity check before frame push: prevents
+             * the operator method's register file from overflowing
+             * into frames[] in the combined slab layout. */
+            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
 
             R(a + 1) = vb;  // this
             savepc();
@@ -576,6 +580,7 @@ vmcase(OP_NOT) {
             if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
             }
+            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
 
             R(a + 1) = vb;  // this
             savepc();

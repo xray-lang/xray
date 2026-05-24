@@ -74,6 +74,58 @@ static inline XrCoroutine *vm_get_coro(XrVMContext *vm_ctx) {
     return w ? (XrCoroutine *) w->m->current_coro : NULL;
 }
 
+/* ========== Stack Growth Helper for Dispatch Functions ========== */
+#include "../coro/xcoroutine.h"
+
+/* Ensure the VM stack has room for a frame whose registers will occupy
+ * slots [caller_base_offset, caller_base_offset + a + 1 + callee_maxstack)
+ * and that one more frame fits in the frames array.
+ *
+ * Critical for combined slab layout (stack and frames in one allocation):
+ * without this check, a callee whose register file extends past
+ * stack_capacity will silently overwrite the frames array, corrupting
+ * frame.closure / frame.pc and crashing on the next return.
+ *
+ * On grow, vm_ctx->stack and vm_ctx->frames may move, so callers MUST
+ * use *base_inout and *frame_inout after the call rather than their
+ * pre-call pointers.
+ *
+ * Returns true on success (no grow needed, or grow succeeded with
+ * pointers refreshed). Returns false on grow failure; caller should
+ * throw XR_ERR_STACK_OVERFLOW. */
+static inline bool vm_ensure_call_stack(XrVMContext *vm_ctx, int needed_slots, XrValue **base_inout,
+                                        XrBcCallFrame **frame_inout, XrInstruction *pc) {
+    int needed = needed_slots;
+    bool need_grow =
+        (needed > vm_ctx->stack_capacity) || (vm_ctx->frame_count + 1 >= vm_ctx->frame_capacity);
+    if (!need_grow)
+        return true;
+
+    XrCoroutine *coro = vm_get_coro(vm_ctx);
+    if (!coro)
+        return false;
+
+    /* Snapshot offsets BEFORE grow — pointers may move. */
+    int caller_base_off = (int) (*base_inout - vm_ctx->stack);
+    int caller_frame_idx = (int) (*frame_inout - vm_ctx->frames);
+
+    /* Save pc into the caller frame so a re-entry (e.g. via startfunc)
+     * resumes at the right instruction. */
+    (*frame_inout)->pc = pc;
+
+    int extra = (needed > vm_ctx->stack_capacity) ? (needed - vm_ctx->stack_capacity + 64) : 64;
+    if (extra < 64)
+        extra = 64;
+    if (!xr_coro_grow_stack(coro, extra))
+        return false;
+
+    /* Re-derive caller pointers from snapshots — stack/frames may have
+     * been reallocated to new addresses. */
+    *base_inout = vm_ctx->stack + caller_base_off;
+    *frame_inout = &vm_ctx->frames[caller_frame_idx];
+    return true;
+}
+
 /* ========== Channel Deep Copy Helpers ========== */
 #include "../coro/xchannel_ops.h"
 

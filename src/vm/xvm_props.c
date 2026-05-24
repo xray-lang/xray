@@ -211,6 +211,13 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 // Place this + value on stack above caller's registers
                 int setter_base =
                     (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
+                /* Stack/frames capacity check: setter occupies
+                 * [setter_base, setter_base + maxstacksize). */
+                int needed = setter_base + proto->maxstacksize;
+                if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+                    VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                             "stack overflow: grow failed before struct setter");
+                }
                 vm_ctx->stack[setter_base] = obj;        // this
                 vm_ctx->stack[setter_base + 1] = value;  // argument
                 frame->pc = pc;
@@ -281,6 +288,14 @@ XR_FUNC XrDispatchAction vm_setprop_instance_setter(XrayIsolate *isolate, XrVMCo
     /* Place setter frame above caller's maxstacksize to avoid
      * clobbering caller registers. */
     int safe_base = (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
+
+    /* Stack/frames capacity check before any write to vm_ctx->stack. */
+    int needed = safe_base + proto->maxstacksize;
+    if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                 "stack overflow: grow failed before instance setter");
+    }
+
     vm_ctx->stack[safe_base] = obj;
     vm_ctx->stack[safe_base + 1] = value;
 
@@ -802,6 +817,12 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                     if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
                         VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
                     }
+                    /* Stack/frames capacity check before frame push. */
+                    int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
+                    if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+                        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                                 "stack overflow: grow failed before struct getter");
+                    }
                     base[a + 1] = obj;  // this = struct_ref
                     frame->pc = pc;
                     int _fidx = vm_ctx->frame_count;
@@ -903,6 +924,14 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMCo
      * clobbering caller registers (same strategy as operator
      * overload calls). */
     int safe_base = (int) (base - vm_ctx->stack) + frame->closure->proto->maxstacksize;
+
+    /* Stack/frames capacity check before any write to vm_ctx->stack. */
+    int needed = safe_base + proto->maxstacksize;
+    if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+        VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                 "stack overflow: grow failed before instance getter");
+    }
+
     vm_ctx->stack[safe_base] = obj;  // this
 
     frame->pc = pc;  // savepc
@@ -978,6 +1007,17 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
             VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
         }
 
+        /* Stack capacity check: callee's registers occupy
+         *   [base + a + 1, base + a + 1 + maxstacksize)
+         * and a new frame is pushed. Without this, in the combined
+         * slab layout the callee's register file silently overwrites
+         * the frames array. base/frame are refreshed on grow. */
+        int needed = (int) (base - vm_ctx->stack) + a + 1 + closure->proto->maxstacksize;
+        if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                     "stack overflow: grow failed before module call");
+        }
+
         // Argument shift: from R[a+2..] to R[a+1..]
         for (int idx = 0; idx < nargs; idx++) {
             base[a + 1 + idx] = base[a + 2 + idx];
@@ -1036,6 +1076,13 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
 
             if (vm_ctx->frame_count >= XR_FRAMES_MAX) {
                 VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW, "stack overflow");
+            }
+
+            /* Stack/frames capacity check before frame push. */
+            int needed = (int) (base - vm_ctx->stack) + a + 1 + closure->proto->maxstacksize;
+            if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                         "stack overflow: grow failed before module class call");
             }
 
             base[a + 1] = inst_val;  // this

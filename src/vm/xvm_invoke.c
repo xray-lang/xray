@@ -654,6 +654,15 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
 
             frame->pc = pc;  // savepc
 
+            /* Stack/frames capacity check before frame push: prevents
+             * the constructor's register file from overflowing into
+             * frames[] in the combined slab layout. */
+            int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
+            if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                         "stack overflow: grow failed before constructor call");
+            }
+
             int fidx = vm_ctx->frame_count;
             memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
             vm_ctx->frame_count++;
@@ -700,7 +709,13 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
             }
 
             if (is_tail) {
-                // Tail call: reuse current frame
+                /* Tail call: reuse current frame, but the callee's
+                 * maxstack may be larger. Ensure base + maxstack fits. */
+                int needed_tail = (int) (base - vm_ctx->stack) + proto->maxstacksize;
+                if (!vm_ensure_call_stack(vm_ctx, needed_tail, &base, &frame, pc)) {
+                    VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                             "stack overflow: grow failed before tail call");
+                }
                 memmove(base, &base[a + 1], sizeof(XrValue) * nargs);
                 frame->closure = closure;
                 frame->pc = PROTO_CODE_BASE(proto);
@@ -709,6 +724,13 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
             }
 
             frame->pc = pc;  // savepc
+
+            /* Stack/frames capacity check before frame push. */
+            int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
+            if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+                VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                         "stack overflow: grow failed before static method call");
+            }
 
             int fidx = vm_ctx->frame_count;
             memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
@@ -833,6 +855,13 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
 
         frame->pc = pc;  // savepc
 
+        /* Stack/frames capacity check before frame push. */
+        int needed = (int) (base - vm_ctx->stack) + call_base_offset + proto->maxstacksize;
+        if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                     "stack overflow: grow failed before super constructor call");
+        }
+
         int fidx = vm_ctx->frame_count;
         memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));
         vm_ctx->frame_count++;
@@ -849,6 +878,13 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
         isolate->vm.ctor_call_depth++;
 
         frame->pc = pc;  // savepc
+
+        /* Stack/frames capacity check before frame push. */
+        int needed = (int) (base - vm_ctx->stack) + a + 1 + proto->maxstacksize;
+        if (!vm_ensure_call_stack(vm_ctx, needed, &base, &frame, pc)) {
+            VM_THROW(frame, pc, XR_ERR_STACK_OVERFLOW,
+                     "stack overflow: grow failed before super method call");
+        }
 
         int fidx = vm_ctx->frame_count;
         memset(&vm_ctx->frames[fidx], 0, sizeof(XrBcCallFrame));

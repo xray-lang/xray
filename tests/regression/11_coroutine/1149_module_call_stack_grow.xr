@@ -1,0 +1,68 @@
+// Regression test: OP_INVOKE must grow the VM stack when the callee's
+// register file extends past the coroutine's current stack capacity.
+//
+// Before the fix, OP_INVOKE (method calls) and vm_invoke_module
+// (module.fn() calls) pushed a new frame without VM_STACK_CHECK.
+// In the combined slab layout used by pooled coroutines
+// (stack[64] immediately followed by frames[4]), a callee whose register
+// file extended past slot 64 would silently overwrite the frames array,
+// corrupting frame.closure and crashing on OP_RETURN1.
+//
+// Reproduces the crash observed in the bili-analysis-server-xr keep-alive
+// workload (OP_INVOKE → vm_invoke_module, large callee maxstacksize).
+
+import "./modules/big_stack" as big
+
+fn worker(n: int) -> int {
+    // Keep many locals live so worker has high maxstacksize (~20+).
+    // This pushes middle()'s base_offset far enough that wide()'s
+    // register file (30+ slots) extends past the slab's 64 slots.
+    let v0 = n + 0
+    let v1 = v0 + 1
+    let v2 = v1 + 1
+    let v3 = v2 + 1
+    let v4 = v3 + 1
+    let v5 = v4 + 1
+    let v6 = v5 + 1
+    let v7 = v6 + 1
+    let v8 = v7 + 1
+    let v9 = v8 + 1
+    let chain = big.Chain()
+    let r = chain.middle(v9)
+    return r + v0 + v1 + v2 + v3 + v4 + v5 + v6 + v7 + v8 + v9
+}
+
+@test
+fn test_invoke_grows_combined_slab() {
+    // Spawn in coroutine: pooled coros start with [stack:64][frames:4].
+    let t1 = go worker(0)
+    let t2 = go worker(100)
+    let t3 = go worker(200)
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+    // Linearity: differences should be equal due to the additive seed.
+    let d12 = r2 - r1
+    let d23 = r3 - r2
+    assert_eq(d12, d23)
+    assert(r1 > 0)
+    assert(r2 > r1)
+}
+
+@test
+fn test_invoke_main_coro() {
+    let r = worker(0)
+    assert(r > 0)
+}
+
+@test
+fn test_repeated_go_reuses_slab() {
+    // Repeatedly spawn so pooled slabs are recycled.
+    let i = 0
+    while (i < 32) {
+        let t = go worker(i)
+        let r = await t
+        assert(r > 0)
+        i = i + 1
+    }
+}

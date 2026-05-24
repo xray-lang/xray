@@ -318,6 +318,11 @@ invoke_dispatch:;
             }
 
             if (invoke_is_tail) {
+                /* Tail call reuses ci's frame slot but the callee may
+                 * have a larger maxstacksize than the caller. Ensure
+                 * the stack covers ci->base_offset + maxstacksize so
+                 * register writes don't bleed into frames[]. */
+                VM_STACK_CHECK(proto->maxstacksize);
                 memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
                 ci->closure = closure;
                 ci->pc = PROTO_CODE_BASE(proto);
@@ -328,6 +333,12 @@ invoke_dispatch:;
             if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
                 VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
             }
+
+            /* Ensure stack/frames capacity for the callee's register file
+             * before pushing the frame; without this, when stack and frames
+             * share a combined slab allocation the callee's writes can
+             * silently overflow into the frames array. */
+            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
 
             int _fidx = VM_FRAME_COUNT;
             VM_INC_FRAME_COUNT;
@@ -425,13 +436,19 @@ vmcase(OP_INVOKE_DIRECT) {
     XrClosure *closure = method->as.closure;
 
     if (is_tail_direct) {
-        // Tail call: reuse current stack frame
+        // Tail call: reuse current stack frame; callee maxstack may be larger.
+        VM_STACK_CHECK(closure->proto->maxstacksize);
         memmove(base, &R(a + 1), sizeof(XrValue) * (nargs + 1));
         ci->closure = closure;
         ci->pc = PROTO_CODE_BASE(closure->proto);
         VM_SET_STACK_TOP(base + closure->proto->maxstacksize);
         goto startfunc;
     }
+
+    /* Stack/frames capacity check before pushing a new frame; without
+     * this the callee's register file can overflow into frames[] when
+     * the coroutine still uses the combined slab layout. */
+    VM_STACK_CHECK(a + 1 + closure->proto->maxstacksize);
 
     savepc();
     int _fidx = VM_FRAME_COUNT;
