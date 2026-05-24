@@ -876,7 +876,8 @@ install(TARGETS xray_core
 install(FILES
     ${CMAKE_SOURCE_DIR}/include/xray.h
     ${CMAKE_SOURCE_DIR}/include/xray_isolate.h
-    ${CMAKE_SOURCE_DIR}/include/xray_platform.h
+    ${CMAKE_SOURCE_DIR}/include/xray_export.h
+    ${CMAKE_SOURCE_DIR}/include/xray_version.h
     DESTINATION include/xray
 )
 
