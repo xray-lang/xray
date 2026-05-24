@@ -702,8 +702,32 @@ int xr_hpack_encode(XrHpackTable *table, const char *name, size_t name_len, cons
     buf[0] = 0x00;  // Literal without indexing, new name
     int total = 1;
 
+    // RFC 7540 §8.1.2: HTTP/2 header field names MUST be lowercase on the
+    // wire. Sending mixed-case names like "User-Agent" causes RFC-conformant
+    // peers to respond with RST_STREAM(PROTOCOL_ERROR), which is exactly
+    // what production servers (api.bilibili.com etc.) do. We lowercase
+    // here into a stack buffer rather than at every caller site so the
+    // invariant is enforced in one place. Pseudo-headers (":method",
+    // ":path", ...) are already lowercase by construction; this loop is
+    // a no-op for them.
+    char lower_stack[256];
+    char *lower = lower_stack;
+    char *lower_heap = NULL;
+    if (name_len > sizeof(lower_stack)) {
+        lower_heap = (char *) xr_malloc(name_len);
+        if (!lower_heap)
+            return -1;
+        lower = lower_heap;
+    }
+    for (size_t i = 0; i < name_len; i++) {
+        char c = name[i];
+        lower[i] = (c >= 'A' && c <= 'Z') ? (char) (c + ('a' - 'A')) : c;
+    }
+
     // Encode name
-    int len = hpack_encode_string(buf + total, buf_len - total, name, name_len);
+    int len = hpack_encode_string(buf + total, buf_len - total, lower, name_len);
+    if (lower_heap)
+        xr_free(lower_heap);
     if (len < 0)
         return -1;
     total += len;
@@ -926,10 +950,35 @@ void xr_h2_conn_free(XrH2Conn *conn) {
     xr_free(conn);
 }
 
-// Send data
+// Send data over the underlying transport.
+//
+// When the connection is wrapped in TLS, we MUST route through the TLS
+// layer (xr_tls_conn_write) — writing the raw bytes to conn->fd would
+// bypass encryption entirely, leak HTTP/2 frame contents in plaintext on
+// the wire, and trigger a "tlsv1 alert protocol version" fatal alert
+// from any HTTPS peer because the server's TLS state machine treats the
+// stray bytes as a malformed TLS record.
+//
+// Loop until all `len` bytes are delivered: both SSL_write and POSIX
+// write() are permitted to perform short writes, so a single call is
+// insufficient when the kernel send buffer is full or OpenSSL needs to
+// split the data across multiple TLS records.
 static int h2_send(XrH2Conn *conn, const void *buf, size_t len) {
-    // Simplified: use write directly
-    return (int) write(conn->fd, buf, len);
+    const uint8_t *p = (const uint8_t *) buf;
+    size_t total = 0;
+    while (total < len) {
+        int n;
+        if (conn->tls_conn) {
+            n = xr_tls_conn_write(NULL, conn->tls_conn, p + total, len - total);
+        } else {
+            n = (int) write(conn->fd, p + total, len - total);
+        }
+        if (n <= 0) {
+            return total > 0 ? (int) total : n;
+        }
+        total += (size_t) n;
+    }
+    return (int) total;
 }
 
 int xr_h2_conn_init(XrH2Conn *conn) {
@@ -1132,15 +1181,36 @@ XrH2Stream *xr_h2_get_stream(XrH2Conn *conn, uint32_t stream_id) {
     return xr_h2_stream_hash_find(&conn->stream_hash, stream_id);
 }
 
-// Receive data. H2 has no per-frame isolate context (the connection
-// runs inside its own event loop), so TLS reads cannot suspend a
-// coroutine here — a NULL X reproduces the old behaviour where
-// xr_io_get_isolate() returned NULL on these threads.
+// Receive exactly `len` bytes (or return short on EOF / error).
+//
+// H2 has no per-frame isolate context (the connection runs inside its own
+// event loop), so TLS reads cannot suspend a coroutine here — passing NULL
+// reproduces the legacy behaviour where xr_io_get_isolate() returned NULL.
+//
+// Loop until we've drained the requested length: both OpenSSL's SSL_read
+// and POSIX read() are permitted to return fewer bytes than asked for,
+// even when more data is available on the wire. The frame parser above
+// (xr_h2_recv) expects an exact-length read for the 9-byte frame header
+// and for the payload, so a short read was silently mis-classified as
+// "connection broken" and aborted every HTTP/2 request whose first TLS
+// record split the header. Looping fixes that and is also correct for
+// the plaintext-h2c fallback.
 static int h2_recv(XrH2Conn *conn, void *buf, size_t len) {
-    if (conn->tls_conn) {
-        return xr_tls_conn_read(NULL, conn->tls_conn, buf, len);
+    uint8_t *p = (uint8_t *) buf;
+    size_t total = 0;
+    while (total < len) {
+        int n;
+        if (conn->tls_conn) {
+            n = xr_tls_conn_read(NULL, conn->tls_conn, p + total, len - total);
+        } else {
+            n = (int) read(conn->fd, p + total, len - total);
+        }
+        if (n <= 0) {
+            return total > 0 ? (int) total : n;
+        }
+        total += (size_t) n;
     }
-    return (int) read(conn->fd, buf, len);
+    return (int) total;
 }
 
 // HPACK header decode callback: extract :status pseudo-header
@@ -1531,6 +1601,14 @@ XrH2Conn *xr_h2_conn_new(int fd, void *tls_conn, bool is_client) {
 
     xr_hpack_init(&conn->encoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
     xr_hpack_init(&conn->decoder_table, XR_H2_DEFAULT_HEADER_TABLE_SIZE);
+
+    // Initialize stream hash. Without this, hash->buckets is NULL and
+    // both stream_hash_add() and stream_hash_find() silently no-op,
+    // so every stream becomes unreachable: server frames addressed to
+    // our stream (HEADERS, DATA, RST_STREAM) resolve to a NULL stream
+    // pointer and are silently dropped, leaving recv_stream_data
+    // looping forever until sysmon cancels the coroutine.
+    xr_h2_stream_hash_init(&conn->stream_hash);
 
     conn->next_stream_id = is_client ? 1 : 2;
     conn->connection_window = XR_H2_DEFAULT_INITIAL_WINDOW_SIZE;
