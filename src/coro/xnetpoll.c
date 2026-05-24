@@ -189,10 +189,42 @@ bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
         return old == XR_PD_READY;
     }
 
-    // Wait on condition variable instead of busy-wait
+    // Wait for the I/O ready notification. The cond_signal is sent by
+    // xr_netpoll_unblock, which itself only runs when SOMEONE calls
+    // xr_netpoll_poll on this netpoll. In a multi-worker runtime the
+    // worker scheduling loop drives poll continuously, but in a
+    // standalone script that does not spawn coroutines (no `go`, no
+    // http.listen) the calling thread is the only worker — if it
+    // parked here on a plain cond_wait nobody else would advance the
+    // netpoll and the wait would deadlock forever.
+    //
+    // To make blocking I/O from cfunc callees correct in BOTH topologies
+    // we time-bound the cond_wait and self-drive xr_netpoll_poll(np, 0)
+    // on every timeout. xr_netpoll_poll is reentrant across threads
+    // (kqueue/epoll/IOCP backends are MT-safe), so doing this when
+    // other workers are also polling is harmless: at most one of them
+    // observes each kernel event and routes it through
+    // xr_netpoll_unblock → cond_signal.
+    XrNetpoll *np = pd->netpoll;
     xr_mutex_lock(&pd->block_mu);
     while (atomic_load(gpp) == XR_PD_WAIT && !atomic_load(&pd->closing)) {
-        xr_cond_wait(&pd->block_cond, &pd->block_mu);
+        // 1ms timeout balances responsiveness against wakeup overhead.
+        bool signalled = xr_cond_wait_for_ns(&pd->block_cond, &pd->block_mu, 1000000ULL);
+        if (signalled) {
+            continue;  // Re-check the loop condition.
+        }
+        if (!np) {
+            continue;  // No netpoll → nothing we can do, just re-wait.
+        }
+        // Release the per-pd mutex while polling so xr_netpoll_unblock
+        // (which takes block_mu before cond_signal) can run on this
+        // very thread without deadlocking.
+        xr_mutex_unlock(&pd->block_mu);
+        XrReadyList ready = xr_netpoll_poll(np, 0);
+        (void) ready;  // Ready coros, if any, will be picked up by the
+                       // worker loop once we resume; for cfunc waiters
+                       // we only care that block_cond gets signalled.
+        xr_mutex_lock(&pd->block_mu);
     }
     xr_mutex_unlock(&pd->block_mu);
 

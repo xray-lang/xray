@@ -102,6 +102,11 @@ static int coro_tcp_connect(int fd, const struct sockaddr *sa, socklen_t sa_len,
     return 0;
 }
 
+// Forward declaration: create_connection's TLS error path calls
+// close_connection, which is defined later in the file. Without this
+// declaration, builds with -DENABLE_TLS=ON fail.
+static void close_connection(struct XrayIsolate *X, XrPooledConn *conn);
+
 // Create new connection with DNS resolution and optional TLS. Made fd
 // non-blocking from creation so all subsequent pooled_conn_read/write calls
 // can go through xr_socket_read/write and yield the coroutine cleanly.

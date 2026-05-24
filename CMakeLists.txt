@@ -104,7 +104,7 @@ option(XR_USE_GC "Enable garbage collector" ON)
 option(ENABLE_LLVM_BACKEND "Enable LLVM backend" OFF)
 option(BUILD_TESTS "Build unit tests" ON)
 option(ENABLE_ASAN "Enable AddressSanitizer memory detection" OFF)
-option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" OFF)
+option(ENABLE_TLS "Enable HTTPS/TLS support (requires OpenSSL)" ON)
 option(XR_USE_MIMALLOC "Use mimalloc high-performance allocator" OFF)
 option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (for debugging)" OFF)
 

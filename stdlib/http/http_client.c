@@ -704,8 +704,36 @@ static XrHttpResult xr_http_request_internal(XrayIsolate *X, const XrHttpRequest
                 if (recv_buf->size >= expected) {
                     break;  // Receive complete
                 }
-            } else if (!resp.chunked && !resp.keep_alive) {
-                // No Content-Length, wait for connection close
+            } else if (resp.chunked) {
+                // Chunked: look for last-chunk terminator "\r\n0\r\n\r\n"
+                // anywhere in the body region. RFC 7230 §4.1.3 requires the
+                // last-chunk to be size 0 followed by an empty line, so the
+                // 5-byte tail "0\r\n\r\n" is sufficient on the wire; the
+                // leading \r\n is included to make the match unambiguous
+                // when a chunk-data payload could itself be all zeros.
+                if (recv_buf->size > (size_t) resp.header_bytes + 5) {
+                    const char *body_start = recv_buf->bytes + resp.header_bytes;
+                    size_t body_len = recv_buf->size - resp.header_bytes;
+                    // memmem search for "\r\n0\r\n\r\n"
+                    static const char TAIL[] = "\r\n0\r\n\r\n";
+                    const size_t TLEN = 7;
+                    bool found = false;
+                    if (body_len >= TLEN) {
+                        for (size_t i = 0; i + TLEN <= body_len; i++) {
+                            if (memcmp(body_start + i, TAIL, TLEN) == 0) {
+                                found = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (found) {
+                        break;  // Receive complete (last chunk seen)
+                    }
+                }
+                continue;
+            } else if (!resp.keep_alive) {
+                // No Content-Length, no chunked, no keep-alive
+                // → wait for connection close
                 continue;
             }
         } else if (parse_result == XR_HTTP_PARSE_ERROR) {

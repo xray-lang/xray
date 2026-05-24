@@ -448,6 +448,9 @@ int xr_tls_conn_read(struct XrayIsolate *X, XrTlsConn *conn, void *buf, size_t l
                 continue;
 
             default:
+                // Drain the OpenSSL error queue so stale entries do not
+                // confuse subsequent operations on this thread.
+                ERR_clear_error();
                 return -1;
         }
     }
