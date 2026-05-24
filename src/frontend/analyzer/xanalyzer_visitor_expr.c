@@ -162,14 +162,19 @@ XrType *xa_visit_variable(XaInferContext *ctx, AstNode *node) {
         xa_symbol_add_ref(links, node->line, node->column, end_col, false);
     }
 
-    // Definite assignment check: warn if variable used before initialization
+    // Definite assignment check: warn if variable used before initialization.
+    // Tagged with XR_ERR_ANALYZE_USED_BEFORE_ASSIGN so the closure-body
+    // visitor can selectively discard the false positives this check produces
+    // for variables captured from enclosing scopes (the closure runs lazily,
+    // so the variable may be assigned before the closure is called even if
+    // the assignment textually follows the closure literal).
     if (links && !links->is_definitely_assigned && sym->kind == XA_SYM_VARIABLE &&
         !sym->is_builtin) {
         XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
         char msg[256];
         snprintf(msg, sizeof(msg), "Variable '%s' is used before being assigned", name);
-        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                   msg, &loc);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                   XR_ERR_ANALYZE_USED_BEFORE_ASSIGN, msg, &loc);
     }
 
     // Use-after-move check: moved variables cannot be accessed
@@ -1609,10 +1614,14 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     // get symbol_id=0 and upvalue resolution fails.
     bool need_return_infer = XR_TYPE_IS_UNKNOWN(return_type);
     if (fn->body) {
-        // When visiting purely for symbol resolution (return type already
-        // known), suppress diagnostics: closure bodies execute lazily, so
-        // definite-assignment checks produce false positives for variables
-        // from enclosing scopes that are assigned after the closure literal.
+        // Closure bodies execute lazily, so the definite-assignment check
+        // produces false positives for variables captured from enclosing
+        // scopes that are textually assigned after the closure literal.
+        // We snapshot the diagnostics list before visiting and, after the
+        // body visit, drop only the entries tagged USED_BEFORE_ASSIGN.
+        // Real semantic errors (e.g. throw on a non-Exception, type
+        // mismatches inside the body) are kept regardless of whether the
+        // return type was already known.
         int saved_diag_count = ctx->analyzer->diagnostic_count;
         XaDiagnostic *saved_diag_tail = ctx->analyzer->diagnostics_tail;
 
@@ -1660,16 +1669,28 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
             }
         }
 
-        // Set expected return type for bidirectional inference on return stmts.
-        // If contextual type provides a return type, use it for checking.
-        // Otherwise, reset to NULL so the outer function's expected_return_type
-        // doesn't leak into this closure (e.g. void from enclosing fn).
+        // Set expected return type for bidirectional inference on return
+        // stmts.  Priority order:
+        //   1. user-written annotation on the closure (`fn(d) -> int { ... }`),
+        //      which is authoritative for what the body must return;
+        //   2. an outer contextual type that pins down a concrete result
+        //      (e.g. assigning the closure to a typed variable);
+        //   3. otherwise NULL so the enclosing function's
+        //      expected_return_type doesn't leak in (e.g. `void` from a
+        //      parent fn would spuriously fail value-returning closure
+        //      bodies).
+        // Skipping unbound type parameters (`U` inside `map<T,U>(callback)`)
+        // is critical: the analyzer's monomorphisation can't always resolve
+        // those at the call site, and using `U` as expected_return_type
+        // produces false "expected 'U', got '<concrete>'" errors on
+        // perfectly valid closures.
         XrType *saved_expected_ret = ctx->expected_return_type;
-        if (expected_fn && expected_fn->function.return_type &&
-            !XR_TYPE_IS_UNKNOWN(expected_fn->function.return_type)) {
-            ctx->expected_return_type = expected_fn->function.return_type;
-        } else if (fn->return_type) {
+        if (fn->return_type) {
             ctx->expected_return_type = return_type;
+        } else if (expected_fn && expected_fn->function.return_type &&
+                   !XR_TYPE_IS_UNKNOWN(expected_fn->function.return_type) &&
+                   expected_fn->function.return_type->kind != XR_KIND_TYPE_PARAM) {
+            ctx->expected_return_type = expected_fn->function.return_type;
         } else {
             ctx->expected_return_type = NULL;
         }
@@ -1689,25 +1710,31 @@ XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
 
         xa_analyzer_exit_scope(ctx->analyzer);
 
-        // Discard diagnostics from symbol-resolution-only body visit
-        if (!need_return_infer && ctx->analyzer->diagnostic_count > saved_diag_count) {
-            XaDiagnostic *first_new =
-                saved_diag_tail ? saved_diag_tail->next : ctx->analyzer->diagnostics;
-            XaDiagnostic *d = first_new;
+        // Drop only USED_BEFORE_ASSIGN false positives from the body visit;
+        // keep every other diagnostic so genuine errors inside anonymous
+        // functions surface to the user.
+        if (ctx->analyzer->diagnostic_count > saved_diag_count) {
+            XaDiagnostic **link =
+                saved_diag_tail ? &saved_diag_tail->next : &ctx->analyzer->diagnostics;
+            XaDiagnostic *d = *link;
+            XaDiagnostic *new_tail = saved_diag_tail;
+            int kept = 0;
             while (d) {
                 XaDiagnostic *next = d->next;
-                if (d->message)
-                    xr_free((void *) d->message);
-                xr_free(d);
+                if (d->code == XR_ERR_ANALYZE_USED_BEFORE_ASSIGN) {
+                    if (d->message)
+                        xr_free((void *) d->message);
+                    xr_free(d);
+                    *link = next;
+                } else {
+                    new_tail = d;
+                    link = &d->next;
+                    kept++;
+                }
                 d = next;
             }
-            if (saved_diag_tail) {
-                saved_diag_tail->next = NULL;
-            } else {
-                ctx->analyzer->diagnostics = NULL;
-            }
-            ctx->analyzer->diagnostics_tail = saved_diag_tail;
-            ctx->analyzer->diagnostic_count = saved_diag_count;
+            ctx->analyzer->diagnostics_tail = new_tail;
+            ctx->analyzer->diagnostic_count = saved_diag_count + kept;
         }
 
         // Restore flow state to enclosing function's context
