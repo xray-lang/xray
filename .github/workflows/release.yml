@@ -113,6 +113,7 @@ jobs:
 
     - name: Trigger VS Code extension publish
       if: success()
+      continue-on-error: true
       env:
         GH_TOKEN: ${{ secrets.VSCODE_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
       run: |
@@ -124,9 +125,9 @@ jobs:
   # so that www.xray-lang.org/playground always runs the latest release.
   # Skips silently if SERVER_HOST is not configured (e.g. forks).
   deploy-runtime:
-    needs: release
+    needs: [build, release]
     runs-on: ubuntu-latest
-    if: ${{ success() }}
+    if: ${{ always() && needs.build.result == 'success' }}
 
     steps:
     - name: Skip if SERVER_HOST not configured
