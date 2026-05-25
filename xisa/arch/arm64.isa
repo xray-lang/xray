@@ -1,0 +1,427 @@
+; xisa/arch/arm64/isa.isa — AArch64 machine instruction schema
+;
+; AArch64 instructions are fixed-width 32-bit.
+; Encoding fields: rd, rn, rm, imm12, imm16, imm26, cond, shift, etc.
+
+; ==================================================================
+; Register class definitions
+; ==================================================================
+
+(define-regclass arm64.gpr64
+  :regs (x0 x1 x2 x3 x4 x5 x6 x7 x8 x9 x10 x11 x12 x13 x14 x15
+         x16 x17 x18 x19 x20 x21 x22 x23 x24 x25 x26 x27 x28 fp lr sp)
+  :encoding-bits 5)
+
+(define-regclass arm64.gpr32
+  :regs (w0 w1 w2 w3 w4 w5 w6 w7 w8 w9 w10 w11 w12 w13 w14 w15
+         w16 w17 w18 w19 w20 w21 w22 w23 w24 w25 w26 w27 w28 wfp wlr wsp)
+  :encoding-bits 5)
+
+; ==================================================================
+; ALU reg,reg (64-bit)
+; ==================================================================
+
+(define-mcinsn arm64.add.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x8b000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "ab 00 02 8b")
+                   ((x3 x4 x5) "83 00 05 8b")
+                   ((x28 x29 x30) "bc 03 1e 8b"))
+  :golden-asm     (((x0 x1 x2) "add x0, x1, x2")
+                   ((x3 x4 x5) "add x3, x4, x5"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.sub.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xcb000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 00 02 cb")
+                   ((x3 x4 x5) "83 00 05 cb")
+                   ((x28 x29 x30) "bc 03 1e cb"))
+  :golden-asm     (((x0 x1 x2) "sub x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.and.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x8a000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 00 02 8a")
+                   ((x3 x4 x5) "83 00 05 8a"))
+  :golden-asm     (((x0 x1 x2) "and x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.orr.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xaa000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 00 02 aa")
+                   ((x3 x4 x5) "83 00 05 aa"))
+  :golden-asm     (((x0 x1 x2) "orr x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.eor.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xca000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 00 02 ca")
+                   ((x3 x4 x5) "83 00 05 ca"))
+  :golden-asm     (((x0 x1 x2) "eor x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.mul.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x9b007c00 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 7c 02 9b")
+                   ((x3 x4 x5) "83 7c 05 9b"))
+  :golden-asm     (((x0 x1 x2) "mul x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.sdiv.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x9ac00c00 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 0c c2 9a")
+                   ((x3 x4 x5) "83 0c c5 9a"))
+  :golden-asm     (((x0 x1 x2) "sdiv x0, x1, x2"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; ALU reg,imm
+; ==================================================================
+
+(define-mcinsn arm64.add.ri12
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($imm imm:u12))
+  :constraints    ()
+  :encoding       (0x91000000 (field 0 5 $rd) (field 5 5 $rn) (field 10 12 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 1) "20 04 00 91")
+                   ((x0 x1 42) "20 a8 00 91")
+                   ((sp sp 16) "ff 43 00 91"))
+  :golden-asm     (((x0 x1 1) "add x0, x1, #1")
+                   ((sp sp 16) "add sp, sp, #16"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.sub.ri12
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($imm imm:u12))
+  :constraints    ()
+  :encoding       (0xd1000000 (field 0 5 $rd) (field 5 5 $rn) (field 10 12 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((sp sp 16) "ff 43 00 d1")
+                   ((x0 x1 1) "20 04 00 d1"))
+  :golden-asm     (((sp sp 16) "sub sp, sp, #16"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.cmp.ri12
+  :operands       (($rn reg:gpr64) ($imm imm:u12))
+  :constraints    ()
+  :encoding       (0xf100001f (field 5 5 $rn) (field 10 12 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 0) "1f 00 00 f1")
+                   ((x1 42) "3f a8 00 f1"))
+  :golden-asm     (((x0 0) "cmp x0, #0"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; MOV
+; ==================================================================
+
+(define-mcinsn arm64.mov.rr
+  :operands       (($rd reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xaa0003e0 (field 0 5 $rd) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1) "e0 03 01 aa")
+                   ((x3 x4) "e3 03 04 aa")
+                   ((fp sp) "fd 03 00 91"))
+  :golden-asm     (((x0 x1) "mov x0, x1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.movz
+  :operands       (($rd reg:gpr64) ($imm imm:u16))
+  :constraints    ()
+  :encoding       (0xd2800000 (field 0 5 $rd) (field 5 16 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 0) "00 00 80 d2")
+                   ((x0 42) "40 05 80 d2")
+                   ((x1 0xFFFF) "e1 ff 9f d2"))
+  :golden-asm     (((x0 0) "mov x0, #0")
+                   ((x0 42) "mov x0, #42"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Shift
+; ==================================================================
+
+(define-mcinsn arm64.lsl.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x9ac02000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 20 c2 9a")
+                   ((x3 x4 x5) "83 20 c5 9a"))
+  :golden-asm     (((x0 x1 x2) "lsl x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.lsr.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x9ac02400 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 24 c2 9a")
+                   ((x3 x4 x5) "83 24 c5 9a"))
+  :golden-asm     (((x0 x1 x2) "lsr x0, x1, x2"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.asr.rrr
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0x9ac02800 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 x2) "20 28 c2 9a")
+                   ((x3 x4 x5) "83 28 c5 9a"))
+  :golden-asm     (((x0 x1 x2) "asr x0, x1, x2"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Memory: Load / Store [base, #imm]
+; ==================================================================
+
+(define-mcinsn arm64.ldr.bi9
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($imm imm:i9))
+  :constraints    ()
+  :encoding       (0xf8400000 (field 0 5 $rt) (field 5 5 $rn) (field 12 9 $imm))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 f8")
+                   ((x0 sp 8) "e0 83 40 f8")
+                   ((x3 fp -8) "a3 83 5f f8"))
+  :golden-asm     (((x0 x1 0) "ldur x0, [x1]")
+                   ((x0 sp 8) "ldur x0, [sp, #8]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.str.bi9
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($imm imm:i9))
+  :constraints    ()
+  :encoding       (0xf8000000 (field 0 5 $rt) (field 5 5 $rn) (field 12 9 $imm))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 f8")
+                   ((x0 sp 8) "e0 83 00 f8")
+                   ((x3 fp -8) "a3 83 1f f8"))
+  :golden-asm     (((x0 x1 0) "stur x0, [x1]")
+                   ((x0 sp 8) "stur x0, [sp, #8]"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Control Flow
+; ==================================================================
+
+(define-mcinsn arm64.bl
+  :operands       (($target imm:rel26))
+  :constraints    ()
+  :encoding       (0x94000000 (field 0 26 $target))
+  :flags          (call patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((0) "00 00 00 94")
+                   ((1) "01 00 00 94"))
+  :golden-asm     (((0) "bl #0"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.blr
+  :operands       (($rn reg:gpr64))
+  :constraints    ()
+  :encoding       (0xd63f0000 (field 5 5 $rn))
+  :flags          (call)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0) "00 00 3f d6")
+                   ((x8) "00 01 3f d6")
+                   ((lr) "c0 03 3f d6"))
+  :golden-asm     (((x0) "blr x0")
+                   ((lr) "blr x30"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.ret
+  :operands       ()
+  :constraints    ()
+  :encoding       (0xd65f03c0)
+  :flags          (terminator)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   ((() "c0 03 5f d6"))
+  :golden-asm     ((() "ret"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.b
+  :operands       (($target imm:rel26))
+  :constraints    ()
+  :encoding       (0x14000000 (field 0 26 $target))
+  :flags          (branch terminator patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((0) "00 00 00 14")
+                   ((1) "01 00 00 14"))
+  :golden-asm     (((0) "b #0"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.b.cond
+  :operands       (($cond cc) ($target imm:rel19))
+  :constraints    ()
+  :encoding       (0x54000000 (field 0 4 $cond) (field 5 19 $target))
+  :flags          (branch patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((0 0) "00 00 00 54")
+                   ((1 0) "01 00 00 54")
+                   ((11 0) "0b 00 00 54")
+                   ((13 0) "0d 00 00 54"))
+  :golden-asm     (((0 0) "b.eq #0")
+                   ((1 0) "b.ne #0"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.cbz
+  :operands       (($rt reg:gpr64) ($target imm:rel19))
+  :constraints    ()
+  :encoding       (0xb4000000 (field 0 5 $rt) (field 5 19 $target))
+  :flags          (branch patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 0) "00 00 00 b4")
+                   ((x1 0) "01 00 00 b4"))
+  :golden-asm     (((x0 0) "cbz x0, #0"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.cbnz
+  :operands       (($rt reg:gpr64) ($target imm:rel19))
+  :constraints    ()
+  :encoding       (0xb5000000 (field 0 5 $rt) (field 5 19 $target))
+  :flags          (branch patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 0) "00 00 00 b5")
+                   ((x1 0) "01 00 00 b5"))
+  :golden-asm     (((x0 0) "cbnz x0, #0"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Stack / Frame
+; ==================================================================
+
+(define-mcinsn arm64.stp.pre
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($imm imm:i7))
+  :constraints    ()
+  :encoding       (0xa9800000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field 15 7 $imm))
+  :flags          (memory stack)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((fp lr sp -2) "fd 7b be a9")
+                   ((x19 x20 sp -2) "f4 4f be a9"))
+  :golden-asm     (((fp lr sp -2) "stp x29, x30, [sp, #-16]!"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.ldp.post
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($imm imm:i7))
+  :constraints    ()
+  :encoding       (0xa8c00000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field 15 7 $imm))
+  :flags          (memory stack)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((fp lr sp 2) "fd 7b c2 a8")
+                   ((x19 x20 sp 2) "f4 4f c2 a8"))
+  :golden-asm     (((fp lr sp 2) "ldp x29, x30, [sp], #16"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Miscellaneous
+; ==================================================================
+
+(define-mcinsn arm64.nop
+  :operands       ()
+  :constraints    ()
+  :encoding       (0xd503201f)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   ((() "1f 20 03 d5"))
+  :golden-asm     ((() "nop"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.brk
+  :operands       (($imm imm:u16))
+  :constraints    ()
+  :encoding       (0xd4200000 (field 5 16 $imm))
+  :flags          (trap)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((0) "00 00 20 d4")
+                   ((1) "20 00 20 d4")
+                   ((0xf000) "00 e0 3f d4"))
+  :golden-asm     (((0) "brk #0")
+                   ((1) "brk #1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.neg.rr
+  :operands       (($rd reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xcb0003e0 (field 0 5 $rd) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1) "e0 03 01 cb")
+                   ((x3 x4) "e3 03 04 cb"))
+  :golden-asm     (((x0 x1) "neg x0, x1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.cmp.rr
+  :operands       (($rn reg:gpr64) ($rm reg:gpr64))
+  :constraints    ()
+  :encoding       (0xeb00001f (field 5 5 $rn) (field 16 5 $rm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1) "1f 00 01 eb")
+                   ((x3 x4) "7f 00 04 eb"))
+  :golden-asm     (((x0 x1) "cmp x0, x1"))
+  :external-reference llvm-mc)
