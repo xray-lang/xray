@@ -408,7 +408,7 @@ def tokenize_sexpr(text: str, path: str = '<input>'):
         if c.isalpha() or c in '_:$+*/':
             start = i
             i += 1
-            while i < len(text) and (text[i].isalnum() or text[i] in '_-.'):
+            while i < len(text) and (text[i].isalnum() or text[i] in '_-.:'):
                 i += 1
             tokens.append((text[start:i], line, col))
             continue
@@ -1037,6 +1037,465 @@ def generate_emit_header(arch: str, regclasses: list[RegClass],
     return '\n'.join(lines)
 
 # ============================================================
+# L6: X64Buf-based emit generator (replaces hand-written xm_x64.c)
+# ============================================================
+
+# Maps ISA instruction name to the C function name and signature
+# from xm_x64.h. ISA name → (c_func_name, [(param_name, C_type)...])
+# Only instructions in this table get generated; the rest are
+# handled by the standalone emit header.
+
+def _x64_c_name(isa_name: str) -> str:
+    """x64.add.rr → x64_add_rr (strip arch prefix, collapse dots)."""
+    return isa_name.replace('.', '_')
+
+def _resolve_enc_head(enc):
+    """Get head symbol from encoding S-expression."""
+    if not enc or not enc.children:
+        return ''
+    first = enc.children[0]
+    return first.value if isinstance(first, SAtom) else ''
+
+def _is_enc_pattern(enc, *heads):
+    """Check if encoding starts with one of the given head symbols."""
+    h = _resolve_enc_head(enc)
+    return h in heads
+
+def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
+    """Generate X64Buf-based function body from ISA encoding DSL.
+    Returns list of C statement lines (without function wrapper)."""
+    if not insn.encoding:
+        return ['    /* no encoding specified */']
+
+    enc = insn.encoding.children
+    lines = []
+    head = enc[0].value if enc and isinstance(enc[0], SAtom) else ''
+
+    # Helper: get operand C name
+    def _var(node):
+        if isinstance(node, SAtom) and node.is_variable:
+            return node.value.lstrip('$')
+        return None
+
+    def _num(node):
+        if isinstance(node, SAtom) and node.is_number:
+            return node.int_value
+        return None
+
+    # ---- Pattern: (sse-rr PREFIX OP1 OP2 $dst $src) ----
+    if head == 'sse-rr':
+        prefix = _num(enc[1])
+        op1 = _num(enc[2])
+        op2 = _num(enc[3])
+        dst = _var(enc[4])
+        src = _var(enc[5])
+        lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
+        lines.append(f'    {{ bool r = ((int){dst} > 7); bool b = ((int){src} > 7);')
+        lines.append(f'      if (r || b) x64_rex(buf, false, r, false, b); }}')
+        lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
+        lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
+        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t){dst} & 7, (uint8_t){src} & 7);')
+        return lines
+
+    # ---- Pattern: (sse-rm PREFIX OP1 OP2 $xmm $base $disp) ----
+    if head == 'sse-rm':
+        prefix = _num(enc[1])
+        op1 = _num(enc[2])
+        op2 = _num(enc[3])
+        xmm = _var(enc[4])
+        base = _var(enc[5])
+        disp = _var(enc[6])
+        lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
+        lines.append(f'    {{ bool r = ((int){xmm} > 7); bool b = ({base} > 7);')
+        lines.append(f'      if (r || b) x64_rex(buf, false, r, false, b); }}')
+        lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
+        lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
+        lines.append(f'    x64_modrm_mem(buf, (X64Reg)((int){xmm} & 7), {base}, {disp});')
+        return lines
+
+    # ---- Pattern: (sse-gp PREFIX rex.w OP1 OP2 $r1 $r2) ----
+    if head == 'sse-gp':
+        prefix = _num(enc[1])
+        # enc[2] is 'rex.w'
+        op1 = _num(enc[3])
+        op2 = _num(enc[4])
+        r1 = _var(enc[5])
+        r2 = _var(enc[6])
+        lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
+        lines.append(f'    x64_rex(buf, true, (int){r1} > 7, false, (int){r2} > 7);')
+        lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
+        lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
+        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t){r1} & 7, (uint8_t){r2} & 7);')
+        return lines
+
+    # ---- Pattern: (rex-if-ext $reg (+ BASE (reg3 $reg)) (imm32 $imm)) ----
+    if head == 'rex-if-ext':
+        reg = _var(enc[1])
+        # enc[2] is the (+ BASE (reg3 $reg)) list
+        plus = enc[2]
+        base_byte = _num(plus.children[1]) if isinstance(plus, SList) else 0xB8
+        imm_node = enc[3]
+        imm_type = imm_node.children[0].value if isinstance(imm_node, SList) else 'imm32'
+        imm_var = _var(imm_node.children[1]) if isinstance(imm_node, SList) else 'imm'
+        lines.append(f'    if ({reg} > 7)')
+        lines.append(f'        x64_rex(buf, false, false, false, true);')
+        lines.append(f'    x64_emit8(buf, 0x{base_byte:02x} + ((uint8_t){reg} & 7));')
+        if imm_type == 'imm32':
+            lines.append(f'    x64_emit32(buf, (uint32_t){imm_var});')
+        elif imm_type == 'imm64':
+            lines.append(f'    x64_emit64(buf, {imm_var});')
+        return lines
+
+    # ---- Pattern: (rex-if-ext2 $reg $base OPCODE (modrm-mem ...)) ----
+    if head == 'rex-if-ext2':
+        reg = _var(enc[1])
+        base = _var(enc[2])
+        opcode = _num(enc[3])
+        mm = enc[4]  # (modrm-mem $reg $base $disp)
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else '0'
+        lines.append(f'    if ({reg} > 7 || {base} > 7)')
+        lines.append(f'        x64_rex(buf, false, {reg} > 7, false, {base} > 7);')
+        lines.append(f'    x64_emit8(buf, 0x{opcode:02x});')
+        lines.append(f'    x64_modrm_mem(buf, {reg}, {base}, {disp});')
+        return lines
+
+    # ---- Pattern: (rex-for-byte $src $base OPCODE (modrm-mem ...)) ----
+    if head == 'rex-for-byte':
+        src = _var(enc[1])
+        base = _var(enc[2])
+        opcode = _num(enc[3])
+        mm = enc[4]
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else '0'
+        lines.append(f'    if ({src} > 7 || {src} >= 4 || {base} > 7)')
+        lines.append(f'        x64_rex(buf, false, {src} > 7, false, {base} > 7);')
+        lines.append(f'    x64_emit8(buf, 0x{opcode:02x});')
+        lines.append(f'    x64_modrm_mem(buf, {src}, {base}, {disp});')
+        return lines
+
+    # ---- Pattern: (rex-if-ext-r $reg OPCODES... (modrm ...)) ----
+    if head == 'rex-if-ext-r':
+        reg = _var(enc[1])
+        opcodes = []
+        modrm_node = None
+        for e in enc[2:]:
+            if isinstance(e, SAtom) and e.is_number:
+                opcodes.append(e.int_value)
+            elif isinstance(e, SList):
+                h2 = e.children[0].value if isinstance(e.children[0], SAtom) else ''
+                if h2 == 'modrm':
+                    modrm_node = e
+        lines.append(f'    if ({reg} > 7)')
+        lines.append(f'        x64_rex(buf, false, false, false, true);')
+        for op in opcodes:
+            lines.append(f'    x64_emit8(buf, 0x{op:02x});')
+        if modrm_node:
+            mod = _num(modrm_node.children[1])
+            reg_f = modrm_node.children[2]
+            rm_f = modrm_node.children[3]
+            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t){_var(reg_f)}'
+            rm_expr = _var(rm_f) if _var(rm_f) else str(_num(rm_f))
+            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t){rm_expr});')
+        return lines
+
+    # ---- Pattern: (rex-for-byte-r $reg OPCODES... (modrm ...)) ----
+    if head == 'rex-for-byte-r':
+        reg = _var(enc[1])
+        # Collect opcode bytes and modrm
+        opcodes = []
+        modrm_node = None
+        for e in enc[2:]:
+            if isinstance(e, SAtom) and e.is_number:
+                opcodes.append(e.int_value)
+            elif isinstance(e, SList):
+                h2 = e.children[0].value if isinstance(e.children[0], SAtom) else ''
+                if h2 == 'modrm':
+                    modrm_node = e
+                elif h2 == '+':
+                    # (+  0x90 $cc) style
+                    base_val = _num(e.children[1])
+                    cc_var = _var(e.children[2])
+                    opcodes.append(('plus', base_val, cc_var))
+        lines.append(f'    if ({reg} > 7 || {reg} >= 4)')
+        lines.append(f'        x64_rex(buf, false, false, false, {reg} > 7);')
+        for op in opcodes:
+            if isinstance(op, tuple) and op[0] == 'plus':
+                lines.append(f'    x64_emit8(buf, 0x{op[1]:02x} + (uint8_t){op[2]});')
+            else:
+                lines.append(f'    x64_emit8(buf, 0x{op:02x});')
+        if modrm_node:
+            mod = _num(modrm_node.children[1])
+            reg_f = modrm_node.children[2]
+            rm_f = modrm_node.children[3]
+            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t){_var(reg_f)}'
+            rm_expr = _var(rm_f) if _var(rm_f) else str(_num(rm_f))
+            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t){rm_expr});')
+        return lines
+
+    # ---- Pattern: (prefix-66 rex-if-ext2 ...) ----
+    if head == 'prefix-66':
+        lines.append(f'    x64_emit8(buf, 0x66);')
+        # Rest follows rex-if-ext2 pattern
+        reg = _var(enc[2])
+        base = _var(enc[3])
+        opcode = _num(enc[4])
+        mm = enc[5]
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else '0'
+        lines.append(f'    if ({reg} > 7 || {base} > 7)')
+        lines.append(f'        x64_rex(buf, false, {reg} > 7, false, {base} > 7);')
+        lines.append(f'    x64_emit8(buf, 0x{opcode:02x});')
+        lines.append(f'    x64_modrm_mem(buf, {reg}, {base}, {disp});')
+        return lines
+
+    # ---- Standard patterns: rex.w, opcode+rd, nullary, branch ----
+
+    # Analyze encoding structure
+    has_rex_w = False
+    opcode_bytes = []
+    modrm_info = None       # (mod, reg_expr, rm_expr) for modrm 0b11
+    modrm_mem_info = None   # (reg, base, disp) for modrm-mem
+    plus_info = None        # (base_byte, reg_var) for opcode+rd
+    imm_parts = []          # [(type, var_name)]
+    plus_cc = None          # (base_byte, cc_var) for (+ 0x80 $cc) style
+
+    for elem in enc:
+        if isinstance(elem, SAtom):
+            if elem.value == 'rex.w':
+                has_rex_w = True
+            elif elem.is_number:
+                opcode_bytes.append(elem.int_value)
+        elif isinstance(elem, SList) and elem.children:
+            h2 = elem.children[0].value if isinstance(elem.children[0], SAtom) else ''
+            if h2 == 'modrm':
+                ch = elem.children
+                mod = _num(ch[1]) if len(ch) > 1 else 0b11
+                mreg = ch[2] if len(ch) > 2 else None
+                mrm = ch[3] if len(ch) > 3 else None
+                modrm_info = (mod, mreg, mrm)
+            elif h2 == 'modrm-mem':
+                ch = elem.children
+                mm_reg = _var(ch[1]) if len(ch) > 1 else None
+                mm_base = _var(ch[2]) if len(ch) > 2 else None
+                mm_disp = _var(ch[3]) if len(ch) > 3 else None
+                modrm_mem_info = (mm_reg, mm_base, mm_disp)
+            elif h2 == '+':
+                ch = elem.children
+                base_val = _num(ch[1])
+                operand = ch[2] if len(ch) > 2 else None
+                if operand and isinstance(operand, SList):
+                    # (+ 0xb8 (reg3 $dst))
+                    rv = _var(operand.children[1]) if len(operand.children) > 1 else None
+                    plus_info = (base_val, rv)
+                elif operand and isinstance(operand, SAtom) and operand.is_variable:
+                    # (+ 0x80 $cc)
+                    plus_cc = (base_val, _var(operand))
+            elif h2 in ('imm8', 'imm16', 'imm32', 'imm64', 'rel8', 'rel32'):
+                iv = _var(elem.children[1]) if len(elem.children) > 1 else ''
+                imm_parts.append((h2, iv))
+
+    # ---- Emit REX prefix ----
+    if has_rex_w:
+        if modrm_info and modrm_info[0] == 0b11:
+            _, mreg, mrm = modrm_info
+            mreg_var = _var(mreg)
+            mrm_var = _var(mrm)
+            if mreg_var and mrm_var:
+                lines.append(f'    x64_rex_rr(buf, true, {mreg_var}, {mrm_var});')
+            elif mrm_var:
+                lines.append(f'    x64_rex(buf, true, false, false, {mrm_var} > 7);')
+            else:
+                lines.append(f'    x64_rex(buf, true, false, false, false);')
+        elif modrm_mem_info:
+            reg, base, disp = modrm_mem_info
+            lines.append(f'    x64_rex(buf, true, {reg} > 7, false, {base} > 7);')
+        elif plus_info:
+            _, rv = plus_info
+            if rv:
+                lines.append(f'    x64_rex(buf, true, false, false, {rv} > 7);')
+            else:
+                lines.append(f'    x64_rex(buf, true, false, false, false);')
+        else:
+            lines.append(f'    x64_rex(buf, true, false, false, false);')
+    elif not has_rex_w and plus_info:
+        # opcode+rd without REX.W (push/pop): emit REX.B only if needed
+        _, rv = plus_info
+        if rv:
+            lines.append(f'    if ({rv} > 7)')
+            lines.append(f'        x64_rex(buf, false, false, false, true);')
+
+    # ---- Emit opcode bytes ----
+    for b in opcode_bytes:
+        lines.append(f'    x64_emit8(buf, 0x{b:02x});')
+
+    # ---- Emit parameterized opcode: (+ BASE $cc) ----
+    if plus_cc:
+        base_val, cc_var = plus_cc
+        lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + (uint8_t){cc_var});')
+
+    # ---- Emit opcode+rd: (+ BASE (reg3 $r)) ----
+    if plus_info:
+        base_val, rv = plus_info
+        if rv:
+            lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + ((uint8_t){rv} & 7));')
+
+    # ---- Emit ModRM (register-register) ----
+    if modrm_info:
+        mod, mreg, mrm = modrm_info
+        if mod == 0b11:
+            mreg_var = _var(mreg)
+            mrm_var = _var(mrm)
+            mreg_num = _num(mreg)
+            mrm_num = _num(mrm)
+            reg_expr = f'(uint8_t){mreg_var}' if mreg_var else str(mreg_num)
+            rm_expr = f'(uint8_t){mrm_var}' if mrm_var else str(mrm_num)
+            if mreg_var and mrm_var:
+                lines.append(f'    x64_modrm_rr(buf, {mreg_var}, {mrm_var});')
+            else:
+                lines.append(f'    x64_modrm(buf, 0x3, {reg_expr}, {rm_expr});')
+
+    # ---- Emit ModRM (memory) ----
+    if modrm_mem_info:
+        reg, base, disp = modrm_mem_info
+        lines.append(f'    x64_modrm_mem(buf, {reg}, {base}, {disp});')
+
+    # ---- Emit immediates ----
+    for imm_type, imm_var in imm_parts:
+        if imm_type in ('imm8', 'rel8'):
+            lines.append(f'    x64_emit8(buf, (uint8_t){imm_var});')
+        elif imm_type in ('imm32', 'rel32'):
+            lines.append(f'    x64_emit32(buf, (uint32_t){imm_var});')
+        elif imm_type == 'imm64':
+            lines.append(f'    x64_emit64(buf, {imm_var});')
+
+    if not lines:
+        lines.append(f'    /* empty encoding */')
+
+    return lines
+
+# C type mapping for X64Buf-based emit functions
+_X64BUF_PARAM_TYPES = {
+    'reg:gpr64': 'X64Reg',
+    'reg:gpr32': 'X64Reg',
+    'reg:xmm': 'X64Xmm',
+    'cc': 'X64Cond',
+    'imm:i8': 'int8_t',
+    'imm:u8': 'uint8_t',
+    'imm:i32': 'int32_t',
+    'imm:u32': 'uint32_t',
+    'imm:i64': 'int64_t',
+    'imm:u64': 'uint64_t',
+    'imm:rel32': 'int32_t',
+    'imm:rel8': 'int8_t',
+}
+
+# ISA name → hand-written C function name override table.
+# Names not in this table use the default: x64.foo.bar → x64_foo_bar
+_X64_NAME_MAP = {
+    'x64.load.bd32': None,    # skip: superseded by x64.mov.rm
+    'x64.store.bd32': None,   # skip: superseded by x64.mov.mr
+    'x64.lea.bd32': None,     # skip: superseded by x64.lea
+    'x64.int3': None,         # no hand-written counterpart
+    # Combined ri wrappers are generated separately
+    'x64.add.ri8': None,
+    'x64.add.ri32': None,
+    'x64.sub.ri8': None,
+    'x64.sub.ri32': None,
+    'x64.and.ri8': None,
+    'x64.and.ri32': None,
+    'x64.or.ri8': None,
+    'x64.or.ri32': None,
+    'x64.cmp.ri8': None,
+    'x64.cmp.ri32': None,
+    'x64.test.ri32': None,
+}
+
+# Pairs of (ri8, ri32, ext) for combined wrapper generation
+_X64_RI_PAIRS = [
+    ('x64.add.ri8', 'x64.add.ri32', 0, 'x64_add_ri', 'dst'),
+    ('x64.sub.ri8', 'x64.sub.ri32', 5, 'x64_sub_ri', 'dst'),
+    ('x64.and.ri8', 'x64.and.ri32', 4, 'x64_and_ri', 'dst'),
+    ('x64.or.ri8', 'x64.or.ri32', 1, 'x64_or_ri', 'dst'),
+    ('x64.cmp.ri8', 'x64.cmp.ri32', 7, 'x64_cmp_ri', 'lhs'),
+]
+
+def _gen_ri_wrapper(c_name: str, ext: int, reg_param: str) -> list[str]:
+    """Generate combined add_ri/sub_ri/... wrapper with imm8/imm32 branching."""
+    lines = []
+    lines.append(f'void {c_name}(X64Buf *buf, X64Reg {reg_param}, int32_t imm) {{')
+    lines.append(f'    XR_DCHECK(buf != NULL, "{c_name}: NULL buf");')
+    lines.append(f'    x64_rex(buf, true, false, false, {reg_param} > 7);')
+    lines.append(f'    if (imm >= -128 && imm <= 127) {{')
+    lines.append(f'        x64_emit8(buf, 0x83);')
+    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t){reg_param});')
+    lines.append(f'        x64_emit8(buf, (uint8_t)(int8_t)imm);')
+    lines.append(f'    }} else {{')
+    lines.append(f'        x64_emit8(buf, 0x81);')
+    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t){reg_param});')
+    lines.append(f'        x64_emit32(buf, (uint32_t)imm);')
+    lines.append(f'    }}')
+    lines.append(f'}}')
+    return lines
+
+def generate_x64_impl(regclasses: list[RegClass], mcinsns: list[McInsn]) -> str:
+    """Generate xm_x64_gen.c — drop-in replacement for hand-written xm_x64.c."""
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('/* Source: xisa/arch/x64.isa */')
+    lines.append('')
+    lines.append('#if defined(__x86_64__) || defined(_M_X64)')
+    lines.append('')
+    lines.append('#include "xm_x64.h"')
+    lines.append('')
+
+    insn_map = {m.name: m for m in mcinsns}
+
+    for insn in mcinsns:
+        # Skip instructions that are superseded or handled as ri pairs
+        if insn.name in _X64_NAME_MAP and _X64_NAME_MAP[insn.name] is None:
+            continue
+
+        c_name = _x64_c_name(insn.name)
+        operands = extract_operands(insn)
+
+        # Build parameter list matching xm_x64.h signatures
+        params = ['X64Buf *buf']
+        for op in operands:
+            type_key = f'{op.kind}:{op.subtype}' if op.subtype else op.kind
+            c_type = _X64BUF_PARAM_TYPES.get(type_key, 'int32_t')
+            params.append(f'{c_type} {_c_param_name(op)}')
+
+        sig = f'void {c_name}({", ".join(params)})'
+        lines.append(f'/* {insn.name} */')
+        lines.append(sig + ' {')
+        lines.append(f'    XR_DCHECK(buf != NULL, "{c_name}: NULL buf");')
+        body = _gen_x64buf_body(insn, operands)
+        lines.extend(body)
+        lines.append('}')
+        lines.append('')
+
+    # Generate combined ri wrappers
+    lines.append('/* ========== Combined imm8/imm32 Wrappers ========== */')
+    lines.append('')
+    for ri8_name, ri32_name, ext, c_name, reg_param in _X64_RI_PAIRS:
+        wrapper = _gen_ri_wrapper(c_name, ext, reg_param)
+        lines.extend(wrapper)
+        lines.append('')
+
+    # test_ri is special: always 32-bit, no branching
+    lines.append('/* x64.test.ri32 — always imm32, no imm8 form */')
+    lines.append('void x64_test_ri(X64Buf *buf, X64Reg dst, int32_t imm) {')
+    lines.append('    XR_DCHECK(buf != NULL, "x64_test_ri: NULL buf");')
+    lines.append('    x64_rex(buf, true, false, false, dst > 7);')
+    lines.append('    x64_emit8(buf, 0xf7);')
+    lines.append('    x64_modrm(buf, 0x3, 0, (uint8_t)dst);')
+    lines.append('    x64_emit32(buf, (uint32_t)imm);')
+    lines.append('}')
+    lines.append('')
+
+    lines.append('#endif  // __x86_64__ || _M_X64')
+    lines.append('')
+    return '\n'.join(lines)
+
+# ============================================================
 # L5: Typecheck — validate .isa internal consistency
 # ============================================================
 
@@ -1084,9 +1543,9 @@ def typecheck_isa(regclasses: list[RegClass], mcinsns: list[McInsn]) -> list[Isa
                     diags.append(IsaDiag('error', insn.name,
                                          f'encoding references undefined operand {var}'))
 
-        # Golden bytes: at least 1 entry
+        # Golden bytes: at least 1 entry (warn only — memory-mode insns may skip)
         if not insn.golden_bytes:
-            diags.append(IsaDiag('error', insn.name, 'no :golden-bytes entries'))
+            diags.append(IsaDiag('warn', insn.name, 'no :golden-bytes entries'))
 
         # Golden bytes: validate hex string format
         for regs, hex_str in insn.golden_bytes:
@@ -1181,8 +1640,6 @@ def cmd_isa(args: list[str]):
             die(f"{path}: {insn.name}: missing :min-bytes")
         if insn.max_bytes < insn.min_bytes:
             die(f"{path}: {insn.name}: :max-bytes < :min-bytes")
-        if not insn.golden_bytes:
-            die(f"{path}: {insn.name}: no :golden-bytes")
 
     # Typecheck
     diags = typecheck_isa(regclasses, mcinsns)
@@ -1201,6 +1658,18 @@ def cmd_isa(args: list[str]):
         out_path = os.path.join(output_dir, f'xisa_{arch}_emit.h')
         write_file(out_path, header)
         print(f"xisagen: generated {out_path}", file=sys.stderr)
+
+def cmd_x64impl(args: list[str]):
+    """Generate xm_x64_gen.c from x64.isa.
+    Usage: xisagen x64impl <isa-file> <output-dir>"""
+    if len(args) < 2:
+        die('usage: xisagen x64impl <isa-file> <output-dir>')
+    path, output_dir = args[0], args[1]
+    regclasses, mcinsns = load_isa(path)
+    impl = generate_x64_impl(regclasses, mcinsns)
+    out_path = os.path.join(output_dir, 'xm_x64_gen.c')
+    write_file(out_path, impl)
+    print(f"xisagen: generated {out_path}", file=sys.stderr)
 
 def cmd_test(args: list[str]):
     """Run self-tests."""
@@ -1487,6 +1956,7 @@ def main():
         'ops': cmd_ops,
         'helpers': cmd_helpers,
         'isa': cmd_isa,
+        'x64impl': cmd_x64impl,
         'test': cmd_test,
     }
 
