@@ -18,28 +18,28 @@ configure_file(
 )
 
 # ============================================================================
-# XISA Code Generation (ops.def → xm_ops_gen.h, helpers.def → xm_helpers_gen.h)
+# XISA Code Generation (Python xisagen: .def → generated headers)
 # ============================================================================
-# Build the xisagen host tool, then use it to regenerate headers.
+# Uses tools/xisagen/xisagen.py to regenerate headers from .def sources.
 # Generated headers are checked into git, so this only runs when .def changes.
 
-add_executable(xisagen EXCLUDE_FROM_ALL tools/xisagen/xisagen.c)
+set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    COMMAND xisagen ops
+    COMMAND python3 ${XISAGEN} ops
             ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
             ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    DEPENDS xisagen ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
     COMMENT "xisagen: generating xm_ops_gen.h from ops.def"
 )
 
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    COMMAND xisagen helpers
+    COMMAND python3 ${XISAGEN} helpers
             ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
             ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    DEPENDS xisagen ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
     COMMENT "xisagen: generating xm_helpers_gen.h from helpers.def"
 )
 
