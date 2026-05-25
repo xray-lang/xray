@@ -1314,7 +1314,8 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
             g_udp_recv_addr.port = ntohs(sin6->sin6_port);
         }
 
-        // Create result Json: { data: string, addr: { host, port } }
+        // Build UdpPacket handle: { data: string, host: string, port: int }
+        // Flat layout — direct .field access instead of .addr.host / .addr.port.
         XrJson *json = xr_json_new(xr_current_coro(X));
         if (!json) {
             xr_free(state);
@@ -1323,15 +1324,10 @@ static XrCFuncResult net_recv_from_step(XrayIsolate *X, NetRecvFromState *state,
         }
         xr_json_set_by_key(X, json, "data",
                            xr_string_value(xr_string_intern(X, g_udp_recv_buf, n, 0)));
-
-        XrJson *addr_json = xr_json_new(xr_current_coro(X));
-        if (addr_json) {
-            xr_json_set_by_key(X, addr_json, "host",
-                               xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
-                                                                strlen(g_udp_recv_addr.host), 0)));
-            xr_json_set_by_key(X, addr_json, "port", xr_int(g_udp_recv_addr.port));
-            xr_json_set_by_key(X, json, "addr", xr_json_value(addr_json));
-        }
+        xr_json_set_by_key(X, json, "host",
+                           xr_string_value(xr_string_intern(X, g_udp_recv_addr.host,
+                                                            strlen(g_udp_recv_addr.host), 0)));
+        xr_json_set_by_key(X, json, "port", xr_int(g_udp_recv_addr.port));
 
         xr_free(state);
         *result = xr_json_value(json);
@@ -1403,6 +1399,7 @@ static XrValue net_dns_lookup(XrayIsolate *isolate, XrValue *args, int nargs) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module net
+// @handle UdpPacket { const data: string, const host: string, const port: int }
 //
 // cfunc signatures use the typed prelude handle classes (NetConn /
 // NetListener), with union types where the cfunc accepts either kind
@@ -1435,8 +1432,9 @@ XR_DEFINE_BUILTIN(net_udp_bind_handle, "udpBind", "(port: int, addr?: string): N
 XR_DEFINE_BUILTIN(net_send_to_yieldable, "sendTo",
                   "(handle: NetConn, data: string, host: string, port: int): int",
                   "Send UDP datagram")
-XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom", "(handle: NetConn, maxlen?: int): Json",
-                  "Receive UDP datagram")
+XR_DEFINE_BUILTIN(net_recv_from_yieldable, "recvFrom",
+                  "(handle: NetConn, maxlen?: int): UdpPacket?",
+                  "Receive UDP datagram (returns flat handle: data, host, port)")
 
 /* ========== Native-type instance methods (synchronous) ==========
  *

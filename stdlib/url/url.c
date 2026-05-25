@@ -947,6 +947,9 @@ static XrValue url_join_fn(XrayIsolate *X, XrValue *args, int nargs) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module url
+// @handle URL { const protocol: string, const hostname: string, const port: string, const pathname:
+// string, const search: string, const hash: string, const username: string, const password: string,
+// const host: string, const origin: string, const href: string }
 
 XR_DEFINE_BUILTIN(url_encode_fn, "encode", "(s: string): string", "RFC 3986 percent-encode")
 XR_DEFINE_BUILTIN(url_decode_fn, "decode", "(s: string): string", "RFC 3986 percent-decode")
@@ -954,9 +957,11 @@ XR_DEFINE_BUILTIN(url_encode_form_fn, "encodeForm", "(s: string): string",
                   "Form URL encode (space as +)")
 XR_DEFINE_BUILTIN(url_decode_form_fn, "decodeForm", "(s: string): string",
                   "Form URL decode (+ as space)")
-XR_DEFINE_BUILTIN(url_parse_fn, "parse", "(url: string): Json", "Parse URL into Json object")
-XR_DEFINE_BUILTIN(url_format_fn, "format", "(obj: Json): string",
-                  "Build URL string from Json components")
+XR_DEFINE_BUILTIN(url_parse_fn, "parse", "(url: string): URL",
+                  "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, "
+                  "username, password, host, origin, href)")
+XR_DEFINE_BUILTIN(url_format_fn, "format", "(obj: URL): string",
+                  "Build URL string from URL components")
 XR_DEFINE_BUILTIN(url_parse_query_fn, "parseQuery", "(qs: string): Json",
                   "Parse query string to Json")
 XR_DEFINE_BUILTIN(url_build_query_fn, "buildQuery", "(obj: Json): string",

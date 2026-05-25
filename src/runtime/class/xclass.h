@@ -121,6 +121,7 @@ typedef enum {
     XR_BK_ENUM_TYPE,
     XR_BK_ITERATOR,
     XR_BK_REGEX,
+    XR_BK_REGEX_MATCH,
     XR_BK_NETCONN,
     XR_BK_NETLISTENER,
     XR_BK_BIGINT,

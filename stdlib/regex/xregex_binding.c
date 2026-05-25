@@ -24,7 +24,6 @@
 #include "../../src/runtime/value/xvalue_format.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/class/xinstance.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
 #include "../../src/runtime/class/xclass.h"
@@ -78,45 +77,53 @@ static XrRegexFlags parse_flags(const char *flags_str) {
     return flags;
 }
 
+/* RegexMatch field slot indices — must match the order in
+ * xr_regex_register_match_class() and stdlib/types/regex.xr. */
+#define REGEX_MATCH_FIELD_START 0
+#define REGEX_MATCH_FIELD_END 1
+#define REGEX_MATCH_FIELD_TEXT 2
+#define REGEX_MATCH_FIELD_GROUPS 3
+
 /*
- * Create Match object (as Json)
+ * Create a RegexMatch instance (typed XrInstance, not Json).
  *
- * Structure:
- *   { start: int, end: int, text: string, groups: Array<string> }
- *
- * Public symbol: stdlib/regex/regex_methods.c reuses this so the
- * native-type binding yields identically shaped match objects.
+ * Fields (fixed slot offsets, direct store — no hash lookup):
+ *   slot 0: start  (int)
+ *   slot 1: end    (int)
+ *   slot 2: text   (string)
+ *   slot 3: groups (Array<string>)
  */
 XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match) {
-    /* Temporarily disable GC: multiple allocations below (Json, String,
-     * Array) are not rooted from the VM stack — only held in C locals.
-     * A GC step triggered by any intermediate alloc could collect them. */
+    XrayCoreClasses *core = xr_isolate_get_core_classes(isolate);
+    XR_DCHECK(core && core->regexMatchClass, "make_match_object: regexMatchClass not registered");
+
+    /* Temporarily disable GC: multiple allocations below (Instance,
+     * String, Array) are not rooted from the VM stack. */
     XrCoroutine *coro = xr_current_coro(isolate);
     XrCoroGC *gc = coro ? coro->coro_gc : NULL;
     if (gc)
         gc->gc_disabled++;
 
-    XrJson *result = xr_json_new(coro);
+    XrInstance *inst = xr_instance_new(isolate, core->regexMatchClass);
+    XR_DCHECK(inst != NULL, "make_match_object: instance alloc failed");
 
-    // start
+    /* start / end */
     int start_offset = match->groups[0].start ? (int) (match->groups[0].start - text) : 0;
-    xr_json_set_by_key(isolate, result, "start", xr_int(start_offset));
-
-    // end
     int end_offset = match->groups[0].end ? (int) (match->groups[0].end - text) : 0;
-    xr_json_set_by_key(isolate, result, "end", xr_int(end_offset));
+    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_START, xr_int(start_offset));
+    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_END, xr_int(end_offset));
 
-    // text
+    /* text */
     if (match->groups[0].start && match->groups[0].end) {
         int len = (int) (match->groups[0].end - match->groups[0].start);
         XrString *matched_text = xr_string_intern(isolate, match->groups[0].start, len, 0);
-        xr_json_set_by_key(isolate, result, "text", xr_string_value(matched_text));
+        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_string_value(matched_text));
     } else {
-        xr_json_set_by_key(isolate, result, "text", xr_null());
+        xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_TEXT, xr_null());
     }
 
-    // groups
-    XrArray *groups = xr_array_new(xr_current_coro(isolate));
+    /* groups */
+    XrArray *groups = xr_array_new(coro);
     for (int i = 0; i < match->group_count; i++) {
         if (match->groups[i].start && match->groups[i].end) {
             int len = (int) (match->groups[i].end - match->groups[i].start);
@@ -126,11 +133,11 @@ XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMat
             xr_array_push(groups, xr_null());
         }
     }
-    xr_json_set_by_key(isolate, result, "groups", xr_value_from_array(groups));
+    xr_instance_set_field_fast(inst, REGEX_MATCH_FIELD_GROUPS, xr_value_from_array(groups));
 
     if (gc)
         gc->gc_disabled--;
-    return xr_json_value(result);
+    return XR_FROM_PTR(inst);
 }
 
 /* ========================================================================
@@ -324,6 +331,61 @@ static XrValue regex_count(XrayIsolate *isolate, XrValue *args, int argc) {
 
     int count = xr_regex_count(re, text, text_len);
     return xr_int(count);
+}
+
+// findText(re, text) - Find match, return only matched text (zero-alloc)
+static XrValue regex_find_text(XrayIsolate *isolate, XrValue *args, int argc) {
+    if (argc < 2)
+        return xr_null();
+
+    XrRegex *re = unwrap_regex(isolate, args[0]);
+    if (!re)
+        return xr_null();
+
+    int text_len;
+    const char *text = value_to_cstring(args[1], &text_len);
+    if (!text)
+        return xr_null();
+
+    XrMatch match;
+    if (!xr_regex_match(re, text, text_len, &match))
+        return xr_null();
+    if (!match.groups[0].start || !match.groups[0].end)
+        return xr_null();
+
+    int len = (int) (match.groups[0].end - match.groups[0].start);
+    return xr_string_value(xr_string_intern(isolate, match.groups[0].start, len, 0));
+}
+
+// findGroup(re, text, index) - Find match, return single capture group (zero-alloc)
+static XrValue regex_find_group(XrayIsolate *isolate, XrValue *args, int argc) {
+    if (argc < 3)
+        return xr_null();
+
+    XrRegex *re = unwrap_regex(isolate, args[0]);
+    if (!re)
+        return xr_null();
+
+    int text_len;
+    const char *text = value_to_cstring(args[1], &text_len);
+    if (!text)
+        return xr_null();
+
+    if (!XR_IS_INT(args[2]))
+        return xr_null();
+    int group_idx = (int) XR_TO_INT(args[2]);
+
+    XrMatch match;
+    if (!xr_regex_match(re, text, text_len, &match))
+        return xr_null();
+
+    if (group_idx < 0 || group_idx >= match.group_count)
+        return xr_null();
+    if (!match.groups[group_idx].start || !match.groups[group_idx].end)
+        return xr_null();
+
+    int len = (int) (match.groups[group_idx].end - match.groups[group_idx].start);
+    return xr_string_value(xr_string_intern(isolate, match.groups[group_idx].start, len, 0));
 }
 
 // find(re, text [, offset]) - Find match from specified position
@@ -569,6 +631,59 @@ static XrValue re_m_split(XrayIsolate *X, XrValue self, XrValue *a, int n) {
     return regex_split(X, tmp, n + 1);
 }
 
+/* findText: zero-allocation path — return only the matched text (string?).
+ * No RegexMatch object, no groups array allocated. */
+static XrValue re_m_find_text(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    if (n < 1)
+        return xr_null();
+    XrRegex *re = unwrap_regex(X, self);
+    if (!re)
+        return xr_null();
+    int text_len;
+    const char *text = value_to_cstring(a[0], &text_len);
+    if (!text)
+        return xr_null();
+
+    XrMatch match;
+    if (!xr_regex_match(re, text, text_len, &match))
+        return xr_null();
+
+    if (!match.groups[0].start || !match.groups[0].end)
+        return xr_null();
+
+    int len = (int) (match.groups[0].end - match.groups[0].start);
+    return xr_string_value(xr_string_intern(X, match.groups[0].start, len, 0));
+}
+
+/* findGroup: zero-allocation path — return a single capture group (string?).
+ * args: (text: string, index: int). index 0 = whole match, 1+ = groups. */
+static XrValue re_m_find_group(XrayIsolate *X, XrValue self, XrValue *a, int n) {
+    if (n < 2)
+        return xr_null();
+    XrRegex *re = unwrap_regex(X, self);
+    if (!re)
+        return xr_null();
+    int text_len;
+    const char *text = value_to_cstring(a[0], &text_len);
+    if (!text)
+        return xr_null();
+    if (!XR_IS_INT(a[1]))
+        return xr_null();
+    int group_idx = (int) XR_TO_INT(a[1]);
+
+    XrMatch match;
+    if (!xr_regex_match(re, text, text_len, &match))
+        return xr_null();
+
+    if (group_idx < 0 || group_idx >= match.group_count)
+        return xr_null();
+    if (!match.groups[group_idx].start || !match.groups[group_idx].end)
+        return xr_null();
+
+    int len = (int) (match.groups[group_idx].end - match.groups[group_idx].start);
+    return xr_string_value(xr_string_intern(X, match.groups[group_idx].start, len, 0));
+}
+
 /* ========================================================================
  * Native Body Lifecycle
  * ======================================================================== */
@@ -620,6 +735,8 @@ void xr_regex_register_class(XrayIsolate *isolate) {
     /* Instance methods */
     xr_class_builder_add_method(b, "test", re_m_test, 0, 1);
     xr_class_builder_add_method(b, "find", re_m_find, 0, 2);
+    xr_class_builder_add_method(b, "findText", re_m_find_text, 0, 1);
+    xr_class_builder_add_method(b, "findGroup", re_m_find_group, 0, 2);
     xr_class_builder_add_method(b, "findAll", re_m_find_all, 0, 2);
     xr_class_builder_add_method(b, "replace", re_m_replace, 0, 2);
     xr_class_builder_add_method(b, "replaceAll", re_m_replace_all, 0, 2);
@@ -632,6 +749,24 @@ void xr_regex_register_class(XrayIsolate *isolate) {
     cls->flags |= XR_CLASS_BUILTIN | XR_CLASS_HAS_NATIVE_BODY;
     cls->builtin_kind = XR_BK_REGEX;
     core->regexClass = cls;
+
+    /* ---- RegexMatch (plain fields, no native body) ---- */
+    XR_DCHECK(core->regexMatchClass == NULL,
+              "regex_register_class: regexMatchClass already registered");
+    XrClassBuilder *mb = xr_class_builder_new(isolate, "RegexMatch", core->objectClass);
+    XR_CHECK(mb != NULL, "regex_register_class: match builder alloc failed");
+
+    /* Field order MUST match REGEX_MATCH_FIELD_* constants. */
+    xr_class_builder_add_field(mb, "start", 0);
+    xr_class_builder_add_field(mb, "end", 0);
+    xr_class_builder_add_field(mb, "text", 0);
+    xr_class_builder_add_field(mb, "groups", 0);
+
+    XrClass *mcls = xr_class_builder_finalize(mb);
+    XR_CHECK(mcls != NULL, "regex_register_class: match finalize failed");
+    mcls->flags |= XR_CLASS_BUILTIN | XR_CLASS_FINAL;
+    mcls->builtin_kind = XR_BK_REGEX_MATCH;
+    core->regexMatchClass = mcls;
 }
 
 /* ========================================================================
@@ -648,12 +783,16 @@ XR_DEFINE_BUILTIN(regex_compile, "compile", "(pattern: string, flags?: string): 
                   "Compile a regex pattern")
 XR_DEFINE_BUILTIN(regex_test, "test", "(pattern: Regex, s: string): bool",
                   "Test if pattern matches string")
-XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): Json",
+XR_DEFINE_BUILTIN(regex_find, "find", "(pattern: Regex, s: string, offset?: int): RegexMatch?",
                   "Find first match")
-XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): Json",
+XR_DEFINE_BUILTIN(regex_find_text, "findText", "(pattern: Regex, s: string): string?",
+                  "Find first match, return matched text only (zero-alloc)")
+XR_DEFINE_BUILTIN(regex_find_group, "findGroup", "(pattern: Regex, s: string, index: int): string?",
+                  "Find first match, return single capture group (zero-alloc)")
+XR_DEFINE_BUILTIN(regex_full_match, "fullFind", "(pattern: Regex, s: string): RegexMatch?",
                   "Full match with captures")
 XR_DEFINE_BUILTIN(regex_count, "count", "(pattern: Regex, s: string): int", "Count matches")
-XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<string>",
+XR_DEFINE_BUILTIN(regex_find_all, "findAll", "(pattern: Regex, s: string): Array<RegexMatch>",
                   "Find all matches")
 XR_DEFINE_BUILTIN(regex_replace, "replace",
                   "(pattern: Regex, s: string, replacement: string): string", "Replace first match")
@@ -673,6 +812,8 @@ XR_FUNC XrModule *xr_load_module_regex(XrayIsolate *isolate) {
     XRS_EXPORT(mod, isolate, "compile", regex_compile);
     XRS_EXPORT(mod, isolate, "test", regex_test);
     XRS_EXPORT(mod, isolate, "find", regex_find);
+    XRS_EXPORT(mod, isolate, "findText", regex_find_text);
+    XRS_EXPORT(mod, isolate, "findGroup", regex_find_group);
     XRS_EXPORT(mod, isolate, "fullFind", regex_full_match);
     XRS_EXPORT(mod, isolate, "count", regex_count);
     XRS_EXPORT(mod, isolate, "findAll", regex_find_all);

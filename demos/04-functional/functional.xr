@@ -23,8 +23,8 @@ let addOne = fn(x: int) -> int { return x + 1 }
 print("twice(addOne, 5) = ${twice(addOne, 5)}")
 
 // === Function composition ===
-fn compose(f: (int) -> int, g: (int) -> int) ->(int) -> int {
-    return fn(x: int) -> int { return f(g(x }))
+fn compose(f: (int) -> int, g: (int) -> int) -> (int) -> int {
+    return fn(x: int) -> int { return f(g(x)) }
 }
 
 let doubleIt = fn(x: int) -> int { return x * 2 }

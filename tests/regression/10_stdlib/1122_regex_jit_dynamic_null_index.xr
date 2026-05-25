@@ -17,7 +17,7 @@ fn regex_dynamic_match_text(pattern: string, text: string, expected: string) -> 
     if (result == null) {
         return false
     }
-    return result["text"] == expected
+    return result.text == expected
 }
 
 @test

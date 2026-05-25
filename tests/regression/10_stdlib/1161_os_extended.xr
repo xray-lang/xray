@@ -89,10 +89,8 @@ fn test_clock() {
 fn test_exec_echo() {
     let result = os.exec("echo hello")
     assert(result != null)
-    let stdout = result.get("stdout")
-    assert_eq(stdout, "hello\n")
-    let code = result.get("exitCode")
-    assert_eq(code, 0)
+    assert_eq(result.stdout, "hello\n")
+    assert_eq(result.exitCode, 0)
 }
 
 @test
@@ -103,18 +101,15 @@ fn test_exec_stderr() {
     }
     let result = os.exec("echo error_msg >&2")
     assert(result != null)
-    let stderr = result.get("stderr")
-    assert_eq(stderr, "error_msg\n")
-    let code = result.get("exitCode")
-    assert_eq(code, 0)
+    assert_eq(result.stderr, "error_msg\n")
+    assert_eq(result.exitCode, 0)
 }
 
 @test
 fn test_exec_exit_code() {
     let result = os.exec("exit 42")
     assert(result != null)
-    let code = result.get("exitCode")
-    assert_eq(code, 42)
+    assert_eq(result.exitCode, 42)
 }
 
 @test
@@ -123,13 +118,11 @@ fn test_exec_command_output() {
         // Windows echo adds \r\n; printf not available
         let result = os.exec("echo abc")
         assert(result != null)
-        let stdout = result.get("stdout")
-        assert(stdout != null)
+        assert(result.stdout != null)
     } else {
         let result = os.exec("printf 'abc'")
         assert(result != null)
-        let stdout = result.get("stdout")
-        assert_eq(stdout, "abc")
+        assert_eq(result.stdout, "abc")
     }
 }
 

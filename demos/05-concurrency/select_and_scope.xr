@@ -6,8 +6,8 @@
 import time
 
 // === select: multiplex multiple channels ===
-const ch1 = Channel(1)
-const ch2 = Channel(1)
+shared const ch1 = new Channel<string>(1)
+shared const ch2 = new Channel<string>(1)
 
 fn sendDelayed(ch: Channel<string>, msg: string, delay: int) {
     time.sleep(delay)
@@ -57,7 +57,7 @@ print("all tasks in scope completed")
 
 // === Practical: parallel data processing ===
 print("\n--- parallel pipeline ---")
-const results = Channel(3)
+shared const results = new Channel<string>(3)
 
 fn fetchData(id: int, out: Channel<string>) {
     time.sleep(10)

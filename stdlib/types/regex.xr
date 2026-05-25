@@ -1,10 +1,20 @@
-// Built-in Regex type — implementation in stdlib/regex/regex_methods.c
+// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c
+
+@native
+class RegexMatch {
+    start: int
+    end: int
+    text: string
+    groups: Array<string>
+}
 
 @native
 class Regex {
     test(text: string) -> bool
-    find(text: string) -> string?
-    findAll(text: string) -> Array<string>
+    find(text: string) -> RegexMatch?
+    findText(text: string) -> string?
+    findGroup(text: string, index: int) -> string?
+    findAll(text: string) -> Array<RegexMatch>
     replace(text: string, replacement: string) -> string
     split(text: string) -> Array<string>
 }

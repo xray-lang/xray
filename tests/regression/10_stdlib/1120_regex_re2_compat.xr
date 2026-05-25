@@ -29,7 +29,7 @@ fn match_eq(pattern: string, text: string, expected: string) -> bool {
     if (result == null) {
         return false
     }
-    return result["text"] == expected
+    return result.text == expected
 }
 
 // ============================================================================
@@ -444,7 +444,7 @@ fn test_ignorecase_inline() {
     let re = regex.compile("(?i)hello")
     let result = regex.find(re, "HELLO")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HELLO")
+    assert_eq(result.text, "HELLO")
 }
 
 @test
@@ -452,7 +452,7 @@ fn test_ignorecase_flag() {
     let re = regex.compile("hello", "i")
     let result = regex.find(re, "HeLLo")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HeLLo")
+    assert_eq(result.text, "HeLLo")
 }
 
 @test

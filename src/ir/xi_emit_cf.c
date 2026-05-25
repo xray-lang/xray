@@ -471,21 +471,65 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 emit_inst(ctx, CREATE_ABC(OP_TEST, cond, 0, 0));
             }
 
-            /* JMP -> else block */
-            int else_jmp_pc = current_pc(ctx);
-            emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
-            xi_emit_add_patch(ctx, else_jmp_pc, else_b->id);
+            /* Emit phi moves for both branch edges.
+             *
+             * The CMP/TEST instruction conditionally skips the next instruction,
+             * so we cannot insert moves between it and the JMP.  When the else
+             * path needs phi resolution we route through a trampoline:
+             *
+             *   CMP a b k
+             *   JMP → trampoline           (skip if condition true)
+             *   [then phi moves]
+             *   JMP → then_b
+             *   trampoline:
+             *   [else phi moves]
+             *   JMP → else_b  (or fall through)
+             */
+            bool else_has_phis = (else_b->phis != NULL);
 
-            /* Phi moves for then path */
-            emit_phi_moves(ctx, blk, then_b);
-            if (ctx->status != XI_EMIT_OK)
-                return;
+            if (!else_has_phis) {
+                /* Fast path: no phis on else edge, direct JMP */
+                int else_jmp_pc = current_pc(ctx);
+                emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder */
+                xi_emit_add_patch(ctx, else_jmp_pc, else_b->id);
 
-            /* Jump to then if not fallthrough */
-            if (then_b != next_blk) {
+                emit_phi_moves(ctx, blk, then_b);
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+
+                if (then_b != next_blk) {
+                    int then_jmp_pc = current_pc(ctx);
+                    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+                    xi_emit_add_patch(ctx, then_jmp_pc, then_b->id);
+                }
+            } else {
+                /* Else target has phis — use trampoline for phi moves */
+                int else_jmp_pc = current_pc(ctx);
+                emit_inst(ctx, CREATE_sJ(OP_JMP, 0)); /* placeholder → trampoline */
+
+                emit_phi_moves(ctx, blk, then_b);
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+
+                /* Always emit JMP to then_b (trampoline follows) */
                 int then_jmp_pc = current_pc(ctx);
                 emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
                 xi_emit_add_patch(ctx, then_jmp_pc, then_b->id);
+
+                /* Trampoline: patch the else JMP to land here */
+                int trampoline_pc = current_pc(ctx);
+                int else_offset = trampoline_pc - (else_jmp_pc + 1);
+                PROTO_SET_CODE(ctx->proto, else_jmp_pc, CREATE_sJ(OP_JMP, else_offset));
+
+                emit_phi_moves(ctx, blk, else_b);
+                if (ctx->status != XI_EMIT_OK)
+                    return;
+
+                if (else_b != next_blk) {
+                    int final_jmp_pc = current_pc(ctx);
+                    emit_inst(ctx, CREATE_sJ(OP_JMP, 0));
+                    xi_emit_add_patch(ctx, final_jmp_pc, else_b->id);
+                }
             }
             break;
         }

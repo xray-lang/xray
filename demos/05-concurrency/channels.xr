@@ -4,8 +4,8 @@
 // Run: xray demos/05-concurrency/channels.xr
 
 // === Basic channel ===
-// Channels MUST be const (system heap, reference counted)
-const ch = Channel(3)
+// Channels MUST be `shared const` so multiple coroutines can capture them safely.
+shared const ch = new Channel<int>(3)
 
 // Send values (buffered, non-blocking up to capacity)
 ch.send(10)
@@ -19,7 +19,7 @@ print("recv: ${ch.recv()}")
 ch.close()
 
 // === Producer-Consumer pattern ===
-const data = Channel(5)
+shared const data = new Channel<int>(5)
 
 fn producer(out: Channel<int>, count: int) {
     for (i in 0..count) {
@@ -40,7 +40,7 @@ go producer(data, 6)
 consumer(data)
 
 // === Fan-out: one producer, multiple consumers ===
-const work = Channel(10)
+shared const work = new Channel<int>(10)
 
 fn worker(id: int, jobs: Channel<int>) {
     while (true) {
@@ -64,7 +64,7 @@ scope {
 }
 
 // === tryRecv (non-blocking) ===
-const ch2 = Channel(1)
+shared const ch2 = new Channel<int>(1)
 ch2.send(42)
 
 let (val, ok) = ch2.tryRecv()

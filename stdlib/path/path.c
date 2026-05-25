@@ -16,6 +16,7 @@
 #include "../common.h"
 #include "../ctxbuf.h"
 #include "../../src/runtime/object/xmap.h"
+#include "../../src/runtime/object/xjson.h"
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/coro/xcoroutine.h"  // xr_current_coro
@@ -462,21 +463,30 @@ static XrValue path_relative(XrayIsolate *X, XrValue *args, int argc) {
     return ret;
 }
 
-// parse(path) - Parse path into components
+// parse(path) - Parse path into a PathInfo handle (Json with fixed shape:
+// root, dir, base, name, ext). Returns Json so user code uses .field access
+// (e.g. `let p = path.parse(s); p.dir`) instead of `.get("dir")`.
 static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
-    // Short-circuit when no usable input is supplied. Returning an empty
-    // map early avoids the wasted allocations + partial population that
-    // previously happened when the caller passed a non-string value.
+    // Short-circuit on bad input — return an empty Json with the same five
+    // fields populated as empty strings, so downstream `.field` access on
+    // the result never NPEs.
+    XrJson *json = xr_json_new(xr_current_coro(X));
+    if (!json)
+        return XR_NULL_VAL;
+
     if (argc < 1 || !XR_IS_STRING(args[0])) {
-        XrMap *empty = xr_map_new(xr_current_coro(X));
-        return xr_value_from_map(empty);
+        XrValue empty = xrs_string_value_c(X, "");
+        xr_json_set_by_key(X, json, "root", empty);
+        xr_json_set_by_key(X, json, "dir", empty);
+        xr_json_set_by_key(X, json, "base", empty);
+        xr_json_set_by_key(X, json, "name", empty);
+        xr_json_set_by_key(X, json, "ext", empty);
+        return xr_json_value(json);
     }
 
     const char *path = xrs_string_arg(args[0], NULL);
     if (!path)
         path = "";
-
-    XrMap *map = xr_map_new(xr_current_coro(X));
 
     // Get each part
     XrValue dir = path_dirname(X, args, 1);
@@ -496,16 +506,16 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
         root = xrs_string_value_c(X, "/");
     }
 
-    xr_map_set(map, xrs_string_value_c(X, "root"), root);
-    xr_map_set(map, xrs_string_value_c(X, "dir"), dir);
-    xr_map_set(map, xrs_string_value_c(X, "base"), base);
-    xr_map_set(map, xrs_string_value_c(X, "name"), name);
-    xr_map_set(map, xrs_string_value_c(X, "ext"), ext);
+    xr_json_set_by_key(X, json, "root", root);
+    xr_json_set_by_key(X, json, "dir", dir);
+    xr_json_set_by_key(X, json, "base", base);
+    xr_json_set_by_key(X, json, "name", name);
+    xr_json_set_by_key(X, json, "ext", ext);
 
-    return xr_value_from_map(map);
+    return xr_json_value(json);
 }
 
-// format(obj) - Build path from components.
+// format(obj) - Build path from a PathInfo Json.
 //
 // Uses a dynamic buffer so arbitrarily long paths are preserved, and honours
 // PATH_SEP rather than hard-coding '/'. That avoids mixed-separator output
@@ -513,16 +523,15 @@ static XrValue path_parse(XrayIsolate *X, XrValue *args, int argc) {
 static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xrs_string_value_c(X, "");
-    if (!XR_IS_MAP(args[0]))
+    if (!xr_value_is_json(args[0]))
         return xrs_string_value_c(X, "");
 
-    XrMap *map = XR_TO_MAP(args[0]);
-    bool found;
+    XrJson *json = xr_value_to_json(args[0]);
 
-    XrValue dir = xr_map_get(map, xrs_string_value_c(X, "dir"), &found);
-    XrValue base = xr_map_get(map, xrs_string_value_c(X, "base"), &found);
-    XrValue name = xr_map_get(map, xrs_string_value_c(X, "name"), &found);
-    XrValue ext = xr_map_get(map, xrs_string_value_c(X, "ext"), &found);
+    XrValue dir = xr_json_get_by_key(X, json, "dir");
+    XrValue base = xr_json_get_by_key(X, json, "base");
+    XrValue name = xr_json_get_by_key(X, json, "name");
+    XrValue ext = xr_json_get_by_key(X, json, "ext");
 
     // Derive `base` from name+ext when only those are present.
     XrCtxBuf base_buf;
@@ -569,6 +578,8 @@ static XrValue path_format(XrayIsolate *X, XrValue *args, int argc) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module path
+// @handle PathInfo { const root: string, const dir: string, const base: string, const name: string,
+// const ext: string }
 
 XR_DEFINE_BUILTIN(path_join, "join", "(...parts: string): string", "Join path segments")
 XR_DEFINE_BUILTIN(path_dirname, "dirname", "(path: string): string", "Get directory name")
@@ -581,8 +592,9 @@ XR_DEFINE_BUILTIN(path_isAbsolute, "isAbsolute", "(path: string): bool",
 XR_DEFINE_BUILTIN(path_resolve, "resolve", "(...parts: string): string", "Resolve to absolute path")
 XR_DEFINE_BUILTIN(path_relative, "relative", "(from: string, to: string): string",
                   "Get relative path")
-XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): Json", "Parse path into components")
-XR_DEFINE_BUILTIN(path_format, "format", "(obj: Json): string", "Format path from components")
+XR_DEFINE_BUILTIN(path_parse, "parse", "(path: string): PathInfo",
+                  "Parse path into components (root, dir, base, name, ext)")
+XR_DEFINE_BUILTIN(path_format, "format", "(obj: PathInfo): string", "Format path from components")
 
 XR_FUNC XrModule *xr_load_module_path(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_path: NULL isolate");
