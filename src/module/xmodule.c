@@ -359,13 +359,10 @@ static XrModuleRegistry *create_registry(void) {
     if (!registry)
         return NULL;
 
+    memset(registry, 0, sizeof(*registry));
     registry->native_loaders = xr_hashmap_new();
     registry->loaded_modules = xr_hashmap_new();
     registry->stdlib_path = xr_strdup("stdlib");
-
-    // Project config (optional)
-    registry->project = NULL;
-    registry->resolver = NULL;
 
     return registry;
 }

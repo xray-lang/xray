@@ -13,15 +13,27 @@
 #include "../coro/xcoroutine.h"
 #include "../base/xlog.h"
 #include <string.h>
-#include <time.h>
 
-/* Monotonic clock helper (returns ns). Returns 0 if clock_gettime fails so
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <time.h>
+#endif
+
+/* Monotonic clock helper (returns ns). Returns 0 on failure so
  * deadline checks fail open rather than aborting the embedder. */
 static int64_t xr_now_ns(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, counter;
+    if (!QueryPerformanceFrequency(&freq) || !QueryPerformanceCounter(&counter))
+        return 0;
+    return (int64_t) ((double) counter.QuadPart / (double) freq.QuadPart * 1e9);
+#else
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
         return 0;
     return (int64_t) ts.tv_sec * 1000000000LL + (int64_t) ts.tv_nsec;
+#endif
 }
 
 /* ========== Memory Subsystem ========== */
