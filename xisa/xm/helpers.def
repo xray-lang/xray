@@ -1,0 +1,124 @@
+# xisa/xm/helpers.def — JIT runtime helper registry (single truth source)
+#
+# Replaces the hand-written XM_HELPER_DEF X-macro in xm_helper_table.h.
+# xisagen generates xm_helpers_gen.h (enum XmHelperId + XmHelperMeta table).
+#
+# Format:
+#   XM_HELPER(NAME, NARGS, RET_REP, FLAGS)
+#
+#   NAME     C function suffix after "xr_jit_" (lowercase)
+#   NARGS    call_arg_pool arguments consumed (NOT counting coro, extra_arg ABI)
+#   RET_REP  return representation:
+#              TAGGED — XrJitResult, dynamic tag in x1
+#              PTR    — always returns a GC pointer
+#              I64    — always returns int64 (also used for bool)
+#              F64    — always returns float64
+#              VOID   — no meaningful return value
+#   FLAGS    bitwise OR of: GC | DEOPT | THROW | SUSPEND  (or NONE)
+
+# ===== Call / Invoke =====
+XM_HELPER(call_self,           0, TAGGED, GC|DEOPT)
+XM_HELPER(call_func,           0, TAGGED, GC|DEOPT)
+XM_HELPER(invoke_method,       0, TAGGED, GC|DEOPT)
+XM_HELPER(invoke_direct,       0, TAGGED, GC|DEOPT)
+XM_HELPER(closure_new,         0, PTR,    GC)
+XM_HELPER(closure_set_upval,   0, VOID,   NONE)
+XM_HELPER(upval_get,           0, TAGGED, NONE)
+XM_HELPER(upval_set,           0, VOID,   NONE)
+XM_HELPER(upval_cell_get,      0, TAGGED, NONE)
+XM_HELPER(upval_cell_set,      0, VOID,   NONE)
+XM_HELPER(cell_new,            0, PTR,    GC)
+XM_HELPER(cell_get_direct,     0, TAGGED, NONE)
+XM_HELPER(cell_set_direct,     0, VOID,   NONE)
+
+# ===== Arithmetic (mixed-type fallback) =====
+XM_HELPER(rt_add,              2, TAGGED, GC)
+XM_HELPER(rt_sub,              2, TAGGED, NONE)
+XM_HELPER(rt_mul,              2, TAGGED, NONE)
+XM_HELPER(rt_div,              2, TAGGED, NONE)
+XM_HELPER(rt_mod,              2, TAGGED, NONE)
+XM_HELPER(rt_eq,               2, I64,    NONE)
+XM_HELPER(eq_value,            2, I64,    NONE)
+
+# ===== Property Access =====
+XM_HELPER(getprop,             1, TAGGED, GC|DEOPT)
+XM_HELPER(setprop,             2, VOID,   GC)
+XM_HELPER(getfield_ic,         0, TAGGED, NONE)
+XM_HELPER(getbuiltin,          0, TAGGED, NONE)
+
+# ===== Index / Container Access =====
+XM_HELPER(index_get,           2, TAGGED, GC|DEOPT)
+XM_HELPER(index_set,           3, VOID,   GC)
+XM_HELPER(tarray_get,          2, TAGGED, NONE)
+XM_HELPER(tarray_set,          3, VOID,   NONE)
+XM_HELPER(map_get,             2, TAGGED, GC)
+XM_HELPER(map_set,             3, VOID,   GC)
+XM_HELPER(map_increment,       2, VOID,   GC)
+
+# ===== Shared Variables =====
+XM_HELPER(get_shared,          0, TAGGED, GC)
+XM_HELPER(set_shared,          1, VOID,   GC)
+
+# ===== Exception =====
+XM_HELPER(throw,               1, VOID,   THROW)
+
+# ===== Type Operations =====
+XM_HELPER(is_type,             1, I64,    NONE)
+XM_HELPER(checktype,           1, I64,    NONE)
+XM_HELPER(typename,            1, PTR,    NONE)
+XM_HELPER(typeof,              1, I64,    NONE)
+XM_HELPER(deep_copy,           1, PTR,    GC)
+
+# ===== String Operations =====
+XM_HELPER(chr,                 0, PTR,    GC)
+XM_HELPER(substring,           0, PTR,    GC)
+XM_HELPER(str_repeat,          0, PTR,    GC)
+XM_HELPER(tostring,            1, PTR,    GC)
+XM_HELPER(strbuf_new,          0, PTR,    GC)
+XM_HELPER(strbuf_append,       0, VOID,   GC)
+XM_HELPER(strbuf_finish,       0, PTR,    GC)
+
+# ===== Struct Native Storage =====
+XM_HELPER(new_struct,          0, PTR,    GC)
+XM_HELPER(struct_get,          0, TAGGED, NONE)
+XM_HELPER(struct_set,          0, VOID,   NONE)
+XM_HELPER(struct_copy,         0, PTR,    GC)
+
+# ===== Container Construction =====
+XM_HELPER(rt_array_new,        0, PTR,    GC)
+XM_HELPER(rt_array_push,       0, VOID,   GC)
+XM_HELPER(rt_array_len,        0, I64,    NONE)
+XM_HELPER(rt_map_new,          0, PTR,    GC)
+XM_HELPER(newrange,            0, PTR,    GC)
+XM_HELPER(range_unpack,        0, VOID,   NONE)
+XM_HELPER(newset,              0, PTR,    GC)
+XM_HELPER(slice,               0, PTR,    GC)
+XM_HELPER(bytes_new,           0, PTR,    GC)
+
+# ===== Enum =====
+XM_HELPER(enum_access,         0, TAGGED, NONE)
+XM_HELPER(enum_name,           0, PTR,    NONE)
+XM_HELPER(enum_convert,        0, TAGGED, NONE)
+
+# ===== IO / Debug =====
+XM_HELPER(print,               0, VOID,   NONE)
+XM_HELPER(dump,                0, VOID,   NONE)
+XM_HELPER(assert,              1, VOID,   THROW)
+XM_HELPER(assert_eq,           2, VOID,   THROW)
+XM_HELPER(assert_ne,           2, VOID,   THROW)
+
+# ===== Channel / Concurrency =====
+XM_HELPER(chan_new,             0, PTR,    GC)
+XM_HELPER(chan_close,           0, VOID,   NONE)
+XM_HELPER(chan_is_closed,       0, I64,    NONE)
+XM_HELPER(chan_try_send,        0, I64,    NONE)
+XM_HELPER(chan_try_recv,        0, TAGGED, NONE)
+XM_HELPER(chan_send,            0, TAGGED, GC|SUSPEND)
+XM_HELPER(chan_send_block,      0, VOID,   SUSPEND)
+XM_HELPER(chan_recv,            0, TAGGED, GC|SUSPEND)
+XM_HELPER(chan_recv_block,      0, VOID,   SUSPEND)
+XM_HELPER(scope_enter,         0, VOID,   NONE)
+XM_HELPER(scope_exit,          0, VOID,   NONE)
+XM_HELPER(go,                  0, TAGGED, GC|SUSPEND)
+XM_HELPER(await,               0, TAGGED, SUSPEND)
+XM_HELPER(await_block,         0, VOID,   SUSPEND)

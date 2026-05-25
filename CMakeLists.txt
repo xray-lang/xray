@@ -18,23 +18,35 @@ configure_file(
 )
 
 # ============================================================================
-# XISA Code Generation (ops.def → xm_ops_gen.h)
+# XISA Code Generation (ops.def → xm_ops_gen.h, helpers.def → xm_helpers_gen.h)
 # ============================================================================
-# Build the xisagen host tool, then use it to regenerate the header.
-# The generated header is checked into git, so this only runs when ops.def changes.
+# Build the xisagen host tool, then use it to regenerate headers.
+# Generated headers are checked into git, so this only runs when .def changes.
 
 add_executable(xisagen EXCLUDE_FROM_ALL tools/xisagen/xisagen.c)
 
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    COMMAND xisagen
+    COMMAND xisagen ops
             ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
             ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     DEPENDS xisagen ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
     COMMENT "xisagen: generating xm_ops_gen.h from ops.def"
 )
 
-add_custom_target(gen-xm-ops DEPENDS ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h)
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    COMMAND xisagen helpers
+            ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    DEPENDS xisagen ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
+    COMMENT "xisagen: generating xm_helpers_gen.h from helpers.def"
+)
+
+add_custom_target(gen-xm-ops DEPENDS
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+)
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
