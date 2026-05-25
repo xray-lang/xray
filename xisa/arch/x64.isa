@@ -565,7 +565,7 @@
   :min-bytes      5
   :max-bytes      6
   :golden-bytes   (((rax 42) "b8 2a 00 00 00")
-                   ((r12 42) "41 b4 2a 00 00 00"))
+                   ((r12 42) "41 bc 2a 00 00 00"))
   :golden-asm     (((rax 42) "mov eax, 42"))
   :external-reference llvm-mc)
 
