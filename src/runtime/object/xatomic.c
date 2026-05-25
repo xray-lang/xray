@@ -157,10 +157,10 @@ static XrValue m_add(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
         int64_t cur = atomic_load(&a->value);
         for (;;) {
             double dval;
-            __builtin_memcpy(&dval, &cur, sizeof(dval));
+            memcpy(&dval, &cur, sizeof(dval));
             dval += delta;
             int64_t desired;
-            __builtin_memcpy(&desired, &dval, sizeof(desired));
+            memcpy(&desired, &dval, sizeof(desired));
             if (atomic_compare_exchange_weak(&a->value, &cur, desired))
                 break;
         }
@@ -183,10 +183,10 @@ static XrValue m_sub(XrayIsolate *isolate, XrValue self, XrValue *args, int narg
         int64_t cur = atomic_load(&a->value);
         for (;;) {
             double dval;
-            __builtin_memcpy(&dval, &cur, sizeof(dval));
+            memcpy(&dval, &cur, sizeof(dval));
             dval -= delta;
             int64_t desired;
-            __builtin_memcpy(&desired, &dval, sizeof(desired));
+            memcpy(&desired, &dval, sizeof(desired));
             if (atomic_compare_exchange_weak(&a->value, &cur, desired))
                 break;
         }
@@ -211,11 +211,11 @@ static XrValue m_fetch_add(XrayIsolate *isolate, XrValue self, XrValue *args, in
         int64_t cur = atomic_load(&a->value);
         for (;;) {
             double dval;
-            __builtin_memcpy(&dval, &cur, sizeof(dval));
+            memcpy(&dval, &cur, sizeof(dval));
             double old_val = dval;
             dval += delta;
             int64_t desired;
-            __builtin_memcpy(&desired, &dval, sizeof(desired));
+            memcpy(&desired, &dval, sizeof(desired));
             if (atomic_compare_exchange_weak(&a->value, &cur, desired))
                 return xr_float(old_val);
         }
@@ -240,11 +240,11 @@ static XrValue m_fetch_sub(XrayIsolate *isolate, XrValue self, XrValue *args, in
         int64_t cur = atomic_load(&a->value);
         for (;;) {
             double dval;
-            __builtin_memcpy(&dval, &cur, sizeof(dval));
+            memcpy(&dval, &cur, sizeof(dval));
             double old_val = dval;
             dval -= delta;
             int64_t desired;
-            __builtin_memcpy(&desired, &dval, sizeof(desired));
+            memcpy(&desired, &dval, sizeof(desired));
             if (atomic_compare_exchange_weak(&a->value, &cur, desired))
                 return xr_float(old_val);
         }
@@ -330,7 +330,7 @@ static XrValue xr_builtin_atomic_construct(XrayIsolate *isolate, XrValue receive
     } else if (XR_IS_FLOAT(args[0])) {
         kind = XR_ATOMIC_FLOAT;
         double d = XR_TO_FLOAT(args[0]);
-        __builtin_memcpy(&initial, &d, sizeof(initial));
+        memcpy(&initial, &d, sizeof(initial));
     } else if (XR_IS_BOOL(args[0])) {
         kind = XR_ATOMIC_BOOL;
         initial = XR_TO_BOOL(args[0]) ? 1 : 0;
