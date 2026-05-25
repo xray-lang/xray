@@ -28,6 +28,10 @@
 #define PATH_MAX 4096
 #endif
 
+#ifdef _WIN32
+#define realpath(path, resolved) _fullpath((resolved), (path), PATH_MAX)
+#endif
+
 /* ========== Canonical Path Resolution ========== */
 
 XR_FUNC const char *xi_resolve_import_canonical(const XrModuleGraph *graph,
