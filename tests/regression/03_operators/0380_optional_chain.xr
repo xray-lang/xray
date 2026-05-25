@@ -126,3 +126,39 @@ fn test_optional_value_with_nullish() {
     assert_eq(theme, "dark")
 }
 
+// ===== Optional chain method calls =====
+
+@test
+fn test_optional_method_on_value() {
+    let s: string? = "42"
+    let n = s?.toInt()
+    assert_eq(n, 42)
+}
+
+@test
+fn test_optional_method_on_null() {
+    let s: string? = null
+    let n = s?.toInt()
+    assert_eq(n, null)
+}
+
+@test
+fn test_optional_method_substring() {
+    let s: string? = "hello world"
+    let sub = s?.substring(0, 5)
+    assert_eq(sub, "hello")
+}
+
+@test
+fn test_optional_method_on_array() {
+    let arr: Array<int>? = [1, 2, 3]
+    let rev = arr?.reverse()
+    assert_eq(rev, [3, 2, 1])
+}
+
+@test
+fn test_optional_method_on_null_array() {
+    let arr: Array<int>? = null
+    let rev = arr?.reverse()
+    assert_eq(rev, null)
+}

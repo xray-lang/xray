@@ -1296,6 +1296,71 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         return v;
     }
 
+    /* Optional chain method call: obj?.method(args) — null short-circuit
+     * with XI_CALL_METHOD on the non-null path. chain_type==2 signals
+     * the parser detected a call immediately after the optional chain. */
+    if (call->callee && call->callee->type == AST_OPTIONAL_CHAIN &&
+        call->callee->as.optional_chain.name && call->callee->as.optional_chain.chain_type == 2) {
+        OptionalChainNode *oc = &call->callee->as.optional_chain;
+        XiValue *obj = xi_lower_expr(l, oc->object);
+        if (!obj)
+            return NULL;
+
+        XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+        if (!is_null)
+            return obj;
+        is_null->args[0] = obj;
+
+        XiBlock *call_blk = xi_block_new(l->func);
+        XiBlock *null_blk = xi_block_new(l->func);
+        XiBlock *merge = xi_block_new(l->func);
+
+        xi_block_set_if(l->cur_block, is_null, null_blk, call_blk);
+        xi_lower_braun_seal(l, call_blk);
+        xi_lower_braun_seal(l, null_blk);
+
+        /* Null path */
+        l->cur_block = null_blk;
+        struct XrType *result_type = xi_lower_node_type(l, node);
+        XiValue *null_val = xi_const_null(l->func, l->cur_block, l->type_null);
+        xi_block_set_jump(l->cur_block, merge);
+
+        /* Non-null path: emit XI_CALL_METHOD */
+        l->cur_block = call_blk;
+        XiValue *arg_vals[32];
+        int n = lower_call_args_expand_spread(l, call, arg_vals, 32, NULL, 0);
+        if (n < 0)
+            return NULL;
+
+        uint16_t nargs = (uint16_t) (n + 1);
+        XiValue *mcall = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
+        if (!mcall)
+            return NULL;
+        mcall->args[0] = obj;
+        for (int i = 0; i < n; i++)
+            mcall->args[i + 1] = arg_vals[i];
+        mcall->aux = (void *) arena_strdup(l->func, oc->name);
+        mcall->aux_int = (int64_t) xi_lower_method_symbol(l, oc->name) << 1;
+        mcall->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+        mcall->line = (uint32_t) node->line;
+        XiBlock *call_exit = l->cur_block;
+        xi_block_set_jump(call_exit, merge);
+
+        /* Merge: PHI(null, method_result) */
+        xi_lower_braun_seal(l, merge);
+        l->cur_block = merge;
+        XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+        if (phi) {
+            for (uint16_t i = 0; i < merge->npreds; i++) {
+                if (merge->preds[i] == null_blk)
+                    phi->value.args[i] = null_val;
+                else
+                    phi->value.args[i] = mcall;
+            }
+        }
+        return phi ? &phi->value : null_val;
+    }
+
     /* Compile-time builtin interception: detect calls to known builtins
      * and emit specialized Xi ops instead of generic XI_CALL. */
     if (call->callee && call->callee->type == AST_VARIABLE) {
