@@ -271,7 +271,7 @@ if(XR_BUILD_LSP)
     add_executable(test_lsp_json
         lsp/test_lsp_json.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
-        ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
+        ${CMAKE_SOURCE_DIR}/src/base/xutf8.c
     )
     target_include_directories(test_lsp_json PRIVATE
         ${CMAKE_SOURCE_DIR}/src/base
@@ -346,7 +346,7 @@ if(XR_BUILD_DAP)
     add_executable(test_dap_server
         dap/test_dap_server.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
-        ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
+        ${CMAKE_SOURCE_DIR}/src/base/xutf8.c
     )
     target_include_directories(test_dap_server PRIVATE
         ${CMAKE_SOURCE_DIR}/src/base
@@ -413,7 +413,7 @@ if(XR_BUILD_MCP)
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge.c
         ${CMAKE_SOURCE_DIR}/src/app/mcp/xmcp_knowledge_generated.c
         ${CMAKE_SOURCE_DIR}/src/base/xjson.c
-        ${CMAKE_SOURCE_DIR}/src/runtime/object/xutf8.c
+        ${CMAKE_SOURCE_DIR}/src/base/xutf8.c
     )
     target_include_directories(test_mcp_protocol PRIVATE
         ${XRAY_COMMON_INCLUDES}
