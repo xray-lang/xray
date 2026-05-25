@@ -1924,6 +1924,13 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         value_type = xr_type_new_string(NULL);
                         item_type = xr_type_new_int(NULL);  // key is index
                     }
+                } else if (XR_TYPE_IS_JSON(coll_type)) {
+                    // Json object iteration: keys are string, values are Json
+                    item_type = xr_type_new_json(ctx->analyzer->isolate);
+                    if (fi->is_keyvalue) {
+                        value_type = xr_type_new_json(ctx->analyzer->isolate);
+                        item_type = xr_type_new_string(NULL);
+                    }
                 } else if (XR_TYPE_IS_TUPLE(coll_type)) {
                     /* Tuples are heterogeneous by design — there is no
                      * single element type. Iteration would either widen

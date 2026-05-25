@@ -1399,6 +1399,31 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
+
+        // Built-in methods on primitive/container types (e.g. string?.toInt())
+        if (xa_builtin_is_method(base_type, prop_name)) {
+            const char *sig = xa_builtin_get_member_signature(base_type, prop_name);
+            if (sig) {
+                XrType *fn_type = xa_builtin_parse_full_signature(ctx->analyzer->isolate, sig);
+                if (fn_type) {
+                    XrType *result = xr_type_make_nullable(ctx->analyzer->isolate, fn_type);
+                    return result;
+                }
+            }
+        }
+
+        // Built-in non-method properties (e.g. channel?.isClosed)
+        {
+            const char *sig = xa_builtin_get_member_signature(base_type, prop_name);
+            if (sig && sig[0] == ':') {
+                const char *type_str = sig + 1;
+                while (*type_str == ' ')
+                    type_str++;
+                XrType *prop_type = xa_builtin_parse_type_string(ctx->analyzer->isolate, type_str);
+                if (prop_type)
+                    return xr_type_make_nullable(ctx->analyzer->isolate, prop_type);
+            }
+        }
     }
 
     // Index access: obj?.[index]
