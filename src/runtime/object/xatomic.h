@@ -26,6 +26,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdatomic.h>
+#include <string.h>
 
 #include "../gc/xgc_header.h"
 #include "../value/xvalue.h"
@@ -76,7 +77,7 @@ static inline int64_t xr_atomic_pack(XrValue v, XrAtomicKind kind) {
         case XR_ATOMIC_FLOAT: {
             double d = XR_TO_FLOAT(v);
             int64_t bits;
-            __builtin_memcpy(&bits, &d, sizeof(bits));
+            memcpy(&bits, &d, sizeof(bits));
             return bits;
         }
     }
@@ -92,7 +93,7 @@ static inline XrValue xr_atomic_unpack(int64_t raw, XrAtomicKind kind) {
             return xr_bool(raw != 0);
         case XR_ATOMIC_FLOAT: {
             double d;
-            __builtin_memcpy(&d, &raw, sizeof(d));
+            memcpy(&d, &raw, sizeof(d));
             return xr_float(d);
         }
     }
