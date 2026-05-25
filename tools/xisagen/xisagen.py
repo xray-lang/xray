@@ -549,6 +549,23 @@ def extract_regclass(form: SList) -> RegClass:
     bits = form.get_kw_int(':encoding-bits', 4)
     return RegClass(name=name, regs=regs, encoding_bits=bits)
 
+def load_isa_text(text: str, name: str = '<text>') -> tuple[list[RegClass], list[McInsn]]:
+    """Parse .isa from a string, returning regclasses and mcinsns."""
+    tokens = tokenize_sexpr(text, name)
+    forms = parse_sexpr(tokens, name)
+    regclasses = []
+    mcinsns = []
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            continue
+        head = form.head
+        if isinstance(head, SAtom):
+            if head.value == 'define-mcinsn':
+                mcinsns.append(extract_mcinsn(form))
+            elif head.value == 'define-regclass':
+                regclasses.append(extract_regclass(form))
+    return regclasses, mcinsns
+
 def load_isa(path: str) -> tuple[list[RegClass], list[McInsn]]:
     """Load and parse a .isa file, returning regclasses and mcinsns."""
     forms = parse_isa_file(path)
@@ -564,6 +581,460 @@ def load_isa(path: str) -> tuple[list[RegClass], list[McInsn]]:
             elif head.value == 'define-regclass':
                 regclasses.append(extract_regclass(form))
     return regclasses, mcinsns
+
+# ============================================================
+# L4: Emit-helper code generation (.isa → C emit functions)
+# ============================================================
+
+def _c_ident(name: str) -> str:
+    """Convert dotted ISA name to C identifier: x64.add.rr → x64_add_rr"""
+    return name.replace('.', '_').replace('-', '_')
+
+def _detect_arch(mcinsns: list[McInsn]) -> str:
+    """Detect architecture from instruction name prefix."""
+    if mcinsns and mcinsns[0].name.startswith('arm64.'):
+        return 'arm64'
+    if mcinsns and mcinsns[0].name.startswith('riscv64.'):
+        return 'riscv64'
+    return 'x64'
+
+# ---------- Operand extraction ----------
+
+@dataclass
+class OperandInfo:
+    name: str       # $dst, $src, $imm
+    kind: str       # "reg" or "imm"
+    subtype: str    # "gpr64", "i8", "i32", etc.
+
+def extract_operands(insn: McInsn) -> list[OperandInfo]:
+    """Extract typed operand list from a McInsn."""
+    ops = []
+    if not insn.operands:
+        return ops
+    for child in insn.operands.children:
+        if isinstance(child, SList) and len(child.children) >= 2:
+            var = child.children[0]
+            typ = child.children[1]
+            if isinstance(var, SAtom) and isinstance(typ, SAtom):
+                var_name = var.value  # $dst
+                type_str = typ.value  # reg:gpr64 or imm:i32
+                parts = type_str.split(':')
+                kind = parts[0]  # "reg" or "imm" or "cc"
+                subtype = parts[1] if len(parts) > 1 else ''
+                ops.append(OperandInfo(name=var_name, kind=kind, subtype=subtype))
+    return ops
+
+def _c_param_type(op: OperandInfo) -> str:
+    """Return C parameter type for an operand."""
+    if op.kind == 'reg':
+        return 'uint8_t'
+    if op.kind == 'cc':
+        return 'uint8_t'
+    if op.subtype in ('i8', 'u8'):
+        return 'int8_t' if op.subtype == 'i8' else 'uint8_t'
+    if op.subtype in ('i16', 'u16'):
+        return 'int16_t' if op.subtype == 'i16' else 'uint16_t'
+    if op.subtype in ('i32', 'rel32', 'u32'):
+        return 'int32_t' if op.subtype in ('i32', 'rel32') else 'uint32_t'
+    if op.subtype in ('i64', 'u64'):
+        return 'int64_t' if op.subtype == 'i64' else 'uint64_t'
+    # Default: signed imm or rel
+    if 'rel' in op.subtype:
+        return 'int32_t'
+    return 'int32_t'
+
+def _c_param_name(op: OperandInfo) -> str:
+    """Operand $dst → dst"""
+    return op.name.lstrip('$')
+
+# ---------- x64 emit generator ----------
+
+def _gen_x64_emit(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
+    """Generate x64 emit function body lines."""
+    if not insn.encoding:
+        return ['    /* no encoding specified */', '    return 0;']
+
+    enc = insn.encoding.children
+    lines = []
+    byte_idx = 0
+
+    # Scan encoding for structural elements
+    has_rex_w = False
+    has_modrm = False
+    has_plus_rd = False
+    opcode_bytes = []
+    modrm_info = None   # (mod, reg_or_ext, rm)
+    plus_info = None    # (base_byte, reg_operand)
+    imm_parts = []      # [(type, operand_name)]
+
+    for elem in enc:
+        if isinstance(elem, SAtom):
+            if elem.value == 'rex.w':
+                has_rex_w = True
+            elif elem.is_number:
+                opcode_bytes.append(elem.int_value)
+            # else: symbol like "rex", skip for now
+        elif isinstance(elem, SList) and elem.children:
+            head_val = elem.children[0].value if isinstance(elem.children[0], SAtom) else ''
+            if head_val == 'modrm':
+                has_modrm = True
+                ch = elem.children
+                modrm_mod = ch[1].int_value if len(ch) > 1 and isinstance(ch[1], SAtom) and ch[1].is_number else 0b11
+                modrm_reg = ch[2] if len(ch) > 2 else None  # number or $var
+                modrm_rm = ch[3] if len(ch) > 3 else None    # $var
+                modrm_info = (modrm_mod, modrm_reg, modrm_rm)
+            elif head_val == '+':
+                has_plus_rd = True
+                base = elem.children[1].int_value if len(elem.children) > 1 and isinstance(elem.children[1], SAtom) else 0
+                reg_part = elem.children[2] if len(elem.children) > 2 else None
+                plus_info = (base, reg_part)
+            elif head_val in ('imm8', 'imm16', 'imm32', 'imm64', 'rel8', 'rel32'):
+                imm_type = head_val
+                imm_var = elem.children[1].value.lstrip('$') if len(elem.children) > 1 and isinstance(elem.children[1], SAtom) else ''
+                imm_parts.append((imm_type, imm_var))
+            elif head_val == 'reg3':
+                pass  # handled inside '+'
+
+    # Build function body
+    # Capacity check
+    lines.append(f'    if (cap < {insn.max_bytes}) return 0;')
+    lines.append(f'    uint8_t *p = buf;')
+
+    # REX prefix
+    if has_rex_w:
+        # Collect register operands that need REX.R/REX.B extension
+        rex_parts = ['0x48']  # REX.W
+        if has_modrm and modrm_info:
+            _, mreg, mrm = modrm_info
+            if mreg and isinstance(mreg, SAtom) and mreg.is_variable:
+                reg_name = mreg.value.lstrip('$')
+                rex_parts.append(f'(({reg_name} >> 3) << 2)')  # REX.R
+            if mrm and isinstance(mrm, SAtom) and mrm.is_variable:
+                rm_name = mrm.value.lstrip('$')
+                rex_parts.append(f'(({rm_name} >> 3) << 0)')   # REX.B
+        elif has_plus_rd and plus_info:
+            _, reg_part = plus_info
+            if reg_part and isinstance(reg_part, SList) and reg_part.children:
+                reg_var = reg_part.children[1] if len(reg_part.children) > 1 else None
+                if reg_var and isinstance(reg_var, SAtom) and reg_var.is_variable:
+                    rn = reg_var.value.lstrip('$')
+                    rex_parts.append(f'(({rn} >> 3) << 0)')  # REX.B
+        lines.append(f'    *p++ = (uint8_t)({" | ".join(rex_parts)});')
+
+    # Opcode bytes
+    if has_plus_rd and plus_info:
+        base, reg_part = plus_info
+        if reg_part and isinstance(reg_part, SList):
+            reg_var = reg_part.children[1] if len(reg_part.children) > 1 else None
+            if reg_var and isinstance(reg_var, SAtom) and reg_var.is_variable:
+                rn = reg_var.value.lstrip('$')
+                lines.append(f'    *p++ = (uint8_t)(0x{base:02x} + ({rn} & 7));')
+            else:
+                lines.append(f'    *p++ = 0x{base:02x};')
+        else:
+            lines.append(f'    *p++ = 0x{base:02x};')
+    else:
+        for b in opcode_bytes:
+            lines.append(f'    *p++ = 0x{b:02x};')
+
+    # ModRM
+    if has_modrm and modrm_info:
+        mod, mreg, mrm = modrm_info
+        reg_expr = '0'
+        rm_expr = '0'
+        if isinstance(mreg, SAtom):
+            if mreg.is_number:
+                reg_expr = str(mreg.int_value)
+            elif mreg.is_variable:
+                reg_expr = f'({mreg.value.lstrip("$")} & 7)'
+        if isinstance(mrm, SAtom):
+            if mrm.is_variable:
+                rm_expr = f'({mrm.value.lstrip("$")} & 7)'
+            elif mrm.is_number:
+                rm_expr = str(mrm.int_value)
+        lines.append(f'    *p++ = (uint8_t)(0x{mod:02x} << 6 | ({reg_expr}) << 3 | ({rm_expr}));')
+
+    # Immediates
+    for imm_type, imm_var in imm_parts:
+        if imm_type in ('imm8', 'rel8'):
+            lines.append(f'    *p++ = (uint8_t){imm_var};')
+        elif imm_type == 'imm16':
+            lines.append(f'    memcpy(p, &(uint16_t){{{imm_var}}}, 2); p += 2;')
+        elif imm_type in ('imm32', 'rel32'):
+            lines.append(f'    {{ int32_t v = {imm_var}; memcpy(p, &v, 4); p += 4; }}')
+        elif imm_type == 'imm64':
+            lines.append(f'    {{ int64_t v = {imm_var}; memcpy(p, &v, 8); p += 8; }}')
+
+    lines.append(f'    return (int)(p - buf);')
+    return lines
+
+# ---------- arm64 emit generator ----------
+
+def _gen_arm64_emit(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
+    """Generate arm64 emit function body (fixed 32-bit, little-endian)."""
+    if not insn.encoding:
+        return ['    /* no encoding specified */', '    return 0;']
+
+    enc = insn.encoding.children
+    lines = []
+    lines.append(f'    if (cap < 4) return 0;')
+
+    # First element should be the base opcode (32-bit number)
+    base_opcode = 0
+    fields = []  # (bit_offset, width, operand_name_or_value)
+
+    for elem in enc:
+        if isinstance(elem, SAtom) and elem.is_number:
+            base_opcode = elem.int_value
+        elif isinstance(elem, SList) and elem.children:
+            head_val = elem.children[0].value if isinstance(elem.children[0], SAtom) else ''
+            if head_val == 'field':
+                ch = elem.children
+                bit_off = ch[1].int_value if len(ch) > 1 and isinstance(ch[1], SAtom) else 0
+                width = ch[2].int_value if len(ch) > 2 and isinstance(ch[2], SAtom) else 0
+                operand = ch[3] if len(ch) > 3 else None
+                if operand and isinstance(operand, SAtom):
+                    if operand.is_variable:
+                        fields.append((bit_off, width, operand.value.lstrip('$')))
+                    elif operand.is_number:
+                        fields.append((bit_off, width, str(operand.int_value)))
+
+    lines.append(f'    uint32_t insn = 0x{base_opcode:08x}u;')
+    for bit_off, width, val in fields:
+        mask = (1 << width) - 1
+        lines.append(f'    insn |= ((uint32_t)({val}) & 0x{mask:x}u) << {bit_off};')
+    lines.append(f'    memcpy(buf, &insn, 4);')
+    lines.append(f'    return 4;')
+    return lines
+
+# ---------- riscv64 emit generator ----------
+
+def _gen_riscv64_emit(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
+    """Generate riscv64 emit function body (fixed 32-bit, little-endian)."""
+    if not insn.encoding:
+        return ['    /* no encoding specified */', '    return 0;']
+
+    enc = insn.encoding.children
+    lines = []
+    lines.append(f'    if (cap < 4) return 0;')
+
+    # Detect format from first symbol
+    if not enc:
+        return ['    return 0;']
+
+    head = enc[0]
+    if isinstance(head, SAtom) and head.is_number:
+        # Raw 32-bit constant (nop, ebreak)
+        val = head.int_value
+        lines.append(f'    uint32_t insn = 0x{val:08x}u;')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+        return lines
+
+    fmt = head.value if isinstance(head, SAtom) else ''
+
+    def _rv_var(idx):
+        """Get operand name from encoding child at index."""
+        if idx < len(enc) and isinstance(enc[idx], SAtom) and enc[idx].is_variable:
+            return enc[idx].value.lstrip('$')
+        return '0'
+
+    def _rv_imm(idx):
+        """Get immediate value (number or variable) from encoding child."""
+        if idx < len(enc) and isinstance(enc[idx], SAtom):
+            if enc[idx].is_number:
+                return str(enc[idx].int_value)
+            if enc[idx].is_variable:
+                return enc[idx].value.lstrip('$')
+        return '0'
+
+    if fmt == 'r-type':
+        # (r-type opcode funct3 funct7 rd rs1 rs2)
+        opcode = _rv_imm(1)
+        funct3 = _rv_imm(2)
+        funct7 = _rv_imm(3)
+        rd = _rv_var(4)
+        rs1 = _rv_var(5)
+        rs2 = _rv_var(6)
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)({rd}) << 7)')
+        lines.append(f'        | ((uint32_t)({funct3}u) << 12)')
+        lines.append(f'        | ((uint32_t)({rs1}) << 15)')
+        lines.append(f'        | ((uint32_t)({rs2}) << 20)')
+        lines.append(f'        | ((uint32_t)({funct7}u) << 25);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    elif fmt == 'i-type':
+        # (i-type opcode funct3 rd rs1 imm)
+        opcode = _rv_imm(1)
+        funct3 = _rv_imm(2)
+        rd = _rv_var(3)
+        rs1 = _rv_var(4)
+        imm = _rv_imm(5)
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)({rd}) << 7)')
+        lines.append(f'        | ((uint32_t)({funct3}u) << 12)')
+        lines.append(f'        | ((uint32_t)({rs1}) << 15)')
+        lines.append(f'        | ((uint32_t)((int32_t)({imm}) & 0xfff) << 20);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    elif fmt == 's-type':
+        # (s-type opcode funct3 rs1 rs2 imm)
+        opcode = _rv_imm(1)
+        funct3 = _rv_imm(2)
+        rs1 = _rv_var(3)
+        rs2 = _rv_var(4)
+        imm = _rv_imm(5)
+        lines.append(f'    int32_t imm_val = (int32_t)({imm});')
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)(imm_val & 0x1f) << 7)')
+        lines.append(f'        | ((uint32_t)({funct3}u) << 12)')
+        lines.append(f'        | ((uint32_t)({rs1}) << 15)')
+        lines.append(f'        | ((uint32_t)({rs2}) << 20)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 5) & 0x7f) << 25);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    elif fmt == 'b-type':
+        # (b-type opcode funct3 rs1 rs2 imm)
+        opcode = _rv_imm(1)
+        funct3 = _rv_imm(2)
+        rs1 = _rv_var(3)
+        rs2 = _rv_var(4)
+        imm = _rv_imm(5)
+        lines.append(f'    int32_t imm_val = (int32_t)({imm});')
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 11) & 1) << 7)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 1) & 0xf) << 8)')
+        lines.append(f'        | ((uint32_t)({funct3}u) << 12)')
+        lines.append(f'        | ((uint32_t)({rs1}) << 15)')
+        lines.append(f'        | ((uint32_t)({rs2}) << 20)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 5) & 0x3f) << 25)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 12) & 1) << 31);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    elif fmt == 'u-type':
+        # (u-type opcode rd imm)
+        opcode = _rv_imm(1)
+        rd = _rv_var(2)
+        imm = _rv_imm(3)
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)({rd}) << 7)')
+        lines.append(f'        | ((uint32_t)({imm}) << 12);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    elif fmt == 'j-type':
+        # (j-type opcode rd imm)
+        opcode = _rv_imm(1)
+        rd = _rv_var(2)
+        imm = _rv_imm(3)
+        lines.append(f'    int32_t imm_val = (int32_t)({imm});')
+        lines.append(f'    uint32_t insn = ({opcode}u)')
+        lines.append(f'        | ((uint32_t)({rd}) << 7)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 12) & 0xff) << 12)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 11) & 1) << 20)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 1) & 0x3ff) << 21)')
+        lines.append(f'        | ((uint32_t)((imm_val >> 20) & 1) << 31);')
+        lines.append(f'    memcpy(buf, &insn, 4);')
+        lines.append(f'    return 4;')
+
+    else:
+        lines.append(f'    /* unknown riscv64 format: {fmt} */')
+        lines.append(f'    return 0;')
+
+    return lines
+
+# ---------- Emit file generator ----------
+
+def generate_emit_header(arch: str, regclasses: list[RegClass],
+                         mcinsns: list[McInsn]) -> str:
+    """Generate complete C header with emit helpers for one architecture."""
+    guard = f'XISA_{arch.upper()}_EMIT_H'
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append(f'/* Source: xisa/arch/{arch}.isa */')
+    lines.append('')
+    lines.append(f'#ifndef {guard}')
+    lines.append(f'#define {guard}')
+    lines.append('')
+    lines.append('#include <stdint.h>')
+    lines.append('#include <string.h>')
+    lines.append('')
+
+    # Register encoding tables (prefixed by arch to avoid cross-arch collision)
+    for rc in regclasses:
+        cname = _c_ident(rc.name)
+        prefix = arch.upper()
+        lines.append(f'/* Register class: {rc.name} ({len(rc.regs)} regs, {rc.encoding_bits}-bit encoding) */')
+        lines.append(f'enum {{')
+        for i, reg in enumerate(rc.regs):
+            lines.append(f'    XISA_{prefix}_REG_{reg.upper()} = {i},')
+        lines.append(f'}};')
+        lines.append('')
+
+    # Emit functions
+    gen_fn = {'x64': _gen_x64_emit, 'arm64': _gen_arm64_emit, 'riscv64': _gen_riscv64_emit}
+    emit_fn = gen_fn.get(arch, _gen_x64_emit)
+
+    for insn in mcinsns:
+        operands = extract_operands(insn)
+        fname = f'xisa_emit_{_c_ident(insn.name)}'
+
+        # Build parameter list
+        params = ['uint8_t *buf', 'int cap']
+        for op in operands:
+            params.append(f'{_c_param_type(op)} {_c_param_name(op)}')
+
+        sig = f'static inline int {fname}({", ".join(params)})'
+        lines.append(f'/* {insn.name}: {insn.min_bytes}-{insn.max_bytes} bytes */')
+        lines.append(sig)
+        lines.append('{')
+        body = emit_fn(insn, operands)
+        lines.extend(body)
+        lines.append('}')
+        lines.append('')
+
+    # Instruction metadata struct (guarded against redefinition)
+    lines.append('/* ========== Instruction Metadata ========== */')
+    lines.append('')
+    lines.append('#ifndef XISA_MCINSN_INFO_DEFINED')
+    lines.append('#define XISA_MCINSN_INFO_DEFINED')
+    lines.append(f'typedef struct {{')
+    lines.append(f'    const char *name;')
+    lines.append(f'    uint8_t min_bytes;')
+    lines.append(f'    uint8_t max_bytes;')
+    lines.append(f'    uint8_t noperands;')
+    lines.append(f'    uint16_t flags;  /* bitmask of XISA_F_* */')
+    lines.append(f'}} XisaMcInsnInfo;')
+    lines.append('#endif')
+    lines.append('')
+
+    # Flag defines (arch-prefixed)
+    all_flags = sorted(set(f for insn in mcinsns for f in insn.flags))
+    for i, flag in enumerate(all_flags):
+        lines.append(f'#ifndef XISA_F_{flag.upper()}')
+        lines.append(f'#define XISA_F_{flag.upper()} (1u << {i})')
+        lines.append(f'#endif')
+    lines.append('')
+
+    lines.append(f'#ifdef XISA_{arch.upper()}_IMPL')
+    lines.append(f'static const XisaMcInsnInfo xisa_{arch}_mcinsn_info[] = {{')
+    for insn in mcinsns:
+        operands = extract_operands(insn)
+        flags_expr = ' | '.join(f'XISA_F_{f.upper()}' for f in insn.flags) if insn.flags else '0'
+        lines.append(f'    {{"{insn.name}", {insn.min_bytes}, {insn.max_bytes}, '
+                     f'{len(operands)}, {flags_expr}}},')
+    lines.append(f'}};')
+    lines.append(f'#endif')
+    lines.append('')
+
+    lines.append(f'#endif  // {guard}')
+    lines.append('')
+    return '\n'.join(lines)
 
 # ============================================================
 # CLI
@@ -595,8 +1066,10 @@ def cmd_isa(args: list[str]):
     if len(args) < 1:
         die("usage: xisagen.py isa <isa.isa> [output_dir]")
     path = args[0]
+    output_dir = args[1] if len(args) > 1 else None
     regclasses, mcinsns = load_isa(path)
-    print(f"xisagen: parsed {path}: {len(regclasses)} regclasses, {len(mcinsns)} mcinsns",
+    arch = _detect_arch(mcinsns)
+    print(f"xisagen: parsed {path}: {len(regclasses)} regclasses, {len(mcinsns)} mcinsns ({arch})",
           file=sys.stderr)
 
     # Validate golden bytes
@@ -613,6 +1086,13 @@ def cmd_isa(args: list[str]):
         if not insn.golden_bytes:
             die(f"{path}: {insn.name}: no :golden-bytes")
 
+    # Generate emit header if output_dir given
+    if output_dir:
+        header = generate_emit_header(arch, regclasses, mcinsns)
+        out_path = os.path.join(output_dir, f'xisa_{arch}_emit.h')
+        write_file(out_path, header)
+        print(f"xisagen: generated {out_path}", file=sys.stderr)
+
 def cmd_test(args: list[str]):
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
@@ -620,6 +1100,7 @@ def cmd_test(args: list[str]):
     _test_ops_parser()
     _test_helpers_parser()
     _test_isa_parser()
+    _test_emit_generator()
     print("All xisagen self-tests passed.", file=sys.stderr)
 
 def _test_sexpr_parser():
@@ -723,6 +1204,62 @@ def _test_isa_parser():
     assert insn.golden_bytes[0] == (['rax', 'rbx'], '48 01 d8')
     assert insn.golden_asm[0] == (['rax', 'rbx'], 'add rax, rbx')
     assert insn.external_ref == 'llvm-mc'
+
+    print(" PASS", file=sys.stderr)
+
+def _test_emit_generator():
+    print("  test_emit_generator...", end='', file=sys.stderr)
+    # x64 emit
+    text_x64 = '''
+    (define-regclass x64.gpr64
+      :regs (rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15)
+      :encoding-bits 4)
+    (define-mcinsn x64.nop
+      :operands () :constraints () :encoding (0x90) :flags ()
+      :min-bytes 1 :max-bytes 1 :golden-bytes ((() "90")))
+    (define-mcinsn x64.add.rr
+      :operands (($dst reg:gpr64) ($src reg:gpr64))
+      :constraints ((same $dst $src))
+      :encoding (rex.w 0x01 (modrm 0b11 $src $dst))
+      :flags () :min-bytes 3 :max-bytes 3
+      :golden-bytes (((rax rbx) "48 01 d8")))
+    '''
+    rc, insns = load_isa_text(text_x64, 'test_x64')
+    header = generate_emit_header('x64', rc, insns)
+    assert 'xisa_emit_x64_nop' in header
+    assert 'xisa_emit_x64_add_rr' in header
+    assert 'static inline int' in header
+    assert '0x48' in header  # REX.W
+    assert '0x90' in header  # NOP opcode
+
+    # arm64 emit
+    text_arm64 = '''
+    (define-regclass arm64.gpr64
+      :regs (x0 x1 x2) :encoding-bits 5)
+    (define-mcinsn arm64.add.rrr
+      :operands (($rd reg:gpr64) ($rn reg:gpr64) ($rm reg:gpr64))
+      :constraints () :flags () :min-bytes 4 :max-bytes 4
+      :encoding (0x8b000000 (field 0 5 $rd) (field 5 5 $rn) (field 16 5 $rm))
+      :golden-bytes (((x0 x1 x2) "20 00 02 8b")))
+    '''
+    rc, insns = load_isa_text(text_arm64, 'test_arm64')
+    header = generate_emit_header('arm64', rc, insns)
+    assert 'xisa_emit_arm64_add_rrr' in header
+    assert '0x8b000000u' in header
+
+    # riscv64 emit
+    text_rv = '''
+    (define-regclass riscv64.gpr :regs (x0 x1 x2) :encoding-bits 5)
+    (define-mcinsn riscv64.add
+      :operands (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+      :constraints () :flags () :min-bytes 4 :max-bytes 4
+      :encoding (r-type 0x33 0x0 0x00 $rd $rs1 $rs2)
+      :golden-bytes (((x1 x2 x3) "b3 00 31 00")))
+    '''
+    rc, insns = load_isa_text(text_rv, 'test_rv')
+    header = generate_emit_header('riscv64', rc, insns)
+    assert 'xisa_emit_riscv64_add' in header
+    assert 'r-type' not in header  # encoding format should not appear in output
 
     print(" PASS", file=sys.stderr)
 
