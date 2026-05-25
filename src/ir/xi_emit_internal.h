@@ -16,6 +16,7 @@
 
 #include "xi_emit.h"
 #include "xi.h"
+#include "xi_module.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

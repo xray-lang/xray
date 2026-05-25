@@ -147,7 +147,7 @@ char *xr_realpath(const char *path) {
         return NULL;
 
     char *dup = xr_strdup(rp);
-    free(rp); /* realpath uses system malloc */
+    free(rp); /* xr:allow-raw-alloc realpath uses system malloc */
     return dup;
 #endif
 }

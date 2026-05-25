@@ -27,7 +27,7 @@
 #include "xlsp_utils.h"
 #include "../../frontend/parser/xast_nodes.h"
 #include "../../base/xhash.h"
-#include "../../runtime/object/xutf8.h"
+#include "../../base/xutf8.h"
 #include "../../os/os_poll.h"  // Cross-platform poll abstraction
 #include "xray_version.h"
 #include <stdlib.h>

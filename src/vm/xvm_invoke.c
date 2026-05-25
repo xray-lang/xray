@@ -37,7 +37,7 @@
 #include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
-#include "../runtime/object/xutf8.h"
+#include "../base/xutf8.h"
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_feedback.h"

@@ -9,7 +9,7 @@
  */
 
 #include "xutf8.h"
-#include "../../base/xchecks.h"
+#include "xchecks.h"
 #include <string.h>
 
 /* ========================================================================

@@ -31,6 +31,7 @@
 #define XI_LOWER_H
 
 #include "xi.h"
+#include "xi_module.h"
 
 struct AstNode;
 struct XaAnalyzer;

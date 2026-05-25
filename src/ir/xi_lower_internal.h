@@ -17,8 +17,22 @@
 #include "xi.h"
 #include "../base/xdefs.h"
 
+#include <string.h>
+
 struct AstNode;
 struct XrType;
+
+/* Copy a string into the XiFunc arena so it survives AST destruction. */
+static inline const char *arena_strdup(XiFunc *f, const char *s) {
+    if (!s)
+        return NULL;
+    uint32_t len = (uint32_t) strlen(s);
+    char *copy = (char *) xi_func_arena_alloc(f, len + 1);
+    if (!copy)
+        return NULL;
+    memcpy(copy, s, len + 1);
+    return copy;
+}
 
 /* ========== Braun SSA Primitives ========== */
 
@@ -115,5 +129,14 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, struct AstN
 /* Emit XI_IS test against the given XrTypeRef on a pre-lowered value. */
 struct XrTypeRef;
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line);
+
+/* ========== Misc Expression Lowering (xi_lower_misc.c) ========== */
+
+XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_enum_convert(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_cancelled_expr(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_catch_expr(XiLower *l, struct AstNode *node);
+XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, struct AstNode *node);
 
 #endif  // XI_LOWER_INTERNAL_H

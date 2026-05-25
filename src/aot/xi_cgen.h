@@ -16,6 +16,7 @@
 #define XI_CGEN_H
 
 #include "../ir/xi.h"
+#include "../ir/xi_module.h"
 #include <stdio.h>
 
 /* Opaque codegen context — holds all mutable state for one C-generation

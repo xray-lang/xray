@@ -38,7 +38,7 @@ static inline struct tm *localtime_r(const time_t *timep, struct tm *result) {
 
 static inline char *strndup(const char *s, size_t n) {
     size_t len = strnlen(s, n);
-    char *copy = (char *) malloc(len + 1);
+    char *copy = (char *) malloc(len + 1); /* xr:allow-raw-alloc POSIX strndup polyfill */
     if (!copy)
         return NULL;
     memcpy(copy, s, len);
@@ -58,7 +58,7 @@ static inline ssize_t getline(char **lineptr, size_t *n, FILE *stream) {
     while ((c = fgetc(stream)) != EOF) {
         if (len + 2 > cap) {
             cap = (cap < 128) ? 128 : cap * 2;
-            char *tmp = (char *) realloc(buf, cap);
+            char *tmp = (char *) realloc(buf, cap); /* xr:allow-raw-alloc POSIX getline polyfill */
             if (!tmp)
                 return -1;
             buf = tmp;

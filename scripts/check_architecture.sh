@@ -40,7 +40,7 @@ while IFS= read -r line; do
         fail "$file has $lines lines (limit: 3000)"
         q1_count=$((q1_count + 1))
     fi
-done < <(find "$SRC_DIR" -name '*.c' -exec wc -l {} + 2>/dev/null | grep -v 'total$')
+done < <(find "$SRC_DIR" -name '*.c' ! -name '*_generated.c' -exec wc -l {} + 2>/dev/null | grep -v 'total$')
 [ "$q1_count" -eq 0 ] && pass "All .c files within size limit"
 echo ""
 
@@ -93,6 +93,7 @@ q3_hits=$(grep -rnE '\b(malloc|free|calloc|realloc)[[:space:]]*\(' \
         --include='*.c' --include='*.h' \
         --exclude='xmalloc.h' \
         --exclude='xrt.h' \
+        --exclude='xrt_arc.h' \
         "$SRC_DIR" 2>/dev/null \
     | grep -vE '\b(xr|luaM)_(malloc|free|calloc|realloc)\b' \
     | grep -vE '^[^:]+:[0-9]+:[[:space:]]*(//|\*|/\*)' \

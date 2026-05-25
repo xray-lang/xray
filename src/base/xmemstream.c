@@ -108,7 +108,7 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
      * *outbuf / *outsize (libc-malloc'd). */
     if (fclose(stream) != 0) {
         if (*outbuf) {
-            free(*outbuf);
+            free(*outbuf); /* xr:allow-raw-alloc libc open_memstream */
             *outbuf = NULL;
         }
         *outsize = 0;
@@ -123,14 +123,14 @@ XR_FUNC int xr_close_memstream(FILE *stream, char **outbuf, size_t *outsize) {
     size_t size = *outsize;
     char *owned = (char *) xr_malloc(size + 1);
     if (!owned) {
-        free(*outbuf);
+        free(*outbuf); /* xr:allow-raw-alloc libc open_memstream */
         *outbuf = NULL;
         *outsize = 0;
         return -1;
     }
     memcpy(owned, *outbuf, size);
     owned[size] = '\0';
-    free(*outbuf);
+    free(*outbuf); /* xr:allow-raw-alloc libc open_memstream */
     *outbuf = owned;
     *outsize = size;
     return 0;

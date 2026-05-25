@@ -18,7 +18,7 @@
 #include "../stdlib_cache.h"
 #include "../../src/vm/xvm.h"
 #include "../../src/runtime/object/xmap.h"
-#include "../../src/runtime/object/xutf8.h"
+#include "../../src/base/xutf8.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/runtime/gc/xalloc_unified.h"
