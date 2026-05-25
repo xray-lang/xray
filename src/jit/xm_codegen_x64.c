@@ -813,6 +813,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             break;
         }
         default:
+            XR_DCHECK(false, "x64_emit_terminator: unhandled jump type");
             break;
     }
 }
