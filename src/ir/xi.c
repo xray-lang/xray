@@ -13,6 +13,7 @@
  */
 
 #include "xi.h"
+#include "xi_module.h"
 #include "xi_effect.h"
 #include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
 #include "../base/xmalloc.h"

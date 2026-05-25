@@ -15,7 +15,7 @@
 #include "xjson.h"
 #include "xmalloc.h"
 #include "xchecks.h"
-#include "../runtime/object/xutf8.h"
+#include "xutf8.h"
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>

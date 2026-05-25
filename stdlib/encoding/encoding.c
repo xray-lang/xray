@@ -16,7 +16,7 @@
 #include "encoding.h"
 #include "../common.h"
 #include "../../src/runtime/object/xarray.h"
-#include "../../src/runtime/object/xutf8.h"
+#include "../../src/base/xutf8.h"
 #include "../../src/base/xsimd.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"

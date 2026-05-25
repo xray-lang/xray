@@ -19,6 +19,7 @@
 #define XI_IMPORT_RESOLVE_H
 
 #include "xi.h"
+#include "xi_module.h"
 
 struct XrModuleGraph;
 

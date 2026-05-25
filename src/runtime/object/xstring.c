@@ -20,7 +20,7 @@
 #include "xarray.h"
 #include "xstring.h"
 #include "xmap.h"
-#include "xutf8.h"
+#include "../../base/xutf8.h"
 #include "../xstrbuf.h"
 #include "xstringbuilder.h"
 #include "../xisolate_api.h"

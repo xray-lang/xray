@@ -18,6 +18,7 @@
  */
 
 #include "xi.h"
+#include "xi_module.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"

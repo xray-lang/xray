@@ -25,7 +25,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "../../base/xdefs.h"
+#include "xdefs.h"
 
 #define XR_UNICODE_MAX 0x10FFFF
 #define XR_UNICODE_INVALID 0xFFFD

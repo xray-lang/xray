@@ -16,6 +16,7 @@
 #define XI_TO_XM_H
 
 #include "../ir/xi.h"
+#include "../ir/xi_module.h"
 
 struct XmFunc;
 struct XrProto;

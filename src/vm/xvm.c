@@ -72,7 +72,7 @@
 #include "../coro/xdeep_copy.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/object/xrange.h"
-#include "../runtime/object/xutf8.h"  // XR_UNICODE_MAX
+#include "../base/xutf8.h"  // XR_UNICODE_MAX
 #include "../runtime/value/xslot_type.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xstruct_layout.h"

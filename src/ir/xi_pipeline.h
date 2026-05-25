@@ -25,6 +25,7 @@
 #define XI_PIPELINE_H
 
 #include "xi.h"
+#include "xi_module.h"
 #include "xi_pass.h"
 
 struct AstNode;

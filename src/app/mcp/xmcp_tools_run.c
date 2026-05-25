@@ -102,7 +102,7 @@ static char *xmcp_run_capture_finish(XmcpRunCapture *cap, int64_t limit, int *ou
     char *buf = xr_malloc(copy + 1);
     if (!buf) {
         fclose(cap->file);
-        free(cap->mem_buf);
+        free(cap->mem_buf); /* xr:allow-raw-alloc libc open_memstream */
         return NULL;
     }
     if (copy > 0)
@@ -110,7 +110,7 @@ static char *xmcp_run_capture_finish(XmcpRunCapture *cap, int64_t limit, int *ou
     buf[copy] = '\0';
     *out_size = (int) copy;
     fclose(cap->file);
-    free(cap->mem_buf); /* allocated by open_memstream, must use libc free */
+    free(cap->mem_buf); /* xr:allow-raw-alloc libc open_memstream */
     return buf;
 #endif
 }
