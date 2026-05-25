@@ -42,6 +42,8 @@ OUTPUT_FILE = PROJECT_ROOT / "src" / "frontend" / "analyzer" / "xanalyzer_builti
 
 # Pattern to match method/function definitions in C
 # e.g., XR_DEFINE_BUILTIN(array_push, "push", "(item: T): int", "Push item to end")
+# The doc string may use C adjacent-string concatenation across lines;
+# _join_adjacent_strings() collapses those before this regex runs.
 METHOD_PATTERN = re.compile(
     r'XR_DEFINE_BUILTIN\s*\(\s*'
     r'(\w+)\s*,\s*'           # C function name
@@ -49,6 +51,14 @@ METHOD_PATTERN = re.compile(
     r'"([^"]+)"\s*,\s*'       # Signature
     r'"([^"]+)"\s*\)'         # Documentation
 )
+
+# Collapse C adjacent string literals ("a" "b" -> "ab") so that
+# multi-line XR_DEFINE_BUILTIN doc strings match METHOD_PATTERN.
+_ADJACENT_STR = re.compile(r'"\s*\n?\s*"')
+
+
+def _join_adjacent_strings(text: str) -> str:
+    return _ADJACENT_STR.sub('', text)
 
 # Pattern to match module-level constants registered at runtime, e.g.
 #   xr_module_add_export(isolate, mod, "DEBUG", xr_int(XR_LOG_DEBUG))
@@ -124,6 +134,10 @@ def scan_file(filepath):
     except Exception as e:
         print(f"Warning: Cannot read {filepath}: {e}", file=sys.stderr)
         return None
+
+    # Collapse C adjacent string literals so multi-line doc strings
+    # in XR_DEFINE_BUILTIN are matched by the single-string regex.
+    content = _join_adjacent_strings(content)
 
     result = {
         'type': None,          # @type annotation (for builtin types)

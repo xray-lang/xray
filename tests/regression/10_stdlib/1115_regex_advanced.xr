@@ -17,7 +17,7 @@ fn test_lazy_plus() {
     let re = regex.compile("a+?")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "a")
+    assert_eq(result.text, "a")
 }
 
 @test
@@ -25,7 +25,7 @@ fn test_lazy_star() {
     let re = regex.compile("a*?")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "")
+    assert_eq(result.text, "")
 }
 
 @test
@@ -33,7 +33,7 @@ fn test_lazy_question() {
     let re = regex.compile("a??")
     let result = regex.find(re, "a")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "")
+    assert_eq(result.text, "")
 }
 
 @test
@@ -41,7 +41,7 @@ fn test_lazy_repeat() {
     let re = regex.compile("a{2,}?")
     let result = regex.find(re, "aaaa")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "aa")
+    assert_eq(result.text, "aa")
 }
 
 @test
@@ -49,7 +49,7 @@ fn test_greedy_plus() {
     let re = regex.compile("a+")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "aaa")
+    assert_eq(result.text, "aaa")
 }
 
 @test
@@ -57,7 +57,7 @@ fn test_greedy_star() {
     let re = regex.compile("a*")
     let result = regex.find(re, "aaa")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "aaa")
+    assert_eq(result.text, "aaa")
 }
 
 // ========================================
@@ -69,7 +69,7 @@ fn test_ignorecase_inline() {
     let re = regex.compile("(?i)hello")
     let result = regex.find(re, "HELLO World")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HELLO")
+    assert_eq(result.text, "HELLO")
 }
 
 @test
@@ -77,7 +77,7 @@ fn test_ignorecase_flag() {
     let re = regex.compile("hello", "i")
     let result = regex.find(re, "HeLLo")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HeLLo")
+    assert_eq(result.text, "HeLLo")
 }
 
 @test
@@ -96,7 +96,7 @@ fn test_multiline_caret() {
     let re = regex.compile("(?m)^world")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "world")
+    assert_eq(result.text, "world")
 }
 
 @test
@@ -104,7 +104,7 @@ fn test_multiline_dollar() {
     let re = regex.compile("(?m)hello$")
     let result = regex.find(re, "hello\nworld")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "hello")
+    assert_eq(result.text, "hello")
 }
 
 // ========================================
@@ -116,7 +116,7 @@ fn test_dotall() {
     let re = regex.compile("(?s)a.b")
     let result = regex.find(re, "a\nb")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "a\nb")
+    assert_eq(result.text, "a\nb")
 }
 
 @test
@@ -136,5 +136,5 @@ fn test_combined_flags() {
     let re = regex.compile("(?im)^hello")
     let result = regex.find(re, "world\nHELLO")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HELLO")
+    assert_eq(result.text, "HELLO")
 }

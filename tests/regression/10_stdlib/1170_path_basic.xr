@@ -215,17 +215,19 @@ fn test_normalize_only_dot() {
 @test
 fn test_parse_basic() {
     let p = path.parse("/home/user/file.txt")
-    assert_eq(p.get("base"), "file.txt")
-    assert_eq(p.get("ext"), ".txt")
-    assert_eq(p.get("name"), "file")
+    assert_eq(p.base, "file.txt")
+    assert_eq(p.ext, ".txt")
+    assert_eq(p.name, "file")
+    assert_eq(p.dir, "/home/user")
+    assert_eq(p.root, "/")
 }
 
 // ===== format =====
 
 @test
 fn test_format_basic() {
-    let obj = #{"dir": "/home/user",
-        "base": "file.txt"}
+    // path.format accepts a PathInfo handle (Json with the documented fields).
+    let obj = { dir: "/home/user", base: "file.txt", root: "", name: "", ext: "" }
     let result = path.format(obj)
     assert_eq(result, "/home/user/file.txt")
 }

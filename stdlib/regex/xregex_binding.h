@@ -66,11 +66,15 @@ struct XrModule;
  *   - split(re, text)            Split by pattern
  *   - escape(text)               Escape special characters
  *
- * Match object properties:
- *   - start                      Match start position
- *   - end                        Match end position
- *   - text                       Matched text
- *   - groups                     Capture group array (groups[0] is full match)
+ * RegexMatch object fields (typed instance, not Json):
+ *   - start: int                 Match start position
+ *   - end: int                   Match end position
+ *   - text: string               Matched text
+ *   - groups: Array<string>      Capture group array (groups[0] is full match)
+ *
+ * Zero-allocation narrow APIs:
+ *   - findText(re, text)         Return matched text only (string?)
+ *   - findGroup(re, text, i)     Return capture group i only (string?)
  */
 XR_FUNC struct XrModule *xr_load_module_regex(XrayIsolate *isolate);
 
@@ -97,9 +101,9 @@ XR_FUNC bool xr_value_is_regex(XrValue v);
 XR_FUNC XrRegex *xr_value_to_regex(XrValue v);
 
 /*
- * Build a Json match result with shape { start, end, text, groups }.
- * Lifted from a static helper so stdlib/regex/regex_methods.c can
- * reuse the exact same shape used by the legacy native-type binding.
+ * Build a RegexMatch instance (typed XrInstance with 4 field slots).
+ * Replaces the former Json { start, end, text, groups } approach —
+ * field access is now a direct slot load, not a hash lookup.
  */
 XR_FUNC XrValue xr_regex_make_match_object(XrayIsolate *isolate, const char *text, XrMatch *match);
 

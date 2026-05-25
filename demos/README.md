@@ -51,6 +51,7 @@ Xray's core differentiator. **If it compiles, it's concurrency-safe.**
 | [channels.xr](05-concurrency/channels.xr) | Channel, send/recv, producer-consumer, fan-out |
 | [select_and_scope.xr](05-concurrency/select_and_scope.xr) | select, defer, scope (structured concurrency) |
 | [shared_data.xr](05-concurrency/shared_data.xr) | shared const, Channel, parameter passing — the 3 sharing rules |
+| [atomic.xr](05-concurrency/atomic.xr) | Atomic&lt;T&gt; for int/float/bool — load, store, add, CAS, toggle |
 
 ### 06 — Networking
 

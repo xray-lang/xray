@@ -17,6 +17,7 @@
 #include "../../src/base/xplatform.h"
 #include "../../src/base/xmalloc.h"
 #include "../../src/base/xchecks.h"
+#include "../../src/runtime/object/xjson.h"
 #include "../../src/coro/xyieldable.h"  // xr_yield_for_timeout
 #include "../../src/vm/xvm.h"           // xr_vm_yieldable_cfunction_new
 #include <stdio.h>
@@ -571,7 +572,8 @@ static char *read_fd_to_string(int fd) {
 }
 #endif
 
-// exec(cmd) - Execute shell command, return {stdout, stderr, exitCode}
+// exec(cmd) - Execute shell command, return ExecResult handle
+// (Json with fixed shape: stdout, stderr, exitCode).
 static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
         return xr_null();
@@ -622,12 +624,13 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
         exit_code = raw_status & 0xFF;
     }
 
-    XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, xrs_string_value_c(X, "stdout"), xrs_string_value_c(X, output));
-    xr_map_set(map, xrs_string_value_c(X, "stderr"), xrs_string_value_c(X, ""));
-    xr_map_set(map, xrs_string_value_c(X, "exitCode"), xr_int(exit_code));
+    XrJson *json = xr_json_new(xr_current_coro(X));
+    XR_CHECK(json != NULL, "os_exec: json alloc failed");
+    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, output));
+    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, ""));
+    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
     xr_free(output);
-    return xr_value_from_map(map);
+    return xr_json_value(json);
 #else
     // Unix: fork + exec + pipe for both stdout and stderr
     int stdout_pipe[2], stderr_pipe[2];
@@ -673,16 +676,15 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     waitpid(pid, &status, 0);
     int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
 
-    XrMap *map = xr_map_new(xr_current_coro(X));
-    xr_map_set(map, xrs_string_value_c(X, "stdout"),
-               xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
-    xr_map_set(map, xrs_string_value_c(X, "stderr"),
-               xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
-    xr_map_set(map, xrs_string_value_c(X, "exitCode"), xr_int(exit_code));
+    XrJson *json = xr_json_new(xr_current_coro(X));
+    XR_CHECK(json != NULL, "os_exec: json alloc failed");
+    xr_json_set_by_key(X, json, "stdout", xrs_string_value_c(X, stdout_buf ? stdout_buf : ""));
+    xr_json_set_by_key(X, json, "stderr", xrs_string_value_c(X, stderr_buf ? stderr_buf : ""));
+    xr_json_set_by_key(X, json, "exitCode", xr_int(exit_code));
 
     xr_free(stdout_buf);
     xr_free(stderr_buf);
-    return xr_value_from_map(map);
+    return xr_json_value(json);
 #endif
 }
 
@@ -727,6 +729,7 @@ static const char *get_arch(void) {
 #include "../../src/module/xbuiltin_decl.h"
 
 // @module os
+// @handle ExecResult { const stdout: string, const stderr: string, const exitCode: int }
 
 XR_DEFINE_BUILTIN(os_getenv, "getenv", "(name: string): string?", "Get environment variable")
 XR_DEFINE_BUILTIN(os_setenv, "setenv", "(name: string, value: string): bool",
@@ -761,7 +764,7 @@ XR_DEFINE_BUILTIN(os_sleep, "sleep", "(ms: int): ()", "Sleep for milliseconds")
 XR_DEFINE_BUILTIN(os_clock, "clock", "(): float", "Get process CPU time in seconds")
 
 // Process execution
-XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): Map<string, any>?", "Execute shell command")
+XR_DEFINE_BUILTIN(os_exec, "exec", "(cmd: string): ExecResult?", "Execute shell command")
 
 XR_FUNC XrModule *xr_load_module_os(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "xr_load_module_os: NULL isolate");

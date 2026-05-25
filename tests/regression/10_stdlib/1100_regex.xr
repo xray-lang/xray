@@ -16,9 +16,9 @@ fn test_find() {
     let re = regex.compile("\\d+")
     let result = regex.find(re, "abc123def")
     assert(result != null)
-    assert_eq(result["start"], 3)
-    assert_eq(result["end"], 6)
-    assert_eq(result["groups"][0], "123")
+    assert_eq(result.start, 3)
+    assert_eq(result.end, 6)
+    assert_eq(result.groups[0], "123")
 }
 
 // @test capture groups
@@ -27,7 +27,7 @@ fn test_capture_groups() {
     let re = regex.compile("(\\w+)@(\\w+)")
     let result = regex.find(re, "contact: user@host.com")
     assert(result != null)
-    let groups = result["groups"]
+    let groups = result.groups
     assert_eq(groups[0], "user@host")
     assert_eq(groups[1], "user")
     assert_eq(groups[2], "host")

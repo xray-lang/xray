@@ -38,7 +38,7 @@ fn test_capture_groups() {
     let re = /([0-9]+)-([0-9]+)/
     let result = regex.find(re, "测试: 123-456 结果")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "123-456")
+    assert_eq(result.text, "123-456")
 }
 
 // 测试复杂模式（锚定全匹配）
@@ -56,7 +56,7 @@ fn test_word_boundary() {
     let re = /world/
     let result = regex.find(re, "hello world!")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "world")
+    assert_eq(result.text, "world")
 }
 
 // 测试 replace

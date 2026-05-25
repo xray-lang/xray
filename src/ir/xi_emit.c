@@ -107,7 +107,11 @@ XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
 
 /* Like reg_of but never uses the free list — always allocates from next_reg.
  * Call instructions place args at dst+1..dst+nargs; a recycled low register
- * for dst could overlap with live source registers and cause clobber bugs. */
+ * for dst could overlap with live source registers and cause clobber bugs.
+ *
+ * When var_id is set and var_reg is unset (first definition of the variable
+ * comes from a call-like op), record var_reg so that subsequent definitions
+ * and exception-path reads find a consistent register. */
 XR_FUNC uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
     XR_DCHECK(v != NULL, "alloc_reg_fresh: NULL value");
     if (v->id >= ctx->reg_map_size) {
@@ -122,6 +126,10 @@ XR_FUNC uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
         ctx->reg_map[v->id] = ctx->next_reg++;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
+        /* First definition via call-like op: pin var_reg so later defs
+         * and exception-path reads coalesce to this register. */
+        if (v->var_id != 0xFF && ctx->var_reg[v->var_id] == NO_REG)
+            ctx->var_reg[v->var_id] = ctx->reg_map[v->id];
     }
     return ctx->reg_map[v->id];
 }
@@ -612,6 +620,21 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         emit_inst(ctx, CREATE_ABC(OP_CELL_SET, real_dst, dst, 0));
         ctx->reg_map[v->id] = real_dst;
         free_reg(ctx, dst);
+    }
+
+    /* Call-like ops use alloc_reg_fresh which places the result in a high
+     * register to prevent call-frame clobber.  When the variable already
+     * has a coalesced register (var_reg) from a prior non-call definition,
+     * the fresh register diverges from var_reg.  Copy the result back so
+     * that (a) exception paths (OP_THROW bypasses phi) read the correct
+     * value, and (b) merge-point phi moves become no-ops. */
+    if (call_like && ctx->status == XI_EMIT_OK && v->var_id != 0xFF && !need_cell_set &&
+        !need_cell_new) {
+        uint8_t vr = ctx->var_reg[v->var_id];
+        uint8_t call_dst = ctx->reg_map[v->id];
+        if (vr != NO_REG && vr != call_dst) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, call_dst, 0));
+        }
     }
 
     /* Restore original reg_map and free temp registers */

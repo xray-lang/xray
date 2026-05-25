@@ -192,8 +192,9 @@ static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {
 
 // http.HttpRequest handle fields
 static const XaBuiltinHandleField g_gen_http_httprequest_fields[] = {
-    {"method", "string", true},     {"path", "string", true},    {"query", "Json", true},
-    {"contentLength", "int", true}, {"bodyOffset", "int", true},
+    {"method", "string", true},  {"path", "string", true},       {"query", "Json", true},
+    {"body", "string", true},    {"contentLength", "int", true}, {"params", "Json", true},
+    {"streaming", "bool", true},
 };
 
 // http.DownloadResult handle fields
@@ -204,7 +205,7 @@ static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
     {"HttpResponse", g_gen_http_httpresponse_fields, 6},
-    {"HttpRequest", g_gen_http_httprequest_fields, 5},
+    {"HttpRequest", g_gen_http_httprequest_fields, 7},
     {"DownloadResult", g_gen_http_downloadresult_fields, 5},
 };
 #define GEN_HTTP_HANDLE_COUNT 3
@@ -380,6 +381,18 @@ static const XaBuiltinMember g_gen_math_functions[] = {
 };
 #define GEN_MATH_FUNCTION_COUNT 51
 
+// net.UdpPacket handle fields
+static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
+    {"data", "string", true},
+    {"host", "string", true},
+    {"port", "int", true},
+};
+
+static const XaBuiltinHandle g_gen_net_handles[] = {
+    {"UdpPacket", g_gen_net_udppacket_fields, 3},
+};
+#define GEN_NET_HANDLE_COUNT 1
+
 // net module functions
 static const XaBuiltinMember g_gen_net_functions[] = {
     {"dial", "(host: string, port: int, timeout?: int): NetConn?", "Dial a TCP connection", true,
@@ -400,9 +413,22 @@ static const XaBuiltinMember g_gen_net_functions[] = {
     {"udpBind", "(port: int, addr?: string): NetConn?", "Bind a UDP socket", true, false},
     {"sendTo", "(handle: NetConn, data: string, host: string, port: int): int", "Send UDP datagram",
      true, false},
-    {"recvFrom", "(handle: NetConn, maxlen?: int): Json", "Receive UDP datagram", true, false},
+    {"recvFrom", "(handle: NetConn, maxlen?: int): UdpPacket?",
+     "Receive UDP datagram (returns flat handle: data, host, port)", true, false},
 };
 #define GEN_NET_FUNCTION_COUNT 14
+
+// os.ExecResult handle fields
+static const XaBuiltinHandleField g_gen_os_execresult_fields[] = {
+    {"stdout", "string", true},
+    {"stderr", "string", true},
+    {"exitCode", "int", true},
+};
+
+static const XaBuiltinHandle g_gen_os_handles[] = {
+    {"ExecResult", g_gen_os_execresult_fields, 3},
+};
+#define GEN_OS_HANDLE_COUNT 1
 
 // os module functions
 static const XaBuiltinMember g_gen_os_functions[] = {
@@ -429,7 +455,7 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"kill", "(pid: int, signal?: int): bool", "Send signal to process", true, false},
     {"sleep", "(ms: int): ()", "Sleep for milliseconds", true, false},
     {"clock", "(): float", "Get process CPU time in seconds", true, false},
-    {"exec", "(cmd: string): Map<string, any>?", "Execute shell command", true, false},
+    {"exec", "(cmd: string): ExecResult?", "Execute shell command", true, false},
     // Module constants (is_method=false)
     {"platform", ": string", "", false, false},
     {"arch", ": string", "", false, false},
@@ -437,6 +463,17 @@ static const XaBuiltinMember g_gen_os_functions[] = {
     {"eol", ": string", "", false, false},
 };
 #define GEN_OS_FUNCTION_COUNT 28
+
+// path.PathInfo handle fields
+static const XaBuiltinHandleField g_gen_path_pathinfo_fields[] = {
+    {"root", "string", true}, {"dir", "string", true}, {"base", "string", true},
+    {"name", "string", true}, {"ext", "string", true},
+};
+
+static const XaBuiltinHandle g_gen_path_handles[] = {
+    {"PathInfo", g_gen_path_pathinfo_fields, 5},
+};
+#define GEN_PATH_HANDLE_COUNT 1
 
 // path module functions
 static const XaBuiltinMember g_gen_path_functions[] = {
@@ -448,8 +485,9 @@ static const XaBuiltinMember g_gen_path_functions[] = {
     {"isAbsolute", "(path: string): bool", "Check if path is absolute", true, false},
     {"resolve", "(...parts: string): string", "Resolve to absolute path", true, false},
     {"relative", "(from: string, to: string): string", "Get relative path", true, false},
-    {"parse", "(path: string): Json", "Parse path into components", true, false},
-    {"format", "(obj: Json): string", "Format path from components", true, false},
+    {"parse", "(path: string): PathInfo", "Parse path into components (root, dir, base, name, ext)",
+     true, false},
+    {"format", "(obj: PathInfo): string", "Format path from components", true, false},
     // Module constants (is_method=false)
     {"sep", ": string", "", false, false},
     {"delimiter", ": string", "", false, false},
@@ -460,10 +498,16 @@ static const XaBuiltinMember g_gen_path_functions[] = {
 static const XaBuiltinMember g_gen_regex_functions[] = {
     {"compile", "(pattern: string, flags?: string): Regex", "Compile a regex pattern", true, false},
     {"test", "(pattern: Regex, s: string): bool", "Test if pattern matches string", true, false},
-    {"find", "(pattern: Regex, s: string, offset?: int): Json", "Find first match", true, false},
-    {"fullFind", "(pattern: Regex, s: string): Json", "Full match with captures", true, false},
+    {"find", "(pattern: Regex, s: string, offset?: int): RegexMatch?", "Find first match", true,
+     false},
+    {"findText", "(pattern: Regex, s: string): string?",
+     "Find first match, return matched text only (zero-alloc)", true, false},
+    {"findGroup", "(pattern: Regex, s: string, index: int): string?",
+     "Find first match, return single capture group (zero-alloc)", true, false},
+    {"fullFind", "(pattern: Regex, s: string): RegexMatch?", "Full match with captures", true,
+     false},
     {"count", "(pattern: Regex, s: string): int", "Count matches", true, false},
-    {"findAll", "(pattern: Regex, s: string): Array<string>", "Find all matches", true, false},
+    {"findAll", "(pattern: Regex, s: string): Array<RegexMatch>", "Find all matches", true, false},
     {"replace", "(pattern: Regex, s: string, replacement: string): string", "Replace first match",
      true, false},
     {"replaceAll", "(pattern: Regex, s: string, replacement: string): string",
@@ -472,7 +516,7 @@ static const XaBuiltinMember g_gen_regex_functions[] = {
     {"escape", "(s: string): string", "Escape regex special chars", true, false},
     {"isValid", "(pattern: string): bool", "Check if pattern is valid", true, false},
 };
-#define GEN_REGEX_FUNCTION_COUNT 11
+#define GEN_REGEX_FUNCTION_COUNT 13
 
 // time module functions
 static const XaBuiltinMember g_gen_time_functions[] = {
@@ -495,14 +539,30 @@ static const XaBuiltinMember g_gen_toml_functions[] = {
 };
 #define GEN_TOML_FUNCTION_COUNT 5
 
+// url.URL handle fields
+static const XaBuiltinHandleField g_gen_url_url_fields[] = {
+    {"protocol", "string", true}, {"hostname", "string", true}, {"port", "string", true},
+    {"search", "string", true},   {"hash", "string", true},     {"username", "string", true},
+    {"password", "string", true}, {"host", "string", true},     {"origin", "string", true},
+    {"href", "string", true},
+};
+
+static const XaBuiltinHandle g_gen_url_handles[] = {
+    {"URL", g_gen_url_url_fields, 10},
+};
+#define GEN_URL_HANDLE_COUNT 1
+
 // url module functions
 static const XaBuiltinMember g_gen_url_functions[] = {
     {"encode", "(s: string): string", "RFC 3986 percent-encode", true, false},
     {"decode", "(s: string): string", "RFC 3986 percent-decode", true, false},
     {"encodeForm", "(s: string): string", "Form URL encode (space as +)", true, false},
     {"decodeForm", "(s: string): string", "Form URL decode (+ as space)", true, false},
-    {"parse", "(url: string): Json", "Parse URL into Json object", true, false},
-    {"format", "(obj: Json): string", "Build URL string from Json components", true, false},
+    {"parse", "(url: string): URL",
+     "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, "
+     "password, host, origin, href)",
+     true, false},
+    {"format", "(obj: URL): string", "Build URL string from URL components", true, false},
     {"parseQuery", "(qs: string): Json", "Parse query string to Json", true, false},
     {"buildQuery", "(obj: Json): string", "Build query string from Json", true, false},
     {"resolve", "(base: string, relative: string): string", "Resolve relative URL", true, false},
@@ -521,11 +581,12 @@ static const XaBuiltinHandleField g_gen_ws_wsconn_fields[] = {
 static const XaBuiltinHandleField g_gen_ws_wsmessage_fields[] = {
     {"data", "string", true},
     {"binary", "bool", true},
+    {"error", "string", true},
 };
 
 static const XaBuiltinHandle g_gen_ws_handles[] = {
     {"WsConn", g_gen_ws_wsconn_fields, 3},
-    {"WsMessage", g_gen_ws_wsmessage_fields, 2},
+    {"WsMessage", g_gen_ws_wsmessage_fields, 3},
 };
 #define GEN_WS_HANDLE_COUNT 2
 
@@ -590,13 +651,14 @@ static const XaBuiltinModule g_gen_builtin_modules[] = {
     {"io", g_gen_io_functions, GEN_IO_FUNCTION_COUNT, g_gen_io_handles, GEN_IO_HANDLE_COUNT},
     {"log", g_gen_log_functions, GEN_LOG_FUNCTION_COUNT, NULL, 0},
     {"math", g_gen_math_functions, GEN_MATH_FUNCTION_COUNT, NULL, 0},
-    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, NULL, 0},
-    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, NULL, 0},
-    {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, NULL, 0},
+    {"net", g_gen_net_functions, GEN_NET_FUNCTION_COUNT, g_gen_net_handles, GEN_NET_HANDLE_COUNT},
+    {"os", g_gen_os_functions, GEN_OS_FUNCTION_COUNT, g_gen_os_handles, GEN_OS_HANDLE_COUNT},
+    {"path", g_gen_path_functions, GEN_PATH_FUNCTION_COUNT, g_gen_path_handles,
+     GEN_PATH_HANDLE_COUNT},
     {"regex", g_gen_regex_functions, GEN_REGEX_FUNCTION_COUNT, NULL, 0},
     {"time", g_gen_time_functions, GEN_TIME_FUNCTION_COUNT, NULL, 0},
     {"toml", g_gen_toml_functions, GEN_TOML_FUNCTION_COUNT, NULL, 0},
-    {"url", g_gen_url_functions, GEN_URL_FUNCTION_COUNT, NULL, 0},
+    {"url", g_gen_url_functions, GEN_URL_FUNCTION_COUNT, g_gen_url_handles, GEN_URL_HANDLE_COUNT},
     {"ws", g_gen_ws_functions, GEN_WS_FUNCTION_COUNT, g_gen_ws_handles, GEN_WS_HANDLE_COUNT},
     {"xml", g_gen_xml_functions, GEN_XML_FUNCTION_COUNT, NULL, 0},
     {"yaml", g_gen_yaml_functions, GEN_YAML_FUNCTION_COUNT, NULL, 0},

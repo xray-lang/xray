@@ -280,7 +280,13 @@ static int do_resolve_all(struct XrIoDnsCache *cache, const char *hostname, XrSo
     }
     hints.ai_socktype = SOCK_STREAM;
 
+    // getaddrinfo() can block 50-500ms on cold cache (especially over
+    // public DNS). Hand off P to another M so other coroutines on the
+    // same Worker keep progressing while this M parks in the resolver.
+    // No-op when called outside a Worker (CLI / tests).
+    xr_worker_entersyscall();
     int err = getaddrinfo(hostname, NULL, &hints, &res);
+    xr_worker_exitsyscall();
     if (err != 0 || !res)
         return 0;
 

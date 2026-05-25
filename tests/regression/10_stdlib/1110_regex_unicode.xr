@@ -14,7 +14,7 @@ fn test_p_han() {
     let re = regex.compile("\\p{Han}+")
     let result = regex.find(re, "Hello你好World世界")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "你好")
+    assert_eq(result.text, "你好")
 }
 
 // \p{L} - 匹配所有字母（包括汉字）
@@ -23,7 +23,7 @@ fn test_p_letter() {
     let re = regex.compile("\\p{L}+")
     let result = regex.find(re, "123abc")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "abc")
+    assert_eq(result.text, "abc")
 }
 
 // \p{N} - 匹配数字
@@ -32,7 +32,7 @@ fn test_p_number() {
     let re = regex.compile("\\p{N}+")
     let result = regex.find(re, "abc123def")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "123")
+    assert_eq(result.text, "123")
 }
 
 // \p{Latin} - 匹配拉丁字母
@@ -41,7 +41,7 @@ fn test_p_latin() {
     let re = regex.compile("\\p{Latin}+")
     let result = regex.find(re, "你好HelloWorld")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "HelloWorld")
+    assert_eq(result.text, "HelloWorld")
 }
 
 // \P{Han} - 匹配非汉字
@@ -50,7 +50,7 @@ fn test_P_not_han() {
     let re = regex.compile("\\P{Han}+")
     let result = regex.find(re, "你好World")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "World")
+    assert_eq(result.text, "World")
 }
 
 // \p{ASCII} - 匹配 ASCII 字符
@@ -59,7 +59,7 @@ fn test_p_ascii() {
     let re = regex.compile("\\p{ASCII}+")
     let result = regex.find(re, "Hello世界")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "Hello")
+    assert_eq(result.text, "Hello")
 }
 
 // \p{Hiragana} - 匹配平假名
@@ -68,7 +68,7 @@ fn test_p_hiragana() {
     let re = regex.compile("\\p{Hiragana}+")
     let result = regex.find(re, "Helloひらがな世界")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "ひらがな")
+    assert_eq(result.text, "ひらがな")
 }
 
 // \p{Katakana} - 匹配片假名
@@ -77,7 +77,7 @@ fn test_p_katakana() {
     let re = regex.compile("\\p{Katakana}+")
     let result = regex.find(re, "Helloカタカナ世界")
     assert_eq(result != null, true)
-    assert_eq(result["text"], "カタカナ")
+    assert_eq(result.text, "カタカナ")
 }
 
 // 混合匹配
@@ -88,10 +88,10 @@ fn test_unicode_mixed() {
     // All letters (including CJK)
     let re_l = regex.compile("\\p{L}+")
     let result = regex.find(re_l, text)
-    assert_eq(result["text"], "abc你好")
+    assert_eq(result.text, "abc你好")
     
     // 所有数字
     let re_n = regex.compile("\\p{N}+")
     result = regex.find(re_n, text)
-    assert_eq(result["text"], "123")
+    assert_eq(result.text, "123")
 }

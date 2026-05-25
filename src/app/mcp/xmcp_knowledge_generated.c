@@ -485,8 +485,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle type",
     },
     {
-        .name = "HttpRequest.bodyOffset",
-        .signature = "const int",
+        .name = "HttpRequest.body",
+        .signature = "const string",
         .summary = "Handle field",
     },
     {
@@ -500,6 +500,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
         .summary = "Handle field",
     },
     {
+        .name = "HttpRequest.params",
+        .signature = "const Json",
+        .summary = "Handle field",
+    },
+    {
         .name = "HttpRequest.path",
         .signature = "const string",
         .summary = "Handle field",
@@ -507,6 +512,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_http[] = {
     {
         .name = "HttpRequest.query",
         .signature = "const Json",
+        .summary = "Handle field",
+    },
+    {
+        .name = "HttpRequest.streaming",
+        .signature = "const bool",
         .summary = "Handle field",
     },
     {
@@ -1217,6 +1227,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_math[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     {
+        .name = "UdpPacket",
+        .signature = "UdpPacket",
+        .summary = "Handle type",
+    },
+    {
+        .name = "UdpPacket.data",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "UdpPacket.host",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "UdpPacket.port",
+        .signature = "const int",
+        .summary = "Handle field",
+    },
+    {
         .name = "accept",
         .signature = "(listener: NetListener): NetConn?",
         .summary = "Accept a new connection",
@@ -1263,8 +1293,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
     },
     {
         .name = "recvFrom",
-        .signature = "(handle: NetConn, maxlen?: int): Json",
-        .summary = "Receive UDP datagram",
+        .signature = "(handle: NetConn, maxlen?: int): UdpPacket?",
+        .summary = "Receive UDP datagram (returns flat handle: data, host, port)",
     },
     {
         .name = "sendTo",
@@ -1289,6 +1319,26 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
 };
 
 static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
+    {
+        .name = "ExecResult",
+        .signature = "ExecResult",
+        .summary = "Handle type",
+    },
+    {
+        .name = "ExecResult.exitCode",
+        .signature = "const int",
+        .summary = "Handle field",
+    },
+    {
+        .name = "ExecResult.stderr",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "ExecResult.stdout",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
     {
         .name = "arch",
         .signature = ": string",
@@ -1321,7 +1371,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
     },
     {
         .name = "exec",
-        .signature = "(cmd: string): Map<string, any>?",
+        .signature = "(cmd: string): ExecResult?",
         .summary = "Execute shell command",
     },
     {
@@ -1433,6 +1483,36 @@ static const XmcpGeneratedStdlibSymbol _symbols_os[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     {
+        .name = "PathInfo",
+        .signature = "PathInfo",
+        .summary = "Handle type",
+    },
+    {
+        .name = "PathInfo.base",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "PathInfo.dir",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "PathInfo.ext",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "PathInfo.name",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "PathInfo.root",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
         .name = "basename",
         .signature = "(path: string): string",
         .summary = "Get base name",
@@ -1454,7 +1534,7 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     },
     {
         .name = "format",
-        .signature = "(obj: Json): string",
+        .signature = "(obj: PathInfo): string",
         .summary = "Format path from components",
     },
     {
@@ -1474,8 +1554,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_path[] = {
     },
     {
         .name = "parse",
-        .signature = "(path: string): Json",
-        .summary = "Parse path into components",
+        .signature = "(path: string): PathInfo",
+        .summary = "Parse path into components (root, dir, base, name, ext)",
     },
     {
         .name = "relative",
@@ -1512,17 +1592,27 @@ static const XmcpGeneratedStdlibSymbol _symbols_regex[] = {
     },
     {
         .name = "find",
-        .signature = "(pattern: Regex, s: string, offset?: int): Json",
+        .signature = "(pattern: Regex, s: string, offset?: int): RegexMatch?",
         .summary = "Find first match",
     },
     {
         .name = "findAll",
-        .signature = "(pattern: Regex, s: string): Array<string>",
+        .signature = "(pattern: Regex, s: string): Array<RegexMatch>",
         .summary = "Find all matches",
     },
     {
+        .name = "findGroup",
+        .signature = "(pattern: Regex, s: string, index: int): string?",
+        .summary = "Find first match, return single capture group (zero-alloc)",
+    },
+    {
+        .name = "findText",
+        .signature = "(pattern: Regex, s: string): string?",
+        .summary = "Find first match, return matched text only (zero-alloc)",
+    },
+    {
         .name = "fullFind",
-        .signature = "(pattern: Regex, s: string): Json",
+        .signature = "(pattern: Regex, s: string): RegexMatch?",
         .summary = "Full match with captures",
     },
     {
@@ -1615,6 +1705,61 @@ static const XmcpGeneratedStdlibSymbol _symbols_toml[] = {
 
 static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     {
+        .name = "URL",
+        .signature = "URL",
+        .summary = "Handle type",
+    },
+    {
+        .name = "URL.hash",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.host",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.hostname",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.href",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.origin",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.password",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.port",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.protocol",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.search",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "URL.username",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
         .name = "buildQuery",
         .signature = "(obj: Json): string",
         .summary = "Build query string from Json",
@@ -1641,8 +1786,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     },
     {
         .name = "format",
-        .signature = "(obj: Json): string",
-        .summary = "Build URL string from Json components",
+        .signature = "(obj: URL): string",
+        .summary = "Build URL string from URL components",
     },
     {
         .name = "join",
@@ -1651,8 +1796,8 @@ static const XmcpGeneratedStdlibSymbol _symbols_url[] = {
     },
     {
         .name = "parse",
-        .signature = "(url: string): Json",
-        .summary = "Parse URL into Json object",
+        .signature = "(url: string): URL",
+        .summary = "Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href)",
     },
     {
         .name = "parseQuery",
@@ -1699,6 +1844,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_ws[] = {
     },
     {
         .name = "WsMessage.data",
+        .signature = "const string",
+        .summary = "Handle field",
+    },
+    {
+        .name = "WsMessage.error",
         .signature = "const string",
         .summary = "Handle field",
     },
@@ -3416,11 +3566,13 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `DownloadResult.status` | `const int` | Handle field |\n"
             "| `DownloadResult.total` | `const int` | Handle field |\n"
             "| `http.HttpRequest` | `HttpRequest` | Handle type |\n"
-            "| `HttpRequest.bodyOffset` | `const int` | Handle field |\n"
+            "| `HttpRequest.body` | `const string` | Handle field |\n"
             "| `HttpRequest.contentLength` | `const int` | Handle field |\n"
             "| `HttpRequest.method` | `const string` | Handle field |\n"
+            "| `HttpRequest.params` | `const Json` | Handle field |\n"
             "| `HttpRequest.path` | `const string` | Handle field |\n"
             "| `HttpRequest.query` | `const Json` | Handle field |\n"
+            "| `HttpRequest.streaming` | `const bool` | Handle field |\n"
             "| `http.HttpResponse` | `HttpResponse` | Handle type |\n"
             "| `HttpResponse.body` | `string` | Handle field |\n"
             "| `HttpResponse.error` | `const string` | Handle field |\n"
@@ -3645,6 +3797,10 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `net.UdpPacket` | `UdpPacket` | Handle type |\n"
+            "| `UdpPacket.data` | `const string` | Handle field |\n"
+            "| `UdpPacket.host` | `const string` | Handle field |\n"
+            "| `UdpPacket.port` | `const int` | Handle field |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` | Accept a new connection |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` | Close a connection or listener |\n"
             "| `net.dial` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TCP connection |\n"
@@ -3654,7 +3810,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `net.listen` | `(port: int, backlog?: int): NetListener?` | Start listening on a port |\n"
             "| `net.lookup` | `(hostname: string): string?` | DNS lookup |\n"
             "| `net.read` | `(conn: NetConn, maxlen?: int): string?` | Read data from connection |\n"
-            "| `net.recvFrom` | `(handle: NetConn, maxlen?: int): Json` | Receive UDP datagram |\n"
+            "| `net.recvFrom` | `(handle: NetConn, maxlen?: int): UdpPacket?` | Receive UDP datagram (returns flat handle: data, host, port) |\n"
             "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` | Send UDP datagram |\n"
             "| `net.udpBind` | `(port: int, addr?: string): NetConn?` | Bind a UDP socket |\n"
             "| `net.upgradeTLS` | `(conn: NetConn, hostname: string): NetConn?` | Upgrade connection to TLS |\n"
@@ -3677,13 +3833,17 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `os.ExecResult` | `ExecResult` | Handle type |\n"
+            "| `ExecResult.exitCode` | `const int` | Handle field |\n"
+            "| `ExecResult.stderr` | `const string` | Handle field |\n"
+            "| `ExecResult.stdout` | `const string` | Handle field |\n"
             "| `os.arch` | `: string` |  |\n"
             "| `os.chdir` | `(path: string): bool` | Change working directory |\n"
             "| `os.clock` | `(): float` | Get process CPU time in seconds |\n"
             "| `os.cpuCount` | `(): int` | Get number of CPU cores |\n"
             "| `os.environ` | `(): Map<string, string>` | Get all environment variables |\n"
             "| `os.eol` | `: string` |  |\n"
-            "| `os.exec` | `(cmd: string): Map<string, any>?` | Execute shell command |\n"
+            "| `os.exec` | `(cmd: string): ExecResult?` | Execute shell command |\n"
             "| `os.exit` | `(code?: int): ()` | Exit process |\n"
             "| `os.freeMemory` | `(): int` | Get available system memory in bytes |\n"
             "| `os.getcwd` | `(): string` | Get current working directory |\n"
@@ -3723,15 +3883,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `path.PathInfo` | `PathInfo` | Handle type |\n"
+            "| `PathInfo.base` | `const string` | Handle field |\n"
+            "| `PathInfo.dir` | `const string` | Handle field |\n"
+            "| `PathInfo.ext` | `const string` | Handle field |\n"
+            "| `PathInfo.name` | `const string` | Handle field |\n"
+            "| `PathInfo.root` | `const string` | Handle field |\n"
             "| `path.basename` | `(path: string): string` | Get base name |\n"
             "| `path.delimiter` | `: string` |  |\n"
             "| `path.dirname` | `(path: string): string` | Get directory name |\n"
             "| `path.extname` | `(path: string): string` | Get file extension |\n"
-            "| `path.format` | `(obj: Json): string` | Format path from components |\n"
+            "| `path.format` | `(obj: PathInfo): string` | Format path from components |\n"
             "| `path.isAbsolute` | `(path: string): bool` | Check if path is absolute |\n"
             "| `path.join` | `(...parts: string): string` | Join path segments |\n"
             "| `path.normalize` | `(path: string): string` | Normalize path separators |\n"
-            "| `path.parse` | `(path: string): Json` | Parse path into components |\n"
+            "| `path.parse` | `(path: string): PathInfo` | Parse path into components (root, dir, base, name, ext) |\n"
             "| `path.relative` | `(from: string, to: string): string` | Get relative path |\n"
             "| `path.resolve` | `(...parts: string): string` | Resolve to absolute path |\n"
             "| `path.sep` | `: string` |  |\n"
@@ -3756,9 +3922,11 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `regex.compile` | `(pattern: string, flags?: string): Regex` | Compile a regex pattern |\n"
             "| `regex.count` | `(pattern: Regex, s: string): int` | Count matches |\n"
             "| `regex.escape` | `(s: string): string` | Escape regex special chars |\n"
-            "| `regex.find` | `(pattern: Regex, s: string, offset?: int): Json` | Find first match |\n"
-            "| `regex.findAll` | `(pattern: Regex, s: string): Array<string>` | Find all matches |\n"
-            "| `regex.fullFind` | `(pattern: Regex, s: string): Json` | Full match with captures |\n"
+            "| `regex.find` | `(pattern: Regex, s: string, offset?: int): RegexMatch?` | Find first match |\n"
+            "| `regex.findAll` | `(pattern: Regex, s: string): Array<RegexMatch>` | Find all matches |\n"
+            "| `regex.findGroup` | `(pattern: Regex, s: string, index: int): string?` | Find first match, return single capture group (zero-alloc) |\n"
+            "| `regex.findText` | `(pattern: Regex, s: string): string?` | Find first match, return matched text only (zero-alloc) |\n"
+            "| `regex.fullFind` | `(pattern: Regex, s: string): RegexMatch?` | Full match with captures |\n"
             "| `regex.isValid` | `(pattern: string): bool` | Check if pattern is valid |\n"
             "| `regex.replace` | `(pattern: Regex, s: string, replacement: string): string` | Replace first match |\n"
             "| `regex.replaceAll` | `(pattern: Regex, s: string, replacement: string): string` | Replace all matches |\n"
@@ -3829,14 +3997,25 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
+            "| `url.URL` | `URL` | Handle type |\n"
+            "| `URL.hash` | `const string` | Handle field |\n"
+            "| `URL.host` | `const string` | Handle field |\n"
+            "| `URL.hostname` | `const string` | Handle field |\n"
+            "| `URL.href` | `const string` | Handle field |\n"
+            "| `URL.origin` | `const string` | Handle field |\n"
+            "| `URL.password` | `const string` | Handle field |\n"
+            "| `URL.port` | `const string` | Handle field |\n"
+            "| `URL.protocol` | `const string` | Handle field |\n"
+            "| `URL.search` | `const string` | Handle field |\n"
+            "| `URL.username` | `const string` | Handle field |\n"
             "| `url.buildQuery` | `(obj: Json): string` | Build query string from Json |\n"
             "| `url.decode` | `(s: string): string` | RFC 3986 percent-decode |\n"
             "| `url.decodeForm` | `(s: string): string` | Form URL decode (+ as space) |\n"
             "| `url.encode` | `(s: string): string` | RFC 3986 percent-encode |\n"
             "| `url.encodeForm` | `(s: string): string` | Form URL encode (space as +) |\n"
-            "| `url.format` | `(obj: Json): string` | Build URL string from Json components |\n"
+            "| `url.format` | `(obj: URL): string` | Build URL string from URL components |\n"
             "| `url.join` | `(...parts: string): string` | Join URL path segments |\n"
-            "| `url.parse` | `(url: string): Json` | Parse URL into Json object |\n"
+            "| `url.parse` | `(url: string): URL` | Parse URL into a URL handle (protocol, hostname, port, pathname, search, hash, username, password, host, origin, href) |\n"
             "| `url.parseQuery` | `(qs: string): Json` | Parse query string to Json |\n"
             "| `url.resolve` | `(base: string, relative: string): string` | Resolve relative URL |\n"
             "",
@@ -3864,6 +4043,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `ws.WsMessage` | `WsMessage` | Handle type |\n"
             "| `WsMessage.binary` | `const bool` | Handle field |\n"
             "| `WsMessage.data` | `const string` | Handle field |\n"
+            "| `WsMessage.error` | `const string` | Handle field |\n"
             "| `ws.close` | `(conn: WsConn, code?: int, reason?: string?): bool` | Close a WebSocket connection |\n"
             "| `ws.connect` | `(url: string, options?: Json): WsConn?` | Connect to a WebSocket server |\n"
             "| `ws.echoServe` | `(port: int): bool` | Pure C echo server with zero VM/GC overhead per message |\n"

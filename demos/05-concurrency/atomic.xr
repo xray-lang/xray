@@ -1,0 +1,63 @@
+// Demo: Atomic Operations
+// Lock-free shared state for int / float / bool.
+//
+// Run: xray demos/05-concurrency/atomic.xr
+
+// === Basic load / store / add / sub ===
+// Atomic<T> must be declared `shared const` so coroutines can capture it.
+shared const counter = Atomic(0)
+
+counter.store(10)
+print("initial: ${counter.load()}")        // 10
+
+counter.add(5)
+print("after +5: ${counter.load()}")       // 15
+
+counter.sub(3)
+print("after -3: ${counter.load()}")       // 12
+
+// === fetchAdd / fetchSub (return old value) ===
+let old = counter.fetchAdd(100)
+print("fetchAdd old=${old} now=${counter.load()}")    // 12, 112
+
+// === swap ===
+let prev = counter.swap(0)
+print("swap prev=${prev} now=${counter.load()}")      // 112, 0
+
+// === compareExchange (CAS) ===
+counter.store(42)
+let (was, ok) = counter.compareExchange(42, 99)
+print("CAS ok=${ok} was=${was} now=${counter.load()}")    // true, 42, 99
+
+let (was2, ok2) = counter.compareExchange(42, 0)
+print("CAS ok=${ok2} was=${was2} now=${counter.load()}")  // false, 99, 99
+
+// === Atomic<bool> toggle ===
+shared const flag = Atomic(false)
+print("flag before: ${flag.load()}")       // false
+let wasFalse = flag.toggle()
+print("toggle old=${wasFalse} now=${flag.load()}")    // false, true
+
+// === Concurrent counter — the typical use case ===
+shared const total = Atomic(0)
+
+scope {
+    for (i in 0..10) {
+        go fn() {
+            total.add(1)
+        }()
+    }
+}
+print("concurrent total: ${total.load()}")            // 10
+
+// === Atomic<float> ===
+shared const rate = Atomic(1.0)
+rate.add(0.5)
+print("rate: ${rate.load()}")              // 1.5
+
+// === Memory ordering (default: SeqCst) ===
+// All methods accept an optional Ordering enum.
+shared const data = Atomic(0)
+data.store(42, Ordering.Release)
+let val = data.load(Ordering.Acquire)
+print("ordered load: ${val}")              // 42
