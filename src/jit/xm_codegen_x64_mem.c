@@ -284,6 +284,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                         break;
                     }
                     default:
+                        XR_DCHECK(false, "x64 RT_* mem: unreachable float op");
                         break;
                 }
             } else {

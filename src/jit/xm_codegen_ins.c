@@ -214,6 +214,7 @@ static void a64_h_cmp_float(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             cc = A64_CC_LS;
             break;
         default:
+            XR_DCHECK(false, "a64_h_cmp_float: unreachable opcode");
             cc = A64_CC_AL;
             break;
     }
@@ -251,6 +252,7 @@ static void a64_h_cmp_int(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             cc = A64_CC_NE;
             break;
         default:
+            XR_DCHECK(false, "a64_h_cmp_int: unreachable opcode");
             cc = A64_CC_AL;
             break;
     }
@@ -427,8 +429,8 @@ XR_FUNC void a64_emit_xm_ins(CodegenCtx *ctx, XmIns *ins) {
         return;
     if (xm_emit_mem_ops(ctx, ins, rd))
         return;
-    xr_log_warning("jit", "unhandled Xm opcode %d in a64_emit_xm_ins", ins->op);
-    a64_buf_emit(&ctx->buf, a64_nop());
+    xr_log_warning("jit", "unhandled Xm opcode %d in a64_emit_xm_ins — hard fail", ins->op);
+    ctx->had_error = true;
 }
 
 #endif /* __aarch64__ */

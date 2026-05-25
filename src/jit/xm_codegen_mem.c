@@ -161,6 +161,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                         break;
                     }
                     default:
+                        XR_DCHECK(false, "a64 RT_* mem: unreachable float op");
                         break;
                 }
             } else {

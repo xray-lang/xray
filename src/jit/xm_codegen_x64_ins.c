@@ -404,6 +404,7 @@ static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             cc = X64_CC_GE;
             break;
         default:
+            XR_DCHECK(false, "x64_h_cmp_int: unreachable opcode");
             cc = X64_CC_E;
             break;
     }
@@ -490,6 +491,7 @@ static void x64_h_cmp_float(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_setcc(&ctx->buf, X64_CC_BE, rd);
             break;
         default:
+            XR_DCHECK(false, "x64_h_cmp_float: unreachable opcode");
             break;
     }
 }
@@ -629,6 +631,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
+            XR_DCHECK(false, "x64_h_subword: unreachable opcode");
             break;
     }
 }
@@ -729,6 +732,7 @@ static void x64_h_coro(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
+            XR_DCHECK(false, "x64_h_coro: unreachable opcode");
             break;
     }
 }
@@ -967,6 +971,7 @@ static void x64_h_guard(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
+            XR_DCHECK(false, "x64_h_guard: unreachable opcode");
             break;
     }
 }
@@ -1060,6 +1065,7 @@ static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 break;
             }
             default:
+                XR_DCHECK(false, "x64_h_rt_arith: unreachable float op");
                 break;
         }
     } else {
@@ -1723,8 +1729,7 @@ XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins) {
     if (handler) {
         handler(ctx, ins, rd);
     } else {
-        xr_log_warning("x64-cg", "unsupported Xm opcode %d", ins->op);
-        ctx->had_error = true;
+        CODEGEN_CHECK(ctx, false, "unhandled Xm opcode in x64 backend");
     }
 }
 

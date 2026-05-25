@@ -655,7 +655,7 @@ static A64Cond xm_cmp_to_false_cc(uint16_t op, bool *is_float) {
             *is_float = true;
             return A64_CC_HI;
         default:
-            return A64_CC_AL;
+            return A64_CC_AL; /* not a fusible comparison */
     }
 }
 
@@ -1365,6 +1365,7 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
             a64_buf_emit(&ctx->buf, 0xD4200020);  // BRK #1
             break;
         default:
+            XR_DCHECK(false, "emit_terminator: unhandled jump type");
             break;
     }
 }
