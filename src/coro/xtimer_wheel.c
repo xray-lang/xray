@@ -610,8 +610,8 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
 
         // Process this timer cancellation (zombie cleanup)
         XrTWheelTimer *timer = next->timer;
-        if (timer && atomic_load_explicit(&timer->state, memory_order_acquire) ==
-                         XR_TIMER_STATE_ZOMBIE &&
+        if (timer &&
+            atomic_load_explicit(&timer->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE &&
             timer->owner_worker_id == tw->owner_worker_id) {
             if (timer->slot != XR_TW_SLOT_INACTIVE) {
                 if (timer_is_in_slot(tw, timer, timer->slot)) {
@@ -622,8 +622,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
                     count++;
                 }
             } else {
-                atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE,
-                                      memory_order_release);
+                atomic_store_explicit(&timer->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
             }
         }
 

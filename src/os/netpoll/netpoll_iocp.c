@@ -39,7 +39,7 @@
 #include <stdbool.h>
 
 #define XR_AFD_READ_POLL_EVENTS                                                                    \
-    (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_DISCONNECT | AFD_POLL_ABORT |       \
+    (AFD_POLL_RECEIVE | AFD_POLL_RECEIVE_EXPEDITED | AFD_POLL_DISCONNECT | AFD_POLL_ABORT |        \
      AFD_POLL_LOCAL_CLOSE | AFD_POLL_ACCEPT)
 #define XR_AFD_WRITE_POLL_EVENTS (AFD_POLL_SEND | AFD_POLL_CONNECT_FAIL | AFD_POLL_LOCAL_CLOSE)
 
@@ -356,15 +356,15 @@ enum {
 };
 
 typedef struct XrIocpPdState {
-    IO_STATUS_BLOCK iosb;            // MUST be first; lpOverlapped recovery
-    XR_AFD_POLL_INFO poll_info;      // Submitted to NtDeviceIoControlFile
-    SOCKET base_socket;              // Resolved once on add_fd
-    uint32_t user_events;            // AFD event mask we want monitored
-    _Atomic uint32_t pending_events; // Snapshot at submit time (debug aid)
-    _Atomic uint8_t poll_status;     // XR_IOCP_POLL_*
-    _Atomic uint8_t in_update_queue; // 1 if linked into ctx->update_queue_head
-    uint8_t pad[6];                  // Explicit padding so update_link is 8-byte aligned
-    struct XrPollDesc *update_link;  // Intrusive single-linked stack
+    IO_STATUS_BLOCK iosb;             // MUST be first; lpOverlapped recovery
+    XR_AFD_POLL_INFO poll_info;       // Submitted to NtDeviceIoControlFile
+    SOCKET base_socket;               // Resolved once on add_fd
+    uint32_t user_events;             // AFD event mask we want monitored
+    _Atomic uint32_t pending_events;  // Snapshot at submit time (debug aid)
+    _Atomic uint8_t poll_status;      // XR_IOCP_POLL_*
+    _Atomic uint8_t in_update_queue;  // 1 if linked into ctx->update_queue_head
+    uint8_t pad[6];                   // Explicit padding so update_link is 8-byte aligned
+    struct XrPollDesc *update_link;   // Intrusive single-linked stack
 } XrIocpPdState;
 
 _Static_assert(sizeof(XrIocpPdState) <= XR_IOCP_PD_STATE_SIZE,

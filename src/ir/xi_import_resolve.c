@@ -24,6 +24,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
 /* ========== Canonical Path Resolution ========== */
 
 XR_FUNC const char *xi_resolve_import_canonical(const XrModuleGraph *graph,
