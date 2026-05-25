@@ -241,9 +241,9 @@ static void test_printer(void) {
 static void test_opcode_info(void) {
     fprintf(stderr, "  test_opcode_info...");
 
-    assert(strcmp(xm_op_name(XM_ADD), "add") == 0);
-    assert(strcmp(xm_op_name(XM_RET), "ret") == 0);
-    assert(strcmp(xm_op_name(XM_SAFEPOINT), "safepoint") == 0);
+    assert(strcmp(xm_op_name(XM_ADD), "ADD") == 0);
+    assert(strcmp(xm_op_name(XM_RET), "RET") == 0);
+    assert(strcmp(xm_op_name(XM_SAFEPOINT), "SAFEPOINT") == 0);
 
     assert(xm_op_is_commutative(XM_ADD));
     assert(xm_op_is_commutative(XM_MUL));
