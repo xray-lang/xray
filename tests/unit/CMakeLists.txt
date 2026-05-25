@@ -496,3 +496,24 @@ set_tests_properties(harness_no_tests PROPERTIES WILL_FAIL TRUE)
 add_test(NAME harness_mixed_pass_fail
          COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/mixed_pass_fail.xr)
 set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
+
+# ============================================================================
+# jit/ — x64 golden-bytes encoding verification (x86_64 only)
+# ============================================================================
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
+    add_custom_command(
+        OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_golden_gen.c
+        COMMAND python3 ${XISAGEN} golden
+                ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+                ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_golden_gen.c
+        DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+        COMMENT "xisagen: generating test_x64_golden_gen.c"
+    )
+    add_executable(test_x64_golden jit/test_x64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c)
+    target_include_directories(test_x64_golden PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/jit
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    add_test(NAME test_x64_golden COMMAND test_x64_golden)
+endif()
