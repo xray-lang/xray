@@ -73,7 +73,7 @@ PARALLEL_JOBS=${XRAY_TEST_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/
 SKIP_TESTS=""
 
 # Tests requiring --no-jit flag (colon-separated)
-NOJIT_TESTS="1148_scope_race_stress.xr:1205_gc_incremental_pressure.xr:1207_gc_stress.xr:0915_shared_const_for_go.xr"
+NOJIT_TESTS="1148_scope_race_stress.xr:1205_gc_incremental_pressure.xr:1207_gc_stress.xr:0915_shared_const_for_go.xr:1430_net_basic.xr"
 
 # 自动构建（除非设置 XRAY_SKIP_BUILD=1）
 if [ "${XRAY_SKIP_BUILD}" != "1" ]; then

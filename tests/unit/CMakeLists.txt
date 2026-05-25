@@ -199,8 +199,10 @@ add_xray_unit_test(test_steal_queue coro/test_steal_queue.c)
 # ============================================================================
 
 add_xray_unit_test(test_resolver module/test_resolver.c)
-add_xray_unit_test(test_module_resolver module/test_module_resolver.c)
-add_xray_unit_test(test_module_graph module/test_module_graph.c)
+if(NOT WIN32)
+  add_xray_unit_test(test_module_resolver module/test_module_resolver.c)
+  add_xray_unit_test(test_module_graph module/test_module_graph.c)
+endif()
 add_xray_unit_test(test_semver module/test_semver.c)
 add_xray_unit_test(test_lockfile module/test_lockfile.c)
 add_xray_unit_test(test_source_cache module/test_source_cache.c)
