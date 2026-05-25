@@ -55,11 +55,19 @@ char *xr_path_dirname(const char *path) {
     if (!path)
         return xr_strdup(".");
 
-    const char *last_slash = strrchr(path, '/');
+    const char *last_fwd = strrchr(path, '/');
+#ifdef _WIN32
+    const char *last_bwd = strrchr(path, '\\');
+    const char *last_slash = last_fwd;
+    if (!last_slash || (last_bwd && last_bwd > last_slash))
+        last_slash = last_bwd;
+#else
+    const char *last_slash = last_fwd;
+#endif
     if (!last_slash)
         return xr_strdup(".");
 
-    /* Handle root "/" */
+    /* Handle root "/" or "X:\" */
     if (last_slash == path)
         return xr_strdup("/");
 
