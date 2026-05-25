@@ -17,6 +17,25 @@ configure_file(
     @ONLY
 )
 
+# ============================================================================
+# XISA Code Generation (ops.def → xm_ops_gen.h)
+# ============================================================================
+# Build the xisagen host tool, then use it to regenerate the header.
+# The generated header is checked into git, so this only runs when ops.def changes.
+
+add_executable(xisagen EXCLUDE_FROM_ALL tools/xisagen/xisagen.c)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    COMMAND xisagen
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    DEPENDS xisagen ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMENT "xisagen: generating xm_ops_gen.h from ops.def"
+)
+
+add_custom_target(gen-xm-ops DEPENDS ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h)
+
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_compile_definitions(_GNU_SOURCE)
