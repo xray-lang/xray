@@ -41,6 +41,15 @@
 #include <stdbool.h>
 #include <limits.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#ifdef _WIN32
+#include <stdlib.h>
+#define realpath(path, resolved) _fullpath((resolved), (path), PATH_MAX)
+#endif
+
 /* Create a full-runtime isolate for AOT compilation.
  * Equivalent to XR_ISOLATE_PROFILE_RUN without depending on the
  * isolate-profile factory in src/api/. */
