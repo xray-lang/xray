@@ -1,0 +1,420 @@
+; xisa/arch/x64/isa.isa — x86-64 machine instruction schema
+;
+; Each (define-mcinsn ...) declares one machine instruction variant.
+; Fields:
+;   :operands       — typed operand list
+;   :constraints    — register constraints (same, fixed, etc.)
+;   :encoding       — byte sequence with encoding elements
+;   :flags          — instruction flags (call, branch, patchable, etc.)
+;   :min-bytes      — minimum encoded size
+;   :max-bytes      — maximum encoded size
+;   :golden-bytes   — known-good (register-set → hex-string) pairs
+;   :golden-asm     — disassembly (register-set → asm-string) pairs
+;   :decode-priority — disambiguation priority for overlapping encodings
+;   :external-reference — source of golden values (llvm-mc, gas, manual)
+
+; ==================================================================
+; Register class definitions
+; ==================================================================
+
+(define-regclass x64.gpr64
+  :regs (rax rcx rdx rbx rsp rbp rsi rdi r8 r9 r10 r11 r12 r13 r14 r15)
+  :encoding-bits 4)
+
+(define-regclass x64.gpr32
+  :regs (eax ecx edx ebx esp ebp esi edi r8d r9d r10d r11d r12d r13d r14d r15d)
+  :encoding-bits 4)
+
+; ==================================================================
+; ALU reg,reg (64-bit)
+; ==================================================================
+
+(define-mcinsn x64.add.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ((same $dst $src))
+  :encoding       (rex.w 0x01 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 01 d8")
+                   ((r12 r13) "4d 01 ec")
+                   ((rsp rbp) "48 01 ec"))
+  :golden-asm     (((rax rbx) "add rax, rbx")
+                   ((r12 r13) "add r12, r13"))
+  :decode-priority high
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.sub.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ((same $dst $src))
+  :encoding       (rex.w 0x29 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 29 d8")
+                   ((r12 r13) "4d 29 ec"))
+  :golden-asm     (((rax rbx) "sub rax, rbx"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.and.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ((same $dst $src))
+  :encoding       (rex.w 0x21 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 21 d8"))
+  :golden-asm     (((rax rbx) "and rax, rbx"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.or.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ((same $dst $src))
+  :encoding       (rex.w 0x09 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 09 d8"))
+  :golden-asm     (((rax rbx) "or rax, rbx"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.xor.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ((same $dst $src))
+  :encoding       (rex.w 0x31 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 31 d8")
+                   ((rax rax) "48 31 c0"))
+  :golden-asm     (((rax rbx) "xor rax, rbx")
+                   ((rax rax) "xor rax, rax"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.cmp.rr
+  :operands       (($lhs reg:gpr64) ($rhs reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0x39 (modrm 0b11 $rhs $lhs))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 39 d8"))
+  :golden-asm     (((rax rbx) "cmp rax, rbx"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.test.rr
+  :operands       (($lhs reg:gpr64) ($rhs reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0x85 (modrm 0b11 $rhs $lhs))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rax) "48 85 c0"))
+  :golden-asm     (((rax rax) "test rax, rax"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.imul.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0x0f 0xaf (modrm 0b11 $dst $src))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((rax rbx) "48 0f af c3"))
+  :golden-asm     (((rax rbx) "imul rax, rbx"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; ALU reg,imm
+; ==================================================================
+
+(define-mcinsn x64.add.ri32
+  :operands       (($dst reg:gpr64) ($imm imm:i32))
+  :constraints    ()
+  :encoding       (rex.w 0x81 (modrm 0b11 0 $dst) (imm32 $imm))
+  :flags          ()
+  :min-bytes      7
+  :max-bytes      7
+  :golden-bytes   (((rax 42) "48 81 c0 2a 00 00 00"))
+  :golden-asm     (((rax 42) "add rax, 42"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.add.ri8
+  :operands       (($dst reg:gpr64) ($imm imm:i8))
+  :constraints    ()
+  :encoding       (rex.w 0x83 (modrm 0b11 0 $dst) (imm8 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((rax 1) "48 83 c0 01")
+                   ((r12 -1) "49 83 c4 ff"))
+  :golden-asm     (((rax 1) "add rax, 1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.sub.ri8
+  :operands       (($dst reg:gpr64) ($imm imm:i8))
+  :constraints    ()
+  :encoding       (rex.w 0x83 (modrm 0b11 5 $dst) (imm8 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((rax 1) "48 83 e8 01"))
+  :golden-asm     (((rax 1) "sub rax, 1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.cmp.ri8
+  :operands       (($lhs reg:gpr64) ($imm imm:i8))
+  :constraints    ()
+  :encoding       (rex.w 0x83 (modrm 0b11 7 $lhs) (imm8 $imm))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((rax 0) "48 83 f8 00"))
+  :golden-asm     (((rax 0) "cmp rax, 0"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; MOV
+; ==================================================================
+
+(define-mcinsn x64.mov.rr
+  :operands       (($dst reg:gpr64) ($src reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0x89 (modrm 0b11 $src $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax rbx) "48 89 d8")
+                   ((r12 r13) "4d 89 ec"))
+  :golden-asm     (((rax rbx) "mov rax, rbx"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.mov.ri64
+  :operands       (($dst reg:gpr64) ($imm imm:i64))
+  :constraints    ()
+  :encoding       (rex.w (+ 0xb8 (reg3 $dst)) (imm64 $imm))
+  :flags          ()
+  :min-bytes      10
+  :max-bytes      10
+  :golden-bytes   (((rax 0) "48 b8 00 00 00 00 00 00 00 00")
+                   ((rbx 1) "48 bb 01 00 00 00 00 00 00 00"))
+  :golden-asm     (((rax 0) "movabs rax, 0"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Shift
+; ==================================================================
+
+(define-mcinsn x64.shl.rcl
+  :operands       (($dst reg:gpr64))
+  :constraints    ((fixed rcx))
+  :encoding       (rex.w 0xd3 (modrm 0b11 4 $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax) "48 d3 e0"))
+  :golden-asm     (((rax) "shl rax, cl"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.shr.rcl
+  :operands       (($dst reg:gpr64))
+  :constraints    ((fixed rcx))
+  :encoding       (rex.w 0xd3 (modrm 0b11 5 $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax) "48 d3 e8"))
+  :golden-asm     (((rax) "shr rax, cl"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.sar.rcl
+  :operands       (($dst reg:gpr64))
+  :constraints    ((fixed rcx))
+  :encoding       (rex.w 0xd3 (modrm 0b11 7 $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax) "48 d3 f8"))
+  :golden-asm     (((rax) "sar rax, cl"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Memory: Load / Store [base + disp32]
+; ==================================================================
+
+(define-mcinsn x64.load.bd32
+  :operands       (($dst reg:gpr64) ($base reg:gpr64) ($disp imm:i32))
+  :constraints    ()
+  :encoding       (rex.w 0x8b (modrm 0b10 $dst $base) (imm32 $disp))
+  :flags          (memory)
+  :min-bytes      7
+  :max-bytes      7
+  :golden-bytes   (((rax rbp 8) "48 8b 85 08 00 00 00"))
+  :golden-asm     (((rax rbp 8) "mov rax, [rbp+8]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.store.bd32
+  :operands       (($base reg:gpr64) ($disp imm:i32) ($src reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0x89 (modrm 0b10 $src $base) (imm32 $disp))
+  :flags          (memory)
+  :min-bytes      7
+  :max-bytes      7
+  :golden-bytes   (((rbp 8 rax) "48 89 85 08 00 00 00"))
+  :golden-asm     (((rbp 8 rax) "mov [rbp+8], rax"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Control Flow
+; ==================================================================
+
+(define-mcinsn x64.call.rel32
+  :operands       (($target imm:rel32))
+  :constraints    ()
+  :encoding       (0xe8 (rel32 $target))
+  :flags          (call patchable)
+  :min-bytes      5
+  :max-bytes      5
+  :golden-bytes   (((0) "e8 00 00 00 00"))
+  :golden-asm     (((0) "call 0x5"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.call.r
+  :operands       (($target reg:gpr64))
+  :constraints    ()
+  :encoding       (0xff (modrm 0b11 2 $target))
+  :flags          (call)
+  :min-bytes      2
+  :max-bytes      3
+  :golden-bytes   (((rax) "ff d0")
+                   ((r12) "41 ff d4"))
+  :golden-asm     (((rax) "call rax"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.ret
+  :operands       ()
+  :constraints    ()
+  :encoding       (0xc3)
+  :flags          (terminator)
+  :min-bytes      1
+  :max-bytes      1
+  :golden-bytes   ((() "c3"))
+  :golden-asm     ((() "ret"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.jmp.rel32
+  :operands       (($target imm:rel32))
+  :constraints    ()
+  :encoding       (0xe9 (rel32 $target))
+  :flags          (branch terminator patchable)
+  :min-bytes      5
+  :max-bytes      5
+  :golden-bytes   (((0) "e9 00 00 00 00"))
+  :golden-asm     (((0) "jmp 0x5"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.jcc.rel32
+  :operands       (($cc cc) ($target imm:rel32))
+  :constraints    ()
+  :encoding       (0x0f (+ 0x80 $cc) (rel32 $target))
+  :flags          (branch patchable)
+  :min-bytes      6
+  :max-bytes      6
+  :golden-bytes   (((4 0) "0f 84 00 00 00 00")    ; je
+                   ((5 0) "0f 85 00 00 00 00")     ; jne
+                   ((12 0) "0f 8c 00 00 00 00")    ; jl
+                   ((14 0) "0f 8e 00 00 00 00"))   ; jle
+  :golden-asm     (((4 0) "je 0x6")
+                   ((5 0) "jne 0x6"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Stack
+; ==================================================================
+
+(define-mcinsn x64.push.r
+  :operands       (($src reg:gpr64))
+  :constraints    ()
+  :encoding       ((+ 0x50 (reg3 $src)))
+  :flags          (stack)
+  :min-bytes      1
+  :max-bytes      2
+  :golden-bytes   (((rax) "50")
+                   ((rbp) "55")
+                   ((r12) "41 54"))
+  :golden-asm     (((rax) "push rax")
+                   ((rbp) "push rbp"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.pop.r
+  :operands       (($dst reg:gpr64))
+  :constraints    ()
+  :encoding       ((+ 0x58 (reg3 $dst)))
+  :flags          (stack)
+  :min-bytes      1
+  :max-bytes      2
+  :golden-bytes   (((rax) "58")
+                   ((rbp) "5d")
+                   ((r12) "41 5c"))
+  :golden-asm     (((rax) "pop rax")
+                   ((rbp) "pop rbp"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Miscellaneous
+; ==================================================================
+
+(define-mcinsn x64.nop
+  :operands       ()
+  :constraints    ()
+  :encoding       (0x90)
+  :flags          ()
+  :min-bytes      1
+  :max-bytes      1
+  :golden-bytes   ((() "90"))
+  :golden-asm     ((() "nop"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.int3
+  :operands       ()
+  :constraints    ()
+  :encoding       (0xcc)
+  :flags          (trap)
+  :min-bytes      1
+  :max-bytes      1
+  :golden-bytes   ((() "cc"))
+  :golden-asm     ((() "int3"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.neg.r
+  :operands       (($dst reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0xf7 (modrm 0b11 3 $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax) "48 f7 d8"))
+  :golden-asm     (((rax) "neg rax"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.not.r
+  :operands       (($dst reg:gpr64))
+  :constraints    ()
+  :encoding       (rex.w 0xf7 (modrm 0b11 2 $dst))
+  :flags          ()
+  :min-bytes      3
+  :max-bytes      3
+  :golden-bytes   (((rax) "48 f7 d0"))
+  :golden-asm     (((rax) "not rax"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.lea.bd32
+  :operands       (($dst reg:gpr64) ($base reg:gpr64) ($disp imm:i32))
+  :constraints    ()
+  :encoding       (rex.w 0x8d (modrm 0b10 $dst $base) (imm32 $disp))
+  :flags          ()
+  :min-bytes      7
+  :max-bytes      7
+  :golden-bytes   (((rax rbp 16) "48 8d 85 10 00 00 00"))
+  :golden-asm     (((rax rbp 16) "lea rax, [rbp+16]"))
+  :external-reference llvm-mc)

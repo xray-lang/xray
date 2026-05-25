@@ -32,10 +32,10 @@ typedef enum {
     XM_CLASS_GUARD = 10,
     XM_CLASS_CORO = 11,
     XM_CLASS_EH = 12,
-    XM_CLASS_ARC = 13,
-    XM_CLASS_UPVAL = 14,
-    XM_CLASS_SELECT = 15,
-    XM_CLASS_MISC = 16,
+    XM_CLASS_MISC = 13,
+    XM_CLASS_ARC = 14,
+    XM_CLASS_UPVAL = 15,
+    XM_CLASS_SELECT = 16,
     XM_CLASS__COUNT
 } XmOpClass;
 
