@@ -44,15 +44,6 @@ add_custom_command(
 )
 
 add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xisa_x64_emit.h
-    COMMAND python3 ${XISAGEN} isa
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-    COMMENT "xisagen: generating xisa_x64_emit.h from x64.isa"
-)
-
-add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
     COMMAND python3 ${XISAGEN} x64impl
             ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
@@ -64,7 +55,6 @@ add_custom_command(
 add_custom_target(gen-xm-ops DEPENDS
     ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xisa_x64_emit.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
 )
 
