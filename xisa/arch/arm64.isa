@@ -30,7 +30,7 @@
   :max-bytes      4
   :golden-bytes   (((x0 x1 x2) "ab 00 02 8b")
                    ((x3 x4 x5) "83 00 05 8b")
-                   ((x28 x29 x30) "bc 03 1e 8b"))
+                   ((x28 fp lr) "bc 03 1e 8b"))
   :golden-asm     (((x0 x1 x2) "add x0, x1, x2")
                    ((x3 x4 x5) "add x3, x4, x5"))
   :external-reference llvm-mc)
@@ -44,7 +44,7 @@
   :max-bytes      4
   :golden-bytes   (((x0 x1 x2) "20 00 02 cb")
                    ((x3 x4 x5) "83 00 05 cb")
-                   ((x28 x29 x30) "bc 03 1e cb"))
+                   ((x28 fp lr) "bc 03 1e cb"))
   :golden-asm     (((x0 x1 x2) "sub x0, x1, x2"))
   :external-reference llvm-mc)
 

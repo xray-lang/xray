@@ -1037,6 +1037,104 @@ def generate_emit_header(arch: str, regclasses: list[RegClass],
     return '\n'.join(lines)
 
 # ============================================================
+# L5: Typecheck — validate .isa internal consistency
+# ============================================================
+
+@dataclass
+class IsaDiag:
+    level: str   # "error" or "warn"
+    insn: str
+    msg: str
+
+def typecheck_isa(regclasses: list[RegClass], mcinsns: list[McInsn]) -> list[IsaDiag]:
+    """Validate internal consistency of parsed .isa definitions."""
+    diags = []
+
+    # Build register name set from all regclasses
+    all_regs = set()
+    for rc in regclasses:
+        for r in rc.regs:
+            all_regs.add(r)
+
+    # Build regclass name → RegClass map
+    rc_map = {rc.name: rc for rc in regclasses}
+
+    seen_names = set()
+    for insn in mcinsns:
+        # Duplicate name check
+        if insn.name in seen_names:
+            diags.append(IsaDiag('error', insn.name, 'duplicate mcinsn name'))
+        seen_names.add(insn.name)
+
+        # min/max bytes
+        if insn.min_bytes <= 0:
+            diags.append(IsaDiag('error', insn.name, ':min-bytes must be > 0'))
+        if insn.max_bytes < insn.min_bytes:
+            diags.append(IsaDiag('error', insn.name, ':max-bytes < :min-bytes'))
+
+        # Operand extraction
+        operands = extract_operands(insn)
+        op_names = {op.name for op in operands}
+
+        # Check encoding references valid operands
+        if insn.encoding:
+            enc_vars = _collect_variables(insn.encoding)
+            for var in enc_vars:
+                if var not in op_names:
+                    diags.append(IsaDiag('error', insn.name,
+                                         f'encoding references undefined operand {var}'))
+
+        # Golden bytes: at least 1 entry
+        if not insn.golden_bytes:
+            diags.append(IsaDiag('error', insn.name, 'no :golden-bytes entries'))
+
+        # Golden bytes: validate hex string format
+        for regs, hex_str in insn.golden_bytes:
+            hex_bytes = hex_str.split()
+            for hb in hex_bytes:
+                if len(hb) != 2 or not all(c in '0123456789abcdefABCDEF' for c in hb):
+                    diags.append(IsaDiag('error', insn.name,
+                                         f'invalid hex byte "{hb}" in :golden-bytes'))
+            # Check byte count vs min/max
+            n_bytes = len(hex_bytes)
+            if n_bytes < insn.min_bytes or n_bytes > insn.max_bytes:
+                diags.append(IsaDiag('warn', insn.name,
+                                     f'golden-bytes length {n_bytes} outside '
+                                     f'[{insn.min_bytes}, {insn.max_bytes}]'))
+
+        # Golden bytes: register names should be in regclass (if regs provided)
+        for regs, _ in insn.golden_bytes:
+            for r in regs:
+                # Skip numeric immediate values
+                try:
+                    int(r, 0)
+                    continue
+                except ValueError:
+                    pass
+                if r.startswith('-'):
+                    try:
+                        int(r, 0)
+                        continue
+                    except ValueError:
+                        pass
+                if all_regs and r not in all_regs:
+                    diags.append(IsaDiag('warn', insn.name,
+                                         f'golden-bytes register "{r}" not in any regclass'))
+
+    return diags
+
+def _collect_variables(node: SExpr) -> set[str]:
+    """Recursively collect all $variable names from an S-expression tree."""
+    result = set()
+    if isinstance(node, SAtom):
+        if node.is_variable:
+            result.add(node.value)
+    elif isinstance(node, SList):
+        for child in node.children:
+            result.update(_collect_variables(child))
+    return result
+
+# ============================================================
 # CLI
 # ============================================================
 
@@ -1086,6 +1184,17 @@ def cmd_isa(args: list[str]):
         if not insn.golden_bytes:
             die(f"{path}: {insn.name}: no :golden-bytes")
 
+    # Typecheck
+    diags = typecheck_isa(regclasses, mcinsns)
+    errors = [d for d in diags if d.level == 'error']
+    warns = [d for d in diags if d.level == 'warn']
+    for d in warns:
+        print(f"xisagen: warn: {d.insn}: {d.msg}", file=sys.stderr)
+    for d in errors:
+        print(f"xisagen: error: {d.insn}: {d.msg}", file=sys.stderr)
+    if errors:
+        die(f"{len(errors)} typecheck error(s) in {path}")
+
     # Generate emit header if output_dir given
     if output_dir:
         header = generate_emit_header(arch, regclasses, mcinsns)
@@ -1101,6 +1210,8 @@ def cmd_test(args: list[str]):
     _test_helpers_parser()
     _test_isa_parser()
     _test_emit_generator()
+    _test_typecheck()
+    _test_error_paths()
     print("All xisagen self-tests passed.", file=sys.stderr)
 
 def _test_sexpr_parser():
@@ -1260,6 +1371,106 @@ def _test_emit_generator():
     header = generate_emit_header('riscv64', rc, insns)
     assert 'xisa_emit_riscv64_add' in header
     assert 'r-type' not in header  # encoding format should not appear in output
+
+    print(" PASS", file=sys.stderr)
+
+def _test_typecheck():
+    print("  test_typecheck...", end='', file=sys.stderr)
+
+    # Valid definition — should produce no errors
+    text_ok = '''
+    (define-regclass x64.gpr64
+      :regs (rax rcx rdx rbx) :encoding-bits 4)
+    (define-mcinsn x64.add.rr
+      :operands (($dst reg:gpr64) ($src reg:gpr64))
+      :constraints () :flags () :min-bytes 3 :max-bytes 3
+      :encoding (rex.w 0x01 (modrm 0b11 $src $dst))
+      :golden-bytes (((rax rbx) "48 01 d8")))
+    '''
+    rc, insns = load_isa_text(text_ok)
+    diags = typecheck_isa(rc, insns)
+    errors = [d for d in diags if d.level == 'error']
+    assert len(errors) == 0, f"expected 0 errors, got {errors}"
+
+    # Undefined operand in encoding
+    text_bad_ref = '''
+    (define-mcinsn x64.bad
+      :operands (($dst reg:gpr64))
+      :constraints () :flags () :min-bytes 3 :max-bytes 3
+      :encoding (rex.w 0x01 (modrm 0b11 $ghost $dst))
+      :golden-bytes (((rax) "48 01 c0")))
+    '''
+    _, insns2 = load_isa_text(text_bad_ref)
+    diags2 = typecheck_isa([], insns2)
+    errs2 = [d for d in diags2 if d.level == 'error' and 'undefined operand' in d.msg]
+    assert len(errs2) == 1, f"expected 1 undefined-operand error, got {errs2}"
+
+    # Duplicate name
+    text_dup = '''
+    (define-mcinsn x64.dup :operands () :constraints () :flags ()
+      :min-bytes 1 :max-bytes 1 :encoding (0x90) :golden-bytes ((() "90")))
+    (define-mcinsn x64.dup :operands () :constraints () :flags ()
+      :min-bytes 1 :max-bytes 1 :encoding (0x90) :golden-bytes ((() "90")))
+    '''
+    _, insns3 = load_isa_text(text_dup)
+    diags3 = typecheck_isa([], insns3)
+    dup_errs = [d for d in diags3 if 'duplicate' in d.msg]
+    assert len(dup_errs) == 1
+
+    # max < min
+    text_range = '''
+    (define-mcinsn x64.bad_range :operands () :constraints () :flags ()
+      :min-bytes 5 :max-bytes 3 :encoding (0x90) :golden-bytes ((() "90")))
+    '''
+    _, insns4 = load_isa_text(text_range)
+    diags4 = typecheck_isa([], insns4)
+    range_errs = [d for d in diags4 if d.level == 'error' and 'max-bytes' in d.msg]
+    assert len(range_errs) == 1
+
+    # Bad hex in golden-bytes
+    text_hex = '''
+    (define-mcinsn x64.bad_hex :operands () :constraints () :flags ()
+      :min-bytes 1 :max-bytes 1 :encoding (0x90) :golden-bytes ((() "ZZ")))
+    '''
+    _, insns5 = load_isa_text(text_hex)
+    diags5 = typecheck_isa([], insns5)
+    hex_errs = [d for d in diags5 if d.level == 'error' and 'invalid hex' in d.msg]
+    assert len(hex_errs) == 1
+
+    print(" PASS", file=sys.stderr)
+
+def _test_error_paths():
+    print("  test_error_paths...", end='', file=sys.stderr)
+
+    # Unterminated string
+    try:
+        tokenize_sexpr('"hello', 'test')
+        assert False, "should have died"
+    except SystemExit:
+        pass
+
+    # Unclosed paren
+    try:
+        tokens = tokenize_sexpr('(a b', 'test')
+        parse_sexpr(tokens, 'test')
+        assert False, "should have died"
+    except SystemExit:
+        pass
+
+    # Unexpected )
+    try:
+        tokens = tokenize_sexpr(')', 'test')
+        parse_sexpr(tokens, 'test')
+        assert False, "should have died"
+    except SystemExit:
+        pass
+
+    # Unexpected character
+    try:
+        tokenize_sexpr('`', 'test')
+        assert False, "should have died"
+    except SystemExit:
+        pass
 
     print(" PASS", file=sys.stderr)
 
