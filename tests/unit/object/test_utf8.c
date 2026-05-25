@@ -9,7 +9,7 @@
  */
 
 #include "../test_framework.h"
-#include "runtime/object/xutf8.h"
+#include "base/xutf8.h"
 #include <string.h>
 
 /* ========== Decode Tests ========== */
