@@ -52,10 +52,20 @@ add_custom_command(
     COMMENT "xisagen: generating xm_x64_gen.c from x64.isa"
 )
 
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
+    COMMAND python3 ${XISAGEN} arm64impl
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+    COMMENT "xisagen: generating xm_arm64_gen.c from arm64.isa"
+)
+
 add_custom_target(gen-xm-ops DEPENDS
     ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
