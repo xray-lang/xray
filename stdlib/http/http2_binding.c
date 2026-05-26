@@ -24,6 +24,17 @@
 #include "../net/tls.h"
 #include <string.h>
 
+// clang-format off
+static const char TLS_UNAVAIL_MSG[] =
+    "HTTPS requires TLS support. Xray was built without OpenSSL"
+    " -- rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>";
+
+static void throw_tls_unavailable(XrayIsolate *X) {
+    XrValue exc = xr_exception_new(X, XR_ERR_TLS_UNAVAILABLE, TLS_UNAVAIL_MSG);
+    xr_vm_unwind_with_trace(X, exc);
+}
+// clang-format on
+
 // External declarations
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
@@ -204,13 +215,8 @@ XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
     }
 
     if (!resp) {
-        if (!xr_tls_is_available()) {
-            XrValue exc = xr_exception_new(
-                X, XR_ERR_TLS_UNAVAILABLE,
-                "HTTPS requires TLS support. Xray was built without OpenSSL "
-                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
-            xr_vm_unwind_with_trace(X, exc);
-        }
+        if (!xr_tls_is_available())
+            throw_tls_unavailable(X);
         return xr_null();
     }
 
@@ -235,13 +241,8 @@ XrValue h2_post(XrayIsolate *X, XrValue *args, int argc) {
     XrH2Response *resp = xr_h2_post(url, body, body_len, content_type);
 
     if (!resp) {
-        if (!xr_tls_is_available()) {
-            XrValue exc = xr_exception_new(
-                X, XR_ERR_TLS_UNAVAILABLE,
-                "HTTPS requires TLS support. Xray was built without OpenSSL "
-                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
-            xr_vm_unwind_with_trace(X, exc);
-        }
+        if (!xr_tls_is_available())
+            throw_tls_unavailable(X);
         return xr_null();
     }
 
@@ -288,13 +289,8 @@ XrValue h2_request(XrayIsolate *X, XrValue *args, int argc) {
         xr_free(headers);
 
     if (!resp) {
-        if (!xr_tls_is_available()) {
-            XrValue exc = xr_exception_new(
-                X, XR_ERR_TLS_UNAVAILABLE,
-                "HTTPS requires TLS support. Xray was built without OpenSSL "
-                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
-            xr_vm_unwind_with_trace(X, exc);
-        }
+        if (!xr_tls_is_available())
+            throw_tls_unavailable(X);
         return xr_null();
     }
 

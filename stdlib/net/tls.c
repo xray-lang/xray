@@ -704,11 +704,13 @@ void xr_tls_cleanup(void) {
 XrTlsContext *xr_tls_context_new_client(void) {
     if (!tls_warned) {
         tls_warned = 1;
+        // clang-format off
         fprintf(stderr,
-                "warning: TLS is not available — Xray was built without "
-                "OpenSSL. HTTPS connections will fail.\n"
-                "  Rebuild with: cmake -DENABLE_TLS=ON "
-                "-DOPENSSL_ROOT_DIR=<path-to-openssl>\n");
+            "warning: TLS is not available -- Xray was built without "
+            "OpenSSL. HTTPS connections will fail.\n"
+            "  Rebuild with: cmake -DENABLE_TLS=ON "
+            "-DOPENSSL_ROOT_DIR=<path-to-openssl>\n");
+        // clang-format on
     }
     return NULL;
 }
