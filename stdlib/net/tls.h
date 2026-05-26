@@ -37,6 +37,11 @@ typedef XrNetError XrTlsError;
 #define XR_TLS_ERR_CLOSED XR_NERR_CLOSED
 #define XR_TLS_ERR_VERIFY XR_NERR_TLS_VERIFY
 
+/* ========== Availability ========== */
+
+// Returns true if TLS support was compiled in (OpenSSL found at build time)
+XR_FUNC bool xr_tls_is_available(void);
+
 /* ========== Global Initialization ========== */
 
 // Initialize the TLS library (process-level, call once)

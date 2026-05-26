@@ -115,11 +115,12 @@
 #define XR_ERR_CORO_DEAD 460
 #define XR_ERR_CORO_CANCELLED 461
 
-/* ---- Runtime stdlib errors (E04xx, 470-479) ---- */
+/* ---- Runtime stdlib errors (E04xx, 470-489) ---- */
 #define XR_ERR_JSON_PARSE 470
 #define XR_ERR_JSON_INVALID 471
 #define XR_ERR_REGEX_COMPILE 475
 #define XR_ERR_REGEX_PATTERN 476
+#define XR_ERR_TLS_UNAVAILABLE 480
 
 /* ---- Module errors (E05xx) ---- */
 #define XR_ERR_MOD_NOT_FOUND 501
