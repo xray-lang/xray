@@ -131,13 +131,17 @@ jobs:
     steps:
     - name: Resolve release tag
       id: resolve_tag
+      env:
+        INPUT_RELEASE_TAG: ${{ github.event.inputs.release_tag }}
+        DISPATCH_RELEASE_TAG: ${{ github.event.client_payload.release_tag }}
+        REF_NAME: ${{ github.ref_name }}
       run: |
-        if [ -n "${{ github.event.client_payload.release_tag }}" ]; then
-          echo "tag=${{ github.event.client_payload.release_tag }}" >> "$GITHUB_OUTPUT"
-        elif [ -n "${{ inputs.release_tag }}" ]; then
-          echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+        if [ -n "$DISPATCH_RELEASE_TAG" ]; then
+          echo "tag=$DISPATCH_RELEASE_TAG" >> "$GITHUB_OUTPUT"
+        elif [ -n "$INPUT_RELEASE_TAG" ]; then
+          echo "tag=$INPUT_RELEASE_TAG" >> "$GITHUB_OUTPUT"
         else
-          echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
         fi
 
     - name: Download all artifacts
