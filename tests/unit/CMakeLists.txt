@@ -538,3 +538,18 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
     )
     add_test(NAME test_arm64_golden COMMAND test_arm64_golden)
 endif()
+
+# ============================================================================
+# jit/ — riscv64 golden-bytes encoding verification (cross-platform, pure math)
+# ============================================================================
+
+add_custom_command(
+    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_golden_gen.c
+    COMMAND python3 ${XISAGEN} golden
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_golden_gen.c
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating test_riscv64_golden_gen.c"
+)
+add_executable(test_riscv64_golden jit/test_riscv64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c)
+add_test(NAME test_riscv64_golden COMMAND test_riscv64_golden)

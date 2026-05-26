@@ -208,7 +208,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((x1 x2 0) "83 30 01 00")
-                   ((x10 x8 8) "03 b5 84 00")
+                   ((x10 x8 8) "03 35 84 00")
                    ((x1 x2 -8) "83 30 81 ff"))
   :golden-asm     (((x1 x2 0) "ld x1, 0(x2)")
                    ((x10 x8 8) "ld x10, 8(x8)"))
@@ -266,7 +266,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((x1 x2 0) "63 80 20 00")
-                   ((x10 x11 0) "63 05 b5 00"))
+                   ((x10 x11 0) "63 00 b5 00"))
   :golden-asm     (((x1 x2 0) "beq x1, x2, 0"))
   :external-reference riscv-spec)
 
@@ -278,7 +278,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((x1 x2 0) "63 90 20 00")
-                   ((x10 x11 0) "63 15 b5 00"))
+                   ((x10 x11 0) "63 10 b5 00"))
   :golden-asm     (((x1 x2 0) "bne x1, x2, 0"))
   :external-reference riscv-spec)
 
@@ -290,7 +290,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((x1 x2 0) "63 c0 20 00")
-                   ((x10 x11 0) "63 45 b5 00"))
+                   ((x10 x11 0) "63 40 b5 00"))
   :golden-asm     (((x1 x2 0) "blt x1, x2, 0"))
   :external-reference riscv-spec)
 
@@ -302,7 +302,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((x1 x2 0) "63 d0 20 00")
-                   ((x10 x11 0) "63 55 b5 00"))
+                   ((x10 x11 0) "63 50 b5 00"))
   :golden-asm     (((x1 x2 0) "bge x1, x2, 0"))
   :external-reference riscv-spec)
 
