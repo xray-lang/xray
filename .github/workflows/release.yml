@@ -74,12 +74,36 @@ jobs:
 
     - name: Package (Windows)
       if: runner.os == 'Windows'
+      shell: pwsh
       run: |
-        mkdir dist
-        copy build\Release\xray.exe dist\
-        xcopy stdlib dist\stdlib\ /E /I
-        copy README.md dist\ 2>nul || echo.
-        copy LICENSE dist\ 2>nul || echo.
+        New-Item -ItemType Directory -Path dist -Force | Out-Null
+        Copy-Item build\Release\xray.exe dist\
+        Copy-Item build\Release\*.dll dist\ -ErrorAction SilentlyContinue
+
+        $searchDirs = @()
+        if ($env:OPENSSL_ROOT_DIR) {
+          $searchDirs += Join-Path $env:OPENSSL_ROOT_DIR 'bin'
+        }
+        $searchDirs += @(
+          'C:\Program Files\OpenSSL\bin',
+          'C:\Program Files\OpenSSL-Win64\bin',
+          'C:\Program Files\FireDaemon OpenSSL 4\bin'
+        )
+        $searchDirs += ($env:PATH -split ';')
+        foreach ($pattern in @('libssl*.dll', 'libcrypto*.dll')) {
+          $dll = $searchDirs |
+            Where-Object { $_ -and (Test-Path $_) } |
+            ForEach-Object { Get-ChildItem -Path $_ -Filter $pattern -File -ErrorAction SilentlyContinue } |
+            Select-Object -First 1
+          if ($dll) {
+            Copy-Item $dll.FullName dist\ -Force
+            Write-Host "Copied $($dll.Name)"
+          }
+        }
+
+        Copy-Item stdlib dist\stdlib\ -Recurse
+        Copy-Item README.md dist\ -ErrorAction SilentlyContinue
+        Copy-Item LICENSE dist\ -ErrorAction SilentlyContinue
         Compress-Archive -Path dist\* -DestinationPath ${{ matrix.artifact }}.zip
 
     - name: Upload artifact
