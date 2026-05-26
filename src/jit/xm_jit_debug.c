@@ -98,6 +98,12 @@ XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
             fprintf(stderr, " %02x", bytes[off + j]);
         fprintf(stderr, "\n");
     }
+#elif defined(__riscv)
+    /* RISC-V: fixed 32-bit instructions — dump as hex words */
+    uint32_t n_inst = size / 4;
+    const uint32_t *insts = (const uint32_t *) code;
+    for (uint32_t i = 0; i < n_inst; i++)
+        fprintf(stderr, "  %04x:  %08x\n", i * 4, insts[i]);
 #endif
 
     fprintf(stderr, "===== end %s =====\n\n", name ? name : "?");
@@ -316,6 +322,9 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
 #elif defined(XR_OS_LINUX)
     fault_pc = (void *) uc->uc_mcontext.gregs[16];  // REG_RIP
 #endif
+#elif defined(__riscv) && defined(XR_OS_LINUX)
+    ucontext_t *uc = (ucontext_t *) ucontext;
+    fault_pc = (void *) uc->uc_mcontext.__gregs[0]; /* REG_PC */
 #endif
 
     // Try guard page safepoint first (returns true if handled).
@@ -368,6 +377,18 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                     fprintf(stderr, "\n");
                 }
             }
+#elif defined(__riscv)
+            {
+                uint32_t crash_inst = offset / 4;
+                uint32_t n_inst = r->code_size / 4;
+                uint32_t dstart = (crash_inst > 10) ? crash_inst - 10 : 0;
+                uint32_t dend = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
+                const uint32_t *code = (const uint32_t *) r->code;
+                for (uint32_t i = dstart; i < dend; i++) {
+                    fprintf(stderr, "  %s %04x:  %08x\n", (i == crash_inst) ? ">>>" : "   ", i * 4,
+                            code[i]);
+                }
+            }
 #endif
 
             /* Save full code dump to /tmp */
@@ -388,6 +409,11 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                         fprintf(f, " %02x", bytes[off + j]);
                     fprintf(f, "\n");
                 }
+#elif defined(__riscv)
+                uint32_t n_inst = r->code_size / 4;
+                const uint32_t *code = (const uint32_t *) r->code;
+                for (uint32_t i = 0; i < n_inst; i++)
+                    fprintf(f, "  %04x:  %08x\n", i * 4, code[i]);
 #endif
                 fclose(f);
                 fprintf(stderr, "[JIT-CRASH] Full dump saved to %s\n", fname);
