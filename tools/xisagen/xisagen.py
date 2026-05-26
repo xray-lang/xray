@@ -240,6 +240,96 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     return '\n'.join(lines)
 
 # ============================================================
+# L2b: isel.def parser + coverage validator
+# ============================================================
+
+@dataclass
+class IselEntry:
+    xm_op: str      # e.g. "ADD"
+    target: str     # "x64", "arm64", "riscv64"
+    pattern: str    # "GP_RRR", "CUSTOM", etc.
+    mcinsn: str     # primary machine instruction(s)
+    notes: str      # optional notes
+
+VALID_ISEL_PATTERNS = {
+    'GP_RR_COMM', 'GP_RR', 'GP_RRR', 'GP_R',
+    'FP_RR_COMM', 'FP_RR', 'FP_RRR', 'FP_R',
+    'CMP_RR_CC', 'FCMP_RR_CC',
+    'CONV', 'MEM_LOAD', 'MEM_STORE',
+    'CALL_HELPER', 'CUSTOM',
+}
+
+VALID_ISEL_TARGETS = {'x64', 'arm64', 'riscv64'}
+
+def parse_isel_def(text: str) -> list[IselEntry]:
+    entries = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        m = re.match(
+            r'ISEL\(\s*(\w+)\s*,\s*(\w+)\s*,\s*(\w+)\s*,\s*([^,)]+)'
+            r'(?:\s*,\s*"([^"]*)")?\s*\)',
+            line)
+        if not m:
+            continue
+        xm_op, target, pattern, mcinsn, notes = m.groups()
+        entries.append(IselEntry(
+            xm_op=xm_op, target=target.strip(),
+            pattern=pattern.strip(), mcinsn=mcinsn.strip(),
+            notes=notes or ''))
+    return entries
+
+def validate_isel(entries: list[IselEntry], ops: list[OpDef]) -> list[str]:
+    """Validate isel.def against ops.def. Returns list of error messages."""
+    errors = []
+    op_names = {o.name for o in ops}
+
+    for e in entries:
+        if e.xm_op not in op_names:
+            errors.append(f"ISEL references unknown op XM_{e.xm_op}")
+        if e.target not in VALID_ISEL_TARGETS:
+            errors.append(f"ISEL({e.xm_op}, {e.target}): unknown target")
+        if e.pattern not in VALID_ISEL_PATTERNS:
+            errors.append(f"ISEL({e.xm_op}, {e.target}): unknown pattern '{e.pattern}'")
+
+    # Check coverage: every op should have entries for all 3 targets
+    covered = {}
+    for e in entries:
+        covered.setdefault(e.xm_op, set()).add(e.target)
+    for op in ops:
+        targets = covered.get(op.name, set())
+        for t in VALID_ISEL_TARGETS:
+            if t not in targets:
+                errors.append(f"XM_{op.name} missing ISEL entry for target '{t}'")
+
+    return errors
+
+def isel_coverage_report(entries: list[IselEntry], ops: list[OpDef]) -> str:
+    """Generate a human-readable coverage report."""
+    lines = []
+    lines.append(f'isel coverage: {len(entries)} entries, {len(ops)} ops, '
+                 f'{len(VALID_ISEL_TARGETS)} targets')
+
+    # Count patterns
+    pattern_counts: dict[str, int] = {}
+    custom_count = 0
+    for e in entries:
+        pattern_counts[e.pattern] = pattern_counts.get(e.pattern, 0) + 1
+        if e.pattern == 'CUSTOM':
+            custom_count += 1
+    non_custom = len(entries) - custom_count
+    lines.append(f'  patterned: {non_custom}, custom: {custom_count}')
+
+    # Per-target summary
+    for t in sorted(VALID_ISEL_TARGETS):
+        t_entries = [e for e in entries if e.target == t]
+        t_custom = sum(1 for e in t_entries if e.pattern == 'CUSTOM')
+        lines.append(f'  {t}: {len(t_entries)} entries ({t_custom} custom)')
+
+    return '\n'.join(lines)
+
+# ============================================================
 # L3: S-expression lexer + parser for .isa files
 # ============================================================
 
@@ -2288,12 +2378,39 @@ def cmd_golden(args: list[str]):
     write_file(out_path, test_code)
     print(f"xisagen: generated {out_path}", file=sys.stderr)
 
+def cmd_isel(args: list[str]):
+    """Validate isel.def against ops.def and print coverage report.
+    Usage: xisagen isel <isel.def> <ops.def>"""
+    if len(args) < 2:
+        die('usage: xisagen isel <isel.def> <ops.def>')
+    isel_path, ops_path = args[0], args[1]
+    with open(isel_path) as f:
+        isel_text = f.read()
+    with open(ops_path) as f:
+        ops_text = f.read()
+    entries = parse_isel_def(isel_text)
+    ops = parse_ops_def(ops_text)
+    print(f"xisagen: parsed {len(entries)} ISEL entries from {isel_path}", file=sys.stderr)
+
+    errors = validate_isel(entries, ops)
+    for e in errors:
+        print(f"xisagen: error: {e}", file=sys.stderr)
+
+    report = isel_coverage_report(entries, ops)
+    print(report, file=sys.stderr)
+
+    if errors:
+        die(f"{len(errors)} isel validation error(s)")
+    else:
+        print("xisagen: isel validation passed", file=sys.stderr)
+
 def cmd_test(args: list[str]):
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
     _test_sexpr_parser()
     _test_ops_parser()
     _test_helpers_parser()
+    _test_isel_parser()
     _test_isa_parser()
     _test_emit_generator()
     _test_typecheck()
@@ -2364,6 +2481,37 @@ def _test_helpers_parser():
     header = generate_helpers_header(helpers)
     assert 'XM_HELPER_call_func = 0' in header
     assert 'XM_HF_GC | XM_HF_DEOPT' in header
+    print(" PASS", file=sys.stderr)
+
+def _test_isel_parser():
+    print("  test_isel_parser...", end='', file=sys.stderr)
+    isel_text = '''
+# comment
+ISEL(ADD,  x64,     GP_RR_COMM,  x64.add.rr)
+ISEL(ADD,  arm64,   GP_RRR,      arm64.add.rrr)
+ISEL(ADD,  riscv64, GP_RRR,      riscv64.add)
+ISEL(DIV,  x64,     CUSTOM,      x64.idiv.r, "RAX:RDX sequence")
+'''
+    entries = parse_isel_def(isel_text)
+    assert len(entries) == 4, f"expected 4, got {len(entries)}"
+    assert entries[0].xm_op == 'ADD'
+    assert entries[0].target == 'x64'
+    assert entries[0].pattern == 'GP_RR_COMM'
+    assert entries[3].notes == 'RAX:RDX sequence'
+
+    # Validate against minimal ops
+    ops_text = 'XM_OP(ADD, ARITH, 2, I64, COMMUTATIVE)\nXM_OP(DIV, ARITH, 2, I64, NONE)\n'
+    ops = parse_ops_def(ops_text)
+    errors = validate_isel(entries, ops)
+    # DIV is missing arm64 and riscv64 entries
+    assert any('DIV' in e and 'arm64' in e for e in errors)
+    assert any('DIV' in e and 'riscv64' in e for e in errors)
+    # ADD is complete
+    assert not any('ADD' in e and 'missing' in e for e in errors)
+
+    # Coverage report
+    report = isel_coverage_report(entries, ops)
+    assert 'isel coverage: 4 entries' in report
     print(" PASS", file=sys.stderr)
 
 def _test_isa_parser():
@@ -2577,6 +2725,7 @@ def main():
     commands = {
         'ops': cmd_ops,
         'helpers': cmd_helpers,
+        'isel': cmd_isel,
         'isa': cmd_isa,
         'x64impl': cmd_x64impl,
         'arm64impl': cmd_arm64impl,
