@@ -230,17 +230,42 @@
   :external-reference llvm-mc)
 
 (define-mcinsn arm64.movz
-  :operands       (($rd reg:gpr64) ($imm imm:u16))
+  :operands       (($rd reg:gpr64) ($imm imm:u16) ($shift imm:u8))
   :constraints    ()
-  :encoding       (0xd2800000 (field 0 5 $rd) (field 5 16 $imm))
+  :encoding       (0xd2800000 (field 0 5 $rd) (field 5 16 $imm) (field-scaled 21 2 $shift 16))
   :flags          ()
   :min-bytes      4
   :max-bytes      4
-  :golden-bytes   (((x0 0) "00 00 80 d2")
-                   ((x0 42) "40 05 80 d2")
-                   ((x1 0xFFFF) "e1 ff 9f d2"))
-  :golden-asm     (((x0 0) "mov x0, #0")
-                   ((x0 42) "mov x0, #42"))
+  :golden-bytes   (((x0 42 0) "40 05 80 d2")
+                   ((x0 0xFFFF 16) "e0 ff bf d2"))
+  :golden-asm     (((x0 42 0) "mov x0, #42")
+                   ((x0 0xFFFF 16) "movz x0, #0xffff, lsl #16"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.movk
+  :operands       (($rd reg:gpr64) ($imm imm:u16) ($shift imm:u8))
+  :constraints    ()
+  :encoding       (0xf2800000 (field 0 5 $rd) (field 5 16 $imm) (field-scaled 21 2 $shift 16))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 42 0) "40 05 80 f2")
+                   ((x0 0xFFFF 16) "e0 ff bf f2"))
+  :golden-asm     (((x0 42 0) "movk x0, #42")
+                   ((x0 0xFFFF 16) "movk x0, #0xffff, lsl #16"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.cset
+  :operands       (($rd reg:gpr64) ($cond cc))
+  :constraints    ()
+  :encoding       (0x9a9f07e0 (field 0 5 $rd) (field-xor 12 4 $cond 1))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 0) "e0 17 9f 9a")
+                   ((x0 1) "e0 07 9f 9a")
+                   ((x3 11) "e3 a7 9f 9a"))
+  :golden-asm     (((x0 0) "cset x0, eq"))
   :external-reference llvm-mc)
 
 ; ==================================================================
@@ -362,6 +387,184 @@
                    ((x3 fp -8) "a3 83 1f f8"))
   :golden-asm     (((x0 x1 0) "stur x0, [x1]")
                    ((x0 sp 8) "stur x0, [sp, #8]"))
+  :external-reference llvm-mc)
+
+; ==================================================================
+; Memory: Load / Store [base, #scaled_offset]
+; ==================================================================
+
+(define-mcinsn arm64.ldr
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xf9400000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 f9")
+                   ((x0 sp 8) "e0 07 40 f9")
+                   ((x3 fp 16) "a3 0b 40 f9"))
+  :golden-asm     (((x0 x1 0) "ldr x0, [x1]")
+                   ((x0 sp 8) "ldr x0, [sp, #8]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.str
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xf9000000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 f9")
+                   ((x0 sp 8) "e0 07 00 f9"))
+  :golden-asm     (((x0 x1 0) "str x0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.ldp
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xa9400000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field-scaled 15 7 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 sp 0) "e0 07 40 a9")
+                   ((x0 x1 sp 16) "e0 07 41 a9"))
+  :golden-asm     (((x0 x1 sp 0) "ldp x0, x1, [sp]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.stp
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xa9000000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field-scaled 15 7 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 sp 0) "e0 07 00 a9")
+                   ((x0 x1 sp 16) "e0 07 01 a9"))
+  :golden-asm     (((x0 x1 sp 0) "stp x0, x1, [sp]"))
+  :external-reference llvm-mc)
+
+; ---- 8-bit memory ----
+
+(define-mcinsn arm64.ldrb
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x39400000 (field 0 5 $rt) (field 5 5 $rn) (field 10 12 $offset))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 39")
+                   ((x0 sp 4) "e0 13 40 39"))
+  :golden-asm     (((x0 x1 0) "ldrb w0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.strb
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x39000000 (field 0 5 $rt) (field 5 5 $rn) (field 10 12 $offset))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 39"))
+  :golden-asm     (((x0 x1 0) "strb w0, [x1]"))
+  :external-reference llvm-mc)
+
+; ---- 16-bit memory ----
+
+(define-mcinsn arm64.ldrh
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x79400000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 2))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 79")
+                   ((x0 sp 4) "e0 0b 40 79"))
+  :golden-asm     (((x0 x1 0) "ldrh w0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.strh
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x79000000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 2))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 79"))
+  :golden-asm     (((x0 x1 0) "strh w0, [x1]"))
+  :external-reference llvm-mc)
+
+; ---- 32-bit memory ----
+
+(define-mcinsn arm64.ldr_w
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xb9400000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 4))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 b9")
+                   ((x0 sp 8) "e0 0b 40 b9"))
+  :golden-asm     (((x0 x1 0) "ldr w0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.str_w
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xb9000000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 4))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 b9"))
+  :golden-asm     (((x0 x1 0) "str w0, [x1]"))
+  :external-reference llvm-mc)
+
+; ---- FP memory (64-bit double) ----
+
+(define-mcinsn arm64.ldr_fp
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xfd400000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 fd")
+                   ((x0 sp 8) "e0 07 40 fd"))
+  :golden-asm     (((x0 x1 0) "ldr d0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.str_fp
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xfd000000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 fd"))
+  :golden-asm     (((x0 x1 0) "str d0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.stp_fp
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x6d000000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field-scaled 15 7 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 sp 0) "e0 07 00 6d")
+                   ((x0 x1 sp 16) "e0 07 01 6d"))
+  :golden-asm     (((x0 x1 sp 0) "stp d0, d1, [sp]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.ldp_fp
+  :operands       (($rt1 reg:gpr64) ($rt2 reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x6d400000 (field 0 5 $rt1) (field 5 5 $rn) (field 10 5 $rt2) (field-scaled 15 7 $offset 8))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 sp 0) "e0 07 40 6d")
+                   ((x0 x1 sp 16) "e0 07 41 6d"))
+  :golden-asm     (((x0 x1 sp 0) "ldp d0, d1, [sp]"))
   :external-reference llvm-mc)
 
 ; ==================================================================

@@ -99,6 +99,23 @@ uint32_t a64_mov(A64Reg rd, A64Reg rm) {
     return 0xaa0003e0u | ((uint32_t) rd & 0x1f) | (((uint32_t) rm & 0x1f) << 16);
 }
 
+/* arm64.movz */
+uint32_t a64_movz(A64Reg rd, uint16_t imm, uint8_t shift) {
+    return 0xd2800000u | ((uint32_t) rd & 0x1f) | (((uint32_t) imm & 0xffff) << 5) |
+           ((((uint32_t) shift / 16) & 0x3) << 21);
+}
+
+/* arm64.movk */
+uint32_t a64_movk(A64Reg rd, uint16_t imm, uint8_t shift) {
+    return 0xf2800000u | ((uint32_t) rd & 0x1f) | (((uint32_t) imm & 0xffff) << 5) |
+           ((((uint32_t) shift / 16) & 0x3) << 21);
+}
+
+/* arm64.cset */
+uint32_t a64_cset(A64Reg rd, A64Cond cond) {
+    return 0x9a9f07e0u | ((uint32_t) rd & 0x1f) | ((((uint32_t) cond ^ 1) & 0xf) << 12);
+}
+
 /* arm64.lsl.rrr */
 uint32_t a64_lsl(A64Reg rd, A64Reg rn, A64Reg rm) {
     return 0x9ac02000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
@@ -133,6 +150,90 @@ uint32_t a64_csel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
 uint32_t a64_fcsel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
     return 0x1e600c00u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
            (((uint32_t) cond & 0xf) << 12) | (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.ldr */
+uint32_t a64_ldr(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xf9400000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 8) & 0xfff) << 10);
+}
+
+/* arm64.str */
+uint32_t a64_str(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xf9000000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 8) & 0xfff) << 10);
+}
+
+/* arm64.ldp */
+uint32_t a64_ldp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
+    return 0xa9400000u | ((uint32_t) rt1 & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rt2 & 0x1f) << 10) | ((((uint32_t) offset / 8) & 0x7f) << 15);
+}
+
+/* arm64.stp */
+uint32_t a64_stp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
+    return 0xa9000000u | ((uint32_t) rt1 & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rt2 & 0x1f) << 10) | ((((uint32_t) offset / 8) & 0x7f) << 15);
+}
+
+/* arm64.ldrb */
+uint32_t a64_ldrb(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0x39400000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) offset & 0xfff) << 10);
+}
+
+/* arm64.strb */
+uint32_t a64_strb(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0x39000000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) offset & 0xfff) << 10);
+}
+
+/* arm64.ldrh */
+uint32_t a64_ldrh(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0x79400000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 2) & 0xfff) << 10);
+}
+
+/* arm64.strh */
+uint32_t a64_strh(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0x79000000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 2) & 0xfff) << 10);
+}
+
+/* arm64.ldr_w */
+uint32_t a64_ldr_w(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xb9400000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 4) & 0xfff) << 10);
+}
+
+/* arm64.str_w */
+uint32_t a64_str_w(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xb9000000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 4) & 0xfff) << 10);
+}
+
+/* arm64.ldr_fp */
+uint32_t a64_ldr_fp(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xfd400000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 8) & 0xfff) << 10);
+}
+
+/* arm64.str_fp */
+uint32_t a64_str_fp(A64Reg rt, A64Reg rn, int32_t offset) {
+    return 0xfd000000u | ((uint32_t) rt & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           ((((uint32_t) offset / 8) & 0xfff) << 10);
+}
+
+/* arm64.stp_fp */
+uint32_t a64_stp_fp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
+    return 0x6d000000u | ((uint32_t) rt1 & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rt2 & 0x1f) << 10) | ((((uint32_t) offset / 8) & 0x7f) << 15);
+}
+
+/* arm64.ldp_fp */
+uint32_t a64_ldp_fp(A64Reg rt1, A64Reg rt2, A64Reg rn, int32_t offset) {
+    return 0x6d400000u | ((uint32_t) rt1 & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rt2 & 0x1f) << 10) | ((((uint32_t) offset / 8) & 0x7f) << 15);
 }
 
 /* arm64.bl */

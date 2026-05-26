@@ -228,6 +228,48 @@ int main(void) {
         check_golden("arm64.mov.rr (x3 x4)", a64_mov(A64_X3, A64_X4), exp);
     }
 
+    /* arm64.movz: x0 42 0 → 40 05 80 d2 */
+    {
+        static const uint8_t exp[] = {0x40, 0x05, 0x80, 0xd2};
+        check_golden("arm64.movz (x0 42 0)", a64_movz(A64_X0, 42, 0), exp);
+    }
+
+    /* arm64.movz: x0 0xFFFF 16 → e0 ff bf d2 */
+    {
+        static const uint8_t exp[] = {0xe0, 0xff, 0xbf, 0xd2};
+        check_golden("arm64.movz (x0 0xFFFF 16)", a64_movz(A64_X0, 65535, 16), exp);
+    }
+
+    /* arm64.movk: x0 42 0 → 40 05 80 f2 */
+    {
+        static const uint8_t exp[] = {0x40, 0x05, 0x80, 0xf2};
+        check_golden("arm64.movk (x0 42 0)", a64_movk(A64_X0, 42, 0), exp);
+    }
+
+    /* arm64.movk: x0 0xFFFF 16 → e0 ff bf f2 */
+    {
+        static const uint8_t exp[] = {0xe0, 0xff, 0xbf, 0xf2};
+        check_golden("arm64.movk (x0 0xFFFF 16)", a64_movk(A64_X0, 65535, 16), exp);
+    }
+
+    /* arm64.cset: x0 0 → e0 17 9f 9a */
+    {
+        static const uint8_t exp[] = {0xe0, 0x17, 0x9f, 0x9a};
+        check_golden("arm64.cset (x0 0)", a64_cset(A64_X0, 0), exp);
+    }
+
+    /* arm64.cset: x0 1 → e0 07 9f 9a */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x9f, 0x9a};
+        check_golden("arm64.cset (x0 1)", a64_cset(A64_X0, 1), exp);
+    }
+
+    /* arm64.cset: x3 11 → e3 a7 9f 9a */
+    {
+        static const uint8_t exp[] = {0xe3, 0xa7, 0x9f, 0x9a};
+        check_golden("arm64.cset (x3 11)", a64_cset(A64_X3, 11), exp);
+    }
+
     /* arm64.lsl.rrr: x0 x1 x2 → 20 20 c2 9a */
     {
         static const uint8_t exp[] = {0x20, 0x20, 0xc2, 0x9a};
@@ -280,6 +322,156 @@ int main(void) {
     {
         static const uint8_t exp[] = {0x20, 0x0c, 0x62, 0x1e};
         check_golden("arm64.fcsel (x0 x1 x2 0)", a64_fcsel(A64_X0, A64_X1, A64_X2, 0), exp);
+    }
+
+    /* arm64.ldr: x0 x1 0 → 20 00 40 f9 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0xf9};
+        check_golden("arm64.ldr (x0 x1 0)", a64_ldr(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldr: x0 sp 8 → e0 07 40 f9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x40, 0xf9};
+        check_golden("arm64.ldr (x0 sp 8)", a64_ldr(A64_X0, A64_SP, 8), exp);
+    }
+
+    /* arm64.ldr: x3 fp 16 → a3 0b 40 f9 */
+    {
+        static const uint8_t exp[] = {0xa3, 0x0b, 0x40, 0xf9};
+        check_golden("arm64.ldr (x3 fp 16)", a64_ldr(A64_X3, A64_FP, 16), exp);
+    }
+
+    /* arm64.str: x0 x1 0 → 20 00 00 f9 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0xf9};
+        check_golden("arm64.str (x0 x1 0)", a64_str(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.str: x0 sp 8 → e0 07 00 f9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x00, 0xf9};
+        check_golden("arm64.str (x0 sp 8)", a64_str(A64_X0, A64_SP, 8), exp);
+    }
+
+    /* arm64.ldp: x0 x1 sp 0 → e0 07 40 a9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x40, 0xa9};
+        check_golden("arm64.ldp (x0 x1 sp 0)", a64_ldp(A64_X0, A64_X1, A64_SP, 0), exp);
+    }
+
+    /* arm64.ldp: x0 x1 sp 16 → e0 07 41 a9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x41, 0xa9};
+        check_golden("arm64.ldp (x0 x1 sp 16)", a64_ldp(A64_X0, A64_X1, A64_SP, 16), exp);
+    }
+
+    /* arm64.stp: x0 x1 sp 0 → e0 07 00 a9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x00, 0xa9};
+        check_golden("arm64.stp (x0 x1 sp 0)", a64_stp(A64_X0, A64_X1, A64_SP, 0), exp);
+    }
+
+    /* arm64.stp: x0 x1 sp 16 → e0 07 01 a9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x01, 0xa9};
+        check_golden("arm64.stp (x0 x1 sp 16)", a64_stp(A64_X0, A64_X1, A64_SP, 16), exp);
+    }
+
+    /* arm64.ldrb: x0 x1 0 → 20 00 40 39 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0x39};
+        check_golden("arm64.ldrb (x0 x1 0)", a64_ldrb(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrb: x0 sp 4 → e0 13 40 39 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x13, 0x40, 0x39};
+        check_golden("arm64.ldrb (x0 sp 4)", a64_ldrb(A64_X0, A64_SP, 4), exp);
+    }
+
+    /* arm64.strb: x0 x1 0 → 20 00 00 39 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0x39};
+        check_golden("arm64.strb (x0 x1 0)", a64_strb(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrh: x0 x1 0 → 20 00 40 79 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0x79};
+        check_golden("arm64.ldrh (x0 x1 0)", a64_ldrh(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrh: x0 sp 4 → e0 0b 40 79 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x0b, 0x40, 0x79};
+        check_golden("arm64.ldrh (x0 sp 4)", a64_ldrh(A64_X0, A64_SP, 4), exp);
+    }
+
+    /* arm64.strh: x0 x1 0 → 20 00 00 79 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0x79};
+        check_golden("arm64.strh (x0 x1 0)", a64_strh(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldr_w: x0 x1 0 → 20 00 40 b9 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0xb9};
+        check_golden("arm64.ldr_w (x0 x1 0)", a64_ldr_w(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldr_w: x0 sp 8 → e0 0b 40 b9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x0b, 0x40, 0xb9};
+        check_golden("arm64.ldr_w (x0 sp 8)", a64_ldr_w(A64_X0, A64_SP, 8), exp);
+    }
+
+    /* arm64.str_w: x0 x1 0 → 20 00 00 b9 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0xb9};
+        check_golden("arm64.str_w (x0 x1 0)", a64_str_w(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldr_fp: x0 x1 0 → 20 00 40 fd */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0xfd};
+        check_golden("arm64.ldr_fp (x0 x1 0)", a64_ldr_fp(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldr_fp: x0 sp 8 → e0 07 40 fd */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x40, 0xfd};
+        check_golden("arm64.ldr_fp (x0 sp 8)", a64_ldr_fp(A64_X0, A64_SP, 8), exp);
+    }
+
+    /* arm64.str_fp: x0 x1 0 → 20 00 00 fd */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0xfd};
+        check_golden("arm64.str_fp (x0 x1 0)", a64_str_fp(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.stp_fp: x0 x1 sp 0 → e0 07 00 6d */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x00, 0x6d};
+        check_golden("arm64.stp_fp (x0 x1 sp 0)", a64_stp_fp(A64_X0, A64_X1, A64_SP, 0), exp);
+    }
+
+    /* arm64.stp_fp: x0 x1 sp 16 → e0 07 01 6d */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x01, 0x6d};
+        check_golden("arm64.stp_fp (x0 x1 sp 16)", a64_stp_fp(A64_X0, A64_X1, A64_SP, 16), exp);
+    }
+
+    /* arm64.ldp_fp: x0 x1 sp 0 → e0 07 40 6d */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x40, 0x6d};
+        check_golden("arm64.ldp_fp (x0 x1 sp 0)", a64_ldp_fp(A64_X0, A64_X1, A64_SP, 0), exp);
+    }
+
+    /* arm64.ldp_fp: x0 x1 sp 16 → e0 07 41 6d */
+    {
+        static const uint8_t exp[] = {0xe0, 0x07, 0x41, 0x6d};
+        check_golden("arm64.ldp_fp (x0 x1 sp 16)", a64_ldp_fp(A64_X0, A64_X1, A64_SP, 16), exp);
     }
 
     /* arm64.bl: 0 → 00 00 00 94 */
@@ -524,7 +716,7 @@ int main(void) {
         check_golden("arm64.fcvtzs (x0 x1)", a64_fcvtzs(A64_X0, A64_X1), exp);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 83 total)\n", g_pass, g_fail);
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 115 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }
 
