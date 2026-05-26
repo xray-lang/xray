@@ -21,13 +21,15 @@
  *   The value pointer itself stays valid (arena-allocated).
  *
  * LIMITATIONS:
- *   - Only hoists pure arithmetic/comparison/bitwise values.
- *   - Does not hoist loads (Xi IR lacks field-level alias info).
+ *   - Hoists pure arithmetic/comparison/bitwise values.
+ *   - Hoists loads that are provably alias-free with all stores
+ *     and calls inside the loop body (using TBAA).
  *   - Requires a unique preheader; skips loops without one.
  */
 
 #include "xi_opt_licm.h"
 #include "xi_loop.h"
+#include "xi_tbaa.h"
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -85,6 +87,59 @@ static bool licm_is_pure(const XiValue *v) {
         default:
             return false;
     }
+}
+
+/* Forward declarations for helpers used across sections. */
+static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
+                             const bool *in_loop, uint32_t nblocks);
+
+/* ========== Alias-Aware Hoisting ========== */
+
+/* Check if a load is safe to hoist: its mem_group must not alias
+ * any store or call inside the loop body. */
+static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
+    if (!load || load->mem_group == XI_MEM_NONE)
+        return false;
+    /* Loads from immutable memory are always safe. */
+    if (xi_mem_is_const((XiMemGroup) load->mem_group))
+        return true;
+
+    for (uint32_t bi = 0; bi < L->nbody; bi++) {
+        const XiBlock *blk = L->body[bi];
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            /* Check stores and calls inside loop. */
+            if (xi_is_memory_store(v->op) || v->op == XI_CALL || v->op == XI_CALL_METHOD ||
+                v->op == XI_CALL_BUILTIN) {
+                if (xi_tbaa_may_alias(load, v))
+                    return false;
+            }
+        }
+    }
+    return true;
+}
+
+/* Combined hoistability check: pure ops OR alias-safe loads. */
+static bool licm_can_hoist_value(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
+                                 const bool *in_loop, uint32_t nblocks, const XiLoop *L) {
+    if (!v)
+        return false;
+
+    bool is_pure_op = licm_is_pure(v);
+    bool is_safe_load = !is_pure_op && xi_is_memory_load(v->op) &&
+                        !(v->flags & XI_FLAG_SIDE_EFFECT) && load_is_alias_safe(v, L);
+
+    if (!is_pure_op && !is_safe_load)
+        return false;
+
+    /* All operands must be defined outside the loop. */
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (!def_outside_loop(v->args[a], def_blk, max_id, in_loop, nblocks))
+            return false;
+    }
+    return true;
 }
 
 /* ========== Def-Block Mapping ========== */
@@ -214,17 +269,7 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
                 uint32_t write = 0;
                 for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
                     XiValue *v = blk->values[vi];
-                    bool can_hoist = false;
-
-                    if (v && licm_is_pure(v)) {
-                        can_hoist = true;
-                        for (uint16_t a = 0; a < v->nargs; a++) {
-                            if (!def_outside_loop(v->args[a], def_blk, max_id, in_loop, nblk)) {
-                                can_hoist = false;
-                                break;
-                            }
-                        }
-                    }
+                    bool can_hoist = licm_can_hoist_value(v, def_blk, max_id, in_loop, nblk, L);
 
                     if (can_hoist) {
                         /* Move to preheader */
