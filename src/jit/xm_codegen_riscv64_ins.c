@@ -530,6 +530,761 @@ static void rv64_h_nop(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     (void) rd;
 }
 
+/* ========== Tag Load ========== */
+
+static void rv64_h_tag_load(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    Rv64Reg ptr = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+    int32_t offset = 0;
+    if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[1]);
+        offset = (int32_t) ctx->func->consts[ci].val.i64;
+    }
+    rv64_buf_emit(&ctx->buf, rv64_lbu(rd, ptr, offset));
+}
+
+/* ========== Box / Unbox ========== */
+
+static void rv64_h_box(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    /* BOX is a no-op inside JIT (values are always raw/untagged) */
+    Rv64Reg rn = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+    if (rd != rn)
+        rv64_buf_emit(&ctx->buf, rv64_mv(rd, rn));
+}
+
+static void rv64_h_unbox_i64(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    uint8_t src_type = XR_REP_I64;
+    if (xm_ref_is_vreg(ins->args[0])) {
+        uint32_t vi = XM_REF_INDEX(ins->args[0]);
+        if (vi < ctx->func->nvreg)
+            src_type = ctx->func->vregs[vi].rep;
+    }
+    if (src_type == XR_REP_PTR) {
+        Rv64Reg ptr = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        rv64_buf_emit(&ctx->buf, rv64_ld(rd, ptr, XM_XRVALUE_PAYLOAD_OFFSET));
+    } else {
+        Rv64Reg rn = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        if (rd != rn)
+            rv64_buf_emit(&ctx->buf, rv64_mv(rd, rn));
+    }
+}
+
+static void rv64_h_unbox_f64(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    uint8_t src_type = XR_REP_F64;
+    if (xm_ref_is_vreg(ins->args[0])) {
+        uint32_t vi = XM_REF_INDEX(ins->args[0]);
+        if (vi < ctx->func->nvreg)
+            src_type = ctx->func->vregs[vi].rep;
+    }
+    if (src_type == XR_REP_PTR) {
+        Rv64Reg ptr = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
+        rv64_buf_emit(&ctx->buf, rv64_fld(fd, ptr, XM_XRVALUE_PAYLOAD_OFFSET));
+    } else {
+        Rv64Reg rn = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        if (rd != rn)
+            rv64_buf_emit(&ctx->buf, rv64_mv(rd, rn));
+    }
+}
+
+/* ========== Guard Ops ========== */
+
+static void rv64_h_guard(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    switch (ins->op) {
+        case XM_GUARD_TAG: {
+            Rv64Reg val_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, val_reg, XM_XRVALUE_TAG_OFFSET));
+            Rv64Reg exp_reg;
+            if (xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                int32_t expected = (int32_t) ctx->func->consts[ci].val.raw;
+                rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) expected);
+                exp_reg = RV64_SCRATCH_REG2;
+            } else {
+                exp_reg = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
+            }
+            /* Deopt if tag != expected */
+            rv64_buf_emit(&ctx->buf, rv64_sub(RV64_SCRATCH_REG, RV64_SCRATCH_REG, exp_reg));
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG);
+            break;
+        }
+        case XM_GUARD_BOUNDS: {
+            Rv64Reg idx_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            Rv64Reg len_reg = rv64_get_operand(ctx, ins->args[1],
+                                               idx_reg == RV64_SCRATCH_REG ? RV64_SCRATCH_REG2
+                                                                           : RV64_SCRATCH_REG);
+            /* Deopt if idx >= len (unsigned), i.e., BGEU idx, len -> deopt.
+             * Emit: SLTU tmp, idx, len; deopt if tmp == 0 (idx >= len) */
+            rv64_buf_emit(&ctx->buf, rv64_sltu(RV64_SCRATCH_REG, idx_reg, len_reg));
+            /* Invert: deopt when tmp == 0.  SEQZ + deopt_branch. */
+            rv64_buf_emit(&ctx->buf, rv64_seqz(RV64_SCRATCH_REG, RV64_SCRATCH_REG));
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG);
+            break;
+        }
+        case XM_GUARD_NONNULL: {
+            Rv64Reg val_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            /* Deopt if val == 0 (null) */
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, val_reg);
+            break;
+        }
+        case XM_GUARD_CLASS: {
+            Rv64Reg obj = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            rv64_buf_emit(&ctx->buf, rv64_lhu(RV64_SCRATCH_REG, obj, (int32_t) XM_GC_EXTRA_OFFSET));
+            Rv64Reg exp_reg;
+            if (xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                int32_t expected = (int32_t) ctx->func->consts[ci].val.raw;
+                rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) expected);
+                exp_reg = RV64_SCRATCH_REG2;
+            } else {
+                exp_reg = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
+            }
+            rv64_buf_emit(&ctx->buf, rv64_sub(RV64_SCRATCH_REG, RV64_SCRATCH_REG, exp_reg));
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG);
+            break;
+        }
+        case XM_GUARD_KLASS: {
+            Rv64Reg obj = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            rv64_buf_emit(&ctx->buf,
+                          rv64_ld(RV64_SCRATCH_REG, obj, (int32_t) XM_INSTANCE_KLASS_OFFSET));
+            if (xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                uint64_t expected = (uint64_t) ctx->func->consts[ci].val.i64;
+                rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, expected);
+            } else {
+                Rv64Reg exp = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
+                if (exp != RV64_SCRATCH_REG2)
+                    rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG2, exp));
+            }
+            rv64_buf_emit(&ctx->buf,
+                          rv64_sub(RV64_SCRATCH_REG, RV64_SCRATCH_REG, RV64_SCRATCH_REG2));
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG);
+            break;
+        }
+        case XM_TAG_CHECK: {
+            Rv64Reg val_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, val_reg, XM_XRVALUE_TAG_OFFSET));
+            if (xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                int32_t expected = (int32_t) ctx->func->consts[ci].val.raw;
+                rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) expected);
+            }
+            rv64_buf_emit(&ctx->buf,
+                          rv64_sub(RV64_SCRATCH_REG, RV64_SCRATCH_REG, RV64_SCRATCH_REG2));
+            rv64_emit_deopt_id(ctx, ins);
+            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG);
+            break;
+        }
+        default:
+            XR_DCHECK(false, "rv64_h_guard: unreachable opcode");
+            break;
+    }
+}
+
+/* ========== Deopt ========== */
+
+static void rv64_h_deopt(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    rv64_emit_deopt_id(ctx, ins);
+    rv64_emit_deopt_jmp(ctx);
+}
+
+/* ========== Safepoint ========== */
+
+static void rv64_h_safepoint(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    (void) ins;
+    uint32_t smap_id = rv64_record_safepoint(ctx);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) smap_id);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+    /* Touch safepoint page to allow GC stop-the-world via mprotect */
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, RV64_SCRATCH_REG, 0));
+}
+
+/* ========== Runtime Arithmetic (mixed int/float) ========== */
+
+static void rv64_h_rt_arith(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
+    if (xm_ref_is_vreg(ins->args[0])) {
+        uint32_t ai = XM_REF_INDEX(ins->args[0]);
+        if (ai < ctx->func->nvreg)
+            ta = ctx->func->vregs[ai].rep;
+    }
+    if (xm_ref_is_vreg(ins->args[1])) {
+        uint32_t bi = XM_REF_INDEX(ins->args[1]);
+        if (bi < ctx->func->nvreg)
+            tb = ctx->func->vregs[bi].rep;
+    }
+    XR_DCHECK(ins->op >= XM_RT_ADD && ins->op <= XM_RT_MOD, "rv64_h_rt_arith: bad op");
+
+    if ((ta == XR_REP_I64 || ta == XR_REP_F64) && (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+        /* Promote both to double */
+        Rv64Freg fa;
+        if (ta == XR_REP_F64) {
+            fa = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT10);
+        } else {
+            Rv64Reg ga = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            fa = RV64_FT10;
+            rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fa, ga));
+        }
+        Rv64Freg fb;
+        if (tb == XR_REP_F64) {
+            fb = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT11);
+        } else {
+            Rv64Reg gb = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG);
+            fb = RV64_FT11;
+            rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fb, gb));
+        }
+        Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
+        switch (ins->op) {
+            case XM_RT_ADD:
+                rv64_buf_emit(&ctx->buf, rv64_fadd_d(fd, fa, fb));
+                break;
+            case XM_RT_SUB:
+                rv64_buf_emit(&ctx->buf, rv64_fsub_d(fd, fa, fb));
+                break;
+            case XM_RT_MUL:
+                rv64_buf_emit(&ctx->buf, rv64_fmul_d(fd, fa, fb));
+                break;
+            case XM_RT_DIV:
+                rv64_buf_emit(&ctx->buf, rv64_fdiv_d(fd, fa, fb));
+                break;
+            case XM_RT_MOD: {
+                /* fmod: fd = fa - trunc(fa/fb) * fb */
+                rv64_buf_emit(&ctx->buf, rv64_fdiv_d(RV64_FT10, fa, fb));
+                rv64_buf_emit(&ctx->buf, rv64_fcvt_l_d(RV64_SCRATCH_REG, RV64_FT10));
+                rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(RV64_FT10, RV64_SCRATCH_REG));
+                rv64_buf_emit(&ctx->buf, rv64_fmul_d(RV64_FT10, RV64_FT10, fb));
+                rv64_buf_emit(&ctx->buf, rv64_fsub_d(fd, fa, RV64_FT10));
+                break;
+            }
+            default:
+                XR_DCHECK(false, "rv64_h_rt_arith: unreachable float op");
+                break;
+        }
+    } else {
+        /* Non-numeric types: deopt to interpreter */
+        rv64_emit_deopt_id(ctx, ins);
+        rv64_emit_deopt_jmp(ctx);
+    }
+}
+
+/* ========== Runtime Unary Minus ========== */
+
+static void rv64_h_rt_unm(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    uint8_t ta = XR_REP_I64;
+    if (xm_ref_is_vreg(ins->args[0])) {
+        uint32_t ai = XM_REF_INDEX(ins->args[0]);
+        if (ai < ctx->func->nvreg)
+            ta = ctx->func->vregs[ai].rep;
+    }
+    Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
+    if (ta == XR_REP_F64) {
+        Rv64Freg fa = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT10);
+        rv64_buf_emit(&ctx->buf, rv64_fneg_d(fd, fa));
+    } else {
+        Rv64Reg ga = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fd, ga));
+        rv64_buf_emit(&ctx->buf, rv64_fneg_d(fd, fd));
+    }
+}
+
+/* ========== Runtime Comparison ========== */
+
+static void rv64_h_rt_cmp(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    uint8_t ta = XR_REP_I64, tb = XR_REP_I64;
+    if (xm_ref_is_vreg(ins->args[0])) {
+        uint32_t ai = XM_REF_INDEX(ins->args[0]);
+        if (ai < ctx->func->nvreg)
+            ta = ctx->func->vregs[ai].rep;
+    }
+    if (xm_ref_is_vreg(ins->args[1])) {
+        uint32_t bi = XM_REF_INDEX(ins->args[1]);
+        if (bi < ctx->func->nvreg)
+            tb = ctx->func->vregs[bi].rep;
+    }
+
+    if ((ta == XR_REP_I64 || ta == XR_REP_F64) && (tb == XR_REP_I64 || tb == XR_REP_F64)) {
+        Rv64Freg fa;
+        if (ta == XR_REP_F64) {
+            fa = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT10);
+        } else {
+            Rv64Reg ga = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+            fa = RV64_FT10;
+            rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fa, ga));
+        }
+        Rv64Freg fb;
+        if (tb == XR_REP_F64) {
+            fb = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT11);
+        } else {
+            Rv64Reg gb = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG);
+            fb = RV64_FT11;
+            rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fb, gb));
+        }
+        /* RISC-V FP compare writes GPR directly */
+        switch (ins->op) {
+            case XM_RT_LT:
+                rv64_buf_emit(&ctx->buf, rv64_flt_d(rd, fa, fb));
+                break;
+            case XM_RT_LE:
+                rv64_buf_emit(&ctx->buf, rv64_fle_d(rd, fa, fb));
+                break;
+            case XM_RT_EQ:
+                rv64_buf_emit(&ctx->buf, rv64_feq_d(rd, fa, fb));
+                break;
+            default:
+                XR_DCHECK(false, "rv64_h_rt_cmp: unreachable cmp op");
+                break;
+        }
+    } else {
+        rv64_emit_deopt_id(ctx, ins);
+        rv64_emit_deopt_jmp(ctx);
+    }
+}
+
+/* ========== Runtime Collection New ========== */
+
+static void rv64_h_rt_collection(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    rv64_emit_ptr_spill_writeback(ctx);
+
+    uint32_t smap_id = rv64_record_safepoint(ctx);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) smap_id);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+
+    /* Store capacity to extra_arg scratch slot */
+    if (xm_ref_is_const(ins->args[0])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[0]);
+        uint64_t cval = (uint64_t) ctx->func->consts[ci].val.raw;
+        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, cval);
+    } else {
+        Rv64Reg r = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        if (r != RV64_SCRATCH_REG)
+            rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, r));
+    }
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
+
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
+
+    void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
+                                            : (void *) (uintptr_t) xr_jit_rt_map_new;
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
+
+    rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_call_c = true;
+
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t dvi = XM_REF_INDEX(ins->dst);
+        if (rd != RV64_A0)
+            rv64_buf_emit(&ctx->buf, rv64_mv(rd, RV64_A0));
+        if (dvi < ctx->func->nvreg && dvi < XR_JIT_MAX_VREG_TAGS) {
+            int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) dvi;
+            rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, XR_TAG_PTR);
+            rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, tag_off));
+        }
+    }
+}
+
+/* ========== Runtime Array Push ========== */
+
+static void rv64_h_rt_array_push(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    rv64_emit_ptr_spill_writeback(ctx);
+
+    uint32_t smap_id = rv64_record_safepoint(ctx);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) smap_id);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+
+    /* Store array (arg0) and element (arg1) to call_args[0..1] */
+    int32_t ca0 = (int32_t) XM_JIT_CALL_ARGS_OFFSET;
+    Rv64Reg arr_r = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+    rv64_buf_emit(&ctx->buf, rv64_sd(arr_r, RV64_JIT_CTX_REG, ca0));
+
+    int32_t ca1 = (int32_t) (XM_JIT_CALL_ARGS_OFFSET + 8);
+    if (xm_ref_is_const(ins->args[1])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[1]);
+        uint64_t cval = (uint64_t) ctx->func->consts[ci].val.raw;
+        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, cval);
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, ca1));
+    } else {
+        Rv64Reg vr = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG);
+        rv64_buf_emit(&ctx->buf, rv64_sd(vr, RV64_JIT_CTX_REG, ca1));
+    }
+
+    /* Pack call_arg_tags: tag0=PTR, tag1 from compile-time info */
+    uint8_t t0 = XR_TAG_PTR;
+    uint8_t t1 = XR_RTAG_UNKNOWN;
+    if (xm_ref_is_const(ins->args[1])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[1]);
+        t1 = rv64_const_rep_to_value_tag(ctx->func->consts[ci].rep);
+    } else {
+        XmType ct = xm_ref_ctype(ctx->func, ins->args[1]);
+        uint8_t vk = type_kind_to_vtag(ct.kind);
+        if (vtag_is_concrete(vk))
+            t1 = vtag_to_value_tag(vk);
+    }
+    uint64_t tpk = (uint64_t) t0 | ((uint64_t) t1 << 8);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, tpk);
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET));
+
+    /* Dynamic tag patch for unknown element tag */
+    if (t1 == XR_RTAG_UNKNOWN && xm_ref_is_vreg(ins->args[1])) {
+        uint32_t ai = XM_REF_INDEX(ins->args[1]);
+        if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+            int32_t soff = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+            int32_t doff = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + 1;
+            rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, soff));
+            rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, doff));
+        }
+    }
+
+    /* Clear extra_arg and deopt_id */
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
+
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+
+    rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_call_c = true;
+}
+
+/* ========== Runtime Simple Ops (ISNULL, PRINT, ARRAY_LEN, INDEX_GET/SET) ========== */
+
+static bool rv64_isnull_uses_runtime_tag(Rv64CodegenCtx *ctx, XmRef ref, uint32_t *out_vi) {
+    if (!xm_ref_is_vreg(ref))
+        return false;
+    uint32_t vi = XM_REF_INDEX(ref);
+    if (vi >= ctx->func->nvreg || vi >= XR_JIT_MAX_VREG_TAGS)
+        return false;
+    if (ctx->func->vregs[vi].rep == XR_REP_TAGGED) {
+        *out_vi = vi;
+        return true;
+    }
+    XmType ct = xm_ref_ctype(ctx->func, ref);
+    if (ct.kind != XM_TK_TAGGED)
+        return false;
+    XmIns *def = ctx->func->vregs[vi].def;
+    if (!def) {
+        *out_vi = vi;
+        return true;
+    }
+    switch (def->op) {
+        case XM_CALL_C:
+        case XM_CALL_KNOWN:
+        case XM_CALL_KNOWN_REG:
+        case XM_CALL_DIRECT:
+        case XM_CALL_SELF_DIRECT:
+            *out_vi = vi;
+            return true;
+        default:
+            return false;
+    }
+}
+
+static void rv64_h_rt_simple(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    if (ins->op == XM_RT_ISNULL) {
+        if (xm_ref_is_vreg(ins->args[0])) {
+            XmType ct = xm_ref_ctype(ctx->func, ins->args[0]);
+            if (ct.kind == XM_TK_NULL) {
+                rv64_load_imm64(&ctx->buf, rd, 1);
+                return;
+            }
+            if (ct.kind == XM_TK_INT || ct.kind == XM_TK_FLOAT || ct.kind == XM_TK_BOOL) {
+                rv64_load_imm64(&ctx->buf, rd, 0);
+                return;
+            }
+            uint32_t vi = 0;
+            if (rv64_isnull_uses_runtime_tag(ctx, ins->args[0], &vi)) {
+                int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+                rv64_buf_emit(&ctx->buf, rv64_lbu(rd, RV64_JIT_CTX_REG, tag_off));
+                /* rd = (rd == XR_TAG_NULL) ? 1 : 0.  XR_TAG_NULL == 0, so SEQZ. */
+                rv64_buf_emit(&ctx->buf, rv64_seqz(rd, rd));
+                return;
+            }
+        }
+        Rv64Reg val = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+        /* rd = (val == 0) ? 1 : 0 */
+        rv64_buf_emit(&ctx->buf, rv64_seqz(rd, val));
+    } else {
+        /* RT_PRINT, RT_ARRAY_LEN, RT_INDEX_GET, RT_INDEX_SET:
+         * These are lowered to CALL_C by the builder. If they reach
+         * codegen, emit a NOP so branch offsets stay valid. */
+        xr_log_debug("rv64-cg", "RT opcode %d fell through to NOP (expected CALL_C)", ins->op);
+        rv64_buf_emit(&ctx->buf, rv64_nop());
+    }
+}
+
+/* ========== Write Barriers ========== */
+
+static void rv64_h_barrier_fwd(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    Rv64Reg parent_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+    Rv64Reg child_reg = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
+    if (parent_reg != RV64_SCRATCH_REG)
+        rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, parent_reg));
+    if (child_reg != RV64_SCRATCH_REG2)
+        rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG2, child_reg));
+    rv64_add_patch(ctx, RV64_PATCH_BARRIER_FWD, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_barriers = true;
+}
+
+static void rv64_h_barrier_back(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    Rv64Reg container_reg = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
+    if (container_reg != RV64_SCRATCH_REG)
+        rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, container_reg));
+    rv64_add_patch(ctx, RV64_PATCH_BARRIER_BACK, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_barriers = true;
+}
+
+/* ========== GC Allocation ========== */
+
+static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    uint8_t gc_type = 0;
+    uint16_t gc_extra = 0;
+    uint32_t alloc_size = 0;
+    if (xm_ref_is_const(ins->args[0])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[0]);
+        int64_t packed_const = ctx->func->consts[ci].val.i64;
+        gc_type = (uint8_t) (packed_const & 0xFF);
+        gc_extra = (uint16_t) ((packed_const >> 8) & 0xFFFF);
+    }
+    if (xm_ref_is_const(ins->args[1])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[1]);
+        alloc_size = (uint32_t) ctx->func->consts[ci].val.i64;
+    }
+    alloc_size = (alloc_size + 7) & ~7u;
+    RV64_CODEGEN_CHECK(ctx, alloc_size > 0 && alloc_size < 65536, "alloc_size OOB");
+
+    /* Slow path via C helper: pack type_and_size into extra_arg, call xr_jit_alloc */
+    rv64_emit_ptr_spill_writeback(ctx);
+
+    uint32_t smap_id = rv64_record_safepoint(ctx);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) smap_id);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+
+    uint64_t type_and_size = ((uint64_t) alloc_size << 32) | ((uint64_t) gc_extra << 8) | gc_type;
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, type_and_size);
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
+
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
+
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_alloc);
+    rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_call_c = true;
+
+    /* Result (pointer) is in a0 */
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t dvi = XM_REF_INDEX(ins->dst);
+        if (rd != RV64_A0)
+            rv64_buf_emit(&ctx->buf, rv64_mv(rd, RV64_A0));
+        if (dvi < ctx->func->nvreg && dvi < XR_JIT_MAX_VREG_TAGS) {
+            int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) dvi;
+            rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, XR_TAG_PTR);
+            rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, tag_off));
+        }
+    }
+}
+
+/* ========== Catch ========== */
+
+static void rv64_h_catch(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    int16_t spill_slot = -1;
+    rv64_buf_emit(&ctx->buf, rv64_ld(rd, RV64_JIT_CTX_REG, (int32_t) XM_JIT_EXCEPTION_OFFSET));
+    if (rd == RV64_SCRATCH_REG && xm_ref_is_vreg(ins->dst)) {
+        uint32_t dvi = XM_REF_INDEX(ins->dst);
+        spill_slot = xra_vreg_spill(ctx->xra, dvi);
+        if (spill_slot >= 0) {
+            int32_t spill_off = -(int32_t) (RV64_SPILL_BASE + (uint32_t) spill_slot * 8);
+            rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_FP, spill_off));
+        }
+    }
+    /* Clear exception slot */
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_EXCEPTION_OFFSET));
+    /* Tag result as PTR */
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t dvi = XM_REF_INDEX(ins->dst);
+        if (dvi < ctx->func->nvreg && dvi < XR_JIT_MAX_VREG_TAGS) {
+            int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) dvi;
+            rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, XR_TAG_PTR);
+            rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG, tag_off));
+        }
+    }
+    if (rd == RV64_SCRATCH_REG && spill_slot >= 0) {
+        int32_t spill_off = -(int32_t) (RV64_SPILL_BASE + (uint32_t) spill_slot * 8);
+        rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_FP, spill_off));
+    }
+}
+
+/* ========== Suspend (coroutine await/channel) ========== */
+
+static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    uint32_t suspend_id = 0;
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t vi = XM_REF_INDEX(ins->dst);
+        if (vi < ctx->func->nvreg)
+            suspend_id = ctx->func->vregs[vi].call_arg_start;
+    }
+
+    int64_t discard_result = 0;
+    if (xm_ref_is_const(ins->args[1])) {
+        uint32_t ci = XM_REF_INDEX(ins->args[1]);
+        discard_result = ctx->func->consts[ci].val.i64;
+    }
+
+    uint32_t smap_id = rv64_record_safepoint(ctx);
+
+    /* t6 = coro->jit_suspend */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
+    RV64_CODEGEN_CHECK(ctx, suspend_id < 16, "suspend_id out of range");
+
+    /* Save caller-saved GP regs to suspend state */
+    extern const Rv64Reg rv64_alloc_regs[];
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < 21; i++)
+        rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SCRATCH_REG, i * 8));
+
+    /* Save callee-saved GP regs */
+    extern const Rv64Reg rv64_callee_saved_regs[];
+    for (int i = 0; i < RV64_NGPR_CALLEE_SAVE_ALLOC; i++)
+        rv64_buf_emit(&ctx->buf,
+                      rv64_sd(rv64_alloc_regs[RV64_NGPR_CALLER_SAVE + i], RV64_SCRATCH_REG,
+                              (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8));
+
+    /* Save spill slots */
+    {
+        uint32_t ns = ctx->xra ? ctx->xra->nspill : 0;
+        if (ns > XM_SUSPEND_SPILL_MAX)
+            ns = XM_SUSPEND_SPILL_MAX;
+        for (uint32_t s = 0; s < ns; s++) {
+            int32_t frame_off = -(int32_t) (RV64_SPILL_BASE + s * 8);
+            int32_t regs_off = (int32_t) (XM_SUSPEND_SPILL_OFF + s * 8);
+            rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG2, RV64_FP, frame_off));
+            rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG2, RV64_SCRATCH_REG, regs_off));
+        }
+    }
+
+    /* Store suspend_id and smap_id */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) suspend_id);
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sw(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET));
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) smap_id);
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sw(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_SMAP_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
+
+    /* Pre-store resume info */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_RESUME_PROTO_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG2, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_PROTO_JIT_RESUME_ENTRY_OFFSET));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_RESUME_ENTRY_OFFSET));
+
+    /* Call block_helper(coro, extra_arg) via JALR */
+    void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
+    int64_t helper_extra_arg = 0;
+    if (!block_helper) {
+        block_helper = (void *) xr_jit_await_block;
+        helper_extra_arg = discard_result;
+    }
+    rv64_buf_emit(&ctx->buf, rv64_mv(RV64_A0, RV64_CORO_REG));
+    rv64_load_imm64(&ctx->buf, RV64_A1, (uint64_t) helper_extra_arg);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) (uintptr_t) block_helper);
+    rv64_buf_emit(&ctx->buf, rv64_jalr(RV64_RA, RV64_SCRATCH_REG2, 0));
+
+    /* Check result: a0 == 0 -> blocked (return SUSPEND_MARKER),
+     * a0 != 0 -> inline resume */
+    uint32_t bne_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_bne(RV64_A0, RV64_X0, 0)); /* placeholder, patched below */
+
+    /* Blocked path: return SUSPEND_MARKER via epilogue */
+    rv64_load_imm64(&ctx->buf, RV64_A0, (uint64_t) XM_SUSPEND_MARKER);
+    rv64_emit_epilogue(ctx);
+
+    /* Patch BNE to skip to not-blocked path */
+    int32_t bne_off = (int32_t) (ctx->buf.count - bne_idx) * 4;
+    ctx->buf.code[bne_idx] = rv64_bne(RV64_A0, RV64_X0, bne_off);
+
+    /* Not-blocked: reload suspend pointer (clobbered by CALL) */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
+
+    /* Reload caller-saved GP regs */
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < 21; i++)
+        rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SCRATCH_REG, i * 8));
+
+    /* Load await/channel result into dst */
+    if (rd != RV64_SCRATCH_REG) {
+        rv64_buf_emit(&ctx->buf, rv64_ld(rd, RV64_SCRATCH_REG, (int32_t) XM_SUSPEND_RESULT_OFF));
+    }
+
+    /* Load result_tag -> runtime_tags[vreg] */
+    {
+        int32_t res_vreg_off = -1;
+        int16_t res_bc_slot = -1;
+        if (xm_ref_is_vreg(ins->dst)) {
+            uint32_t vi = XM_REF_INDEX(ins->dst);
+            if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)
+                res_vreg_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) vi;
+            if (vi < ctx->func->nvreg)
+                res_bc_slot = ctx->func->vregs[vi].bc_slot;
+        }
+        if (res_vreg_off >= 0) {
+            rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG2, RV64_SCRATCH_REG,
+                                              (int32_t) XM_SUSPEND_RESULT_TAG_OFF));
+            rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG, res_vreg_off));
+        }
+        if (suspend_id < 16) {
+            ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
+            ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
+        }
+    }
+
+    /* Record continuation for resume entry jump table */
+    if (suspend_id < 16) {
+        ctx->suspend_cont_offsets[suspend_id] = rv64_buf_offset(&ctx->buf);
+        ctx->suspend_smap_ids[suspend_id] = smap_id;
+        ctx->suspend_result_regs[suspend_id] =
+            (uint8_t) (xm_ref_is_vreg(ins->dst) ? rd : RV64_SCRATCH_REG);
+        if (suspend_id >= ctx->nsuspend)
+            ctx->nsuspend = suspend_id + 1;
+    }
+}
+
+/* ========== Float sub-word load/store ========== */
+
+static void rv64_h_f32(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    /* f32 load/store are rare in practice; bail to interpreter for now */
+    rv64_emit_deopt_id(ctx, ins);
+    rv64_emit_deopt_jmp(ctx);
+}
+
 /* ========== Call Handler Wrapper ========== */
 
 static void rv64_h_call(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -538,9 +1293,6 @@ static void rv64_h_call(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 }
 
 /* ========== Stub Handlers (to be implemented) ========== */
-
-/* These handlers emit a bail for now — they will be fleshed out
- * when the full RISC-V JIT pipeline is brought up. */
 
 static void rv64_h_stub(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     (void) ins;
@@ -617,8 +1369,8 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
     [XM_LOAD32Z] = rv64_h_subword,
     [XM_LOAD32S] = rv64_h_subword,
     [XM_STORE32] = rv64_h_subword,
-    [XM_LOAD_F32] = rv64_h_stub,
-    [XM_STORE_F32] = rv64_h_stub,
+    [XM_LOAD_F32] = rv64_h_f32,
+    [XM_STORE_F32] = rv64_h_f32,
 
     /* Coro/context */
     [XM_LOAD_CORO] = rv64_h_coro,
@@ -630,41 +1382,41 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
     [XM_LOAD_FIELD] = rv64_h_field_load,
     [XM_STORE_FIELD] = rv64_h_field_store,
 
-    /* Tagged value / box / unbox — stub for now */
-    [XM_TAG_LOAD] = rv64_h_stub,
-    [XM_BOX_I64] = rv64_h_stub,
-    [XM_BOX_F64] = rv64_h_stub,
-    [XM_UNBOX_I64] = rv64_h_stub,
-    [XM_UNBOX_F64] = rv64_h_stub,
+    /* Tagged value / box / unbox */
+    [XM_TAG_LOAD] = rv64_h_tag_load,
+    [XM_BOX_I64] = rv64_h_box,
+    [XM_BOX_F64] = rv64_h_box,
+    [XM_UNBOX_I64] = rv64_h_unbox_i64,
+    [XM_UNBOX_F64] = rv64_h_unbox_f64,
 
-    /* Guards / deopt — stub for now */
-    [XM_GUARD_TAG] = rv64_h_stub,
-    [XM_GUARD_BOUNDS] = rv64_h_stub,
-    [XM_GUARD_NONNULL] = rv64_h_stub,
-    [XM_GUARD_CLASS] = rv64_h_stub,
-    [XM_GUARD_KLASS] = rv64_h_stub,
-    [XM_TAG_CHECK] = rv64_h_stub,
-    [XM_DEOPT] = rv64_h_stub,
-    [XM_SAFEPOINT] = rv64_h_stub,
+    /* Guards / deopt */
+    [XM_GUARD_TAG] = rv64_h_guard,
+    [XM_GUARD_BOUNDS] = rv64_h_guard,
+    [XM_GUARD_NONNULL] = rv64_h_guard,
+    [XM_GUARD_CLASS] = rv64_h_guard,
+    [XM_GUARD_KLASS] = rv64_h_guard,
+    [XM_TAG_CHECK] = rv64_h_guard,
+    [XM_DEOPT] = rv64_h_deopt,
+    [XM_SAFEPOINT] = rv64_h_safepoint,
 
-    /* Runtime helpers — stub for now */
-    [XM_RT_ADD] = rv64_h_stub,
-    [XM_RT_SUB] = rv64_h_stub,
-    [XM_RT_MUL] = rv64_h_stub,
-    [XM_RT_DIV] = rv64_h_stub,
-    [XM_RT_MOD] = rv64_h_stub,
-    [XM_RT_UNM] = rv64_h_stub,
-    [XM_RT_LT] = rv64_h_stub,
-    [XM_RT_LE] = rv64_h_stub,
-    [XM_RT_EQ] = rv64_h_stub,
-    [XM_RT_ARRAY_NEW] = rv64_h_stub,
-    [XM_RT_MAP_NEW] = rv64_h_stub,
-    [XM_RT_ARRAY_PUSH] = rv64_h_stub,
-    [XM_RT_PRINT] = rv64_h_stub,
-    [XM_RT_ARRAY_LEN] = rv64_h_stub,
-    [XM_RT_INDEX_GET] = rv64_h_stub,
-    [XM_RT_INDEX_SET] = rv64_h_stub,
-    [XM_RT_ISNULL] = rv64_h_stub,
+    /* Runtime helpers */
+    [XM_RT_ADD] = rv64_h_rt_arith,
+    [XM_RT_SUB] = rv64_h_rt_arith,
+    [XM_RT_MUL] = rv64_h_rt_arith,
+    [XM_RT_DIV] = rv64_h_rt_arith,
+    [XM_RT_MOD] = rv64_h_rt_arith,
+    [XM_RT_UNM] = rv64_h_rt_unm,
+    [XM_RT_LT] = rv64_h_rt_cmp,
+    [XM_RT_LE] = rv64_h_rt_cmp,
+    [XM_RT_EQ] = rv64_h_rt_cmp,
+    [XM_RT_ARRAY_NEW] = rv64_h_rt_collection,
+    [XM_RT_MAP_NEW] = rv64_h_rt_collection,
+    [XM_RT_ARRAY_PUSH] = rv64_h_rt_array_push,
+    [XM_RT_PRINT] = rv64_h_rt_simple,
+    [XM_RT_ARRAY_LEN] = rv64_h_rt_simple,
+    [XM_RT_INDEX_GET] = rv64_h_rt_simple,
+    [XM_RT_INDEX_SET] = rv64_h_rt_simple,
+    [XM_RT_ISNULL] = rv64_h_rt_simple,
 
     /* Exception / coroutine — no-op or stub */
     [XM_TRY_BEGIN] = rv64_h_nop,
@@ -672,11 +1424,11 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
     [XM_THROW] = rv64_h_nop,
     [XM_NOP] = rv64_h_nop,
     [XM_PHI] = rv64_h_nop,
-    [XM_SUSPEND] = rv64_h_stub,
-    [XM_BARRIER_FWD] = rv64_h_stub,
-    [XM_BARRIER_BACK] = rv64_h_stub,
-    [XM_ALLOC] = rv64_h_stub,
-    [XM_CATCH] = rv64_h_stub,
+    [XM_SUSPEND] = rv64_h_suspend,
+    [XM_BARRIER_FWD] = rv64_h_barrier_fwd,
+    [XM_BARRIER_BACK] = rv64_h_barrier_back,
+    [XM_ALLOC] = rv64_h_alloc,
+    [XM_CATCH] = rv64_h_catch,
 
     /* Calls */
     [XM_CALL_C] = rv64_h_call,
