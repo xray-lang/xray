@@ -36,6 +36,38 @@
 
 /* ========== Loop Structures ========== */
 
+typedef enum XiIvKind {
+    XI_IV_BASIC = 1,
+    XI_IV_DERIVED = 2,
+    XI_IV_POLYNOMIAL = 3,
+} XiIvKind;
+
+typedef struct XiBasicIV {
+    XiValue *phi;       /* loop-carried phi value */
+    XiValue *start;     /* incoming value from preheader */
+    XiValue *next;      /* incoming value from latch */
+    XiValue *step;      /* loop-invariant step operand */
+    XiOp step_op;       /* XI_ADD or XI_SUB */
+    int64_t step_const; /* canonical signed step when step is const */
+    bool has_const_step;
+} XiBasicIV;
+
+typedef struct XiDerivedIV {
+    XiValue *value;      /* derived expression value */
+    XiValue *base;       /* basic IV phi value */
+    XiValue *scale;      /* loop-invariant scale, NULL means 1 */
+    XiValue *offset;     /* loop-invariant offset, NULL means 0 */
+    int64_t scale_const; /* known scale when constant */
+    int64_t offset_const;
+    bool has_const_scale;
+    bool has_const_offset;
+} XiDerivedIV;
+
+typedef struct XiPolynomialIV {
+    XiValue *value; /* polynomial expression value */
+    XiValue *base;  /* basic IV phi value */
+} XiPolynomialIV;
+
 typedef struct XiLoop {
     struct XiLoop *parent;  /* outer loop (NULL at forest root) */
     struct XiLoop *child;   /* first nested loop */
@@ -50,6 +82,13 @@ typedef struct XiLoop {
 
     uint32_t depth; /* 1-based nesting depth */
     uint32_t id;    /* index in XiLoopInfo::all_loops[] */
+
+    XiBasicIV *basic_ivs;
+    uint32_t nbasic_ivs;
+    XiDerivedIV *derived_ivs;
+    uint32_t nderived_ivs;
+    XiPolynomialIV *polynomial_ivs;
+    uint32_t npolynomial_ivs;
 } XiLoop;
 
 typedef struct XiLoopInfo {

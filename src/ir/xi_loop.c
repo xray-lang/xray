@@ -76,6 +76,323 @@ static XiBlock *find_preheader(XiBlock *hdr, const uint8_t *in_loop) {
     return found;
 }
 
+static bool loop_contains_block_raw(const XiLoop *loop, const XiBlock *blk) {
+    if (!loop || !blk)
+        return false;
+    for (uint32_t i = 0; i < loop->nbody; i++)
+        if (loop->body[i] == blk)
+            return true;
+    return false;
+}
+
+static int pred_index(const XiBlock *blk, const XiBlock *pred) {
+    if (!blk || !pred)
+        return -1;
+    for (uint16_t i = 0; i < blk->npreds; i++)
+        if (blk->preds[i] == pred)
+            return (int) i;
+    return -1;
+}
+
+static bool is_const_i64(const XiValue *v, int64_t *out) {
+    if (!v || v->op != XI_CONST)
+        return false;
+    if (out)
+        *out = v->aux_int;
+    return true;
+}
+
+static bool value_is_loop_invariant(const XiLoop *loop, const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_CONST)
+        return true;
+    return !loop_contains_block_raw(loop, v->block);
+}
+
+static bool loop_has_single_latch_pred(const XiLoop *loop) {
+    if (!loop || !loop->header || !loop->preheader || !loop->latch)
+        return false;
+
+    uint32_t in_loop_preds = 0;
+    uint32_t out_loop_preds = 0;
+    for (uint16_t i = 0; i < loop->header->npreds; i++) {
+        XiBlock *pred = loop->header->preds[i];
+        if (!pred)
+            continue;
+        if (loop_contains_block_raw(loop, pred)) {
+            if (pred != loop->latch)
+                return false;
+            in_loop_preds++;
+        } else {
+            if (pred != loop->preheader)
+                return false;
+            out_loop_preds++;
+        }
+    }
+    return in_loop_preds == 1 && out_loop_preds == 1;
+}
+
+static bool match_basic_iv(const XiLoop *loop, const XiPhi *phi, XiBasicIV *out) {
+    if (!loop || !phi || !out || !loop_has_single_latch_pred(loop))
+        return false;
+
+    const XiValue *phi_val = &phi->value;
+    int pre_idx = pred_index(loop->header, loop->preheader);
+    int latch_idx = pred_index(loop->header, loop->latch);
+    if (pre_idx < 0 || latch_idx < 0 || pre_idx == latch_idx)
+        return false;
+    if ((uint16_t) pre_idx >= phi_val->nargs || (uint16_t) latch_idx >= phi_val->nargs)
+        return false;
+
+    XiValue *start = phi_val->args[pre_idx];
+    XiValue *next = phi_val->args[latch_idx];
+    if (!start || !next || !loop_contains_block_raw(loop, next->block))
+        return false;
+    if ((next->op != XI_ADD && next->op != XI_SUB) || next->nargs != 2)
+        return false;
+
+    XiValue *step = NULL;
+    if (next->op == XI_ADD) {
+        if (next->args[0] == phi_val)
+            step = next->args[1];
+        else if (next->args[1] == phi_val)
+            step = next->args[0];
+    } else if (next->args[0] == phi_val) {
+        step = next->args[1];
+    }
+    if (!step || !value_is_loop_invariant(loop, step))
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    out->phi = (XiValue *) phi_val;
+    out->start = start;
+    out->next = next;
+    out->step = step;
+    out->step_op = (XiOp) next->op;
+
+    int64_t step_const = 0;
+    if (is_const_i64(step, &step_const)) {
+        out->has_const_step = true;
+        out->step_const = next->op == XI_SUB ? -step_const : step_const;
+    }
+    return true;
+}
+
+static XiBasicIV *find_basic_iv(const XiLoop *loop, const XiValue *v) {
+    if (!loop || !v)
+        return NULL;
+    for (uint32_t i = 0; i < loop->nbasic_ivs; i++)
+        if (loop->basic_ivs[i].phi == v)
+            return &loop->basic_ivs[i];
+    return NULL;
+}
+
+static bool is_basic_iv_update(const XiLoop *loop, const XiValue *v) {
+    if (!loop || !v)
+        return false;
+    for (uint32_t i = 0; i < loop->nbasic_ivs; i++)
+        if (loop->basic_ivs[i].next == v)
+            return true;
+    return false;
+}
+
+static bool match_linear_term(const XiLoop *loop, XiValue *v, XiValue **base, XiValue **scale,
+                              bool *has_const_scale, int64_t *scale_const) {
+    if (!loop || !v || !base || !scale || !has_const_scale || !scale_const)
+        return false;
+
+    XiBasicIV *basic = find_basic_iv(loop, v);
+    if (basic) {
+        *base = basic->phi;
+        *scale = NULL;
+        *has_const_scale = true;
+        *scale_const = 1;
+        return true;
+    }
+
+    if (v->op != XI_MUL || v->nargs != 2)
+        return false;
+
+    XiValue *lhs = v->args[0];
+    XiValue *rhs = v->args[1];
+    XiBasicIV *lhs_basic = find_basic_iv(loop, lhs);
+    XiBasicIV *rhs_basic = find_basic_iv(loop, rhs);
+    XiValue *scale_candidate = NULL;
+    XiValue *base_candidate = NULL;
+
+    if (lhs_basic && value_is_loop_invariant(loop, rhs)) {
+        base_candidate = lhs_basic->phi;
+        scale_candidate = rhs;
+    } else if (rhs_basic && value_is_loop_invariant(loop, lhs)) {
+        base_candidate = rhs_basic->phi;
+        scale_candidate = lhs;
+    } else {
+        return false;
+    }
+
+    *base = base_candidate;
+    *scale = scale_candidate;
+    int64_t c = 0;
+    if (is_const_i64(scale_candidate, &c)) {
+        *has_const_scale = true;
+        *scale_const = c;
+    } else {
+        *has_const_scale = false;
+        *scale_const = 0;
+    }
+    return true;
+}
+
+static bool fill_derived_iv(const XiLoop *loop, XiValue *value, XiValue *base, XiValue *scale,
+                            XiValue *offset, int offset_sign, bool has_const_scale,
+                            int64_t scale_const, XiDerivedIV *out) {
+    if (!loop || !value || !base || !out)
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    out->value = value;
+    out->base = base;
+    out->scale = scale;
+    out->offset = offset;
+    out->has_const_scale = has_const_scale;
+    out->scale_const = has_const_scale ? scale_const : 0;
+    if (!offset) {
+        out->has_const_offset = true;
+        out->offset_const = 0;
+        return true;
+    }
+
+    int64_t c = 0;
+    if (is_const_i64(offset, &c)) {
+        out->has_const_offset = true;
+        out->offset_const = offset_sign < 0 ? -c : c;
+    }
+    return true;
+}
+
+static bool match_derived_iv(const XiLoop *loop, XiValue *v, XiDerivedIV *out) {
+    if (!loop || !v || !out || find_basic_iv(loop, v) || is_basic_iv_update(loop, v))
+        return false;
+
+    XiValue *base = NULL;
+    XiValue *scale = NULL;
+    bool has_const_scale = false;
+    int64_t scale_const = 0;
+    if (match_linear_term(loop, v, &base, &scale, &has_const_scale, &scale_const))
+        return fill_derived_iv(loop, v, base, scale, NULL, 1, has_const_scale, scale_const, out);
+
+    if ((v->op != XI_ADD && v->op != XI_SUB) || v->nargs != 2)
+        return false;
+
+    XiValue *lhs = v->args[0];
+    XiValue *rhs = v->args[1];
+    if (match_linear_term(loop, lhs, &base, &scale, &has_const_scale, &scale_const) &&
+        value_is_loop_invariant(loop, rhs)) {
+        if (v->op == XI_SUB && !is_const_i64(rhs, NULL))
+            return false;
+        return fill_derived_iv(loop, v, base, scale, rhs, v->op == XI_SUB ? -1 : 1, has_const_scale,
+                               scale_const, out);
+    }
+
+    if (v->op == XI_ADD &&
+        match_linear_term(loop, rhs, &base, &scale, &has_const_scale, &scale_const) &&
+        value_is_loop_invariant(loop, lhs)) {
+        return fill_derived_iv(loop, v, base, scale, lhs, 1, has_const_scale, scale_const, out);
+    }
+
+    return false;
+}
+
+static bool match_polynomial_iv(const XiLoop *loop, XiValue *v, XiPolynomialIV *out) {
+    if (!loop || !v || !out || v->op != XI_MUL || v->nargs != 2)
+        return false;
+    XiBasicIV *lhs = find_basic_iv(loop, v->args[0]);
+    XiBasicIV *rhs = find_basic_iv(loop, v->args[1]);
+    if (!lhs || !rhs || lhs->phi != rhs->phi)
+        return false;
+
+    memset(out, 0, sizeof(*out));
+    out->value = v;
+    out->base = lhs->phi;
+    return true;
+}
+
+static void analyze_basic_ivs(XiLoop *loop) {
+    if (!loop || !loop->header)
+        return;
+
+    uint32_t count = 0;
+    XiBasicIV tmp;
+    for (XiPhi *phi = loop->header->phis; phi; phi = phi->next)
+        if (match_basic_iv(loop, phi, &tmp))
+            count++;
+    if (count == 0)
+        return;
+
+    loop->basic_ivs = (XiBasicIV *) xr_calloc(count, sizeof(XiBasicIV));
+    if (!loop->basic_ivs)
+        return;
+    for (XiPhi *phi = loop->header->phis; phi; phi = phi->next)
+        if (match_basic_iv(loop, phi, &tmp))
+            loop->basic_ivs[loop->nbasic_ivs++] = tmp;
+}
+
+static uint32_t loop_value_count(const XiLoop *loop) {
+    if (!loop)
+        return 0;
+    uint32_t n = 0;
+    for (uint32_t bi = 0; bi < loop->nbody; bi++) {
+        XiBlock *blk = loop->body[bi];
+        if (blk)
+            n += blk->nvalues;
+    }
+    return n;
+}
+
+static void analyze_derived_ivs(XiLoop *loop) {
+    if (!loop || loop->nbasic_ivs == 0)
+        return;
+
+    uint32_t max_values = loop_value_count(loop);
+    if (max_values == 0)
+        return;
+
+    loop->derived_ivs = (XiDerivedIV *) xr_calloc(max_values, sizeof(XiDerivedIV));
+    loop->polynomial_ivs = (XiPolynomialIV *) xr_calloc(max_values, sizeof(XiPolynomialIV));
+    if (!loop->derived_ivs || !loop->polynomial_ivs) {
+        xr_free(loop->derived_ivs);
+        xr_free(loop->polynomial_ivs);
+        loop->derived_ivs = NULL;
+        loop->polynomial_ivs = NULL;
+        return;
+    }
+
+    XiDerivedIV derived_tmp;
+    XiPolynomialIV poly_tmp;
+    for (uint32_t bi = 0; bi < loop->nbody; bi++) {
+        XiBlock *blk = loop->body[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (match_polynomial_iv(loop, v, &poly_tmp)) {
+                loop->polynomial_ivs[loop->npolynomial_ivs++] = poly_tmp;
+                continue;
+            }
+            if (match_derived_iv(loop, v, &derived_tmp))
+                loop->derived_ivs[loop->nderived_ivs++] = derived_tmp;
+        }
+    }
+}
+
+static void analyze_loop_ivs(XiLoop *loop) {
+    analyze_basic_ivs(loop);
+    analyze_derived_ivs(loop);
+}
+
 /* Allocate and populate an XiLoop from header + body bitmap. */
 static XiLoop *alloc_loop(XiFunc *f, uint32_t hdr_bi, uint32_t latch_bi, const uint8_t *in_loop) {
     XR_DCHECK(f != NULL, "alloc_loop: NULL func");
@@ -111,6 +428,9 @@ static XiLoop *alloc_loop(XiFunc *f, uint32_t hdr_bi, uint32_t latch_bi, const u
 static void free_loop(XiLoop *loop) {
     if (!loop)
         return;
+    xr_free(loop->basic_ivs);
+    xr_free(loop->derived_ivs);
+    xr_free(loop->polynomial_ivs);
     xr_free(loop->body);
     xr_free(loop);
 }
@@ -308,6 +628,9 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
     for (uint32_t i = 0; i < nloop; i++)
         info->all_loops[i]->id = i;
 
+    for (uint32_t i = 0; i < nloop; i++)
+        analyze_loop_ivs(info->all_loops[i]);
+
     xr_free(body_bitmaps);
     xr_free(headers);
     xr_free(first_latch);
@@ -335,10 +658,5 @@ XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id) {
 }
 
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk) {
-    if (!loop || !blk)
-        return false;
-    for (uint32_t i = 0; i < loop->nbody; i++)
-        if (loop->body[i] == blk)
-            return true;
-    return false;
+    return loop_contains_block_raw(loop, blk);
 }
