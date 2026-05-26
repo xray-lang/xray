@@ -373,6 +373,118 @@ int main(void) {
         check_golden("x64.mov.ri32 (r12 42)", &buf, exp, 6);
     }
 
+    /* x64.mov.rm: rax rbp 8 → 48 8b 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_rm(&buf, X64_RAX, X64_RBP, 8);
+    {
+        static const uint8_t exp[] = {0x48, 0x8b, 0x45, 0x08};
+        check_golden("x64.mov.rm (rax rbp 8)", &buf, exp, 4);
+    }
+
+    /* x64.mov.rm: rax rsp 0 → 48 8b 04 24 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_rm(&buf, X64_RAX, X64_RSP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x8b, 0x04, 0x24};
+        check_golden("x64.mov.rm (rax rsp 0)", &buf, exp, 4);
+    }
+
+    /* x64.mov.mr: rbp 8 rax → 48 89 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_mr(&buf, X64_RBP, 8, X64_RAX);
+    {
+        static const uint8_t exp[] = {0x48, 0x89, 0x45, 0x08};
+        check_golden("x64.mov.mr (rbp 8 rax)", &buf, exp, 4);
+    }
+
+    /* x64.mov.mr: rsp 16 rcx → 48 89 4c 24 10 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_mr(&buf, X64_RSP, 16, X64_RCX);
+    {
+        static const uint8_t exp[] = {0x48, 0x89, 0x4c, 0x24, 0x10};
+        check_golden("x64.mov.mr (rsp 16 rcx)", &buf, exp, 5);
+    }
+
+    /* x64.lea: rax rbp 16 → 48 8d 45 10 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_lea(&buf, X64_RAX, X64_RBP, 16);
+    {
+        static const uint8_t exp[] = {0x48, 0x8d, 0x45, 0x10};
+        check_golden("x64.lea (rax rbp 16)", &buf, exp, 4);
+    }
+
+    /* x64.movsxd.rm: rax rbp 0 → 48 63 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movsxd_rm(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x63, 0x45, 0x00};
+        check_golden("x64.movsxd.rm (rax rbp 0)", &buf, exp, 4);
+    }
+
+    /* x64.mov.rm32: rax rbp 0 → 8b 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_rm32(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x8b, 0x45, 0x00};
+        check_golden("x64.mov.rm32 (rax rbp 0)", &buf, exp, 3);
+    }
+
+    /* x64.mov.mr32: rbp 0 rax → 89 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_mr32(&buf, X64_RBP, 0, X64_RAX);
+    {
+        static const uint8_t exp[] = {0x89, 0x45, 0x00};
+        check_golden("x64.mov.mr32 (rbp 0 rax)", &buf, exp, 3);
+    }
+
+    /* x64.movzx.rm8: rax rbp 0 → 48 0f b6 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movzx_rm8(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x0f, 0xb6, 0x45, 0x00};
+        check_golden("x64.movzx.rm8 (rax rbp 0)", &buf, exp, 5);
+    }
+
+    /* x64.movsx.rm8: rax rbp 0 → 48 0f be 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movsx_rm8(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x0f, 0xbe, 0x45, 0x00};
+        check_golden("x64.movsx.rm8 (rax rbp 0)", &buf, exp, 5);
+    }
+
+    /* x64.movzx.rm16: rax rbp 0 → 48 0f b7 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movzx_rm16(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x0f, 0xb7, 0x45, 0x00};
+        check_golden("x64.movzx.rm16 (rax rbp 0)", &buf, exp, 5);
+    }
+
+    /* x64.movsx.rm16: rax rbp 0 → 48 0f bf 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movsx_rm16(&buf, X64_RAX, X64_RBP, 0);
+    {
+        static const uint8_t exp[] = {0x48, 0x0f, 0xbf, 0x45, 0x00};
+        check_golden("x64.movsx.rm16 (rax rbp 0)", &buf, exp, 5);
+    }
+
+    /* x64.mov.mr8: rbp 0 rax → 88 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_mr8(&buf, X64_RBP, 0, X64_RAX);
+    {
+        static const uint8_t exp[] = {0x88, 0x45, 0x00};
+        check_golden("x64.mov.mr8 (rbp 0 rax)", &buf, exp, 3);
+    }
+
+    /* x64.mov.mr16: rbp 0 rax → 66 89 45 00 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_mov_mr16(&buf, X64_RBP, 0, X64_RAX);
+    {
+        static const uint8_t exp[] = {0x66, 0x89, 0x45, 0x00};
+        check_golden("x64.mov.mr16 (rbp 0 rax)", &buf, exp, 4);
+    }
+
     /* x64.cmov.rr: 4 rax rbx → 48 0f 44 c3 */
     x64_buf_init(&buf, mem, sizeof(mem));
     x64_cmov_rr(&buf, 4, X64_RAX, X64_RBX);
@@ -453,6 +565,22 @@ int main(void) {
         check_golden("x64.movsd.rr (xmm0 xmm1)", &buf, exp, 4);
     }
 
+    /* x64.movsd.rm: xmm0 rbp 8 → f2 0f 10 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movsd_rm(&buf, X64_XMM0, X64_RBP, 8);
+    {
+        static const uint8_t exp[] = {0xf2, 0x0f, 0x10, 0x45, 0x08};
+        check_golden("x64.movsd.rm (xmm0 rbp 8)", &buf, exp, 5);
+    }
+
+    /* x64.movsd.mr: rbp 8 xmm0 → f2 0f 11 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movsd_mr(&buf, X64_RBP, 8, X64_XMM0);
+    {
+        static const uint8_t exp[] = {0xf2, 0x0f, 0x11, 0x45, 0x08};
+        check_golden("x64.movsd.mr (rbp 8 xmm0)", &buf, exp, 5);
+    }
+
     /* x64.cvtsi2sd: xmm0 rax → f2 48 0f 2a c0 */
     x64_buf_init(&buf, mem, sizeof(mem));
     x64_cvtsi2sd(&buf, X64_XMM0, X64_RAX);
@@ -501,7 +629,7 @@ int main(void) {
         check_golden("x64.xorpd (xmm0 xmm0)", &buf, exp, 4);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 59 total)\n", g_pass, g_fail);
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 75 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }
 
