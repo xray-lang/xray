@@ -237,6 +237,10 @@ XR_FUNC int rv64_live_fp(Rv64CodegenCtx *ctx, Rv64Freg *out);
 XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd);
 XR_FUNC void rv64_emit_call_args_from_pool(Rv64CodegenCtx *ctx, XmIns *ins);
 
+/* OSR + resume entry (xm_codegen_riscv64_osr.c) */
+XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result);
+XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result);
+
 /* Bail out of codegen on invariant violation */
 #define RV64_CODEGEN_CHECK(ctx, cond, msg)                                                         \
     do {                                                                                           \
