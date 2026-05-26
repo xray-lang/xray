@@ -104,6 +104,8 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_TBAA_ANNOTATED                                                                      \
     ((XiInvariantMask) (1u << 9))                     /* every load/store carries a mem_group */
 #define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
+#define XI_INV_RANGE_ANNOTATED                                                                     \
+    ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
 
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
@@ -715,6 +717,11 @@ typedef struct XiFunc {
 
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id; /* unique name suffix for generated C functions */
+
+    /* Analysis side-tables: opaque pointers owned by analysis passes.
+     * [0] = range table (xi_range.c), [1] = reserved.
+     * Freed by xi_func_free or re-running the analysis. */
+    void *analysis_data[2];
 } XiFunc;
 
 /* ========== Arena Constants ========== */
