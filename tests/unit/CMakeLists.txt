@@ -517,3 +517,24 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
     )
     add_test(NAME test_x64_golden COMMAND test_x64_golden)
 endif()
+
+# ============================================================================
+# jit/ — arm64 golden-bytes encoding verification (aarch64 only)
+# ============================================================================
+
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|arm64|ARM64")
+    add_custom_command(
+        OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_golden_gen.c
+        COMMAND python3 ${XISAGEN} golden
+                ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+                ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_golden_gen.c
+        DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+        COMMENT "xisagen: generating test_arm64_golden_gen.c"
+    )
+    add_executable(test_arm64_golden jit/test_arm64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c)
+    target_include_directories(test_arm64_golden PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/jit
+        ${CMAKE_SOURCE_DIR}/src
+    )
+    add_test(NAME test_arm64_golden COMMAND test_arm64_golden)
+endif()
