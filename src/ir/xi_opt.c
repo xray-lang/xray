@@ -13,6 +13,7 @@
 
 #include "xi_opt.h"
 #include "xi_opt_gvn.h"
+#include "xi_tbaa.h"
 #include "xi_opt_ifconv.h"
 #include "xi_opt_inline.h"
 #include "xi_opt_licm.h"
@@ -1142,6 +1143,7 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
 static const XiPassDesc xi_pass_table[] = {
     /* name              fn                       min_level      flags               in_stage
        out_stage */
+    {"tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_STAGE_RAW, XI_STAGE_RAW},
     {"constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
      XI_STAGE_RAW},
