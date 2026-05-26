@@ -85,19 +85,16 @@ static XiMemGroup classify_op(uint16_t op) {
         /* Struct typed field access */
         case XI_STRUCT_GET:
         case XI_STRUCT_SET:
-        case XI_STRUCT_NEW:
             return XI_MEM_STRUCT;
 
         /* JSON object fields */
         case XI_JSON_GET_F:
         case XI_JSON_SET_F:
         case XI_JSON_INIT_F:
-        case XI_JSON_NEW:
             return XI_MEM_JSON;
 
         /* Tuple element access */
         case XI_TUPLE_GET:
-        case XI_TUPLE_NEW:
             return XI_MEM_TUPLE;
 
         /* Closure upvalue slots */
