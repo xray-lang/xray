@@ -126,8 +126,19 @@
   :golden-asm     (((x1 x2 x3) "slt x1, x2, x3"))
   :external-reference riscv-spec)
 
+(define-mcinsn riscv64.sltu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x3 0x00 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 30 31 00"))
+  :golden-asm     (((x1 x2 x3) "sltu x1, x2, x3"))
+  :external-reference riscv-spec)
+
 ; ==================================================================
-; RV64I word-width: addw, subw
+; RV64I word-width: addw, subw, sllw, srlw, sraw
 ; ==================================================================
 
 (define-mcinsn riscv64.addw
@@ -152,6 +163,39 @@
   :golden-bytes   (((x1 x2 x3) "bb 00 31 40")
                    ((x10 x11 x12) "3b 85 c5 40"))
   :golden-asm     (((x1 x2 x3) "subw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sllw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x1 0x00 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 10 31 00"))
+  :golden-asm     (((x1 x2 x3) "sllw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.srlw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x5 0x00 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 50 31 00"))
+  :golden-asm     (((x1 x2 x3) "srlw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sraw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x5 0x20 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 50 31 40"))
+  :golden-asm     (((x1 x2 x3) "sraw x1, x2, x3"))
   :external-reference riscv-spec)
 
 ; ==================================================================
@@ -196,9 +240,162 @@
   :golden-asm     (((x1 x2 1) "ori x1, x2, 1"))
   :external-reference riscv-spec)
 
+(define-mcinsn riscv64.xori
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x4 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "93 40 11 00"))
+  :golden-asm     (((x1 x2 1) "xori x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.slti
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x2 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "93 20 11 00"))
+  :golden-asm     (((x1 x2 1) "slti x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sltiu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x3 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "93 30 11 00"))
+  :golden-asm     (((x1 x2 1) "sltiu x1, x2, 1"))
+  :external-reference riscv-spec)
+
+; ==================================================================
+; Shift immediate (RV64I 6-bit shamt encoded as I-type imm)
+; ==================================================================
+
+(define-mcinsn riscv64.slli
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x1 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "93 10 11 00")
+                   ((x10 x11 32) "13 95 05 02"))
+  :golden-asm     (((x1 x2 1) "slli x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.srli
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x5 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "93 50 11 00"))
+  :golden-asm     (((x1 x2 1) "srli x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.srai
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x13 0x5 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0x401) "93 50 11 40"))
+  :golden-asm     (((x1 x2 0x401) "srai x1, x2, 1"))
+  :external-reference riscv-spec)
+
+; ==================================================================
+; Word-width I-type (RV64I)
+; ==================================================================
+
+(define-mcinsn riscv64.addiw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x1b 0x0 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "9b 00 11 00")
+                   ((x10 x11 -1) "1b 85 f5 ff"))
+  :golden-asm     (((x1 x2 1) "addiw x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.slliw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x1b 0x1 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "9b 10 11 00"))
+  :golden-asm     (((x1 x2 1) "slliw x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.srliw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x1b 0x5 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 1) "9b 50 11 00"))
+  :golden-asm     (((x1 x2 1) "srliw x1, x2, 1"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sraiw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x1b 0x5 $rd $rs1 $imm)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0x401) "9b 50 11 40"))
+  :golden-asm     (((x1 x2 0x401) "sraiw x1, x2, 1"))
+  :external-reference riscv-spec)
+
 ; ==================================================================
 ; Load / Store
 ; ==================================================================
+
+(define-mcinsn riscv64.lb
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x0 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 00 01 00"))
+  :golden-asm     (((x1 x2 0) "lb x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.lh
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x1 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 10 01 00"))
+  :golden-asm     (((x1 x2 0) "lh x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.lw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x2 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 20 01 00"))
+  :golden-asm     (((x1 x2 0) "lw x1, 0(x2)"))
+  :external-reference riscv-spec)
 
 (define-mcinsn riscv64.ld
   :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
@@ -212,6 +409,72 @@
                    ((x1 x2 -8) "83 30 81 ff"))
   :golden-asm     (((x1 x2 0) "ld x1, 0(x2)")
                    ((x10 x8 8) "ld x10, 8(x8)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.lbu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x4 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 40 01 00"))
+  :golden-asm     (((x1 x2 0) "lbu x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.lhu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x5 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 50 01 00"))
+  :golden-asm     (((x1 x2 0) "lhu x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.lwu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x03 0x6 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "83 60 01 00"))
+  :golden-asm     (((x1 x2 0) "lwu x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sb
+  :operands       (($rs2 reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (s-type 0x23 0x0 $rs1 $rs2 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "23 00 11 00"))
+  :golden-asm     (((x1 x2 0) "sb x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sh
+  :operands       (($rs2 reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (s-type 0x23 0x1 $rs1 $rs2 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "23 10 11 00"))
+  :golden-asm     (((x1 x2 0) "sh x1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.sw
+  :operands       (($rs2 reg:gpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (s-type 0x23 0x2 $rs1 $rs2 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "23 20 11 00"))
+  :golden-asm     (((x1 x2 0) "sw x1, 0(x2)"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.sd
@@ -306,6 +569,28 @@
   :golden-asm     (((x1 x2 0) "bge x1, x2, 0"))
   :external-reference riscv-spec)
 
+(define-mcinsn riscv64.bltu
+  :operands       (($rs1 reg:gpr) ($rs2 reg:gpr) ($imm imm:rel12))
+  :constraints    ()
+  :encoding       (b-type 0x63 0x6 $rs1 $rs2 $imm)
+  :flags          (branch patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "63 e0 20 00"))
+  :golden-asm     (((x1 x2 0) "bltu x1, x2, 0"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.bgeu
+  :operands       (($rs1 reg:gpr) ($rs2 reg:gpr) ($imm imm:rel12))
+  :constraints    ()
+  :encoding       (b-type 0x63 0x7 $rs1 $rs2 $imm)
+  :flags          (branch patchable)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 0) "63 f0 20 00"))
+  :golden-asm     (((x1 x2 0) "bgeu x1, x2, 0"))
+  :external-reference riscv-spec)
+
 ; ==================================================================
 ; Upper immediate
 ; ==================================================================
@@ -358,4 +643,303 @@
   :max-bytes      4
   :golden-bytes   ((() "73 00 10 00"))
   :golden-asm     ((() "ebreak"))
+  :external-reference riscv-spec)
+
+; ==================================================================
+; RV64M — Multiply / Divide extension
+; ==================================================================
+
+(define-mcinsn riscv64.mul
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x0 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 00 31 02"))
+  :golden-asm     (((x1 x2 x3) "mul x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.mulh
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x1 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 10 31 02"))
+  :golden-asm     (((x1 x2 x3) "mulh x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.mulhu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x3 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 30 31 02"))
+  :golden-asm     (((x1 x2 x3) "mulhu x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.div
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x4 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 40 31 02"))
+  :golden-asm     (((x1 x2 x3) "div x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.divu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x5 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 50 31 02"))
+  :golden-asm     (((x1 x2 x3) "divu x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.rem
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x6 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 60 31 02"))
+  :golden-asm     (((x1 x2 x3) "rem x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.remu
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x33 0x7 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "b3 70 31 02"))
+  :golden-asm     (((x1 x2 x3) "remu x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.mulw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x0 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 00 31 02"))
+  :golden-asm     (((x1 x2 x3) "mulw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.divw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x4 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 40 31 02"))
+  :golden-asm     (((x1 x2 x3) "divw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.divuw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x5 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 50 31 02"))
+  :golden-asm     (((x1 x2 x3) "divuw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.remw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x6 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 60 31 02"))
+  :golden-asm     (((x1 x2 x3) "remw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.remuw
+  :operands       (($rd reg:gpr) ($rs1 reg:gpr) ($rs2 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x3b 0x7 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 x2 x3) "bb 70 31 02"))
+  :golden-asm     (((x1 x2 x3) "remuw x1, x2, x3"))
+  :external-reference riscv-spec)
+
+; ==================================================================
+; RV64D — Double-precision floating-point
+; ==================================================================
+
+(define-regclass riscv64.fpr
+  :regs (f0 f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 f14 f15
+         f16 f17 f18 f19 f20 f21 f22 f23 f24 f25 f26 f27 f28 f29 f30 f31)
+  :encoding-bits 5)
+
+(define-mcinsn riscv64.fld
+  :operands       (($rd reg:fpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (i-type 0x07 0x3 $rd $rs1 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 x2 0) "87 30 01 00"))
+  :golden-asm     (((f1 x2 0) "fld f1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fsd
+  :operands       (($rs2 reg:fpr) ($rs1 reg:gpr) ($imm imm:i12))
+  :constraints    ()
+  :encoding       (s-type 0x27 0x3 $rs1 $rs2 $imm)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 x2 0) "27 30 11 00"))
+  :golden-asm     (((f1 x2 0) "fsd f1, 0(x2)"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fadd.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x01 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2 f3) "d3 00 31 02"))
+  :golden-asm     (((f1 f2 f3) "fadd.d f1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fsub.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x05 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2 f3) "d3 00 31 0a"))
+  :golden-asm     (((f1 f2 f3) "fsub.d f1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fmul.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x09 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2 f3) "d3 00 31 12"))
+  :golden-asm     (((f1 f2 f3) "fmul.d f1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fdiv.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x0D $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2 f3) "d3 00 31 1a"))
+  :golden-asm     (((f1 f2 f3) "fdiv.d f1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fsqrt.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x2D $rd $rs1 0)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2) "d3 00 01 5a"))
+  :golden-asm     (((f1 f2) "fsqrt.d f1, f2"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.feq.d
+  :operands       (($rd reg:gpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x2 0x51 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 f2 f3) "d3 20 31 a2"))
+  :golden-asm     (((x1 f2 f3) "feq.d x1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.flt.d
+  :operands       (($rd reg:gpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x1 0x51 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 f2 f3) "d3 10 31 a2"))
+  :golden-asm     (((x1 f2 f3) "flt.d x1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fle.d
+  :operands       (($rd reg:gpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x51 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 f2 f3) "d3 00 31 a2"))
+  :golden-asm     (((x1 f2 f3) "fle.d x1, f2, f3"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fcvt.d.l
+  :operands       (($rd reg:fpr) ($rs1 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x69 $rd $rs1 2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 x2) "d3 00 21 d2"))
+  :golden-asm     (((f1 x2) "fcvt.d.l f1, x2"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fcvt.l.d
+  :operands       (($rd reg:gpr) ($rs1 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x1 0x61 $rd $rs1 0)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 f2) "d3 10 01 c2"))
+  :golden-asm     (((x1 f2) "fcvt.l.d x1, f2"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fmv.x.d
+  :operands       (($rd reg:gpr) ($rs1 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x71 $rd $rs1 0)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x1 f2) "d3 00 01 e2"))
+  :golden-asm     (((x1 f2) "fmv.x.d x1, f2"))
+  :external-reference riscv-spec)
+
+(define-mcinsn riscv64.fmv.d.x
+  :operands       (($rd reg:fpr) ($rs1 reg:gpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x0 0x79 $rd $rs1 0)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 x2) "d3 00 01 f2"))
+  :golden-asm     (((f1 x2) "fmv.d.x f1, x2"))
   :external-reference riscv-spec)

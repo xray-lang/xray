@@ -57,6 +57,12 @@ uint32_t rv64_slt(uint8_t rd, uint8_t rs1, uint8_t rs2) {
            ((uint32_t) (rs2) << 20) | (0x0u << 25);
 }
 
+/* riscv64.sltu */
+uint32_t rv64_sltu(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x3u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x0u << 25);
+}
+
 /* riscv64.addw */
 uint32_t rv64_addw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
     return 0x3bu | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
@@ -66,6 +72,24 @@ uint32_t rv64_addw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
 /* riscv64.subw */
 uint32_t rv64_subw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
     return 0x3bu | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x20u << 25);
+}
+
+/* riscv64.sllw */
+uint32_t rv64_sllw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x0u << 25);
+}
+
+/* riscv64.srlw */
+uint32_t rv64_srlw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x0u << 25);
+}
+
+/* riscv64.sraw */
+uint32_t rv64_sraw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
            ((uint32_t) (rs2) << 20) | (0x20u << 25);
 }
 
@@ -87,10 +111,127 @@ uint32_t rv64_ori(uint8_t rd, uint8_t rs1, int32_t imm) {
            ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
 }
 
+/* riscv64.xori */
+uint32_t rv64_xori(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x4u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.slti */
+uint32_t rv64_slti(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x2u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.sltiu */
+uint32_t rv64_sltiu(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x3u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.slli */
+uint32_t rv64_slli(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.srli */
+uint32_t rv64_srli(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.srai */
+uint32_t rv64_srai(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x13u | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.addiw */
+uint32_t rv64_addiw(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x1bu | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.slliw */
+uint32_t rv64_slliw(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x1bu | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.srliw */
+uint32_t rv64_srliw(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x1bu | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.sraiw */
+uint32_t rv64_sraiw(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x1bu | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lb */
+uint32_t rv64_lb(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lh */
+uint32_t rv64_lh(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lw */
+uint32_t rv64_lw(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x2u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
 /* riscv64.ld */
 uint32_t rv64_ld(uint8_t rd, uint8_t rs1, int32_t imm) {
     return 0x3u | ((uint32_t) (rd) << 7) | (0x3u << 12) | ((uint32_t) (rs1) << 15) |
            ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lbu */
+uint32_t rv64_lbu(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x4u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lhu */
+uint32_t rv64_lhu(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.lwu */
+uint32_t rv64_lwu(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x3u | ((uint32_t) (rd) << 7) | (0x6u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.sb */
+uint32_t rv64_sb(uint8_t rs2, uint8_t rs1, int32_t imm) {
+    return (uint32_t) (0x23u | (((int32_t) (imm) & 0x1f) << 7) | (0x0u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       (((uint32_t) ((int32_t) (imm) >> 5) & 0x7f) << 25));
+}
+
+/* riscv64.sh */
+uint32_t rv64_sh(uint8_t rs2, uint8_t rs1, int32_t imm) {
+    return (uint32_t) (0x23u | (((int32_t) (imm) & 0x1f) << 7) | (0x1u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       (((uint32_t) ((int32_t) (imm) >> 5) & 0x7f) << 25));
+}
+
+/* riscv64.sw */
+uint32_t rv64_sw(uint8_t rs2, uint8_t rs1, int32_t imm) {
+    return (uint32_t) (0x23u | (((int32_t) (imm) & 0x1f) << 7) | (0x2u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       (((uint32_t) ((int32_t) (imm) >> 5) & 0x7f) << 25));
 }
 
 /* riscv64.sd */
@@ -150,6 +291,24 @@ uint32_t rv64_bge(uint8_t rs1, uint8_t rs2, int32_t imm) {
                        ((((int32_t) (imm) >> 12) & 1u) << 31));
 }
 
+/* riscv64.bltu */
+uint32_t rv64_bltu(uint8_t rs1, uint8_t rs2, int32_t imm) {
+    return (uint32_t) (0x63u | ((((int32_t) (imm) >> 11) & 1) << 7) |
+                       ((((int32_t) (imm) >> 1) & 0xf) << 8) | (0x6u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       ((((int32_t) (imm) >> 5) & 0x3f) << 25) |
+                       ((((int32_t) (imm) >> 12) & 1u) << 31));
+}
+
+/* riscv64.bgeu */
+uint32_t rv64_bgeu(uint8_t rs1, uint8_t rs2, int32_t imm) {
+    return (uint32_t) (0x63u | ((((int32_t) (imm) >> 11) & 1) << 7) |
+                       ((((int32_t) (imm) >> 1) & 0xf) << 8) | (0x7u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       ((((int32_t) (imm) >> 5) & 0x3f) << 25) |
+                       ((((int32_t) (imm) >> 12) & 1u) << 31));
+}
+
 /* riscv64.lui */
 uint32_t rv64_lui(uint8_t rd, uint32_t imm) {
     return 0x37u | ((uint32_t) (rd) << 7) | ((uint32_t) (imm) << 12);
@@ -168,4 +327,161 @@ uint32_t rv64_nop(void) {
 /* riscv64.ebreak */
 uint32_t rv64_ebreak(void) {
     return 0x00100073u;
+}
+
+/* riscv64.mul */
+uint32_t rv64_mul(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.mulh */
+uint32_t rv64_mulh(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.mulhu */
+uint32_t rv64_mulhu(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x3u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.div */
+uint32_t rv64_div(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x4u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.divu */
+uint32_t rv64_divu(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.rem */
+uint32_t rv64_rem(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x6u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.remu */
+uint32_t rv64_remu(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x33u | ((uint32_t) (rd) << 7) | (0x7u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.mulw */
+uint32_t rv64_mulw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.divw */
+uint32_t rv64_divw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x4u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.divuw */
+uint32_t rv64_divuw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x5u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.remw */
+uint32_t rv64_remw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x6u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.remuw */
+uint32_t rv64_remuw(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x3bu | ((uint32_t) (rd) << 7) | (0x7u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.fld */
+uint32_t rv64_fld(uint8_t rd, uint8_t rs1, int32_t imm) {
+    return 0x7u | ((uint32_t) (rd) << 7) | (0x3u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) ((int32_t) (imm) & 0xfff) << 20);
+}
+
+/* riscv64.fsd */
+uint32_t rv64_fsd(uint8_t rs2, uint8_t rs1, int32_t imm) {
+    return (uint32_t) (0x27u | (((int32_t) (imm) & 0x1f) << 7) | (0x3u << 12) |
+                       ((uint32_t) (rs1) << 15) | ((uint32_t) (rs2) << 20) |
+                       (((uint32_t) ((int32_t) (imm) >> 5) & 0x7f) << 25));
+}
+
+/* riscv64.fadd.d */
+uint32_t rv64_fadd_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x1u << 25);
+}
+
+/* riscv64.fsub.d */
+uint32_t rv64_fsub_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x5u << 25);
+}
+
+/* riscv64.fmul.d */
+uint32_t rv64_fmul_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x9u << 25);
+}
+
+/* riscv64.fdiv.d */
+uint32_t rv64_fdiv_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0xdu << 25);
+}
+
+/* riscv64.fsqrt.d */
+uint32_t rv64_fsqrt_d(uint8_t rd, uint8_t rs1) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (0x0u) << 20) | (0x2du << 25);
+}
+
+/* riscv64.feq.d */
+uint32_t rv64_feq_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x2u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x51u << 25);
+}
+
+/* riscv64.flt.d */
+uint32_t rv64_flt_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x51u << 25);
+}
+
+/* riscv64.fle.d */
+uint32_t rv64_fle_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (rs2) << 20) | (0x51u << 25);
+}
+
+/* riscv64.fcvt.d.l */
+uint32_t rv64_fcvt_d_l(uint8_t rd, uint8_t rs1) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (0x2u) << 20) | (0x69u << 25);
+}
+
+/* riscv64.fcvt.l.d */
+uint32_t rv64_fcvt_l_d(uint8_t rd, uint8_t rs1) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x1u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (0x0u) << 20) | (0x61u << 25);
+}
+
+/* riscv64.fmv.x.d */
+uint32_t rv64_fmv_x_d(uint8_t rd, uint8_t rs1) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (0x0u) << 20) | (0x71u << 25);
+}
+
+/* riscv64.fmv.d.x */
+uint32_t rv64_fmv_d_x(uint8_t rd, uint8_t rs1) {
+    return 0x53u | ((uint32_t) (rd) << 7) | (0x0u << 12) | ((uint32_t) (rs1) << 15) |
+           ((uint32_t) (0x0u) << 20) | (0x79u << 25);
 }
