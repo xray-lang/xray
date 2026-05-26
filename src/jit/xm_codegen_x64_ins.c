@@ -1719,6 +1719,21 @@ static const X64InsHandler x64_ins_handlers[XM_OP_COUNT] = {
 
 /* ========== Instruction Dispatch ========== */
 
+/* Ops that legitimately emit 0 bytes (metadata-only or resolved elsewhere) */
+static bool x64_op_allows_zero_emit(XmOp op) {
+    switch (op) {
+        case XM_NOP:
+        case XM_PHI:
+        case XM_TRY_BEGIN:
+        case XM_TRY_END:
+        case XM_THROW:
+        case XM_SELECT_COND:
+            return true;
+        default:
+            return false;
+    }
+}
+
 XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins) {
     CODEGEN_CHECK(ctx, ctx != NULL, "x64_emit_xm_ins: NULL ctx");
     CODEGEN_CHECK(ctx, ins != NULL, "x64_emit_xm_ins: NULL ins");
@@ -1727,7 +1742,12 @@ XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins) {
     XR_DCHECK(ins->op >= 0 && ins->op < XM_OP_COUNT, "x64_emit_xm_ins: op out of range");
     X64InsHandler handler = x64_ins_handlers[ins->op];
     if (handler) {
+        uint32_t pos_before = ctx->buf.pos;
         handler(ctx, ins, rd);
+        /* Byte self-check: non-metadata ops must emit ≥ 1 byte */
+        if (ctx->buf.pos == pos_before && !x64_op_allows_zero_emit(ins->op)) {
+            CODEGEN_CHECK(ctx, false, "x64 handler emitted 0 bytes for non-metadata op");
+        }
     } else {
         CODEGEN_CHECK(ctx, false, "unhandled Xm opcode in x64 backend");
     }

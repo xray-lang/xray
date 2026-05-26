@@ -42,6 +42,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_emit = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
+    cfg.budget_ns = XI_BUDGET_JIT_TIER1_NS;
     return cfg;
 }
 

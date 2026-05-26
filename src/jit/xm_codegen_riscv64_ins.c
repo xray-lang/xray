@@ -1582,6 +1582,21 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
 
 /* ========== Instruction Dispatch ========== */
 
+/* Ops that legitimately emit 0 bytes (metadata-only or resolved elsewhere) */
+static bool rv64_op_allows_zero_emit(XmOp op) {
+    switch (op) {
+        case XM_NOP:
+        case XM_PHI:
+        case XM_TRY_BEGIN:
+        case XM_TRY_END:
+        case XM_THROW:
+        case XM_SELECT_COND:
+            return true;
+        default:
+            return false;
+    }
+}
+
 XR_FUNC void rv64_emit_xm_ins(Rv64CodegenCtx *ctx, XmIns *ins) {
     RV64_CODEGEN_CHECK(ctx, ctx != NULL, "rv64_emit_xm_ins: NULL ctx");
     RV64_CODEGEN_CHECK(ctx, ins != NULL, "rv64_emit_xm_ins: NULL ins");
@@ -1590,7 +1605,12 @@ XR_FUNC void rv64_emit_xm_ins(Rv64CodegenCtx *ctx, XmIns *ins) {
     XR_DCHECK(ins->op >= 0 && ins->op < XM_OP_COUNT, "rv64_emit_xm_ins: op out of range");
     Rv64InsHandler handler = rv64_ins_handlers[ins->op];
     if (handler) {
+        uint32_t pos_before = ctx->buf.pos;
         handler(ctx, ins, rd);
+        /* Byte self-check: non-metadata ops must emit ≥ 1 byte */
+        if (ctx->buf.pos == pos_before && !rv64_op_allows_zero_emit(ins->op)) {
+            RV64_CODEGEN_CHECK(ctx, false, "rv64 handler emitted 0 bytes for non-metadata op");
+        }
     } else {
         RV64_CODEGEN_CHECK(ctx, false, "unhandled Xm opcode in riscv64 backend");
     }
