@@ -39,6 +39,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        token: ''
+        persist-credentials: false
 
     - name: Install clang (Linux)
       if: runner.os == 'Linux'
