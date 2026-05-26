@@ -70,12 +70,25 @@ add_custom_command(
     COMMENT "xisagen: generating xm_riscv64_gen.c from riscv64.isa"
 )
 
+add_custom_command(
+    OUTPUT  ${CMAKE_BINARY_DIR}/isel_validated.stamp
+    COMMAND python3 ${XISAGEN} isel
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/isel_validated.stamp
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMENT "xisagen: validating isel.def coverage (ops × 3 backends)"
+)
+
 add_custom_target(gen-xm-ops DEPENDS
     ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
+    ${CMAKE_BINARY_DIR}/isel_validated.stamp
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -606,7 +619,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-
+add_dependencies(xray_core gen-xm-ops)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
