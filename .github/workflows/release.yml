@@ -85,8 +85,12 @@ jobs:
       shell: pwsh
       run: |
         New-Item -ItemType Directory -Path dist -Force | Out-Null
-        Copy-Item build\Release\xray.exe dist\
-        Copy-Item build\Release\*.dll dist\ -ErrorAction SilentlyContinue
+        $buildExe = @('build\Release\xray.exe', 'build\xray.exe') | Where-Object { Test-Path $_ } | Select-Object -First 1
+        if (-not $buildExe) {
+          throw 'xray.exe was not produced by the release build'
+        }
+        Copy-Item $buildExe dist\
+        Copy-Item (Join-Path (Split-Path $buildExe) '*.dll') dist\ -ErrorAction SilentlyContinue
 
         $searchDirs = @()
         if ($env:OPENSSL_ROOT_DIR) {
