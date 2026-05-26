@@ -23,6 +23,7 @@
 
 #include "xi_opt_sccp.h"
 #include "xi_pass.h"
+#include "xi_range.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -36,29 +37,37 @@ typedef enum {
     SCCP_CONST_INT,
     SCCP_CONST_FLOAT,
     SCCP_CONST_BOOL,
-    SCCP_BOT, /* overdefined */
+    SCCP_RANGE_INT, /* bounded integer range [lo, hi] (not a single const) */
+    SCCP_BOT,       /* overdefined */
 } SccpKind;
 
 typedef struct {
     SccpKind kind;
-    int64_t ival; /* payload for INT / BOOL */
-    double fval;  /* payload for FLOAT */
+    int64_t ival;   /* payload for INT / BOOL; lo for RANGE_INT */
+    double fval;    /* payload for FLOAT */
+    int64_t hi_val; /* hi bound for RANGE_INT */
 } SccpCell;
 
 static SccpCell sccp_top(void) {
-    return (SccpCell) {SCCP_TOP, 0, 0.0};
+    return (SccpCell) {SCCP_TOP, 0, 0.0, 0};
 }
 static SccpCell sccp_bot(void) {
-    return (SccpCell) {SCCP_BOT, 0, 0.0};
+    return (SccpCell) {SCCP_BOT, 0, 0.0, 0};
 }
 static SccpCell sccp_int(int64_t v) {
-    return (SccpCell) {SCCP_CONST_INT, v, 0.0};
+    return (SccpCell) {SCCP_CONST_INT, v, 0.0, v};
 }
 static SccpCell sccp_float(double v) {
-    return (SccpCell) {SCCP_CONST_FLOAT, 0, v};
+    return (SccpCell) {SCCP_CONST_FLOAT, 0, v, 0};
+}
+static SccpCell sccp_range(int64_t lo, int64_t hi) {
+    XR_DCHECK(lo <= hi, "sccp_range: lo > hi");
+    if (lo == hi)
+        return sccp_int(lo);
+    return (SccpCell) {SCCP_RANGE_INT, lo, 0.0, hi};
 }
 static SccpCell sccp_bool(bool v) {
-    return (SccpCell) {SCCP_CONST_BOOL, v ? 1 : 0, 0.0};
+    return (SccpCell) {SCCP_CONST_BOOL, v ? 1 : 0, 0.0, 0};
 }
 
 static bool sccp_eq(SccpCell a, SccpCell b) {
@@ -71,6 +80,8 @@ static bool sccp_eq(SccpCell a, SccpCell b) {
             return a.fval == b.fval;
         case SCCP_CONST_BOOL:
             return a.ival == b.ival;
+        case SCCP_RANGE_INT:
+            return a.ival == b.ival && a.hi_val == b.hi_val;
         default:
             return true;
     }
@@ -85,6 +96,33 @@ static SccpCell sccp_meet(SccpCell a, SccpCell b) {
         return sccp_bot();
     if (sccp_eq(a, b))
         return a;
+
+    /* Range-aware meet: two different int-typed cells produce a range
+     * instead of immediately going to BOT. */
+    int64_t a_lo, a_hi, b_lo, b_hi;
+    bool a_int = false, b_int = false;
+    if (a.kind == SCCP_CONST_INT) {
+        a_lo = a_hi = a.ival;
+        a_int = true;
+    } else if (a.kind == SCCP_RANGE_INT) {
+        a_lo = a.ival;
+        a_hi = a.hi_val;
+        a_int = true;
+    }
+    if (b.kind == SCCP_CONST_INT) {
+        b_lo = b_hi = b.ival;
+        b_int = true;
+    } else if (b.kind == SCCP_RANGE_INT) {
+        b_lo = b.ival;
+        b_hi = b.hi_val;
+        b_int = true;
+    }
+    if (a_int && b_int) {
+        int64_t lo = a_lo < b_lo ? a_lo : b_lo;
+        int64_t hi = a_hi > b_hi ? a_hi : b_hi;
+        return sccp_range(lo, hi);
+    }
+
     return sccp_bot();
 }
 
@@ -177,6 +215,20 @@ static SccpCell value_cell(SccpCtx *ctx, const XiValue *v) {
 
 static bool both_int(SccpCell a, SccpCell b) {
     return a.kind == SCCP_CONST_INT && b.kind == SCCP_CONST_INT;
+}
+
+/* True if the cell carries integer range info (const or range). */
+static bool has_int_bounds(SccpCell c) {
+    return c.kind == SCCP_CONST_INT || c.kind == SCCP_RANGE_INT;
+}
+
+static void cell_bounds(SccpCell c, int64_t *lo, int64_t *hi) {
+    if (c.kind == SCCP_CONST_INT) {
+        *lo = *hi = c.ival;
+    } else {
+        *lo = c.ival;
+        *hi = c.hi_val;
+    }
 }
 static bool both_float(SccpCell a, SccpCell b) {
     return a.kind == SCCP_CONST_FLOAT && b.kind == SCCP_CONST_FLOAT;
@@ -297,30 +349,66 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
                     return sccp_int((int64_t) ((uint64_t) a.ival >> b.ival));
                 return sccp_bot();
 
-            /* Comparisons (result is bool) */
+            /* Comparisons (result is bool) — range-aware */
             case XI_LT:
                 if (both_int(a, b))
                     return sccp_bool(a.ival < b.ival);
                 if (both_float(a, b))
                     return sccp_bool(a.fval < b.fval);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_hi < b_lo)
+                        return sccp_bool(true);
+                    if (a_lo >= b_hi)
+                        return sccp_bool(false);
+                }
                 return sccp_bot();
             case XI_LE:
                 if (both_int(a, b))
                     return sccp_bool(a.ival <= b.ival);
                 if (both_float(a, b))
                     return sccp_bool(a.fval <= b.fval);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_hi <= b_lo)
+                        return sccp_bool(true);
+                    if (a_lo > b_hi)
+                        return sccp_bool(false);
+                }
                 return sccp_bot();
             case XI_GT:
                 if (both_int(a, b))
                     return sccp_bool(a.ival > b.ival);
                 if (both_float(a, b))
                     return sccp_bool(a.fval > b.fval);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_lo > b_hi)
+                        return sccp_bool(true);
+                    if (a_hi <= b_lo)
+                        return sccp_bool(false);
+                }
                 return sccp_bot();
             case XI_GE:
                 if (both_int(a, b))
                     return sccp_bool(a.ival >= b.ival);
                 if (both_float(a, b))
                     return sccp_bool(a.fval >= b.fval);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_lo >= b_hi)
+                        return sccp_bool(true);
+                    if (a_hi < b_lo)
+                        return sccp_bool(false);
+                }
                 return sccp_bot();
             case XI_EQ:
                 if (both_int(a, b))
@@ -329,6 +417,13 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
                     return sccp_bool(a.fval == b.fval);
                 if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
                     return sccp_bool(a.ival == b.ival);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_hi < b_lo || b_hi < a_lo)
+                        return sccp_bool(false);
+                }
                 return sccp_bot();
             case XI_NE:
                 if (both_int(a, b))
@@ -337,6 +432,13 @@ static SccpCell eval_value(SccpCtx *ctx, const XiValue *v) {
                     return sccp_bool(a.fval != b.fval);
                 if (a.kind == SCCP_CONST_BOOL && b.kind == SCCP_CONST_BOOL)
                     return sccp_bool(a.ival != b.ival);
+                if (has_int_bounds(a) && has_int_bounds(b)) {
+                    int64_t a_lo, a_hi, b_lo, b_hi;
+                    cell_bounds(a, &a_lo, &a_hi);
+                    cell_bounds(b, &b_lo, &b_hi);
+                    if (a_hi < b_lo || b_hi < a_lo)
+                        return sccp_bool(true);
+                }
                 return sccp_bot();
 
             default:
