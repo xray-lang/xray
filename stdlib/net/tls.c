@@ -23,6 +23,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <wincrypt.h>
+#pragma comment(lib, "crypt32.lib")
+#endif
+
 /* ========== Internal Structures ========== */
 
 struct XrTlsContext {
@@ -82,7 +88,27 @@ XrTlsContext *xr_tls_context_new_client(void) {
     SSL_CTX_set_min_proto_version(ctx->ssl_ctx, TLS1_2_VERSION);
 
     // Load system CA certificates
+#ifdef _WIN32
+    // Windows: load CA certs from the system ROOT store via CryptoAPI
+    {
+        HCERTSTORE hStore = CertOpenSystemStoreW(0, L"ROOT");
+        if (hStore) {
+            X509_STORE *store = SSL_CTX_get_cert_store(ctx->ssl_ctx);
+            PCCERT_CONTEXT pCtx = NULL;
+            while ((pCtx = CertEnumCertificatesInStore(hStore, pCtx)) != NULL) {
+                const unsigned char *der = pCtx->pbCertEncoded;
+                X509 *x509 = d2i_X509(NULL, &der, (long) pCtx->cbCertEncoded);
+                if (x509) {
+                    X509_STORE_add_cert(store, x509);
+                    X509_free(x509);
+                }
+            }
+            CertCloseStore(hStore, 0);
+        }
+    }
+#else
     SSL_CTX_set_default_verify_paths(ctx->ssl_ctx);
+#endif
 
     // Set verification mode
     SSL_CTX_set_verify(ctx->ssl_ctx, SSL_VERIFY_PEER, NULL);
