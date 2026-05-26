@@ -1503,6 +1503,7 @@ _A64_PARAM_TYPES = {
     'reg:gpr64': 'A64Reg',
     'reg:gpr32': 'A64Reg',
     'cc': 'A64Cond',
+    'imm:u6': 'uint32_t',
     'imm:u12': 'uint32_t',
     'imm:u16': 'uint16_t',
     'imm:i7': 'int32_t',
@@ -1513,6 +1514,7 @@ _A64_PARAM_TYPES = {
 
 # ISA name → C function name (or None to skip)
 _A64_NAME_MAP: dict = {
+    # ALU reg,reg
     'arm64.add.rrr': 'a64_add',
     'arm64.sub.rrr': 'a64_sub',
     'arm64.and.rrr': 'a64_and',
@@ -1520,22 +1522,53 @@ _A64_NAME_MAP: dict = {
     'arm64.eor.rrr': 'a64_eor',
     'arm64.mul.rrr': 'a64_mul',
     'arm64.sdiv.rrr': 'a64_sdiv',
+    'arm64.subs.rrr': 'a64_subs',
+    'arm64.msub.rrrr': 'a64_msub',
+    'arm64.add.lsl': 'a64_add_lsl',
+    # ALU reg,imm
     'arm64.add.ri12': 'a64_add_imm',
     'arm64.sub.ri12': 'a64_sub_imm',
     'arm64.cmp.ri12': 'a64_cmp_imm',
-    'arm64.cmp.rr': 'a64_cmp',
+    'arm64.subs_imm_w': 'a64_subs_imm_w',
+    # Logical
+    'arm64.mvn.rr': 'a64_mvn',
+    # MOV
     'arm64.mov.rr': 'a64_mov',
     'arm64.movz': None,  # header has extra shift param not in ISA
+    # Shift
     'arm64.lsl.rrr': 'a64_lsl',
     'arm64.lsr.rrr': None,  # no register variant in header
     'arm64.asr.rrr': 'a64_asr',
-    'arm64.ldr.bi9': None,  # unscaled variant, different from header's a64_ldr
-    'arm64.str.bi9': None,  # unscaled variant, different from header's a64_str
+    'arm64.lsr_imm': 'a64_lsr_imm',
+    'arm64.lsr_imm64': 'a64_lsr_imm64',
+    # Compare
+    'arm64.cmp.rr': 'a64_cmp',
+    'arm64.csel': 'a64_csel',
+    'arm64.fcsel': 'a64_fcsel',
+    # Memory (unscaled variants — skip in gen)
+    'arm64.ldr.bi9': None,
+    'arm64.str.bi9': None,
+    # Stack
     'arm64.stp.pre': 'a64_stp_pre',
     'arm64.ldp.post': 'a64_ldp_post',
-    'arm64.neg.rr': 'a64_neg',
+    # Branch
     'arm64.b.cond': 'a64_bcond',
+    'arm64.br': 'a64_br',
+    # Misc
+    'arm64.neg.rr': 'a64_neg',
     'arm64.brk': None,  # not exposed in public header
+    # Floating-point
+    'arm64.fadd': 'a64_fadd',
+    'arm64.fsub': 'a64_fsub',
+    'arm64.fmul': 'a64_fmul',
+    'arm64.fdiv': 'a64_fdiv',
+    'arm64.fneg': 'a64_fneg',
+    'arm64.fmov.rr': 'a64_fmov',
+    'arm64.fmov.gp_to_fp': 'a64_fmov_gp_to_fp',
+    'arm64.fmov.to_gpr': 'a64_fmov_to_gpr',
+    'arm64.fcmp': 'a64_fcmp',
+    'arm64.scvtf': 'a64_scvtf',
+    'arm64.fcvtzs': 'a64_fcvtzs',
 }
 
 def _a64_c_name(isa_name: str) -> str:
