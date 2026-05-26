@@ -1504,9 +1504,11 @@ _A64_PARAM_TYPES = {
     'reg:gpr32': 'A64Reg',
     'cc': 'A64Cond',
     'imm:u6': 'uint32_t',
+    'imm:u8': 'uint8_t',
     'imm:u12': 'uint32_t',
     'imm:u16': 'uint16_t',
     'imm:i7': 'int32_t',
+    'imm:i32': 'int32_t',
     'imm:i9': 'int32_t',
     'imm:rel19': 'int32_t',
     'imm:rel26': 'int32_t',
@@ -1532,9 +1534,11 @@ _A64_NAME_MAP: dict = {
     'arm64.subs_imm_w': 'a64_subs_imm_w',
     # Logical
     'arm64.mvn.rr': 'a64_mvn',
-    # MOV
+    # MOV / Immediate
     'arm64.mov.rr': 'a64_mov',
-    'arm64.movz': None,  # header has extra shift param not in ISA
+    'arm64.movz': 'a64_movz',
+    'arm64.movk': 'a64_movk',
+    'arm64.cset': 'a64_cset',
     # Shift
     'arm64.lsl.rrr': 'a64_lsl',
     'arm64.lsr.rrr': None,  # no register variant in header
@@ -1545,9 +1549,24 @@ _A64_NAME_MAP: dict = {
     'arm64.cmp.rr': 'a64_cmp',
     'arm64.csel': 'a64_csel',
     'arm64.fcsel': 'a64_fcsel',
-    # Memory (unscaled variants — skip in gen)
+    # Memory (unscaled variants — skip, different from scaled API)
     'arm64.ldr.bi9': None,
     'arm64.str.bi9': None,
+    # Memory (scaled offset)
+    'arm64.ldr': 'a64_ldr',
+    'arm64.str': 'a64_str',
+    'arm64.ldp': 'a64_ldp',
+    'arm64.stp': 'a64_stp',
+    'arm64.ldrb': 'a64_ldrb',
+    'arm64.strb': 'a64_strb',
+    'arm64.ldrh': 'a64_ldrh',
+    'arm64.strh': 'a64_strh',
+    'arm64.ldr_w': 'a64_ldr_w',
+    'arm64.str_w': 'a64_str_w',
+    'arm64.ldr_fp': 'a64_ldr_fp',
+    'arm64.str_fp': 'a64_str_fp',
+    'arm64.stp_fp': 'a64_stp_fp',
+    'arm64.ldp_fp': 'a64_ldp_fp',
     # Stack
     'arm64.stp.pre': 'a64_stp_pre',
     'arm64.ldp.post': 'a64_ldp_post',
@@ -1604,7 +1623,7 @@ def _gen_arm64_field_expr(enc, operands: list[OperandInfo]) -> str:
     for op in operands:
         op_map[op.name] = _c_param_name(op)
 
-    # Remaining elements are (field bit_pos width $var)
+    # Remaining elements are field operations
     for elem in elems[1:]:
         if not isinstance(elem, SList):
             continue
@@ -1612,18 +1631,50 @@ def _gen_arm64_field_expr(enc, operands: list[OperandInfo]) -> str:
         if len(children) < 4:
             continue
         head = children[0].value if isinstance(children[0], SAtom) else ''
-        if head != 'field':
-            continue
-        bit_pos = children[1].int_value if isinstance(children[1], SAtom) else 0
-        width = children[2].int_value if isinstance(children[2], SAtom) else 0
-        var = children[3].value.lstrip('$') if isinstance(children[3], SAtom) else ''
 
-        param = op_map.get(var, var)
-        mask = (1 << width) - 1
-        if bit_pos == 0:
-            parts.append(f'((uint32_t){param} & 0x{mask:x})')
-        else:
-            parts.append(f'(((uint32_t){param} & 0x{mask:x}) << {bit_pos})')
+        if head == 'field':
+            # (field bit_pos width $var)
+            bit_pos = children[1].int_value if isinstance(children[1], SAtom) else 0
+            width = children[2].int_value if isinstance(children[2], SAtom) else 0
+            var = children[3].value.lstrip('$') if isinstance(children[3], SAtom) else ''
+            param = op_map.get(var, var)
+            mask = (1 << width) - 1
+            if bit_pos == 0:
+                parts.append(f'((uint32_t){param} & 0x{mask:x})')
+            else:
+                parts.append(f'(((uint32_t){param} & 0x{mask:x}) << {bit_pos})')
+
+        elif head == 'field-scaled':
+            # (field-scaled bit_pos width $var divisor)
+            if len(children) < 5:
+                continue
+            bit_pos = children[1].int_value if isinstance(children[1], SAtom) else 0
+            width = children[2].int_value if isinstance(children[2], SAtom) else 0
+            var = children[3].value.lstrip('$') if isinstance(children[3], SAtom) else ''
+            divisor = children[4].int_value if isinstance(children[4], SAtom) else 1
+            param = op_map.get(var, var)
+            mask = (1 << width) - 1
+            val_expr = f'((uint32_t){param} / {divisor})' if divisor > 1 else f'(uint32_t){param}'
+            if bit_pos == 0:
+                parts.append(f'({val_expr} & 0x{mask:x})')
+            else:
+                parts.append(f'(({val_expr} & 0x{mask:x}) << {bit_pos})')
+
+        elif head == 'field-xor':
+            # (field-xor bit_pos width $var xor_mask)
+            if len(children) < 5:
+                continue
+            bit_pos = children[1].int_value if isinstance(children[1], SAtom) else 0
+            width = children[2].int_value if isinstance(children[2], SAtom) else 0
+            var = children[3].value.lstrip('$') if isinstance(children[3], SAtom) else ''
+            xor_mask = children[4].int_value if isinstance(children[4], SAtom) else 0
+            param = op_map.get(var, var)
+            mask = (1 << width) - 1
+            val_expr = f'((uint32_t){param} ^ {xor_mask})'
+            if bit_pos == 0:
+                parts.append(f'({val_expr} & 0x{mask:x})')
+            else:
+                parts.append(f'(({val_expr} & 0x{mask:x}) << {bit_pos})')
 
     return ' | '.join(parts)
 
