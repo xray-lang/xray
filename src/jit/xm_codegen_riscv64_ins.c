@@ -1055,8 +1055,16 @@ static void rv64_h_barrier_back(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     ctx->has_barriers = true;
 }
 
-/* ========== GC Allocation ========== */
+/* ========== GC Allocation (inline fast path + slow path) ========== */
 
+/* Inline bump-pointer allocator for RISC-V.
+ * Fast path: cursor check -> commit -> init GC header -> alloc_post bookkeeping.
+ * Slow path: fall through to CALL_C(xr_jit_alloc).
+ *
+ * Register usage during fast path:
+ *   t6 (SCRATCH_REG)  = gc pointer, then block pointer
+ *   t5 (SCRATCH_REG2) = cursor / new_cursor / scratch
+ *   rd                = temporarily holds limit, then allocated obj pointer */
 static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     uint8_t gc_type = 0;
     uint16_t gc_extra = 0;
@@ -1074,7 +1082,117 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     alloc_size = (alloc_size + 7) & ~7u;
     RV64_CODEGEN_CHECK(ctx, alloc_size > 0 && alloc_size < 65536, "alloc_size OOB");
 
-    /* Slow path via C helper: pack type_and_size into extra_arg, call xr_jit_alloc */
+    /* === Fast path: inline bump-pointer === */
+
+    /* t6 = coro->coro_gc */
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_GC_OFFSET));
+
+    /* BEQ t6, x0, slow_path (gc == NULL) */
+    uint32_t beq_slow_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_beq(RV64_SCRATCH_REG, RV64_X0, 0)); /* placeholder */
+
+    /* t5 = gc->cursor */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG2, RV64_SCRATCH_REG, (int32_t) XM_IMMIX_CURSOR_OFFSET));
+    /* t5 = cursor + alloc_size (new_cursor) */
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG2, RV64_SCRATCH_REG2, (int32_t) alloc_size));
+
+    /* rd = gc->limit (borrow rd as temp) */
+    rv64_buf_emit(&ctx->buf, rv64_ld(rd, RV64_SCRATCH_REG, (int32_t) XM_IMMIX_LIMIT_OFFSET));
+
+    /* BLTU rd, t5, slow_path  (limit < new_cursor → overflow) */
+    uint32_t bltu_slow_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_bltu(rd, RV64_SCRATCH_REG2, 0)); /* placeholder */
+
+    /* Commit: gc->cursor = new_cursor */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG2, RV64_SCRATCH_REG, (int32_t) XM_IMMIX_CURSOR_OFFSET));
+
+    /* rd = new_cursor - alloc_size = allocated GCHeader* */
+    rv64_buf_emit(&ctx->buf, rv64_addi(rd, RV64_SCRATCH_REG2, -(int32_t) alloc_size));
+
+    /* Init GC header inline */
+    /* gc_next = NULL (SD x0, [rd, 0]) */
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, rd, 0));
+
+    /* marked = currentwhite (byte load from gc + offset) */
+    rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG2, RV64_SCRATCH_REG,
+                                      (int32_t) XM_GC_CURRENTWHITE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_MARKED_OFFSET));
+
+    /* type = gc_type */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) gc_type);
+    rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_TYPE_OFFSET));
+
+    /* extra = gc_extra (16-bit store) */
+    if (gc_extra != 0) {
+        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) gc_extra);
+        rv64_buf_emit(&ctx->buf, rv64_sh(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_EXTRA_OFFSET));
+    } else {
+        rv64_buf_emit(&ctx->buf, rv64_sh(RV64_X0, rd, (int32_t) XM_GC_HDR_EXTRA_OFFSET));
+    }
+
+    /* objsize = alloc_size (32-bit store) */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) alloc_size);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_OBJSIZE_OFFSET));
+
+    /* === Inline alloc_post: GC bookkeeping === */
+
+    /* block = rd & ~0x3FFF (16KB block alignment) */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, ~(uint64_t) XM_IMMIX_BLOCK_SIZE_MASK);
+    rv64_buf_emit(&ctx->buf, rv64_and(RV64_SCRATCH_REG2, rd, RV64_SCRATCH_REG2));
+    /* t5 = block pointer now */
+
+    /* old_head = block->local_allgc */
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));
+    /* obj->gc_next = old_head */
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, rd, 0));
+    /* block->local_allgc = obj */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(rd, RV64_SCRATCH_REG2, (int32_t) XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));
+
+    /* block->alloc_count++ */
+    rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, 1));
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+
+    /* block->alloc_bytes += alloc_size */
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, (int32_t) alloc_size));
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
+                                     (int32_t) XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+
+    /* GC stats: gc->totalbytes += size, gc->GCdebt += size */
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_GC_OFFSET));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_TOTALBYTES_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, (int32_t) alloc_size));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_TOTALBYTES_OFFSET));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_GCDEBT_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, (int32_t) alloc_size));
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_GCDEBT_OFFSET));
+
+    /* J alloc_done (skip slow path) */
+    uint32_t j_done_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_j(0)); /* placeholder */
+
+    /* === Slow path: CALL_C to xr_jit_alloc === */
+    uint32_t slow_path_idx = ctx->buf.count;
+
+    /* Patch fast-path branches to target slow_path */
+    int32_t beq_off = (int32_t) (slow_path_idx - beq_slow_idx) * 4;
+    ctx->buf.code[beq_slow_idx] = rv64_beq(RV64_SCRATCH_REG, RV64_X0, beq_off);
+    int32_t bltu_off = (int32_t) (slow_path_idx - bltu_slow_idx) * 4;
+    ctx->buf.code[bltu_slow_idx] = rv64_bltu(rd, RV64_SCRATCH_REG2, bltu_off);
+
     rv64_emit_ptr_spill_writeback(ctx);
 
     uint32_t smap_id = rv64_record_safepoint(ctx);
@@ -1082,8 +1200,9 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
                                      (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
 
-    uint64_t type_and_size = ((uint64_t) alloc_size << 32) | ((uint64_t) gc_extra << 8) | gc_type;
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, type_and_size);
+    /* Pack type_and_size matching xr_jit_alloc convention: gc_type<<32 | alloc_size */
+    uint64_t packed_arg = ((uint64_t) gc_type << 32) | (uint64_t) alloc_size;
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, packed_arg);
     rv64_buf_emit(&ctx->buf,
                   rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
 
@@ -1094,11 +1213,29 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_call(0));
     ctx->has_call_c = true;
 
-    /* Result (pointer) is in a0 */
+    /* Result (pointer) in a0 */
+    if (rd != RV64_A0)
+        rv64_buf_emit(&ctx->buf, rv64_mv(rd, RV64_A0));
+
+    /* Deopt if NULL (allocation failure): BEQ rd, x0, deopt */
+    rv64_emit_deopt_id(ctx, ins);
+    rv64_add_patch(ctx, RV64_PATCH_DEOPT_BRANCH, 0, RV64_CC_EQ, (uint8_t) rd, (uint8_t) RV64_X0);
+    rv64_buf_emit(&ctx->buf, rv64_beq(rd, RV64_X0, 0));
+    ctx->has_deopt = true;
+
+    /* Set gc_extra after slow path (xr_jit_alloc sets extra=0) */
+    if (gc_extra != 0) {
+        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) gc_extra);
+        rv64_buf_emit(&ctx->buf, rv64_sh(RV64_SCRATCH_REG, rd, (int32_t) XM_GC_HDR_EXTRA_OFFSET));
+    }
+
+    /* alloc_done: patch J over slow path to land here */
+    int32_t j_done_off = (int32_t) (ctx->buf.count - j_done_idx) * 4;
+    ctx->buf.code[j_done_idx] = rv64_j(j_done_off);
+
+    /* Tag result as PTR */
     if (xm_ref_is_vreg(ins->dst)) {
         uint32_t dvi = XM_REF_INDEX(ins->dst);
-        if (rd != RV64_A0)
-            rv64_buf_emit(&ctx->buf, rv64_mv(rd, RV64_A0));
         if (dvi < ctx->func->nvreg && dvi < XR_JIT_MAX_VREG_TAGS) {
             int32_t tag_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) dvi;
             rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, XR_TAG_PTR);
