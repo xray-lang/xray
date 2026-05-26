@@ -10,6 +10,8 @@ on:
         description: 'Release tag to publish'
         required: false
         default: ''
+  repository_dispatch:
+    types: [manual-release]
 
 jobs:
   build:
@@ -130,7 +132,9 @@ jobs:
     - name: Resolve release tag
       id: resolve_tag
       run: |
-        if [ -n "${{ inputs.release_tag }}" ]; then
+        if [ -n "${{ github.event.client_payload.release_tag }}" ]; then
+          echo "tag=${{ github.event.client_payload.release_tag }}" >> "$GITHUB_OUTPUT"
+        elif [ -n "${{ inputs.release_tag }}" ]; then
           echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
         else
           echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
