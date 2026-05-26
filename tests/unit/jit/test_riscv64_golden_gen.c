@@ -15,12 +15,35 @@ uint32_t rv64_sll(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_srl(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_sra(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_slt(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_sltu(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_addw(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_subw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_sllw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_srlw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_sraw(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_addi(uint8_t rd, uint8_t rs1, int32_t imm);
 uint32_t rv64_andi(uint8_t rd, uint8_t rs1, int32_t imm);
 uint32_t rv64_ori(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_xori(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_slti(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_sltiu(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_slli(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_srli(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_srai(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_addiw(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_slliw(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_srliw(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_sraiw(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lb(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lh(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lw(uint8_t rd, uint8_t rs1, int32_t imm);
 uint32_t rv64_ld(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lbu(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lhu(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_lwu(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_sb(uint8_t rs2, uint8_t rs1, int32_t imm);
+uint32_t rv64_sh(uint8_t rs2, uint8_t rs1, int32_t imm);
+uint32_t rv64_sw(uint8_t rs2, uint8_t rs1, int32_t imm);
 uint32_t rv64_sd(uint8_t rs2, uint8_t rs1, int32_t imm);
 uint32_t rv64_jal(uint8_t rd, int32_t imm);
 uint32_t rv64_jalr(uint8_t rd, uint8_t rs1, int32_t imm);
@@ -28,10 +51,38 @@ uint32_t rv64_beq(uint8_t rs1, uint8_t rs2, int32_t imm);
 uint32_t rv64_bne(uint8_t rs1, uint8_t rs2, int32_t imm);
 uint32_t rv64_blt(uint8_t rs1, uint8_t rs2, int32_t imm);
 uint32_t rv64_bge(uint8_t rs1, uint8_t rs2, int32_t imm);
+uint32_t rv64_bltu(uint8_t rs1, uint8_t rs2, int32_t imm);
+uint32_t rv64_bgeu(uint8_t rs1, uint8_t rs2, int32_t imm);
 uint32_t rv64_lui(uint8_t rd, uint32_t imm);
 uint32_t rv64_auipc(uint8_t rd, uint32_t imm);
 uint32_t rv64_nop(void);
 uint32_t rv64_ebreak(void);
+uint32_t rv64_mul(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_mulh(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_mulhu(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_div(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_divu(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_rem(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_remu(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_mulw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_divw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_divuw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_remw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_remuw(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fld(uint8_t rd, uint8_t rs1, int32_t imm);
+uint32_t rv64_fsd(uint8_t rs2, uint8_t rs1, int32_t imm);
+uint32_t rv64_fadd_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fsub_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fmul_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fdiv_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fsqrt_d(uint8_t rd, uint8_t rs1);
+uint32_t rv64_feq_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_flt_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fle_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
+uint32_t rv64_fcvt_d_l(uint8_t rd, uint8_t rs1);
+uint32_t rv64_fcvt_l_d(uint8_t rd, uint8_t rs1);
+uint32_t rv64_fmv_x_d(uint8_t rd, uint8_t rs1);
+uint32_t rv64_fmv_d_x(uint8_t rd, uint8_t rs1);
 
 static int g_pass = 0;
 static int g_fail = 0;
@@ -162,6 +213,12 @@ int main(void) {
         check_golden("riscv64.slt (x10 x11 x12)", rv64_slt(10, 11, 12), exp);
     }
 
+    /* riscv64.sltu: x1 x2 x3 → b3 30 31 00 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x30, 0x31, 0x00};
+        check_golden("riscv64.sltu (x1 x2 x3)", rv64_sltu(1, 2, 3), exp);
+    }
+
     /* riscv64.addw: x1 x2 x3 → bb 00 31 00 */
     {
         static const uint8_t exp[] = {0xbb, 0x00, 0x31, 0x00};
@@ -184,6 +241,24 @@ int main(void) {
     {
         static const uint8_t exp[] = {0x3b, 0x85, 0xc5, 0x40};
         check_golden("riscv64.subw (x10 x11 x12)", rv64_subw(10, 11, 12), exp);
+    }
+
+    /* riscv64.sllw: x1 x2 x3 → bb 10 31 00 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x10, 0x31, 0x00};
+        check_golden("riscv64.sllw (x1 x2 x3)", rv64_sllw(1, 2, 3), exp);
+    }
+
+    /* riscv64.srlw: x1 x2 x3 → bb 50 31 00 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x50, 0x31, 0x00};
+        check_golden("riscv64.srlw (x1 x2 x3)", rv64_srlw(1, 2, 3), exp);
+    }
+
+    /* riscv64.sraw: x1 x2 x3 → bb 50 31 40 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x50, 0x31, 0x40};
+        check_golden("riscv64.sraw (x1 x2 x3)", rv64_sraw(1, 2, 3), exp);
     }
 
     /* riscv64.addi: x1 x2 1 → 93 00 11 00 */
@@ -228,6 +303,96 @@ int main(void) {
         check_golden("riscv64.ori (x10 x11 0xFF)", rv64_ori(10, 11, 255), exp);
     }
 
+    /* riscv64.xori: x1 x2 1 → 93 40 11 00 */
+    {
+        static const uint8_t exp[] = {0x93, 0x40, 0x11, 0x00};
+        check_golden("riscv64.xori (x1 x2 1)", rv64_xori(1, 2, 1), exp);
+    }
+
+    /* riscv64.slti: x1 x2 1 → 93 20 11 00 */
+    {
+        static const uint8_t exp[] = {0x93, 0x20, 0x11, 0x00};
+        check_golden("riscv64.slti (x1 x2 1)", rv64_slti(1, 2, 1), exp);
+    }
+
+    /* riscv64.sltiu: x1 x2 1 → 93 30 11 00 */
+    {
+        static const uint8_t exp[] = {0x93, 0x30, 0x11, 0x00};
+        check_golden("riscv64.sltiu (x1 x2 1)", rv64_sltiu(1, 2, 1), exp);
+    }
+
+    /* riscv64.slli: x1 x2 1 → 93 10 11 00 */
+    {
+        static const uint8_t exp[] = {0x93, 0x10, 0x11, 0x00};
+        check_golden("riscv64.slli (x1 x2 1)", rv64_slli(1, 2, 1), exp);
+    }
+
+    /* riscv64.slli: x10 x11 32 → 13 95 05 02 */
+    {
+        static const uint8_t exp[] = {0x13, 0x95, 0x05, 0x02};
+        check_golden("riscv64.slli (x10 x11 32)", rv64_slli(10, 11, 32), exp);
+    }
+
+    /* riscv64.srli: x1 x2 1 → 93 50 11 00 */
+    {
+        static const uint8_t exp[] = {0x93, 0x50, 0x11, 0x00};
+        check_golden("riscv64.srli (x1 x2 1)", rv64_srli(1, 2, 1), exp);
+    }
+
+    /* riscv64.srai: x1 x2 0x401 → 93 50 11 40 */
+    {
+        static const uint8_t exp[] = {0x93, 0x50, 0x11, 0x40};
+        check_golden("riscv64.srai (x1 x2 0x401)", rv64_srai(1, 2, 1025), exp);
+    }
+
+    /* riscv64.addiw: x1 x2 1 → 9b 00 11 00 */
+    {
+        static const uint8_t exp[] = {0x9b, 0x00, 0x11, 0x00};
+        check_golden("riscv64.addiw (x1 x2 1)", rv64_addiw(1, 2, 1), exp);
+    }
+
+    /* riscv64.addiw: x10 x11 -1 → 1b 85 f5 ff */
+    {
+        static const uint8_t exp[] = {0x1b, 0x85, 0xf5, 0xff};
+        check_golden("riscv64.addiw (x10 x11 -1)", rv64_addiw(10, 11, -1), exp);
+    }
+
+    /* riscv64.slliw: x1 x2 1 → 9b 10 11 00 */
+    {
+        static const uint8_t exp[] = {0x9b, 0x10, 0x11, 0x00};
+        check_golden("riscv64.slliw (x1 x2 1)", rv64_slliw(1, 2, 1), exp);
+    }
+
+    /* riscv64.srliw: x1 x2 1 → 9b 50 11 00 */
+    {
+        static const uint8_t exp[] = {0x9b, 0x50, 0x11, 0x00};
+        check_golden("riscv64.srliw (x1 x2 1)", rv64_srliw(1, 2, 1), exp);
+    }
+
+    /* riscv64.sraiw: x1 x2 0x401 → 9b 50 11 40 */
+    {
+        static const uint8_t exp[] = {0x9b, 0x50, 0x11, 0x40};
+        check_golden("riscv64.sraiw (x1 x2 0x401)", rv64_sraiw(1, 2, 1025), exp);
+    }
+
+    /* riscv64.lb: x1 x2 0 → 83 00 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x00, 0x01, 0x00};
+        check_golden("riscv64.lb (x1 x2 0)", rv64_lb(1, 2, 0), exp);
+    }
+
+    /* riscv64.lh: x1 x2 0 → 83 10 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x10, 0x01, 0x00};
+        check_golden("riscv64.lh (x1 x2 0)", rv64_lh(1, 2, 0), exp);
+    }
+
+    /* riscv64.lw: x1 x2 0 → 83 20 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x20, 0x01, 0x00};
+        check_golden("riscv64.lw (x1 x2 0)", rv64_lw(1, 2, 0), exp);
+    }
+
     /* riscv64.ld: x1 x2 0 → 83 30 01 00 */
     {
         static const uint8_t exp[] = {0x83, 0x30, 0x01, 0x00};
@@ -244,6 +409,42 @@ int main(void) {
     {
         static const uint8_t exp[] = {0x83, 0x30, 0x81, 0xff};
         check_golden("riscv64.ld (x1 x2 -8)", rv64_ld(1, 2, -8), exp);
+    }
+
+    /* riscv64.lbu: x1 x2 0 → 83 40 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x40, 0x01, 0x00};
+        check_golden("riscv64.lbu (x1 x2 0)", rv64_lbu(1, 2, 0), exp);
+    }
+
+    /* riscv64.lhu: x1 x2 0 → 83 50 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x50, 0x01, 0x00};
+        check_golden("riscv64.lhu (x1 x2 0)", rv64_lhu(1, 2, 0), exp);
+    }
+
+    /* riscv64.lwu: x1 x2 0 → 83 60 01 00 */
+    {
+        static const uint8_t exp[] = {0x83, 0x60, 0x01, 0x00};
+        check_golden("riscv64.lwu (x1 x2 0)", rv64_lwu(1, 2, 0), exp);
+    }
+
+    /* riscv64.sb: x1 x2 0 → 23 00 11 00 */
+    {
+        static const uint8_t exp[] = {0x23, 0x00, 0x11, 0x00};
+        check_golden("riscv64.sb (x1 x2 0)", rv64_sb(1, 2, 0), exp);
+    }
+
+    /* riscv64.sh: x1 x2 0 → 23 10 11 00 */
+    {
+        static const uint8_t exp[] = {0x23, 0x10, 0x11, 0x00};
+        check_golden("riscv64.sh (x1 x2 0)", rv64_sh(1, 2, 0), exp);
+    }
+
+    /* riscv64.sw: x1 x2 0 → 23 20 11 00 */
+    {
+        static const uint8_t exp[] = {0x23, 0x20, 0x11, 0x00};
+        check_golden("riscv64.sw (x1 x2 0)", rv64_sw(1, 2, 0), exp);
     }
 
     /* riscv64.sd: x1 x2 0 → 23 30 11 00 */
@@ -336,6 +537,18 @@ int main(void) {
         check_golden("riscv64.bge (x10 x11 0)", rv64_bge(10, 11, 0), exp);
     }
 
+    /* riscv64.bltu: x1 x2 0 → 63 e0 20 00 */
+    {
+        static const uint8_t exp[] = {0x63, 0xe0, 0x20, 0x00};
+        check_golden("riscv64.bltu (x1 x2 0)", rv64_bltu(1, 2, 0), exp);
+    }
+
+    /* riscv64.bgeu: x1 x2 0 → 63 f0 20 00 */
+    {
+        static const uint8_t exp[] = {0x63, 0xf0, 0x20, 0x00};
+        check_golden("riscv64.bgeu (x1 x2 0)", rv64_bgeu(1, 2, 0), exp);
+    }
+
     /* riscv64.lui: x1 1 → b7 10 00 00 */
     {
         static const uint8_t exp[] = {0xb7, 0x10, 0x00, 0x00};
@@ -372,6 +585,162 @@ int main(void) {
         check_golden("riscv64.ebreak ()", rv64_ebreak(), exp);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 54 total)\n", g_pass, g_fail);
+    /* riscv64.mul: x1 x2 x3 → b3 00 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x00, 0x31, 0x02};
+        check_golden("riscv64.mul (x1 x2 x3)", rv64_mul(1, 2, 3), exp);
+    }
+
+    /* riscv64.mulh: x1 x2 x3 → b3 10 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x10, 0x31, 0x02};
+        check_golden("riscv64.mulh (x1 x2 x3)", rv64_mulh(1, 2, 3), exp);
+    }
+
+    /* riscv64.mulhu: x1 x2 x3 → b3 30 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x30, 0x31, 0x02};
+        check_golden("riscv64.mulhu (x1 x2 x3)", rv64_mulhu(1, 2, 3), exp);
+    }
+
+    /* riscv64.div: x1 x2 x3 → b3 40 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x40, 0x31, 0x02};
+        check_golden("riscv64.div (x1 x2 x3)", rv64_div(1, 2, 3), exp);
+    }
+
+    /* riscv64.divu: x1 x2 x3 → b3 50 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x50, 0x31, 0x02};
+        check_golden("riscv64.divu (x1 x2 x3)", rv64_divu(1, 2, 3), exp);
+    }
+
+    /* riscv64.rem: x1 x2 x3 → b3 60 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x60, 0x31, 0x02};
+        check_golden("riscv64.rem (x1 x2 x3)", rv64_rem(1, 2, 3), exp);
+    }
+
+    /* riscv64.remu: x1 x2 x3 → b3 70 31 02 */
+    {
+        static const uint8_t exp[] = {0xb3, 0x70, 0x31, 0x02};
+        check_golden("riscv64.remu (x1 x2 x3)", rv64_remu(1, 2, 3), exp);
+    }
+
+    /* riscv64.mulw: x1 x2 x3 → bb 00 31 02 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x00, 0x31, 0x02};
+        check_golden("riscv64.mulw (x1 x2 x3)", rv64_mulw(1, 2, 3), exp);
+    }
+
+    /* riscv64.divw: x1 x2 x3 → bb 40 31 02 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x40, 0x31, 0x02};
+        check_golden("riscv64.divw (x1 x2 x3)", rv64_divw(1, 2, 3), exp);
+    }
+
+    /* riscv64.divuw: x1 x2 x3 → bb 50 31 02 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x50, 0x31, 0x02};
+        check_golden("riscv64.divuw (x1 x2 x3)", rv64_divuw(1, 2, 3), exp);
+    }
+
+    /* riscv64.remw: x1 x2 x3 → bb 60 31 02 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x60, 0x31, 0x02};
+        check_golden("riscv64.remw (x1 x2 x3)", rv64_remw(1, 2, 3), exp);
+    }
+
+    /* riscv64.remuw: x1 x2 x3 → bb 70 31 02 */
+    {
+        static const uint8_t exp[] = {0xbb, 0x70, 0x31, 0x02};
+        check_golden("riscv64.remuw (x1 x2 x3)", rv64_remuw(1, 2, 3), exp);
+    }
+
+    /* riscv64.fld: f1 x2 0 → 87 30 01 00 */
+    {
+        static const uint8_t exp[] = {0x87, 0x30, 0x01, 0x00};
+        check_golden("riscv64.fld (f1 x2 0)", rv64_fld(1, 2, 0), exp);
+    }
+
+    /* riscv64.fsd: f1 x2 0 → 27 30 11 00 */
+    {
+        static const uint8_t exp[] = {0x27, 0x30, 0x11, 0x00};
+        check_golden("riscv64.fsd (f1 x2 0)", rv64_fsd(1, 2, 0), exp);
+    }
+
+    /* riscv64.fadd.d: f1 f2 f3 → d3 00 31 02 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x31, 0x02};
+        check_golden("riscv64.fadd.d (f1 f2 f3)", rv64_fadd_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fsub.d: f1 f2 f3 → d3 00 31 0a */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x31, 0x0a};
+        check_golden("riscv64.fsub.d (f1 f2 f3)", rv64_fsub_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fmul.d: f1 f2 f3 → d3 00 31 12 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x31, 0x12};
+        check_golden("riscv64.fmul.d (f1 f2 f3)", rv64_fmul_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fdiv.d: f1 f2 f3 → d3 00 31 1a */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x31, 0x1a};
+        check_golden("riscv64.fdiv.d (f1 f2 f3)", rv64_fdiv_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fsqrt.d: f1 f2 → d3 00 01 5a */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x01, 0x5a};
+        check_golden("riscv64.fsqrt.d (f1 f2)", rv64_fsqrt_d(1, 2), exp);
+    }
+
+    /* riscv64.feq.d: x1 f2 f3 → d3 20 31 a2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x20, 0x31, 0xa2};
+        check_golden("riscv64.feq.d (x1 f2 f3)", rv64_feq_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.flt.d: x1 f2 f3 → d3 10 31 a2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x10, 0x31, 0xa2};
+        check_golden("riscv64.flt.d (x1 f2 f3)", rv64_flt_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fle.d: x1 f2 f3 → d3 00 31 a2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x31, 0xa2};
+        check_golden("riscv64.fle.d (x1 f2 f3)", rv64_fle_d(1, 2, 3), exp);
+    }
+
+    /* riscv64.fcvt.d.l: f1 x2 → d3 00 21 d2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x21, 0xd2};
+        check_golden("riscv64.fcvt.d.l (f1 x2)", rv64_fcvt_d_l(1, 2), exp);
+    }
+
+    /* riscv64.fcvt.l.d: x1 f2 → d3 10 01 c2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x10, 0x01, 0xc2};
+        check_golden("riscv64.fcvt.l.d (x1 f2)", rv64_fcvt_l_d(1, 2), exp);
+    }
+
+    /* riscv64.fmv.x.d: x1 f2 → d3 00 01 e2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x01, 0xe2};
+        check_golden("riscv64.fmv.x.d (x1 f2)", rv64_fmv_x_d(1, 2), exp);
+    }
+
+    /* riscv64.fmv.d.x: f1 x2 → d3 00 01 f2 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x00, 0x01, 0xf2};
+        check_golden("riscv64.fmv.d.x (f1 x2)", rv64_fmv_d_x(1, 2), exp);
+    }
+
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 107 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }

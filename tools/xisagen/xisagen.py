@@ -1729,43 +1729,21 @@ def generate_arm64_impl(regclasses: list[RegClass], mcinsns: list[McInsn]) -> st
 
 _RV64_PARAM_TYPES = {
     'reg:gpr': 'uint8_t',
+    'reg:fpr': 'uint8_t',
     'imm:i12': 'int32_t',
     'imm:u20': 'uint32_t',
     'imm:rel12': 'int32_t',
     'imm:rel20': 'int32_t',
 }
 
-_RV64_NAME_MAP: dict = {
-    'riscv64.add': 'rv64_add',
-    'riscv64.sub': 'rv64_sub',
-    'riscv64.and': 'rv64_and',
-    'riscv64.or': 'rv64_or',
-    'riscv64.xor': 'rv64_xor',
-    'riscv64.sll': 'rv64_sll',
-    'riscv64.srl': 'rv64_srl',
-    'riscv64.sra': 'rv64_sra',
-    'riscv64.slt': 'rv64_slt',
-    'riscv64.addw': 'rv64_addw',
-    'riscv64.subw': 'rv64_subw',
-    'riscv64.addi': 'rv64_addi',
-    'riscv64.andi': 'rv64_andi',
-    'riscv64.ori': 'rv64_ori',
-    'riscv64.ld': 'rv64_ld',
-    'riscv64.sd': 'rv64_sd',
-    'riscv64.jal': 'rv64_jal',
-    'riscv64.jalr': 'rv64_jalr',
-    'riscv64.beq': 'rv64_beq',
-    'riscv64.bne': 'rv64_bne',
-    'riscv64.blt': 'rv64_blt',
-    'riscv64.bge': 'rv64_bge',
-    'riscv64.lui': 'rv64_lui',
-    'riscv64.auipc': 'rv64_auipc',
-    'riscv64.nop': 'rv64_nop',
-    'riscv64.ebreak': 'rv64_ebreak',
-}
+_RV64_NAME_MAP: dict = {}
+
+def _rv64_auto_name(isa_name: str) -> str:
+    """Auto-derive C function name: riscv64.fadd.d -> rv64_fadd_d"""
+    return 'rv64_' + isa_name.removeprefix('riscv64.').replace('.', '_')
 
 def _rv64_c_name(isa_name: str) -> str:
-    return _RV64_NAME_MAP.get(isa_name, 'rv64_' + isa_name.replace('riscv64.', ''))
+    return _RV64_NAME_MAP.get(isa_name, _rv64_auto_name(isa_name))
 
 
 def _gen_riscv64_field_expr(enc, operands: list['OperandInfo']) -> str:
@@ -1892,7 +1870,10 @@ def generate_riscv64_impl(regclasses: list['RegClass'], mcinsns: list['McInsn'])
 # L4b: Golden-bytes test generator
 # ============================================================
 
-_RV64_REG_MAP = {f'x{i}': str(i) for i in range(32)}
+_RV64_REG_MAP = {
+    **{f'x{i}': str(i) for i in range(32)},
+    **{f'f{i}': str(i) for i in range(32)},
+}
 
 # Map ISA register names → C enum values
 _X64_REG_MAP = {
