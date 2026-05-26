@@ -48,6 +48,24 @@ uint32_t a64_sdiv(A64Reg rd, A64Reg rn, A64Reg rm) {
            (((uint32_t) rm & 0x1f) << 16);
 }
 
+/* arm64.subs.rrr */
+uint32_t a64_subs(A64Reg rd, A64Reg rn, A64Reg rm) {
+    return 0xeb000000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.msub.rrrr */
+uint32_t a64_msub(A64Reg rd, A64Reg rn, A64Reg rm, A64Reg ra) {
+    return 0x9b008000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) ra & 0x1f) << 10) | (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.add.lsl */
+uint32_t a64_add_lsl(A64Reg rd, A64Reg rn, A64Reg rm, uint32_t shift) {
+    return 0x8b000000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) shift & 0x3f) << 10) | (((uint32_t) rm & 0x1f) << 16);
+}
+
 /* arm64.add.ri12 */
 uint32_t a64_add_imm(A64Reg rd, A64Reg rn, uint32_t imm) {
     return 0x91000000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
@@ -63,6 +81,17 @@ uint32_t a64_sub_imm(A64Reg rd, A64Reg rn, uint32_t imm) {
 /* arm64.cmp.ri12 */
 uint32_t a64_cmp_imm(A64Reg rn, uint32_t imm) {
     return 0xf100001fu | (((uint32_t) rn & 0x1f) << 5) | (((uint32_t) imm & 0xfff) << 10);
+}
+
+/* arm64.subs_imm_w */
+uint32_t a64_subs_imm_w(A64Reg rd, A64Reg rn, uint32_t imm) {
+    return 0x71000000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) imm & 0xfff) << 10);
+}
+
+/* arm64.mvn.rr */
+uint32_t a64_mvn(A64Reg rd, A64Reg rm) {
+    return 0xaa2003e0u | ((uint32_t) rd & 0x1f) | (((uint32_t) rm & 0x1f) << 16);
 }
 
 /* arm64.mov.rr */
@@ -82,6 +111,30 @@ uint32_t a64_asr(A64Reg rd, A64Reg rn, A64Reg rm) {
            (((uint32_t) rm & 0x1f) << 16);
 }
 
+/* arm64.lsr_imm */
+uint32_t a64_lsr_imm(A64Reg rd, A64Reg rn, uint32_t shift) {
+    return 0x53007c00u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) shift & 0x3f) << 16);
+}
+
+/* arm64.lsr_imm64 */
+uint32_t a64_lsr_imm64(A64Reg rd, A64Reg rn, uint32_t shift) {
+    return 0xd340fc00u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) shift & 0x3f) << 16);
+}
+
+/* arm64.csel */
+uint32_t a64_csel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
+    return 0x9a800000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) cond & 0xf) << 12) | (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fcsel */
+uint32_t a64_fcsel(A64Reg rd, A64Reg rn, A64Reg rm, A64Cond cond) {
+    return 0x1e600c00u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) cond & 0xf) << 12) | (((uint32_t) rm & 0x1f) << 16);
+}
+
 /* arm64.bl */
 uint32_t a64_bl(int32_t target) {
     return 0x94000000u | ((uint32_t) target & 0x3ffffff);
@@ -90,6 +143,11 @@ uint32_t a64_bl(int32_t target) {
 /* arm64.blr */
 uint32_t a64_blr(A64Reg rn) {
     return 0xd63f0000u | (((uint32_t) rn & 0x1f) << 5);
+}
+
+/* arm64.br */
+uint32_t a64_br(A64Reg rn) {
+    return 0xd61f0000u | (((uint32_t) rn & 0x1f) << 5);
 }
 
 /* arm64.ret */
@@ -142,6 +200,65 @@ uint32_t a64_neg(A64Reg rd, A64Reg rm) {
 /* arm64.cmp.rr */
 uint32_t a64_cmp(A64Reg rn, A64Reg rm) {
     return 0xeb00001fu | (((uint32_t) rn & 0x1f) << 5) | (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fadd */
+uint32_t a64_fadd(A64Reg rd, A64Reg rn, A64Reg rm) {
+    return 0x1e602800u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fsub */
+uint32_t a64_fsub(A64Reg rd, A64Reg rn, A64Reg rm) {
+    return 0x1e603800u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fmul */
+uint32_t a64_fmul(A64Reg rd, A64Reg rn, A64Reg rm) {
+    return 0x1e600800u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fdiv */
+uint32_t a64_fdiv(A64Reg rd, A64Reg rn, A64Reg rm) {
+    return 0x1e601800u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5) |
+           (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.fneg */
+uint32_t a64_fneg(A64Reg rd, A64Reg rn) {
+    return 0x1e614000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5);
+}
+
+/* arm64.fmov.rr */
+uint32_t a64_fmov(A64Reg rd, A64Reg rn) {
+    return 0x1e604000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5);
+}
+
+/* arm64.fmov.gp_to_fp */
+uint32_t a64_fmov_gp_to_fp(A64Reg dd, A64Reg xn) {
+    return 0x9e670000u | ((uint32_t) dd & 0x1f) | (((uint32_t) xn & 0x1f) << 5);
+}
+
+/* arm64.fmov.to_gpr */
+uint32_t a64_fmov_to_gpr(A64Reg xd, A64Reg dn) {
+    return 0x9e660000u | ((uint32_t) xd & 0x1f) | (((uint32_t) dn & 0x1f) << 5);
+}
+
+/* arm64.fcmp */
+uint32_t a64_fcmp(A64Reg rn, A64Reg rm) {
+    return 0x1e602000u | (((uint32_t) rn & 0x1f) << 5) | (((uint32_t) rm & 0x1f) << 16);
+}
+
+/* arm64.scvtf */
+uint32_t a64_scvtf(A64Reg rd, A64Reg rn) {
+    return 0x9e620000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5);
+}
+
+/* arm64.fcvtzs */
+uint32_t a64_fcvtzs(A64Reg rd, A64Reg rn) {
+    return 0x9e780000u | ((uint32_t) rd & 0x1f) | (((uint32_t) rn & 0x1f) << 5);
 }
 
 #endif  // __aarch64__
