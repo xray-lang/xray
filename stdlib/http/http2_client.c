@@ -82,6 +82,8 @@ void xr_h2_pool_destroy(XrH2Pool *pool) {
 static XrH2PoolEntry *create_h2_connection(const char *host, int port, bool is_https);
 static uint64_t get_time_ms(void);
 static unsigned int hash_host(const char *host, int port);
+static void h2_pool_entry_free(XrH2PoolEntry *entry);
+static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target);
 
 // Acquire connection from per-isolate pool
 XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int port, bool is_https) {
@@ -93,14 +95,16 @@ XrH2PoolEntry *xr_h2_pool_acquire_from(XrH2Pool *pool, const char *host, int por
     unsigned int idx = hash_host(host, port);
     XrH2PoolEntry *entry = pool->hosts[idx];
     XrH2PoolEntry *prev = NULL;
+    uint64_t now = get_time_ms();
 
     while (entry) {
         if (strcmp(entry->host, host) == 0 && entry->port == port && !entry->in_use) {
             if (entry->conn &&
                 entry->active_streams <
-                    (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS]) {
+                    (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS] &&
+                (now - entry->last_used) <= XR_H2_CONN_IDLE_TIMEOUT) {
                 entry->in_use = true;
-                entry->last_used = get_time_ms();
+                entry->last_used = now;
                 xr_mutex_unlock(&pool->lock);
                 return entry;
             }
@@ -169,6 +173,49 @@ static unsigned int hash_host(const char *host, int port) {
     }
     h = h * 31 + port;
     return h % XR_H2_POOL_MAX_HOSTS;
+}
+
+static void h2_pool_entry_free(XrH2PoolEntry *entry) {
+    if (!entry)
+        return;
+
+    if (entry->conn)
+        xr_h2_conn_free(entry->conn);
+    if (entry->tls_conn) {
+        xr_tls_conn_close(entry->tls_conn);
+        xr_tls_conn_free(entry->tls_conn);
+    }
+    if (entry->tls_ctx)
+        xr_tls_context_free(entry->tls_ctx);
+    xr_free(entry->host);
+    xr_free(entry);
+}
+
+static void h2_pool_discard_entry(XrH2Pool *pool, XrH2PoolEntry *target) {
+    if (!pool || !target || !target->host)
+        return;
+
+    unsigned int idx = hash_host(target->host, target->port);
+
+    xr_mutex_lock(&pool->lock);
+    XrH2PoolEntry *entry = pool->hosts[idx];
+    XrH2PoolEntry *prev = NULL;
+
+    while (entry) {
+        if (entry == target) {
+            if (prev)
+                prev->next = entry->next;
+            else
+                pool->hosts[idx] = entry->next;
+            xr_mutex_unlock(&pool->lock);
+            h2_pool_entry_free(entry);
+            return;
+        }
+        prev = entry;
+        entry = entry->next;
+    }
+
+    xr_mutex_unlock(&pool->lock);
 }
 
 void xr_h2_pool_init(void) {
@@ -356,6 +403,7 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
     unsigned int idx = hash_host(host, port);
     XrH2PoolEntry *entry = g_pool.hosts[idx];
     XrH2PoolEntry *prev = NULL;
+    uint64_t now = get_time_ms();
 
     // Find available connection
     while (entry) {
@@ -363,9 +411,10 @@ XrH2PoolEntry *xr_h2_pool_acquire(const char *host, int port, bool is_https) {
             // Check if connection is valid
             if (entry->conn &&
                 entry->active_streams <
-                    (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS]) {
+                    (int) entry->conn->remote_settings[XR_H2_SETTINGS_MAX_CONCURRENT_STREAMS] &&
+                (now - entry->last_used) <= XR_H2_CONN_IDLE_TIMEOUT) {
                 entry->in_use = true;
-                entry->last_used = get_time_ms();
+                entry->last_used = now;
                 xr_mutex_unlock(&g_pool.lock);
                 return entry;
             }
@@ -546,7 +595,7 @@ XrH2Response *xr_h2_request(const char *url, const XrH2Request *req) {
     if (xr_h2_send_headers(entry->conn, stream, names, name_lens, values, value_lens,
                            h2_header_count, !has_body) < 0) {
         entry->active_streams--;
-        xr_h2_pool_release(entry);
+        h2_pool_discard_entry(&g_pool, entry);
         xr_http_url_free(&parsed);
         return NULL;
     }
@@ -555,7 +604,7 @@ XrH2Response *xr_h2_request(const char *url, const XrH2Request *req) {
     if (has_body) {
         if (xr_h2_send_data(entry->conn, stream, req->body, req->body_len, true) < 0) {
             entry->active_streams--;
-            xr_h2_pool_release(entry);
+            h2_pool_discard_entry(&g_pool, entry);
             xr_http_url_free(&parsed);
             return NULL;
         }
@@ -573,7 +622,7 @@ XrH2Response *xr_h2_request(const char *url, const XrH2Request *req) {
     if (xr_h2_recv_stream_data(entry->conn, stream, &resp->body, &resp->body_len) < 0) {
         xr_free(resp);
         entry->active_streams--;
-        xr_h2_pool_release(entry);
+        h2_pool_discard_entry(&g_pool, entry);
         xr_http_url_free(&parsed);
         return NULL;
     }
