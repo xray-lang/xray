@@ -125,6 +125,8 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
     XmCodegenResult res = xm_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
 #elif defined(__x86_64__) || defined(_M_X64)
     XmCodegenResult res = xm_codegen_x64(func, &q->worker_code_alloc[worker_id]);
+#elif defined(__riscv)
+    XmCodegenResult res = xm_codegen_riscv64(func, &q->worker_code_alloc[worker_id]);
 #else
     XmCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif

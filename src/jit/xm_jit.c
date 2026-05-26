@@ -526,6 +526,8 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     XmCodegenResult res = xm_codegen_arm64(func, &jit->code_alloc);
 #elif defined(__x86_64__) || defined(_M_X64)
     XmCodegenResult res = xm_codegen_x64(func, &jit->code_alloc);
+#elif defined(__riscv)
+    XmCodegenResult res = xm_codegen_riscv64(func, &jit->code_alloc);
 #else
     XmCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif
