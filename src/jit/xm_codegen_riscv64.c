@@ -935,6 +935,8 @@ XR_FUNC XmCodegenResult xm_codegen_riscv64(XmFunc *func, XmCodeAlloc *alloc) {
     rv64_emit_deopt_stub(&ctx);
     rv64_emit_call_c_stub(&ctx);
     rv64_emit_barrier_stubs(&ctx);
+    rv64_emit_osr_stubs(&ctx, &result);
+    rv64_emit_resume_entry(&ctx, &result);
 
     /* Check for buffer overflow before patching */
     if (ctx.buf.count >= ctx.buf.capacity) {
