@@ -125,4 +125,8 @@ XR_FUNC XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc);
 // Uses the provided code allocator for executable memory
 XR_FUNC XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc);
 
+// Generate RISC-V 64 machine code from Xm function
+// Uses the provided code allocator for executable memory
+XR_FUNC XmCodegenResult xm_codegen_riscv64(XmFunc *func, XmCodeAlloc *alloc);
+
 #endif  // XM_CODEGEN_H
