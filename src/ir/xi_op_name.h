@@ -230,6 +230,8 @@ static inline const char *xi_op_name(uint16_t op) {
             return "IMPORT_REF";
         case XI_REGEX_COMPILE:
             return "REGEX_COMPILE";
+        case XI_BOUNDS_CHECK:
+            return "BOUNDS_CHECK";
         case XI_RETAIN:
             return "RETAIN";
         case XI_RELEASE:

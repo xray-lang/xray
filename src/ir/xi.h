@@ -363,6 +363,12 @@ typedef enum {
 
     XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
 
+    /* Bounds check (inserted before INDEX_GET/INDEX_SET by xi_lower).
+     * args[0]=index, args[1]=length; traps if index < 0 || index >= length.
+     * Result is args[0] (passthrough for SSA chain).
+     * BCE pass eliminates when range(idx) ⊆ [0, range(len).lo - 1]. */
+    XI_BOUNDS_CHECK,
+
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
     XI_RETAIN,  /* args[0]=value; increment refcount (no-op for scalars) */
     XI_RELEASE, /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
