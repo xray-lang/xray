@@ -101,6 +101,9 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_ARC_INSERTED ((XiInvariantMask) (1u << 7))  /* RETAIN/RELEASE ops inserted */
 #define XI_INV_EFFECTS_VALID                                                                       \
     ((XiInvariantMask) (1u << 8)) /* per-value effect flags match opcode table */
+#define XI_INV_TBAA_ANNOTATED                                                                      \
+    ((XiInvariantMask) (1u << 9))                     /* every load/store carries a mem_group */
+#define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
 
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
@@ -525,6 +528,8 @@ typedef struct XiValue {
                             * default XR_REP_TAGGED until STAGE_REPPED) */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
+                            * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
     struct XrType *type;   /* authoritative compile-time type (never NULL) */
     int64_t aux_int;       /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;             /* auxiliary pointer: proto, string literal, etc. */
