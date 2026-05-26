@@ -199,6 +199,23 @@ jobs:
                 print(body.decode("utf-8", "replace"))
                 raise
 
+        class NoRedirect(urllib.request.HTTPRedirectHandler):
+            def redirect_request(self, req, fp, code, msg, hdrs, newurl):
+                return None
+
+        def download_artifact_archive(url):
+            opener = urllib.request.build_opener(NoRedirect)
+            req = urllib.request.Request(url, headers=headers, method="GET")
+            try:
+                with opener.open(req) as resp:
+                    return resp.read()
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (301, 302, 303, 307, 308):
+                    raise
+                signed_url = exc.headers["Location"]
+            with urllib.request.urlopen(signed_url) as resp:
+                return resp.read()
+
         artifacts_root = pathlib.Path("artifacts")
         artifacts_root.mkdir(exist_ok=True)
         status, body = request("GET", f"{api}/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")
@@ -206,7 +223,7 @@ jobs:
         for artifact in artifacts:
             if artifact.get("expired"):
                 continue
-            status, archive = request("GET", artifact["archive_download_url"])
+            archive = download_artifact_archive(artifact["archive_download_url"])
             archive_path = pathlib.Path(tempfile.gettempdir()) / f'{artifact["name"]}.zip'
             archive_path.write_bytes(archive)
             target_dir = artifacts_root / artifact["name"]
