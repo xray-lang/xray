@@ -16,6 +16,7 @@
 #include "xi_backend.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -1132,6 +1133,29 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* NARROW before typed-array store (all stages) */
     if (!ctx.failed) {
         verify_narrow_before_typed_store(&ctx, f);
+    }
+
+    /* TBAA annotation consistency (only when invariant bit is set) */
+    if (!ctx.failed && (f->invariant_mask & XI_INV_TBAA_ANNOTATED)) {
+        for (uint32_t bi = 0; bi < f->nblocks && !ctx.failed; bi++) {
+            XiBlock *blk = f->blocks[bi];
+            if (!blk)
+                continue;
+            for (uint32_t vi = 0; vi < blk->nvalues && !ctx.failed; vi++) {
+                XiValue *v = blk->values[vi];
+                if (!v)
+                    continue;
+                bool is_mem = xi_is_memory_op(v->op);
+                if (is_mem && v->mem_group == XI_MEM_NONE) {
+                    verr(&ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
+                         xi_op_name(v->op));
+                } else if (!is_mem && v->op != XI_CALL && v->op != XI_CALL_METHOD &&
+                           v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
+                    verr(&ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)",
+                         v->id, xi_op_name(v->op), v->mem_group);
+                }
+            }
+        }
     }
 
     return !ctx.failed;
