@@ -1,0 +1,233 @@
+/*
+ * Unit tests for extended Xi verifier contracts.
+ * Covers bounds checks, tail-call safety, TBAA metadata, and backend legality.
+ */
+
+#include "../../../src/ir/xi_verify.h"
+#include "../../../src/ir/xi_tbaa.h"
+#include "../../../src/ir/xi.h"
+#include "../../../src/runtime/value/xtype.h"
+#include "../../../src/base/xmalloc.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 2, .frozen = true};
+
+static int tests_passed = 0;
+static int tests_failed = 0;
+
+#define ASSERT(cond)                                                                               \
+    do {                                                                                           \
+        if (!(cond)) {                                                                             \
+            printf("  FAIL: %s (line %d)\n", #cond, __LINE__);                                     \
+            tests_failed++;                                                                        \
+            return;                                                                                \
+        }                                                                                          \
+    } while (0)
+
+#define TEST(name)                                                                                 \
+    static void test_##name(void);                                                                 \
+    static void run_##name(void) {                                                                 \
+        printf("--- " #name " ---\n");                                                             \
+        test_##name();                                                                             \
+        printf("  PASS\n");                                                                        \
+        tests_passed++;                                                                            \
+    }                                                                                              \
+    static void test_##name(void)
+
+static XiFunc *make_func(const char *name) {
+    XiFunc *f = xi_func_new(name, &stub_int);
+    if (!f)
+        return NULL;
+    XiBlock *entry = xi_block_new(f);
+    if (!entry) {
+        xi_func_free(f);
+        return NULL;
+    }
+    entry->sealed = true;
+    return f;
+}
+
+static bool verify_ok(const XiFunc *f) {
+    char err[256] = {0};
+    return xi_verify(f, err, sizeof(err));
+}
+
+static bool verify_fail(const XiFunc *f) {
+    char err[256] = {0};
+    bool ok = xi_verify(f, err, sizeof(err));
+    if (ok)
+        return false;
+    return err[0] != '\0';
+}
+
+/* ========== Bounds check contracts ========== */
+
+TEST(bounds_check_valid) {
+    XiFunc *f = make_func("bounds_valid");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *len = xi_const_int(f, entry, 8, &stub_int);
+    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 2);
+    bc->args[0] = idx;
+    bc->args[1] = len;
+    xi_block_set_return(entry, bc);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(bounds_check_arity_failure) {
+    XiFunc *f = make_func("bounds_arity");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 1);
+    bc->args[0] = idx;
+    xi_block_set_return(entry, bc);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(bounds_check_effect_failure) {
+    XiFunc *f = make_func("bounds_effect");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *idx = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *len = xi_const_int(f, entry, 8, &stub_int);
+    XiValue *bc = xi_value_new(f, entry, XI_BOUNDS_CHECK, &stub_int, 2);
+    bc->args[0] = idx;
+    bc->args[1] = len;
+    bc->flags = 0;
+    xi_block_set_return(entry, bc);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+/* ========== Tail-call flag safety ========== */
+
+TEST(tail_flag_on_non_call_fails) {
+    XiFunc *f = make_func("tail_non_call");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_const_int(f, entry, 1, &stub_int);
+    v->flags |= XI_FLAG_TAIL;
+    xi_block_set_return(entry, v);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(tail_call_with_non_function_callee_fails) {
+    XiFunc *f = make_func("tail_bad_callee");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *callee = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 1);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_TAIL;
+    xi_block_set_return(entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(tail_call_with_function_callee_passes) {
+    XiFunc *f = make_func("tail_good_callee");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *callee = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_func, 0);
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 1);
+    call->args[0] = callee;
+    call->flags |= XI_FLAG_TAIL;
+    xi_block_set_return(entry, call);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+/* ========== TBAA metadata consistency ========== */
+
+TEST(tbaa_memory_op_requires_mem_group) {
+    XiFunc *f = make_func("tbaa_missing_group");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *idx = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *load = xi_value_new(f, entry, XI_INDEX_GET, &stub_int, 2);
+    load->args[0] = arr;
+    load->args[1] = idx;
+    load->mem_group = XI_MEM_NONE;
+    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_block_set_return(entry, load);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(tbaa_memory_op_with_group_passes) {
+    XiFunc *f = make_func("tbaa_with_group");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *idx = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *load = xi_value_new(f, entry, XI_INDEX_GET, &stub_int, 2);
+    load->args[0] = arr;
+    load->args[1] = idx;
+    load->mem_group = XI_MEM_ARRAY;
+    f->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+    xi_block_set_return(entry, load);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+/* ========== Backend legality ========== */
+
+TEST(backend_rejects_unlowered_alloc) {
+    XiFunc *f = make_func("backend_illegal");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *size = xi_const_int(f, entry, 4, &stub_int);
+    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_int, 1);
+    arr->args[0] = size;
+    xi_block_set_return(entry, arr);
+    f->stage = XI_STAGE_BACKEND;
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+/* ========== Main ========== */
+
+int main(void) {
+    printf("=== Xi Extended Verifier Tests ===\n\n");
+
+    run_bounds_check_valid();
+    run_bounds_check_arity_failure();
+    run_bounds_check_effect_failure();
+    run_tail_flag_on_non_call_fails();
+    run_tail_call_with_non_function_callee_fails();
+    run_tail_call_with_function_callee_passes();
+    run_tbaa_memory_op_requires_mem_group();
+    run_tbaa_memory_op_with_group_passes();
+    run_backend_rejects_unlowered_alloc();
+
+    printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
+    return tests_failed > 0 ? 1 : 0;
+}
