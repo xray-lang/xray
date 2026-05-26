@@ -4,6 +4,10 @@
 
 cmake_minimum_required(VERSION 3.10)
 
+if(POLICY CMP0091)
+    cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(Xray
     VERSION 0.8.0
     DESCRIPTION "Xray Programming Language Interpreter"
@@ -72,6 +76,7 @@ if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     endif()
 
 elseif(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
     # MSVC needs explicit opt-in for C11 atomics. /std:c11 sets the
     # language version; /experimental:c11atomics turns on the
     # _Atomic keyword path (still flagged "experimental" in VS 2022
@@ -94,11 +99,6 @@ elseif(MSVC)
     # UTF-8 source / execution charset so string literals and the
     # console match what every other platform uses.
     add_compile_options(/utf-8)
-    # Static CRT for Release builds so the distributed binary does
-    # not require vcruntime140.dll on end-user machines.
-    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-    endif()
 endif()
 
 # ============================================================================
@@ -701,6 +701,15 @@ if(READLINE_LIB)
 endif()
 
 target_include_directories(xray PRIVATE ${XRAY_CLI_INCLUDES})
+
+if(WIN32 AND CMAKE_VERSION VERSION_GREATER_EQUAL "3.21")
+    add_custom_command(TARGET xray POST_BUILD
+        COMMAND ${CMAKE_COMMAND}
+                -DOUTPUT_DIR=$<TARGET_FILE_DIR:xray>
+                -DRUNTIME_DLLS=$<JOIN:$<TARGET_RUNTIME_DLLS:xray>,\;>
+                -P ${CMAKE_SOURCE_DIR}/cmake/copy_runtime_dlls.cmake
+    )
+endif()
 
 # Build configuration summary
 set(MODULES_ENABLED "")
