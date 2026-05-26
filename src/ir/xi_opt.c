@@ -18,6 +18,8 @@
 #include "xi_opt_inline.h"
 #include "xi_opt_licm.h"
 #include "xi_opt_sccp.h"
+#include "xi_opt_bce.h"
+#include "xi_range.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "../base/xdefs.h"
@@ -1151,6 +1153,8 @@ static const XiPassDesc xi_pass_table[] = {
     {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
+    {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
+    {"bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"gvn", xi_opt_gvn, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
