@@ -155,16 +155,29 @@ static uint32_t thread_block(XiBlock *target) {
     /* Walk predecessors in reverse to allow safe removal during iteration. */
     for (int pi = (int) target->npreds - 1; pi >= 0; pi--) {
         XiBlock *pred = target->preds[pi];
-        if (!pred || pred->kind != XI_BLOCK_IF || !pred->control)
+        if (!pred)
+            continue;
+
+        /* Walk up through single-succ PLAIN blocks to find the
+         * governing IF block that determines which edge reaches target. */
+        XiBlock *gov = pred;
+        XiBlock *child = target;
+        uint32_t depth = 0;
+        while (gov && gov->kind == XI_BLOCK_PLAIN && gov->npreds == 1 && depth < 16) {
+            child = gov;
+            gov = gov->preds[0];
+            depth++;
+        }
+        if (!gov || gov->kind != XI_BLOCK_IF || !gov->control)
             continue;
 
         CmpKey pred_cmp;
-        if (!extract_cmp_key(pred->control, &pred_cmp))
+        if (!extract_cmp_key(gov->control, &pred_cmp))
             continue;
 
-        /* Determine which side of pred's branch leads to target. */
-        bool from_then = (pred->succs[0] == target);
-        bool from_else = (pred->succs[1] == target);
+        /* Determine which side of gov's branch leads toward target. */
+        bool from_then = (gov->succs[0] == child);
+        bool from_else = (gov->succs[1] == child);
         if (!from_then && !from_else)
             continue;
 
