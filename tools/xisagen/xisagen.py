@@ -2458,6 +2458,11 @@ def _test_emit_generator():
     assert 'xisa_emit_riscv64_add' in header
     assert 'r-type' not in header  # encoding format should not appear in output
 
+    # riscv64impl — pure encoding functions returning uint32_t
+    impl = generate_riscv64_impl(rc, insns)
+    assert 'uint32_t rv64_add(' in impl
+    assert 'return' in impl
+
     print(" PASS", file=sys.stderr)
 
 def _test_typecheck():
