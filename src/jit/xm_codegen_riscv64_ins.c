@@ -530,6 +530,13 @@ static void rv64_h_nop(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     (void) rd;
 }
 
+/* ========== Call Handler Wrapper ========== */
+
+static void rv64_h_call(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    bool handled = rv64_emit_call_ins(ctx, ins, rd);
+    RV64_CODEGEN_CHECK(ctx, handled, "rv64_h_call: unhandled call opcode");
+}
+
 /* ========== Stub Handlers (to be implemented) ========== */
 
 /* These handlers emit a bail for now — they will be fleshed out
@@ -671,14 +678,14 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
     [XM_ALLOC] = rv64_h_stub,
     [XM_CATCH] = rv64_h_stub,
 
-    /* Calls — stub for now */
-    [XM_CALL_C] = rv64_h_stub,
-    [XM_CALL_C_LEAF] = rv64_h_stub,
-    [XM_CALL_SELF_DIRECT] = rv64_h_stub,
-    [XM_CALL_KNOWN] = rv64_h_stub,
-    [XM_CALL_KNOWN_REG] = rv64_h_stub,
-    [XM_CALL_DIRECT] = rv64_h_stub,
-    [XM_CALL] = rv64_h_stub,
+    /* Calls */
+    [XM_CALL_C] = rv64_h_call,
+    [XM_CALL_C_LEAF] = rv64_h_call,
+    [XM_CALL_SELF_DIRECT] = rv64_h_call,
+    [XM_CALL_KNOWN] = rv64_h_call,
+    [XM_CALL_KNOWN_REG] = rv64_h_call,
+    [XM_CALL_DIRECT] = rv64_h_call,
+    [XM_CALL] = rv64_h_call,
 
     /* Return */
     [XM_RET] = rv64_h_ret,

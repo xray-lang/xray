@@ -513,7 +513,7 @@ static void rv64_emit_prologue(Rv64CodegenCtx *ctx) {
     }
 }
 
-static void rv64_emit_epilogue(Rv64CodegenCtx *ctx) {
+XR_FUNC void rv64_emit_epilogue(Rv64CodegenCtx *ctx) {
     /* Restore callee-saved registers (reverse order of saves).
      * We saved them at frame_size-8, frame_size-16, ... from sp.
      * Since fp = sp + frame_size, we can restore using negative offsets from fp. */
@@ -742,16 +742,22 @@ static void rv64_emit_block(Rv64CodegenCtx *ctx, uint32_t block_idx) {
 static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         Rv64BranchPatch *p = &ctx->patches[i];
-        RV64_CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets, "patch: target block OOB");
-        uint32_t target_idx = ctx->block_offsets[p->target_blk];
-        int32_t byte_offset = (int32_t) (target_idx - p->emit_idx) * 4;
+        uint32_t target_idx = 0;
+        int32_t byte_offset = 0;
 
         switch (p->type) {
             case RV64_PATCH_JAL:
+                RV64_CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets,
+                                   "patch JAL: target block OOB");
+                target_idx = ctx->block_offsets[p->target_blk];
+                byte_offset = (int32_t) (target_idx - p->emit_idx) * 4;
                 ctx->buf.code[p->emit_idx] = rv64_j(byte_offset);
                 break;
             case RV64_PATCH_BRANCH:
-                /* Re-encode the conditional branch with correct offset */
+                RV64_CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets,
+                                   "patch branch: target block OOB");
+                target_idx = ctx->block_offsets[p->target_blk];
+                byte_offset = (int32_t) (target_idx - p->emit_idx) * 4;
                 switch (p->cc) {
                     case RV64_CC_EQ:
                         ctx->buf.code[p->emit_idx] = rv64_beq(p->rs1, p->rs2, byte_offset);
@@ -770,8 +776,42 @@ static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
                         break;
                 }
                 break;
-            default:
-                /* Stub/call patches handled later */
+            case RV64_PATCH_CALL_C:
+                byte_offset = (int32_t) (ctx->call_c_stub - p->emit_idx) * 4;
+                ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
+                break;
+            case RV64_PATCH_DEOPT_JAL:
+                byte_offset = (int32_t) (ctx->deopt_stub - p->emit_idx) * 4;
+                ctx->buf.code[p->emit_idx] = rv64_j(byte_offset);
+                break;
+            case RV64_PATCH_DEOPT_BRANCH:
+                byte_offset = (int32_t) (ctx->deopt_stub - p->emit_idx) * 4;
+                switch (p->cc) {
+                    case RV64_CC_NE:
+                        ctx->buf.code[p->emit_idx] = rv64_bne(p->rs1, p->rs2, byte_offset);
+                        break;
+                    case RV64_CC_EQ:
+                        ctx->buf.code[p->emit_idx] = rv64_beq(p->rs1, p->rs2, byte_offset);
+                        break;
+                    default:
+                        ctx->buf.code[p->emit_idx] = rv64_bne(p->rs1, p->rs2, byte_offset);
+                        break;
+                }
+                break;
+            case RV64_PATCH_BARRIER_FWD:
+                byte_offset = (int32_t) (ctx->barrier_fwd_stub - p->emit_idx) * 4;
+                ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
+                break;
+            case RV64_PATCH_BARRIER_BACK:
+                byte_offset = (int32_t) (ctx->barrier_back_stub - p->emit_idx) * 4;
+                ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
+                break;
+            case RV64_PATCH_CALL_SELF:
+                /* Self-call patches target the fast_entry_offset.
+                 * byte_offset = (fast_entry_offset_in_inst - emit_idx) * 4 */
+                target_idx = ctx->fast_entry_offset / 4;
+                byte_offset = (int32_t) (target_idx - p->emit_idx) * 4;
+                ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
                 break;
         }
     }
@@ -890,6 +930,11 @@ XR_FUNC XmCodegenResult xm_codegen_riscv64(XmFunc *func, XmCodeAlloc *alloc) {
     /* Emit all blocks */
     for (uint32_t i = 0; i < func->nblk; i++)
         rv64_emit_block(&ctx, i);
+
+    /* Emit stubs (after all blocks, before patching) */
+    rv64_emit_deopt_stub(&ctx);
+    rv64_emit_call_c_stub(&ctx);
+    rv64_emit_barrier_stubs(&ctx);
 
     /* Check for buffer overflow before patching */
     if (ctx.buf.count >= ctx.buf.capacity) {
