@@ -19,6 +19,7 @@
 #include "xi_opt_licm.h"
 #include "xi_opt_sccp.h"
 #include "xi_opt_bce.h"
+#include "xi_opt_block_simplify.h"
 #include "xi_range.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -1159,6 +1160,8 @@ static const XiPassDesc xi_pass_table[] = {
     {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
+    {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
+     XI_STAGE_RAW},
 };
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
