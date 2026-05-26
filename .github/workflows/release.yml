@@ -5,6 +5,11 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release tag to publish'
+        required: false
+        default: ''
 
 jobs:
   build:
@@ -122,6 +127,15 @@ jobs:
       contents: write
 
     steps:
+    - name: Resolve release tag
+      id: resolve_tag
+      run: |
+        if [ -n "${{ inputs.release_tag }}" ]; then
+          echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+        else
+          echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: Download all artifacts
       uses: actions/download-artifact@v4
       with:
@@ -130,6 +144,7 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ steps.resolve_tag.outputs.tag }}
         files: artifacts/**/*
         overwrite_files: true
         generate_release_notes: true
@@ -144,7 +159,7 @@ jobs:
       run: |
         gh api repos/xray-lang/xray-vscode/dispatches \
           -f event_type=xray-release \
-          -f "client_payload[xray_tag]=${{ github.ref_name }}"
+          -f "client_payload[xray_tag]=${{ steps.resolve_tag.outputs.tag }}"
 
   # Deploy the freshly built linux-x64 xray binary to the playground server
   # so that www.xray-lang.org/playground always runs the latest release.
