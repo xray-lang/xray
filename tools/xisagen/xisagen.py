@@ -1724,8 +1724,175 @@ def generate_arm64_impl(regclasses: list[RegClass], mcinsns: list[McInsn]) -> st
     return '\n'.join(lines)
 
 # ============================================================
+# L4a3: RISC-V 64 implementation generator
+# ============================================================
+
+_RV64_PARAM_TYPES = {
+    'reg:gpr': 'uint8_t',
+    'imm:i12': 'int32_t',
+    'imm:u20': 'uint32_t',
+    'imm:rel12': 'int32_t',
+    'imm:rel20': 'int32_t',
+}
+
+_RV64_NAME_MAP: dict = {
+    'riscv64.add': 'rv64_add',
+    'riscv64.sub': 'rv64_sub',
+    'riscv64.and': 'rv64_and',
+    'riscv64.or': 'rv64_or',
+    'riscv64.xor': 'rv64_xor',
+    'riscv64.sll': 'rv64_sll',
+    'riscv64.srl': 'rv64_srl',
+    'riscv64.sra': 'rv64_sra',
+    'riscv64.slt': 'rv64_slt',
+    'riscv64.addw': 'rv64_addw',
+    'riscv64.subw': 'rv64_subw',
+    'riscv64.addi': 'rv64_addi',
+    'riscv64.andi': 'rv64_andi',
+    'riscv64.ori': 'rv64_ori',
+    'riscv64.ld': 'rv64_ld',
+    'riscv64.sd': 'rv64_sd',
+    'riscv64.jal': 'rv64_jal',
+    'riscv64.jalr': 'rv64_jalr',
+    'riscv64.beq': 'rv64_beq',
+    'riscv64.bne': 'rv64_bne',
+    'riscv64.blt': 'rv64_blt',
+    'riscv64.bge': 'rv64_bge',
+    'riscv64.lui': 'rv64_lui',
+    'riscv64.auipc': 'rv64_auipc',
+    'riscv64.nop': 'rv64_nop',
+    'riscv64.ebreak': 'rv64_ebreak',
+}
+
+def _rv64_c_name(isa_name: str) -> str:
+    return _RV64_NAME_MAP.get(isa_name, 'rv64_' + isa_name.replace('riscv64.', ''))
+
+
+def _gen_riscv64_field_expr(enc, operands: list['OperandInfo']) -> str:
+    """Generate C expression for RISC-V 64 bitfield encoding."""
+    if not enc:
+        return '0'
+    elems = enc.children if isinstance(enc, SList) else enc
+    if not elems:
+        return '0'
+
+    head = elems[0]
+    if isinstance(head, SAtom) and head.is_number:
+        return f'0x{head.int_value:08x}u'
+
+    fmt = head.value if isinstance(head, SAtom) else ''
+    op_map = {}
+    for op in operands:
+        op_map[op.name] = _c_param_name(op)
+
+    def _ref(idx):
+        if idx < len(elems) and isinstance(elems[idx], SAtom):
+            if elems[idx].is_variable:
+                var = elems[idx].value.lstrip('$')
+                return op_map.get(var, var)
+            if elems[idx].is_number:
+                return f'0x{elems[idx].int_value:x}u'
+        return '0'
+
+    if fmt == 'r-type':
+        # (r-type opcode funct3 funct7 rd rs1 rs2)
+        opcode, funct3, funct7 = _ref(1), _ref(2), _ref(3)
+        rd, rs1, rs2 = _ref(4), _ref(5), _ref(6)
+        return (f'{opcode} | ((uint32_t)({rd}) << 7) | ({funct3} << 12) '
+                f'| ((uint32_t)({rs1}) << 15) | ((uint32_t)({rs2}) << 20) '
+                f'| ({funct7} << 25)')
+
+    elif fmt == 'i-type':
+        # (i-type opcode funct3 rd rs1 imm)
+        opcode, funct3 = _ref(1), _ref(2)
+        rd, rs1, imm = _ref(3), _ref(4), _ref(5)
+        return (f'{opcode} | ((uint32_t)({rd}) << 7) | ({funct3} << 12) '
+                f'| ((uint32_t)({rs1}) << 15) | ((uint32_t)((int32_t)({imm}) & 0xfff) << 20)')
+
+    elif fmt == 's-type':
+        # (s-type opcode funct3 rs1 rs2 imm)
+        opcode, funct3 = _ref(1), _ref(2)
+        rs1, rs2, imm = _ref(3), _ref(4), _ref(5)
+        return (f'(uint32_t)({opcode} | (((int32_t)({imm}) & 0x1f) << 7) | ({funct3} << 12) '
+                f'| ((uint32_t)({rs1}) << 15) | ((uint32_t)({rs2}) << 20) '
+                f'| (((uint32_t)((int32_t)({imm}) >> 5) & 0x7f) << 25))')
+
+    elif fmt == 'b-type':
+        # (b-type opcode funct3 rs1 rs2 imm)
+        opcode, funct3 = _ref(1), _ref(2)
+        rs1, rs2, imm = _ref(3), _ref(4), _ref(5)
+        return (f'(uint32_t)({opcode} '
+                f'| ((((int32_t)({imm}) >> 11) & 1) << 7) '
+                f'| ((((int32_t)({imm}) >> 1) & 0xf) << 8) '
+                f'| ({funct3} << 12) '
+                f'| ((uint32_t)({rs1}) << 15) '
+                f'| ((uint32_t)({rs2}) << 20) '
+                f'| ((((int32_t)({imm}) >> 5) & 0x3f) << 25) '
+                f'| ((((int32_t)({imm}) >> 12) & 1u) << 31))')
+
+    elif fmt == 'u-type':
+        # (u-type opcode rd imm)
+        opcode = _ref(1)
+        rd, imm = _ref(2), _ref(3)
+        return f'{opcode} | ((uint32_t)({rd}) << 7) | ((uint32_t)({imm}) << 12)'
+
+    elif fmt == 'j-type':
+        # (j-type opcode rd imm)
+        opcode = _ref(1)
+        rd, imm = _ref(2), _ref(3)
+        return (f'(uint32_t)({opcode} | ((uint32_t)({rd}) << 7) '
+                f'| ((((int32_t)({imm}) >> 12) & 0xff) << 12) '
+                f'| ((((int32_t)({imm}) >> 11) & 1) << 20) '
+                f'| ((((int32_t)({imm}) >> 1) & 0x3ff) << 21) '
+                f'| ((((int32_t)({imm}) >> 20) & 1u) << 31))')
+
+    return '0 /* unknown encoding format */'
+
+
+def generate_riscv64_impl(regclasses: list['RegClass'], mcinsns: list['McInsn']) -> str:
+    """Generate xm_riscv64_gen.c — RISC-V 64 instruction encoder."""
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('/* Source: xisa/arch/riscv64.isa */')
+    lines.append('')
+    lines.append('#include <stdint.h>')
+    lines.append('')
+
+    for insn in mcinsns:
+        if insn.name in _RV64_NAME_MAP:
+            c_name = _RV64_NAME_MAP[insn.name]
+            if c_name is None:
+                continue
+        else:
+            c_name = _rv64_c_name(insn.name)
+        operands = extract_operands(insn)
+
+        params = []
+        for op in operands:
+            type_key = f'{op.kind}:{op.subtype}' if op.subtype else op.kind
+            c_type = _RV64_PARAM_TYPES.get(type_key, 'int32_t')
+            params.append(f'{c_type} {_c_param_name(op)}')
+
+        sig = f'uint32_t {c_name}({", ".join(params)})'
+        if not params:
+            sig = f'uint32_t {c_name}(void)'
+
+        enc_expr = _gen_riscv64_field_expr(insn.encoding, operands)
+
+        lines.append(f'/* {insn.name} */')
+        lines.append(sig + ' {')
+        lines.append(f'    return {enc_expr};')
+        lines.append('}')
+        lines.append('')
+
+    return '\n'.join(lines)
+
+
+# ============================================================
 # L4b: Golden-bytes test generator
 # ============================================================
+
+_RV64_REG_MAP = {f'x{i}': str(i) for i in range(32)}
 
 # Map ISA register names → C enum values
 _X64_REG_MAP = {
@@ -1748,6 +1915,8 @@ def _detect_golden_reg_map(mcinsns: list[McInsn]) -> dict:
     """Detect which register map to use based on instruction prefix."""
     if mcinsns and mcinsns[0].name.startswith('arm64.'):
         return _A64_REG_MAP
+    if mcinsns and mcinsns[0].name.startswith('riscv64.'):
+        return _RV64_REG_MAP
     return _X64_REG_MAP
 
 def _golden_arg_to_c(arg: str, op: OperandInfo, reg_map: dict) -> str:
@@ -1769,19 +1938,41 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
     """Generate a C test file that verifies all golden-bytes entries."""
     arch = _detect_arch(mcinsns)
     reg_map = _detect_golden_reg_map(mcinsns)
-    is_arm64 = (arch == 'arm64')
+    is_fixed32 = (arch in ('arm64', 'riscv64'))
 
     lines = []
     lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
     lines.append(f'/* Golden-bytes verification test for {arch} instruction encoding */')
     lines.append('')
 
-    if is_arm64:
+    if arch == 'arm64':
         lines.append('#ifdef __aarch64__')
         lines.append('')
         lines.append('#include <stdio.h>')
         lines.append('#include <string.h>')
         lines.append('#include "xm_arm64.h"')
+    elif arch == 'riscv64':
+        # RISC-V golden test is cross-platform (encoder is pure math)
+        lines.append('#include <stdio.h>')
+        lines.append('#include <string.h>')
+        lines.append('#include <stdint.h>')
+        lines.append('')
+        lines.append('/* Forward declarations for generated encoder functions */')
+        for insn in mcinsns:
+            if insn.name in _RV64_NAME_MAP:
+                c_name = _RV64_NAME_MAP[insn.name]
+                if c_name is None:
+                    continue
+            else:
+                c_name = _rv64_c_name(insn.name)
+            operands = extract_operands(insn)
+            params = []
+            for op in operands:
+                type_key = f'{op.kind}:{op.subtype}' if op.subtype else op.kind
+                c_type = _RV64_PARAM_TYPES.get(type_key, 'int32_t')
+                params.append(f'{c_type} {_c_param_name(op)}')
+            sig = f'uint32_t {c_name}({", ".join(params)})' if params else f'uint32_t {c_name}(void)'
+            lines.append(f'{sig};')
     else:
         lines.append('#if defined(__x86_64__) || defined(_M_X64)')
         lines.append('')
@@ -1794,8 +1985,8 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
     lines.append('static int g_fail = 0;')
     lines.append('')
 
-    if is_arm64:
-        # ARM64: each function returns uint32_t, compare as 4-byte LE word
+    if is_fixed32:
+        # Fixed 32-bit: each function returns uint32_t, compare as 4-byte LE word
         lines.append('static void check_golden(const char *name, uint32_t got,')
         lines.append('                         const uint8_t *expected) {')
         lines.append('    uint32_t exp_word;')
@@ -1828,15 +2019,22 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
     lines.append('')
     lines.append('int main(void) {')
 
-    if not is_arm64:
+    if not is_fixed32:
         lines.append('    uint8_t mem[64];')
         lines.append('    X64Buf buf;')
 
     lines.append('')
 
     # Determine name map and c_name function
-    name_map = _A64_NAME_MAP if is_arm64 else _X64_NAME_MAP
-    c_name_fn = _a64_c_name if is_arm64 else _x64_c_name
+    if arch == 'arm64':
+        name_map = _A64_NAME_MAP
+        c_name_fn = _a64_c_name
+    elif arch == 'riscv64':
+        name_map = _RV64_NAME_MAP
+        c_name_fn = _rv64_c_name
+    else:
+        name_map = _X64_NAME_MAP
+        c_name_fn = _x64_c_name
 
     test_id = 0
     for insn in mcinsns:
@@ -1857,7 +2055,7 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
             nbytes = len(expected_bytes)
 
             # Build C arguments
-            if is_arm64:
+            if is_fixed32:
                 c_args = []
             else:
                 c_args = ['&buf']
@@ -1869,7 +2067,7 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
 
             byte_list = ', '.join(f'0x{b}' for b in expected_bytes)
 
-            if is_arm64:
+            if is_fixed32:
                 lines.append(f'    {{ static const uint8_t exp[] = {{{byte_list}}};')
                 lines.append(f'      check_golden("{insn.name} ({" ".join(regs)})",')
                 lines.append(f'                   {c_name}({", ".join(c_args)}), exp); }}')
@@ -1886,12 +2084,15 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
     lines.append('    return g_fail > 0 ? 1 : 0;')
     lines.append('}')
     lines.append('')
-    lines.append('#else')
-    lines.append('int main(void) { return 0; }')
-    if is_arm64:
-        lines.append('#endif  // __aarch64__')
+    if arch == 'riscv64':
+        pass  # no conditional compilation needed
     else:
-        lines.append('#endif  // __x86_64__ || _M_X64')
+        lines.append('#else')
+        lines.append('int main(void) { return 0; }')
+        if arch == 'arm64':
+            lines.append('#endif  // __aarch64__')
+        else:
+            lines.append('#endif  // __x86_64__ || _M_X64')
     lines.append('')
     return '\n'.join(lines)
 
@@ -2080,6 +2281,18 @@ def cmd_arm64impl(args: list[str]):
     regclasses, mcinsns = load_isa(path)
     impl = generate_arm64_impl(regclasses, mcinsns)
     out_path = os.path.join(output_dir, 'xm_arm64_gen.c')
+    write_file(out_path, impl)
+    print(f"xisagen: generated {out_path}", file=sys.stderr)
+
+def cmd_riscv64impl(args: list[str]):
+    """Generate xm_riscv64_gen.c from riscv64.isa.
+    Usage: xisagen riscv64impl <isa-file> <output-dir>"""
+    if len(args) < 2:
+        die('usage: xisagen riscv64impl <isa-file> <output-dir>')
+    path, output_dir = args[0], args[1]
+    regclasses, mcinsns = load_isa(path)
+    impl = generate_riscv64_impl(regclasses, mcinsns)
+    out_path = os.path.join(output_dir, 'xm_riscv64_gen.c')
     write_file(out_path, impl)
     print(f"xisagen: generated {out_path}", file=sys.stderr)
 
@@ -2381,6 +2594,7 @@ def main():
         'isa': cmd_isa,
         'x64impl': cmd_x64impl,
         'arm64impl': cmd_arm64impl,
+        'riscv64impl': cmd_riscv64impl,
         'golden': cmd_golden,
         'test': cmd_test,
     }
