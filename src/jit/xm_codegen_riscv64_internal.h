@@ -76,6 +76,11 @@
 #define RV64_SPILL_BASE 176
 #define RV64_JIT_FRAME_BASE 176
 
+/* Extra-arg scratch: reuse the call_args[15] slot to pass extra_arg to
+ * call_c_stub. Safe because call_args are written before the call and
+ * the extra_arg is consumed before any call_args are read by the callee. */
+#define RV64_EXTRA_ARG_OFFSET XM_JIT_TAG_SCRATCH_OFFSET
+
 /* ========== Branch Patch ========== */
 
 typedef enum {
@@ -194,10 +199,43 @@ static inline bool rv64_is_fp_vreg(Rv64CodegenCtx *ctx, XmRef ref) {
     return ctx->func->vregs[idx].rep == XR_REP_F64;
 }
 
+/* Derive XR_TAG_* from const rep for call_arg_tags[] */
+static inline uint8_t rv64_const_rep_to_value_tag(uint8_t rep) {
+    switch (rep) {
+        case XR_REP_I64:
+            return 3; /* XR_TAG_I64 */
+        case XR_REP_F64:
+            return 4; /* XR_TAG_F64 */
+        case XR_REP_PTR:
+            return 5; /* XR_TAG_PTR */
+        default:
+            return 0xFF; /* XR_RTAG_UNKNOWN */
+    }
+}
+
 /* ========== Sub-emit functions ========== */
 
 /* Per-instruction emission (xm_codegen_riscv64_ins.c) */
 XR_FUNC void rv64_emit_xm_ins(Rv64CodegenCtx *ctx, XmIns *ins);
+
+/* Epilogue emission (xm_codegen_riscv64.c) — shared with deopt stub */
+XR_FUNC void rv64_emit_epilogue(Rv64CodegenCtx *ctx);
+
+/* Stub emission (xm_codegen_riscv64_stub.c) */
+XR_FUNC void rv64_emit_call_c_stub(Rv64CodegenCtx *ctx);
+XR_FUNC void rv64_emit_deopt_stub(Rv64CodegenCtx *ctx);
+XR_FUNC void rv64_emit_barrier_stubs(Rv64CodegenCtx *ctx);
+XR_FUNC void rv64_emit_deopt_branch(Rv64CodegenCtx *ctx, Rv64Reg cond_reg);
+XR_FUNC void rv64_emit_deopt_jmp(Rv64CodegenCtx *ctx);
+XR_FUNC void rv64_emit_deopt_id(Rv64CodegenCtx *ctx, XmIns *ins);
+XR_FUNC uint32_t rv64_record_safepoint(Rv64CodegenCtx *ctx);
+XR_FUNC void rv64_emit_ptr_spill_writeback(Rv64CodegenCtx *ctx);
+XR_FUNC int rv64_live_gp(Rv64CodegenCtx *ctx, Rv64Reg *out, Rv64Reg exclude);
+XR_FUNC int rv64_live_fp(Rv64CodegenCtx *ctx, Rv64Freg *out);
+
+/* Call instruction emission (xm_codegen_riscv64_call.c) */
+XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd);
+XR_FUNC void rv64_emit_call_args_from_pool(Rv64CodegenCtx *ctx, XmIns *ins);
 
 /* Bail out of codegen on invariant violation */
 #define RV64_CODEGEN_CHECK(ctx, cond, msg)                                                         \
