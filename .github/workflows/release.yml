@@ -38,10 +38,13 @@ jobs:
     name: Build (${{ matrix.name }})
 
     steps:
-    - uses: actions/checkout@v4
-      with:
-        token: ''
-        persist-credentials: false
+    - name: Checkout
+      shell: bash
+      run: |
+        git init .
+        git remote add origin https://github.com/xray-lang/xray.git
+        git fetch --depth=1 origin "$GITHUB_SHA"
+        git checkout --detach FETCH_HEAD
 
     - name: Install clang (Linux)
       if: runner.os == 'Linux'
@@ -164,7 +167,7 @@ jobs:
         overwrite_files: true
         generate_release_notes: true
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
 
     - name: Trigger VS Code extension publish
       if: success()
