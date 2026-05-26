@@ -32,6 +32,8 @@ void xr_cli_print_version(void) {
     printf(", x86_64");
 #elif defined(__aarch64__) || defined(_M_ARM64)
     printf(", arm64");
+#elif defined(__riscv)
+    printf(", riscv64");
 #elif defined(__i386__) || defined(_M_IX86)
     printf(", x86");
 #endif
