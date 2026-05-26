@@ -159,6 +159,10 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_END_TRY:
             return XI_FLAG_SIDE_EFFECT;
 
+        /* --- Bounds check: traps on out-of-bounds --- */
+        case XI_BOUNDS_CHECK:
+            return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
         /* --- Assert: side effect + may throw --- */
         case XI_ASSERT:
         case XI_ASSERT_EQ:
