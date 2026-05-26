@@ -136,6 +136,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
 
     steps:
@@ -154,30 +155,125 @@ jobs:
           echo "tag=$REF_NAME" >> "$GITHUB_OUTPUT"
         fi
 
-    - name: Download all artifacts
-      uses: actions/download-artifact@v4
-      with:
-        path: artifacts
-
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        tag_name: ${{ steps.resolve_tag.outputs.tag }}
-        files: artifacts/**/*
-        overwrite_files: true
-        generate_release_notes: true
+    - name: Publish Release
       env:
-        GITHUB_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        RELEASE_TAG: ${{ steps.resolve_tag.outputs.tag }}
+        REPO: ${{ github.repository }}
+        RUN_ID: ${{ github.run_id }}
+      run: |
+        python3 - <<'PY'
+        import json
+        import mimetypes
+        import os
+        import pathlib
+        import tempfile
+        import urllib.error
+        import urllib.parse
+        import urllib.request
+        import zipfile
+
+        token = os.environ["GH_TOKEN"]
+        tag = os.environ["RELEASE_TAG"]
+        repo = os.environ["REPO"]
+        run_id = os.environ["RUN_ID"]
+        api = "https://api.github.com"
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        }
+
+        def request(method, url, data=None, content_type=None):
+            req_headers = dict(headers)
+            if content_type:
+                req_headers["Content-Type"] = content_type
+            req = urllib.request.Request(url, data=data, headers=req_headers, method=method)
+            try:
+                with urllib.request.urlopen(req) as resp:
+                    return resp.status, resp.read()
+            except urllib.error.HTTPError as exc:
+                body = exc.read()
+                if exc.code == 404:
+                    return exc.code, body
+                print(body.decode("utf-8", "replace"))
+                raise
+
+        artifacts_root = pathlib.Path("artifacts")
+        artifacts_root.mkdir(exist_ok=True)
+        status, body = request("GET", f"{api}/repos/{repo}/actions/runs/{run_id}/artifacts?per_page=100")
+        artifacts = json.loads(body)["artifacts"]
+        for artifact in artifacts:
+            if artifact.get("expired"):
+                continue
+            status, archive = request("GET", artifact["archive_download_url"])
+            archive_path = pathlib.Path(tempfile.gettempdir()) / f'{artifact["name"]}.zip'
+            archive_path.write_bytes(archive)
+            target_dir = artifacts_root / artifact["name"]
+            target_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(archive_path) as zf:
+                zf.extractall(target_dir)
+
+        files = sorted(path for path in artifacts_root.rglob("*") if path.is_file())
+        if not files:
+            raise SystemExit("no release artifacts were downloaded")
+
+        status, body = request("GET", f"{api}/repos/{repo}/releases/tags/{urllib.parse.quote(tag, safe='')}")
+        if status == 404:
+            payload = json.dumps({
+                "tag_name": tag,
+                "name": tag,
+                "generate_release_notes": True,
+                "draft": False,
+                "prerelease": False,
+            }).encode()
+            status, body = request("POST", f"{api}/repos/{repo}/releases", payload, "application/json")
+        release = json.loads(body)
+        release_id = release["id"]
+
+        status, body = request("GET", f"{api}/repos/{repo}/releases/{release_id}/assets?per_page=100")
+        existing = {asset["name"]: asset["id"] for asset in json.loads(body)}
+        for path in files:
+            name = path.name
+            if name in existing:
+                request("DELETE", f"{api}/repos/{repo}/releases/assets/{existing[name]}")
+            upload_url = f"https://uploads.github.com/repos/{repo}/releases/{release_id}/assets?name={urllib.parse.quote(name)}"
+            content_type = mimetypes.guess_type(name)[0] or "application/octet-stream"
+            status, body = request("POST", upload_url, path.read_bytes(), content_type)
+            asset = json.loads(body)
+            print(f'uploaded {asset["name"]}')
+        PY
 
     - name: Trigger VS Code extension publish
       if: success()
       continue-on-error: true
       env:
-        GH_TOKEN: ${{ secrets.VSCODE_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+        GH_TOKEN: ${{ secrets.VSCODE_DISPATCH_TOKEN || secrets.GH_RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
+        XRAY_TAG: ${{ steps.resolve_tag.outputs.tag }}
       run: |
-        gh api repos/xray-lang/xray-vscode/dispatches \
-          -f event_type=xray-release \
-          -f "client_payload[xray_tag]=${{ steps.resolve_tag.outputs.tag }}"
+        python3 - <<'PY'
+        import json
+        import os
+        import urllib.request
+
+        payload = json.dumps({
+            "event_type": "xray-release",
+            "client_payload": {"xray_tag": os.environ["XRAY_TAG"]},
+        }).encode()
+        req = urllib.request.Request(
+            "https://api.github.com/repos/xray-lang/xray-vscode/dispatches",
+            data=payload,
+            headers={
+                "Authorization": f'Bearer {os.environ["GH_TOKEN"]}',
+                "Accept": "application/vnd.github+json",
+                "Content-Type": "application/json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            method="POST",
+        )
+        with urllib.request.urlopen(req) as resp:
+            print(resp.status)
+        PY
 
   # Deploy the freshly built linux-x64 xray binary to the playground server
   # so that www.xray-lang.org/playground always runs the latest release.
