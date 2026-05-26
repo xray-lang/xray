@@ -28,6 +28,10 @@ void xr_cli_print_version(void) {
     printf("VM");
 #endif
 
+#ifdef XR_ENABLE_TLS
+    printf(", TLS");
+#endif
+
 #if defined(__x86_64__) || defined(_M_X64)
     printf(", x86_64");
 #elif defined(__aarch64__) || defined(_M_ARM64)

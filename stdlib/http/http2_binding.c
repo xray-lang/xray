@@ -20,6 +20,8 @@
 #include "../../src/runtime/object/xmap.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
+#include "../../src/runtime/object/xexception.h"
+#include "../net/tls.h"
 #include <string.h>
 
 // External declarations
@@ -201,8 +203,16 @@ XrValue h2_get(XrayIsolate *X, XrValue *args, int argc) {
         resp = xr_h2_get(url);
     }
 
-    if (!resp)
+    if (!resp) {
+        if (!xr_tls_is_available()) {
+            XrValue exc = xr_exception_new(
+                X, XR_ERR_TLS_UNAVAILABLE,
+                "HTTPS requires TLS support. Xray was built without OpenSSL "
+                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
+            xr_vm_unwind_with_trace(X, exc);
+        }
         return xr_null();
+    }
 
     XrValue result = h2_response_to_json(X, resp);
     xr_h2_response_free(resp);
@@ -224,8 +234,16 @@ XrValue h2_post(XrayIsolate *X, XrValue *args, int argc) {
 
     XrH2Response *resp = xr_h2_post(url, body, body_len, content_type);
 
-    if (!resp)
+    if (!resp) {
+        if (!xr_tls_is_available()) {
+            XrValue exc = xr_exception_new(
+                X, XR_ERR_TLS_UNAVAILABLE,
+                "HTTPS requires TLS support. Xray was built without OpenSSL "
+                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
+            xr_vm_unwind_with_trace(X, exc);
+        }
         return xr_null();
+    }
 
     XrValue result = h2_response_to_json(X, resp);
     xr_h2_response_free(resp);
@@ -269,8 +287,16 @@ XrValue h2_request(XrayIsolate *X, XrValue *args, int argc) {
     if (headers)
         xr_free(headers);
 
-    if (!resp)
+    if (!resp) {
+        if (!xr_tls_is_available()) {
+            XrValue exc = xr_exception_new(
+                X, XR_ERR_TLS_UNAVAILABLE,
+                "HTTPS requires TLS support. Xray was built without OpenSSL "
+                "— rebuild with: cmake -DENABLE_TLS=ON -DOPENSSL_ROOT_DIR=<path>");
+            xr_vm_unwind_with_trace(X, exc);
+        }
         return xr_null();
+    }
 
     XrValue result = h2_response_to_json(X, resp);
     xr_h2_response_free(resp);

@@ -43,6 +43,12 @@ struct XrTlsConn {
     XrTlsContext *ctx;
 };
 
+/* ========== Availability ========== */
+
+bool xr_tls_is_available(void) {
+    return true;
+}
+
 /* ========== Global Initialization ========== */
 
 static int tls_initialized = 0;
@@ -681,13 +687,29 @@ int xr_tls_context_enable_ocsp_stapling(XrTlsContext *ctx) {
 
 #else  // !XR_ENABLE_TLS
 
-// Empty implementations when TLS is disabled
+#include <stdio.h>
+
+// Stub implementations when TLS is disabled (built without OpenSSL)
+
+bool xr_tls_is_available(void) {
+    return false;
+}
+
+static int tls_warned = 0;
 
 void xr_tls_init(void) {
 }
 void xr_tls_cleanup(void) {
 }
 XrTlsContext *xr_tls_context_new_client(void) {
+    if (!tls_warned) {
+        tls_warned = 1;
+        fprintf(stderr,
+                "warning: TLS is not available — Xray was built without "
+                "OpenSSL. HTTPS connections will fail.\n"
+                "  Rebuild with: cmake -DENABLE_TLS=ON "
+                "-DOPENSSL_ROOT_DIR=<path-to-openssl>\n");
+    }
     return NULL;
 }
 XrTlsContext *xr_tls_context_new_server(const char *cert_file, const char *key_file) {
