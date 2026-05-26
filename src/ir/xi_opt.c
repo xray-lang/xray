@@ -21,6 +21,7 @@
 #include "xi_opt_bce.h"
 #include "xi_opt_block_simplify.h"
 #include "xi_opt_jump_thread.h"
+#include "xi_opt_tail_call.h"
 #include "xi_range.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
@@ -1160,6 +1161,7 @@ static const XiPassDesc xi_pass_table[] = {
     {"gvn", xi_opt_gvn, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
+    {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
     {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
     {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
