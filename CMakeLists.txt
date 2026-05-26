@@ -9,7 +9,7 @@ if(POLICY CMP0091)
 endif()
 
 project(Xray
-    VERSION 0.8.0
+    VERSION 0.8.1
     DESCRIPTION "Xray Programming Language Interpreter"
     LANGUAGES C CXX ASM
 )
