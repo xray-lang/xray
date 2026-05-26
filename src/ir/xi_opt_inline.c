@@ -33,14 +33,90 @@
 
 /* ========== Cost Model ========== */
 
-static uint32_t callee_cost(const XiFunc *callee) {
-    uint32_t cost = 0;
+/* Analyze callee to build a detailed cost model. */
+static XiInlineCostModel analyze_callee(const XiFunc *callee) {
+    XiInlineCostModel m = {0};
     for (uint32_t b = 0; b < callee->nblocks; b++) {
-        cost += callee->blocks[b]->nvalues;
-        for (const XiPhi *p = callee->blocks[b]->phis; p; p = p->next)
-            cost++;
+        const XiBlock *blk = callee->blocks[b];
+        m.value_count += blk->nvalues;
+        for (const XiPhi *p = blk->phis; p; p = p->next)
+            m.value_count++;
+
+        if (blk->kind == XI_BLOCK_IF)
+            m.branch_count++;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN)
+                m.call_count++;
+            if (v->op == XI_THROW)
+                m.has_throw = true;
+        }
+
+        /* Back-edge detection: successor with lower block id indicates loop. */
+        for (int s = 0; s < 2; s++) {
+            if (blk->succs[s] && blk->succs[s]->id <= blk->id)
+                m.has_loop = true;
+        }
     }
-    return cost;
+    m.calls_self = false; /* checked separately at call site */
+    return m;
+}
+
+/* Compute caller's current total value count. */
+static uint32_t caller_total_values(const XiFunc *f) {
+    uint32_t total = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        total += f->blocks[b]->nvalues;
+        for (const XiPhi *p = f->blocks[b]->phis; p; p = p->next)
+            total++;
+    }
+    return total;
+}
+
+/* Check if all call arguments (excluding callee itself) are constants. */
+static bool all_args_are_const(const XiValue *call_val) {
+    for (uint16_t a = 1; a < call_val->nargs; a++) {
+        if (!call_val->args[a] || call_val->args[a]->op != XI_CONST)
+            return false;
+    }
+    return true;
+}
+
+/* Benefit scoring:
+ *   base = THRESHOLD - value_count   (bigger callee = lower base)
+ *   + all_args_const * 15             (constant args enable specialization)
+ *   + single_call_site * 10           (no code duplication)
+ *   - call_count * 3                  (nested calls reduce benefit)
+ *   - branch_count * 2                (complex control flow)
+ *   - has_loop * 20                   (loop body expansion)
+ *   - has_throw * 5                   (exception path pollution)
+ *   - (caller_size > 300) * 15        (cap growth in large functions) */
+XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site) {
+    XR_DCHECK(cost != NULL && site != NULL, "inline_benefit: NULL arg");
+
+    if (cost->calls_self)
+        return -1000; /* never inline recursion */
+
+    int score = (int) XI_INLINE_BASE_THRESHOLD - (int) cost->value_count;
+
+    if (site->all_args_const)
+        score += 15;
+    if (site->single_call_site)
+        score += 10;
+
+    score -= (int) cost->call_count * 3;
+    score -= (int) cost->branch_count * 2;
+    if (cost->has_loop)
+        score -= 20;
+    if (cost->has_throw)
+        score -= 5;
+    if (site->caller_size > 300)
+        score -= 15;
+
+    return score;
 }
 
 /* ========== Callee Resolution ========== */
@@ -380,12 +456,12 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
 
     bool any_inlined = false;
 
-    /* Single scan: inline up to 4 call sites per pass invocation
+    /* Single scan: inline up to N call sites per pass invocation
      * to limit code growth. */
     uint32_t inlined_count = 0;
-    const uint32_t max_inline_per_pass = 4;
+    uint32_t caller_size = caller_total_values(f);
 
-    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < max_inline_per_pass; bi++) {
+    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < XI_INLINE_MAX_PER_PASS; bi++) {
         XiBlock *blk = f->blocks[bi];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
@@ -399,11 +475,21 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             if (callee == f)
                 continue; /* no self-recursion */
-
-            uint32_t cost = callee_cost(callee);
-            if (cost > XI_INLINE_MAX_COST)
-                continue;
             if (callee->nblocks == 0)
+                continue;
+
+            XiInlineCostModel cm = analyze_callee(callee);
+            if (cm.value_count > XI_INLINE_MAX_COST)
+                continue;
+            cm.calls_self = (callee == f);
+
+            XiInlineCallSiteInfo si = {
+                .all_args_const = all_args_are_const(v),
+                .single_call_site = false, /* conservative: unknown */
+                .caller_size = caller_size,
+            };
+
+            if (xi_inline_benefit(&cm, &si) <= 0)
                 continue;
 
             if (inline_call_site(f, blk, vi, v, callee)) {
