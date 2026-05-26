@@ -94,6 +94,11 @@ elseif(MSVC)
     # UTF-8 source / execution charset so string literals and the
     # console match what every other platform uses.
     add_compile_options(/utf-8)
+    # Static CRT for Release builds so the distributed binary does
+    # not require vcruntime140.dll on end-user machines.
+    if(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+    endif()
 endif()
 
 # ============================================================================
