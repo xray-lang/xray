@@ -477,6 +477,10 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         case XI_PARAM:
             fprintf(out, "p%u", (unsigned) v->aux_int);
+            if (cg_rep(v) == XR_REP_I64)
+                fprintf(out, ".i");
+            else if (cg_rep(v) == XR_REP_F64)
+                fprintf(out, ".f");
             break;
 
         case XI_COPY:

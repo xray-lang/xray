@@ -451,17 +451,26 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
 /* ========== Pass Driver ========== */
 
+XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size) {
+    if (caller_size < 100)
+        return XI_INLINE_MAX_PER_PASS + 2;
+    if (caller_size > 300)
+        return XI_INLINE_MAX_PER_PASS - 2;
+    return XI_INLINE_MAX_PER_PASS;
+}
+
 XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_inline: NULL func");
 
     bool any_inlined = false;
 
-    /* Single scan: inline up to N call sites per pass invocation
-     * to limit code growth. */
+    /* Single scan: inline up to budget call sites per pass invocation
+     * to limit code growth.  Budget scales with caller size. */
     uint32_t inlined_count = 0;
     uint32_t caller_size = caller_total_values(f);
+    uint32_t budget = xi_inline_budget(caller_size);
 
-    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < XI_INLINE_MAX_PER_PASS; bi++) {
+    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < budget; bi++) {
         XiBlock *blk = f->blocks[bi];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
@@ -481,7 +490,9 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)
                 continue;
-            cm.calls_self = (callee == f);
+            /* callee == f is filtered above; calls_self stays false here.
+             * The benefit function still honours calls_self, so any future
+             * indirect-recursion analysis can set it before scoring. */
 
             XiInlineCallSiteInfo si = {
                 .all_args_const = all_args_are_const(v),

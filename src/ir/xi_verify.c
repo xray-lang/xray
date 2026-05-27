@@ -335,9 +335,8 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
     if (ctx->failed)
         return;
 
-    /* Compute RPO and dominators (overwrites scratch fields on blocks). */
-    xi_compute_rpo(f);
-    xi_compute_dominators(f);
+    /* Ensure RPO and dominators are up to date (cached). */
+    xi_ensure_dominators(f);
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];

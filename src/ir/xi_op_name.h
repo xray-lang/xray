@@ -198,6 +198,8 @@ static inline const char *xi_op_name(uint16_t op) {
             return "ISNULL";
         case XI_PHI:
             return "PHI";
+        case XI_SELECT:
+            return "SELECT";
         case XI_COPY:
             return "COPY";
         case XI_CLASS_CREATE:

@@ -1,19 +1,10 @@
 # Baseline list of silent fallback ("default: break;") violations.
 # Format: <relative-path>:<line>
-# Generated 2026-05-17 by scripts/check_codegen_invariants.sh --update-baseline
-# Total: 32
+# Generated 2026-05-26 by scripts/check_codegen_invariants.sh --update-baseline
+# Total: 23
 # Owner: xingleixu
-# Removal plan: 076 main line S3/S5/S6 progressively reduces to 0.
+# Removal plan: progressively reduce this baseline to 0.
 # Any *new* silent fallback outside this list is rejected by CI.
-src/jit/xm_codegen.c:1367
-src/jit/xm_codegen_mem.c:163
-src/jit/xm_codegen_x64.c:815
-src/jit/xm_codegen_x64_ins.c:492
-src/jit/xm_codegen_x64_ins.c:631
-src/jit/xm_codegen_x64_ins.c:731
-src/jit/xm_codegen_x64_ins.c:969
-src/jit/xm_codegen_x64_ins.c:1062
-src/jit/xm_codegen_x64_mem.c:286
 src/jit/xm_fold.c:149
 src/jit/xm_fold.c:187
 src/jit/xm_fold.c:205

@@ -23,6 +23,7 @@
 #define XR_TYPED_OPS_H
 
 #include "xr_elem_type.h"
+#include <stdbool.h>
 
 /* Read one element from a typed buffer, returning a boxed XrValue.
  * Caller must ensure index is within bounds. */

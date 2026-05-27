@@ -114,23 +114,30 @@ fi
 # --------------------------------------------------------------------------
 echo "--- INV-2: op name sync ---"
 if [ -f src/ir/xi.h ] && [ -f src/ir/xi_op_name.h ]; then
-    # Count enum members between XI_CONST and XI_OP_COUNT (the op enum range)
-    N_OPS=$(awk '/XI_CONST = 0/,/XI_OP_COUNT/' src/ir/xi.h \
-        | grep -c '^\s*XI_[A-Z]' 2>/dev/null || echo "0")
-    N_NAMES=$(grep -c 'case XI_[A-Z_]*:' src/ir/xi_op_name.h 2>/dev/null || echo "0")
-    N_OPS=$(echo "$N_OPS" | tr -d '[:space:]')
-    N_NAMES=$(echo "$N_NAMES" | tr -d '[:space:]')
-    if [ "$N_OPS" -le "$N_NAMES" ]; then
-        pass "op enum ($N_OPS) <= op names ($N_NAMES)"
+    # Extract every concrete op identifier in the [XI_CONST, XI_OP_COUNT)
+    # range, dedup, drop the XI_OP_COUNT sentinel, then diff against the
+    # set of cases handled by xi_op_name.h. Anything left is a real gap.
+    OPS_FILE=$(mktemp)
+    NAMES_FILE=$(mktemp)
+    awk '/XI_CONST = 0/,/XI_OP_COUNT/' src/ir/xi.h \
+        | grep -oE '^[[:space:]]*XI_[A-Z_]+' \
+        | tr -d ' ' \
+        | grep -v '^XI_OP_COUNT$' \
+        | sort -u > "$OPS_FILE"
+    grep -oE 'case XI_[A-Z_]+' src/ir/xi_op_name.h \
+        | sed 's/case //' \
+        | sort -u > "$NAMES_FILE"
+    MISSING=$(comm -23 "$OPS_FILE" "$NAMES_FILE")
+    EXTRA=$(comm -13 "$OPS_FILE" "$NAMES_FILE")
+    rm -f "$OPS_FILE" "$NAMES_FILE"
+    if [ -z "$MISSING" ] && [ -z "$EXTRA" ]; then
+        pass "every XI_* op has a name entry, no orphan cases"
+    elif [ -n "$MISSING" ]; then
+        fail "ops missing from xi_op_name.h:"
+        printf "%s\n" "$MISSING" | sed 's/^/    /'
     else
-        DELTA=$((N_OPS - N_NAMES))
-        if [ "$DELTA" -le 16 ]; then
-            # Pre-existing gap (some ops use default "???" path).
-            # New ops must add a name entry; CI will catch growth.
-            warn "op enum ($N_OPS) > op names ($N_NAMES), gap=$DELTA (pre-existing)"
-        else
-            fail "op enum ($N_OPS) > op names ($N_NAMES) — new ops missing in xi_op_name.h"
-        fi
+        fail "xi_op_name.h has cases for unknown XI_* ops:"
+        printf "%s\n" "$EXTRA" | sed 's/^/    /'
     fi
 else
     warn "xi.h or xi_op_name.h not found, skipping"
@@ -198,25 +205,48 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# INV-12: Negative tests — each xi_opt_*.c should have a test file
+# INV-12: Each xi_opt_*.c must have either a dedicated test file or
+# a non-trivial reference set inside the combined test_xi_opt.c.
 # --------------------------------------------------------------------------
 echo "--- INV-12: Test coverage check ---"
-MISSING_TESTS=0
+COMBINED_TEST="tests/unit/ir/test_xi_opt.c"
+COMBINED_MIN_REFS=3   # at least N references implies real coverage, not a stray include
+MISSING_DEDICATED=()
+NO_COVERAGE=()
 for f in src/ir/xi_opt_*.c; do
     [ -f "$f" ] || continue
-    BASE=$(basename "$f" .c)
-    # Look for any test file referencing this pass
-    if ! ls tests/unit/ir/test_${BASE}*.c tests/unit/ir/test_xi_opt.c 2>/dev/null | grep -q .; then
-        if [ "$VERBOSE" -eq 1 ]; then
-            printf "  Missing test for: %s\n" "$BASE"
-        fi
-        MISSING_TESTS=1
+    BASE=$(basename "$f" .c)               # e.g. xi_opt_ifconv
+    SHORT="${BASE#xi_opt_}"                # e.g. ifconv
+    # Accept any of: test_<base>.c, test_xi_<short>.c, test_<base>_*.c
+    if ls "tests/unit/ir/test_${BASE}.c" \
+          "tests/unit/ir/test_xi_${SHORT}.c" \
+          tests/unit/ir/test_${BASE}_*.c 2>/dev/null | grep -q .; then
+        continue
+    fi
+    # No dedicated file — fall back to checking the combined test.
+    REFS=0
+    if [ -f "$COMBINED_TEST" ]; then
+        # grep -c returns exit 1 with 0 matches; capture stdout regardless
+        REFS=$(grep -c "${BASE}" "$COMBINED_TEST" 2>/dev/null) || REFS=0
+    fi
+    if [ "$REFS" -ge "$COMBINED_MIN_REFS" ]; then
+        MISSING_DEDICATED+=("$BASE ($REFS refs in test_xi_opt.c)")
+    else
+        NO_COVERAGE+=("$BASE")
     fi
 done
-if [ "$MISSING_TESTS" -eq 0 ]; then
-    pass "All xi_opt_*.c have corresponding tests"
+if [ "${#NO_COVERAGE[@]}" -gt 0 ]; then
+    fail "Passes with no test coverage at all:"
+    for entry in "${NO_COVERAGE[@]}"; do
+        printf "    %s\n" "$entry"
+    done
+elif [ "${#MISSING_DEDICATED[@]}" -gt 0 ]; then
+    warn "Passes covered only by test_xi_opt.c (consider promoting to dedicated test):"
+    for entry in "${MISSING_DEDICATED[@]}"; do
+        printf "    %s\n" "$entry"
+    done
 else
-    warn "Some xi_opt_*.c may lack dedicated tests (covered by test_xi_opt.c)"
+    pass "Every xi_opt_*.c has a dedicated test file"
 fi
 
 # --------------------------------------------------------------------------

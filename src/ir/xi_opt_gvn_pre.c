@@ -5,37 +5,40 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_opt_gvn.c - Global Value Numbering with Partial Redundancy Elimination
+ * xi_opt_gvn_pre.c - Global Value Numbering with Partial Redundancy
+ *                    Elimination for Xi IR
  *
  * ALGORITHM (dominator-based GVN-PRE):
  *
  *   1. VALUE NUMBERING:
- *      Hash-consing table keyed by (op, vn(arg0), vn(arg1), aux_int).
- *      Commutative ops are normalized.  Each unique expression gets a
- *      dense value number (VN).  Two values with the same VN are
- *      semantically equivalent.
+ *      Hash-consing table keyed by (op, vn(arg0), vn(arg1), type_key,
+ *      aux_int). Commutative ops are normalized. Each unique expression
+ *      receives a dense value number (VN); two values with the same VN
+ *      are semantically equivalent.
  *
  *   2. FULL REDUNDANCY ELIMINATION:
- *      Walk blocks in dominator-tree RPO.  If a value's VN already
- *      has a dominating definition, replace with XI_COPY.
+ *      Walk blocks in dominator-tree RPO. If a value's VN already has
+ *      a dominating definition, replace the use with XI_COPY.
  *
  *   3. TBAA-AWARE LOAD ELIMINATION:
- *      Memory loads participate when XI_INV_TBAA_ANNOTATED is set.
- *      A load is redundant if an earlier load with the same VN exists
- *      and no intervening store may alias it (checked via mem_group).
+ *      Memory loads participate when XI_INV_TBAA_ANNOTATED is set. A
+ *      load is redundant if an earlier load with the same VN exists and
+ *      no intervening store may alias it (checked via mem_group).
  *
- *   Partial-redundancy insertion is deferred to a future upgrade —
- *   full redundancy elimination already covers the majority of cases
- *   in typical xray programs.
- *
- * SCOPE (vs legacy):
- *   - Unary + binary + conversion ops (was: binary only)
- *   - Memory loads with TBAA disjointness (was: none)
- *   - VN-based matching (was: pointer identity on args)
+ *   4. PARTIAL REDUNDANCY ELIMINATION (pure expressions only):
+ *      For each multi-predecessor block, if a pure expression's VN is
+ *      already available on at least one incoming edge, materialize a
+ *      phi merging per-edge leaders and replace the join expression
+ *      with XI_COPY(phi). Missing edges receive a clone, but only when
+ *      the predecessor flows uniquely into the join (no critical edge
+ *      splitting) and all operands already dominate it. Memory loads
+ *      stay on path 3 — speculating them past potential clobbers needs
+ *      Memory SSA, not just TBAA.
  */
 
-#include "xi_opt_gvn.h"
+#include "xi_opt_gvn_pre.h"
 #include "xi_analysis.h"
+#include "xi_effect.h"
 #include "xi_tbaa.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -283,16 +286,200 @@ static bool has_aliasing_store_between(const XiFunc *f, const XiValue *leader,
     return false;
 }
 
+/* ========== Partial Redundancy Elimination ========== */
+
+typedef struct {
+    uint32_t n_inserted;
+    uint32_t n_phis;
+    uint32_t n_replaced;
+} GvnPreStats;
+
+/* Pure-expression PRE candidate: eligible op without memory effects.
+ * Memory loads still rely on TBAA-based liveness reasoning, so they
+ * stay on the full-redundancy path. */
+static bool pre_is_candidate(const XiValue *v) {
+    if (!gvn_is_eligible(v))
+        return false;
+    if (gvn_is_load(v->op))
+        return false;
+    if (v->flags & XI_FLAG_MEM_ANY)
+        return false;
+    return true;
+}
+
+/* True if 'pred' flows only into 'join' (no critical edge to split). */
+static bool pre_pred_clean(const XiBlock *pred, const XiBlock *join) {
+    return pred && pred->kind == XI_BLOCK_PLAIN && pred->succs[0] == join && pred->succs[1] == NULL;
+}
+
+/* All operands of 'v' must be defined in blocks that dominate 'pred',
+ * so that a clone of 'v' can be safely inserted at the end of 'pred'. */
+static bool pre_operands_dominate_pred(const XiValue *v, const XiBlock *pred) {
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        XiValue *arg = v->args[a];
+        if (!arg || !arg->block)
+            return false;
+        if (!xi_dominates(arg->block, pred))
+            return false;
+    }
+    return true;
+}
+
+/* Look up a value with VN == target_vn that is available along the edge
+ * entering 'pred' — defined in 'pred' itself or in any block dominating
+ * 'pred'. Returns NULL if no such leader exists. */
+static XiValue *pre_find_available(const XiFunc *f, const VnTable *vn, uint32_t target_vn,
+                                   const XiBlock *pred, const XiValue *skip) {
+    XR_DCHECK(f != NULL, "pre_find_available: NULL func");
+    if (!pred)
+        return NULL;
+    for (uint32_t vi = 0; vi < pred->nvalues; vi++) {
+        XiValue *v = pred->values[vi];
+        if (v && v != skip && vn_get(vn, v) == target_vn)
+            return v;
+    }
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *b = f->blocks[bi];
+        if (!b || b == pred)
+            continue;
+        if (!xi_dominates(b, pred))
+            continue;
+        for (uint32_t vi = 0; vi < b->nvalues; vi++) {
+            XiValue *v = b->values[vi];
+            if (v && v != skip && vn_get(vn, v) == target_vn)
+                return v;
+        }
+    }
+    return NULL;
+}
+
+/* Clone the pure expression 'tmpl' at the end of 'pred', reusing the
+ * same operand pointers (callers must have verified that they dominate
+ * 'pred'). Returns NULL on allocation failure. */
+static XiValue *pre_clone_value(XiFunc *f, XiBlock *pred, const XiValue *tmpl) {
+    XR_DCHECK(f != NULL && pred != NULL && tmpl != NULL, "pre_clone_value: NULL arg");
+    XiValue *ins = xi_value_new(f, pred, tmpl->op, tmpl->type, tmpl->nargs);
+    if (!ins)
+        return NULL;
+    for (uint16_t a = 0; a < tmpl->nargs; a++)
+        ins->args[a] = tmpl->args[a];
+    ins->flags = tmpl->flags;
+    ins->rep = tmpl->rep;
+    ins->mem_group = tmpl->mem_group;
+    ins->aux_int = tmpl->aux_int;
+    ins->aux = tmpl->aux;
+    ins->line = tmpl->line;
+    return ins;
+}
+
+/* Try to materialize a partially-available pure expression at 'blk' by
+ * inserting clones along edges where it is missing and replacing the
+ * join definition with a copy of a freshly inserted phi. Bails out (no
+ * mutation) if any predecessor is unsuitable. */
+static bool pre_try_value(XiFunc *f, VnTable *vn, XiBlock *blk, XiValue *v, GvnPreStats *stats) {
+    if (!v || blk->npreds < 2 || !pre_is_candidate(v))
+        return false;
+    uint32_t target_vn = vn_get(vn, v);
+    if (target_vn == GVN_NO_VN)
+        return false;
+
+    XiValue **edge_vals = (XiValue **) xr_calloc(blk->npreds, sizeof(XiValue *));
+    if (!edge_vals)
+        return false;
+
+    /* Each predecessor must either already provide a leader for this VN
+     * or accept a clone (PLAIN single-successor block whose operands
+     * already dominate it). At least one edge must already be available
+     * to keep the transform anticipability-bounded — pure speculation
+     * (no edge available) would risk inserting work onto cold paths. */
+    bool any_avail = false;
+    bool ok = true;
+    for (uint16_t p = 0; p < blk->npreds; p++) {
+        XiBlock *pred = blk->preds[p];
+        if (!pred) {
+            ok = false;
+            break;
+        }
+        XiValue *avail = pre_find_available(f, vn, target_vn, pred, v);
+        if (avail) {
+            edge_vals[p] = avail;
+            any_avail = true;
+            continue;
+        }
+        if (!pre_pred_clean(pred, blk) || !pre_operands_dominate_pred(v, pred)) {
+            ok = false;
+            break;
+        }
+    }
+    if (!ok || !any_avail) {
+        xr_free(edge_vals);
+        return false;
+    }
+
+    uint32_t inserted = 0;
+    for (uint16_t p = 0; p < blk->npreds; p++) {
+        if (edge_vals[p])
+            continue;
+        XiValue *clone = pre_clone_value(f, blk->preds[p], v);
+        if (!clone) {
+            xr_free(edge_vals);
+            return false;
+        }
+        vn_set(vn, clone, target_vn);
+        edge_vals[p] = clone;
+        inserted++;
+    }
+
+    XiPhi *phi = xi_phi_new(f, blk, v->type, blk->npreds);
+    if (!phi) {
+        xr_free(edge_vals);
+        return false;
+    }
+    phi->value.rep = v->rep;
+    phi->value.line = v->line;
+    for (uint16_t p = 0; p < blk->npreds; p++)
+        phi->value.args[p] = edge_vals[p];
+
+    /* Replace the join expression with a copy of the phi. */
+    v->op = XI_COPY;
+    v->args[0] = &phi->value;
+    v->nargs = 1;
+    v->flags = xi_op_default_effects(XI_COPY);
+    v->aux_int = 0;
+    v->aux = NULL;
+    v->mem_group = XI_MEM_NONE;
+    vn_set(vn, v, target_vn);
+
+    stats->n_inserted += inserted;
+    stats->n_phis++;
+    stats->n_replaced++;
+    xr_free(edge_vals);
+    return true;
+}
+
+/* Walk every multi-predecessor block and try PRE on each value. Each
+ * attempt either commits or leaves the IR untouched. */
+static GvnPreStats gvn_eliminate_partial(XiFunc *f, VnTable *vn) {
+    GvnPreStats stats = {0, 0, 0};
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk || blk->npreds < 2)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++)
+            pre_try_value(f, vn, blk, blk->values[vi], &stats);
+    }
+    return stats;
+}
+
 /* ========== Driver ========== */
 
-XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
-    XR_DCHECK(f != NULL, "xi_opt_gvn: NULL func");
+XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_gvn_pre: NULL func");
     if (f->nblocks < 1)
         return xi_pass_no_change();
 
-    /* Ensure dominator tree is available. */
-    xi_compute_rpo(f);
-    xi_compute_dominators(f);
+    /* Ensure dominator tree is available (cached across passes). */
+    xi_ensure_dominators(f);
 
     bool tbaa_active = (f->invariant_mask & XI_INV_TBAA_ANNOTATED) != 0;
 
@@ -396,13 +583,15 @@ XR_FUNC XiPassChange xi_opt_gvn(XiFunc *f) {
         }
     }
 
+    GvnPreStats pre = gvn_eliminate_partial(f, &vn);
     vn_destroy(&vn);
 
-    if (n_replaced == 0)
+    if (n_replaced == 0 && pre.n_replaced == 0 && pre.n_inserted == 0 && pre.n_phis == 0)
         return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();
     chg.values_changed = true;
-    chg.n_removed = n_replaced;
+    chg.n_removed = n_replaced + pre.n_replaced;
+    chg.n_added = pre.n_inserted + pre.n_phis;
     return chg;
 }

@@ -695,6 +695,35 @@ typedef struct XiFunc {
      * Automatically updated when stage advances. */
     XiInvariantMask invariant_mask;
 
+    /* CFG / analysis version tags.  cfg_version is bumped by
+     * xi_cfg_invalidate() whenever the CFG changes (block split /
+     * merge / edge rewrite).  *_version fields record the
+     * cfg_version observed when each analysis was last computed;
+     * the corresponding xi_ensure_*() entry point recomputes lazily
+     * only when its version lags cfg_version.
+     *
+     * Initial cfg_version is 1 (set by xi_func_new); all *_version
+     * default to 0 (calloc), so the first ensure() call always
+     * recomputes.
+     *
+     * loop_cache is owned by the XiFunc — callers of xi_ensure_loops()
+     * must NOT free the returned pointer; xi_func_free() handles
+     * release, and a CFG-version mismatch triggers re-release inside
+     * xi_ensure_loops(). */
+    uint64_t cfg_version;
+    uint64_t rpo_version;
+    uint64_t dom_version;
+    uint64_t loop_version;
+    struct XiLoopInfo *loop_cache;
+
+    /* Cache-miss counters — incremented at the bottom of each
+     * xi_compute_* entry point.  xi_pipeline_stats_dump reports these
+     * so XRAY_XI_STATS=1 can show whether the cache actually saved
+     * work across a pipeline run. */
+    uint32_t rpo_recomputes;
+    uint32_t dom_recomputes;
+    uint32_t loop_recomputes;
+
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;      /* has rest parameter (...args) */
     uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
@@ -730,70 +759,7 @@ typedef struct XiFunc {
     void *analysis_data[2];
 } XiFunc;
 
-/* ========== Arena Constants ========== */
-
-#define XI_ARENA_INITIAL_SIZE (64 * 1024) /* 64 KiB initial arena */
-
-/* ========== API: Function Lifecycle ========== */
-
-XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
-XR_FUNC void xi_func_free(XiFunc *f);
-XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage);
-
-/* Arena helper: allocate aligned memory from the function's bump allocator.
- * Used by xi_lower.c for phi arg arrays during Braun SSA construction. */
-XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
-
-/* Compute effect_summary by OR-ing all value flags in the function.
- * Recurses into children to propagate may-suspend etc. upward. */
-XR_FUNC void xi_func_compute_effects(XiFunc *f);
-
-/* ========== API: Block Management ========== */
-
-XR_FUNC XiBlock *xi_block_new(XiFunc *f);
-XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);
-
-/* ========== API: Value Construction ========== */
-
-/* Create a new value and append to the given block. */
-XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
-                              uint16_t nargs);
-
-/* Convenience: constant constructors.
- * Caller provides XrType* (obtained from XaAnalyzer/XrTypePool).
- * The IR module does not depend on XrayIsolate. */
-XR_FUNC XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type);
-XR_FUNC XiValue *xi_const_float(XiFunc *f, XiBlock *blk, double val, struct XrType *float_type);
-XR_FUNC XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_type);
-XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk, struct XrType *null_type);
-XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str, struct XrType *str_type);
-XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk, const char *digits,
-                                 struct XrType *bigint_type);
-
-/* Convenience: binary op */
-XR_FUNC XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *lhs,
-                           XiValue *rhs);
-
-/* Convenience: unary op */
-XR_FUNC XiValue *xi_unary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *arg);
-
-/* Convenience: function parameter */
-XR_FUNC XiValue *xi_param(XiFunc *f, XiBlock *blk, uint16_t index, struct XrType *type);
-
-/* ========== API: Phi Nodes ========== */
-
-XR_FUNC XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds);
-
-/* ========== API: Block Termination ========== */
-
-XR_FUNC void xi_block_set_return(XiBlock *blk, XiValue *val);
-XR_FUNC void xi_block_set_jump(XiBlock *blk, XiBlock *target);
-XR_FUNC void xi_block_set_if(XiBlock *blk, XiValue *cond, XiBlock *then_blk, XiBlock *else_blk);
-
-/* ========== API: Dump ========== */
-
-/* Print human-readable text representation to FILE* (pass stdout for console) */
-XR_FUNC void xi_func_dump(const XiFunc *f, void *stream);
+#include "xi_core_api.h"
 
 /* Module metadata, slot map, and closure pass are in xi_module.h */
 

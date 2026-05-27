@@ -134,8 +134,13 @@ def generate_ops_header(ops: list[OpDef]) -> str:
     lines.append('static const XmOpInfo xm_op_info[XM_OP_COUNT] = {')
     for op in ops:
         flags_expr = ' | '.join(f'XM_EF_{f}' for f in op.flags) if op.flags else '0'
-        lines.append(f'    [XM_{op.name}] = {{"{op.name}", '
-                     f'XM_CLASS_{op.cls}, {op.nargs}, XR_REP_{op.rep}, {flags_expr}}},')
+        entry = f'    [XM_{op.name}] = {{"{op.name}", XM_CLASS_{op.cls}, {op.nargs}, XR_REP_{op.rep}, {flags_expr}}},'
+        if len(entry) <= 100:
+            lines.append(entry)
+        else:
+            first_line = f'    [XM_{op.name}] = {{"{op.name}", XM_CLASS_{op.cls}, {op.nargs}, XR_REP_{op.rep},'
+            lines.append(first_line)
+            lines.append(f'{" " * (first_line.index("{") + 1)}{flags_expr}}},')
     lines.append('};')
     lines.append('#else')
     lines.append('extern const XmOpInfo xm_op_info[XM_OP_COUNT];')
@@ -186,9 +191,9 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     # Flag defines
     lines.append('/* ========== Helper Flags ========== */')
     lines.append('')
-    lines.append('#define XM_HF_GC      (1 << 0)')
-    lines.append('#define XM_HF_DEOPT   (1 << 1)')
-    lines.append('#define XM_HF_THROW   (1 << 2)')
+    lines.append('#define XM_HF_GC (1 << 0)')
+    lines.append('#define XM_HF_DEOPT (1 << 1)')
+    lines.append('#define XM_HF_THROW (1 << 2)')
     lines.append('#define XM_HF_SUSPEND (1 << 3)')
     lines.append('')
 
@@ -206,10 +211,10 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('/* ========== Helper Metadata ========== */')
     lines.append('')
     lines.append('typedef struct {')
-    lines.append('    void *func;       /* C function pointer (set by xm_helper_table.c) */')
-    lines.append('    uint8_t ret_rep;  /* XrRep: return representation */')
-    lines.append('    uint8_t nargs;    /* call_arg_pool arguments consumed */')
-    lines.append('    uint16_t flags;   /* XM_HF_* */')
+    lines.append('    void *func;      /* C function pointer (set by xm_helper_table.c) */')
+    lines.append('    uint8_t ret_rep; /* XrRep: return representation */')
+    lines.append('    uint8_t nargs;   /* call_arg_pool arguments consumed */')
+    lines.append('    uint16_t flags;  /* XM_HF_* */')
     lines.append('} XmHelperInfo;')
     lines.append('')
 
@@ -217,10 +222,14 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('/* ========== Helper Metadata Table (static, no func ptr) ========== */')
     lines.append('')
     lines.append('#ifdef XM_HELPERS_META_IMPL')
-    lines.append('static const struct { uint8_t ret_rep; uint8_t nargs; uint16_t flags; } xm_helper_meta[XM_HELPER__COUNT] = {')
+    lines.append('static const struct {')
+    lines.append('    uint8_t ret_rep;')
+    lines.append('    uint8_t nargs;')
+    lines.append('    uint16_t flags;')
+    lines.append('} xm_helper_meta[XM_HELPER__COUNT] = {')
     for h in helpers:
         flags_expr = ' | '.join(f'XM_HF_{f}' for f in h.flags) if h.flags else '0'
-        lines.append(f'    [XM_HELPER_{h.name}] = {{ XR_REP_{h.ret_rep}, {h.nargs}, {flags_expr} }},')
+        lines.append(f'    [XM_HELPER_{h.name}] = {{XR_REP_{h.ret_rep}, {h.nargs}, {flags_expr}}},')
     lines.append('};')
     lines.append('#endif')
     lines.append('')
@@ -228,11 +237,18 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     # X-macro for fn-ptr table
     lines.append('/* ========== X-Macro for fn-ptr table ========== */')
     lines.append('')
-    lines.append('#define XM_HELPER_DEF(_) \\')
-    for i, h in enumerate(helpers):
+    macro_entries = []
+    for h in helpers:
         flags_expr = ' | '.join(f'XM_HF_{f}' for f in h.flags) if h.flags else '0'
-        cont = ' \\' if i < len(helpers) - 1 else ''
-        lines.append(f'    _({h.name}, {h.nargs}, XR_REP_{h.ret_rep}, {flags_expr}){cont}')
+        macro_entries.append(f'    _({h.name}, {h.nargs}, XR_REP_{h.ret_rep}, {flags_expr})')
+    macro_backslash_col0 = 99
+    macro_define = '#define XM_HELPER_DEF(_)'
+    lines.append(f'{macro_define}{" " * (macro_backslash_col0 - len(macro_define))}\\')
+    for i, entry in enumerate(macro_entries):
+        if i < len(macro_entries) - 1:
+            lines.append(f'{entry}{" " * (macro_backslash_col0 - len(entry))}\\')
+        else:
+            lines.append(entry)
     lines.append('')
 
     lines.append('#endif  // XM_HELPERS_GEN_H')
@@ -1180,11 +1196,15 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
         dst = _var(enc[4])
         src = _var(enc[5])
         lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
-        lines.append(f'    {{ bool r = ((int){dst} > 7); bool b = ((int){src} > 7);')
-        lines.append(f'      if (r || b) x64_rex(buf, false, r, false, b); }}')
+        lines.append('    {')
+        lines.append(f'        bool r = ((int) {dst} > 7);')
+        lines.append(f'        bool b = ((int) {src} > 7);')
+        lines.append('        if (r || b)')
+        lines.append('            x64_rex(buf, false, r, false, b);')
+        lines.append('    }')
         lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
         lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
-        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t){dst} & 7, (uint8_t){src} & 7);')
+        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t) {dst} & 7, (uint8_t) {src} & 7);')
         return lines
 
     # ---- Pattern: (sse-rm PREFIX OP1 OP2 $xmm $base $disp) ----
@@ -1196,11 +1216,15 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
         base = _var(enc[5])
         disp = _var(enc[6])
         lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
-        lines.append(f'    {{ bool r = ((int){xmm} > 7); bool b = ({base} > 7);')
-        lines.append(f'      if (r || b) x64_rex(buf, false, r, false, b); }}')
+        lines.append('    {')
+        lines.append(f'        bool r = ((int) {xmm} > 7);')
+        lines.append(f'        bool b = ({base} > 7);')
+        lines.append('        if (r || b)')
+        lines.append('            x64_rex(buf, false, r, false, b);')
+        lines.append('    }')
         lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
         lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
-        lines.append(f'    x64_modrm_mem(buf, (X64Reg)((int){xmm} & 7), {base}, {disp});')
+        lines.append(f'    x64_modrm_mem(buf, (X64Reg) ((int) {xmm} & 7), {base}, {disp});')
         return lines
 
     # ---- Pattern: (sse-gp PREFIX rex.w OP1 OP2 $r1 $r2) ----
@@ -1212,10 +1236,10 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
         r1 = _var(enc[5])
         r2 = _var(enc[6])
         lines.append(f'    x64_emit8(buf, 0x{prefix:02x});')
-        lines.append(f'    x64_rex(buf, true, (int){r1} > 7, false, (int){r2} > 7);')
+        lines.append(f'    x64_rex(buf, true, (int) {r1} > 7, false, (int) {r2} > 7);')
         lines.append(f'    x64_emit8(buf, 0x{op1:02x});')
         lines.append(f'    x64_emit8(buf, 0x{op2:02x});')
-        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t){r1} & 7, (uint8_t){r2} & 7);')
+        lines.append(f'    x64_modrm(buf, 0x3, (uint8_t) {r1} & 7, (uint8_t) {r2} & 7);')
         return lines
 
     # ---- Pattern: (rex-if-ext $reg (+ BASE (reg3 $reg)) (imm32 $imm)) ----
@@ -1229,9 +1253,9 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
         imm_var = _var(imm_node.children[1]) if isinstance(imm_node, SList) else 'imm'
         lines.append(f'    if ({reg} > 7)')
         lines.append(f'        x64_rex(buf, false, false, false, true);')
-        lines.append(f'    x64_emit8(buf, 0x{base_byte:02x} + ((uint8_t){reg} & 7));')
+        lines.append(f'    x64_emit8(buf, 0x{base_byte:02x} + ((uint8_t) {reg} & 7));')
         if imm_type == 'imm32':
-            lines.append(f'    x64_emit32(buf, (uint32_t){imm_var});')
+            lines.append(f'    x64_emit32(buf, (uint32_t) {imm_var});')
         elif imm_type == 'imm64':
             lines.append(f'    x64_emit64(buf, {imm_var});')
         return lines
@@ -1282,9 +1306,9 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
             mod = _num(modrm_node.children[1])
             reg_f = modrm_node.children[2]
             rm_f = modrm_node.children[3]
-            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t){_var(reg_f)}'
+            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t) {_var(reg_f)}'
             rm_expr = _var(rm_f) if _var(rm_f) else str(_num(rm_f))
-            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t){rm_expr});')
+            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t) {rm_expr});')
         return lines
 
     # ---- Pattern: (rex-for-byte-r $reg OPCODES... (modrm ...)) ----
@@ -1309,16 +1333,16 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
         lines.append(f'        x64_rex(buf, false, false, false, {reg} > 7);')
         for op in opcodes:
             if isinstance(op, tuple) and op[0] == 'plus':
-                lines.append(f'    x64_emit8(buf, 0x{op[1]:02x} + (uint8_t){op[2]});')
+                lines.append(f'    x64_emit8(buf, 0x{op[1]:02x} + (uint8_t) {op[2]});')
             else:
                 lines.append(f'    x64_emit8(buf, 0x{op:02x});')
         if modrm_node:
             mod = _num(modrm_node.children[1])
             reg_f = modrm_node.children[2]
             rm_f = modrm_node.children[3]
-            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t){_var(reg_f)}'
+            reg_expr = str(_num(reg_f)) if _num(reg_f) is not None else f'(uint8_t) {_var(reg_f)}'
             rm_expr = _var(rm_f) if _var(rm_f) else str(_num(rm_f))
-            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t){rm_expr});')
+            lines.append(f'    x64_modrm(buf, 0x{mod:x}, {reg_expr}, (uint8_t) {rm_expr});')
         return lines
 
     # ---- Pattern: (prefix-66 rex-if-ext2 ...) ----
@@ -1419,13 +1443,13 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
     # ---- Emit parameterized opcode: (+ BASE $cc) ----
     if plus_cc:
         base_val, cc_var = plus_cc
-        lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + (uint8_t){cc_var});')
+        lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + (uint8_t) {cc_var});')
 
     # ---- Emit opcode+rd: (+ BASE (reg3 $r)) ----
     if plus_info:
         base_val, rv = plus_info
         if rv:
-            lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + ((uint8_t){rv} & 7));')
+            lines.append(f'    x64_emit8(buf, 0x{base_val:02x} + ((uint8_t) {rv} & 7));')
 
     # ---- Emit ModRM (register-register) ----
     if modrm_info:
@@ -1435,8 +1459,8 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
             mrm_var = _var(mrm)
             mreg_num = _num(mreg)
             mrm_num = _num(mrm)
-            reg_expr = f'(uint8_t){mreg_var}' if mreg_var else str(mreg_num)
-            rm_expr = f'(uint8_t){mrm_var}' if mrm_var else str(mrm_num)
+            reg_expr = f'(uint8_t) {mreg_var}' if mreg_var else str(mreg_num)
+            rm_expr = f'(uint8_t) {mrm_var}' if mrm_var else str(mrm_num)
             if mreg_var and mrm_var:
                 lines.append(f'    x64_modrm_rr(buf, {mreg_var}, {mrm_var});')
             else:
@@ -1450,9 +1474,9 @@ def _gen_x64buf_body(insn: McInsn, operands: list[OperandInfo]) -> list[str]:
     # ---- Emit immediates ----
     for imm_type, imm_var in imm_parts:
         if imm_type in ('imm8', 'rel8'):
-            lines.append(f'    x64_emit8(buf, (uint8_t){imm_var});')
+            lines.append(f'    x64_emit8(buf, (uint8_t) {imm_var});')
         elif imm_type in ('imm32', 'rel32'):
-            lines.append(f'    x64_emit32(buf, (uint32_t){imm_var});')
+            lines.append(f'    x64_emit32(buf, (uint32_t) {imm_var});')
         elif imm_type == 'imm64':
             lines.append(f'    x64_emit64(buf, {imm_var});')
 
@@ -1515,12 +1539,12 @@ def _gen_ri_wrapper(c_name: str, ext: int, reg_param: str) -> list[str]:
     lines.append(f'    x64_rex(buf, true, false, false, {reg_param} > 7);')
     lines.append(f'    if (imm >= -128 && imm <= 127) {{')
     lines.append(f'        x64_emit8(buf, 0x83);')
-    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t){reg_param});')
-    lines.append(f'        x64_emit8(buf, (uint8_t)(int8_t)imm);')
+    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t) {reg_param});')
+    lines.append(f'        x64_emit8(buf, (uint8_t) (int8_t) imm);')
     lines.append(f'    }} else {{')
     lines.append(f'        x64_emit8(buf, 0x81);')
-    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t){reg_param});')
-    lines.append(f'        x64_emit32(buf, (uint32_t)imm);')
+    lines.append(f'        x64_modrm(buf, 0x3, {ext}, (uint8_t) {reg_param});')
+    lines.append(f'        x64_emit32(buf, (uint32_t) imm);')
     lines.append(f'    }}')
     lines.append(f'}}')
     return lines
@@ -1576,8 +1600,8 @@ def generate_x64_impl(regclasses: list[RegClass], mcinsns: list[McInsn]) -> str:
     lines.append('    XR_DCHECK(buf != NULL, "x64_test_ri: NULL buf");')
     lines.append('    x64_rex(buf, true, false, false, dst > 7);')
     lines.append('    x64_emit8(buf, 0xf7);')
-    lines.append('    x64_modrm(buf, 0x3, 0, (uint8_t)dst);')
-    lines.append('    x64_emit32(buf, (uint32_t)imm);')
+    lines.append('    x64_modrm(buf, 0x3, 0, (uint8_t) dst);')
+    lines.append('    x64_emit32(buf, (uint32_t) imm);')
     lines.append('}')
     lines.append('')
 
@@ -1730,9 +1754,9 @@ def _gen_arm64_field_expr(enc, operands: list[OperandInfo]) -> str:
             param = op_map.get(var, var)
             mask = (1 << width) - 1
             if bit_pos == 0:
-                parts.append(f'((uint32_t){param} & 0x{mask:x})')
+                parts.append(f'((uint32_t) {param} & 0x{mask:x})')
             else:
-                parts.append(f'(((uint32_t){param} & 0x{mask:x}) << {bit_pos})')
+                parts.append(f'(((uint32_t) {param} & 0x{mask:x}) << {bit_pos})')
 
         elif head == 'field-scaled':
             # (field-scaled bit_pos width $var divisor)
@@ -1744,7 +1768,7 @@ def _gen_arm64_field_expr(enc, operands: list[OperandInfo]) -> str:
             divisor = children[4].int_value if isinstance(children[4], SAtom) else 1
             param = op_map.get(var, var)
             mask = (1 << width) - 1
-            val_expr = f'((uint32_t){param} / {divisor})' if divisor > 1 else f'(uint32_t){param}'
+            val_expr = f'((uint32_t) {param} / {divisor})' if divisor > 1 else f'(uint32_t) {param}'
             if bit_pos == 0:
                 parts.append(f'({val_expr} & 0x{mask:x})')
             else:
@@ -1760,7 +1784,7 @@ def _gen_arm64_field_expr(enc, operands: list[OperandInfo]) -> str:
             xor_mask = children[4].int_value if isinstance(children[4], SAtom) else 0
             param = op_map.get(var, var)
             mask = (1 << width) - 1
-            val_expr = f'((uint32_t){param} ^ {xor_mask})'
+            val_expr = f'((uint32_t) {param} ^ {xor_mask})'
             if bit_pos == 0:
                 parts.append(f'({val_expr} & 0x{mask:x})')
             else:
@@ -1805,7 +1829,7 @@ def generate_arm64_impl(regclasses: list[RegClass], mcinsns: list[McInsn]) -> st
 
         lines.append(f'/* {insn.name} */')
         lines.append(sig + ' {')
-        lines.append(f'    return {enc_expr};')
+        lines.extend(_gen_riscv64_return_lines(enc_expr))
         lines.append('}')
         lines.append('')
 
@@ -1917,6 +1941,27 @@ def _gen_riscv64_field_expr(enc, operands: list['OperandInfo']) -> str:
     return '0 /* unknown encoding format */'
 
 
+def _format_c_casts(expr: str) -> str:
+    return (expr.replace('(uint32_t)(', '(uint32_t) (')
+            .replace('(int32_t)(', '(int32_t) (')
+            .replace('(uint8_t)(', '(uint8_t) (')
+            .replace('(int8_t)(', '(int8_t) ('))
+
+
+def _gen_riscv64_return_lines(expr: str) -> list[str]:
+    expr = _format_c_casts(expr)
+    if expr.startswith('(uint32_t) (') and expr.endswith(')'):
+        expr = expr[len('(uint32_t) ('):-1]
+    terms = [term.strip() for term in expr.split(' | ')]
+    if len(terms) <= 1:
+        return [f'    return {terms[0]};']
+    lines = [f'    uint32_t insn = {terms[0]};']
+    for term in terms[1:]:
+        lines.append(f'    insn |= {term};')
+    lines.append('    return insn;')
+    return lines
+
+
 def generate_riscv64_impl(regclasses: list['RegClass'], mcinsns: list['McInsn']) -> str:
     """Generate xm_riscv64_gen.c — RISC-V 64 instruction encoder."""
     lines = []
@@ -1949,7 +1994,7 @@ def generate_riscv64_impl(regclasses: list['RegClass'], mcinsns: list['McInsn'])
 
         lines.append(f'/* {insn.name} */')
         lines.append(sig + ' {')
-        lines.append(f'    return {enc_expr};')
+        lines.extend(_gen_riscv64_return_lines(enc_expr))
         lines.append('}')
         lines.append('')
 
@@ -1998,9 +2043,9 @@ def _golden_arg_to_c(arg: str, op: OperandInfo, reg_map: dict) -> str:
     try:
         v = int(arg, 0)
         if op.subtype == 'u64':
-            return f'(uint64_t){v}ULL'
+            return f'(uint64_t) {v}ULL'
         if op.subtype == 'u32':
-            return f'(uint32_t){v}U'
+            return f'(uint32_t) {v}U'
         return str(v)
     except ValueError:
         return arg
@@ -2058,22 +2103,19 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
 
     if is_fixed32:
         # Fixed 32-bit: each function returns uint32_t, compare as 4-byte LE word
-        lines.append('static void check_golden(const char *name, uint32_t got,')
-        lines.append('                         const uint8_t *expected) {')
+        lines.append('static void check_golden(const char *name, uint32_t got, const uint8_t *expected) {')
         lines.append('    uint32_t exp_word;')
         lines.append('    memcpy(&exp_word, expected, 4);')
         lines.append('    if (got != exp_word) {')
-        lines.append('        fprintf(stderr, "FAIL: %s: expected 0x%08x, got 0x%08x\\n",')
-        lines.append('                name, exp_word, got);')
+        lines.append('        fprintf(stderr, "FAIL: %s: expected 0x%08x, got 0x%08x\\n", name, exp_word, got);')
         lines.append('        g_fail++;')
         lines.append('    } else {')
         lines.append('        g_pass++;')
         lines.append('    }')
         lines.append('}')
     else:
-        lines.append('static void check_golden(const char *name, X64Buf *buf,')
-        lines.append('                         const uint8_t *expected, int len) {')
-        lines.append('    if ((int)buf->pos != len || memcmp(buf->code, expected, (size_t)len) != 0) {')
+        lines.append('static void check_golden(const char *name, X64Buf *buf, const uint8_t *expected, int len) {')
+        lines.append('    if ((int) buf->pos != len || memcmp(buf->code, expected, (size_t) len) != 0) {')
         lines.append('        fprintf(stderr, "FAIL: %s: expected %d bytes [", name, len);')
         lines.append('        for (int i = 0; i < len; i++)')
         lines.append('            fprintf(stderr, "%s%02x", i ? " " : "", expected[i]);')
@@ -2093,8 +2135,7 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
     if not is_fixed32:
         lines.append('    uint8_t mem[64];')
         lines.append('    X64Buf buf;')
-
-    lines.append('')
+        lines.append('')
 
     # Determine name map and c_name function
     if arch == 'arm64':
@@ -2139,27 +2180,41 @@ def generate_golden_test(regclasses: list[RegClass], mcinsns: list[McInsn]) -> s
             byte_list = ', '.join(f'0x{b}' for b in expected_bytes)
 
             if is_fixed32:
-                lines.append(f'    {{ static const uint8_t exp[] = {{{byte_list}}};')
-                lines.append(f'      check_golden("{insn.name} ({" ".join(regs)})",')
-                lines.append(f'                   {c_name}({", ".join(c_args)}), exp); }}')
+                lines.append('    {')
+                lines.append(f'        static const uint8_t exp[] = {{{byte_list}}};')
+                call_line = f'        check_golden("{insn.name} ({" ".join(regs)})", {c_name}({", ".join(c_args)}), exp);'
+                if len(call_line) <= 100:
+                    lines.append(call_line)
+                else:
+                    lines.append(f'        check_golden("{insn.name} ({" ".join(regs)})", {c_name}({", ".join(c_args)}),')
+                    lines.append('                     exp);')
+                lines.append('    }')
             else:
                 lines.append(f'    x64_buf_init(&buf, mem, sizeof(mem));')
                 lines.append(f'    {c_name}({", ".join(c_args)});')
-                lines.append(f'    {{ static const uint8_t exp[] = {{{byte_list}}};')
-                lines.append(f'      check_golden("{insn.name} ({" ".join(regs)})", &buf, exp, {nbytes}); }}')
+                lines.append('    {')
+                lines.append(f'        static const uint8_t exp[] = {{{byte_list}}};')
+                call_line = f'        check_golden("{insn.name} ({" ".join(regs)})", &buf, exp, {nbytes});'
+                if len(call_line) <= 100:
+                    lines.append(call_line)
+                else:
+                    lines.append(f'        check_golden("{insn.name} ({" ".join(regs)})", &buf, exp,')
+                    lines.append(f'                     {nbytes});')
+                lines.append('    }')
             lines.append('')
             test_id += 1
 
-    lines.append(f'    fprintf(stderr, "golden-bytes: %d passed, %d failed (of {test_id} total)\\n",')
-    lines.append(f'            g_pass, g_fail);')
+    lines.append(f'    fprintf(stderr, "golden-bytes: %d passed, %d failed (of {test_id} total)\\n", g_pass, g_fail);')
     lines.append('    return g_fail > 0 ? 1 : 0;')
     lines.append('}')
-    lines.append('')
     if arch == 'riscv64':
         pass  # no conditional compilation needed
     else:
+        lines.append('')
         lines.append('#else')
-        lines.append('int main(void) { return 0; }')
+        lines.append('int main(void) {')
+        lines.append('    return 0;')
+        lines.append('}')
         if arch == 'arm64':
             lines.append('#endif  // __aarch64__')
         else:

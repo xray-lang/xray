@@ -375,6 +375,23 @@ static void x64_h_shr(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 /* ========== Integer Comparison ========== */
 
+static X64Cond x64_int_cmp_cc(uint16_t op) {
+    if (op == XM_EQ)
+        return X64_CC_E;
+    if (op == XM_NE)
+        return X64_CC_NE;
+    if (op == XM_LT)
+        return X64_CC_L;
+    if (op == XM_LE)
+        return X64_CC_LE;
+    if (op == XM_GT)
+        return X64_CC_G;
+    if (op == XM_GE)
+        return X64_CC_GE;
+    XR_DCHECK(false, "x64_int_cmp_cc: unreachable opcode");
+    return X64_CC_E;
+}
+
 static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
@@ -383,31 +400,7 @@ static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         rm = X64_SCRATCH_REG;
     }
     x64_cmp_rr(&ctx->buf, rn, rm);
-    X64Cond cc;
-    switch (ins->op) {
-        case XM_EQ:
-            cc = X64_CC_E;
-            break;
-        case XM_NE:
-            cc = X64_CC_NE;
-            break;
-        case XM_LT:
-            cc = X64_CC_L;
-            break;
-        case XM_LE:
-            cc = X64_CC_LE;
-            break;
-        case XM_GT:
-            cc = X64_CC_G;
-            break;
-        case XM_GE:
-            cc = X64_CC_GE;
-            break;
-        default:
-            XR_DCHECK(false, "x64_h_cmp_int: unreachable opcode");
-            cc = X64_CC_E;
-            break;
-    }
+    X64Cond cc = x64_int_cmp_cc(ins->op);
     /* Zero without clobbering CMP flags (MOV doesn't affect flags) */
     x64_mov_ri32(&ctx->buf, rd, 0);
     x64_setcc(&ctx->buf, cc, rd);

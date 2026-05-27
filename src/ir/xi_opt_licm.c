@@ -214,15 +214,15 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
     if (f->nblocks < 2)
         return xi_pass_no_change();
 
-    /* Compute analysis prerequisites */
-    xi_compute_rpo(f);
-    xi_compute_dominators(f);
-    XiLoopInfo *loops = xi_compute_loops(f);
-    if (!loops || loops->nloop == 0) {
-        if (loops)
-            xi_loopinfo_free(loops);
+    /* Compute analysis prerequisites (cached across passes). */
+    xi_ensure_dominators(f);
+    /* xi_ensure_loops returns a borrowed pointer; the XiFunc owns the
+     * cache, so we never free it here.  LICM only hoists pure values
+     * across an existing preheader — the CFG is not mutated, so the
+     * cache stays valid for the rest of the pipeline. */
+    XiLoopInfo *loops = xi_ensure_loops(f);
+    if (!loops || loops->nloop == 0)
         return xi_pass_no_change();
-    }
 
     uint32_t max_id = f->next_value_id;
     uint32_t nblk = f->nblocks;
@@ -232,7 +232,6 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
     if (!def_blk || !in_loop) {
         xr_free(def_blk);
         xr_free(in_loop);
-        xi_loopinfo_free(loops);
         return xi_pass_no_change();
     }
 
@@ -297,7 +296,7 @@ XR_FUNC XiPassChange xi_opt_licm(XiFunc *f) {
 
     xr_free(def_blk);
     xr_free(in_loop);
-    xi_loopinfo_free(loops);
+    /* loops is owned by f->loop_cache — do not free. */
 
     if (!any_hoisted)
         return xi_pass_no_change();

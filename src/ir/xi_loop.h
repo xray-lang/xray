@@ -23,8 +23,18 @@
  *
  * INVARIANTS:
  *   Requires RPO + dominator tree computed via xi_analysis.h.
- *   Any pass that modifies the CFG must call xi_loopinfo_free()
- *   and recompute if loop info is still needed.
+ *
+ *   Two ownership models coexist:
+ *
+ *   - xi_compute_loops() returns a heap-allocated XiLoopInfo that
+ *     the caller must release with xi_loopinfo_free().  This entry
+ *     point is unconditional — every call re-derives the forest.
+ *
+ *   - xi_ensure_loops() returns a borrowed pointer owned by the
+ *     XiFunc.  It lazily reuses the cached forest when cfg_version
+ *     has not advanced since the last computation.  The cache is
+ *     freed by xi_func_free or transparently rebuilt when a CFG
+ *     change invalidates it.
  */
 
 #ifndef XI_LOOP_H
@@ -102,12 +112,22 @@ typedef struct XiLoopInfo {
 /* ========== API ========== */
 
 /* Compute the natural-loop forest for the function.
- * Requires RPO + dominators already computed (xi_compute_rpo,
- * xi_compute_dominators).  Returns heap-allocated result.
- * Returns NULL if no loops found or on allocation failure. */
+ * Requires RPO + dominators already computed — call xi_ensure_dominators(f)
+ * first (or the unconditional xi_compute_rpo / xi_compute_dominators pair).
+ * Returns heap-allocated result, or NULL when there are no loops.
+ * Caller owns the result; release with xi_loopinfo_free. */
 XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f);
 
-/* Free loop info and all associated memory. */
+/* Cached form: returns the borrowed XiLoopInfo* owned by f.
+ * Recomputes and replaces the cache only when f->loop_version lags
+ * f->cfg_version.  Returns NULL when the function has no loops
+ * (cached as a sentinel — subsequent calls remain hits).
+ * Callers MUST NOT free the result. */
+XR_FUNC XiLoopInfo *xi_ensure_loops(XiFunc *f);
+
+/* Free loop info and all associated memory.
+ * Only call this on the result of xi_compute_loops; never on the
+ * pointer returned by xi_ensure_loops. */
 XR_FUNC void xi_loopinfo_free(XiLoopInfo *info);
 
 /* Query: innermost loop nesting depth for block.

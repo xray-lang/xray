@@ -102,7 +102,17 @@ XR_FUNC uint32_t xi_compute_rpo(XiFunc *f) {
     for (uint32_t b = 0; b < f->nblocks; b++)
         f->blocks[b]->visited = false;
 
+    f->rpo_version = f->cfg_version;
+    f->rpo_recomputes++;
     return reachable;
+}
+
+XR_FUNC bool xi_ensure_rpo(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_ensure_rpo: NULL func");
+    if (f->rpo_version == f->cfg_version && f->rpo_version != 0)
+        return false;
+    xi_compute_rpo(f);
+    return true;
 }
 
 /* ========== Dominator Tree ========== */
@@ -218,6 +228,24 @@ XR_FUNC void xi_compute_dominators(XiFunc *f) {
     }
 
     xr_free(rpo_order);
+    f->dom_version = f->cfg_version;
+    f->dom_recomputes++;
+}
+
+XR_FUNC bool xi_ensure_dominators(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_ensure_dominators: NULL func");
+    bool recomputed = xi_ensure_rpo(f);
+    if (f->dom_version == f->cfg_version && f->dom_version != 0)
+        return recomputed;
+    xi_compute_dominators(f);
+    return true;
+}
+
+XR_FUNC void xi_cfg_invalidate(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_cfg_invalidate: NULL func");
+    /* A 64-bit counter overflows after ~10^19 invalidations — safe
+     * to ignore wraparound for any realistic compilation. */
+    f->cfg_version++;
 }
 
 XR_FUNC bool xi_dominates(const XiBlock *a, const XiBlock *b) {

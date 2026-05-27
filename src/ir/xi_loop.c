@@ -635,7 +635,28 @@ XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f) {
     xr_free(headers);
     xr_free(first_latch);
     xr_free(latch_seen);
+    f->loop_recomputes++;
     return info;
+}
+
+XR_FUNC XiLoopInfo *xi_ensure_loops(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_ensure_loops: NULL func");
+    /* Cache hit only when the loop forest has already been computed
+     * against the current CFG.  loop_version == 0 means "never run",
+     * so we always recompute on the first call. */
+    if (f->loop_version == f->cfg_version && f->loop_version != 0)
+        return f->loop_cache;
+    /* xi_compute_loops requires RPO + dominators; chain through the
+     * cached entry points so the caller doesn't have to. */
+    xi_ensure_dominators(f);
+    /* Stale or first call: release whatever may be cached and rebuild. */
+    if (f->loop_cache) {
+        xi_loopinfo_free(f->loop_cache);
+        f->loop_cache = NULL;
+    }
+    f->loop_cache = xi_compute_loops(f);
+    f->loop_version = f->cfg_version;
+    return f->loop_cache;
 }
 
 XR_FUNC void xi_loopinfo_free(XiLoopInfo *info) {

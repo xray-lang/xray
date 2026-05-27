@@ -15,63 +15,11 @@
  */
 
 #include "xi_opt_block_simplify.h"
+#include "xi_cfg_edit.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include <string.h>
 
 /* ========== Helpers ========== */
-
-/* Count how many successors a block has (0, 1, or 2). */
-static uint32_t succ_count(const XiBlock *blk) {
-    if (blk->kind == XI_BLOCK_RETURN || blk->kind == XI_BLOCK_UNREACHABLE)
-        return 0;
-    if (blk->kind == XI_BLOCK_IF)
-        return 2;
-    /* PLAIN */
-    return blk->succs[0] ? 1 : 0;
-}
-
-/* Replace occurrences of old_pred with new_pred in blk's pred list.
- * Also fixes phi args: phi arg for the old_pred slot remains correct
- * since we just swap the predecessor identity. */
-static void replace_pred(XiBlock *blk, XiBlock *old_pred, XiBlock *new_pred) {
-    for (uint16_t i = 0; i < blk->npreds; i++) {
-        if (blk->preds[i] == old_pred) {
-            blk->preds[i] = new_pred;
-            return;
-        }
-    }
-}
-
-/* Replace successor of src from old_succ to new_succ. */
-static void replace_succ(XiBlock *src, XiBlock *old_succ, XiBlock *new_succ) {
-    if (src->succs[0] == old_succ)
-        src->succs[0] = new_succ;
-    if (src->succs[1] == old_succ)
-        src->succs[1] = new_succ;
-}
-
-/* Remove blk from target's pred list entirely. */
-static void remove_pred(XiBlock *target, XiBlock *blk) {
-    for (uint16_t i = 0; i < target->npreds; i++) {
-        if (target->preds[i] == blk) {
-            /* Shift remaining preds down */
-            for (uint16_t j = i; j + 1 < target->npreds; j++)
-                target->preds[j] = target->preds[j + 1];
-            target->npreds--;
-
-            /* Also remove phi arg at index i for all phis */
-            for (XiPhi *phi = target->phis; phi; phi = phi->next) {
-                if (i < phi->value.nargs) {
-                    for (uint16_t j = i; j + 1 < phi->value.nargs; j++)
-                        phi->value.args[j] = phi->value.args[j + 1];
-                    phi->value.nargs--;
-                }
-            }
-            return;
-        }
-    }
-}
 
 /* Check if a block is empty: no values and no phis. */
 static bool block_is_empty(const XiBlock *blk) {
@@ -80,36 +28,69 @@ static bool block_is_empty(const XiBlock *blk) {
 
 /* ========== Empty Block Elimination ========== */
 
-/* Try to eliminate an empty PLAIN block by redirecting its preds
- * to its successor.  Returns true if the block was eliminated. */
+/* Try to eliminate an empty PLAIN block by redirecting its preds to
+ * its successor. Returns true if the block was eliminated.
+ *
+ * Multi-predecessor handling: an empty PLAIN block contributes a single
+ * incoming slot to every phi in succ. After elimination each of blk's
+ * preds reaches succ on its own edge, so every such phi must gain
+ * (blk->npreds - 1) extra slots, all carrying the value that was at the
+ * original blk slot (the empty block performs no value rewrites, so the
+ * phi-incoming is identical for every replacement edge). */
 static bool try_eliminate_empty(XiFunc *f, XiBlock *blk) {
-    /* Must be PLAIN with exactly one successor. */
     if (blk->kind != XI_BLOCK_PLAIN)
         return false;
     if (!blk->succs[0])
         return false;
-    /* Must be truly empty (no values, no phis). */
     if (!block_is_empty(blk))
         return false;
-    /* Must not be entry block. */
     if (blk == f->entry)
+        return false;
+    if (blk->npreds == 0)
         return false;
 
     XiBlock *succ = blk->succs[0];
     XR_DCHECK(succ != NULL, "empty block has NULL successor");
 
-    /* For each predecessor of blk, redirect to succ. */
-    for (uint16_t i = 0; i < blk->npreds; i++) {
-        XiBlock *pred = blk->preds[i];
-        XR_DCHECK(pred != NULL, "NULL in pred list");
-        replace_succ(pred, blk, succ);
-        /* Add pred to succ's pred list (replacing blk's entry). */
-        replace_pred(succ, blk, pred);
+    uint16_t blk_idx = xi_cfg_pred_index(succ, blk);
+    if (blk_idx == succ->npreds)
+        return false; /* succ does not list blk — defensive bail */
+
+    /* Snapshot per-phi incoming values at the slot blk currently occupies
+     * before we mutate the pred / phi arrays. */
+    uint32_t nphis = xi_cfg_phi_count(succ);
+    XiValue **phi_incoming = NULL;
+    if (nphis > 0) {
+        phi_incoming = (XiValue **) xi_func_arena_alloc(f, nphis * sizeof(XiValue *));
+        if (!phi_incoming)
+            return false;
+        uint32_t i = 0;
+        for (XiPhi *p = succ->phis; p; p = p->next, i++) {
+            XR_DCHECK(blk_idx < p->value.nargs,
+                      "phi.nargs and succ.npreds out of sync before elimination");
+            phi_incoming[i] = p->value.args[blk_idx];
+        }
     }
 
-    /* If succ still references blk in preds (maybe multiple edges), clean up */
-    /* Mark block as unreachable for later removal. */
+    /* Redirect every predecessor of blk to succ. The first one reuses
+     * blk's slot; the rest are appended (with matching phi.args). */
+    XiBlock *first_pred = blk->preds[0];
+    if (!xi_cfg_replace_pred(succ, blk, first_pred))
+        return false;
+    if (!xi_cfg_replace_successor(first_pred, blk, succ))
+        return false;
+
+    for (uint16_t i = 1; i < blk->npreds; i++) {
+        XiBlock *pred = blk->preds[i];
+        XR_DCHECK(pred != NULL, "NULL in pred list");
+        if (!xi_cfg_replace_successor(pred, blk, succ))
+            return false;
+        if (!xi_cfg_append_pred(succ, pred, phi_incoming, nphis))
+            return false;
+    }
+
     blk->kind = XI_BLOCK_UNREACHABLE;
+    blk->control = NULL;
     blk->succs[0] = NULL;
     blk->succs[1] = NULL;
     blk->npreds = 0;
@@ -145,18 +126,20 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     if (blk->phis != NULL)
         return false;
 
-    /* Merge: append blk's values to pred. */
+    /* Merge: append blk's values to pred and rebind their block pointer
+     * so that xi_verify's "value->block == containing block" invariant
+     * holds after the merge. */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *v = blk->values[i];
         if (!v)
             continue;
-        /* Ensure pred has capacity. */
         if (pred->nvalues >= pred->values_cap) {
             uint32_t new_cap = pred->values_cap ? pred->values_cap * 2 : 16;
             XR_REALLOC_OR_ABORT(pred->values, new_cap * sizeof(XiValue *), "block merge values");
             pred->values_cap = new_cap;
         }
         pred->values[pred->nvalues++] = v;
+        v->block = pred;
     }
 
     /* Transfer terminator: pred takes blk's kind, control, and succs. */
@@ -167,9 +150,9 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
 
     /* Update successors' pred lists: replace blk with pred. */
     if (pred->succs[0])
-        replace_pred(pred->succs[0], blk, pred);
+        xi_cfg_replace_pred(pred->succs[0], blk, pred);
     if (pred->succs[1])
-        replace_pred(pred->succs[1], blk, pred);
+        xi_cfg_replace_pred(pred->succs[1], blk, pred);
 
     /* Mark blk as dead. */
     blk->kind = XI_BLOCK_UNREACHABLE;
@@ -178,24 +161,6 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
     blk->nvalues = 0;
     blk->npreds = 0;
     return true;
-}
-
-/* ========== Dead Block Removal ========== */
-
-/* Compact the block array, removing unreachable blocks. */
-static uint32_t remove_dead_blocks(XiFunc *f) {
-    uint32_t write = 0;
-    uint32_t orig = f->nblocks;
-    for (uint32_t i = 0; i < f->nblocks; i++) {
-        XiBlock *blk = f->blocks[i];
-        if (blk->kind != XI_BLOCK_UNREACHABLE || blk == f->entry) {
-            f->blocks[write] = blk;
-            f->blocks[write]->id = write;
-            write++;
-        }
-    }
-    f->nblocks = write;
-    return orig - write;
 }
 
 /* ========== Driver ========== */
@@ -233,7 +198,7 @@ XR_FUNC XiPassChange xi_opt_block_simplify(XiFunc *f) {
     }
 
     /* Remove dead blocks from array. */
-    uint32_t removed = remove_dead_blocks(f);
+    uint32_t removed = xi_cfg_compact_blocks(f);
 
     XiPassChange chg = xi_pass_no_change();
     if (any_change || removed > 0) {

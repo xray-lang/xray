@@ -49,13 +49,24 @@ typedef struct XiInlineCallSiteInfo {
  * Positive = beneficial to inline.  Decision: inline if benefit > 0. */
 XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site);
 
+/* Per-pass inline budget scaled by caller's current value count.
+ *   < 100        -> XI_INLINE_MAX_PER_PASS + 2  (small caller, cheap to grow)
+ *   100..300     -> XI_INLINE_MAX_PER_PASS      (default)
+ *   > 300        -> XI_INLINE_MAX_PER_PASS - 2  (large caller, cap growth)
+ *
+ * The xi_inline_benefit() function additionally penalises callers >300
+ * by -15, so the two mechanisms compose: large callers see both fewer
+ * call sites considered per pass and stricter benefit thresholds. */
+XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size);
+
 /* Absolute upper bound on callee size (never inline above this). */
 #define XI_INLINE_MAX_COST 60
 
 /* Soft threshold for benefit calculation base penalty. */
 #define XI_INLINE_BASE_THRESHOLD 30
 
-/* Max per-pass inlines scales with caller size. */
+/* Default per-pass inlines (used as the medium-caller anchor of
+ * xi_inline_budget()). */
 #define XI_INLINE_MAX_PER_PASS 4
 
 /* Run inlining on the function.  May inline multiple call sites. */
