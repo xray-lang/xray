@@ -85,14 +85,44 @@ static inline XmHelperId xm_helper_lookup(void *func_ptr) {
     return XM_HELPER__COUNT;
 }
 
-// Check if a helper may trigger GC
 static inline bool xm_helper_may_gc(XmHelperId id) {
     return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_GC);
 }
 
-// Check if a helper may suspend
+static inline bool xm_helper_may_deopt(XmHelperId id) {
+    return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_DEOPT);
+}
+
+static inline bool xm_helper_may_throw(XmHelperId id) {
+    return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_THROW);
+}
+
 static inline bool xm_helper_may_suspend(XmHelperId id) {
     return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_SUSPEND);
+}
+
+static inline bool xm_helper_may_enter_vm(XmHelperId id) {
+    return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_ENTER_VM);
+}
+
+static inline bool xm_helper_may_run_user_code(XmHelperId id) {
+    return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_USER_CODE);
+}
+
+static inline bool xm_helper_needs_stackmap(XmHelperId id) {
+    return id < XM_HELPER__COUNT && (xm_helper_info[id].flags & XM_HF_STACKMAP);
+}
+
+static inline uint8_t xm_helper_pointer_trust(XmHelperId id) {
+    if (id >= XM_HELPER__COUNT)
+        return XM_HPT_EXTERNAL;
+    return xm_helper_info[id].pointer_trust;
+}
+
+static inline uint8_t xm_helper_post_call(XmHelperId id) {
+    if (id >= XM_HELPER__COUNT)
+        return XM_HPC_DEOPT | XM_HPC_THROW | XM_HPC_SUSPEND;
+    return xm_helper_info[id].post_call;
 }
 
 // Check if a helper returns a dynamic-typed value (needs runtime tag)

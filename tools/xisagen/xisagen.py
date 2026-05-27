@@ -161,19 +161,49 @@ class HelperDef:
     nargs: int
     ret_rep: str    # "TAGGED", "PTR", "I64", "F64", "VOID"
     flags: list     # ["GC", "DEOPT", ...]
+    pointer_trust: str
+    post_call: list
 
 def parse_helpers_def(text: str) -> list[HelperDef]:
+    valid_reps = {'TAGGED', 'PTR', 'I64', 'F64', 'VOID'}
+    valid_flags = {'GC', 'DEOPT', 'THROW', 'SUSPEND', 'ENTER_VM', 'USER_CODE', 'STACKMAP'}
+    valid_pointer_trust = {'NONE', 'GC', 'EXTERNAL'}
+    valid_post_call = {'DEOPT', 'THROW', 'SUSPEND'}
     helpers = []
-    for line in text.splitlines():
+    seen = set()
+    for line_no, line in enumerate(text.splitlines(), 1):
         line = line.strip()
         if not line or line.startswith('#'):
             continue
-        m = re.match(r'XM_HELPER\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*([^)]*)\)', line)
+        m = re.match(
+            r'XM_HELPER\(\s*(\w+)\s*,\s*(\d+)\s*,\s*(\w+)\s*,\s*([^,]+)\s*,\s*(\w+)\s*,\s*([^)]*)\)\s*$',
+            line)
         if not m:
-            continue
-        name, nargs, ret_rep, flags_str = m.groups()
-        flags = [f.strip() for f in flags_str.split('|') if f.strip() and f.strip() != 'NONE']
-        helpers.append(HelperDef(name=name, nargs=int(nargs), ret_rep=ret_rep, flags=flags))
+            die(f"invalid helpers.def line {line_no}: {line}")
+        name, nargs, ret_rep, flags_str, pointer_trust, post_call_str = m.groups()
+        if name in seen:
+            die(f"duplicate helper '{name}' on line {line_no}")
+        seen.add(name)
+        if ret_rep not in valid_reps:
+            die(f"invalid return rep '{ret_rep}' for helper '{name}' on line {line_no}")
+        if pointer_trust not in valid_pointer_trust:
+            die(f"invalid pointer trust '{pointer_trust}' for helper '{name}' on line {line_no}")
+        flags = []
+        for flag in [f.strip() for f in flags_str.split('|') if f.strip()]:
+            if flag == 'NONE':
+                continue
+            if flag not in valid_flags:
+                die(f"invalid flag '{flag}' for helper '{name}' on line {line_no}")
+            flags.append(flag)
+        post_call = []
+        for protocol in [p.strip() for p in post_call_str.split('|') if p.strip()]:
+            if protocol == 'NONE':
+                continue
+            if protocol not in valid_post_call:
+                die(f"invalid post-call protocol '{protocol}' for helper '{name}' on line {line_no}")
+            post_call.append(protocol)
+        helpers.append(HelperDef(name=name, nargs=int(nargs), ret_rep=ret_rep, flags=flags,
+                                 pointer_trust=pointer_trust, post_call=post_call))
     return helpers
 
 def generate_helpers_header(helpers: list[HelperDef]) -> str:
@@ -188,6 +218,76 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('#include <stdbool.h>')
     lines.append('')
 
+    def flags_expr(h: HelperDef) -> str:
+        return ' | '.join(f'XM_HF_{f}' for f in h.flags) if h.flags else '0'
+
+    def post_call_expr(h: HelperDef) -> str:
+        return ' | '.join(f'XM_HPC_{p}' for p in h.post_call) if h.post_call else '0'
+
+    def macro_flags_expr(h: HelperDef) -> str:
+        expr = flags_expr(h)
+        return f'({expr})' if h.flags else expr
+
+    def macro_post_call_expr(h: HelperDef) -> str:
+        expr = post_call_expr(h)
+        return f'({expr})' if h.post_call else expr
+
+    def split_flags_expr(expr: str, indent: str) -> list[str]:
+        terms = expr.split(' | ')
+        if len(terms) <= 1 or len(indent) + len(expr) + 1 <= 100:
+            return [indent + expr]
+        out = []
+        current = indent + terms[0]
+        cont_indent = indent + '    '
+        for term in terms[1:]:
+            candidate = current + ' | ' + term
+            if len(candidate) <= 100:
+                current = candidate
+            else:
+                out.append(current + ' |')
+                current = cont_indent + term
+        out.append(current)
+        return out
+
+    def helper_meta_lines(h: HelperDef) -> list[str]:
+        flags = flags_expr(h)
+        post_call = post_call_expr(h)
+        prefix = f'    [XM_HELPER_{h.name}] = {{XR_REP_{h.ret_rep}, {h.nargs}, '
+        ptr = f'XM_HPT_{h.pointer_trust}'
+        entry = f'{prefix}{flags}, {ptr}, {post_call}}},'
+        if len(entry) <= 100:
+            return [entry]
+        indent = ' ' * (prefix.index('{') + 1)
+        post_split = f'{prefix}{flags}, {ptr},'
+        if len(post_split) <= 100:
+            return [post_split, f'{indent}{post_call}}},']
+        ptr_split = f'{prefix}{flags},'
+        if len(ptr_split) <= 100:
+            return [ptr_split, f'{indent}{ptr}, {post_call}}},']
+        first = f'    [XM_HELPER_{h.name}] = {{XR_REP_{h.ret_rep}, {h.nargs},'
+        indent = ' ' * (first.index('{') + 1)
+        flags_ptr = f'{indent}{flags}, {ptr},'
+        if len(flags_ptr) <= 100:
+            return [first, flags_ptr, f'{indent}{post_call}}},']
+        flags_only = f'{indent}{flags},'
+        if len(flags_only) <= 100:
+            return [first, flags_only, f'{indent}{ptr}, {post_call}}},']
+        out = [first]
+        flag_lines = split_flags_expr(flags, indent)
+        out.extend(flag_lines[:-1])
+        out.append(flag_lines[-1] + ',')
+        out.append(f'{indent}{ptr}, {post_call}}},')
+        return out
+
+    def define_macro_lines(name: str, value: str) -> list[str]:
+        line = f'#define {name} {value}'
+        if len(line) <= 100:
+            return [line]
+        macro_backslash_col0 = 99
+        define = f'#define {name}'
+        return [f'{define}{" " * (macro_backslash_col0 - len(define))}\\',
+                f'    {value}']
+
     # Flag defines
     lines.append('/* ========== Helper Flags ========== */')
     lines.append('')
@@ -195,6 +295,25 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('#define XM_HF_DEOPT (1 << 1)')
     lines.append('#define XM_HF_THROW (1 << 2)')
     lines.append('#define XM_HF_SUSPEND (1 << 3)')
+    lines.append('#define XM_HF_ENTER_VM (1 << 4)')
+    lines.append('#define XM_HF_USER_CODE (1 << 5)')
+    lines.append('#define XM_HF_STACKMAP (1 << 6)')
+    lines.append('')
+
+    lines.append('/* ========== Helper Pointer Trust ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XM_HPT_NONE = 0,')
+    lines.append('    XM_HPT_GC = 1,')
+    lines.append('    XM_HPT_EXTERNAL = 2,')
+    lines.append('} XmHelperPointerTrust;')
+    lines.append('')
+
+    lines.append('/* ========== Helper Post-Call Protocol ========== */')
+    lines.append('')
+    lines.append('#define XM_HPC_DEOPT (1 << 0)')
+    lines.append('#define XM_HPC_THROW (1 << 1)')
+    lines.append('#define XM_HPC_SUSPEND (1 << 2)')
     lines.append('')
 
     # Helper ID enum
@@ -211,25 +330,40 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('/* ========== Helper Metadata ========== */')
     lines.append('')
     lines.append('typedef struct {')
-    lines.append('    void *func;      /* C function pointer (set by xm_helper_table.c) */')
-    lines.append('    uint8_t ret_rep; /* XrRep: return representation */')
-    lines.append('    uint8_t nargs;   /* call_arg_pool arguments consumed */')
-    lines.append('    uint16_t flags;  /* XM_HF_* */')
+    lines.append('    uint8_t ret_rep;       /* XrRep: return representation */')
+    lines.append('    uint8_t nargs;         /* call_arg_pool arguments consumed */')
+    lines.append('    uint16_t flags;        /* XM_HF_* */')
+    lines.append('    uint8_t pointer_trust; /* XmHelperPointerTrust */')
+    lines.append('    uint8_t post_call;     /* XM_HPC_* */')
+    lines.append('} XmHelperStaticInfo;')
+    lines.append('')
+    lines.append('typedef struct {')
+    lines.append('    void *func;            /* C function pointer (set by xm_helper_table.c) */')
+    lines.append('    uint8_t ret_rep;       /* XrRep: return representation */')
+    lines.append('    uint8_t nargs;         /* call_arg_pool arguments consumed */')
+    lines.append('    uint16_t flags;        /* XM_HF_* */')
+    lines.append('    uint8_t pointer_trust; /* XmHelperPointerTrust */')
+    lines.append('    uint8_t post_call;     /* XM_HPC_* */')
     lines.append('} XmHelperInfo;')
+    lines.append('')
+
+    lines.append('/* ========== Helper Metadata Constants ========== */')
+    lines.append('')
+    for h in helpers:
+        lines.extend(define_macro_lines(f'XM_HELPER_RET_REP_{h.name}', f'XR_REP_{h.ret_rep}'))
+        lines.extend(define_macro_lines(f'XM_HELPER_NARGS_{h.name}', str(h.nargs)))
+        lines.extend(define_macro_lines(f'XM_HELPER_FLAGS_{h.name}', macro_flags_expr(h)))
+        lines.extend(define_macro_lines(f'XM_HELPER_POINTER_TRUST_{h.name}', f'XM_HPT_{h.pointer_trust}'))
+        lines.extend(define_macro_lines(f'XM_HELPER_POST_CALL_{h.name}', macro_post_call_expr(h)))
     lines.append('')
 
     # Static metadata table
     lines.append('/* ========== Helper Metadata Table (static, no func ptr) ========== */')
     lines.append('')
     lines.append('#ifdef XM_HELPERS_META_IMPL')
-    lines.append('static const struct {')
-    lines.append('    uint8_t ret_rep;')
-    lines.append('    uint8_t nargs;')
-    lines.append('    uint16_t flags;')
-    lines.append('} xm_helper_meta[XM_HELPER__COUNT] = {')
+    lines.append('static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {')
     for h in helpers:
-        flags_expr = ' | '.join(f'XM_HF_{f}' for f in h.flags) if h.flags else '0'
-        lines.append(f'    [XM_HELPER_{h.name}] = {{XR_REP_{h.ret_rep}, {h.nargs}, {flags_expr}}},')
+        lines.extend(helper_meta_lines(h))
     lines.append('};')
     lines.append('#endif')
     lines.append('')
@@ -239,8 +373,7 @@ def generate_helpers_header(helpers: list[HelperDef]) -> str:
     lines.append('')
     macro_entries = []
     for h in helpers:
-        flags_expr = ' | '.join(f'XM_HF_{f}' for f in h.flags) if h.flags else '0'
-        macro_entries.append(f'    _({h.name}, {h.nargs}, XR_REP_{h.ret_rep}, {flags_expr})')
+        macro_entries.append(f'    _({h.name})')
     macro_backslash_col0 = 99
     macro_define = '#define XM_HELPER_DEF(_)'
     lines.append(f'{macro_define}{" " * (macro_backslash_col0 - len(macro_define))}\\')
@@ -2528,14 +2661,26 @@ def _test_ops_parser():
 
 def _test_helpers_parser():
     print("  test_helpers_parser...", end='', file=sys.stderr)
-    text = 'XM_HELPER(call_func, 0, TAGGED, GC|DEOPT)\nXM_HELPER(rt_add, 2, TAGGED, GC)\n'
+    text = (
+        'XM_HELPER(call_func, 0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC, DEOPT)\n'
+        'XM_HELPER(rt_add, 2, TAGGED, GC|STACKMAP, GC, NONE)\n'
+    )
     helpers = parse_helpers_def(text)
     assert len(helpers) == 2
     assert helpers[0].name == 'call_func'
-    assert helpers[0].flags == ['GC', 'DEOPT']
+    assert helpers[0].flags == ['GC', 'DEOPT', 'ENTER_VM', 'USER_CODE', 'STACKMAP']
+    assert helpers[0].pointer_trust == 'GC'
+    assert helpers[0].post_call == ['DEOPT']
     header = generate_helpers_header(helpers)
     assert 'XM_HELPER_call_func = 0' in header
-    assert 'XM_HF_GC | XM_HF_DEOPT' in header
+    assert 'XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP' in header
+    assert 'XM_HPT_GC' in header
+    assert 'XM_HPC_DEOPT' in header
+    try:
+        parse_helpers_def('XM_HELPER(old_format, 0, TAGGED, GC)\n')
+        assert False, "old helper format should be rejected"
+    except SystemExit:
+        pass
     print(" PASS", file=sys.stderr)
 
 def _test_isel_parser():
