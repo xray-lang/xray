@@ -15,6 +15,7 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 2, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -196,6 +197,130 @@ TEST(tbaa_memory_op_with_group_passes) {
     xi_func_free(f);
 }
 
+/* ========== Type contracts ========== */
+
+TEST(select_with_non_bool_condition_fails) {
+    XiFunc *f = make_func("select_bad_cond");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    /* cond is an int constant, not bool. SELECT must reject this. */
+    XiValue *cond = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *t = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *fv = xi_const_int(f, entry, 20, &stub_int);
+    XiValue *sel = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    sel->args[0] = cond;
+    sel->args[1] = t;
+    sel->args[2] = fv;
+    xi_block_set_return(entry, sel);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(select_with_bool_condition_passes) {
+    XiFunc *f = make_func("select_good_cond");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_const_bool(f, entry, true, &stub_bool);
+    XiValue *t = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *fv = xi_const_int(f, entry, 20, &stub_int);
+    XiValue *sel = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    sel->args[0] = cond;
+    sel->args[1] = t;
+    sel->args[2] = fv;
+    xi_block_set_return(entry, sel);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
+TEST(extract_from_non_call_fails) {
+    XiFunc *f = make_func("extract_bad_source");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    /* EXTRACT must take a call/multi_ret as its source. A const int
+     * is illegal and the verifier must report it. */
+    XiValue *src = xi_const_int(f, entry, 7, &stub_int);
+    XiValue *ext = xi_value_new(f, entry, XI_EXTRACT, &stub_int, 1);
+    ext->args[0] = src;
+    ext->aux_int = 0;
+    xi_block_set_return(entry, ext);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(comparison_must_produce_bool_fails) {
+    XiFunc *f = make_func("eq_bad_result_type");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    /* XI_EQ is a bool-producing op; result type must be bool / unknown. */
+    XiValue *a = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *b = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *eq = xi_value_new(f, entry, XI_EQ, &stub_int, 2);
+    eq->args[0] = a;
+    eq->args[1] = b;
+    xi_block_set_return(entry, eq);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+/* ========== XI_CALL_METHOD contract ========== */
+
+TEST(call_method_missing_aux_fails) {
+    XiFunc *f = make_func("call_method_no_aux");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    /* aux must carry the method name string; NULL is a hard error. */
+    XiValue *recv = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 1);
+    call->args[0] = recv;
+    call->aux = NULL;
+    call->aux_int = 0; /* sym=0, is_super=0 */
+    xi_block_set_return(entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(call_method_zero_args_fails) {
+    XiFunc *f = make_func("call_method_no_recv");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    /* CALL_METHOD must have at least the receiver argument. */
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 0);
+    call->aux = (void *) "foo";
+    call->aux_int = 0;
+    xi_block_set_return(entry, call);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+/* ========== Unique value IDs ========== */
+
+TEST(duplicate_value_id_fails) {
+    XiFunc *f = make_func("dup_value_id");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *b = xi_const_int(f, entry, 2, &stub_int);
+    /* Force a duplicate SSA id within the function. */
+    b->id = a->id;
+    xi_block_set_return(entry, b);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 /* ========== Backend legality ========== */
 
 TEST(backend_rejects_unlowered_alloc) {
@@ -226,6 +351,13 @@ int main(void) {
     run_tail_call_with_function_callee_passes();
     run_tbaa_memory_op_requires_mem_group();
     run_tbaa_memory_op_with_group_passes();
+    run_select_with_non_bool_condition_fails();
+    run_select_with_bool_condition_passes();
+    run_extract_from_non_call_fails();
+    run_comparison_must_produce_bool_fails();
+    run_call_method_missing_aux_fails();
+    run_call_method_zero_args_fails();
+    run_duplicate_value_id_fails();
     run_backend_rejects_unlowered_alloc();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
