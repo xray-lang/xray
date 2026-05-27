@@ -13,6 +13,23 @@
 #define XM_HF_DEOPT (1 << 1)
 #define XM_HF_THROW (1 << 2)
 #define XM_HF_SUSPEND (1 << 3)
+#define XM_HF_ENTER_VM (1 << 4)
+#define XM_HF_USER_CODE (1 << 5)
+#define XM_HF_STACKMAP (1 << 6)
+
+/* ========== Helper Pointer Trust ========== */
+
+typedef enum {
+    XM_HPT_NONE = 0,
+    XM_HPT_GC = 1,
+    XM_HPT_EXTERNAL = 2,
+} XmHelperPointerTrust;
+
+/* ========== Helper Post-Call Protocol ========== */
+
+#define XM_HPC_DEOPT (1 << 0)
+#define XM_HPC_THROW (1 << 1)
+#define XM_HPC_SUSPEND (1 << 2)
 
 /* ========== Helper IDs ========== */
 
@@ -104,187 +121,642 @@ typedef enum {
 /* ========== Helper Metadata ========== */
 
 typedef struct {
-    void *func;      /* C function pointer (set by xm_helper_table.c) */
-    uint8_t ret_rep; /* XrRep: return representation */
-    uint8_t nargs;   /* call_arg_pool arguments consumed */
-    uint16_t flags;  /* XM_HF_* */
+    uint8_t ret_rep;       /* XrRep: return representation */
+    uint8_t nargs;         /* call_arg_pool arguments consumed */
+    uint16_t flags;        /* XM_HF_* */
+    uint8_t pointer_trust; /* XmHelperPointerTrust */
+    uint8_t post_call;     /* XM_HPC_* */
+} XmHelperStaticInfo;
+
+typedef struct {
+    void *func;            /* C function pointer (set by xm_helper_table.c) */
+    uint8_t ret_rep;       /* XrRep: return representation */
+    uint8_t nargs;         /* call_arg_pool arguments consumed */
+    uint16_t flags;        /* XM_HF_* */
+    uint8_t pointer_trust; /* XmHelperPointerTrust */
+    uint8_t post_call;     /* XM_HPC_* */
 } XmHelperInfo;
+
+/* ========== Helper Metadata Constants ========== */
+
+#define XM_HELPER_RET_REP_call_self XR_REP_TAGGED
+#define XM_HELPER_NARGS_call_self 0
+#define XM_HELPER_FLAGS_call_self                                                                  \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_call_self XM_HPT_GC
+#define XM_HELPER_POST_CALL_call_self (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_call_func XR_REP_TAGGED
+#define XM_HELPER_NARGS_call_func 0
+#define XM_HELPER_FLAGS_call_func                                                                  \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_call_func XM_HPT_GC
+#define XM_HELPER_POST_CALL_call_func (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_invoke_method XR_REP_TAGGED
+#define XM_HELPER_NARGS_invoke_method 0
+#define XM_HELPER_FLAGS_invoke_method                                                              \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_invoke_method XM_HPT_GC
+#define XM_HELPER_POST_CALL_invoke_method (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_invoke_direct XR_REP_TAGGED
+#define XM_HELPER_NARGS_invoke_direct 0
+#define XM_HELPER_FLAGS_invoke_direct                                                              \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_invoke_direct XM_HPT_GC
+#define XM_HELPER_POST_CALL_invoke_direct (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_closure_new XR_REP_PTR
+#define XM_HELPER_NARGS_closure_new 0
+#define XM_HELPER_FLAGS_closure_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_closure_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_closure_new 0
+#define XM_HELPER_RET_REP_closure_set_upval XR_REP_VOID
+#define XM_HELPER_NARGS_closure_set_upval 0
+#define XM_HELPER_FLAGS_closure_set_upval 0
+#define XM_HELPER_POINTER_TRUST_closure_set_upval XM_HPT_NONE
+#define XM_HELPER_POST_CALL_closure_set_upval 0
+#define XM_HELPER_RET_REP_upval_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_upval_get 0
+#define XM_HELPER_FLAGS_upval_get 0
+#define XM_HELPER_POINTER_TRUST_upval_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_upval_get 0
+#define XM_HELPER_RET_REP_upval_set XR_REP_VOID
+#define XM_HELPER_NARGS_upval_set 0
+#define XM_HELPER_FLAGS_upval_set 0
+#define XM_HELPER_POINTER_TRUST_upval_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_upval_set 0
+#define XM_HELPER_RET_REP_upval_cell_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_upval_cell_get 0
+#define XM_HELPER_FLAGS_upval_cell_get 0
+#define XM_HELPER_POINTER_TRUST_upval_cell_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_upval_cell_get 0
+#define XM_HELPER_RET_REP_upval_cell_set XR_REP_VOID
+#define XM_HELPER_NARGS_upval_cell_set 0
+#define XM_HELPER_FLAGS_upval_cell_set 0
+#define XM_HELPER_POINTER_TRUST_upval_cell_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_upval_cell_set 0
+#define XM_HELPER_RET_REP_cell_new XR_REP_PTR
+#define XM_HELPER_NARGS_cell_new 0
+#define XM_HELPER_FLAGS_cell_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_cell_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_cell_new 0
+#define XM_HELPER_RET_REP_cell_get_direct XR_REP_TAGGED
+#define XM_HELPER_NARGS_cell_get_direct 0
+#define XM_HELPER_FLAGS_cell_get_direct 0
+#define XM_HELPER_POINTER_TRUST_cell_get_direct XM_HPT_GC
+#define XM_HELPER_POST_CALL_cell_get_direct 0
+#define XM_HELPER_RET_REP_cell_set_direct XR_REP_VOID
+#define XM_HELPER_NARGS_cell_set_direct 0
+#define XM_HELPER_FLAGS_cell_set_direct 0
+#define XM_HELPER_POINTER_TRUST_cell_set_direct XM_HPT_NONE
+#define XM_HELPER_POST_CALL_cell_set_direct 0
+#define XM_HELPER_RET_REP_rt_add XR_REP_TAGGED
+#define XM_HELPER_NARGS_rt_add 2
+#define XM_HELPER_FLAGS_rt_add (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rt_add XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_add 0
+#define XM_HELPER_RET_REP_rt_sub XR_REP_TAGGED
+#define XM_HELPER_NARGS_rt_sub 2
+#define XM_HELPER_FLAGS_rt_sub 0
+#define XM_HELPER_POINTER_TRUST_rt_sub XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_sub 0
+#define XM_HELPER_RET_REP_rt_mul XR_REP_TAGGED
+#define XM_HELPER_NARGS_rt_mul 2
+#define XM_HELPER_FLAGS_rt_mul 0
+#define XM_HELPER_POINTER_TRUST_rt_mul XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_mul 0
+#define XM_HELPER_RET_REP_rt_div XR_REP_TAGGED
+#define XM_HELPER_NARGS_rt_div 2
+#define XM_HELPER_FLAGS_rt_div 0
+#define XM_HELPER_POINTER_TRUST_rt_div XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_div 0
+#define XM_HELPER_RET_REP_rt_mod XR_REP_TAGGED
+#define XM_HELPER_NARGS_rt_mod 2
+#define XM_HELPER_FLAGS_rt_mod 0
+#define XM_HELPER_POINTER_TRUST_rt_mod XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_mod 0
+#define XM_HELPER_RET_REP_rt_eq XR_REP_I64
+#define XM_HELPER_NARGS_rt_eq 2
+#define XM_HELPER_FLAGS_rt_eq 0
+#define XM_HELPER_POINTER_TRUST_rt_eq XM_HPT_NONE
+#define XM_HELPER_POST_CALL_rt_eq 0
+#define XM_HELPER_RET_REP_eq_value XR_REP_I64
+#define XM_HELPER_NARGS_eq_value 2
+#define XM_HELPER_FLAGS_eq_value 0
+#define XM_HELPER_POINTER_TRUST_eq_value XM_HPT_NONE
+#define XM_HELPER_POST_CALL_eq_value 0
+#define XM_HELPER_RET_REP_getprop XR_REP_TAGGED
+#define XM_HELPER_NARGS_getprop 1
+#define XM_HELPER_FLAGS_getprop                                                                    \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_getprop XM_HPT_GC
+#define XM_HELPER_POST_CALL_getprop (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_setprop XR_REP_VOID
+#define XM_HELPER_NARGS_setprop 2
+#define XM_HELPER_FLAGS_setprop (XM_HF_GC | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_setprop XM_HPT_NONE
+#define XM_HELPER_POST_CALL_setprop 0
+#define XM_HELPER_RET_REP_getfield_ic XR_REP_TAGGED
+#define XM_HELPER_NARGS_getfield_ic 0
+#define XM_HELPER_FLAGS_getfield_ic 0
+#define XM_HELPER_POINTER_TRUST_getfield_ic XM_HPT_GC
+#define XM_HELPER_POST_CALL_getfield_ic 0
+#define XM_HELPER_RET_REP_getbuiltin XR_REP_TAGGED
+#define XM_HELPER_NARGS_getbuiltin 0
+#define XM_HELPER_FLAGS_getbuiltin 0
+#define XM_HELPER_POINTER_TRUST_getbuiltin XM_HPT_GC
+#define XM_HELPER_POST_CALL_getbuiltin 0
+#define XM_HELPER_RET_REP_index_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_index_get 2
+#define XM_HELPER_FLAGS_index_get                                                                  \
+    (XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_index_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_index_get (XM_HPC_DEOPT)
+#define XM_HELPER_RET_REP_index_set XR_REP_VOID
+#define XM_HELPER_NARGS_index_set 3
+#define XM_HELPER_FLAGS_index_set (XM_HF_GC | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_index_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_index_set 0
+#define XM_HELPER_RET_REP_tarray_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_tarray_get 2
+#define XM_HELPER_FLAGS_tarray_get 0
+#define XM_HELPER_POINTER_TRUST_tarray_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_tarray_get 0
+#define XM_HELPER_RET_REP_tarray_set XR_REP_VOID
+#define XM_HELPER_NARGS_tarray_set 3
+#define XM_HELPER_FLAGS_tarray_set 0
+#define XM_HELPER_POINTER_TRUST_tarray_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_tarray_set 0
+#define XM_HELPER_RET_REP_map_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_map_get 2
+#define XM_HELPER_FLAGS_map_get (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_map_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_map_get 0
+#define XM_HELPER_RET_REP_map_set XR_REP_VOID
+#define XM_HELPER_NARGS_map_set 3
+#define XM_HELPER_FLAGS_map_set (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_map_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_map_set 0
+#define XM_HELPER_RET_REP_map_increment XR_REP_VOID
+#define XM_HELPER_NARGS_map_increment 2
+#define XM_HELPER_FLAGS_map_increment (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_map_increment XM_HPT_NONE
+#define XM_HELPER_POST_CALL_map_increment 0
+#define XM_HELPER_RET_REP_get_shared XR_REP_TAGGED
+#define XM_HELPER_NARGS_get_shared 0
+#define XM_HELPER_FLAGS_get_shared (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_get_shared XM_HPT_GC
+#define XM_HELPER_POST_CALL_get_shared 0
+#define XM_HELPER_RET_REP_set_shared XR_REP_VOID
+#define XM_HELPER_NARGS_set_shared 1
+#define XM_HELPER_FLAGS_set_shared (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_set_shared XM_HPT_NONE
+#define XM_HELPER_POST_CALL_set_shared 0
+#define XM_HELPER_RET_REP_throw XR_REP_VOID
+#define XM_HELPER_NARGS_throw 1
+#define XM_HELPER_FLAGS_throw (XM_HF_THROW | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_throw XM_HPT_NONE
+#define XM_HELPER_POST_CALL_throw (XM_HPC_THROW)
+#define XM_HELPER_RET_REP_is_type XR_REP_I64
+#define XM_HELPER_NARGS_is_type 1
+#define XM_HELPER_FLAGS_is_type 0
+#define XM_HELPER_POINTER_TRUST_is_type XM_HPT_NONE
+#define XM_HELPER_POST_CALL_is_type 0
+#define XM_HELPER_RET_REP_checktype XR_REP_I64
+#define XM_HELPER_NARGS_checktype 1
+#define XM_HELPER_FLAGS_checktype 0
+#define XM_HELPER_POINTER_TRUST_checktype XM_HPT_NONE
+#define XM_HELPER_POST_CALL_checktype 0
+#define XM_HELPER_RET_REP_typename XR_REP_PTR
+#define XM_HELPER_NARGS_typename 1
+#define XM_HELPER_FLAGS_typename 0
+#define XM_HELPER_POINTER_TRUST_typename XM_HPT_GC
+#define XM_HELPER_POST_CALL_typename 0
+#define XM_HELPER_RET_REP_typeof XR_REP_I64
+#define XM_HELPER_NARGS_typeof 1
+#define XM_HELPER_FLAGS_typeof 0
+#define XM_HELPER_POINTER_TRUST_typeof XM_HPT_NONE
+#define XM_HELPER_POST_CALL_typeof 0
+#define XM_HELPER_RET_REP_deep_copy XR_REP_PTR
+#define XM_HELPER_NARGS_deep_copy 1
+#define XM_HELPER_FLAGS_deep_copy (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_deep_copy XM_HPT_GC
+#define XM_HELPER_POST_CALL_deep_copy 0
+#define XM_HELPER_RET_REP_chr XR_REP_PTR
+#define XM_HELPER_NARGS_chr 0
+#define XM_HELPER_FLAGS_chr (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chr XM_HPT_GC
+#define XM_HELPER_POST_CALL_chr 0
+#define XM_HELPER_RET_REP_substring XR_REP_PTR
+#define XM_HELPER_NARGS_substring 0
+#define XM_HELPER_FLAGS_substring (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_substring XM_HPT_GC
+#define XM_HELPER_POST_CALL_substring 0
+#define XM_HELPER_RET_REP_str_repeat XR_REP_PTR
+#define XM_HELPER_NARGS_str_repeat 0
+#define XM_HELPER_FLAGS_str_repeat (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_str_repeat XM_HPT_GC
+#define XM_HELPER_POST_CALL_str_repeat 0
+#define XM_HELPER_RET_REP_tostring XR_REP_PTR
+#define XM_HELPER_NARGS_tostring 1
+#define XM_HELPER_FLAGS_tostring (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_tostring XM_HPT_GC
+#define XM_HELPER_POST_CALL_tostring 0
+#define XM_HELPER_RET_REP_strbuf_new XR_REP_PTR
+#define XM_HELPER_NARGS_strbuf_new 0
+#define XM_HELPER_FLAGS_strbuf_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_strbuf_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_strbuf_new 0
+#define XM_HELPER_RET_REP_strbuf_append XR_REP_VOID
+#define XM_HELPER_NARGS_strbuf_append 0
+#define XM_HELPER_FLAGS_strbuf_append (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_strbuf_append XM_HPT_NONE
+#define XM_HELPER_POST_CALL_strbuf_append 0
+#define XM_HELPER_RET_REP_strbuf_finish XR_REP_PTR
+#define XM_HELPER_NARGS_strbuf_finish 0
+#define XM_HELPER_FLAGS_strbuf_finish (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_strbuf_finish XM_HPT_GC
+#define XM_HELPER_POST_CALL_strbuf_finish 0
+#define XM_HELPER_RET_REP_new_struct XR_REP_PTR
+#define XM_HELPER_NARGS_new_struct 0
+#define XM_HELPER_FLAGS_new_struct (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_new_struct XM_HPT_GC
+#define XM_HELPER_POST_CALL_new_struct 0
+#define XM_HELPER_RET_REP_struct_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_struct_get 0
+#define XM_HELPER_FLAGS_struct_get 0
+#define XM_HELPER_POINTER_TRUST_struct_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_struct_get 0
+#define XM_HELPER_RET_REP_struct_set XR_REP_VOID
+#define XM_HELPER_NARGS_struct_set 0
+#define XM_HELPER_FLAGS_struct_set 0
+#define XM_HELPER_POINTER_TRUST_struct_set XM_HPT_NONE
+#define XM_HELPER_POST_CALL_struct_set 0
+#define XM_HELPER_RET_REP_struct_copy XR_REP_PTR
+#define XM_HELPER_NARGS_struct_copy 0
+#define XM_HELPER_FLAGS_struct_copy (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_struct_copy XM_HPT_GC
+#define XM_HELPER_POST_CALL_struct_copy 0
+#define XM_HELPER_RET_REP_rt_array_new XR_REP_PTR
+#define XM_HELPER_NARGS_rt_array_new 0
+#define XM_HELPER_FLAGS_rt_array_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rt_array_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_array_new 0
+#define XM_HELPER_RET_REP_rt_array_push XR_REP_VOID
+#define XM_HELPER_NARGS_rt_array_push 0
+#define XM_HELPER_FLAGS_rt_array_push (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rt_array_push XM_HPT_NONE
+#define XM_HELPER_POST_CALL_rt_array_push 0
+#define XM_HELPER_RET_REP_rt_array_len XR_REP_I64
+#define XM_HELPER_NARGS_rt_array_len 0
+#define XM_HELPER_FLAGS_rt_array_len 0
+#define XM_HELPER_POINTER_TRUST_rt_array_len XM_HPT_NONE
+#define XM_HELPER_POST_CALL_rt_array_len 0
+#define XM_HELPER_RET_REP_rt_map_new XR_REP_PTR
+#define XM_HELPER_NARGS_rt_map_new 0
+#define XM_HELPER_FLAGS_rt_map_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rt_map_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_rt_map_new 0
+#define XM_HELPER_RET_REP_newrange XR_REP_PTR
+#define XM_HELPER_NARGS_newrange 0
+#define XM_HELPER_FLAGS_newrange (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_newrange XM_HPT_GC
+#define XM_HELPER_POST_CALL_newrange 0
+#define XM_HELPER_RET_REP_range_unpack XR_REP_VOID
+#define XM_HELPER_NARGS_range_unpack 0
+#define XM_HELPER_FLAGS_range_unpack 0
+#define XM_HELPER_POINTER_TRUST_range_unpack XM_HPT_NONE
+#define XM_HELPER_POST_CALL_range_unpack 0
+#define XM_HELPER_RET_REP_newset XR_REP_PTR
+#define XM_HELPER_NARGS_newset 0
+#define XM_HELPER_FLAGS_newset (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_newset XM_HPT_GC
+#define XM_HELPER_POST_CALL_newset 0
+#define XM_HELPER_RET_REP_slice XR_REP_PTR
+#define XM_HELPER_NARGS_slice 0
+#define XM_HELPER_FLAGS_slice (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_slice XM_HPT_GC
+#define XM_HELPER_POST_CALL_slice 0
+#define XM_HELPER_RET_REP_bytes_new XR_REP_PTR
+#define XM_HELPER_NARGS_bytes_new 0
+#define XM_HELPER_FLAGS_bytes_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_bytes_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_bytes_new 0
+#define XM_HELPER_RET_REP_enum_access XR_REP_TAGGED
+#define XM_HELPER_NARGS_enum_access 0
+#define XM_HELPER_FLAGS_enum_access 0
+#define XM_HELPER_POINTER_TRUST_enum_access XM_HPT_GC
+#define XM_HELPER_POST_CALL_enum_access 0
+#define XM_HELPER_RET_REP_enum_name XR_REP_PTR
+#define XM_HELPER_NARGS_enum_name 0
+#define XM_HELPER_FLAGS_enum_name 0
+#define XM_HELPER_POINTER_TRUST_enum_name XM_HPT_GC
+#define XM_HELPER_POST_CALL_enum_name 0
+#define XM_HELPER_RET_REP_enum_convert XR_REP_TAGGED
+#define XM_HELPER_NARGS_enum_convert 0
+#define XM_HELPER_FLAGS_enum_convert 0
+#define XM_HELPER_POINTER_TRUST_enum_convert XM_HPT_GC
+#define XM_HELPER_POST_CALL_enum_convert 0
+#define XM_HELPER_RET_REP_print XR_REP_VOID
+#define XM_HELPER_NARGS_print 0
+#define XM_HELPER_FLAGS_print 0
+#define XM_HELPER_POINTER_TRUST_print XM_HPT_NONE
+#define XM_HELPER_POST_CALL_print 0
+#define XM_HELPER_RET_REP_dump XR_REP_VOID
+#define XM_HELPER_NARGS_dump 0
+#define XM_HELPER_FLAGS_dump 0
+#define XM_HELPER_POINTER_TRUST_dump XM_HPT_NONE
+#define XM_HELPER_POST_CALL_dump 0
+#define XM_HELPER_RET_REP_assert XR_REP_VOID
+#define XM_HELPER_NARGS_assert 1
+#define XM_HELPER_FLAGS_assert (XM_HF_THROW | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_assert XM_HPT_NONE
+#define XM_HELPER_POST_CALL_assert (XM_HPC_THROW)
+#define XM_HELPER_RET_REP_assert_eq XR_REP_VOID
+#define XM_HELPER_NARGS_assert_eq 2
+#define XM_HELPER_FLAGS_assert_eq (XM_HF_THROW | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_assert_eq XM_HPT_NONE
+#define XM_HELPER_POST_CALL_assert_eq (XM_HPC_THROW)
+#define XM_HELPER_RET_REP_assert_ne XR_REP_VOID
+#define XM_HELPER_NARGS_assert_ne 2
+#define XM_HELPER_FLAGS_assert_ne (XM_HF_THROW | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_assert_ne XM_HPT_NONE
+#define XM_HELPER_POST_CALL_assert_ne (XM_HPC_THROW)
+#define XM_HELPER_RET_REP_chan_new XR_REP_PTR
+#define XM_HELPER_NARGS_chan_new 0
+#define XM_HELPER_FLAGS_chan_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_new 0
+#define XM_HELPER_RET_REP_chan_close XR_REP_VOID
+#define XM_HELPER_NARGS_chan_close 0
+#define XM_HELPER_FLAGS_chan_close 0
+#define XM_HELPER_POINTER_TRUST_chan_close XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_close 0
+#define XM_HELPER_RET_REP_chan_is_closed XR_REP_I64
+#define XM_HELPER_NARGS_chan_is_closed 0
+#define XM_HELPER_FLAGS_chan_is_closed 0
+#define XM_HELPER_POINTER_TRUST_chan_is_closed XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_is_closed 0
+#define XM_HELPER_RET_REP_chan_try_send XR_REP_I64
+#define XM_HELPER_NARGS_chan_try_send 0
+#define XM_HELPER_FLAGS_chan_try_send 0
+#define XM_HELPER_POINTER_TRUST_chan_try_send XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_try_send 0
+#define XM_HELPER_RET_REP_chan_try_recv XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_try_recv 0
+#define XM_HELPER_FLAGS_chan_try_recv 0
+#define XM_HELPER_POINTER_TRUST_chan_try_recv XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_try_recv 0
+#define XM_HELPER_RET_REP_chan_send XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_send 0
+#define XM_HELPER_FLAGS_chan_send (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_send XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_send (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_send_block XR_REP_VOID
+#define XM_HELPER_NARGS_chan_send_block 0
+#define XM_HELPER_FLAGS_chan_send_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_send_block XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_send_block (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_recv XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_recv 0
+#define XM_HELPER_FLAGS_chan_recv (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_recv XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_recv (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_recv_block XR_REP_VOID
+#define XM_HELPER_NARGS_chan_recv_block 0
+#define XM_HELPER_FLAGS_chan_recv_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_recv_block XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_recv_block (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_scope_enter XR_REP_VOID
+#define XM_HELPER_NARGS_scope_enter 0
+#define XM_HELPER_FLAGS_scope_enter 0
+#define XM_HELPER_POINTER_TRUST_scope_enter XM_HPT_NONE
+#define XM_HELPER_POST_CALL_scope_enter 0
+#define XM_HELPER_RET_REP_scope_exit XR_REP_VOID
+#define XM_HELPER_NARGS_scope_exit 0
+#define XM_HELPER_FLAGS_scope_exit 0
+#define XM_HELPER_POINTER_TRUST_scope_exit XM_HPT_NONE
+#define XM_HELPER_POST_CALL_scope_exit 0
+#define XM_HELPER_RET_REP_go XR_REP_TAGGED
+#define XM_HELPER_NARGS_go 0
+#define XM_HELPER_FLAGS_go                                                                         \
+    (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_go XM_HPT_GC
+#define XM_HELPER_POST_CALL_go (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_await XR_REP_TAGGED
+#define XM_HELPER_NARGS_await 0
+#define XM_HELPER_FLAGS_await (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_await XM_HPT_GC
+#define XM_HELPER_POST_CALL_await (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_await_block XR_REP_VOID
+#define XM_HELPER_NARGS_await_block 0
+#define XM_HELPER_FLAGS_await_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_await_block XM_HPT_NONE
+#define XM_HELPER_POST_CALL_await_block (XM_HPC_SUSPEND)
 
 /* ========== Helper Metadata Table (static, no func ptr) ========== */
 
 #ifdef XM_HELPERS_META_IMPL
-static const struct {
-    uint8_t ret_rep;
-    uint8_t nargs;
-    uint16_t flags;
-} xm_helper_meta[XM_HELPER__COUNT] = {
-    [XM_HELPER_call_self] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_call_func] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_invoke_method] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_invoke_direct] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_closure_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_closure_set_upval] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_upval_get] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_upval_set] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_upval_cell_get] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_upval_cell_set] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_cell_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_cell_get_direct] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_cell_set_direct] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_rt_add] = {XR_REP_TAGGED, 2, XM_HF_GC},
-    [XM_HELPER_rt_sub] = {XR_REP_TAGGED, 2, 0},
-    [XM_HELPER_rt_mul] = {XR_REP_TAGGED, 2, 0},
-    [XM_HELPER_rt_div] = {XR_REP_TAGGED, 2, 0},
-    [XM_HELPER_rt_mod] = {XR_REP_TAGGED, 2, 0},
-    [XM_HELPER_rt_eq] = {XR_REP_I64, 2, 0},
-    [XM_HELPER_eq_value] = {XR_REP_I64, 2, 0},
-    [XM_HELPER_getprop] = {XR_REP_TAGGED, 1, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_setprop] = {XR_REP_VOID, 2, XM_HF_GC},
-    [XM_HELPER_getfield_ic] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_getbuiltin] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_index_get] = {XR_REP_TAGGED, 2, XM_HF_GC | XM_HF_DEOPT},
-    [XM_HELPER_index_set] = {XR_REP_VOID, 3, XM_HF_GC},
-    [XM_HELPER_tarray_get] = {XR_REP_TAGGED, 2, 0},
-    [XM_HELPER_tarray_set] = {XR_REP_VOID, 3, 0},
-    [XM_HELPER_map_get] = {XR_REP_TAGGED, 2, XM_HF_GC},
-    [XM_HELPER_map_set] = {XR_REP_VOID, 3, XM_HF_GC},
-    [XM_HELPER_map_increment] = {XR_REP_VOID, 2, XM_HF_GC},
-    [XM_HELPER_get_shared] = {XR_REP_TAGGED, 0, XM_HF_GC},
-    [XM_HELPER_set_shared] = {XR_REP_VOID, 1, XM_HF_GC},
-    [XM_HELPER_throw] = {XR_REP_VOID, 1, XM_HF_THROW},
-    [XM_HELPER_is_type] = {XR_REP_I64, 1, 0},
-    [XM_HELPER_checktype] = {XR_REP_I64, 1, 0},
-    [XM_HELPER_typename] = {XR_REP_PTR, 1, 0},
-    [XM_HELPER_typeof] = {XR_REP_I64, 1, 0},
-    [XM_HELPER_deep_copy] = {XR_REP_PTR, 1, XM_HF_GC},
-    [XM_HELPER_chr] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_substring] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_str_repeat] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_tostring] = {XR_REP_PTR, 1, XM_HF_GC},
-    [XM_HELPER_strbuf_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_strbuf_append] = {XR_REP_VOID, 0, XM_HF_GC},
-    [XM_HELPER_strbuf_finish] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_new_struct] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_struct_get] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_struct_set] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_struct_copy] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_rt_array_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_rt_array_push] = {XR_REP_VOID, 0, XM_HF_GC},
-    [XM_HELPER_rt_array_len] = {XR_REP_I64, 0, 0},
-    [XM_HELPER_rt_map_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_newrange] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_range_unpack] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_newset] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_slice] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_bytes_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_enum_access] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_enum_name] = {XR_REP_PTR, 0, 0},
-    [XM_HELPER_enum_convert] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_print] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_dump] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_assert] = {XR_REP_VOID, 1, XM_HF_THROW},
-    [XM_HELPER_assert_eq] = {XR_REP_VOID, 2, XM_HF_THROW},
-    [XM_HELPER_assert_ne] = {XR_REP_VOID, 2, XM_HF_THROW},
-    [XM_HELPER_chan_new] = {XR_REP_PTR, 0, XM_HF_GC},
-    [XM_HELPER_chan_close] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_chan_is_closed] = {XR_REP_I64, 0, 0},
-    [XM_HELPER_chan_try_send] = {XR_REP_I64, 0, 0},
-    [XM_HELPER_chan_try_recv] = {XR_REP_TAGGED, 0, 0},
-    [XM_HELPER_chan_send] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_SUSPEND},
-    [XM_HELPER_chan_send_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND},
-    [XM_HELPER_chan_recv] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_SUSPEND},
-    [XM_HELPER_chan_recv_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND},
-    [XM_HELPER_scope_enter] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_scope_exit] = {XR_REP_VOID, 0, 0},
-    [XM_HELPER_go] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_SUSPEND},
-    [XM_HELPER_await] = {XR_REP_TAGGED, 0, XM_HF_SUSPEND},
-    [XM_HELPER_await_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND},
+static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
+    [XM_HELPER_call_self] = {XR_REP_TAGGED, 0,
+                             XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                                 XM_HF_STACKMAP,
+                             XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_call_func] = {XR_REP_TAGGED, 0,
+                             XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                                 XM_HF_STACKMAP,
+                             XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_invoke_method] = {XR_REP_TAGGED, 0,
+                                 XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                                     XM_HF_STACKMAP,
+                                 XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_invoke_direct] = {XR_REP_TAGGED, 0,
+                                 XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                                     XM_HF_STACKMAP,
+                                 XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_closure_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_closure_set_upval] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_upval_get] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_upval_set] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_upval_cell_get] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_upval_cell_set] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_cell_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_cell_get_direct] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_cell_set_direct] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_rt_add] = {XR_REP_TAGGED, 2, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_rt_sub] = {XR_REP_TAGGED, 2, 0, XM_HPT_GC, 0},
+    [XM_HELPER_rt_mul] = {XR_REP_TAGGED, 2, 0, XM_HPT_GC, 0},
+    [XM_HELPER_rt_div] = {XR_REP_TAGGED, 2, 0, XM_HPT_GC, 0},
+    [XM_HELPER_rt_mod] = {XR_REP_TAGGED, 2, 0, XM_HPT_GC, 0},
+    [XM_HELPER_rt_eq] = {XR_REP_I64, 2, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_eq_value] = {XR_REP_I64, 2, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_getprop] = {XR_REP_TAGGED, 1,
+                           XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                               XM_HF_STACKMAP,
+                           XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_setprop] = {XR_REP_VOID, 2,
+                           XM_HF_GC | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP,
+                           XM_HPT_NONE, 0},
+    [XM_HELPER_getfield_ic] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_getbuiltin] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_index_get] = {XR_REP_TAGGED, 2,
+                             XM_HF_GC | XM_HF_DEOPT | XM_HF_ENTER_VM | XM_HF_USER_CODE |
+                                 XM_HF_STACKMAP,
+                             XM_HPT_GC, XM_HPC_DEOPT},
+    [XM_HELPER_index_set] = {XR_REP_VOID, 3,
+                             XM_HF_GC | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP,
+                             XM_HPT_NONE, 0},
+    [XM_HELPER_tarray_get] = {XR_REP_TAGGED, 2, 0, XM_HPT_GC, 0},
+    [XM_HELPER_tarray_set] = {XR_REP_VOID, 3, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_map_get] = {XR_REP_TAGGED, 2, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_map_set] = {XR_REP_VOID, 3, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    [XM_HELPER_map_increment] = {XR_REP_VOID, 2, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    [XM_HELPER_get_shared] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_set_shared] = {XR_REP_VOID, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    [XM_HELPER_throw] = {XR_REP_VOID, 1, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE, XM_HPC_THROW},
+    [XM_HELPER_is_type] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_checktype] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_typename] = {XR_REP_PTR, 1, 0, XM_HPT_GC, 0},
+    [XM_HELPER_typeof] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_deep_copy] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_chr] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_substring] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_str_repeat] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_tostring] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_strbuf_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_strbuf_append] = {XR_REP_VOID, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    [XM_HELPER_strbuf_finish] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_new_struct] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_struct_get] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_struct_set] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_struct_copy] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_rt_array_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_rt_array_push] = {XR_REP_VOID, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    [XM_HELPER_rt_array_len] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_rt_map_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_newrange] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_range_unpack] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_newset] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_slice] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_bytes_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_enum_access] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_enum_name] = {XR_REP_PTR, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_enum_convert] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_print] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_dump] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_assert] = {XR_REP_VOID, 1, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE, XM_HPC_THROW},
+    [XM_HELPER_assert_eq] = {XR_REP_VOID, 2, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE,
+                             XM_HPC_THROW},
+    [XM_HELPER_assert_ne] = {XR_REP_VOID, 2, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE,
+                             XM_HPC_THROW},
+    [XM_HELPER_chan_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_chan_close] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_chan_is_closed] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_chan_try_send] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_chan_try_recv] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_chan_send] = {XR_REP_TAGGED, 0,
+                             XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP, XM_HPT_GC,
+                             XM_HPC_SUSPEND},
+    [XM_HELPER_chan_send_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                   XM_HPT_NONE, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_recv] = {XR_REP_TAGGED, 0,
+                             XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP, XM_HPT_GC,
+                             XM_HPC_SUSPEND},
+    [XM_HELPER_chan_recv_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                   XM_HPT_NONE, XM_HPC_SUSPEND},
+    [XM_HELPER_scope_enter] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_scope_exit] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_go] = {XR_REP_TAGGED, 0,
+                      XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_USER_CODE | XM_HF_STACKMAP,
+                      XM_HPT_GC, XM_HPC_SUSPEND},
+    [XM_HELPER_await] = {XR_REP_TAGGED, 0, XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                         XM_HPT_GC, XM_HPC_SUSPEND},
+    [XM_HELPER_await_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                               XM_HPT_NONE, XM_HPC_SUSPEND},
 };
 #endif
 
 /* ========== X-Macro for fn-ptr table ========== */
 
 #define XM_HELPER_DEF(_)                                                                           \
-    _(call_self, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
-    _(call_func, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
-    _(invoke_method, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                     \
-    _(invoke_direct, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                     \
-    _(closure_new, 0, XR_REP_PTR, XM_HF_GC)                                                        \
-    _(closure_set_upval, 0, XR_REP_VOID, 0)                                                        \
-    _(upval_get, 0, XR_REP_TAGGED, 0)                                                              \
-    _(upval_set, 0, XR_REP_VOID, 0)                                                                \
-    _(upval_cell_get, 0, XR_REP_TAGGED, 0)                                                         \
-    _(upval_cell_set, 0, XR_REP_VOID, 0)                                                           \
-    _(cell_new, 0, XR_REP_PTR, XM_HF_GC)                                                           \
-    _(cell_get_direct, 0, XR_REP_TAGGED, 0)                                                        \
-    _(cell_set_direct, 0, XR_REP_VOID, 0)                                                          \
-    _(rt_add, 2, XR_REP_TAGGED, XM_HF_GC)                                                          \
-    _(rt_sub, 2, XR_REP_TAGGED, 0)                                                                 \
-    _(rt_mul, 2, XR_REP_TAGGED, 0)                                                                 \
-    _(rt_div, 2, XR_REP_TAGGED, 0)                                                                 \
-    _(rt_mod, 2, XR_REP_TAGGED, 0)                                                                 \
-    _(rt_eq, 2, XR_REP_I64, 0)                                                                     \
-    _(eq_value, 2, XR_REP_I64, 0)                                                                  \
-    _(getprop, 1, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                           \
-    _(setprop, 2, XR_REP_VOID, XM_HF_GC)                                                           \
-    _(getfield_ic, 0, XR_REP_TAGGED, 0)                                                            \
-    _(getbuiltin, 0, XR_REP_TAGGED, 0)                                                             \
-    _(index_get, 2, XR_REP_TAGGED, XM_HF_GC | XM_HF_DEOPT)                                         \
-    _(index_set, 3, XR_REP_VOID, XM_HF_GC)                                                         \
-    _(tarray_get, 2, XR_REP_TAGGED, 0)                                                             \
-    _(tarray_set, 3, XR_REP_VOID, 0)                                                               \
-    _(map_get, 2, XR_REP_TAGGED, XM_HF_GC)                                                         \
-    _(map_set, 3, XR_REP_VOID, XM_HF_GC)                                                           \
-    _(map_increment, 2, XR_REP_VOID, XM_HF_GC)                                                     \
-    _(get_shared, 0, XR_REP_TAGGED, XM_HF_GC)                                                      \
-    _(set_shared, 1, XR_REP_VOID, XM_HF_GC)                                                        \
-    _(throw, 1, XR_REP_VOID, XM_HF_THROW)                                                          \
-    _(is_type, 1, XR_REP_I64, 0)                                                                   \
-    _(checktype, 1, XR_REP_I64, 0)                                                                 \
-    _(typename, 1, XR_REP_PTR, 0)                                                                  \
-    _(typeof, 1, XR_REP_I64, 0)                                                                    \
-    _(deep_copy, 1, XR_REP_PTR, XM_HF_GC)                                                          \
-    _(chr, 0, XR_REP_PTR, XM_HF_GC)                                                                \
-    _(substring, 0, XR_REP_PTR, XM_HF_GC)                                                          \
-    _(str_repeat, 0, XR_REP_PTR, XM_HF_GC)                                                         \
-    _(tostring, 1, XR_REP_PTR, XM_HF_GC)                                                           \
-    _(strbuf_new, 0, XR_REP_PTR, XM_HF_GC)                                                         \
-    _(strbuf_append, 0, XR_REP_VOID, XM_HF_GC)                                                     \
-    _(strbuf_finish, 0, XR_REP_PTR, XM_HF_GC)                                                      \
-    _(new_struct, 0, XR_REP_PTR, XM_HF_GC)                                                         \
-    _(struct_get, 0, XR_REP_TAGGED, 0)                                                             \
-    _(struct_set, 0, XR_REP_VOID, 0)                                                               \
-    _(struct_copy, 0, XR_REP_PTR, XM_HF_GC)                                                        \
-    _(rt_array_new, 0, XR_REP_PTR, XM_HF_GC)                                                       \
-    _(rt_array_push, 0, XR_REP_VOID, XM_HF_GC)                                                     \
-    _(rt_array_len, 0, XR_REP_I64, 0)                                                              \
-    _(rt_map_new, 0, XR_REP_PTR, XM_HF_GC)                                                         \
-    _(newrange, 0, XR_REP_PTR, XM_HF_GC)                                                           \
-    _(range_unpack, 0, XR_REP_VOID, 0)                                                             \
-    _(newset, 0, XR_REP_PTR, XM_HF_GC)                                                             \
-    _(slice, 0, XR_REP_PTR, XM_HF_GC)                                                              \
-    _(bytes_new, 0, XR_REP_PTR, XM_HF_GC)                                                          \
-    _(enum_access, 0, XR_REP_TAGGED, 0)                                                            \
-    _(enum_name, 0, XR_REP_PTR, 0)                                                                 \
-    _(enum_convert, 0, XR_REP_TAGGED, 0)                                                           \
-    _(print, 0, XR_REP_VOID, 0)                                                                    \
-    _(dump, 0, XR_REP_VOID, 0)                                                                     \
-    _(assert, 1, XR_REP_VOID, XM_HF_THROW)                                                         \
-    _(assert_eq, 2, XR_REP_VOID, XM_HF_THROW)                                                      \
-    _(assert_ne, 2, XR_REP_VOID, XM_HF_THROW)                                                      \
-    _(chan_new, 0, XR_REP_PTR, XM_HF_GC)                                                           \
-    _(chan_close, 0, XR_REP_VOID, 0)                                                               \
-    _(chan_is_closed, 0, XR_REP_I64, 0)                                                            \
-    _(chan_try_send, 0, XR_REP_I64, 0)                                                             \
-    _(chan_try_recv, 0, XR_REP_TAGGED, 0)                                                          \
-    _(chan_send, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                       \
-    _(chan_send_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                              \
-    _(chan_recv, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                       \
-    _(chan_recv_block, 0, XR_REP_VOID, XM_HF_SUSPEND)                                              \
-    _(scope_enter, 0, XR_REP_VOID, 0)                                                              \
-    _(scope_exit, 0, XR_REP_VOID, 0)                                                               \
-    _(go, 0, XR_REP_TAGGED, XM_HF_GC | XM_HF_SUSPEND)                                              \
-    _(await, 0, XR_REP_TAGGED, XM_HF_SUSPEND)                                                      \
-    _(await_block, 0, XR_REP_VOID, XM_HF_SUSPEND)
+    _(call_self)                                                                                   \
+    _(call_func)                                                                                   \
+    _(invoke_method)                                                                               \
+    _(invoke_direct)                                                                               \
+    _(closure_new)                                                                                 \
+    _(closure_set_upval)                                                                           \
+    _(upval_get)                                                                                   \
+    _(upval_set)                                                                                   \
+    _(upval_cell_get)                                                                              \
+    _(upval_cell_set)                                                                              \
+    _(cell_new)                                                                                    \
+    _(cell_get_direct)                                                                             \
+    _(cell_set_direct)                                                                             \
+    _(rt_add)                                                                                      \
+    _(rt_sub)                                                                                      \
+    _(rt_mul)                                                                                      \
+    _(rt_div)                                                                                      \
+    _(rt_mod)                                                                                      \
+    _(rt_eq)                                                                                       \
+    _(eq_value)                                                                                    \
+    _(getprop)                                                                                     \
+    _(setprop)                                                                                     \
+    _(getfield_ic)                                                                                 \
+    _(getbuiltin)                                                                                  \
+    _(index_get)                                                                                   \
+    _(index_set)                                                                                   \
+    _(tarray_get)                                                                                  \
+    _(tarray_set)                                                                                  \
+    _(map_get)                                                                                     \
+    _(map_set)                                                                                     \
+    _(map_increment)                                                                               \
+    _(get_shared)                                                                                  \
+    _(set_shared)                                                                                  \
+    _(throw)                                                                                       \
+    _(is_type)                                                                                     \
+    _(checktype)                                                                                   \
+    _(typename)                                                                                    \
+    _(typeof)                                                                                      \
+    _(deep_copy)                                                                                   \
+    _(chr)                                                                                         \
+    _(substring)                                                                                   \
+    _(str_repeat)                                                                                  \
+    _(tostring)                                                                                    \
+    _(strbuf_new)                                                                                  \
+    _(strbuf_append)                                                                               \
+    _(strbuf_finish)                                                                               \
+    _(new_struct)                                                                                  \
+    _(struct_get)                                                                                  \
+    _(struct_set)                                                                                  \
+    _(struct_copy)                                                                                 \
+    _(rt_array_new)                                                                                \
+    _(rt_array_push)                                                                               \
+    _(rt_array_len)                                                                                \
+    _(rt_map_new)                                                                                  \
+    _(newrange)                                                                                    \
+    _(range_unpack)                                                                                \
+    _(newset)                                                                                      \
+    _(slice)                                                                                       \
+    _(bytes_new)                                                                                   \
+    _(enum_access)                                                                                 \
+    _(enum_name)                                                                                   \
+    _(enum_convert)                                                                                \
+    _(print)                                                                                       \
+    _(dump)                                                                                        \
+    _(assert)                                                                                      \
+    _(assert_eq)                                                                                   \
+    _(assert_ne)                                                                                   \
+    _(chan_new)                                                                                    \
+    _(chan_close)                                                                                  \
+    _(chan_is_closed)                                                                              \
+    _(chan_try_send)                                                                               \
+    _(chan_try_recv)                                                                               \
+    _(chan_send)                                                                                   \
+    _(chan_send_block)                                                                             \
+    _(chan_recv)                                                                                   \
+    _(chan_recv_block)                                                                             \
+    _(scope_enter)                                                                                 \
+    _(scope_exit)                                                                                  \
+    _(go)                                                                                          \
+    _(await)                                                                                       \
+    _(await_block)
 
 #endif  // XM_HELPERS_GEN_H
