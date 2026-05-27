@@ -7,6 +7,7 @@
 #include "../../../src/ir/xi_opt_jump_thread.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_op_name.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -351,6 +352,48 @@ TEST(single_block_no_crash) {
     xi_func_free(f);
 }
 
+TEST(no_thread_loop_backedge_from_target_condition) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
+    xi_block_set_jump(entry, header);
+
+    XiPhi *iv = xi_phi_new(f, header, &stub_int, 2);
+    iv->value.args[0] = zero;
+    XiValue *cmp = make_cmp(f, header, XI_LT, &iv->value, limit);
+    xi_block_set_if(header, cmp, body, exit_blk);
+
+    XiValue *one = xi_const_int(f, body, 1, &stub_int);
+    XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, one);
+    xi_block_set_jump(body, header);
+    iv->value.args[1] = next;
+
+    xi_block_set_return(exit_blk, &iv->value);
+
+    XiPassChange chg = xi_opt_jump_thread(f);
+
+    ASSERT(!chg.cfg_changed);
+    ASSERT(body->succs[0] == header);
+    ASSERT(header->npreds == 2);
+    ASSERT(iv->value.nargs == 2);
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    ASSERT(ok);
+
+    xi_func_free(f);
+}
+
 TEST(thread_ne_eq_negation) {
     /*
      * A: if (x != y) goto B else goto C
@@ -426,6 +469,7 @@ int main(void) {
     run_no_thread_different_operands();
     run_no_thread_plain_pred();
     run_single_block_no_crash();
+    run_no_thread_loop_backedge_from_target_condition();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

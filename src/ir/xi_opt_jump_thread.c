@@ -19,9 +19,8 @@
  */
 
 #include "xi_opt_jump_thread.h"
+#include "xi_cfg_edit.h"
 #include "../base/xchecks.h"
-#include "../base/xmalloc.h"
-#include <string.h>
 
 /* ========== Condition Matching ========== */
 
@@ -87,57 +86,11 @@ static bool cmp_keys_negated(const CmpKey *a, const CmpKey *b) {
     return negate_cmp(a->op) == b->op;
 }
 
-/* ========== Pred Redirect ========== */
-
-/* Replace pred's successor from old_target to new_target, and fix
- * pred arrays.  Returns true if redirect happened. */
-static bool redirect_edge(XiBlock *pred, XiBlock *old_target, XiBlock *new_target) {
-    XR_DCHECK(pred != NULL && old_target != NULL && new_target != NULL, "redirect_edge: NULL arg");
-    if (old_target == new_target)
-        return false;
-
-    /* Update pred's successor pointer. */
-    bool found = false;
-    for (int i = 0; i < 2; i++) {
-        if (pred->succs[i] == old_target) {
-            pred->succs[i] = new_target;
-            found = true;
-            break;
-        }
-    }
-    if (!found)
-        return false;
-
-    /* Remove pred from old_target's pred list. */
-    for (uint16_t i = 0; i < old_target->npreds; i++) {
-        if (old_target->preds[i] == pred) {
-            for (uint16_t j = i; j + 1 < old_target->npreds; j++)
-                old_target->preds[j] = old_target->preds[j + 1];
-            old_target->npreds--;
-
-            /* Remove corresponding phi args. */
-            for (XiPhi *phi = old_target->phis; phi; phi = phi->next) {
-                if (i < phi->value.nargs) {
-                    for (uint16_t j = i; j + 1 < phi->value.nargs; j++)
-                        phi->value.args[j] = phi->value.args[j + 1];
-                    phi->value.nargs--;
-                }
-            }
-            break;
-        }
-    }
-
-    /* Add pred to new_target's pred list. */
-    xi_block_add_pred(new_target, pred);
-
-    return true;
-}
-
 /* ========== Threading Logic ========== */
 
 /* For a given IF block `target`, try to thread incoming edges from
  * predecessors that already know the branch outcome. */
-static uint32_t thread_block(XiBlock *target) {
+static uint32_t thread_block(XiFunc *f, XiBlock *target) {
     if (target->kind != XI_BLOCK_IF || !target->control)
         return 0;
 
@@ -170,6 +123,8 @@ static uint32_t thread_block(XiBlock *target) {
         }
         if (!gov || gov->kind != XI_BLOCK_IF || !gov->control)
             continue;
+        if (gov == target)
+            continue;
 
         CmpKey pred_cmp;
         if (!extract_cmp_key(gov->control, &pred_cmp))
@@ -183,21 +138,35 @@ static uint32_t thread_block(XiBlock *target) {
 
         /* If pred tests the same condition as target:
          *   from_then: pred proved condition true  -> thread to then_succ
-         *   from_else: pred proved condition false  -> thread to else_succ */
-        if (cmp_keys_equal(&pred_cmp, &target_cmp)) {
-            XiBlock *dest = from_then ? then_succ : else_succ;
-            if (redirect_edge(pred, target, dest))
-                threaded++;
-        }
-        /* If pred tests the negation of target's condition:
-         *   from_then: pred proved negation true -> target is false -> else
-         *   from_else: pred proved negation false -> target is true -> then */
-        else if (cmp_keys_negated(&pred_cmp, &target_cmp)) {
-            XiBlock *dest = from_then ? else_succ : then_succ;
-            if (redirect_edge(pred, target, dest))
-                threaded++;
-        }
+         *   from_else: pred proved condition false -> thread to else_succ
+         * If pred tests the negated condition:
+         *   from_then: target is false -> else_succ
+         *   from_else: target is true  -> then_succ */
+        XiBlock *dest = NULL;
+        if (cmp_keys_equal(&pred_cmp, &target_cmp))
+            dest = from_then ? then_succ : else_succ;
+        else if (cmp_keys_negated(&pred_cmp, &target_cmp))
+            dest = from_then ? else_succ : then_succ;
+        else
+            continue;
+        if (dest == pred)
+            continue;
+
+        /* If dest already has a phi, naively appending pred would leave
+         * phi.nargs out of sync with dest.npreds, and the right phi
+         * argument cannot be recovered without per-arg dominance
+         * analysis on the value previously incoming on the target edge.
+         * Refuse this thread candidate; the rest of the IR is left
+         * untouched and the next pipeline iteration may revisit. */
+        if (dest->phis != NULL)
+            continue;
+
+        if (xi_cfg_redirect_edge(pred, target, dest, NULL, 0))
+            threaded++;
     }
+
+    if (threaded > 0)
+        xi_cfg_mark_unreachable_if_isolated(f, target);
 
     return threaded;
 }
@@ -221,7 +190,7 @@ XR_FUNC XiPassChange xi_opt_jump_thread(XiFunc *f) {
             if (!blk || blk->kind != XI_BLOCK_IF)
                 continue;
 
-            uint32_t n = thread_block(blk);
+            uint32_t n = thread_block(f, blk);
             if (n > 0) {
                 total_threaded += n;
                 changed = true;

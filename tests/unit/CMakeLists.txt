@@ -150,6 +150,7 @@ add_xray_unit_test(test_xi ir/test_xi.c)
 add_xray_unit_test(test_xi_lower ir/test_xi_lower.c)
 add_xray_unit_test(test_xi_opt ir/test_xi_opt.c)
 add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)
+add_xray_unit_test(test_xi_cfg_edit ir/test_xi_cfg_edit.c)
 add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
@@ -169,7 +170,14 @@ add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)
 add_xray_unit_test(test_xi_block_simplify ir/test_xi_block_simplify.c)
 add_xray_unit_test(test_xi_jump_thread ir/test_xi_jump_thread.c)
 add_xray_unit_test(test_xi_loop_iv ir/test_xi_loop_iv.c)
+add_xray_unit_test(test_xi_loop_rotate ir/test_xi_loop_rotate.c)
 add_xray_unit_test(test_xi_licm ir/test_xi_licm.c)
+add_xray_unit_test(test_xi_ifconv ir/test_xi_ifconv.c)
+add_xray_unit_test(test_xi_sccp ir/test_xi_sccp.c)
+add_xray_unit_test(test_xi_gvn_pre ir/test_xi_gvn_pre.c)
+add_xray_unit_test(test_xi_strength ir/test_xi_strength.c)
+add_xray_unit_test(test_xi_dom_cache ir/test_xi_dom_cache.c)
+add_xray_unit_test(test_xi_ivsr ir/test_xi_ivsr.c)
 add_xray_unit_test(test_xi_inline ir/test_xi_inline.c)
 add_xray_unit_test(test_xi_tail_call ir/test_xi_tail_call.c)
 add_xray_unit_test(test_xi_verify_ext ir/test_xi_verify_ext.c)
@@ -563,3 +571,14 @@ add_custom_command(
 )
 add_executable(test_riscv64_golden jit/test_riscv64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c)
 add_test(NAME test_riscv64_golden COMMAND test_riscv64_golden)
+
+# ============================================================================
+# Reverse-invariant checks for the Xi IR layer (static grep-based gates).
+# Runs as part of ctest so PRs that introduce raw malloc, phase coordinates
+# in source, or fallback mode flags are blocked locally before CI even runs.
+# ============================================================================
+add_test(
+    NAME check_xi_invariants
+    COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.sh
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)

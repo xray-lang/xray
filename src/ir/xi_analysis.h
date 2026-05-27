@@ -18,9 +18,12 @@
  *   Liveness enables register allocation and spill decisions.
  *
  * USAGE:
- *   xi_compute_rpo(f);        // must be called first
- *   xi_compute_dominators(f); // requires RPO
- *   xi_compute_liveness(f);   // requires RPO, returns heap-allocated result
+ *   xi_ensure_rpo(f);          // recomputes only if CFG changed since last call
+ *   xi_ensure_dominators(f);   // requires RPO; same lazy behaviour
+ *   xi_compute_liveness(f);    // requires RPO, returns heap-allocated result
+ *
+ * The xi_compute_* entry points are unconditional and remain available
+ * for tests and tools that need to force a fresh computation.
  */
 
 #ifndef XI_ANALYSIS_H
@@ -28,20 +31,39 @@
 
 #include "xi.h"
 
+/* ========== CFG-derived Analysis Cache ========== */
+
+/* Bump cfg_version so the next xi_ensure_*() call recomputes.
+ * Pipeline driver calls this automatically when a pass reports
+ * XiPassChange.cfg_changed; passes that mutate the CFG outside the
+ * driver must call it manually. */
+XR_FUNC void xi_cfg_invalidate(XiFunc *f);
+
 /* ========== RPO (Reverse Post-Order) ========== */
 
 /* Compute reverse post-order numbering for all reachable blocks.
  * Sets XiBlock.rpo for each block (1-based; 0 = unreachable).
- * Returns the number of reachable blocks. */
+ * Returns the number of reachable blocks.
+ * This is the unconditional form — prefer xi_ensure_rpo() inside passes. */
 XR_FUNC uint32_t xi_compute_rpo(XiFunc *f);
+
+/* Cached form: recompute only if cfg_version has advanced since the
+ * last call.  Returns true if a recomputation occurred (cache miss). */
+XR_FUNC bool xi_ensure_rpo(XiFunc *f);
 
 /* ========== Dominator Tree ========== */
 
 /* Compute immediate dominators using the Cooper-Harvey-Kennedy algorithm.
  * Requires RPO to be computed first (xi_compute_rpo).
  * Sets XiBlock.idom and XiBlock.dom_depth for each reachable block.
- * Entry block: idom = NULL, dom_depth = 0. */
+ * Entry block: idom = NULL, dom_depth = 0.
+ * Unconditional form — prefer xi_ensure_dominators() inside passes. */
 XR_FUNC void xi_compute_dominators(XiFunc *f);
+
+/* Cached form: ensures both RPO and dominators are up to date.
+ * Recomputes only what cfg_version requires.  Returns true if any
+ * recomputation occurred. */
+XR_FUNC bool xi_ensure_dominators(XiFunc *f);
 
 /* Query: does block 'a' dominate block 'b'?
  * Requires dominators to be computed. O(depth) walk. */

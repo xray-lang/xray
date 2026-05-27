@@ -222,6 +222,28 @@ TEST(combined_bonuses) {
     ASSERT(b == 5);
 }
 
+/* ========== Test: budget scales with caller size ========== */
+
+TEST(budget_small_caller) {
+    /* < 100 → aggressive: default + 2 */
+    ASSERT(xi_inline_budget(0) == XI_INLINE_MAX_PER_PASS + 2);
+    ASSERT(xi_inline_budget(50) == XI_INLINE_MAX_PER_PASS + 2);
+    ASSERT(xi_inline_budget(99) == XI_INLINE_MAX_PER_PASS + 2);
+}
+
+TEST(budget_medium_caller) {
+    /* 100..300 → default */
+    ASSERT(xi_inline_budget(100) == XI_INLINE_MAX_PER_PASS);
+    ASSERT(xi_inline_budget(200) == XI_INLINE_MAX_PER_PASS);
+    ASSERT(xi_inline_budget(300) == XI_INLINE_MAX_PER_PASS);
+}
+
+TEST(budget_large_caller) {
+    /* > 300 → conservative: default - 2 */
+    ASSERT(xi_inline_budget(301) == XI_INLINE_MAX_PER_PASS - 2);
+    ASSERT(xi_inline_budget(1000) == XI_INLINE_MAX_PER_PASS - 2);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -236,6 +258,9 @@ int main(void) {
     run_large_caller_penalty();
     run_throw_penalty();
     run_combined_bonuses();
+    run_budget_small_caller();
+    run_budget_medium_caller();
+    run_budget_large_caller();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

@@ -12,17 +12,22 @@
  */
 
 #include "xi_opt.h"
-#include "xi_opt_gvn.h"
+#include "xi_opt_gvn_pre.h"
 #include "xi_tbaa.h"
+#include "xi_effect.h"
 #include "xi_opt_ifconv.h"
 #include "xi_opt_inline.h"
 #include "xi_opt_licm.h"
+#include "xi_opt_loop_rotate.h"
 #include "xi_opt_sccp.h"
 #include "xi_opt_bce.h"
 #include "xi_opt_block_simplify.h"
 #include "xi_opt_jump_thread.h"
+#include "xi_opt_strength.h"
 #include "xi_opt_tail_call.h"
+#include "xi_opt_ivsr.h"
 #include "xi_range.h"
+#include "xi_analysis.h"
 #include "xi_pass.h"
 #include "xi_verify.h"
 #include "../base/xdefs.h"
@@ -232,6 +237,38 @@ static bool fold_float_compare(uint16_t op, double a, double b, bool *result) {
     }
 }
 
+static void rewrite_to_const_int(XiValue *v, int64_t value) {
+    XR_DCHECK(v != NULL, "rewrite_to_const_int: NULL value");
+    v->op = XI_CONST;
+    v->aux_int = value;
+    v->aux = NULL;
+    v->nargs = 0;
+    v->flags = xi_op_default_effects(XI_CONST);
+    v->mem_group = XI_MEM_NONE;
+}
+
+static void rewrite_to_const_float(XiValue *v, double value) {
+    XR_DCHECK(v != NULL, "rewrite_to_const_float: NULL value");
+    v->op = XI_CONST;
+    memcpy(&v->aux_int, &value, sizeof(double));
+    v->aux = NULL;
+    v->nargs = 0;
+    v->flags = xi_op_default_effects(XI_CONST);
+    v->mem_group = XI_MEM_NONE;
+}
+
+static void rewrite_to_copy(XiValue *v, XiValue *src) {
+    XR_DCHECK(v != NULL, "rewrite_to_copy: NULL value");
+    XR_DCHECK(src != NULL, "rewrite_to_copy: NULL source");
+    v->op = XI_COPY;
+    v->args[0] = src;
+    v->nargs = 1;
+    v->flags = xi_op_default_effects(XI_COPY);
+    v->aux_int = 0;
+    v->aux = NULL;
+    v->mem_group = XI_MEM_NONE;
+}
+
 XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_const_fold: NULL func");
     XiPassChange chg = xi_pass_no_change();
@@ -246,9 +283,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
              * -INT64_MIN is UB on signed; negate on uint64_t then cast back
              * to preserve wrap-on-overflow semantics (matches VM and JIT). */
             if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
-                v->op = XI_CONST;
-                v->aux_int = (int64_t) (0u - (uint64_t) v->args[0]->aux_int);
-                v->nargs = 0;
+                rewrite_to_const_int(v, (int64_t) (0u - (uint64_t) v->args[0]->aux_int));
                 chg.values_changed = true;
                 continue;
             }
@@ -258,27 +293,21 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 double val;
                 memcpy(&val, &v->args[0]->aux_int, sizeof(double));
                 val = -val;
-                v->op = XI_CONST;
-                memcpy(&v->aux_int, &val, sizeof(double));
-                v->nargs = 0;
+                rewrite_to_const_float(v, val);
                 chg.values_changed = true;
                 continue;
             }
 
             /* Fold unary NOT on const bool */
             if (v->op == XI_NOT && v->nargs == 1 && is_const_bool(v->args[0])) {
-                v->op = XI_CONST;
-                v->aux_int = v->args[0]->aux_int ? 0 : 1;
-                v->nargs = 0;
+                rewrite_to_const_int(v, v->args[0]->aux_int ? 0 : 1);
                 chg.values_changed = true;
                 continue;
             }
 
             /* Fold unary BNOT on const int */
             if (v->op == XI_BNOT && v->nargs == 1 && is_const_int(v->args[0])) {
-                v->op = XI_CONST;
-                v->aux_int = ~(v->args[0]->aux_int);
-                v->nargs = 0;
+                rewrite_to_const_int(v, ~(v->args[0]->aux_int));
                 chg.values_changed = true;
                 continue;
             }
@@ -295,9 +324,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
                 XiValue *tup = v->args[0];
                 int64_t idx = v->aux_int;
                 if (idx >= 0 && (uint16_t) idx < tup->nargs && tup->args[(uint16_t) idx]) {
-                    v->op = XI_COPY;
-                    v->args[0] = tup->args[(uint16_t) idx];
-                    v->aux_int = 0;
+                    rewrite_to_copy(v, tup->args[(uint16_t) idx]);
                     /* nargs already 1; type stays as the projected element's type */
                     chg.values_changed = true;
                     continue;
@@ -314,17 +341,13 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
             if (is_const_int(lhs) && is_const_int(rhs)) {
                 int64_t result;
                 if (fold_int_binary(v->op, lhs->aux_int, rhs->aux_int, &result)) {
-                    v->op = XI_CONST;
-                    v->aux_int = result;
-                    v->nargs = 0;
+                    rewrite_to_const_int(v, result);
                     chg.values_changed = true;
                     continue;
                 }
                 bool bres;
                 if (fold_int_compare(v->op, lhs->aux_int, rhs->aux_int, &bres)) {
-                    v->op = XI_CONST;
-                    v->aux_int = bres ? 1 : 0;
-                    v->nargs = 0;
+                    rewrite_to_const_int(v, bres ? 1 : 0);
                     chg.values_changed = true;
                     continue;
                 }
@@ -338,17 +361,13 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
                 double dresult;
                 if (fold_float_binary(v->op, a, b, &dresult)) {
-                    v->op = XI_CONST;
-                    memcpy(&v->aux_int, &dresult, sizeof(double));
-                    v->nargs = 0;
+                    rewrite_to_const_float(v, dresult);
                     chg.values_changed = true;
                     continue;
                 }
                 bool bres;
                 if (fold_float_compare(v->op, a, b, &bres)) {
-                    v->op = XI_CONST;
-                    v->aux_int = bres ? 1 : 0;
-                    v->nargs = 0;
+                    rewrite_to_const_int(v, bres ? 1 : 0);
                     chg.values_changed = true;
                     continue;
                 }
@@ -562,198 +581,7 @@ XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
     return chg;
 }
 
-/* ========== Strength Reduction ========== */
-
-/*
- * Algebraic identity rewrites for integer binary operations.
- * Converts a binary op to either a COPY (identity) or CONST (zero/absorb).
- *
- * Patterns handled:
- *   x + 0 = x,  0 + x = x
- *   x - 0 = x
- *   x * 1 = x,  1 * x = x
- *   x * 0 = 0,  0 * x = 0
- *   x / 1 = x
- *   x & 0 = 0,  0 & x = 0
- *   x | 0 = x,  0 | x = x
- *   x ^ 0 = x,  0 ^ x = x
- *   x << 0 = x, x >> 0 = x
- *   x - x = 0
- *   x ^ x = 0
- */
-XR_FUNC XiPassChange xi_opt_strength_reduce(XiFunc *f) {
-    XR_DCHECK(f != NULL, "xi_opt_strength_reduce: NULL func");
-    XiPassChange chg = xi_pass_no_change();
-
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            XiValue *v = blk->values[i];
-            if (v->nargs != 2)
-                continue;
-
-            XiValue *lhs = v->args[0];
-            XiValue *rhs = v->args[1];
-            bool l_zero = is_const_int(lhs) && lhs->aux_int == 0;
-            bool r_zero = is_const_int(rhs) && rhs->aux_int == 0;
-            bool l_one = is_const_int(lhs) && lhs->aux_int == 1;
-            bool r_one = is_const_int(rhs) && rhs->aux_int == 1;
-            bool same = (lhs == rhs);
-
-            switch (v->op) {
-                case XI_ADD:
-                    /* x + 0 = x */
-                    if (r_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    /* 0 + x = x */
-                    else if (l_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = rhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_SUB:
-                    /* x - 0 = x */
-                    if (r_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    /* x - x = 0 */
-                    else if (same) {
-                        v->op = XI_CONST;
-                        v->aux_int = 0;
-                        v->nargs = 0;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_MUL: {
-                    /* x * 0 = 0 (only valid for numeric types; string * 0
-                     * must go through the runtime to produce "") */
-                    bool both_numeric = lhs->type && rhs->type &&
-                                        lhs->type->kind != XR_KIND_STRING &&
-                                        rhs->type->kind != XR_KIND_STRING;
-                    if ((r_zero || l_zero) && both_numeric) {
-                        v->op = XI_CONST;
-                        v->aux_int = 0;
-                        v->nargs = 0;
-                        chg.values_changed = true;
-                    }
-                    /* x * 1 = x */
-                    else if (r_one) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    /* 1 * x = x */
-                    else if (l_one) {
-                        v->op = XI_COPY;
-                        v->args[0] = rhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-                }
-
-                case XI_DIV:
-                    /* x / 1 = x */
-                    if (r_one) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_BAND:
-                    /* x & 0 = 0 */
-                    if (r_zero || l_zero) {
-                        v->op = XI_CONST;
-                        v->aux_int = 0;
-                        v->nargs = 0;
-                        chg.values_changed = true;
-                    }
-                    /* x & x = x */
-                    else if (same) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_BOR:
-                    /* x | 0 = x */
-                    if (r_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    } else if (l_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = rhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    /* x | x = x */
-                    else if (same) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_BXOR:
-                    /* x ^ 0 = x */
-                    if (r_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    } else if (l_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = rhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    /* x ^ x = 0 */
-                    else if (same) {
-                        v->op = XI_CONST;
-                        v->aux_int = 0;
-                        v->nargs = 0;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                case XI_SHL:
-                case XI_SHR:
-                    /* x << 0 = x, x >> 0 = x */
-                    if (r_zero) {
-                        v->op = XI_COPY;
-                        v->args[0] = lhs;
-                        v->nargs = 1;
-                        chg.values_changed = true;
-                    }
-                    break;
-
-                default:
-                    break;
-            }
-        }
-    }
-    return chg;
-}
+/* Strength reduction lives in xi_opt_strength.c (dedicated). */
 
 /* ========== SelectRepresentations ========== */
 
@@ -1120,8 +948,7 @@ XR_FUNC XiPassChange xi_opt_box_elim(XiFunc *f) {
             bool elim = (v->op == XI_UNBOX && inner->op == XI_BOX) ||
                         (v->op == XI_BOX && inner->op == XI_UNBOX);
             if (elim) {
-                v->op = XI_COPY;
-                v->args[0] = inner->args[0];
+                rewrite_to_copy(v, inner->args[0]);
                 chg.values_changed = true;
             }
         }
@@ -1147,25 +974,35 @@ XR_FUNC void xi_opt_run(XiFunc *f) {
  * The driver runs all passes whose min_level <= requested level. */
 static const XiPassDesc xi_pass_table[] = {
     /* name              fn                       min_level      flags               in_stage
-       out_stage */
-    {"tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
+       out_stage       requires              produces */
+    {"tbaa", xi_tbaa_annotate, XI_OPT_LIGHT, XI_PASS_REQUIRED, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     XI_INV_TBAA_ANNOTATED},
+    {"constfold", xi_opt_const_fold, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW},
-    {"copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"gvn", xi_opt_gvn, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW},
-    {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
-     XI_STAGE_RAW},
+     XI_STAGE_RAW, 0, 0},
+    {"copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     0},
+    {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     XI_INV_RANGE_ANNOTATED},
+    {"bce", xi_opt_bce, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
+     XI_INV_RANGE_ANNOTATED, 0},
+    {"gvn", xi_opt_gvn_pre, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
+     XI_INV_TBAA_ANNOTATED, 0},
+    {"loop_rotate", xi_opt_loop_rotate, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
+     XI_INV_TBAA_ANNOTATED, 0},
+    {"ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
+     0, 0},
+    {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
+     0, 0},
 };
 
 #define XI_PASS_TABLE_SIZE (sizeof(xi_pass_table) / sizeof(xi_pass_table[0]))
@@ -1208,7 +1045,7 @@ static void validate_pass_table(void) {
     }
 
     /* Check declarative pass ordering constraints */
-    xi_pass_order_check();
+    XR_CHECK(xi_pass_order_check(), "xi pass order check failed");
 }
 
 /* ========== Pass Order Constraints ========== */
@@ -1222,6 +1059,7 @@ static const XiPassOrderConstraint xi_pass_constraints[] = {
     {"constfold", "copy_prop", "constant folding enables more copy propagation"},
     {"copy_prop", "dce", "copy propagation makes original values dead"},
     {"gvn", "licm", "GVN eliminates redundancies before LICM hoists"},
+    {"loop_rotate", "licm", "loop rotation exposes a canonical loop body before hoisting"},
 };
 
 #define XI_CONSTRAINT_COUNT (sizeof(xi_pass_constraints) / sizeof(xi_pass_constraints[0]))
@@ -1254,6 +1092,26 @@ XR_FUNC bool xi_pass_order_check(void) {
             return false;
         }
     }
+
+    for (size_t i = 0; i < XI_PASS_TABLE_SIZE; i++) {
+        const XiPassDesc *d = &xi_pass_table[i];
+        XiInvariantMask available = 0;
+        for (size_t j = 0; j < i; j++) {
+            const XiPassDesc *prev = &xi_pass_table[j];
+            if (prev->min_level <= d->min_level)
+                available |= prev->produces_inv_mask;
+        }
+
+        XiInvariantMask missing = d->requires_inv_mask & ~available;
+        if (missing) {
+            fprintf(stderr,
+                    "[xi_pass] invariant order violation: '%s' requires "
+                    "0x%x before the pass table has produced it\n",
+                    d->name, missing);
+            return false;
+        }
+    }
+
     return true;
 }
 
@@ -1273,9 +1131,102 @@ static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
     return s;
 }
 
+static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
+    if (!dst || !src)
+        return;
+    for (uint32_t i = 0; i < src->npass; i++) {
+        const XiPassStats *sp = &src->passes[i];
+        XiPassStats *dp = stats_slot(dst, sp->name);
+        if (!dp)
+            continue;
+        dp->invocations += sp->invocations;
+        dp->n_removed += sp->n_removed;
+        dp->n_added += sp->n_added;
+        dp->elapsed_ns += sp->elapsed_ns;
+    }
+    dst->total_rounds += src->total_rounds;
+    dst->total_ns += src->total_ns;
+    dst->rpo_recomputes += src->rpo_recomputes;
+    dst->dom_recomputes += src->dom_recomputes;
+    dst->loop_recomputes += src->loop_recomputes;
+}
+
+/* Flags whose relative order must be preserved within a block.
+ * READS_MEM is included so a read cannot move before a preceding write. */
+#define XI_SHUFFLE_EFFECT_MASK                                                                     \
+    (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |            \
+     XI_FLAG_MAY_SUSPEND)
+
+static bool shuffle_is_effectful(const XiValue *v) {
+    return (v->flags & XI_SHUFFLE_EFFECT_MASK) != 0;
+}
+
+/* Count incoming edges for each value: intra-block data deps + effect chain.
+ * Phi values live on blk->phis, not blk->values, so they are filtered out. */
+static void shuffle_count_indeg(const XiBlock *blk, uint32_t *indeg) {
+    uint32_t n = blk->nvalues;
+    memset(indeg, 0, n * sizeof(uint32_t));
+    int32_t prev_effect = -1;
+    for (uint32_t i = 0; i < n; i++) {
+        XiValue *v = blk->values[i];
+        for (uint16_t a = 0; a < v->nargs; a++) {
+            XiValue *arg = v->args[a];
+            if (arg && arg->block == blk && arg->op != XI_PHI)
+                indeg[i]++;
+        }
+        if (shuffle_is_effectful(v)) {
+            if (prev_effect >= 0)
+                indeg[i]++;
+            prev_effect = (int32_t) i;
+        }
+    }
+}
+
+/* For each value, record the index of its immediate effect-chain predecessor
+ * in the original ordering, or -1 if none. */
+static void shuffle_build_effect_pred(XiValue *const *values, uint32_t n, int32_t *effect_pred) {
+    int32_t pe = -1;
+    for (uint32_t i = 0; i < n; i++) {
+        effect_pred[i] = -1;
+        if (shuffle_is_effectful(values[i])) {
+            effect_pred[i] = pe;
+            pe = (int32_t) i;
+        }
+    }
+}
+
+/* After value `idx` (== placed_v) has been emitted, decrement indeg of each
+ * remaining value and push newly-ready indices onto `ready`. */
+static void shuffle_release_dependents(XiValue *const *values, uint32_t n, uint32_t idx,
+                                       XiValue *placed_v, const int32_t *effect_pred,
+                                       uint32_t *indeg, uint32_t *ready, uint32_t *ready_count) {
+    bool placed_is_effect = shuffle_is_effectful(placed_v);
+    bool placed_is_phi = placed_v->op == XI_PHI;
+    for (uint32_t j = 0; j < n; j++) {
+        if (indeg[j] == 0 || indeg[j] == UINT32_MAX)
+            continue;
+        XiValue *vj = values[j];
+        uint32_t released = 0;
+        if (!placed_is_phi) {
+            for (uint16_t a = 0; a < vj->nargs; a++) {
+                if (vj->args[a] == placed_v)
+                    released++;
+            }
+        }
+        if (placed_is_effect && effect_pred[j] == (int32_t) idx)
+            released++;
+        if (released > 0) {
+            XR_DCHECK(indeg[j] >= released, "shuffle_block_values: indeg underflow");
+            indeg[j] -= released;
+            if (indeg[j] == 0)
+                ready[(*ready_count)++] = j;
+        }
+    }
+}
+
 /* Randomized topological sort of values within a block.
- * Respects: (1) intra-block data dependencies (use after def),
- *           (2) relative order among memory-touching / effectful values.
+ * Respects intra-block data dependencies (use after def) and the relative
+ * order among memory-touching / effectful values.
  * Uses Kahn's algorithm with random selection from the ready set. */
 static void shuffle_block_values(XiBlock *blk) {
     uint32_t n = blk->nvalues;
@@ -1283,130 +1234,41 @@ static void shuffle_block_values(XiBlock *blk) {
         return;
 
     /* Small stack buffer; fall back to heap for large blocks. */
-    uint32_t stack_indeg[128];
-    uint32_t stack_ready[128];
+    uint32_t stack_indeg[128], stack_ready[128];
+    int32_t stack_epred[128];
+    XiValue *stack_out[128];
     uint32_t *indeg = (n <= 128) ? stack_indeg : (uint32_t *) xr_malloc(n * sizeof(uint32_t));
     uint32_t *ready = (n <= 128) ? stack_ready : (uint32_t *) xr_malloc(n * sizeof(uint32_t));
-    if (!indeg || !ready)
-        return;
+    int32_t *effect_pred = (n <= 128) ? stack_epred : (int32_t *) xr_malloc(n * sizeof(int32_t));
+    XiValue **out = (n <= 128) ? stack_out : (XiValue **) xr_malloc(n * sizeof(XiValue *));
+    if (!indeg || !ready || !effect_pred || !out)
+        goto cleanup;
 
-    memset(indeg, 0, n * sizeof(uint32_t));
+    XiValue **result = blk->values;
+    shuffle_count_indeg(blk, indeg);
+    shuffle_build_effect_pred(result, n, effect_pred);
 
-    /* Build dependency graph.
-     * Edge types:
-     *   (a) Data: value[j] uses value[i] (same block) → edge i→j
-     *   (b) Effect chain: consecutive effectful values maintain order
-     *
-     * For (a), we only need arg->block == blk to confirm intra-block.
-     * Phi operands are never in the values[] array, so they won't match. */
-
-    int32_t prev_effect = -1;
-    for (uint32_t i = 0; i < n; i++) {
-        XiValue *v = blk->values[i];
-
-        /* (a) Data dependencies: count intra-block operands.
-         * Exclude phis (op == XI_PHI) — they live in blk->phis,
-         * not blk->values[], so they are never "placed" by the
-         * topo sort and would create false cycles. */
-        for (uint16_t a = 0; a < v->nargs; a++) {
-            XiValue *arg = v->args[a];
-            if (arg && arg->block == blk && arg->op != XI_PHI) {
-                indeg[i]++;
-            }
-        }
-
-        /* (b) Memory/effect chain: values touching memory or having
-         * side effects maintain relative order.  READS_MEM is included
-         * because a read must not move before a preceding write. */
-        if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM |
-                        XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND)) {
-            if (prev_effect >= 0)
-                indeg[i]++;
-            prev_effect = (int32_t) i;
-        }
-    }
-
-    /* Collect initially ready values */
     uint32_t ready_count = 0;
     for (uint32_t i = 0; i < n; i++) {
         if (indeg[i] == 0)
             ready[ready_count++] = i;
     }
 
-    /* Kahn's algorithm with random pick */
-    XiValue **result = blk->values;
-    XiValue *stack_out[128];
-    XiValue **out = (n <= 128) ? stack_out : (XiValue **) xr_malloc(n * sizeof(XiValue *));
-    if (!out)
-        goto cleanup;
-
     uint32_t placed = 0;
-
-    /* Precompute: for each effectful value, its immediate predecessor
-     * in the effect chain (original order). */
-    int32_t stack_epred[128];
-    int32_t *effect_pred = (n <= 128) ? stack_epred : (int32_t *) xr_malloc(n * sizeof(int32_t));
-    if (!effect_pred)
-        goto cleanup;
-    {
-        int32_t pe = -1;
-        for (uint32_t i = 0; i < n; i++) {
-            effect_pred[i] = -1;
-            if (result[i]->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM |
-                                    XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND)) {
-                effect_pred[i] = pe;
-                pe = (int32_t) i;
-            }
-        }
-    }
-
     while (ready_count > 0) {
         uint32_t pick = (uint32_t) (rand() % ready_count);
         uint32_t idx = ready[pick];
         ready[pick] = ready[--ready_count];
 
-        out[placed++] = result[idx];
         XiValue *placed_v = result[idx];
+        out[placed++] = placed_v;
+        indeg[idx] = UINT32_MAX; /* sentinel: already placed */
 
-        /* Mark as placed using sentinel in-degree */
-        indeg[idx] = UINT32_MAX;
-
-        bool placed_is_effect =
-            (placed_v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM |
-                                XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND)) != 0;
-
-        /* Release dependents */
-        for (uint32_t j = 0; j < n; j++) {
-            if (indeg[j] == 0 || indeg[j] == UINT32_MAX)
-                continue;
-
-            XiValue *vj = result[j];
-            uint32_t released = 0;
-
-            /* (a) Data dependency: vj uses placed_v (count all occurrences,
-             * since indeg was incremented per-arg during construction).
-             * Only count non-phi args (matches the build phase filter). */
-            for (uint16_t a = 0; a < vj->nargs; a++) {
-                if (vj->args[a] == placed_v && placed_v->op != XI_PHI)
-                    released++;
-            }
-
-            /* (b) Effect chain: vj's immediate effect predecessor is idx */
-            if (placed_is_effect && effect_pred[j] == (int32_t) idx) {
-                released++;
-            }
-
-            if (released > 0) {
-                XR_DCHECK(indeg[j] >= released, "shuffle_block_values: indeg underflow");
-                indeg[j] -= released;
-                if (indeg[j] == 0)
-                    ready[ready_count++] = j;
-            }
-        }
+        shuffle_release_dependents(result, n, idx, placed_v, effect_pred, indeg, ready,
+                                   &ready_count);
     }
 
-    /* If topo sort is incomplete, a real cycle exists (should not happen
-     * in well-formed Xi IR). Skip the shuffle silently in release. */
+    /* A real cycle would be a Xi IR bug; skip silently in release. */
     if (placed == n) {
         memcpy(result, out, n * sizeof(XiValue *));
     }
@@ -1421,14 +1283,14 @@ static void shuffle_block_values(XiBlock *blk) {
 
 cleanup:
     if (n > 128) {
-        if (indeg != stack_indeg)
+        if (indeg && indeg != stack_indeg)
             xr_free(indeg);
-        if (ready != stack_ready)
+        if (ready && ready != stack_ready)
             xr_free(ready);
-        if (out != stack_out)
-            xr_free(out);
-        if (effect_pred != stack_epred)
+        if (effect_pred && effect_pred != stack_epred)
             xr_free(effect_pred);
+        if (out && out != stack_out)
+            xr_free(out);
     }
 }
 
@@ -1566,6 +1428,15 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
             if (desc->input_stage > f->stage)
                 continue;
 
+            XiInvariantMask missing_inv = desc->requires_inv_mask & ~f->invariant_mask;
+            if (missing_inv) {
+                fprintf(stderr,
+                        "[xi_pass] pass '%s' requires invariant bits 0x%x "
+                        "but func '%s' only has 0x%x\n",
+                        desc->name, missing_inv, f->name ? f->name : "?", f->invariant_mask);
+                XR_CHECK(false, "xi pass missing required invariant");
+            }
+
             /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
              * passes that assume RPO or insertion order. */
             if (shuffle_blocks && f->nblocks > 2) {
@@ -1591,6 +1462,15 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
                 f->invariant_mask |= xi_stage_invariants(f->stage);
             }
             uint64_t dt = xr_time_monotonic_ns() - t0;
+
+            XiInvariantMask missing_produced = desc->produces_inv_mask & ~f->invariant_mask;
+            if (missing_produced) {
+                fprintf(stderr,
+                        "[xi_pass] pass '%s' did not produce invariant bits "
+                        "0x%x for func '%s'\n",
+                        desc->name, missing_produced, f->name ? f->name : "?");
+                XR_CHECK(false, "xi pass invariant production failed");
+            }
 
             /* XRAY_XI_DUMP: targeted IR dump after matching pass */
             if (dump_func && dump_pass) {
@@ -1626,6 +1506,11 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
             }
 
             round_chg = xi_pass_merge(round_chg, pc);
+
+            /* If the pass changed the CFG, invalidate cached RPO /
+             * dominators so the next xi_ensure_*() recomputes. */
+            if (pc.cfg_changed)
+                xi_cfg_invalidate(f);
 
             /* XRAY_XI_CHECK=1: verify after every single pass.
              * Uses stage-aware verification so stage-specific invariants
@@ -1667,13 +1552,21 @@ done:
     if (stats) {
         stats->total_rounds = (uint32_t) round;
         stats->total_ns = xr_time_monotonic_ns() - pipeline_start;
+        stats->rpo_recomputes = f->rpo_recomputes;
+        stats->dom_recomputes = f->dom_recomputes;
+        stats->loop_recomputes = f->loop_recomputes;
     }
 
     /* Recurse into nested functions / closures */
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i]) {
-            XiPassChange child_chg = xi_opt_run_pipeline_ex(f->children[i], level, NULL, budget_ns);
+            XiPipelineStats child_stats;
+            XiPipelineStats *child_stats_ptr = stats ? &child_stats : NULL;
+            XiPassChange child_chg =
+                xi_opt_run_pipeline_ex(f->children[i], level, child_stats_ptr, budget_ns);
             total = xi_pass_merge(total, child_chg);
+            if (stats)
+                stats_merge(stats, &child_stats);
         }
     }
 
@@ -1691,11 +1584,21 @@ XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *fu
         return;
     fprintf(stderr, "[xi_stats] func '%s': %u rounds, %.3f ms total\n", func_name ? func_name : "?",
             stats->total_rounds, (double) stats->total_ns / 1e6);
+
+    uint32_t total_invocations = 0;
     for (uint32_t i = 0; i < stats->npass; i++) {
         const XiPassStats *ps = &stats->passes[i];
         if (ps->invocations == 0)
             continue;
         fprintf(stderr, "  %-18s  %3u calls  %5u rem  %5u add  %7.3f ms\n", ps->name,
                 ps->invocations, ps->n_removed, ps->n_added, (double) ps->elapsed_ns / 1e6);
+        total_invocations += ps->invocations;
     }
+
+    /* Cache effectiveness — recomputes vs total pass invocations.
+     * Without caching, every pass that needs dominators would force a
+     * full recompute; the ratio shows how much work xi_ensure_* saved. */
+    fprintf(stderr, "  analysis-cache: rpo=%u dom=%u loop=%u  (across %u pass invocations)\n",
+            stats->rpo_recomputes, stats->dom_recomputes, stats->loop_recomputes,
+            total_invocations);
 }
