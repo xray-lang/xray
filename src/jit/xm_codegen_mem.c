@@ -11,6 +11,7 @@
 #ifdef __aarch64__
 
 #include "xm_codegen_internal.h"
+#include "xm_helper_table.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 
@@ -273,8 +274,10 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             break;
         }
 
-        // LOAD32S: 32-bit sign-extending load from [base + const_offset]
-        // Used for loading int32 fields like XrArray.length into 64-bit register
+        // LOAD32S: 32-bit sign-extending load from [base + const_offset].
+        // Used for loading int32 fields like XrArray.length into a 64-bit reg.
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldrsw; the generated
+        // emitter scales offset by 4 internally so we pass the byte-offset.
         case XM_LOAD32S: {
             A64Reg base = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             int32_t offset = 0;
@@ -282,117 +285,101 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 uint32_t ci = XM_REF_INDEX(ins->args[1]);
                 offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
-            // LDRSW Xt, [Xn, #offset] — sign-extend 32-bit to 64-bit
-            // Encoding: 1011 1001 10 imm12 Rn:5 Rt:5 = 0xB9800000
-            // imm12 = offset / 4 (scaled)
-            XR_DCHECK(offset >= 0 && (offset % 4) == 0, "assertion failed");
-            uint32_t imm12 = (uint32_t) (offset / 4);
-            XR_DCHECK(imm12 < 4096, "assertion failed");
-            uint32_t enc = 0xB9800000 | (imm12 << 10) | ((uint32_t) base << 5) | (uint32_t) rd;
-            a64_buf_emit(&ctx->buf, enc);
+            XR_DCHECK(offset >= 0 && (offset % 4) == 0,
+                      "LDRSW: byte offset must be non-negative and 4-byte aligned");
+            XR_DCHECK((offset / 4) < 4096, "LDRSW: imm12 field (offset / 4) must fit in 12 bits");
+            a64_buf_emit(&ctx->buf, a64_ldrsw(rd, base, offset));
             break;
         }
 
-        // LOAD8Z: 8-bit zero-extending load from [addr]
-        // Used for struct BOOL fields (1 byte native storage)
+        // LOAD8Z: 8-bit zero-extending load from [addr] (struct BOOL fields).
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldrb.
         case XM_LOAD8Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDRB Wt, [Xn] — load byte, zero-extend to 64-bit
-            // Encoding: 0011 1001 01 imm12 Rn:5 Rt:5 = 0x39400000
-            a64_buf_emit(&ctx->buf, 0x39400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldrb(rd, addr, 0));
             break;
         }
 
-        // LOAD8S: 8-bit sign-extending load from [addr] (for int8 fields)
+        // LOAD8S: 8-bit sign-extending load from [addr] (for int8 fields).
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldrsb.
         case XM_LOAD8S: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDRSB Xt, [Xn] — sign-extend byte to 64-bit
-            // Encoding: 0011 1001 10 imm12 Rn:5 Rt:5 = 0x39800000
-            a64_buf_emit(&ctx->buf, 0x39800000 | ((uint32_t) addr << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldrsb(rd, addr, 0));
             break;
         }
 
-        // STORE8: 8-bit store [addr] = low byte of value
+        // STORE8: 8-bit store [addr] = low byte of value.
+        // Encoding lives in xisa/arch/arm64.isa as arm64.strb.
         case XM_STORE8: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            // STRB Wt, [Xn] — store byte
-            // Encoding: 0011 1001 00 imm12 Rn:5 Rt:5 = 0x39000000
-            a64_buf_emit(&ctx->buf, 0x39000000 | ((uint32_t) addr << 5) | (uint32_t) val);
+            a64_buf_emit(&ctx->buf, a64_strb(val, addr, 0));
             break;
         }
 
-        // LOAD16Z: 16-bit zero-extending load from [addr] (for uint16 fields)
+        // LOAD16Z: 16-bit zero-extending load from [addr] (for uint16 fields).
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldrh.
         case XM_LOAD16Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDRH Wt, [Xn] — load halfword, zero-extend to 64-bit
-            // Encoding: 0111 1001 01 imm12 Rn:5 Rt:5 = 0x79400000
-            a64_buf_emit(&ctx->buf, 0x79400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldrh(rd, addr, 0));
             break;
         }
 
-        // LOAD16S: 16-bit sign-extending load from [addr] (for int16 fields)
+        // LOAD16S: 16-bit sign-extending load from [addr] (for int16 fields).
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldrsh; the offset is
+        // 0 here so the generated scale-by-2 on the imm12 field is a no-op.
         case XM_LOAD16S: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDRSH Xt, [Xn] — sign-extend halfword to 64-bit
-            // Encoding: 0111 1001 10 imm12 Rn:5 Rt:5 = 0x79800000
-            a64_buf_emit(&ctx->buf, 0x79800000 | ((uint32_t) addr << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldrsh(rd, addr, 0));
             break;
         }
 
-        // STORE16: 16-bit store [addr] = low 16 bits of value
+        // STORE16: 16-bit store [addr] = low 16 bits of value.
+        // Encoding lives in xisa/arch/arm64.isa as arm64.strh.
         case XM_STORE16: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            // STRH Wt, [Xn] — store halfword
-            // Encoding: 0111 1001 00 imm12 Rn:5 Rt:5 = 0x79000000
-            a64_buf_emit(&ctx->buf, 0x79000000 | ((uint32_t) addr << 5) | (uint32_t) val);
+            a64_buf_emit(&ctx->buf, a64_strh(val, addr, 0));
             break;
         }
 
-        // LOAD32Z: 32-bit zero-extending load from [addr] (for uint32 fields)
+        // LOAD32Z: 32-bit zero-extending load from [addr] (for uint32 fields).
+        // Encoding lives in xisa/arch/arm64.isa as arm64.ldr_w.
         case XM_LOAD32Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDR Wt, [Xn] — load word, implicit zero-extend to 64-bit
-            // Encoding: 1011 1001 01 imm12 Rn:5 Rt:5 = 0xB9400000
-            a64_buf_emit(&ctx->buf, 0xB9400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldr_w(rd, addr, 0));
             break;
         }
 
-        // STORE32: 32-bit store [addr] = low 32 bits of value
+        // STORE32: 32-bit store [addr] = low 32 bits of value.
+        // Encoding lives in xisa/arch/arm64.isa as arm64.str_w.
         case XM_STORE32: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            // STR Wt, [Xn] — store word
-            // Encoding: 1011 1001 00 imm12 Rn:5 Rt:5 = 0xB9000000
-            a64_buf_emit(&ctx->buf, 0xB9000000 | ((uint32_t) addr << 5) | (uint32_t) val);
+            a64_buf_emit(&ctx->buf, a64_str_w(val, addr, 0));
             break;
         }
 
-        // LOAD_F32: load 32-bit float from [addr], promote to f64
-        // ARM64: LDR St, [Xn] + FCVT Dd, Ss (single → double)
+        // LOAD_F32: load 32-bit float from [addr], promote to f64.
+        // ARM64: LDR St, [Xn] + FCVT Dd, Ss (single → double).
+        // Encodings live in xisa/arch/arm64.isa as arm64.ldr_s / arm64.fcvt_d_s.
         case XM_LOAD_F32: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            // LDR St, [Xn, #0] — 32-bit FP load
-            // Encoding: 1011 1101 01 imm12 Rn:5 Rt:5 = 0xBD400000
-            a64_buf_emit(&ctx->buf, 0xBD400000 | ((uint32_t) addr << 5) | (uint32_t) rd);
-            // FCVT Dd, Sd — single-precision to double-precision
-            // Encoding: 0001 1110 0010 0010 1100 00 Rn:5 Rd:5 = 0x1E22C000
-            a64_buf_emit(&ctx->buf, 0x1E22C000 | ((uint32_t) rd << 5) | (uint32_t) rd);
+            a64_buf_emit(&ctx->buf, a64_ldr_s(rd, addr, 0));
+            a64_buf_emit(&ctx->buf, a64_fcvt_d_s(rd, rd));
             break;
         }
 
-        // STORE_F32: truncate f64 to float, store 32-bit to [addr]
-        // ARM64: FCVT Ss, Dd + STR Ss, [Xn]
+        // STORE_F32: truncate f64 to float, store 32-bit to [addr].
+        // ARM64: FCVT Ss, Dd + STR St, [Xn].
+        // Encodings live in xisa/arch/arm64.isa as arm64.fcvt_s_d / arm64.str_s.
+        // Uses FP register 31 (S31) as a scratch destination for the conversion.
         case XM_STORE_F32: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            // FCVT S31, Dval — double to single into scratch FP reg 31
-            // Encoding: 0001 1110 0110 0010 0100 00 Rn:5 Rd:5 = 0x1E624000
-            a64_buf_emit(&ctx->buf, 0x1E624000 | ((uint32_t) val << 5) | 31u);
-            // STR S31, [Xn, #0] — 32-bit FP store
-            // Encoding: 1011 1101 00 imm12 Rn:5 Rt:5 = 0xBD000000
-            a64_buf_emit(&ctx->buf, 0xBD000000 | ((uint32_t) addr << 5) | 31u);
+            A64Reg fp_scratch = (A64Reg) 31;
+            a64_buf_emit(&ctx->buf, a64_fcvt_s_d(fp_scratch, val));
+            a64_buf_emit(&ctx->buf, a64_str_s(fp_scratch, addr, 0));
             break;
         }
 
@@ -975,7 +962,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // Result: ptr to XrArray in rd
         case XM_RT_ARRAY_NEW: {
             // Load helper address to x16
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_new);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_new));
             // Load capacity to x17
             if (xm_ref_is_const(ins->args[0])) {
                 uint32_t ci = XM_REF_INDEX(ins->args[0]);
@@ -1041,7 +1029,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, val_tag, 0));
                 a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag1_off));
             }
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_push));
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t) val_tag);
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
@@ -1055,7 +1044,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         case XM_RT_ARRAY_LEN: {
             A64Reg arr_reg = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             a64_buf_emit(&ctx->buf, a64_str(arr_reg, JIT_CTX_REG, 0));
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_len);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_len));
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, 0);
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
@@ -1069,7 +1059,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // args[0] = capacity (const or vreg i64)
         // Result: ptr to XrMap in rd
         case XM_RT_MAP_NEW: {
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_map_new);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_map_new));
             if (xm_ref_is_const(ins->args[0])) {
                 uint32_t ci = XM_REF_INDEX(ins->args[0]);
                 uint64_t cap = (uint64_t) ctx->func->consts[ci].val.i64;
@@ -1213,7 +1204,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
             int64_t helper_extra_arg = 0;
             if (!block_helper) {
-                block_helper = (void *) xr_jit_await_block;
+                block_helper = xm_helper_func(XM_HELPER_await_block);
                 helper_extra_arg = discard_result;
             }
             a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));

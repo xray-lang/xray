@@ -62,7 +62,7 @@ ISEL(DIV,  arm64,   GP_RRR,      arm64.sdiv.rrr,      "no trap on div-by-zero (r
 ISEL(DIV,  riscv64, GP_RRR,      riscv64.div,          "no trap on div-by-zero (returns -1)")
 
 ISEL(MOD,  x64,     CUSTOM,      x64.idiv.r,          "same as DIV, result in RDX")
-ISEL(MOD,  arm64,   CUSTOM,      arm64.sdiv+arm64.msub, "rd = rn - (rn/rm)*rm")
+ISEL(MOD,  arm64,   CUSTOM,      arm64.sdiv.rrr+arm64.msub.rrrr, "rd = rn - (rn/rm)*rm")
 ISEL(MOD,  riscv64, GP_RRR,      riscv64.rem,          "hardware remainder instruction")
 
 ISEL(NEG,  x64,     GP_R,        x64.neg.r)
@@ -101,36 +101,36 @@ ISEL(SHR,  riscv64, GP_RRR,      riscv64.sra)
 # Float Arithmetic
 # ═══════════════════════════════════════════════════════════════════════
 
-ISEL(FADD, x64,     FP_RR_COMM,  x64.addsd.rr)
-ISEL(FADD, arm64,   FP_RRR,      arm64.fadd.rrr)
+ISEL(FADD, x64,     FP_RR_COMM,  x64.addsd)
+ISEL(FADD, arm64,   FP_RRR,      arm64.fadd)
 ISEL(FADD, riscv64, FP_RRR,      riscv64.fadd.d)
 
-ISEL(FSUB, x64,     FP_RR,       x64.subsd.rr)
-ISEL(FSUB, arm64,   FP_RRR,      arm64.fsub.rrr)
+ISEL(FSUB, x64,     FP_RR,       x64.subsd)
+ISEL(FSUB, arm64,   FP_RRR,      arm64.fsub)
 ISEL(FSUB, riscv64, FP_RRR,      riscv64.fsub.d)
 
-ISEL(FMUL, x64,     FP_RR_COMM,  x64.mulsd.rr)
-ISEL(FMUL, arm64,   FP_RRR,      arm64.fmul.rrr)
+ISEL(FMUL, x64,     FP_RR_COMM,  x64.mulsd)
+ISEL(FMUL, arm64,   FP_RRR,      arm64.fmul)
 ISEL(FMUL, riscv64, FP_RRR,      riscv64.fmul.d)
 
-ISEL(FDIV, x64,     FP_RR,       x64.divsd.rr)
-ISEL(FDIV, arm64,   FP_RRR,      arm64.fdiv.rrr)
+ISEL(FDIV, x64,     FP_RR,       x64.divsd)
+ISEL(FDIV, arm64,   FP_RRR,      arm64.fdiv)
 ISEL(FDIV, riscv64, FP_RRR,      riscv64.fdiv.d)
 
 ISEL(FNEG, x64,     CUSTOM,      x64.xorpd,           "XOR sign bit with 0x8000000000000000")
-ISEL(FNEG, arm64,   FP_R,        arm64.fneg.rr)
-ISEL(FNEG, riscv64, FP_R,        riscv64.fneg.d,       "pseudo: FSGNJN.D rd, rs, rs")
+ISEL(FNEG, arm64,   FP_R,        arm64.fneg)
+ISEL(FNEG, riscv64, FP_R,        riscv64.fsgnjn.d, "pseudo: fneg.d rd, rs = fsgnjn.d rd, rs, rs")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Type Conversion
 # ═══════════════════════════════════════════════════════════════════════
 
-ISEL(I2F,  x64,     CONV,        x64.cvtsi2sd.rr)
-ISEL(I2F,  arm64,   CONV,        arm64.scvtf.rr)
+ISEL(I2F,  x64,     CONV,        x64.cvtsi2sd)
+ISEL(I2F,  arm64,   CONV,        arm64.scvtf)
 ISEL(I2F,  riscv64, CONV,        riscv64.fcvt.d.l)
 
-ISEL(F2I,  x64,     CONV,        x64.cvttsd2si.rr)
-ISEL(F2I,  arm64,   CONV,        arm64.fcvtzs.rr)
+ISEL(F2I,  x64,     CONV,        x64.cvttsd2si)
+ISEL(F2I,  arm64,   CONV,        arm64.fcvtzs)
 ISEL(F2I,  riscv64, CONV,        riscv64.fcvt.l.d)
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -212,47 +212,47 @@ ISEL(UNBOX_F64, riscv64, CUSTOM, -, "mask tag, fmv.d.x to FP reg")
 # ═══════════════════════════════════════════════════════════════════════
 
 ISEL(LOAD,       x64,     MEM_LOAD,  x64.mov.rm,        "64-bit load; F64 uses movsd.rm")
-ISEL(LOAD,       arm64,   MEM_LOAD,  arm64.ldr.imm,     "64-bit load; F64 uses fldr")
+ISEL(LOAD,       arm64,   MEM_LOAD,  arm64.ldr,         "64-bit load; F64 uses fldr")
 ISEL(LOAD,       riscv64, MEM_LOAD,  riscv64.ld,         "64-bit load; F64 uses fld")
 
 ISEL(STORE,      x64,     MEM_STORE, x64.mov.mr,        "64-bit store; F64 uses movsd.mr")
-ISEL(STORE,      arm64,   MEM_STORE, arm64.str.imm,     "64-bit store; F64 uses fstr")
+ISEL(STORE,      arm64,   MEM_STORE, arm64.str,         "64-bit store; F64 uses fstr")
 ISEL(STORE,      riscv64, MEM_STORE, riscv64.sd,         "64-bit store; F64 uses fsd")
 
 ISEL(LOAD8Z,     x64,     MEM_LOAD,  x64.movzx.rm8)
-ISEL(LOAD8Z,     arm64,   MEM_LOAD,  arm64.ldrb.imm)
+ISEL(LOAD8Z,     arm64,   MEM_LOAD,  arm64.ldrb)
 ISEL(LOAD8Z,     riscv64, MEM_LOAD,  riscv64.lbu)
 
 ISEL(LOAD8S,     x64,     MEM_LOAD,  x64.movsx.rm8)
-ISEL(LOAD8S,     arm64,   MEM_LOAD,  arm64.ldrsb.imm)
+ISEL(LOAD8S,     arm64,   MEM_LOAD,  arm64.ldrsb)
 ISEL(LOAD8S,     riscv64, MEM_LOAD,  riscv64.lb)
 
 ISEL(STORE8,     x64,     MEM_STORE, x64.mov.mr8)
-ISEL(STORE8,     arm64,   MEM_STORE, arm64.strb.imm)
+ISEL(STORE8,     arm64,   MEM_STORE, arm64.strb)
 ISEL(STORE8,     riscv64, MEM_STORE, riscv64.sb)
 
 ISEL(LOAD16Z,    x64,     MEM_LOAD,  x64.movzx.rm16)
-ISEL(LOAD16Z,    arm64,   MEM_LOAD,  arm64.ldrh.imm)
+ISEL(LOAD16Z,    arm64,   MEM_LOAD,  arm64.ldrh)
 ISEL(LOAD16Z,    riscv64, MEM_LOAD,  riscv64.lhu)
 
 ISEL(LOAD16S,    x64,     MEM_LOAD,  x64.movsx.rm16)
-ISEL(LOAD16S,    arm64,   MEM_LOAD,  arm64.ldrsh.imm)
+ISEL(LOAD16S,    arm64,   MEM_LOAD,  arm64.ldrsh)
 ISEL(LOAD16S,    riscv64, MEM_LOAD,  riscv64.lh)
 
 ISEL(STORE16,    x64,     MEM_STORE, x64.mov.mr16)
-ISEL(STORE16,    arm64,   MEM_STORE, arm64.strh.imm)
+ISEL(STORE16,    arm64,   MEM_STORE, arm64.strh)
 ISEL(STORE16,    riscv64, MEM_STORE, riscv64.sh)
 
 ISEL(LOAD32Z,    x64,     MEM_LOAD,  x64.mov.rm32)
-ISEL(LOAD32Z,    arm64,   MEM_LOAD,  arm64.ldr.w.imm)
+ISEL(LOAD32Z,    arm64,   MEM_LOAD,  arm64.ldr_w)
 ISEL(LOAD32Z,    riscv64, MEM_LOAD,  riscv64.lwu)
 
 ISEL(LOAD32S,    x64,     MEM_LOAD,  x64.movsxd.rm)
-ISEL(LOAD32S,    arm64,   MEM_LOAD,  arm64.ldrsw.imm)
+ISEL(LOAD32S,    arm64,   MEM_LOAD,  arm64.ldrsw)
 ISEL(LOAD32S,    riscv64, MEM_LOAD,  riscv64.lw)
 
 ISEL(STORE32,    x64,     MEM_STORE, x64.mov.mr32)
-ISEL(STORE32,    arm64,   MEM_STORE, arm64.str.w.imm)
+ISEL(STORE32,    arm64,   MEM_STORE, arm64.str_w)
 ISEL(STORE32,    riscv64, MEM_STORE, riscv64.sw)
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -276,10 +276,10 @@ ISEL(CONST_PTR,  riscv64, CUSTOM, riscv64.lui+riscv64.addi)
 # ═══════════════════════════════════════════════════════════════════════
 
 ISEL(JMP,        x64,     CUSTOM, x64.jmp.rel32)
-ISEL(JMP,        arm64,   CUSTOM, arm64.b.imm)
+ISEL(JMP,        arm64,   CUSTOM, arm64.b)
 ISEL(JMP,        riscv64, CUSTOM, riscv64.jal,          "JAL x0, offset")
 
-ISEL(BR,         x64,     CUSTOM, x64.test+x64.jcc,    "TEST reg,reg + Jcc")
+ISEL(BR,         x64,     CUSTOM, x64.test.rr+x64.jcc.rel32, "TEST reg,reg + Jcc")
 ISEL(BR,         arm64,   CUSTOM, arm64.cbnz,           "CBNZ or CBZ")
 ISEL(BR,         riscv64, CUSTOM, riscv64.bne,           "BNE rs, x0, offset")
 
@@ -296,7 +296,7 @@ ISEL(MOV,        arm64,   GP_R,    arm64.mov.rr,        "also handles FP via fmo
 ISEL(MOV,        riscv64, GP_R,    riscv64.addi,         "MV pseudo: addi rd, rs, 0; FP via fmv.d")
 
 ISEL(SELECT_COND, x64,    CUSTOM, x64.test.rr,          "TEST + set flags for SELECT")
-ISEL(SELECT_COND, arm64,  CUSTOM, arm64.cmp.imm,        "CMP rn, #0")
+ISEL(SELECT_COND, arm64,  CUSTOM, arm64.cmp.ri12,        "CMP rn, #0")
 ISEL(SELECT_COND, riscv64,CUSTOM, -,                     "stash condition for following SELECT")
 
 ISEL(SELECT,     x64,     CUSTOM, x64.cmov.rr,          "CMOVcc based on prior flags")
@@ -468,27 +468,27 @@ ISEL(CALL_INTRINSIC,   riscv64, CUSTOM, -, "intrinsic call")
 # ═══════════════════════════════════════════════════════════════════════
 
 ISEL(LOAD_FIELD,       x64,     MEM_LOAD,  x64.mov.rm)
-ISEL(LOAD_FIELD,       arm64,   MEM_LOAD,  arm64.ldr.imm)
+ISEL(LOAD_FIELD,       arm64,   MEM_LOAD,  arm64.ldr)
 ISEL(LOAD_FIELD,       riscv64, MEM_LOAD,  riscv64.ld)
 
 ISEL(STORE_FIELD,      x64,     MEM_STORE, x64.mov.mr)
-ISEL(STORE_FIELD,      arm64,   MEM_STORE, arm64.str.imm)
+ISEL(STORE_FIELD,      arm64,   MEM_STORE, arm64.str)
 ISEL(STORE_FIELD,      riscv64, MEM_STORE, riscv64.sd)
 
 ISEL(LOAD_CORO,        x64,     CUSTOM, x64.mov.rm,   "load from coroutine struct")
-ISEL(LOAD_CORO,        arm64,   CUSTOM, arm64.ldr.imm, "load from coroutine struct")
+ISEL(LOAD_CORO,        arm64,   CUSTOM, arm64.ldr, "load from coroutine struct")
 ISEL(LOAD_CORO,        riscv64, CUSTOM, riscv64.ld,     "load from coroutine struct")
 
 ISEL(LOAD_CORO_BYTE,   x64,     CUSTOM, x64.movzx.rm8)
-ISEL(LOAD_CORO_BYTE,   arm64,   CUSTOM, arm64.ldrb.imm)
+ISEL(LOAD_CORO_BYTE,   arm64,   CUSTOM, arm64.ldrb)
 ISEL(LOAD_CORO_BYTE,   riscv64, CUSTOM, riscv64.lbu)
 
 ISEL(STORE_CORO,       x64,     CUSTOM, x64.mov.mr)
-ISEL(STORE_CORO,       arm64,   CUSTOM, arm64.str.imm)
+ISEL(STORE_CORO,       arm64,   CUSTOM, arm64.str)
 ISEL(STORE_CORO,       riscv64, CUSTOM, riscv64.sd)
 
 ISEL(STORE_CORO_BYTE,  x64,     CUSTOM, x64.mov.mr8)
-ISEL(STORE_CORO_BYTE,  arm64,   CUSTOM, arm64.strb.imm)
+ISEL(STORE_CORO_BYTE,  arm64,   CUSTOM, arm64.strb)
 ISEL(STORE_CORO_BYTE,  riscv64, CUSTOM, riscv64.sb)
 
 ISEL(ALLOC,            x64,     CUSTOM, -, "inline bump-allocator fast path")

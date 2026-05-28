@@ -1362,7 +1362,9 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
             break;
         }
         case XM_JMP_UNREACHABLE:
-            a64_buf_emit(&ctx->buf, 0xD4200020);  // BRK #1
+            // BRK #1 — software breakpoint, used here as an unreachable trap.
+            // Encoding lives in xisa/arch/arm64.isa as arm64.brk.
+            a64_buf_emit(&ctx->buf, a64_brk(1));
             break;
         default:
             XR_DCHECK(false, "emit_terminator: unhandled jump type");

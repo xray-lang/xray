@@ -717,9 +717,6 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                 }
                 break;
             }
-
-            default:
-                break;
         }
     }
 }

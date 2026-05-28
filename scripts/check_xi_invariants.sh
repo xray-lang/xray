@@ -5,9 +5,9 @@
 # Reverse invariants for Xi IR layer (type A — static CI grep checks).
 # Runs in PR gate. Failure blocks merge.
 #
-# Covers invariants #1-#3, #5, #10, #12-#15 from the Xi optimization
-# roadmap reverse invariant table.  Type B (verify pass) and type C
-# (pass table validator) are enforced at runtime, not here.
+# Covers invariants #1-#3, #5, #10, #12-#15 plus source-level
+# fail-fast guards.  Type B (verify pass) and type C (pass table
+# validator) are enforced at runtime, not here.
 #
 # Exit codes:
 #   0   all checks passed
@@ -110,6 +110,33 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# INV-X: No silent default branches in IR source
+# --------------------------------------------------------------------------
+echo "--- INV-X: No silent default branches in src/ir/ ---"
+MATCHES=$(find src/ir -type f \( -name '*.c' -o -name '*.h' \) 2>/dev/null | sort | while read -r f; do
+    awk -v file="$f" '
+        { lines[NR] = $0 }
+        END {
+            for (i = 1; i <= NR; i++) {
+                if (lines[i] ~ /^[[:space:]]*default:[[:space:]]*break;[[:space:]]*$/) {
+                    printf("%s:%d:%s\n", file, i, lines[i])
+                } else if (lines[i] ~ /^[[:space:]]*default:[[:space:]]*$/ &&
+                           i + 1 <= NR &&
+                           lines[i + 1] ~ /^[[:space:]]*break;[[:space:]]*$/) {
+                    printf("%s:%d:%s\n", file, i, lines[i])
+                }
+            }
+        }
+    ' "$f"
+done || true)
+if [ -z "$MATCHES" ]; then
+    pass "No default: break silent fallbacks in src/ir/"
+else
+    fail "Silent default branches found in src/ir/"
+    show_matches "$MATCHES"
+fi
+
+# --------------------------------------------------------------------------
 # INV-2: xi_op_name.h sync — every XI_* enum in xi.h must have a name
 # --------------------------------------------------------------------------
 echo "--- INV-2: op name sync ---"
@@ -141,6 +168,33 @@ if [ -f src/ir/xi.h ] && [ -f src/ir/xi_op_name.h ]; then
     fi
 else
     warn "xi.h or xi_op_name.h not found, skipping"
+fi
+
+# --------------------------------------------------------------------------
+# INV-3: Xi backend builtin lowering must be JIT-visible
+# --------------------------------------------------------------------------
+echo "--- INV-3: Xi backend builtin lowering sync ---"
+if [ -f src/ir/xi_backend_lower.c ] && [ -f src/jit/xi_to_xm.c ]; then
+    LOWER_FILE=$(mktemp)
+    JIT_FILE=$(mktemp)
+    grep -oE 'rewrite_to_builtin\(v, "[A-Za-z0-9_]+"\)' src/ir/xi_backend_lower.c \
+        | sed -E 's/.*"([^"]+)".*/\1/' \
+        | sort -u > "$LOWER_FILE"
+    awk '/static const char \*known\[\]/{in_list=1} in_list {print} in_list && /};/{exit}' \
+        src/jit/xi_to_xm.c \
+        | grep -oE '"[A-Za-z0-9_]+"' \
+        | tr -d '"' \
+        | sort -u > "$JIT_FILE"
+    MISSING=$(comm -23 "$LOWER_FILE" "$JIT_FILE")
+    rm -f "$LOWER_FILE" "$JIT_FILE"
+    if [ -z "$MISSING" ]; then
+        pass "Every xi_backend_lower builtin name is visible to xi_to_xm"
+    else
+        fail "xi_backend_lower emits builtin names missing from xi_to_xm known list:"
+        printf "%s\n" "$MISSING" | sed 's/^/    /'
+    fi
+else
+    warn "xi_backend_lower.c or xi_to_xm.c not found, skipping"
 fi
 
 # --------------------------------------------------------------------------
@@ -199,6 +253,29 @@ if [ -f src/ir/xi_opt.c ]; then
         if [ "$VERBOSE" -eq 1 ]; then
             printf "$MISSING"
         fi
+    fi
+else
+    warn "xi_opt.c not found, skipping"
+fi
+
+# --------------------------------------------------------------------------
+# INV-11: XRAY_XI_PASS must cover the whole pass table
+# --------------------------------------------------------------------------
+echo "--- INV-11: XRAY_XI_PASS pass table coverage ---"
+if [ -f src/ir/xi_opt.c ]; then
+    PASS_NAMES=$(awk '/static const XiPassDesc xi_pass_table\[\]/{in_table=1} in_table {print} in_table && /^};/{exit}' \
+        src/ir/xi_opt.c \
+        | grep -oE '\{"[a-z0-9_]+",' \
+        | sed -E 's/\{"([^"]+)",/\1/' \
+        | sort || true)
+    DUP_NAMES=$(printf "%s\n" "$PASS_NAMES" | uniq -d)
+    if ! grep -q 'XRAY_XI_PASS' src/ir/xi_opt.c || ! grep -q 'pass_index_by_name' src/ir/xi_opt.c; then
+        fail "XRAY_XI_PASS parser or pass_index_by_name is missing"
+    elif [ -n "$DUP_NAMES" ]; then
+        fail "Duplicate Xi pass names:"
+        printf "%s\n" "$DUP_NAMES" | sed 's/^/    /'
+    else
+        pass "XRAY_XI_PASS uses the single pass table and pass names are unique"
     fi
 else
     warn "xi_opt.c not found, skipping"

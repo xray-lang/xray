@@ -1935,7 +1935,18 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             case XR_TREF_NULL:
                 tid = 0;
                 break; /* XR_TID_NULL */
-            default:
+            case XR_TREF_UNKNOWN:
+            case XR_TREF_INT_WIDTH:
+            case XR_TREF_FLOAT_WIDTH:
+            case XR_TREF_NAMED:
+            case XR_TREF_GENERIC:
+            case XR_TREF_OPTIONAL:
+            case XR_TREF_UNION:
+            case XR_TREF_FUNCTION:
+            case XR_TREF_TUPLE:
+            case XR_TREF_OBJECT:
+            case XR_TREF_FIXED_ARRAY:
+            case XR_TREF_TYPE_PARAM:
                 break;
         }
         /* Generic containers: Array<T> → XR_TID_ARRAY, Map<K,V> → XR_TID_MAP, etc. */
@@ -2053,7 +2064,18 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 tid = 0;
                 tname = "null";
                 break; /* XR_TID_NULL */
-            default:
+            case XR_TREF_UNKNOWN:
+            case XR_TREF_INT_WIDTH:
+            case XR_TREF_FLOAT_WIDTH:
+            case XR_TREF_NAMED:
+            case XR_TREF_GENERIC:
+            case XR_TREF_OPTIONAL:
+            case XR_TREF_UNION:
+            case XR_TREF_FUNCTION:
+            case XR_TREF_TUPLE:
+            case XR_TREF_OBJECT:
+            case XR_TREF_FIXED_ARRAY:
+            case XR_TREF_TYPE_PARAM:
                 break;
         }
         if (tid < 0 && inner->kind == XR_TREF_NAMED && inner->name) {

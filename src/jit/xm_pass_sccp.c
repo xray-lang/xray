@@ -564,8 +564,6 @@ static void rewrite_to_const(SccpCtx *ctx, XmIns *ins, SccpVal v) {
                 ins->args[1] = XM_NONE;
             }
             break;
-        default:
-            break;
     }
 }
 

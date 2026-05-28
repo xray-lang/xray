@@ -605,7 +605,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     /* Transfer Xi IR ownership to child proto for JIT direct lowering */
-    child_proto->xi_func = child_func;
+    xi_emit_attach_ir(child_proto, child_func);
     uint16_t cidx = (uint16_t) v->aux_int;
     if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {
         ctx->func->children[cidx] = NULL;
@@ -969,7 +969,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
         xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source, cap->type);
     }
 
-    child_proto->xi_func = child;
+    xi_emit_attach_ir(child_proto, child);
     ctx->func->children[child_func_idx] = NULL;
 
     return xr_vm_proto_add_proto(ctx->proto, child_proto);

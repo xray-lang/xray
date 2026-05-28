@@ -381,6 +381,198 @@ TEST(memssa_null_for_non_memory) {
     xi_func_free(f);
 }
 
+TEST(memssa_phi_at_join) {
+    /* Diamond CFG: entry → {then, else} → merge.
+     * Store in then_blk, load in merge_blk → mem phi at merge. */
+    XiFunc *f = make_func("memssa_phi");
+    XiBlock *entry = f->entry;
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+    XiBlock *merge_blk = xi_block_new(f);
+
+    XiValue *cond = xi_const_int(f, entry, 1, &stub_int);
+    xi_block_set_if(entry, cond, then_blk, else_blk);
+
+    /* then_blk: store shared[0] = 42, then jump to merge */
+    XiValue *val42 = xi_const_int(f, then_blk, 42, &stub_int);
+    XiValue *store = xi_value_new(f, then_blk, XI_SET_SHARED, &stub_int, 1);
+    store->args[0] = val42;
+    store->aux_int = 0;
+    xi_block_set_jump(then_blk, merge_blk);
+
+    /* else_blk: no store, jump to merge */
+    xi_block_set_jump(else_blk, merge_blk);
+
+    /* merge_blk: load shared[0] */
+    XiValue *load = xi_value_new(f, merge_blk, XI_GET_SHARED, &stub_int, 0);
+    load->aux_int = 0;
+    xi_block_set_return(merge_blk, load);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    /* merge_blk must have a memory phi (2 predecessors). */
+    XiMemPhi *mphi = xi_memssa_phis(mssa, merge_blk);
+    assert(mphi != NULL);
+    assert(mphi->npreds == 2);
+    assert(mphi->def_ver != XI_MEMVER_INVALID);
+
+    /* The load should consume the version defined by the mem phi. */
+    XiMemAccess *load_acc = xi_memssa_access(mssa, load);
+    assert(load_acc != NULL);
+    assert(load_acc->use_ver == mphi->def_ver);
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
+TEST(memssa_call_clobbers_memory) {
+    /* A call defines a new memory version (clobbers all memory). */
+    XiFunc *f = make_func("memssa_call");
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_any);
+
+    XiValue *load_before = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
+    load_before->aux_int = 0;
+
+    XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_any, 1);
+    call->args[0] = callee;
+
+    XiValue *load_after = xi_value_new(f, blk, XI_GET_SHARED, &stub_int, 0);
+    load_after->aux_int = 0;
+
+    xi_block_set_return(blk, load_after);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    XiMemAccess *call_acc = xi_memssa_access(mssa, call);
+    assert(call_acc != NULL);
+    assert(call_acc->def_ver != XI_MEMVER_INVALID);
+
+    /* load_after should consume the version defined by the call,
+     * not the same version as load_before. */
+    XiMemAccess *before_acc = xi_memssa_access(mssa, load_before);
+    XiMemAccess *after_acc = xi_memssa_access(mssa, load_after);
+    assert(before_acc != NULL && after_acc != NULL);
+    assert(after_acc->use_ver == call_acc->def_ver);
+    assert(before_acc->use_ver != after_acc->use_ver);
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
+TEST(memssa_cross_block_version) {
+    /* entry: store → blk2: load; load should consume the store's version. */
+    XiFunc *f = make_func("memssa_xblock");
+    XiBlock *entry = f->entry;
+    XiBlock *blk2 = xi_block_new(f);
+
+    XiValue *val = xi_const_int(f, entry, 7, &stub_int);
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &stub_int, 1);
+    store->args[0] = val;
+    store->aux_int = 0;
+    xi_block_set_jump(entry, blk2);
+
+    XiValue *load = xi_value_new(f, blk2, XI_GET_SHARED, &stub_int, 0);
+    load->aux_int = 0;
+    xi_block_set_return(blk2, load);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    XiMemAccess *store_acc = xi_memssa_access(mssa, store);
+    XiMemAccess *load_acc = xi_memssa_access(mssa, load);
+    assert(store_acc != NULL && load_acc != NULL);
+    assert(load_acc->use_ver == store_acc->def_ver);
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
+TEST(memssa_may_alias_disjoint_groups) {
+    /* Two loads from disjoint TBAA groups: memssa_may_alias → false. */
+    XiFunc *f = make_func("memssa_alias");
+    XiBlock *blk = f->entry;
+
+    XiValue *obj = xi_param(f, blk, 0, &stub_any);
+
+    XiValue *load_field = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    load_field->args[0] = obj;
+    load_field->aux_int = 0;
+
+    XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *load_arr = xi_value_new(f, blk, XI_INDEX_GET, &stub_any, 2);
+    load_arr->args[0] = obj;
+    load_arr->args[1] = idx;
+
+    xi_block_set_return(blk, load_field);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    /* Disjoint groups → no alias even through MemSSA. */
+    assert(!xi_memssa_may_alias(mssa, load_field, load_arr));
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
+TEST(memssa_may_alias_same_group) {
+    /* Two loads from same TBAA group and same field: memssa_may_alias → true. */
+    XiFunc *f = make_func("memssa_same");
+    XiBlock *blk = f->entry;
+
+    XiValue *obj = xi_param(f, blk, 0, &stub_any);
+
+    XiValue *load1 = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    load1->args[0] = obj;
+    load1->aux_int = 0;
+
+    XiValue *load2 = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_int, 1);
+    load2->args[0] = obj;
+    load2->aux_int = 0;
+
+    xi_block_set_return(blk, load1);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    /* Same group + same field → may alias. */
+    assert(xi_memssa_may_alias(mssa, load1, load2));
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
+TEST(memssa_no_phi_single_pred) {
+    /* Single-predecessor block should NOT get a memory phi. */
+    XiFunc *f = make_func("memssa_nophi");
+    XiBlock *entry = f->entry;
+    XiBlock *blk2 = xi_block_new(f);
+
+    XiValue *c = xi_const_int(f, entry, 1, &stub_int);
+    xi_block_set_jump(entry, blk2);
+    xi_block_set_return(blk2, c);
+
+    xi_tbaa_annotate(f);
+    XiMemSSA *mssa = xi_memssa_build(f);
+    assert(mssa != NULL);
+
+    /* blk2 has single predecessor → no mem phi. */
+    XiMemPhi *mphi = xi_memssa_phis(mssa, blk2);
+    assert(mphi == NULL);
+
+    xi_memssa_destroy(mssa);
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -409,6 +601,12 @@ int main(void) {
     run_memssa_store_defines_version();
     run_memssa_reaching_def();
     run_memssa_null_for_non_memory();
+    run_memssa_phi_at_join();
+    run_memssa_call_clobbers_memory();
+    run_memssa_cross_block_version();
+    run_memssa_may_alias_disjoint_groups();
+    run_memssa_may_alias_same_group();
+    run_memssa_no_phi_single_pred();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

@@ -19,6 +19,7 @@
 #ifdef __riscv
 
 #include "xm_codegen_riscv64_internal.h"
+#include "xm_helper_table.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 
@@ -85,10 +86,12 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             rv64_buf_emit(&ctx->buf, rv64_call(0)); /* placeholder */
             ctx->has_call_c = true;
 
-            /* Check if C helper requested deopt: if jit_ctx->deopt_id != 0 */
-            rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG,
-                                             (int32_t) XM_JIT_DEOPT_ID_OFFSET));
-            rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG2);
+            if (xm_helper_call_c_needs_deopt_check(ctx->func, ins)) {
+                /* Check if C helper requested deopt: if jit_ctx->deopt_id != 0 */
+                rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG,
+                                                 (int32_t) XM_JIT_DEOPT_ID_OFFSET));
+                rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG2);
+            }
 
             /* Move result payload (a0) to dst register */
             if (xm_ref_is_vreg(ins->dst)) {
@@ -292,7 +295,7 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             void *helper_fn = NULL;
             uint64_t extra_val = 0;
             if (ins->op == XM_CALL_KNOWN || ins->op == XM_CALL_KNOWN_REG) {
-                helper_fn = (void *) xr_jit_call_func;
+                helper_fn = xm_helper_func(XM_HELPER_call_func);
                 /* Store callee proto to jit_ctx */
                 if (xm_ref_is_const(ins->args[0])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[0]);
@@ -307,13 +310,13 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                     extra_val = (uint64_t) ctx->func->consts[ci].val.raw;
                 }
             } else if (ins->op == XM_CALL_DIRECT) {
-                helper_fn = (void *) xr_jit_invoke_direct;
+                helper_fn = xm_helper_func(XM_HELPER_invoke_direct);
                 if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[1]);
                     extra_val = (uint64_t) ctx->func->consts[ci].val.raw;
                 }
             } else {
-                helper_fn = (void *) xr_jit_call_func;
+                helper_fn = xm_helper_func(XM_HELPER_call_func);
                 if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[1]);
                     extra_val = (uint64_t) ctx->func->consts[ci].val.raw;

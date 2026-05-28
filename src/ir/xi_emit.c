@@ -16,6 +16,7 @@
 
 #include "xi_emit_internal.h"
 #include "xi_analysis.h"
+#include "xi_opt.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
@@ -911,9 +912,17 @@ cleanup:;
     return result;
 }
 
+static void prepare_ir_for_jit(XiFunc *ir) {
+    if (!ir || ir->stage >= XI_STAGE_REPPED)
+        return;
+    xi_opt_select_rep(ir);
+    xi_opt_box_elim(ir);
+}
+
 XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
     XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
     XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
+    prepare_ir_for_jit(ir);
     proto->xi_func = ir;
 }
 

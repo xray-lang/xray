@@ -11,6 +11,7 @@
 #ifdef __aarch64__
 
 #include "xm_codegen_internal.h"
+#include "xm_helper_table.h"
 #include "../base/xchecks.h"
 
 // Derive runtime XR_TAG_* from const rep for call_arg_tags[].
@@ -151,11 +152,14 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;
-            // Check if C helper requested deopt (e.g. yieldable cfunc)
-            a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
-            add_patch(ctx, PATCH_DEOPT_CBNZ, 0, SCRATCH_REG2);
-            a64_buf_emit(&ctx->buf, a64_nop());
-            ctx->has_deopt = true;
+            if (xm_helper_call_c_needs_deopt_check(ctx->func, ins)) {
+                // Check if C helper requested deopt (e.g. yieldable cfunc)
+                a64_buf_emit(&ctx->buf,
+                             a64_ldr_w(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
+                add_patch(ctx, PATCH_DEOPT_CBNZ, 0, SCRATCH_REG2);
+                a64_buf_emit(&ctx->buf, a64_nop());
+                ctx->has_deopt = true;
+            }
             // stub returns x0=payload; tag is in jit_ctx->call_result_tag
             // (call_c_stub stores C helper's x1 there to avoid clobbering
             // alloc_regs[0]=x1 which may hold a live vreg across the call)
@@ -749,7 +753,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- Slow path: fallback to xr_jit_call_func C bridge ---
             uint32_t slow_path = ctx->buf.count;
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, nargs_val);
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;
@@ -935,7 +940,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- Slow path ---
             uint32_t slow_path_fast = ctx->buf.count;
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t) nargs_reg);
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;

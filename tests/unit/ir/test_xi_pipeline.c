@@ -266,6 +266,25 @@ TEST(e2e_function_decl) {
     xr_vm_proto_free(p);
 }
 
+TEST(e2e_attached_ir_is_repped) {
+    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
+                                "print(add(1, 2))",
+                                NULL);
+    assert(p != NULL);
+    assert(p->xi_func != NULL);
+    XiFunc *root = (XiFunc *) p->xi_func;
+    assert(root->stage >= XI_STAGE_REPPED);
+    assert((root->invariant_mask & XI_INV_REPS_SELECTED) != 0);
+    assert(PROTO_PROTO_COUNT(p) >= 1);
+    XrProto *child = PROTO_PROTO(p, 0);
+    assert(child != NULL);
+    assert(child->xi_func != NULL);
+    XiFunc *child_ir = (XiFunc *) child->xi_func;
+    assert(child_ir->stage >= XI_STAGE_REPPED);
+    assert((child_ir->invariant_mask & XI_INV_REPS_SELECTED) != 0);
+    xr_vm_proto_free(p);
+}
+
 TEST(e2e_recursive_func) {
     XrProto *p = compile_source("fn fib(n: int) -> int {\n"
                                 "  if (n <= 1) { return n }\n"
@@ -621,6 +640,7 @@ int main(void) {
 
     /* Functions / closures */
     run_e2e_function_decl();
+    run_e2e_attached_ir_is_repped();
     run_e2e_recursive_func();
     run_e2e_nested_call();
 

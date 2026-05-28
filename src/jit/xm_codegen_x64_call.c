@@ -15,6 +15,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_helper_table.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 #include <string.h>
@@ -88,11 +89,13 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_emit32(&ctx->buf, 0); /* placeholder rel32 */
             ctx->has_call_c = true;
 
-            /* Check if C helper requested deopt (e.g. yieldable cfunc).
-             * If jit_ctx->deopt_id != 0, jump to deopt stub. */
-            x64_mov_rm32(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET);
-            x64_test_rr(&ctx->buf, X64_RCX, X64_RCX);
-            x64_emit_deopt_jcc(ctx, X64_CC_NE);
+            if (xm_helper_call_c_needs_deopt_check(ctx->func, ins)) {
+                /* Check if C helper requested deopt (e.g. yieldable cfunc).
+                 * If jit_ctx->deopt_id != 0, jump to deopt stub. */
+                x64_mov_rm32(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET);
+                x64_test_rr(&ctx->buf, X64_RCX, X64_RCX);
+                x64_emit_deopt_jcc(ctx, X64_CC_NE);
+            }
 
             /* Move result payload (RAX) to dst register */
             if (xm_ref_is_vreg(ins->dst)) {
@@ -473,7 +476,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_load_imm64(&ctx->buf, X64_RCX, nargs_val);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
             /* Load helper function pointer to R11 (call_c_stub calls R11) */
-            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
             /* CALL rel32 → call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp = &ctx->patches[ctx->npatch];
@@ -653,7 +657,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Store nargs via RCX; call_c_stub calls R11 as func ptr */
             x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) nargs_reg);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
-            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp_kr = &ctx->patches[ctx->npatch];
             x64_emit8(&ctx->buf, 0xE8);
@@ -722,7 +727,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 uint64_t fn = (uint64_t) ctx->func->consts[ci].val.raw;
                 x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, fn);
             } else {
-                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_call_func);
+                x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                               (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
             }
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp_slow = &ctx->patches[ctx->npatch];

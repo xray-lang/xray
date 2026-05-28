@@ -166,10 +166,74 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     return cloned;
 }
 
+static bool callee_result_shape(const XiFunc *callee, bool *out_multi_ret, uint16_t *out_elems) {
+    if (!callee || !out_multi_ret || !out_elems)
+        return false;
+
+    bool seen_return = false;
+    bool multi_ret = false;
+    uint16_t elems = 0;
+
+    for (uint32_t b = 0; b < callee->nblocks; b++) {
+        const XiBlock *blk = callee->blocks[b];
+        if (!blk || blk->kind != XI_BLOCK_RETURN)
+            continue;
+
+        const XiValue *ret = blk->control;
+        bool cur_multi_ret = ret && ret->op == XI_MULTI_RET;
+        uint16_t cur_elems = ret ? 1 : 0;
+        if (cur_multi_ret)
+            cur_elems = ret->nargs;
+
+        if (cur_elems > 16)
+            return false;
+        if (!seen_return) {
+            seen_return = true;
+            multi_ret = cur_multi_ret;
+            elems = cur_elems;
+            continue;
+        }
+        if (multi_ret != cur_multi_ret || elems != cur_elems)
+            return false;
+    }
+
+    *out_multi_ret = multi_ret;
+    *out_elems = elems;
+    return true;
+}
+
+static bool call_extracts_fit_result_shape(const XiFunc *caller, const XiValue *call_val,
+                                           uint16_t nresult_elems) {
+    if (!caller || !call_val)
+        return false;
+
+    for (uint32_t b = 0; b < caller->nblocks; b++) {
+        const XiBlock *blk = caller->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v || v->op != XI_EXTRACT || v->nargs < 1 || v->args[0] != call_val)
+                continue;
+            if ((uint32_t) v->aux_int >= nresult_elems)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 /* ========== Single Call Site Inlining ========== */
 
 static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_idx,
                              XiValue *call_val, XiFunc *callee) {
+    bool shape_multi_ret = false;
+    uint16_t shape_elems = 0;
+    if (!callee_result_shape(callee, &shape_multi_ret, &shape_elems))
+        return false;
+    if (!call_extracts_fit_result_shape(caller, call_val, shape_elems))
+        return false;
+
     uint32_t callee_max_id = callee->next_value_id;
     XiValue **value_map = (XiValue **) xr_calloc(callee_max_id, sizeof(XiValue *));
     if (!value_map)
@@ -188,45 +252,36 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     /* Create continuation block (values after the call). */
-    XiBlock *cont_blk = (XiBlock *) xr_calloc(1, sizeof(XiBlock));
+    XiBlock *cont_blk = xi_block_new(caller);
     if (!cont_blk) {
         xr_free(value_map);
         return false;
     }
-    cont_blk->id = caller->next_block_id++;
     cont_blk->kind = call_blk->kind;
     cont_blk->control = call_blk->control;
     cont_blk->succs[0] = call_blk->succs[0];
     cont_blk->succs[1] = call_blk->succs[1];
-    cont_blk->func = caller;
-
-    /* Grow caller's block array if needed */
-    if (caller->nblocks >= caller->blocks_cap) {
-        uint32_t new_cap = caller->blocks_cap ? caller->blocks_cap * 2 : 16;
-        XiBlock **tmp = (XiBlock **) xr_malloc(new_cap * sizeof(XiBlock *));
-        if (!tmp) {
-            xr_free(value_map);
-            xr_free(cont_blk);
-            return false;
-        }
-        if (caller->blocks)
-            memcpy(tmp, caller->blocks, caller->nblocks * sizeof(XiBlock *));
-        caller->blocks = tmp;
-        caller->blocks_cap = new_cap;
-    }
-    caller->blocks[caller->nblocks++] = cont_blk;
 
     /* Move post-call values to continuation block. */
     uint32_t post_start = call_idx + 1;
     uint32_t post_count = call_blk->nvalues - post_start;
     if (post_count > 0) {
-        cont_blk->values = (XiValue **) xr_malloc(post_count * sizeof(XiValue *));
-        if (cont_blk->values) {
+        if (post_count > cont_blk->values_cap) {
+            XiValue **new_values =
+                (XiValue **) xi_func_arena_alloc(caller, post_count * sizeof(XiValue *));
+            if (!new_values) {
+                xr_free(value_map);
+                return false;
+            }
+            cont_blk->values = new_values;
             cont_blk->values_cap = post_count;
-            for (uint32_t i = 0; i < post_count; i++)
-                cont_blk->values[i] = call_blk->values[post_start + i];
-            cont_blk->nvalues = post_count;
         }
+        for (uint32_t i = 0; i < post_count; i++) {
+            cont_blk->values[i] = call_blk->values[post_start + i];
+            if (cont_blk->values[i])
+                cont_blk->values[i]->block = cont_blk;
+        }
+        cont_blk->nvalues = post_count;
     }
 
     /* Truncate call_blk: remove the call and everything after it. */
@@ -241,28 +296,13 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     for (uint32_t bi = 0; bi < callee_nblk; bi++) {
-        XiBlock *new_blk = (XiBlock *) xr_calloc(1, sizeof(XiBlock));
+        XiBlock *new_blk = xi_block_new(caller);
         if (!new_blk) {
             xr_free(value_map);
             xr_free(cloned_blks);
             return false;
         }
-        new_blk->id = caller->next_block_id++;
-        new_blk->func = caller;
         cloned_blks[bi] = new_blk;
-
-        /* Grow caller's block array */
-        if (caller->nblocks >= caller->blocks_cap) {
-            uint32_t new_cap = caller->blocks_cap ? caller->blocks_cap * 2 : 16;
-            XiBlock **tmp = (XiBlock **) xr_malloc(new_cap * sizeof(XiBlock *));
-            if (!tmp)
-                continue;
-            if (caller->blocks)
-                memcpy(tmp, caller->blocks, caller->nblocks * sizeof(XiBlock *));
-            caller->blocks = tmp;
-            caller->blocks_cap = new_cap;
-        }
-        caller->blocks[caller->nblocks++] = new_blk;
     }
 
     /* Collect return values and blocks for the join phi. */
@@ -362,19 +402,9 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     for (uint32_t r = 0; r < nret; r++)
         xi_block_add_pred(cont_blk, ret_blocks[r]);
 
-    /* Determine if the callee uses multi-value return (XI_MULTI_RET). */
-    bool is_multi_ret = false;
-    uint16_t nresult_elems = 1;
-    for (uint32_t r = 0; r < nret; r++) {
-        if (ret_values[r] && ret_values[r]->op == XI_MULTI_RET) {
-            is_multi_ret = true;
-            nresult_elems = ret_values[r]->nargs;
-            break;
-        }
-    }
+    bool is_multi_ret = shape_multi_ret;
+    uint16_t nresult_elems = shape_elems;
     XR_DCHECK(nresult_elems <= 16, "inline: too many multi-return elements");
-    if (nresult_elems > 16)
-        nresult_elems = 16;
 
     /* Build per-element result values.
      * Single return block  → use value directly.
@@ -417,7 +447,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
             /* Rewrite XI_EXTRACT into XI_COPY forwarding the element value.
              * DCE will clean up the now-redundant copy. */
-            if (is_multi_ret && v->op == XI_EXTRACT && v->nargs >= 1 && v->args[0] == call_val) {
+            if (v->op == XI_EXTRACT && v->nargs >= 1 && v->args[0] == call_val) {
                 uint32_t idx = (uint32_t) v->aux_int;
                 XiValue *elem = (idx < nresult_elems) ? results[idx] : NULL;
                 if (elem) {

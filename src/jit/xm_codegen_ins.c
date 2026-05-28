@@ -363,6 +363,18 @@ static void a64_h_unbox_f64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     }
 }
 
+/* ========== Pseudo / Marker Handlers ==========
+ * No-op stub for XmOps that emit no machine code on arm64: PHI is resolved by
+ * register allocator edge copies; TRY_BEGIN / TRY_END are EH markers; THROW is
+ * never emitted directly (CALL_C(xr_jit_throw) is used). The x64 and riscv64
+ * backends route these to their own h_nop handlers; this table entry keeps
+ * the three backends symmetric so check_codegen_dispatch sees zero drift. */
+static void a64_h_nop(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
+    (void) ctx;
+    (void) ins;
+    (void) rd;
+}
+
 /* ========== Dispatch Table ========== */
 
 static const A64InsHandler a64_ins_handlers[XM_OP_COUNT] = {
@@ -406,6 +418,11 @@ static const A64InsHandler a64_ins_handlers[XM_OP_COUNT] = {
     [XM_BOX_F64] = a64_h_box,
     [XM_UNBOX_I64] = a64_h_unbox_i64,
     [XM_UNBOX_F64] = a64_h_unbox_f64,
+    /* Pseudo / marker ops that emit no code on arm64 (see a64_h_nop above) */
+    [XM_PHI] = a64_h_nop,
+    [XM_TRY_BEGIN] = a64_h_nop,
+    [XM_TRY_END] = a64_h_nop,
+    [XM_THROW] = a64_h_nop,
     /* All other opcodes (mem, call, etc.) handled by fallback chain */
 };
 

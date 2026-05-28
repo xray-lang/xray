@@ -75,11 +75,49 @@ add_custom_command(
     COMMAND python3 ${XISAGEN} isel
             ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
             ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
     COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/isel_validated.stamp
     DEPENDS ${XISAGEN}
             ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
             ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-    COMMENT "xisagen: validating isel.def coverage (ops × 3 backends)"
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: validating isel.def coverage (ops × 3 backends, mcinsn xref)"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    COMMAND python3 ${XISAGEN} dispatch-coverage
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+    COMMENT "xisagen: generating xm_dispatch_coverage_gen.h from isel.def"
+)
+
+# Disassembler tables (fixed-32 archs only). Generates header+impl pairs
+# exporting xm_<short>_disasm() / xm_<short>_insn_name() for runtime
+# patch verification, deopt logs, and S4 external-diff scaffolding.
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.h
+    COMMAND python3 ${XISAGEN} disasm
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+    COMMENT "xisagen: generating xm_arm64_disasm_gen.{c,h} from arm64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.h
+    COMMAND python3 ${XISAGEN} disasm
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating xm_riscv64_disasm_gen.{c,h} from riscv64.isa"
 )
 
 add_custom_target(gen-xm-ops DEPENDS
@@ -88,6 +126,9 @@ add_custom_target(gen-xm-ops DEPENDS
     ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
     ${CMAKE_BINARY_DIR}/isel_validated.stamp
 )
 

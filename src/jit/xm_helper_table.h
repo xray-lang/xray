@@ -125,6 +125,22 @@ static inline uint8_t xm_helper_post_call(XmHelperId id) {
     return xm_helper_info[id].post_call;
 }
 
+static inline void *xm_helper_func(XmHelperId id) {
+    if (id >= XM_HELPER__COUNT)
+        return NULL;
+    return xm_helper_info[id].func;
+}
+
+static inline bool xm_helper_call_c_needs_deopt_check(const XmFunc *func, const XmIns *ins) {
+    if (!func || !ins || !xm_ref_is_const(ins->args[0]))
+        return true;
+    uint32_t ci = XM_REF_INDEX(ins->args[0]);
+    if (ci >= func->nconst)
+        return true;
+    XmHelperId id = xm_helper_lookup((void *) (uintptr_t) func->consts[ci].val.raw);
+    return (xm_helper_post_call(id) & (XM_HPC_DEOPT | XM_HPC_SUSPEND)) != 0;
+}
+
 // Check if a helper returns a dynamic-typed value (needs runtime tag)
 static inline bool xm_helper_is_tagged(XmHelperId id) {
     return id < XM_HELPER__COUNT && xm_helper_info[id].ret_rep == XR_REP_TAGGED;

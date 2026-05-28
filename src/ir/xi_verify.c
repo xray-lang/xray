@@ -248,7 +248,7 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk
                      blk->kind == XI_BLOCK_RETURN ? "RETURN" : "UNREACHABLE", blk->id, nsucc);
             }
             break;
-        default:
+        case XI_BLOCK_PLAIN:
             break;
     }
 }
