@@ -15,6 +15,10 @@
 #if defined(__aarch64__)
 
 #include "xm_codegen_internal.h"
+#include "xm_patch_verify.h"
+#include "../base/xlog.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 #include "../coro/xcoroutine.h"
 
 /* ========== Write Barrier Stubs ========== */
@@ -22,6 +26,15 @@
 XR_FUNC void a64_emit_barrier_stubs(CodegenCtx *ctx) {
     if (!ctx->has_barriers)
         return;
+
+    uintptr_t barrier_fwd_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_fwd, XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED);
+    uintptr_t barrier_back_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_back, XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED);
+    if (barrier_fwd_entry == 0 || barrier_back_entry == 0) {
+        ctx->had_error = true;
+        return;
+    }
 
     // Forward barrier stub: xr_jit_barrier_fwd(coro, parent, child)
     // Caller has set x16=parent, x17=child before BL here.
@@ -41,7 +54,7 @@ XR_FUNC void a64_emit_barrier_stubs(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
     a64_buf_emit(&ctx->buf, a64_mov(A64_X1, SCRATCH_REG));
     a64_buf_emit(&ctx->buf, a64_mov(A64_X2, SCRATCH_REG2));
-    a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
+    a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) barrier_fwd_entry);
     a64_buf_emit(&ctx->buf, a64_blr(SCRATCH_REG));
 
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, A64_SP, 0));
@@ -72,7 +85,7 @@ XR_FUNC void a64_emit_barrier_stubs(CodegenCtx *ctx) {
     // Set up C call: x0=coro, x1=container(x16)
     a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
     a64_buf_emit(&ctx->buf, a64_mov(A64_X1, SCRATCH_REG));
-    a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
+    a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) barrier_back_entry);
     a64_buf_emit(&ctx->buf, a64_blr(SCRATCH_REG));
 
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, A64_SP, 0));
@@ -405,83 +418,118 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
 
 /* ========== Branch Patching ========== */
 
+// Single arm64 entry point into xm_patch_verify.h. Declared in
+// xm_codegen_internal.h so deferred (a64_patch_branches) and inline
+// patch sites in mem / call / codegen drivers share one verified path.
+XR_FUNC int32_t a64_patch_offset(CodegenCtx *ctx, uint32_t emit_idx, uint32_t target_idx,
+                                 bool is_cond, const char *kind) {
+    XR_DCHECK(ctx != NULL, "a64_patch_offset: NULL ctx");
+    int32_t off = 0;
+    bool ok = is_cond ? xm_patch_calc_arm64_bcond(emit_idx, target_idx, &off)
+                      : xm_patch_calc_arm64_b(emit_idx, target_idx, &off);
+    if (!ok) {
+        xr_log_warning("a64-cg", "patch %s out of range: emit_idx=%u target=%u", kind, emit_idx,
+                       target_idx);
+        ctx->had_error = true;
+        return 0;
+    }
+    return off;
+}
+
 XR_FUNC void a64_patch_branches(CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         BranchPatch *p = &ctx->patches[i];
         if (p->target_blk >= ctx->nblock_offsets)
             continue;
-        int32_t offset = (int32_t) ctx->block_offsets[p->target_blk] - (int32_t) p->emit_idx;
+        uint32_t target = ctx->block_offsets[p->target_blk];
 
         switch (p->type) {
-            case PATCH_B:
-                ctx->buf.code[p->emit_idx] = a64_b(offset);
+            case PATCH_B: {
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, target, false, "B");
+                ctx->buf.code[p->emit_idx] = a64_b(off);
                 break;
-            case PATCH_CBNZ:
-                ctx->buf.code[p->emit_idx] = a64_cbnz(p->reg, offset);
+            }
+            case PATCH_CBNZ: {
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, target, true, "CBNZ");
+                ctx->buf.code[p->emit_idx] = a64_cbnz(p->reg, off);
                 break;
-            case PATCH_CBZ:
-                ctx->buf.code[p->emit_idx] = a64_cbz(p->reg, offset);
+            }
+            case PATCH_CBZ: {
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, target, true, "CBZ");
+                ctx->buf.code[p->emit_idx] = a64_cbz(p->reg, off);
                 break;
-            case PATCH_B_COND:
-                ctx->buf.code[p->emit_idx] = a64_b_cond((A64Cond) p->reg, offset);
+            }
+            case PATCH_B_COND: {
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, target, true, "B.cond");
+                ctx->buf.code[p->emit_idx] = a64_b_cond((A64Cond) p->reg, off);
                 break;
+            }
             case PATCH_SAFEPOINT:
                 // Guard page safepoint: no per-function stub to patch
                 break;
             case PATCH_BARRIER_FWD: {
-                int32_t off = (int32_t) ctx->barrier_fwd_stub - (int32_t) p->emit_idx;
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, ctx->barrier_fwd_stub, false,
+                                               "BL barrier_fwd");
                 ctx->buf.code[p->emit_idx] = a64_bl(off);
                 break;
             }
             case PATCH_BARRIER_BACK: {
-                int32_t off = (int32_t) ctx->barrier_back_stub - (int32_t) p->emit_idx;
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, ctx->barrier_back_stub, false,
+                                               "BL barrier_back");
                 ctx->buf.code[p->emit_idx] = a64_bl(off);
                 break;
             }
             case PATCH_DEOPT: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, false, "B deopt");
                 ctx->buf.code[p->emit_idx] = a64_b(off);
                 break;
             }
             case PATCH_DEOPT_NE: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, true, "B.NE deopt");
                 ctx->buf.code[p->emit_idx] = a64_b_cond(A64_CC_NE, off);
                 break;
             }
             case PATCH_DEOPT_EQ: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, true, "B.EQ deopt");
                 ctx->buf.code[p->emit_idx] = a64_b_cond(A64_CC_EQ, off);
                 break;
             }
             case PATCH_DEOPT_CBZ: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, true, "CBZ deopt");
                 ctx->buf.code[p->emit_idx] = a64_cbz(p->reg, off);
                 break;
             }
             case PATCH_DEOPT_CBNZ: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, true, "CBNZ deopt");
                 ctx->buf.code[p->emit_idx] = a64_cbnz(p->reg, off);
                 break;
             }
             case PATCH_DEOPT_CS: {
-                int32_t off = (int32_t) ctx->deopt_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->deopt_stub, true, "B.CS deopt");
                 ctx->buf.code[p->emit_idx] = a64_b_cond(A64_CC_CS, off);
                 break;
             }
             case PATCH_CALL_C: {
-                int32_t off = (int32_t) ctx->call_c_stub - (int32_t) p->emit_idx;
+                int32_t off =
+                    a64_patch_offset(ctx, p->emit_idx, ctx->call_c_stub, false, "BL call_c");
                 ctx->buf.code[p->emit_idx] = a64_bl(off);
                 break;
             }
             case PATCH_CALL_SELF: {
                 // BL to function entry (instruction index 0)
-                int32_t off = 0 - (int32_t) p->emit_idx;
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, 0, false, "BL call_self");
                 ctx->buf.code[p->emit_idx] = a64_bl(off);
                 break;
             }
             case PATCH_CALL_SELF_FAST: {
                 // BL to fast entry (after param loading in prologue)
-                int32_t off = (int32_t) ctx->fast_entry_offset - (int32_t) p->emit_idx;
+                int32_t off = a64_patch_offset(ctx, p->emit_idx, ctx->fast_entry_offset, false,
+                                               "BL call_self_fast");
                 ctx->buf.code[p->emit_idx] = a64_bl(off);
                 break;
             }
@@ -681,20 +729,29 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
 
     // x1-x15 from suspend_regs[0..14]
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG2, 0));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X3, A64_X4, SCRATCH_REG2, 16));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X5, A64_X6, SCRATCH_REG2, 32));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X7, A64_X8, SCRATCH_REG2, 48));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X9, A64_X10, SCRATCH_REG2, 64));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X11, A64_X12, SCRATCH_REG2, 80));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X13, A64_X14, SCRATCH_REG2, 96));
-    a64_buf_emit(&ctx->buf, a64_ldr(A64_X15, SCRATCH_REG2, 112));
+    a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X3, A64_X4, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 16));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X5, A64_X6, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 32));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X7, A64_X8, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 48));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X9, A64_X10, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 64));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X11, A64_X12, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 80));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X13, A64_X14, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 96));
+    a64_buf_emit(&ctx->buf, a64_ldr(A64_X15, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF + 112));
 
     // x20-x27 from suspend_regs[15..22]
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X20, A64_X21, SCRATCH_REG2, 120));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X22, A64_X23, SCRATCH_REG2, 136));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X24, A64_X25, SCRATCH_REG2, 152));
-    a64_buf_emit(&ctx->buf, a64_ldp(A64_X26, A64_X27, SCRATCH_REG2, 168));
+    a64_buf_emit(&ctx->buf, a64_ldp(A64_X20, A64_X21, SCRATCH_REG2, XM_SUSPEND_CALLEE_SAVED_OFF));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X22, A64_X23, SCRATCH_REG2, XM_SUSPEND_CALLEE_SAVED_OFF + 16));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X24, A64_X25, SCRATCH_REG2, XM_SUSPEND_CALLEE_SAVED_OFF + 32));
+    a64_buf_emit(&ctx->buf,
+                 a64_ldp(A64_X26, A64_X27, SCRATCH_REG2, XM_SUSPEND_CALLEE_SAVED_OFF + 48));
 
     // Override x20 (SAFEPT_PAGE_REG) with the CURRENT worker's guard page.
     // The suspend_regs[15] value is from the old worker; after gopark the
@@ -732,7 +789,11 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     // Each trampoline: LDR result_reg, [x17, #result_off]; B continuation
 
     // First emit CMP/B.EQ chain (suspend_id dispatch)
-    uint32_t trampoline_patches[16];
+    if (ctx->nsuspend > XM_MAX_SUSPEND_ENTRIES) {
+        ctx->had_error = true;
+        return;
+    }
+    uint32_t trampoline_patches[XM_MAX_SUSPEND_ENTRIES];
     for (uint32_t i = 0; i < ctx->nsuspend; i++) {
         // CMP w16, #i  (SUBS WZR, W16, #i)
         a64_buf_emit(&ctx->buf, a64_subs_imm_w(A64_XZR, SCRATCH_REG, i));

@@ -171,6 +171,7 @@ add_xray_unit_test(test_xi_block_simplify ir/test_xi_block_simplify.c)
 add_xray_unit_test(test_xi_jump_thread ir/test_xi_jump_thread.c)
 add_xray_unit_test(test_xi_loop_iv ir/test_xi_loop_iv.c)
 add_xray_unit_test(test_xi_loop_rotate ir/test_xi_loop_rotate.c)
+add_xray_unit_test(test_xi_devirt ir/test_xi_devirt.c)
 add_xray_unit_test(test_xi_licm ir/test_xi_licm.c)
 add_xray_unit_test(test_xi_ifconv ir/test_xi_ifconv.c)
 add_xray_unit_test(test_xi_sccp ir/test_xi_sccp.c)
@@ -626,6 +627,29 @@ add_test(
         --root ${CMAKE_SOURCE_DIR}
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_executable(test_dispatch_meta jit/test_dispatch_meta.c)
+target_include_directories(test_dispatch_meta PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/jit
+)
+add_test(NAME test_dispatch_meta COMMAND test_dispatch_meta)
+
+add_executable(test_runtime_stubs jit/test_runtime_stubs.c)
+target_include_directories(test_runtime_stubs PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/jit
+)
+add_test(NAME test_runtime_stubs COMMAND test_runtime_stubs)
+
+add_xray_unit_test(test_runtime_stub_entries jit/test_runtime_stub_entries.c)
+add_xray_unit_test(test_call_protocol jit/test_call_protocol.c)
+
+add_executable(test_patch_verify jit/test_patch_verify.c)
+target_include_directories(test_patch_verify PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/jit
+)
+add_test(NAME test_patch_verify COMMAND test_patch_verify)
+
+add_xray_unit_test(test_metadata_verify jit/test_metadata_verify.c)
 
 add_test(
     NAME test_codegen_helpers

@@ -134,6 +134,8 @@ static inline const char *xi_op_name(uint16_t op) {
             return "CALL";
         case XI_CALL_METHOD:
             return "CALL_METHOD";
+        case XI_CALL_METHOD_DIRECT:
+            return "CALL_METHOD_DIRECT";
         case XI_CALL_BUILTIN:
             return "CALL_BUILTIN";
         case XI_EXTRACT:

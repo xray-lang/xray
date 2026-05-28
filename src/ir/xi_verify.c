@@ -458,6 +458,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_TUPLE_GET] = 1,    /* args[0]=tuple */
     [XI_CALL] = 0xFF,      /* callee + params: variadic */
     [XI_CALL_METHOD] = 0xFF,
+    [XI_CALL_METHOD_DIRECT] = 0xFF,
     [XI_CALL_BUILTIN] = 0xFF,
     [XI_EXTRACT] = 1,
     [XI_CLOSURE_NEW] = 0xFF, /* captures: variadic */
@@ -596,7 +597,8 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             /* XI_EXTRACT: arg[0] must be a call or multi-ret */
             if (op == XI_EXTRACT && v->nargs == 1 && v->args[0]) {
                 uint16_t src_op = v->args[0]->op;
-                if (src_op != XI_CALL && src_op != XI_CALL_METHOD && src_op != XI_CALL_BUILTIN &&
+                if (src_op != XI_CALL && src_op != XI_CALL_METHOD &&
+                    src_op != XI_CALL_METHOD_DIRECT && src_op != XI_CALL_BUILTIN &&
                     src_op != XI_MULTI_RET) {
                     verr(ctx,
                          "func '%s': XI_EXTRACT v%u in b%u extracts from "
@@ -701,9 +703,46 @@ static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+static void verify_call_method_direct_contract(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL_METHOD_DIRECT)
+                continue;
+            if (v->nargs < 1) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has 0 args "
+                     "(needs at least receiver)",
+                     f->name, v->id, blk->id);
+                return;
+            }
+            if (v->aux_int < 0 || v->aux_int > 255) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has invalid "
+                     "method index=%lld",
+                     f->name, v->id, blk->id, (long long) v->aux_int);
+                return;
+            }
+            if (v->nargs - 1 > 127) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has too many "
+                     "arguments=%u",
+                     f->name, v->id, blk->id, (unsigned) (v->nargs - 1));
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Check 13: Tail Call Safety ========== */
 
-/* XI_FLAG_TAIL may only appear on XI_CALL or XI_CALL_METHOD.
+/* XI_FLAG_TAIL may only appear on call ops.
  * XI_CALL with tail flag must either be a self-call (aux_int & 0xFF == 1)
  * or the callee must be typed as a function.  Class constructors etc.
  * are not safe tail-call targets because OP_TAILCALL only handles closures. */
@@ -721,7 +760,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             /* Only call ops may carry tail flag */
-            if (v->op != XI_CALL && v->op != XI_CALL_METHOD) {
+            if (v->op != XI_CALL && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) {
                 verr(ctx,
                      "func '%s': v%u %s in b%u has XI_FLAG_TAIL "
                      "but is not a call op",
@@ -1113,6 +1152,10 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_call_method_contract(&ctx, f);
     }
 
+    if (!ctx.failed) {
+        verify_call_method_direct_contract(&ctx, f);
+    }
+
     /* Tail call safety: only on call ops with valid callee */
     if (!ctx.failed) {
         verify_tail_calls(&ctx, f);
@@ -1150,7 +1193,8 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
                     verr(&ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
                          xi_op_name(v->op));
                 } else if (!is_mem && v->op != XI_CALL && v->op != XI_CALL_METHOD &&
-                           v->op != XI_CALL_BUILTIN && v->mem_group != XI_MEM_NONE) {
+                           v->op != XI_CALL_METHOD_DIRECT && v->op != XI_CALL_BUILTIN &&
+                           v->mem_group != XI_MEM_NONE) {
                     verr(&ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)",
                          v->id, xi_op_name(v->op), v->mem_group);
                 }

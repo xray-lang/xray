@@ -56,9 +56,6 @@ static bool rv64_osr_should_skip_vreg(Rv64CodegenCtx *ctx, XmBlock *osr_blk, uin
  * primary load loop. */
 static void rv64_osr_materialize_const(Rv64CodegenCtx *ctx, XmIns *def, int8_t phys_gp,
                                        int8_t phys_fp) {
-    extern const Rv64Reg rv64_alloc_regs[];
-    extern const Rv64Freg rv64_alloc_fp_regs[];
-
     if (!def)
         return;
     if (!xm_ref_is_const(def->args[0]))
@@ -96,9 +93,6 @@ static void rv64_osr_materialize_const(Rv64CodegenCtx *ctx, XmIns *def, int8_t p
  *   5. Pass 2: materialize compile-time constants for vregs without bc_slot
  *   6. JAL x0 (J-type) to the loop header block */
 XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
-    extern const Rv64Reg rv64_alloc_regs[];
-    extern const Rv64Freg rv64_alloc_fp_regs[];
-
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
         XmOsrEntry *entry = &result->osr_entries[result->nosr];
@@ -117,32 +111,34 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
         ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
         rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -(int32_t) RV64_JIT_FRAME_BASE));
 
-        /* Save ra, callee-saved GPRs (same layout as normal prologue) */
-        uint32_t off = RV64_JIT_FRAME_BASE - 8;
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_RA, RV64_SP, (int32_t) off));
-        off -= 8;
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_FP, RV64_SP, (int32_t) off));
-        off -= 8;
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S1, RV64_SP, (int32_t) off));
-        off -= 8;
-        for (Rv64Reg r = RV64_S2; r <= RV64_S9; r++) {
-            rv64_buf_emit(&ctx->buf, rv64_sd(r, RV64_SP, (int32_t) off));
-            off -= 8;
-        }
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S10, RV64_SP, (int32_t) off));
-        off -= 8;
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S11, RV64_SP, (int32_t) off));
-        off -= 8;
-        /* FP callee-saved: fs0-fs7 */
-        for (Rv64Freg f = RV64_FS0; f <= RV64_FS7; f++) {
-            rv64_buf_emit(&ctx->buf, rv64_fsd(f, RV64_SP, (int32_t) off));
-            off -= 8;
-        }
+        rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_FP));
 
         /* Set up frame pointer (placeholder — patched later) */
         RV64_CODEGEN_CHECK(ctx, ctx->nadd_patches < 8, "too many frame add patches for OSR stub");
         ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
         rv64_buf_emit(&ctx->buf, rv64_addi(RV64_FP, RV64_SP, (int32_t) RV64_JIT_FRAME_BASE));
+
+        /* Save ra, callee-saved GPRs (same layout as normal prologue) */
+        uint32_t off = RV64_CALLEE_SAVE_BASE_OFFSET;
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_RA, RV64_FP, -(int32_t) off));
+        off += 8;
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_FP, -(int32_t) off));
+        off += 8;
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S1, RV64_FP, -(int32_t) off));
+        off += 8;
+        for (Rv64Reg r = RV64_S2; r <= RV64_S9; r++) {
+            rv64_buf_emit(&ctx->buf, rv64_sd(r, RV64_FP, -(int32_t) off));
+            off += 8;
+        }
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S10, RV64_FP, -(int32_t) off));
+        off += 8;
+        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S11, RV64_FP, -(int32_t) off));
+        off += 8;
+        /* FP callee-saved: fs0-fs7 */
+        for (Rv64Freg f = RV64_FS0; f <= RV64_FS7; f++) {
+            rv64_buf_emit(&ctx->buf, rv64_fsd(f, RV64_FP, -(int32_t) off));
+            off += 8;
+        }
 
         /* Copy coro pointer from a0 and load jit_ctx */
         rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
@@ -260,9 +256,6 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
  *   - Restores spill slots
  *   - Dispatches to the correct continuation point by suspend_id */
 XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
-    extern const Rv64Reg rv64_alloc_regs[];
-    extern const Rv64Freg rv64_alloc_fp_regs[];
-
     if (ctx->nsuspend == 0)
         return;
     ctx->resume_entry_offset = rv64_buf_offset(&ctx->buf);
@@ -274,31 +267,33 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
     ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -(int32_t) RV64_JIT_FRAME_BASE));
 
-    /* Save ra, callee-saved GPRs */
-    uint32_t off = RV64_JIT_FRAME_BASE - 8;
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_RA, RV64_SP, (int32_t) off));
-    off -= 8;
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_FP, RV64_SP, (int32_t) off));
-    off -= 8;
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S1, RV64_SP, (int32_t) off));
-    off -= 8;
-    for (Rv64Reg r = RV64_S2; r <= RV64_S9; r++) {
-        rv64_buf_emit(&ctx->buf, rv64_sd(r, RV64_SP, (int32_t) off));
-        off -= 8;
-    }
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S10, RV64_SP, (int32_t) off));
-    off -= 8;
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S11, RV64_SP, (int32_t) off));
-    off -= 8;
-    for (Rv64Freg f = RV64_FS0; f <= RV64_FS7; f++) {
-        rv64_buf_emit(&ctx->buf, rv64_fsd(f, RV64_SP, (int32_t) off));
-        off -= 8;
-    }
+    rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_FP));
 
     /* Frame pointer setup (placeholder — patched later) */
     RV64_CODEGEN_CHECK(ctx, ctx->nadd_patches < 8, "too many frame add patches for resume entry");
     ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_FP, RV64_SP, (int32_t) RV64_JIT_FRAME_BASE));
+
+    /* Save ra, callee-saved GPRs */
+    uint32_t off = RV64_CALLEE_SAVE_BASE_OFFSET;
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_RA, RV64_FP, -(int32_t) off));
+    off += 8;
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_FP, -(int32_t) off));
+    off += 8;
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S1, RV64_FP, -(int32_t) off));
+    off += 8;
+    for (Rv64Reg r = RV64_S2; r <= RV64_S9; r++) {
+        rv64_buf_emit(&ctx->buf, rv64_sd(r, RV64_FP, -(int32_t) off));
+        off += 8;
+    }
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S10, RV64_FP, -(int32_t) off));
+    off += 8;
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_S11, RV64_FP, -(int32_t) off));
+    off += 8;
+    for (Rv64Freg f = RV64_FS0; f <= RV64_FS7; f++) {
+        rv64_buf_emit(&ctx->buf, rv64_fsd(f, RV64_FP, -(int32_t) off));
+        off += 8;
+    }
 
     /* Setup CORO_REG and JIT_CTX_REG */
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
@@ -344,9 +339,10 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
     }
 
     /* === Reload ALL allocatable registers ===
-     * Caller-saved regs from caller_saved[] offset 0 */
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < 21; i++)
-        rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SCRATCH_REG, i * 8));
+     * Caller-saved regs from caller_saved[] */
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++)
+        rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SCRATCH_REG,
+                                         (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8));
 
     /* Callee-saved allocatable regs from callee_saved[] */
     for (int i = 0; i < RV64_NGPR_CALLEE_SAVE_ALLOC; i++)
@@ -360,9 +356,9 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
 
     /* === Per-suspend-id dispatch: compare + branch chain ===
      * t5 (SCRATCH_REG2) holds suspend_id. */
-    RV64_CODEGEN_CHECK(ctx, ctx->nsuspend <= 16, "too many suspend points");
+    RV64_CODEGEN_CHECK(ctx, ctx->nsuspend <= XM_MAX_SUSPEND_ENTRIES, "too many suspend points");
 
-    uint32_t trampoline_patches[16];
+    uint32_t trampoline_patches[XM_MAX_SUSPEND_ENTRIES];
     for (uint32_t i = 0; i < ctx->nsuspend; i++) {
         /* LI t6, i — load immediate for comparison */
         rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) i);

@@ -766,6 +766,18 @@ generic_call:
         return result;
     }
 
+    if (v->op == XI_CALL_METHOD_DIRECT) {
+        int method_idx = (int) v->aux_int;
+        if (method_idx < 0 || method_idx > 0xFFFF || nargs > 0xFF) {
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
+        }
+        int64_t encoded =
+            ((int64_t) XR_TAG_PTR << 24) | ((int64_t) method_idx << 8) | ((int64_t) nargs & 0xFF);
+        return emit_helper_call(ctx, blk, XM_HELPER_invoke_direct,
+                                xm_const_i64(ctx->xm_func, encoded), call_args, total);
+    }
+
     /* Fallback: generic call via xr_jit_call_func bridge.
      * MAY_THROW ensures codegen emits a post-call exception check: the
      * callee can throw any exception and, absent an enclosing try block,
@@ -1077,6 +1089,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
         /* Method call — same as generic call for now */
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
         case XI_CALL_BUILTIN:
             return lower_call(ctx, blk, v);
 

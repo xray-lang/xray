@@ -112,7 +112,7 @@ static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
                 continue;
             /* Check stores and calls inside loop. */
             if (xi_is_memory_store(v->op) || v->op == XI_CALL || v->op == XI_CALL_METHOD ||
-                v->op == XI_CALL_BUILTIN) {
+                v->op == XI_CALL_METHOD_DIRECT || v->op == XI_CALL_BUILTIN) {
                 if (xi_tbaa_may_alias(load, v))
                     return false;
             }

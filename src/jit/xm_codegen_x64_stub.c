@@ -17,8 +17,29 @@
 #include "xm_codegen_x64_internal.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 
 /* ========== Call-C Stub ========== */
+
+XR_FUNC void x64_emit_jit_frame_push(X64CodegenCtx *ctx) {
+    CODEGEN_CHECK(ctx, ctx != NULL, "x64_emit_jit_frame_push: NULL ctx");
+    x64_mov_rm32(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_DEPTH_OFFSET);
+    x64_shl_ri(&ctx->buf, X64_SCRATCH_REG, 3);
+    x64_add_rr(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG);
+    x64_mov_mr(&ctx->buf, X64_SCRATCH_REG, (int32_t) XM_JIT_FRAME_STACK_OFFSET, X64_RBP);
+    x64_sub_rr(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG);
+    x64_shr_ri(&ctx->buf, X64_SCRATCH_REG, 3);
+    x64_add_ri(&ctx->buf, X64_SCRATCH_REG, 1);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_DEPTH_OFFSET, X64_SCRATCH_REG);
+}
+
+XR_FUNC void x64_emit_jit_frame_pop(X64CodegenCtx *ctx) {
+    CODEGEN_CHECK(ctx, ctx != NULL, "x64_emit_jit_frame_pop: NULL ctx");
+    x64_mov_rm32(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_DEPTH_OFFSET);
+    x64_sub_ri(&ctx->buf, X64_SCRATCH_REG, 1);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_DEPTH_OFFSET, X64_SCRATCH_REG);
+}
 
 /* Emit call_c_stub: shared trampoline that saves/restores all registers
  * around a C function call.
@@ -106,6 +127,13 @@ XR_FUNC void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     if (!ctx->has_barriers)
         return;
 
+    uintptr_t barrier_fwd_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_fwd, XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED);
+    uintptr_t barrier_back_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_back, XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED);
+    CODEGEN_CHECK(ctx, barrier_fwd_entry != 0, "runtime stub barrier_fwd ABI mismatch");
+    CODEGEN_CHECK(ctx, barrier_back_entry != 0, "runtime stub barrier_back ABI mismatch");
+
     /* Forward barrier stub: xr_jit_barrier_fwd(coro, parent, child)
      * On entry: R11 = parent, RCX = child. */
     ctx->barrier_fwd_stub = ctx->buf.pos;
@@ -130,7 +158,7 @@ XR_FUNC void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RCX, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RDX, X64_SCRATCH_REG); /* parent was in R11 */
     x64_mov_rm(&ctx->buf, X64_R8, X64_RSP, X64_ABI_SHADOW_BYTES + child_stack_off);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) barrier_fwd_entry);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
     x64_add_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
 #else
@@ -138,7 +166,7 @@ XR_FUNC void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);
     x64_mov_rm(&ctx->buf, X64_RDX, X64_RSP, child_stack_off);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) barrier_fwd_entry);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 #endif
 
@@ -164,13 +192,13 @@ XR_FUNC void x64_emit_barrier_stubs(X64CodegenCtx *ctx) {
     x64_sub_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
     x64_mov_rr(&ctx->buf, X64_RCX, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RDX, X64_SCRATCH_REG);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) barrier_back_entry);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
     x64_add_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
 #else
     x64_mov_rr(&ctx->buf, X64_RDI, X64_CORO_REG);
     x64_mov_rr(&ctx->buf, X64_RSI, X64_SCRATCH_REG);
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) barrier_back_entry);
     x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 #endif
 

@@ -137,6 +137,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         /* --- Calls: conservatively assume all effects --- */
         case XI_CALL:
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
         case XI_CALL_BUILTIN:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
 

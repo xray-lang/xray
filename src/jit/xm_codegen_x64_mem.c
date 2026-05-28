@@ -27,6 +27,8 @@
 #include "xm_helper_table.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 
 /* Dispatch function for tag/guard/RT/safepoint opcodes.
  * Returns true if the opcode was handled, false otherwise. */
@@ -657,7 +659,10 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_load_imm64(&ctx->buf, X64_RCX, packed_arg);
     x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
 
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_alloc);
+    uintptr_t alloc_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_alloc, XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+    CODEGEN_CHECK(ctx, alloc_entry != 0, "runtime stub alloc ABI mismatch");
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) alloc_entry);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *cp_a = &ctx->patches[ctx->npatch];
     x64_emit8(&ctx->buf, 0xE8);

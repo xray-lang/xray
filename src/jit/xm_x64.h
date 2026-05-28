@@ -33,6 +33,7 @@
 #include <string.h>
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
+#include "xm_patch_verify.h"
 
 /* ========== x86-64 Register Encoding ========== */
 
@@ -468,9 +469,11 @@ XR_FUNC void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src);
 
 /* Patch a rel32 at the given byte offset to jump to target_offset */
 static inline void x64_patch_rel32(X64Buf *buf, uint32_t patch_pos, uint32_t target_offset) {
-    /* rel32 displacement is relative to the end of the instruction,
-     * which is patch_pos + 4 (the 4-byte displacement field itself). */
-    int32_t rel = (int32_t) (target_offset - (patch_pos + 4));
+    int32_t rel = 0;
+    if (patch_pos + 4 > buf->capacity || !xm_patch_calc_x64_rel32(patch_pos, target_offset, &rel)) {
+        buf->overflow = true;
+        return;
+    }
     memcpy(&buf->code[patch_pos], &rel, 4);
 }
 

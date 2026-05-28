@@ -92,6 +92,8 @@
 #ifndef XM_H
 #define XM_H
 
+#define XM_MAX_SUSPEND_ENTRIES 16
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -267,6 +269,23 @@ typedef struct XmIns {
     XmRef dst;      // result vreg (XM_NONE if void)
     XmRef args[2];  // up to 2 inline operands
 } XmIns;
+
+static inline bool xm_ins_is_call_site(const XmIns *ins) {
+    if (ins == NULL)
+        return false;
+    switch (ins->op) {
+        case XM_CALL:
+        case XM_CALL_C:
+        case XM_CALL_C_LEAF:
+        case XM_CALL_SELF_DIRECT:
+        case XM_CALL_DIRECT:
+        case XM_CALL_KNOWN:
+        case XM_CALL_KNOWN_REG:
+            return true;
+        default:
+            return false;
+    }
+}
 
 // Extended args for instructions with >2 operands (CALL)
 typedef struct XmInsExtra {
@@ -602,8 +621,9 @@ typedef struct XmFunc {
     bool conservative;    // compiled in conservative mode (no type speculation)
 
     // Suspend point tracking (for resume entry generation)
-    uint32_t nsuspend;                // number of XM_SUSPEND instructions
-    void *suspend_block_helpers[16];  // per-suspend block helper fn ptr (NULL = xr_jit_await_block)
+    uint32_t nsuspend;                                    // number of XM_SUSPEND instructions
+    void *suspend_block_helpers[XM_MAX_SUSPEND_ENTRIES];  // per-suspend block helper fn ptr (NULL =
+                                                          // xr_jit_await_block)
 
     // Arena allocator for IR nodes (all Xm memory freed together)
     struct XmArena *arena;

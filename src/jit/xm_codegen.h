@@ -43,6 +43,13 @@ typedef struct {
     } slots[XM_MAX_OSR_SLOTS];
 } XmOsrEntry;
 
+typedef struct {
+    uint32_t cont_offset;
+    uint32_t smap_id;
+    int16_t result_bc_slot;
+    int32_t result_tag_offset;
+} XmSuspendEntry;
+
 /* ========== Runtime Deopt Table ========== */
 
 // Location of a value at deopt time (physical register or spill slot)
@@ -110,6 +117,8 @@ typedef struct {
     uint32_t ndeopt;
     // GC stack map table (heap-allocated, transferred to XrProto)
     XrStackMapTable *stack_map;
+    XmSuspendEntry suspend_entries[XM_MAX_SUSPEND_ENTRIES];
+    uint32_t nsuspend;
     // Resume entry offset: byte offset from code start (0 = none).
     // Non-zero when function contains XM_SUSPEND points.
     uint32_t resume_entry_offset;

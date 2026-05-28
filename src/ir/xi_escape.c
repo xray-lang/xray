@@ -100,6 +100,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         /* ---- Call arguments: conservative HEAP_ESCAPE ---- */
         case XI_CALL:
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
         case XI_CALL_BUILTIN:
             /* Callee might store the argument in a heap object.
              * A more precise analysis would use callee summaries. */

@@ -172,6 +172,7 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
 XR_FUNC void x64_patch_branches(X64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         X64BranchPatch *p = &ctx->patches[i];
+        p->record = x64_patch_record_for(p->type, p->emit_pos);
         switch (p->type) {
             case X64_PATCH_CALL_C:
                 x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->call_c_stub);

@@ -131,14 +131,27 @@ static inline void *xm_helper_func(XmHelperId id) {
     return xm_helper_info[id].func;
 }
 
-static inline bool xm_helper_call_c_needs_deopt_check(const XmFunc *func, const XmIns *ins) {
+static inline uint8_t xm_helper_call_c_post_call_protocol(const XmFunc *func, const XmIns *ins) {
     if (!func || !ins || !xm_ref_is_const(ins->args[0]))
-        return true;
+        return XM_HPC_DEOPT | XM_HPC_SUSPEND;
     uint32_t ci = XM_REF_INDEX(ins->args[0]);
     if (ci >= func->nconst)
-        return true;
+        return XM_HPC_DEOPT | XM_HPC_SUSPEND;
     XmHelperId id = xm_helper_lookup((void *) (uintptr_t) func->consts[ci].val.raw);
-    return (xm_helper_post_call(id) & (XM_HPC_DEOPT | XM_HPC_SUSPEND)) != 0;
+    if (id >= XM_HELPER__COUNT)
+        return XM_HPC_DEOPT | XM_HPC_SUSPEND;
+    return xm_helper_post_call(id);
+}
+
+static inline bool xm_helper_call_c_needs_deopt_check(const XmFunc *func, const XmIns *ins) {
+    return (xm_helper_call_c_post_call_protocol(func, ins) & (XM_HPC_DEOPT | XM_HPC_SUSPEND)) != 0;
+}
+
+static inline bool xm_helper_call_c_protocol_matches_flags(const XmFunc *func, const XmIns *ins) {
+    uint8_t protocol = xm_helper_call_c_post_call_protocol(func, ins);
+    if ((protocol & XM_HPC_THROW) != 0 && (ins == NULL || (ins->flags & XM_FLAG_MAY_THROW) == 0))
+        return false;
+    return true;
 }
 
 // Check if a helper returns a dynamic-typed value (needs runtime tag)

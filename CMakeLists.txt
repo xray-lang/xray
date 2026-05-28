@@ -44,6 +44,15 @@ add_custom_command(
 )
 
 add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
+    COMMAND python3 ${XISAGEN} runtime-stubs
+            ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
+    COMMENT "xisagen: generating xm_runtime_stubs_gen.h from runtime_stubs.def"
+)
+
+add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
     COMMAND python3 ${XISAGEN} x64impl
             ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
@@ -97,6 +106,32 @@ add_custom_command(
     COMMENT "xisagen: generating xm_dispatch_coverage_gen.h from isel.def"
 )
 
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    COMMAND python3 ${XISAGEN} dispatch-meta
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMENT "xisagen: generating xm_dispatch_meta_gen.h from isel.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
+    COMMAND python3 ${XISAGEN} patch-ranges
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
+            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating xm_patch_ranges_gen.h from .isa branch immediates"
+)
+
 # Disassembler tables (fixed-32 archs only). Generates header+impl pairs
 # exporting xm_<short>_disasm() / xm_<short>_insn_name() for runtime
 # patch verification, deopt logs, and S4 external-diff scaffolding.
@@ -123,12 +158,15 @@ add_custom_command(
 add_custom_target(gen-xm-ops DEPENDS
     ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
     ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
     ${CMAKE_BINARY_DIR}/isel_validated.stamp
 )
 
