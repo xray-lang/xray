@@ -820,7 +820,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 f2 f3) "d3 00 31 02"))
-  :golden-asm     (((f1 f2 f3) "fadd.d f1, f2, f3"))
+  :golden-asm     (((f1 f2 f3) "fadd.d f1, f2, f3, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fsub.d
@@ -831,7 +831,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 f2 f3) "d3 00 31 0a"))
-  :golden-asm     (((f1 f2 f3) "fsub.d f1, f2, f3"))
+  :golden-asm     (((f1 f2 f3) "fsub.d f1, f2, f3, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fmul.d
@@ -842,7 +842,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 f2 f3) "d3 00 31 12"))
-  :golden-asm     (((f1 f2 f3) "fmul.d f1, f2, f3"))
+  :golden-asm     (((f1 f2 f3) "fmul.d f1, f2, f3, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fdiv.d
@@ -853,7 +853,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 f2 f3) "d3 00 31 1a"))
-  :golden-asm     (((f1 f2 f3) "fdiv.d f1, f2, f3"))
+  :golden-asm     (((f1 f2 f3) "fdiv.d f1, f2, f3, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fsqrt.d
@@ -864,7 +864,7 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 f2) "d3 00 01 5a"))
-  :golden-asm     (((f1 f2) "fsqrt.d f1, f2"))
+  :golden-asm     (((f1 f2) "fsqrt.d f1, f2, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.feq.d
@@ -908,18 +908,35 @@
   :min-bytes      4
   :max-bytes      4
   :golden-bytes   (((f1 x2) "d3 00 21 d2"))
-  :golden-asm     (((f1 x2) "fcvt.d.l f1, x2"))
+  :golden-asm     (((f1 x2) "fcvt.d.l f1, x2, rne"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fcvt.l.d
   :operands       (($rd reg:gpr) ($rs1 reg:fpr))
   :constraints    ()
-  :encoding       (r-type 0x53 0x1 0x61 $rd $rs1 0)
+  ; rs2=2 selects FCVT.L.D (double → int64); rs2=0 is FCVT.W.D (double → int32).
+  :encoding       (r-type 0x53 0x1 0x61 $rd $rs1 2)
   :flags          ()
   :min-bytes      4
   :max-bytes      4
-  :golden-bytes   (((x1 f2) "d3 10 01 c2"))
-  :golden-asm     (((x1 f2) "fcvt.l.d x1, f2"))
+  :golden-bytes   (((x1 f2) "d3 10 21 c2"))
+  :golden-asm     (((x1 f2) "fcvt.l.d x1, f2, rtz"))
+  :external-reference llvm-mc)
+
+; FSGNJN.D rd, rs1, rs2: copy magnitude of rs1, NEGATE sign of rs2. Schema
+; entry models the underlying ISA instruction; the FNEG.D mnemonic is the
+; assembler pseudo when rs1==rs2 (binutils emits "fneg.d rd, rs" then).
+; Encoding family: opcode=0x53, funct3=0x1, funct7=0x11.
+(define-mcinsn riscv64.fsgnjn.d
+  :operands       (($rd reg:fpr) ($rs1 reg:fpr) ($rs2 reg:fpr))
+  :constraints    ()
+  :encoding       (r-type 0x53 0x1 0x11 $rd $rs1 $rs2)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((f1 f2 f2) "d3 10 21 22")
+                   ((f1 f3 f3) "d3 90 31 22"))
+  :golden-asm     (((f1 f2 f2) "fneg.d f1, f2"))
   :external-reference riscv-spec)
 
 (define-mcinsn riscv64.fmv.x.d

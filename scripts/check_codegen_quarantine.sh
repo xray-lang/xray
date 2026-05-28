@@ -91,7 +91,6 @@ else
     echo ""
     echo "Quarantine violation detected!"
     echo "Quarantined files must not gain new hand-written codegen patterns."
-    echo "Use xisa-generated code instead, or update the baseline if this is a justified exception:"
-    echo "  scripts/check_codegen_quarantine.sh --update-baseline"
+    echo "Use xisa-generated code instead. Do not grow the quarantine baseline."
     exit 1
 fi

@@ -81,6 +81,7 @@ uint32_t rv64_flt_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_fle_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_fcvt_d_l(uint8_t rd, uint8_t rs1);
 uint32_t rv64_fcvt_l_d(uint8_t rd, uint8_t rs1);
+uint32_t rv64_fsgnjn_d(uint8_t rd, uint8_t rs1, uint8_t rs2);
 uint32_t rv64_fmv_x_d(uint8_t rd, uint8_t rs1);
 uint32_t rv64_fmv_d_x(uint8_t rd, uint8_t rs1);
 
@@ -723,10 +724,22 @@ int main(void) {
         check_golden("riscv64.fcvt.d.l (f1 x2)", rv64_fcvt_d_l(1, 2), exp);
     }
 
-    /* riscv64.fcvt.l.d: x1 f2 → d3 10 01 c2 */
+    /* riscv64.fcvt.l.d: x1 f2 → d3 10 21 c2 */
     {
-        static const uint8_t exp[] = {0xd3, 0x10, 0x01, 0xc2};
+        static const uint8_t exp[] = {0xd3, 0x10, 0x21, 0xc2};
         check_golden("riscv64.fcvt.l.d (x1 f2)", rv64_fcvt_l_d(1, 2), exp);
+    }
+
+    /* riscv64.fsgnjn.d: f1 f2 f2 → d3 10 21 22 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x10, 0x21, 0x22};
+        check_golden("riscv64.fsgnjn.d (f1 f2 f2)", rv64_fsgnjn_d(1, 2, 2), exp);
+    }
+
+    /* riscv64.fsgnjn.d: f1 f3 f3 → d3 90 31 22 */
+    {
+        static const uint8_t exp[] = {0xd3, 0x90, 0x31, 0x22};
+        check_golden("riscv64.fsgnjn.d (f1 f3 f3)", rv64_fsgnjn_d(1, 3, 3), exp);
     }
 
     /* riscv64.fmv.x.d: x1 f2 → d3 00 01 e2 */
@@ -741,6 +754,6 @@ int main(void) {
         check_golden("riscv64.fmv.d.x (f1 x2)", rv64_fmv_d_x(1, 2), exp);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 107 total)\n", g_pass, g_fail);
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 109 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }

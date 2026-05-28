@@ -150,7 +150,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
  *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
  *  XI_CALL_BUILTIN  —                    builtin_id
- *  XI_EXTRACT       —                    result index (1-based)
+ *  XI_EXTRACT       —                    result index (zero-based)
  *  XI_LOAD_UPVAL    —                    upvalue index
  *  XI_STORE_UPVAL   —                    upvalue index
  *  XI_GET_SHARED    —                    shared slot index (relative)
@@ -263,7 +263,7 @@ typedef enum {
     XI_CALL_METHOD,  /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_EXTRACT,      /* extract i-th result from multi-return call:
-                      * args[0]=call_value, aux_int=result_index (1-based offset) */
+                      * args[0]=call_value, aux_int=result_index (zero-based offset) */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */

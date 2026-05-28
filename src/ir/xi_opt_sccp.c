@@ -363,8 +363,6 @@ static SccpCell range_compare(uint16_t op, SccpCell a, SccpCell b, SccpCell fall
             if (ahi < blo || bhi < alo)
                 return sccp_bool(true);
             break;
-        default:
-            break;
     }
     return fallback;
 }
@@ -662,7 +660,9 @@ static bool rewrite_function(SccpCtx *ctx) {
                     v->nargs = 0;
                     any = true;
                     break;
-                default:
+                case SCCP_TOP:
+                case SCCP_BOT:
+                case SCCP_RANGE_INT:
                     break;
             }
         }

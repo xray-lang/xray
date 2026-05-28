@@ -396,6 +396,18 @@ int main(void) {
         check_golden("arm64.strb (x0 x1 0)", a64_strb(A64_X0, A64_X1, 0), exp);
     }
 
+    /* arm64.ldrsb: x0 x1 0 → 20 00 80 39 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x80, 0x39};
+        check_golden("arm64.ldrsb (x0 x1 0)", a64_ldrsb(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrsb: x0 sp 4 → e0 13 80 39 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x13, 0x80, 0x39};
+        check_golden("arm64.ldrsb (x0 sp 4)", a64_ldrsb(A64_X0, A64_SP, 4), exp);
+    }
+
     /* arm64.ldrh: x0 x1 0 → 20 00 40 79 */
     {
         static const uint8_t exp[] = {0x20, 0x00, 0x40, 0x79};
@@ -406,6 +418,18 @@ int main(void) {
     {
         static const uint8_t exp[] = {0xe0, 0x0b, 0x40, 0x79};
         check_golden("arm64.ldrh (x0 sp 4)", a64_ldrh(A64_X0, A64_SP, 4), exp);
+    }
+
+    /* arm64.ldrsh: x0 x1 0 → 20 00 80 79 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x80, 0x79};
+        check_golden("arm64.ldrsh (x0 x1 0)", a64_ldrsh(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrsh: x0 sp 4 → e0 0b 80 79 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x0b, 0x80, 0x79};
+        check_golden("arm64.ldrsh (x0 sp 4)", a64_ldrsh(A64_X0, A64_SP, 4), exp);
     }
 
     /* arm64.strh: x0 x1 0 → 20 00 00 79 */
@@ -430,6 +454,30 @@ int main(void) {
     {
         static const uint8_t exp[] = {0x20, 0x00, 0x00, 0xb9};
         check_golden("arm64.str_w (x0 x1 0)", a64_str_w(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrsw: x0 x1 0 → 20 00 80 b9 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x80, 0xb9};
+        check_golden("arm64.ldrsw (x0 x1 0)", a64_ldrsw(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.ldrsw: x0 sp 8 → e0 0b 80 b9 */
+    {
+        static const uint8_t exp[] = {0xe0, 0x0b, 0x80, 0xb9};
+        check_golden("arm64.ldrsw (x0 sp 8)", a64_ldrsw(A64_X0, A64_SP, 8), exp);
+    }
+
+    /* arm64.ldr_s: x0 x1 0 → 20 00 40 bd */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x40, 0xbd};
+        check_golden("arm64.ldr_s (x0 x1 0)", a64_ldr_s(A64_X0, A64_X1, 0), exp);
+    }
+
+    /* arm64.str_s: x0 x1 0 → 20 00 00 bd */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x00, 0xbd};
+        check_golden("arm64.str_s (x0 x1 0)", a64_str_s(A64_X0, A64_X1, 0), exp);
     }
 
     /* arm64.ldr_fp: x0 x1 0 → 20 00 40 fd */
@@ -620,6 +668,30 @@ int main(void) {
         check_golden("arm64.nop ()", a64_nop(), exp);
     }
 
+    /* arm64.brk: 0 → 00 00 20 d4 */
+    {
+        static const uint8_t exp[] = {0x00, 0x00, 0x20, 0xd4};
+        check_golden("arm64.brk (0)", a64_brk(0), exp);
+    }
+
+    /* arm64.brk: 1 → 20 00 20 d4 */
+    {
+        static const uint8_t exp[] = {0x20, 0x00, 0x20, 0xd4};
+        check_golden("arm64.brk (1)", a64_brk(1), exp);
+    }
+
+    /* arm64.brk: 0xf000 → 00 00 3e d4 */
+    {
+        static const uint8_t exp[] = {0x00, 0x00, 0x3e, 0xd4};
+        check_golden("arm64.brk (0xf000)", a64_brk(61440), exp);
+    }
+
+    /* arm64.brk: 0xff00 → 00 e0 3f d4 */
+    {
+        static const uint8_t exp[] = {0x00, 0xe0, 0x3f, 0xd4};
+        check_golden("arm64.brk (0xff00)", a64_brk(65280), exp);
+    }
+
     /* arm64.neg.rr: x0 x1 → e0 03 01 cb */
     {
         static const uint8_t exp[] = {0xe0, 0x03, 0x01, 0xcb};
@@ -716,7 +788,19 @@ int main(void) {
         check_golden("arm64.fcvtzs (x0 x1)", a64_fcvtzs(A64_X0, A64_X1), exp);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 115 total)\n", g_pass, g_fail);
+    /* arm64.fcvt_d_s: x0 x1 → 20 c0 22 1e */
+    {
+        static const uint8_t exp[] = {0x20, 0xc0, 0x22, 0x1e};
+        check_golden("arm64.fcvt_d_s (x0 x1)", a64_fcvt_d_s(A64_X0, A64_X1), exp);
+    }
+
+    /* arm64.fcvt_s_d: x0 x1 → 20 40 62 1e */
+    {
+        static const uint8_t exp[] = {0x20, 0x40, 0x62, 0x1e};
+        check_golden("arm64.fcvt_s_d (x0 x1)", a64_fcvt_s_d(A64_X0, A64_X1), exp);
+    }
+
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 129 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }
 

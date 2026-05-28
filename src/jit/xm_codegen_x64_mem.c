@@ -24,6 +24,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_helper_table.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 
@@ -420,8 +421,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                          X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
-                                                    : (void *) (uintptr_t) xr_jit_rt_map_new;
+            void *fn = (ins->op == XM_RT_ARRAY_NEW) ? xm_helper_func(XM_HELPER_rt_array_new)
+                                                    : xm_helper_func(XM_HELPER_rt_map_new);
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
             /* CALL call_c_stub */
@@ -506,7 +507,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                          X64_SCRATCH_REG);
 
             /* Load runtime helper pointer */
-            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+            x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_push));
 
             /* CALL call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");

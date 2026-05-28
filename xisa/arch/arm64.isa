@@ -468,6 +468,20 @@
   :golden-asm     (((x0 x1 0) "strb w0, [x1]"))
   :external-reference llvm-mc)
 
+; LDRSB Xt, [Xn, #imm]: load signed byte, sign-extend to 64-bit.
+; Same operand layout as ldrb, but bits[23:22] = 10 select sign-extend-to-X.
+(define-mcinsn arm64.ldrsb
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x39800000 (field 0 5 $rt) (field 5 5 $rn) (field 10 12 $offset))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 80 39")
+                   ((x0 sp 4) "e0 13 80 39"))
+  :golden-asm     (((x0 x1 0) "ldrsb x0, [x1]"))
+  :external-reference llvm-mc)
+
 ; ---- 16-bit memory ----
 
 (define-mcinsn arm64.ldrh
@@ -480,6 +494,20 @@
   :golden-bytes   (((x0 x1 0) "20 00 40 79")
                    ((x0 sp 4) "e0 0b 40 79"))
   :golden-asm     (((x0 x1 0) "ldrh w0, [x1]"))
+  :external-reference llvm-mc)
+
+; LDRSH Xt, [Xn, #imm]: load signed halfword, sign-extend to 64-bit.
+; Same encoding family as ldrh but with bits[23:22]=10.
+(define-mcinsn arm64.ldrsh
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0x79800000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 2))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 80 79")
+                   ((x0 sp 4) "e0 0b 80 79"))
+  :golden-asm     (((x0 x1 0) "ldrsh x0, [x1]"))
   :external-reference llvm-mc)
 
 (define-mcinsn arm64.strh
@@ -516,6 +544,44 @@
   :max-bytes      4
   :golden-bytes   (((x0 x1 0) "20 00 00 b9"))
   :golden-asm     (((x0 x1 0) "str w0, [x1]"))
+  :external-reference llvm-mc)
+
+; LDRSW Xt, [Xn, #imm]: load signed word, sign-extend to 64-bit.
+; Same encoding family as ldr_w but with bits[23:22]=10.
+(define-mcinsn arm64.ldrsw
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xb9800000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 4))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 80 b9")
+                   ((x0 sp 8) "e0 0b 80 b9"))
+  :golden-asm     (((x0 x1 0) "ldrsw x0, [x1]"))
+  :external-reference llvm-mc)
+
+; ---- FP memory (32-bit single — used for f32 round-trip) ----
+
+(define-mcinsn arm64.ldr_s
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xbd400000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 4))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 40 bd"))
+  :golden-asm     (((x0 x1 0) "ldr s0, [x1]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn arm64.str_s
+  :operands       (($rt reg:gpr64) ($rn reg:gpr64) ($offset imm:i32))
+  :constraints    ()
+  :encoding       (0xbd000000 (field 0 5 $rt) (field 5 5 $rn) (field-scaled 10 12 $offset 4))
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1 0) "20 00 00 bd"))
+  :golden-asm     (((x0 x1 0) "str s0, [x1]"))
   :external-reference llvm-mc)
 
 ; ---- FP memory (64-bit double) ----
@@ -722,9 +788,10 @@
   :flags          (trap)
   :min-bytes      4
   :max-bytes      4
-  :golden-bytes   (((0) "00 00 20 d4")
-                   ((1) "20 00 20 d4")
-                   ((0xf000) "00 e0 3f d4"))
+  :golden-bytes   (((0)      "00 00 20 d4")
+                   ((1)      "20 00 20 d4")
+                   ((0xf000) "00 00 3e d4")
+                   ((0xff00) "00 e0 3f d4"))
   :golden-asm     (((0) "brk #0")
                    ((1) "brk #1"))
   :external-reference llvm-mc)
@@ -878,3 +945,30 @@
   :golden-bytes   (((x0 x1) "20 00 78 9e"))
   :golden-asm     (((x0 x1) "fcvtzs x0, d1"))
   :external-reference llvm-mc)
+
+; FCVT Dd, Ss: convert single-precision FP to double-precision FP.
+; Encoding family: 0001 1110 0010 0010 1100 00 Rn:5 Rd:5 = 0x1E22C000.
+(define-mcinsn arm64.fcvt_d_s
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64))
+  :constraints    ()
+  :encoding       (0x1e22c000 (field 0 5 $rd) (field 5 5 $rn))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1) "20 c0 22 1e"))
+  :golden-asm     (((x0 x1) "fcvt d0, s1"))
+  :external-reference llvm-mc)
+
+; FCVT Ss, Dd: convert double-precision FP to single-precision FP.
+; Encoding family: 0001 1110 0110 0010 0100 00 Rn:5 Rd:5 = 0x1E624000.
+(define-mcinsn arm64.fcvt_s_d
+  :operands       (($rd reg:gpr64) ($rn reg:gpr64))
+  :constraints    ()
+  :encoding       (0x1e624000 (field 0 5 $rd) (field 5 5 $rn))
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      4
+  :golden-bytes   (((x0 x1) "20 40 62 1e"))
+  :golden-asm     (((x0 x1) "fcvt s0, d1"))
+  :external-reference llvm-mc)
+

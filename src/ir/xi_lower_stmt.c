@@ -1429,8 +1429,10 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             xi_lower_braun_write(l, new_var, l->cur_block, src);
             break;
         }
-        default:
+        case PATTERN_SKIP:
             break;
+        default:
+            XR_CHECK(false, "xi_lower: invalid destructure pattern");
     }
 }
 
@@ -2202,7 +2204,7 @@ static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
                 type = xi_lower_node_type(l, s);
                 break;
             default:
-                break;
+                continue;
         }
         if (!name)
             continue;

@@ -10,6 +10,7 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt_gvn_pre.h"
+#include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 
@@ -20,6 +21,7 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
+static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 10, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -310,6 +312,63 @@ TEST(gvn_pre_does_not_speculate_loads) {
     xi_func_free(f);
 }
 
+TEST(gvn_eliminates_cross_block_load_via_memssa) {
+    /* entry: load shared[0] → blk2: load shared[0] again.
+     * No intervening store → second load should be eliminated. */
+    XiFunc *f = make_func("xblock_load", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *blk2 = xi_block_new(f);
+    blk2->sealed = true;
+
+    XiValue *load1 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    load1->aux_int = 0;
+    xi_block_set_jump(entry, blk2);
+
+    XiValue *load2 = xi_value_new(f, blk2, XI_GET_SHARED, &stub_int, 0);
+    load2->aux_int = 0;
+    xi_block_set_return(blk2, load2);
+
+    xi_tbaa_annotate(f);
+    XiPassChange chg = xi_opt_gvn_pre(f);
+
+    assert(chg.values_changed);
+    assert(load2->op == XI_COPY);
+    assert(load2->args[0] == load1);
+
+    xi_func_free(f);
+}
+
+TEST(gvn_no_cross_block_load_elim_after_call) {
+    /* entry: load shared[0], call, → blk2: load shared[0].
+     * Call clobbers memory → second load must NOT be eliminated. */
+    XiFunc *f = make_func("call_clobber", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *blk2 = xi_block_new(f);
+    blk2->sealed = true;
+
+    XiValue *callee = xi_param(f, entry, 0, &stub_any);
+
+    XiValue *load1 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    load1->aux_int = 0;
+
+    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_any, 1);
+    call->args[0] = callee;
+
+    xi_block_set_jump(entry, blk2);
+
+    XiValue *load2 = xi_value_new(f, blk2, XI_GET_SHARED, &stub_int, 0);
+    load2->aux_int = 0;
+    xi_block_set_return(blk2, load2);
+
+    xi_tbaa_annotate(f);
+    XiPassChange chg = xi_opt_gvn_pre(f);
+    (void) chg;
+
+    assert(load2->op == XI_GET_SHARED && "load after call must not be eliminated");
+
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -321,6 +380,8 @@ int main(void) {
     run_gvn_pre_recognizes_commutative_argument_swap();
     run_gvn_pre_handles_three_predecessor_join();
     run_gvn_pre_does_not_speculate_loads();
+    run_gvn_eliminates_cross_block_load_via_memssa();
+    run_gvn_no_cross_block_load_elim_after_call();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

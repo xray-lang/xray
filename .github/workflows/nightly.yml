@@ -11,11 +11,10 @@ name: Nightly
 #                               coroutine scenarios that exposed
 #                               STATUS_HEAP_CORRUPTION in May 2026
 #
-# All jobs are continue-on-error during the W1 baseline so the first
-# nightly run produces complete sanitizer / fuzz output for triage.
-# The tightening deadline is captured in tests/known_failures.txt
-# with a 30-day expiry gate (CI fails on its own if the deadline
-# slips).
+# Nightly failures are actionable signals. The Linux MSan lane remains
+# informational because GitHub-hosted Ubuntu runners do not provide an
+# instrumented libc / libc++, which can produce cross-library false
+# positives.
 
 on:
   schedule:
@@ -31,7 +30,6 @@ jobs:
     runs-on: ubuntu-latest
     name: JIT Fuzz 30min (Linux ASan)
     timeout-minutes: 45
-    continue-on-error: true
 
     env:
       XRAY_JIT_FORCE: "1"
@@ -100,7 +98,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     name: GC Stress (${{ matrix.short_name }})
     timeout-minutes: 30
-    continue-on-error: true
 
     env:
       XRAY_JIT_FORCE: "1"
@@ -137,7 +134,7 @@ jobs:
           XRAY_BIN: ./build/xray
         # run_gc_stress.sh selects the same set as the previous inline
         # loop: 1206 under --jit-force, 1205 / 1207 under --no-jit (the
-        # NOJIT_TESTS designation lives in tests/known_failures.txt).
+        # NOJIT_TESTS designation lives in scripts/run_regression_tests.sh.
         # Failure tails for any crashed iteration land in
         # tests/tmp/gc_stress_failures.log which the artifact upload
         # below would pick up if added in a follow-up.
@@ -199,7 +196,6 @@ jobs:
     runs-on: windows-2022
     name: MSVC Release + Win11 Coro (JIT-force)
     timeout-minutes: 30
-    continue-on-error: true
 
     env:
       XRAY_JIT_FORCE: "1"

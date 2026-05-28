@@ -21,6 +21,7 @@
 #ifdef __riscv
 
 #include "xm_codegen_riscv64_internal.h"
+#include "xm_helper_table.h"
 #include "xm_jit_runtime.h"
 #include "../coro/xcoroutine.h"
 #include <string.h>
@@ -878,8 +879,8 @@ static void rv64_h_rt_collection(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 
     rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
 
-    void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
-                                            : (void *) (uintptr_t) xr_jit_rt_map_new;
+    void *fn = (ins->op == XM_RT_ARRAY_NEW) ? xm_helper_func(XM_HELPER_rt_array_new)
+                                            : xm_helper_func(XM_HELPER_rt_map_new);
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
     rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
@@ -957,7 +958,8 @@ static void rv64_h_rt_array_push(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
     rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
 
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG,
+                    (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_push));
 
     rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
     rv64_buf_emit(&ctx->buf, rv64_call(0));
@@ -1346,7 +1348,7 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
     int64_t helper_extra_arg = 0;
     if (!block_helper) {
-        block_helper = (void *) xr_jit_await_block;
+        block_helper = xm_helper_func(XM_HELPER_await_block);
         helper_extra_arg = discard_result;
     }
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_A0, RV64_CORO_REG));

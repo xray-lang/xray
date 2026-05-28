@@ -795,8 +795,19 @@ uint32_t rv64_fcvt_l_d(uint8_t rd, uint8_t rs1) {
     insn |= ((uint32_t) (rd) << 7);
     insn |= (0x1u << 12);
     insn |= ((uint32_t) (rs1) << 15);
-    insn |= ((uint32_t) (0x0u) << 20);
+    insn |= ((uint32_t) (0x2u) << 20);
     insn |= (0x61u << 25);
+    return insn;
+}
+
+/* riscv64.fsgnjn.d */
+uint32_t rv64_fsgnjn_d(uint8_t rd, uint8_t rs1, uint8_t rs2) {
+    uint32_t insn = 0x53u;
+    insn |= ((uint32_t) (rd) << 7);
+    insn |= (0x1u << 12);
+    insn |= ((uint32_t) (rs1) << 15);
+    insn |= ((uint32_t) (rs2) << 20);
+    insn |= (0x11u << 25);
     return insn;
 }
 

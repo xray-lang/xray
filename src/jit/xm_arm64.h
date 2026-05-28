@@ -250,6 +250,9 @@ XR_FUNC uint32_t a64_ldrb(A64Reg rt, A64Reg rn, int32_t offset);
 // STRB Wt, [Xn, #offset] (8-bit byte store, unscaled offset)
 XR_FUNC uint32_t a64_strb(A64Reg rt, A64Reg rn, int32_t offset);
 
+// LDRSB Xt, [Xn, #offset] (8-bit signed byte load, sign-extends to 64-bit)
+XR_FUNC uint32_t a64_ldrsb(A64Reg rt, A64Reg rn, int32_t offset);
+
 /* ========== 16-bit Memory (for shape_id, etc.) ========== */
 
 // LDRH Wt, [Xn, #offset] (16-bit unsigned load, unsigned offset scaled by 2)
@@ -258,6 +261,9 @@ XR_FUNC uint32_t a64_ldrh(A64Reg rt, A64Reg rn, int32_t offset);
 // STRH Wt, [Xn, #offset] (16-bit store, unsigned offset scaled by 2)
 XR_FUNC uint32_t a64_strh(A64Reg rt, A64Reg rn, int32_t offset);
 
+// LDRSH Xt, [Xn, #offset] (16-bit signed load, sign-extends to 64-bit)
+XR_FUNC uint32_t a64_ldrsh(A64Reg rt, A64Reg rn, int32_t offset);
+
 /* ========== 32-bit Memory (for int32 fields like reductions) ========== */
 
 // LDR Wt, [Xn, #offset] (32-bit load, unsigned offset scaled by 4)
@@ -265,6 +271,30 @@ XR_FUNC uint32_t a64_ldr_w(A64Reg rt, A64Reg rn, int32_t offset);
 
 // STR Wt, [Xn, #offset] (32-bit store)
 XR_FUNC uint32_t a64_str_w(A64Reg rt, A64Reg rn, int32_t offset);
+
+// LDRSW Xt, [Xn, #offset] (32-bit signed load, sign-extends to 64-bit)
+XR_FUNC uint32_t a64_ldrsw(A64Reg rt, A64Reg rn, int32_t offset);
+
+/* ========== 32-bit Single-Precision FP Memory ========== */
+
+// LDR St, [Xn, #offset] (32-bit single-precision FP load, offset scaled by 4)
+XR_FUNC uint32_t a64_ldr_s(A64Reg rt, A64Reg rn, int32_t offset);
+
+// STR St, [Xn, #offset] (32-bit single-precision FP store, offset scaled by 4)
+XR_FUNC uint32_t a64_str_s(A64Reg rt, A64Reg rn, int32_t offset);
+
+/* ========== FP Precision Conversion ========== */
+
+// FCVT Dd, Ss (promote single-precision to double-precision)
+XR_FUNC uint32_t a64_fcvt_d_s(A64Reg rd, A64Reg rn);
+
+// FCVT Ss, Dd (truncate double-precision to single-precision)
+XR_FUNC uint32_t a64_fcvt_s_d(A64Reg rd, A64Reg rn);
+
+/* ========== Debug Trap ========== */
+
+// BRK #imm16 (software breakpoint, used by JIT as an unreachable trap)
+XR_FUNC uint32_t a64_brk(uint16_t imm);
 
 // SUBS Wd, Wn, #imm (32-bit subtract with flags)
 XR_FUNC uint32_t a64_subs_imm_w(A64Reg rd, A64Reg rn, uint32_t imm12);

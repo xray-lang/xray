@@ -287,9 +287,27 @@ uint32_t a64_strb(A64Reg rt, A64Reg rn, int32_t offset) {
     return insn;
 }
 
+/* arm64.ldrsb */
+uint32_t a64_ldrsb(A64Reg rt, A64Reg rn, int32_t offset) {
+    uint32_t insn = 0x39800000u;
+    insn |= ((uint32_t) rt & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    insn |= (((uint32_t) offset & 0xfff) << 10);
+    return insn;
+}
+
 /* arm64.ldrh */
 uint32_t a64_ldrh(A64Reg rt, A64Reg rn, int32_t offset) {
     uint32_t insn = 0x79400000u;
+    insn |= ((uint32_t) rt & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    insn |= ((((uint32_t) offset / 2) & 0xfff) << 10);
+    return insn;
+}
+
+/* arm64.ldrsh */
+uint32_t a64_ldrsh(A64Reg rt, A64Reg rn, int32_t offset) {
+    uint32_t insn = 0x79800000u;
     insn |= ((uint32_t) rt & 0x1f);
     insn |= (((uint32_t) rn & 0x1f) << 5);
     insn |= ((((uint32_t) offset / 2) & 0xfff) << 10);
@@ -317,6 +335,33 @@ uint32_t a64_ldr_w(A64Reg rt, A64Reg rn, int32_t offset) {
 /* arm64.str_w */
 uint32_t a64_str_w(A64Reg rt, A64Reg rn, int32_t offset) {
     uint32_t insn = 0xb9000000u;
+    insn |= ((uint32_t) rt & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    insn |= ((((uint32_t) offset / 4) & 0xfff) << 10);
+    return insn;
+}
+
+/* arm64.ldrsw */
+uint32_t a64_ldrsw(A64Reg rt, A64Reg rn, int32_t offset) {
+    uint32_t insn = 0xb9800000u;
+    insn |= ((uint32_t) rt & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    insn |= ((((uint32_t) offset / 4) & 0xfff) << 10);
+    return insn;
+}
+
+/* arm64.ldr_s */
+uint32_t a64_ldr_s(A64Reg rt, A64Reg rn, int32_t offset) {
+    uint32_t insn = 0xbd400000u;
+    insn |= ((uint32_t) rt & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    insn |= ((((uint32_t) offset / 4) & 0xfff) << 10);
+    return insn;
+}
+
+/* arm64.str_s */
+uint32_t a64_str_s(A64Reg rt, A64Reg rn, int32_t offset) {
+    uint32_t insn = 0xbd000000u;
     insn |= ((uint32_t) rt & 0x1f);
     insn |= (((uint32_t) rn & 0x1f) << 5);
     insn |= ((((uint32_t) offset / 4) & 0xfff) << 10);
@@ -443,6 +488,13 @@ uint32_t a64_nop(void) {
     return 0xd503201fu;
 }
 
+/* arm64.brk */
+uint32_t a64_brk(uint16_t imm) {
+    uint32_t insn = 0xd4200000u;
+    insn |= (((uint32_t) imm & 0xffff) << 5);
+    return insn;
+}
+
 /* arm64.neg.rr */
 uint32_t a64_neg(A64Reg rd, A64Reg rm) {
     uint32_t insn = 0xcb0003e0u;
@@ -546,6 +598,22 @@ uint32_t a64_scvtf(A64Reg rd, A64Reg rn) {
 /* arm64.fcvtzs */
 uint32_t a64_fcvtzs(A64Reg rd, A64Reg rn) {
     uint32_t insn = 0x9e780000u;
+    insn |= ((uint32_t) rd & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    return insn;
+}
+
+/* arm64.fcvt_d_s */
+uint32_t a64_fcvt_d_s(A64Reg rd, A64Reg rn) {
+    uint32_t insn = 0x1e22c000u;
+    insn |= ((uint32_t) rd & 0x1f);
+    insn |= (((uint32_t) rn & 0x1f) << 5);
+    return insn;
+}
+
+/* arm64.fcvt_s_d */
+uint32_t a64_fcvt_s_d(A64Reg rd, A64Reg rn) {
+    uint32_t insn = 0x1e624000u;
     insn |= ((uint32_t) rd & 0x1f);
     insn |= (((uint32_t) rn & 0x1f) << 5);
     return insn;

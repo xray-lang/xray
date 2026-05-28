@@ -19,6 +19,7 @@
 #include "xm.h"
 #include "xm_ops.h"
 #include "xm_jit_runtime.h"
+#include "xm_helper_table.h"
 #include "xm_fold.h"
 #include "xm_codegen.h"
 #include "xm_liveness2.h"
@@ -106,6 +107,43 @@ static XmBlock *get_block(LowerCtx *ctx, XiBlock *blk) {
     XR_DCHECK(blk != NULL, "get_block: NULL block");
     XR_DCHECK(blk->id < ctx->block_map_size, "get_block: block id out of range");
     return ctx->block_map[blk->id];
+}
+
+static uint8_t helper_call_rep(XmHelperId id) {
+    if (id >= XM_HELPER__COUNT)
+        return XR_REP_I64;
+    uint8_t ret_rep = xm_helper_info[id].ret_rep;
+    if (ret_rep == XR_REP_F64 || ret_rep == XR_REP_PTR || ret_rep == XR_REP_I64)
+        return ret_rep;
+    return XR_REP_I64;
+}
+
+static XmType helper_call_ctype(XmHelperId id) {
+    if (id >= XM_HELPER__COUNT)
+        return XM_TYPE_UNKNOWN;
+    if (xm_helper_info[id].ret_rep == XR_REP_PTR && xm_helper_pointer_trust(id) != XM_HPT_GC)
+        return XM_TYPE_UNKNOWN;
+    return (XmType) {xm_helper_type_kind(id), 0, 0};
+}
+
+static XmRef emit_helper_call(LowerCtx *ctx, XmBlock *blk, XmHelperId id, XmRef extra,
+                              const XmRef *args, uint16_t nargs) {
+    XR_DCHECK(ctx != NULL && ctx->xm_func != NULL, "emit_helper_call: invalid ctx");
+    XR_DCHECK(blk != NULL, "emit_helper_call: NULL block");
+    XR_DCHECK(id < XM_HELPER__COUNT, "emit_helper_call: invalid helper id");
+    XmRef fn_ref = xm_const_ptr(ctx->xm_func, xm_helper_info[id].func);
+    XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, helper_call_rep(id), fn_ref, extra);
+    XmIns *ins = &blk->ins[blk->nins - 1];
+    ins->ctype = helper_call_ctype(id);
+    if (xm_helper_may_gc(id))
+        ins->flags |= XM_FLAG_MAY_GC;
+    if (xm_helper_needs_stackmap(id))
+        ins->flags |= XM_FLAG_SAFEPOINT;
+    if (xm_helper_may_throw(id) || (xm_helper_post_call(id) & XM_HPC_THROW))
+        ins->flags |= XM_FLAG_MAY_THROW;
+    if (args && nargs > 0)
+        xm_func_bind_call_args(ctx->xm_func, result, args, nargs);
+    return result;
 }
 
 /* ========== Slot Map / Deopt Helpers ========== */
@@ -656,8 +694,13 @@ generic_call:
          * Known name-based builtins deopt to VM. Numeric-ID builtins
          * (bid > 0) route through OP_INVOKE and also deopt. */
         if (bn != NULL) {
-            static const char *known[] = {"dump",  "copy",          "chr",       "print",
-                                          "Bytes", "StringBuilder", "Exception", NULL};
+            static const char *known[] = {
+                "array_new",     "Bytes",      "chr",       "copy",       "dump",
+                "Exception",     "iter_new",   "iter_next", "iter_valid", "json_get_f",
+                "json_init_f",   "json_set_f", "map_new",   "print",      "range",
+                "regex_compile", "set_new",    "slice",     "str_concat", "StringBuilder",
+                "typeof",        NULL,
+            };
             bool found = false;
             for (int k = 0; known[k]; k++) {
                 if (strcmp(bn, known[k]) == 0) {
@@ -704,15 +747,12 @@ generic_call:
         int64_t encoded = ((int64_t) method_sym << 32) | ((int64_t) (did & 0xFFFF) << 16) |
                           ((int64_t) nargs & 0xFF);
         XmRef encoded_ref = xm_const_i64(ctx->xm_func, encoded);
-        XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_invoke_method);
         /* Method returns are polymorphic (int, bool, string, null, ptr).
          * Use I64 rep (raw payload in GP register) + TAGGED ctype so
          * the type pass does not narrow, allowing the dynamic tag patch
          * to read the correct runtime tag from vreg_runtime_tags[]. */
-        XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, encoded_ref);
-        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-        blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
-        xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
+        XmRef result =
+            emit_helper_call(ctx, blk, XM_HELPER_invoke_method, encoded_ref, call_args, total);
         /* Propagate bc_slot from Xi slot_map so deopt snapshots can
          * reconstruct the correct bytecode register. */
         if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
@@ -752,9 +792,7 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return xm_const_i64(ctx->xm_func, 0);
     }
     XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) child_proto);
-    XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_new);
-    XmRef closure_ref = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_PTR, fn_ref, proto_ref);
-    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    XmRef closure_ref = emit_helper_call(ctx, blk, XM_HELPER_closure_new, proto_ref, NULL, 0);
 
     /* Populate UPVAL_SRC_REG entries: for each non-NULL capture arg,
      * call xr_jit_closure_set_upval(closure, value, upval_index).
@@ -813,12 +851,9 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                  * this ensures call_arg_tags[1] = XR_TAG_PTR when this ref
                  * is later passed to xr_jit_closure_set_upval, so the
                  * upvals[] entry stores a tagged PTR (not raw I64). */
-                XmRef cn_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_new);
-                XmRef cn_res = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_PTR, cn_fn,
-                                       xm_const_i64(ctx->xm_func, 0));
-                blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
                 XmRef cn_args[] = {val};
-                xm_func_bind_call_args(ctx->xm_func, cn_res, cn_args, 1);
+                XmRef cn_res = emit_helper_call(ctx, blk, XM_HELPER_cell_new,
+                                                xm_const_i64(ctx->xm_func, 0), cn_args, 1);
                 ctx->cell_ref[vid] = cn_res;
                 ctx->cell_present[vid] = true;
             }
@@ -827,11 +862,8 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
 
         XmRef idx = xm_const_i64(ctx->xm_func, i);
-        XmRef set_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_closure_set_upval);
-        XmRef set_res = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, set_fn, idx);
-        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
         XmRef call_args[] = {closure_ref, val};
-        xm_func_bind_call_args(ctx->xm_func, set_res, call_args, 2);
+        emit_helper_call(ctx, blk, XM_HELPER_closure_set_upval, idx, call_args, 2);
     }
 
     return closure_ref;
@@ -853,13 +885,9 @@ static XmRef lower_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
     for (uint16_t i = 0; i < v->nargs; i++) {
         XmRef arg = get_ref(ctx, v->args[i]);
-        XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_print);
         XmRef extra = xm_const_i64(ctx->xm_func, jit_flags);
-        XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
-        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-        blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
         XmRef args[1] = {arg};
-        xm_func_bind_call_args(ctx->xm_func, result, args, 1);
+        emit_helper_call(ctx, blk, XM_HELPER_print, extra, args, 1);
     }
     return xm_const_i64(ctx->xm_func, 0);
 }
@@ -992,13 +1020,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             int so = ctx->proto ? ctx->proto->shared_offset : 0;
             int64_t abs_idx = v->aux_int + so;
             XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_get_shared);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            /* Shared vars are dynamically typed: set XM_TK_TAGGED to
-             * prevent the type pass from narrowing to I64, which would
-             * skip the vreg_runtime_tags[] dynamic tag patch. */
-            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
+            XmRef result = emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
             /* Propagate bc_slot for runtime tag resolution */
             if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
                 int32_t si = ctx->slot_idx[v->id];
@@ -1021,11 +1043,8 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             int so = ctx->proto ? ctx->proto->shared_offset : 0;
             int64_t abs_idx = v->aux_int + so;
             XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_set_shared);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             XmRef call_args[] = {val};
-            xm_func_bind_call_args(ctx->xm_func, result, call_args, 1);
+            emit_helper_call(ctx, blk, XM_HELPER_set_shared, idx, call_args, 1);
             return val;
         }
 
@@ -1039,27 +1058,20 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             int upi = (int) v->aux_int;
             bool needs_cell = ctx->xi_func && upi >= 0 && upi < (int) ctx->xi_func->ncaptures &&
                               ctx->xi_func->captures[upi].needs_cell;
-            void *bridge = needs_cell ? (void *) xr_jit_upval_cell_get : (void *) xr_jit_upval_get;
+            XmHelperId helper = needs_cell ? XM_HELPER_upval_cell_get : XM_HELPER_upval_get;
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, bridge);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
-            return result;
+            return emit_helper_call(ctx, blk, helper, idx, NULL, 0);
         }
         case XI_STORE_UPVAL: {
             XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
             int upi = (int) v->aux_int;
             bool needs_cell = ctx->xi_func && upi >= 0 && upi < (int) ctx->xi_func->ncaptures &&
                               ctx->xi_func->captures[upi].needs_cell;
-            void *bridge = needs_cell ? (void *) xr_jit_upval_cell_set : (void *) xr_jit_upval_set;
+            XmHelperId helper = needs_cell ? XM_HELPER_upval_cell_set : XM_HELPER_upval_set;
             XmRef val = get_ref(ctx, v->args[0]);
             XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, bridge);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             XmRef call_args[] = {val};
-            xm_func_bind_call_args(ctx->xm_func, result, call_args, 1);
+            emit_helper_call(ctx, blk, helper, idx, call_args, 1);
             return val;
         }
 
@@ -1069,14 +1081,13 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return lower_call(ctx, blk, v);
 
         /* Extract i-th result from a multi-return call.  aux_int is the
-         * 1-based result index.  Index 1 trivially aliases the first
-         * return value (the call's primary x0/x1 result).  Indices >= 2
-         * require pulling from coro->jit_ctx->ret_vals[] — codegen does
-         * not emit those reads yet, so bail out and let the VM run
-         * the function. */
+         * zero-based result index.  Index 0 aliases the call's primary
+         * x0/x1 result.  Indices >= 1 require pulling from
+         * coro->jit_ctx->ret_vals[] — codegen does not emit those reads
+         * yet, so bail out and let the VM run the function. */
         case XI_EXTRACT: {
             XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
-            if (v->aux_int > 1) {
+            if (v->aux_int != 0) {
                 ctx->error = true;
                 return xm_const_i64(ctx->xm_func, 0);
             }
@@ -1136,13 +1147,9 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XR_DCHECK(v->nargs >= 2, "index_get: need obj + key");
             XmRef obj = get_ref(ctx, v->args[0]);
             XmRef key = get_ref(ctx, v->args[1]);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_index_get);
             XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
             XmRef args[2] = {obj, key};
-            xm_func_bind_call_args(ctx->xm_func, result, args, 2);
+            XmRef result = emit_helper_call(ctx, blk, XM_HELPER_index_get, extra, args, 2);
             return result;
         }
         case XI_INDEX_SET: {
@@ -1150,12 +1157,9 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XmRef obj = get_ref(ctx, v->args[0]);
             XmRef key = get_ref(ctx, v->args[1]);
             XmRef val = get_ref(ctx, v->args[2]);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_index_set);
             XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, extra);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             XmRef args[3] = {obj, key, val};
-            xm_func_bind_call_args(ctx->xm_func, result, args, 3);
+            emit_helper_call(ctx, blk, XM_HELPER_index_set, extra, args, 3);
             return val;
         }
 
@@ -1187,12 +1191,9 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_THROW: {
             XR_DCHECK(v->nargs >= 1, "throw: need value arg");
             XmRef val = get_ref(ctx, v->args[0]);
-            XmRef fn_ptr = xm_const_ptr(ctx->xm_func, (void *) xr_jit_throw);
             XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ptr, extra);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT | XM_FLAG_MAY_THROW;
             XmRef args[1] = {val};
-            xm_func_bind_call_args(ctx->xm_func, result, args, 1);
+            emit_helper_call(ctx, blk, XM_HELPER_throw, extra, args, 1);
             return xm_const_i64(ctx->xm_func, 0);
         }
 
@@ -1347,11 +1348,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             int so = ctx->proto ? ctx->proto->shared_offset : 0;
             int64_t abs_idx = v->aux_int + so;
             XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            XmRef fn_ref = xm_const_ptr(ctx->xm_func, (void *) xr_jit_get_shared);
-            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, fn_ref, idx);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
-            return result;
+            return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
         }
 
         default:
@@ -1395,34 +1392,6 @@ static void resolve_phi_args(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
             xm_phi_set_arg(xm_phi, i, arg_ref);
         }
     }
-}
-
-/* Cell-wrap helper: if var_id `vid` is cellified, emit cell_get_direct and
- * return the dereferenced value's XmRef.  Returns XM_NONE if not cellified. */
-static XmRef maybe_cell_get(LowerCtx *ctx, XmBlock *blk, uint8_t vid) {
-    if (vid == 0xFF || !ctx->cell_present[vid])
-        return XM_NONE;
-    XmRef cg_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_get_direct);
-    XmRef result =
-        xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, cg_fn, xm_const_i64(ctx->xm_func, 0));
-    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_TAGGED, 0, 0};
-    XmRef args[] = {ctx->cell_ref[vid]};
-    xm_func_bind_call_args(ctx->xm_func, result, args, 1);
-    return result;
-}
-
-/* Cell-wrap helper: if var_id `vid` is cellified, emit cell_set_direct
- * to mirror `val` back into the shared cell.  No-op otherwise. */
-static void maybe_cell_set(LowerCtx *ctx, XmBlock *blk, uint8_t vid, XmRef val) {
-    if (vid == 0xFF || !ctx->cell_present[vid])
-        return;
-    XmRef cs_fn = xm_const_ptr(ctx->xm_func, (void *) xr_jit_cell_set_direct);
-    XmRef result =
-        xm_emit(ctx->xm_func, blk, XM_CALL_C, XR_REP_I64, cs_fn, xm_const_i64(ctx->xm_func, 0));
-    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-    XmRef args[] = {ctx->cell_ref[vid], val};
-    xm_func_bind_call_args(ctx->xm_func, result, args, 2);
 }
 
 /* Lower a single block's instructions */

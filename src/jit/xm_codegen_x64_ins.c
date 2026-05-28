@@ -15,6 +15,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_helper_table.h"
 #include "xm_jit_runtime.h"
 #include "../coro/xcoroutine.h"
 #include <string.h>
@@ -1183,8 +1184,8 @@ static void x64_h_rt_collection(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_xor_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
     x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
 
-    void *fn = (ins->op == XM_RT_ARRAY_NEW) ? (void *) (uintptr_t) xr_jit_rt_array_new
-                                            : (void *) (uintptr_t) xr_jit_rt_map_new;
+    void *fn = (ins->op == XM_RT_ARRAY_NEW) ? xm_helper_func(XM_HELPER_rt_array_new)
+                                            : xm_helper_func(XM_HELPER_rt_map_new);
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) fn);
 
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
@@ -1265,7 +1266,8 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_SCRATCH_REG);
     x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET, X64_SCRATCH_REG);
 
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_rt_array_push);
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
+                   (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_rt_array_push));
 
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p_ap = &ctx->patches[ctx->npatch];
@@ -1421,7 +1423,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
     int64_t helper_extra_arg = 0;
     if (!block_helper) {
-        block_helper = (void *) xr_jit_await_block;
+        block_helper = xm_helper_func(XM_HELPER_await_block);
         helper_extra_arg = discard_result;
     }
 #ifdef _WIN32

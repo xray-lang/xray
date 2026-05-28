@@ -841,18 +841,18 @@ void xm_verify_types(XmFunc *func) {
                 case XM_ALLOC:
                     XR_DCHECK(ins->rep == XR_REP_PTR, "ALLOC dst not PTR");
                     break;
-
-                default:
-                    break;
             }
         }
     }
 
     // Check vtag/rep consistency for all vregs:
-    // Concrete vtag must agree with machine rep. For example,
-    // VTAG_I64 requires rep==I64; VTAG_F64 requires rep==F64.
+    // Concrete F64 vtag must agree with machine rep.
     // This catches stale vtag left by passes that forgot to
     // update vtag when changing rep (or vice versa).
+    // VTAG_I64/PTR/BOOL with mismatched rep can occur when
+    // GUARD_TAG narrows vtag after select_rep chose a different rep.
+    // Codegen and regalloc handle this correctly (GP regs for I64/PTR/BOOL,
+    // FP regs for F64). No assertion needed for these combinations.
     for (uint32_t v = 0; v < func->nvreg; v++) {
         uint8_t vt = type_kind_to_vtag(xm_ref_ctype(func, XM_REF(XM_REF_VREG, v)).kind);
         uint8_t rp = func->vregs[v].rep;
@@ -861,12 +861,6 @@ void xm_verify_types(XmFunc *func) {
                 // F64 vtag must use FP or TAGGED register
                 XR_DCHECK(rp == XR_REP_F64 || rp == XR_REP_TAGGED,
                           "VTAG_F64 but rep is not F64 or TAGGED");
-                break;
-            // Note: VTAG_I64/PTR/BOOL with mismatched rep can occur when
-            // GUARD_TAG narrows vtag after select_rep chose a different rep.
-            // Codegen and regalloc handle this correctly (GP regs for I64/PTR/BOOL,
-            // FP regs for F64). No assertion needed for these combinations.
-            default:
                 break;
         }
     }

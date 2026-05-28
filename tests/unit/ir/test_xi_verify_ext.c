@@ -65,6 +65,14 @@ static bool verify_fail(const XiFunc *f) {
     return err[0] != '\0';
 }
 
+static bool verify_stage_fail(const XiFunc *f, XiStage stage) {
+    char err[256] = {0};
+    bool ok = xi_verify_stage(f, stage, err, sizeof(err));
+    if (ok)
+        return false;
+    return err[0] != '\0';
+}
+
 /* ========== Bounds check contracts ========== */
 
 TEST(bounds_check_valid) {
@@ -321,6 +329,93 @@ TEST(duplicate_value_id_fails) {
     xi_func_free(f);
 }
 
+TEST(phi_arg_count_mismatch_fails) {
+    XiFunc *f = make_func("phi_arg_count");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+    XiBlock *merge = xi_block_new(f);
+    ASSERT(merge != NULL);
+
+    xi_block_set_jump(entry, merge);
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 0);
+    ASSERT(phi != NULL);
+    xi_block_set_return(merge, &phi->value);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(use_not_dominated_by_def_fails) {
+    XiFunc *f = make_func("dom_bad_use");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+    ASSERT(then_blk != NULL);
+    ASSERT(else_blk != NULL);
+
+    XiValue *cond = xi_const_bool(f, entry, true, &stub_bool);
+    xi_block_set_if(entry, cond, then_blk, else_blk);
+    XiValue *then_val = xi_const_int(f, then_blk, 1, &stub_int);
+    xi_block_set_return(then_blk, then_val);
+    XiValue *else_val = xi_const_int(f, else_blk, 2, &stub_int);
+    XiValue *bad_use = xi_value_new(f, else_blk, XI_ADD, &stub_int, 2);
+    bad_use->args[0] = then_val;
+    bad_use->args[1] = else_val;
+    xi_block_set_return(else_blk, bad_use);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(closed_stage_rejects_bad_upval_index) {
+    XiFunc *f = make_func("closed_bad_upval");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *up = xi_value_new(f, entry, XI_LOAD_UPVAL, &stub_int, 0);
+    ASSERT(up != NULL);
+    up->aux_int = 0;
+    xi_block_set_return(entry, up);
+    f->stage = XI_STAGE_CLOSED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_CLOSED);
+
+    ASSERT(verify_stage_fail(f, XI_STAGE_CLOSED));
+    xi_func_free(f);
+}
+
+TEST(repped_stage_rejects_box_i64_rep) {
+    XiFunc *f = make_func("repped_bad_box");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *src = xi_const_int(f, entry, 1, &stub_int);
+    XiValue *box = xi_value_new(f, entry, XI_BOX, &stub_int, 1);
+    ASSERT(box != NULL);
+    box->args[0] = src;
+    box->rep = XR_REP_I64;
+    xi_block_set_return(entry, box);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_REPPED);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
+TEST(stage_invariant_mask_missing_bits_fails) {
+    XiFunc *f = make_func("stage_missing_bits");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_const_int(f, entry, 1, &stub_int);
+    xi_block_set_return(entry, v);
+    f->stage = XI_STAGE_CANONICAL;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+
+    ASSERT(verify_stage_fail(f, XI_STAGE_CANONICAL));
+    xi_func_free(f);
+}
+
 /* ========== Backend legality ========== */
 
 TEST(backend_rejects_unlowered_alloc) {
@@ -358,6 +453,11 @@ int main(void) {
     run_call_method_missing_aux_fails();
     run_call_method_zero_args_fails();
     run_duplicate_value_id_fails();
+    run_phi_arg_count_mismatch_fails();
+    run_use_not_dominated_by_def_fails();
+    run_closed_stage_rejects_bad_upval_index();
+    run_repped_stage_rejects_box_i64_rep();
+    run_stage_invariant_mask_missing_bits_fails();
     run_backend_rejects_unlowered_alloc();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

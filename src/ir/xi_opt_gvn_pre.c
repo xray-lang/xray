@@ -32,14 +32,15 @@
  *      with XI_COPY(phi). Missing edges receive a clone, but only when
  *      the predecessor flows uniquely into the join (no critical edge
  *      splitting) and all operands already dominate it. Memory loads
- *      stay on path 3 — speculating them past potential clobbers needs
- *      Memory SSA, not just TBAA.
+ *      stay on path 3 — speculating them past potential clobbers
+ *      requires Memory SSA version comparison, not just TBAA.
  */
 
 #include "xi_opt_gvn_pre.h"
 #include "xi_analysis.h"
 #include "xi_effect.h"
 #include "xi_tbaa.h"
+#include "xi_memssa.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -47,7 +48,10 @@
 /* ========== Pure / Commutative Classification ========== */
 
 static bool gvn_is_eligible(const XiValue *v) {
-    if (!v || v->nargs == 0)
+    if (!v)
+        return false;
+    /* 0-arg memory loads (shared/global/upval) use aux_int, not args. */
+    if (v->nargs == 0 && !xi_is_memory_load(v->op))
         return false;
     if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))
         return false;
@@ -250,17 +254,24 @@ static uint32_t vn_lookup(VnTable *vn, uint16_t op, uint32_t vn0, uint32_t vn1, 
 /* ========== Store Tracking for Load Elimination ========== */
 
 /* Check if any store between a leader load and the current load may
- * alias.  Conservative: scans instructions in the current block before
- * the current position.  For cross-block loads, falls back to "may alias"
- * unless both are in the same block. */
+ * alias.  When Memory SSA is available, cross-block loads are safe if
+ * they consume the same memory version (no intervening clobber).
+ * Without MemSSA, falls back to same-block-only scanning. */
 static bool has_aliasing_store_between(const XiFunc *f, const XiValue *leader,
                                        const XiValue *current, const XiBlock *cur_blk,
-                                       uint32_t cur_vi) {
+                                       uint32_t cur_vi, const XiMemSSA *mssa) {
     (void) f;
 
-    /* If leader is not in the same block, be conservative. */
-    if (!leader->block || leader->block != cur_blk)
+    /* If leader is not in the same block, try Memory SSA. */
+    if (!leader->block || leader->block != cur_blk) {
+        if (mssa) {
+            XiMemAccess *la = xi_memssa_access(mssa, leader);
+            XiMemAccess *ca = xi_memssa_access(mssa, current);
+            if (la && ca && la->use_ver == ca->use_ver)
+                return false;
+        }
         return true;
+    }
 
     /* Scan from leader's position to current position in the block. */
     bool past_leader = false;
@@ -483,6 +494,11 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
 
     bool tbaa_active = (f->invariant_mask & XI_INV_TBAA_ANNOTATED) != 0;
 
+    /* Build Memory SSA for cross-block load elimination. */
+    XiMemSSA *mssa = NULL;
+    if (tbaa_active)
+        mssa = xi_memssa_build(f);
+
     /* Count total values for table sizing. */
     uint32_t total_values = 0;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -570,11 +586,16 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
             if (gvn_is_load(v->op)) {
                 if (!tbaa_active)
                     continue; /* Cannot prove safety without TBAA. */
-                if (has_aliasing_store_between(f, leader, v, blk, vi))
+                if (has_aliasing_store_between(f, leader, v, blk, vi, mssa))
                     continue;
             }
 
             /* Replace with copy of leader. */
+            if (v->nargs == 0 || !v->args) {
+                v->args = (XiValue **) xi_func_arena_alloc(f, sizeof(XiValue *));
+                if (!v->args)
+                    continue;
+            }
             v->op = XI_COPY;
             v->args[0] = leader;
             v->nargs = 1;
@@ -585,6 +606,7 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
 
     GvnPreStats pre = gvn_eliminate_partial(f, &vn);
     vn_destroy(&vn);
+    xi_memssa_destroy(mssa);
 
     if (n_replaced == 0 && pre.n_replaced == 0 && pre.n_inserted == 0 && pre.n_phis == 0)
         return xi_pass_no_change();

@@ -573,6 +573,69 @@ add_executable(test_riscv64_golden jit/test_riscv64_golden_gen.c ${CMAKE_SOURCE_
 add_test(NAME test_riscv64_golden COMMAND test_riscv64_golden)
 
 # ============================================================================
+# jit/ — generated disasm round-trip tests (cross-platform, pure table lookup)
+# ============================================================================
+# These tests run on every host because the generated decoder is a plain
+# array-of-(mask,value) linear scan with no CPU-specific operations.
+
+add_custom_command(
+    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_disasm_gen.c
+    COMMAND python3 ${XISAGEN} disasm-test
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_disasm_gen.c
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+    COMMENT "xisagen: generating test_arm64_disasm_gen.c"
+)
+add_executable(test_arm64_disasm
+    jit/test_arm64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
+)
+target_include_directories(test_arm64_disasm PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/jit
+)
+add_test(NAME test_arm64_disasm COMMAND test_arm64_disasm)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_disasm_gen.c
+    COMMAND python3 ${XISAGEN} disasm-test
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_disasm_gen.c
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating test_riscv64_disasm_gen.c"
+)
+add_executable(test_riscv64_disasm
+    jit/test_riscv64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
+)
+target_include_directories(test_riscv64_disasm PRIVATE
+    ${CMAKE_SOURCE_DIR}/src/jit
+)
+add_test(NAME test_riscv64_disasm COMMAND test_riscv64_disasm)
+
+add_test(
+    NAME test_xisagen_cli
+    COMMAND python3
+        ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_xisagen_cli.py
+        --xisagen ${XISAGEN}
+)
+
+add_test(
+    NAME test_codegen_dispatch
+    COMMAND python3
+        ${CMAKE_SOURCE_DIR}/scripts/check_codegen_dispatch.py
+        --root ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+add_test(
+    NAME test_codegen_helpers
+    COMMAND python3
+        ${CMAKE_SOURCE_DIR}/scripts/check_codegen_helpers.py
+        --root ${CMAKE_SOURCE_DIR}
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
+
+# ============================================================================
 # Reverse-invariant checks for the Xi IR layer (static grep-based gates).
 # Runs as part of ctest so PRs that introduce raw malloc, phase coordinates
 # in source, or fallback mode flags are blocked locally before CI even runs.

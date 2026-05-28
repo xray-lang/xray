@@ -1515,7 +1515,7 @@ XrJitResult xr_jit_struct_set(XrCoroutine *coro, int64_t extra_arg) {
                     *(uint8_t *) fp = (uint8_t) ival;
                     break;
                 default:
-                    break;
+                    XR_CHECK(false, "xr_jit_struct_set: invalid integer native field type");
             }
             break;
         }
@@ -1546,7 +1546,7 @@ XrJitResult xr_jit_struct_set(XrCoroutine *coro, int64_t extra_arg) {
             break;
         }
         default:
-            break;
+            XR_CHECK(false, "xr_jit_struct_set: unsupported native field type");
     }
     return XR_JIT_OK();
 }
