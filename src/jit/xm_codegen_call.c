@@ -111,6 +111,10 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // args[1] = first extra argument (optional, passed as x1)
         // Stub convention: x16=func_ptr, x17=extra_arg, x0=coro
         case XM_CALL_C: {
+            if (!xm_helper_call_c_protocol_matches_flags(ctx->func, ins)) {
+                ctx->had_error = true;
+                return true;
+            }
             emit_call_args_from_pool(ctx, ins);
             // Write live PTR registers back to spill slots before the call.
             // record_safepoint sets spill_bitmap for any PTR vreg that has a spill
@@ -420,7 +424,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 a64_buf_emit(&ctx->buf, a64_nop());
                 ctx->has_deopt = true;
 
-                int32_t skip_off = (int32_t) ctx->buf.count - (int32_t) bne_idx;
+                int32_t skip_off =
+                    a64_patch_offset(ctx, bne_idx, ctx->buf.count, true, "call_self deopt skip");
                 ctx->buf.code[bne_idx] = a64_b_cond(A64_CC_NE, skip_off);
             }
 
@@ -525,6 +530,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t cbz_entry_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
 
+            emit_active_stack_map_from_call_proto(ctx);
+
             // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
             // pass-through. Uses x17 (SCRATCH_REG2), safe here since x16 holds
             // jit_entry. nargs unknown at compile time, copy all 8 slots.
@@ -587,31 +594,38 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t done_label = ctx->buf.count;
 
             // Patch CBZ null-callee → slow_path
-            int32_t off_null = (int32_t) slow_path - (int32_t) cbz_null_idx;
+            int32_t off_null =
+                a64_patch_offset(ctx, cbz_null_idx, slow_path, true, "call_direct CBZ null");
             ctx->buf.code[cbz_null_idx] = a64_cbz(SCRATCH_REG, off_null);
 
             // Patch CBNZ poison-bits → slow_path
-            int32_t off_poison = (int32_t) slow_path - (int32_t) cbnz_poison_idx;
+            int32_t off_poison =
+                a64_patch_offset(ctx, cbnz_poison_idx, slow_path, true, "call_direct CBNZ poison");
             ctx->buf.code[cbnz_poison_idx] = a64_cbnz(SCRATCH_REG2, off_poison);
 
             // Patch B.NE type_guard → slow_path
-            int32_t off_type = (int32_t) slow_path - (int32_t) bne_type_idx;
+            int32_t off_type =
+                a64_patch_offset(ctx, bne_type_idx, slow_path, true, "call_direct B.NE type");
             ctx->buf.code[bne_type_idx] = a64_b_cond(A64_CC_NE, off_type);
 
             // Patch CBZ proto → slow_path
-            int32_t off1 = (int32_t) slow_path - (int32_t) cbz_proto_idx;
+            int32_t off1 =
+                a64_patch_offset(ctx, cbz_proto_idx, slow_path, true, "call_direct CBZ proto");
             ctx->buf.code[cbz_proto_idx] = a64_cbz(SCRATCH_REG, off1);
 
             // Patch CBZ entry → slow_path
-            int32_t off2 = (int32_t) slow_path - (int32_t) cbz_entry_idx;
+            int32_t off2 =
+                a64_patch_offset(ctx, cbz_entry_idx, slow_path, true, "call_direct CBZ entry");
             ctx->buf.code[cbz_entry_idx] = a64_cbz(SCRATCH_REG, off2);
 
             // Patch B → done
-            int32_t off3 = (int32_t) done_label - (int32_t) b_done_idx;
+            int32_t off3 =
+                a64_patch_offset(ctx, b_done_idx, done_label, false, "call_direct B done");
             ctx->buf.code[b_done_idx] = a64_b(off3);
 
             // Patch B.EQ cascade → cascade_direct (nested deopt redirect)
-            int32_t off_cascade_d = (int32_t) cascade_direct - (int32_t) beq_cascade_direct;
+            int32_t off_cascade_d = a64_patch_offset(ctx, beq_cascade_direct, cascade_direct, true,
+                                                     "call_direct B.EQ cascade");
             ctx->buf.code[beq_cascade_direct] = a64_b_cond(A64_CC_EQ, off_cascade_d);
 
             // Pop frame stack + restore caller's stack map in jit_ctx
@@ -713,6 +727,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t cbz_entry_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
 
+            emit_active_stack_map_from_call_proto(ctx);
+
             // Set call_closure from call_args[0] so callee can access upvalues.
             // Without this, xr_jit_upval_get reads stale call_closure.
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
@@ -762,13 +778,16 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- done label ---
             uint32_t done_label = ctx->buf.count;
 
-            int32_t off_cbz = (int32_t) slow_path - (int32_t) cbz_entry_idx;
+            int32_t off_cbz =
+                a64_patch_offset(ctx, cbz_entry_idx, slow_path, true, "call_known CBZ entry");
             ctx->buf.code[cbz_entry_idx] = a64_cbz(SCRATCH_REG, off_cbz);
-            int32_t off_b = (int32_t) done_label - (int32_t) b_done_idx;
+            int32_t off_b =
+                a64_patch_offset(ctx, b_done_idx, done_label, false, "call_known B done");
             ctx->buf.code[b_done_idx] = a64_b(off_b);
 
             // Patch B.EQ cascade → cascade_known (nested deopt redirect)
-            int32_t off_cascade_k = (int32_t) cascade_known - (int32_t) beq_cascade_known;
+            int32_t off_cascade_k = a64_patch_offset(ctx, beq_cascade_known, cascade_known, true,
+                                                     "call_known B.EQ cascade");
             ctx->buf.code[beq_cascade_known] = a64_b_cond(A64_CC_EQ, off_cascade_k);
 
             // Pop frame stack + restore caller's stack map in jit_ctx
@@ -890,6 +909,8 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t cbz_fast_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());
 
+            emit_active_stack_map_from_call_proto(ctx);
+
             // Set call_closure from call_args[0] so callee can access upvalues.
             // Without this, xr_jit_upval_get reads stale call_closure → SIGBUS.
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
@@ -949,13 +970,16 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- done label ---
             uint32_t done_fast_label = ctx->buf.count;
 
-            int32_t off_cbz_f = (int32_t) slow_path_fast - (int32_t) cbz_fast_idx;
+            int32_t off_cbz_f = a64_patch_offset(ctx, cbz_fast_idx, slow_path_fast, true,
+                                                 "call_known_reg CBZ fast");
             ctx->buf.code[cbz_fast_idx] = a64_cbz(SCRATCH_REG, off_cbz_f);
-            int32_t off_b_f = (int32_t) done_fast_label - (int32_t) b_done_fast_idx;
+            int32_t off_b_f = a64_patch_offset(ctx, b_done_fast_idx, done_fast_label, false,
+                                               "call_known_reg B done");
             ctx->buf.code[b_done_fast_idx] = a64_b(off_b_f);
 
             // Patch B.EQ cascade → cascade_fast (nested deopt redirect)
-            int32_t off_cascade_f = (int32_t) cascade_fast - (int32_t) beq_cascade_fast;
+            int32_t off_cascade_f = a64_patch_offset(ctx, beq_cascade_fast, cascade_fast, true,
+                                                     "call_known_reg B.EQ cascade");
             ctx->buf.code[beq_cascade_fast] = a64_b_cond(A64_CC_EQ, off_cascade_f);
 
             // Pop frame stack + restore caller's stack map in jit_ctx

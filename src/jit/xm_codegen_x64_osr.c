@@ -307,7 +307,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     /* === Save suspend_id to stack (before we clobber RCX with reg restore) === */
     x64_mov_rm32(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET);
     x64_push_r(&ctx->buf, X64_RCX);
-    CODEGEN_CHECK(ctx, ctx->nsuspend <= 16, "too many suspend points");
+    CODEGEN_CHECK(ctx, ctx->nsuspend <= XM_MAX_SUSPEND_ENTRIES, "too many suspend points");
 
     /* === Load suspend_state pointer into R11 === */
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
@@ -328,7 +328,8 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     /* === Reload ALL allocatable registers === */
     /* Caller-saved regs from caller_saved[] */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
-        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG, i * 8);
+        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG,
+                   (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8);
 
     /* Callee-saved allocatable regs from callee_saved[] */
     for (int i = 0; i < X64_NGPR_CALLEE_SAVE_ALLOC; i++)
@@ -343,7 +344,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     x64_pop_r(&ctx->buf, X64_SCRATCH_REG);
 
     /* === Per-suspend-id dispatch: CMP + JE chain === */
-    uint32_t trampoline_patches[16];
+    uint32_t trampoline_patches[XM_MAX_SUSPEND_ENTRIES];
     for (uint32_t i = 0; i < ctx->nsuspend; i++) {
         /* CMP R11d, i */
         x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) i);

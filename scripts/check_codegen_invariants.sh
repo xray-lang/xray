@@ -207,6 +207,11 @@ if ! python3 tools/xisagen/xisagen.py helpers xisa/xm/helpers.def \
     red "FAIL: xisagen helpers failed."
     EXIT=1
 fi
+if ! python3 tools/xisagen/xisagen.py runtime-stubs xisa/xm/runtime_stubs.def \
+        "${TMPDIR_PATH}/src/jit/xm_runtime_stubs_gen.h" >/dev/null 2>&1; then
+    red "FAIL: xisagen runtime-stubs failed."
+    EXIT=1
+fi
 if ! python3 tools/xisagen/xisagen.py x64impl xisa/arch/x64.isa \
         "${TMPDIR_PATH}/src/jit" >/dev/null 2>&1; then
     red "FAIL: xisagen x64 implementation failed."
@@ -242,6 +247,19 @@ if ! python3 tools/xisagen/xisagen.py dispatch-coverage xisa/xm/isel.def \
     red "FAIL: xisagen dispatch-coverage failed."
     EXIT=1
 fi
+if ! python3 tools/xisagen/xisagen.py dispatch-meta xisa/xm/isel.def xisa/xm/ops.def \
+        "${TMPDIR_PATH}/src/jit/xm_dispatch_meta_gen.h" >/dev/null 2>&1; then
+    red "FAIL: xisagen dispatch-meta failed."
+    EXIT=1
+fi
+if ! python3 tools/xisagen/xisagen.py patch-ranges \
+        "${TMPDIR_PATH}/src/jit/xm_patch_ranges_gen.h" \
+        x64=xisa/arch/x64.isa \
+        arm64=xisa/arch/arm64.isa \
+        riscv64=xisa/arch/riscv64.isa >/dev/null 2>&1; then
+    red "FAIL: xisagen patch-ranges failed."
+    EXIT=1
+fi
 if ! python3 tools/xisagen/xisagen.py disasm xisa/arch/arm64.isa \
         "${TMPDIR_PATH}/src/jit" >/dev/null 2>&1; then
     red "FAIL: xisagen arm64 disasm failed."
@@ -267,6 +285,7 @@ freshness_fail=0
 for rel in \
     src/jit/xm_ops_gen.h \
     src/jit/xm_helpers_gen.h \
+    src/jit/xm_runtime_stubs_gen.h \
     src/jit/xm_x64_gen.c \
     src/jit/xm_arm64_gen.c \
     src/jit/xm_riscv64_gen.c \
@@ -275,6 +294,8 @@ for rel in \
     src/jit/xm_riscv64_disasm_gen.c \
     src/jit/xm_riscv64_disasm_gen.h \
     src/jit/xm_dispatch_coverage_gen.h \
+    src/jit/xm_dispatch_meta_gen.h \
+    src/jit/xm_patch_ranges_gen.h \
     tests/unit/jit/test_x64_golden_gen.c \
     tests/unit/jit/test_arm64_golden_gen.c \
     tests/unit/jit/test_riscv64_golden_gen.c \
@@ -397,7 +418,7 @@ fi
 section "7. helper address closure"
 
 if python3 scripts/check_codegen_helpers.py >/tmp/xray_helpers_check.log 2>&1; then
-    green "OK: every direct xr_jit_* reference is registered or classified."
+    green "OK: every direct xr_jit_* reference is registered or declared as a runtime stub."
     sed -n 's/^check_codegen_helpers:   /  /p' /tmp/xray_helpers_check.log || true
 else
     red "FAIL: unclassified xr_jit_* direct address in src/jit/*.c:"

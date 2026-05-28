@@ -12,6 +12,8 @@
 
 #include "xm_codegen_internal.h"
 #include "xm_helper_table.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 
@@ -107,8 +109,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf, a64_scvtf(fa, ga));
                     // .skip_scvtf:
                     uint32_t skip_target = ctx->buf.count;
-                    int32_t branch_off = (int32_t) (skip_target - patch_idx);
-                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5);  // b.eq
+                    int32_t branch_off =
+                        a64_patch_offset(ctx, patch_idx, skip_target, true, "rt_op tag.eq A");
+                    ctx->buf.code[patch_idx] = a64_b_cond(A64_CC_EQ, branch_off);
                 } else {
                     A64Reg ga = xra_arg(ctx, ins->args[0], SCRATCH_REG);
                     fa = 30;  // scratch FP d30
@@ -131,8 +134,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf, a64_nop());
                     a64_buf_emit(&ctx->buf, a64_scvtf(fb, gb));
                     uint32_t skip_target = ctx->buf.count;
-                    int32_t branch_off = (int32_t) (skip_target - patch_idx);
-                    ctx->buf.code[patch_idx] = 0x54000000 | ((branch_off & 0x7FFFF) << 5);  // b.eq
+                    int32_t branch_off =
+                        a64_patch_offset(ctx, patch_idx, skip_target, true, "rt_op tag.eq B");
+                    ctx->buf.code[patch_idx] = a64_b_cond(A64_CC_EQ, branch_off);
                 } else {
                     A64Reg gb = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
                     fb = 31;  // scratch FP d31
@@ -806,14 +810,19 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t slow_path_idx = ctx->buf.count;
 
             // Patch CBZ and B.HI to point here
-            int32_t cbz_off = (int32_t) slow_path_idx - (int32_t) cbz_idx;
+            int32_t cbz_off = a64_patch_offset(ctx, cbz_idx, slow_path_idx, true, "alloc CBZ");
             ctx->buf.code[cbz_idx] = a64_cbz(SCRATCH_REG, cbz_off);
-            int32_t bhi_off = (int32_t) slow_path_idx - (int32_t) bhi_idx;
+            int32_t bhi_off = a64_patch_offset(ctx, bhi_idx, slow_path_idx, true, "alloc B.HI");
             ctx->buf.code[bhi_idx] = a64_b_cond(A64_CC_HI, bhi_off);
 
             // Load func ptr and packed arg
-            uint64_t fn_ptr = (uint64_t) (uintptr_t) &xr_jit_alloc;
-            a64_load_imm64(&ctx->buf, SCRATCH_REG, fn_ptr);
+            uintptr_t alloc_entry =
+                xm_runtime_stub_entry(XM_RUNTIME_STUB_alloc, XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+            if (alloc_entry == 0) {
+                ctx->had_error = true;
+                return true;
+            }
+            a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) alloc_entry);
             uint64_t packed = ((uint64_t) gc_type << 32) | (uint64_t) alloc_size;
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, packed);
             // BL call_c_stub
@@ -839,7 +848,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // Patch B to alloc_done
             uint32_t done_idx = ctx->buf.count;
-            int32_t b_done_off = (int32_t) done_idx - (int32_t) b_done_idx;
+            int32_t b_done_off = a64_patch_offset(ctx, b_done_idx, done_idx, false, "alloc done");
             ctx->buf.code[b_done_idx] = a64_b(b_done_off);
 
             break;
@@ -1144,22 +1153,38 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // 2. Load suspend_state pointer: x16 = coro->jit_suspend
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+            if (suspend_id >= XM_MAX_SUSPEND_ENTRIES) {
+                ctx->had_error = true;
+                break;
+            }
 
             // 3. Save x1-x15 to suspend_regs[0..14]
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X1, A64_X2, SCRATCH_REG, 0));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X3, A64_X4, SCRATCH_REG, 16));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X5, A64_X6, SCRATCH_REG, 32));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X7, A64_X8, SCRATCH_REG, 48));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X9, A64_X10, SCRATCH_REG, 64));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X11, A64_X12, SCRATCH_REG, 80));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X13, A64_X14, SCRATCH_REG, 96));
-            a64_buf_emit(&ctx->buf, a64_str(A64_X15, SCRATCH_REG, 112));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X1, A64_X2, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X3, A64_X4, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 16));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X5, A64_X6, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 32));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X7, A64_X8, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 48));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X9, A64_X10, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 64));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X11, A64_X12, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 80));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X13, A64_X14, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 96));
+            a64_buf_emit(&ctx->buf,
+                         a64_str(A64_X15, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 112));
 
             // 4. Save x20-x27 to suspend_regs[15..22]
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X20, A64_X21, SCRATCH_REG, 120));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X22, A64_X23, SCRATCH_REG, 136));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X24, A64_X25, SCRATCH_REG, 152));
-            a64_buf_emit(&ctx->buf, a64_stp(A64_X26, A64_X27, SCRATCH_REG, 168));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X20, A64_X21, SCRATCH_REG, XM_SUSPEND_CALLEE_SAVED_OFF));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X22, A64_X23, SCRATCH_REG, XM_SUSPEND_CALLEE_SAVED_OFF + 16));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X24, A64_X25, SCRATCH_REG, XM_SUSPEND_CALLEE_SAVED_OFF + 32));
+            a64_buf_emit(&ctx->buf,
+                         a64_stp(A64_X26, A64_X27, SCRATCH_REG, XM_SUSPEND_CALLEE_SAVED_OFF + 48));
 
             // 4b. Save spill slots to suspend_state.spill[0..nspill-1].
             // The resume entry creates a NEW stack frame whose spill area
@@ -1194,7 +1219,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // already be valid at that point.
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_CALL_PROTO_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XM_CORO_RESUME_PROTO_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG, 376));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_PROTO_JIT_RESUME_ENTRY_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XM_CORO_RESUME_ENTRY_OFFSET));
 
             // 7. Call block helper(coro, extra_arg)
@@ -1237,7 +1263,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // === Not-blocked path (inline resume): reload regs + load result ===
             {
                 uint32_t here = ctx->buf.count;
-                int32_t off = (int32_t) here - (int32_t) cbnz_not_blocked;
+                int32_t off = a64_patch_offset(ctx, cbnz_not_blocked, here, true, "suspend CBNZ");
                 ctx->buf.code[cbnz_not_blocked] = a64_cbnz(A64_X0, off);
             }
 
@@ -1245,14 +1271,22 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
 
             // Reload x1-x15 from suspend_regs (x20-x27 survived as callee-saved)
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG, 0));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X3, A64_X4, SCRATCH_REG, 16));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X5, A64_X6, SCRATCH_REG, 32));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X7, A64_X8, SCRATCH_REG, 48));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X9, A64_X10, SCRATCH_REG, 64));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X11, A64_X12, SCRATCH_REG, 80));
-            a64_buf_emit(&ctx->buf, a64_ldp(A64_X13, A64_X14, SCRATCH_REG, 96));
-            a64_buf_emit(&ctx->buf, a64_ldr(A64_X15, SCRATCH_REG, 112));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X1, A64_X2, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X3, A64_X4, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 16));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X5, A64_X6, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 32));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X7, A64_X8, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 48));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X9, A64_X10, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 64));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X11, A64_X12, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 80));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldp(A64_X13, A64_X14, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 96));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(A64_X15, SCRATCH_REG, XM_SUSPEND_CALLER_SAVED_OFF + 112));
 
             // Load await/channel result from suspend_state.result into dst register
             if (rd != A64_XZR) {
@@ -1280,14 +1314,14 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                     a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, res_vreg_off));
                 }
                 // Record for resume entry trampoline
-                if (suspend_id < 16) {
+                if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
                     ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
                     ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
                 }
             }
 
             // Record continuation point for resume entry jump table
-            if (suspend_id < 16) {
+            if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
                 ctx->suspend_cont_offsets[suspend_id] = ctx->buf.count;
                 ctx->suspend_smap_ids[suspend_id] = smap_id;
                 ctx->suspend_result_regs[suspend_id] = (uint8_t) rd;

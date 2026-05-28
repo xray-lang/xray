@@ -1,0 +1,23 @@
+# xisa/xm/runtime_stubs.def — non-CALL_C JIT runtime stub ABI contracts
+#
+# Runtime stubs are JIT-emitted calls that cannot use the generic helper table
+# because their entry ABI is tied to inline allocation or fixed-register write
+# barrier stubs. They are still part of the codegen truth source and must be
+# declared here instead of being whitelisted in scripts.
+#
+# FORMAT:
+#   XM_RUNTIME_STUB(NAME, C_SYMBOL, ABI, NARGS, RET_REP, FLAGS, PTR_TRUST, POST_CALL)
+#
+# FIELDS:
+#   NAME       Stable short name used by generated metadata
+#   C_SYMBOL   Runtime C symbol whose address is materialized by codegen
+#   ABI        CALL_C_EXTRA_ARG | BARRIER_FWD_FIXED | BARRIER_BACK_FIXED
+#   NARGS      Logical runtime arguments, including the coroutine argument
+#   RET_REP    XrRep suffix: PTR | VOID | I64 | F64 | TAGGED
+#   FLAGS      XM_HF_* suffixes without prefix, separated by |, or NONE
+#   PTR_TRUST  XM_HPT_* suffix: NONE | GC | EXTERNAL
+#   POST_CALL  XM_HPC_* suffixes without prefix, separated by |, or NONE
+
+XM_RUNTIME_STUB(alloc,        xr_jit_alloc,        CALL_C_EXTRA_ARG,   2, PTR,  GC|STACKMAP, GC,   NONE)
+XM_RUNTIME_STUB(barrier_fwd,  xr_jit_barrier_fwd,  BARRIER_FWD_FIXED,  3, VOID, GC|STACKMAP, NONE, NONE)
+XM_RUNTIME_STUB(barrier_back, xr_jit_barrier_back, BARRIER_BACK_FIXED, 2, VOID, GC|STACKMAP, NONE, NONE)

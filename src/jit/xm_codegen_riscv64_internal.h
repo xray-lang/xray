@@ -54,27 +54,51 @@
 #define RV64_NGPR_CALLER_SAVE 12      /* a0-a7 + t0-t3 */
 #define RV64_NGPR_CALLEE_SAVE_ALLOC 8 /* s1 + s2-s8 */
 #define RV64_NFPR_CALLER_SAVE 12      /* fa0-fa7 + ft0-ft3 */
+#define RV64_NFPR_CALLEE_SAVE_ALLOC 8 /* fs0-fs7 */
+#define RV64_MAX_PHYS_REGS (RV64_NGPR_CALLER_SAVE + RV64_NGPR_CALLEE_SAVE_ALLOC)
+#define RV64_MAX_FP_REGS (RV64_NFPR_CALLER_SAVE + RV64_NFPR_CALLEE_SAVE_ALLOC)
 
 /* Frame layout (RISC-V 64):
  *
  *   [higher addresses]
  *     caller's frame
- *     return address           (saved by prologue: sd ra, [sp+X])
- *     saved s0/fp              (saved by prologue: sd s0, [sp+X])
+ *     [stack_map_ptr]          [fp - 8]
+ *     [safepoint_id]           [fp - 16]
  *     --- callee-saved regs ---
- *     [stack_map_ptr]          8 bytes
- *     [safepoint_id]           8 bytes
- *     --- spill slots ---      ← sp after prologue
+ *     --- spill slots ---      [fp - RV64_SPILL_BASE - slot * 8]
+ *   [lower addresses]
  *
- * Callee-saved: ra + s0 + s1-s9 = 11 * 8 = 88B
- * FP callee-saved: fs0-fs7 = 8 * 8 = 64B
  * Stack map metadata: 16B
- * Total frame_base = 88 + 64 + 16 = 168B (rounded to 16-byte alignment = 176B)
+ * GPR callee-saved: ra + fp + s1-s9 + s10 + s11 = 13 * 8 = 104B
+ * FPR callee-saved: fs0-fs7 = 8 * 8 = 64B
+ * Total frame_base = 16 + 104 + 64 = 184B (rounded to 16-byte alignment = 192B)
  */
-#define RV64_FRAME_SMAP_PTR_OFFSET 8 /* [fp - 8]:  XrStackMapTable* */
-#define RV64_FRAME_SMAP_ID_OFFSET 16 /* [fp - 16]: safepoint_id */
-#define RV64_SPILL_BASE 176
-#define RV64_JIT_FRAME_BASE 176
+#define RV64_FRAME_SMAP_PTR_OFFSET 8       /* [fp - 8]:  XrStackMapTable* */
+#define RV64_FRAME_SMAP_ID_OFFSET 16       /* [fp - 16]: safepoint_id */
+#define RV64_FRAME_CALLEE_SAVE_GP_SLOTS 13 /* ra + fp + s1-s9 + s10 + s11 */
+#define RV64_FRAME_CALLEE_SAVE_FP_SLOTS 8  /* fs0-fs7 */
+#define RV64_FRAME_CALLEE_SAVE_SLOTS                                                               \
+    (RV64_FRAME_CALLEE_SAVE_GP_SLOTS + RV64_FRAME_CALLEE_SAVE_FP_SLOTS)
+#define RV64_SPILL_BASE 192
+#define RV64_JIT_FRAME_BASE 192
+#define RV64_CALLEE_SAVE_BASE_OFFSET 24 /* first callee-save slot is [fp - 24] */
+
+_Static_assert(RV64_FRAME_SMAP_ID_OFFSET + 8 <= RV64_CALLEE_SAVE_BASE_OFFSET,
+               "rv64 frame metadata overlaps callee-save area");
+_Static_assert(RV64_CALLEE_SAVE_BASE_OFFSET + RV64_FRAME_CALLEE_SAVE_SLOTS * 8 <= RV64_SPILL_BASE,
+               "rv64 callee-save area overlaps spill area");
+_Static_assert(RV64_JIT_FRAME_BASE == RV64_SPILL_BASE, "rv64 frame base and spill base must match");
+
+_Static_assert(RV64_NGPR_CALLER_SAVE <= (int) (sizeof(((XrJitSuspendState *) 0)->caller_saved) /
+                                               sizeof(((XrJitSuspendState *) 0)->caller_saved[0])),
+               "rv64 caller-saved suspend capacity mismatch");
+_Static_assert(RV64_NGPR_CALLEE_SAVE_ALLOC <=
+                   (int) (sizeof(((XrJitSuspendState *) 0)->callee_saved) /
+                          sizeof(((XrJitSuspendState *) 0)->callee_saved[0])),
+               "rv64 callee-saved suspend capacity mismatch");
+
+XR_DATA const Rv64Reg rv64_alloc_regs[RV64_MAX_PHYS_REGS];
+XR_DATA const Rv64Freg rv64_alloc_fp_regs[RV64_MAX_FP_REGS];
 
 /* Extra-arg scratch: reuse the call_args[15] slot to pass extra_arg to
  * call_c_stub. Safe because call_args are written before the call and
@@ -101,7 +125,24 @@ typedef struct {
     Rv64Cond cc; /* condition code (for branch patches) */
     uint8_t rs1; /* first source register (for branch) */
     uint8_t rs2; /* second source register (for branch) */
+    XmPatchRecord record;
 } Rv64BranchPatch;
+
+static inline XmPatchRecord rv64_patch_record_for(Rv64PatchType type, uint32_t offset) {
+    switch (type) {
+        case RV64_PATCH_JAL:
+        case RV64_PATCH_DEOPT_JAL:
+        case RV64_PATCH_CALL_C:
+        case RV64_PATCH_CALL_SELF:
+        case RV64_PATCH_BARRIER_FWD:
+        case RV64_PATCH_BARRIER_BACK:
+            return xm_patch_record_make(XM_PATCH_MCINSN_RV64_JAL, offset, 21, true);
+        case RV64_PATCH_BRANCH:
+        case RV64_PATCH_DEOPT_BRANCH:
+            return xm_patch_record_make(XM_PATCH_MCINSN_RV64_BRANCH, offset, 13, true);
+    }
+    return xm_patch_record_make(XM_PATCH_MCINSN_NONE, offset, 0, false);
+}
 
 #define RV64_INIT_PATCHES 256
 
@@ -156,11 +197,11 @@ typedef struct {
     bool has_barriers;
 
     /* Suspend/resume tracking */
-    uint32_t suspend_cont_offsets[16];
-    uint32_t suspend_smap_ids[16];
-    uint8_t suspend_result_regs[16];
-    int16_t suspend_result_bc_slots[16];
-    int32_t suspend_result_tag_offs[16];
+    uint32_t suspend_cont_offsets[XM_MAX_SUSPEND_ENTRIES];
+    uint32_t suspend_smap_ids[XM_MAX_SUSPEND_ENTRIES];
+    uint8_t suspend_result_regs[XM_MAX_SUSPEND_ENTRIES];
+    int16_t suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];
+    int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];
     uint32_t nsuspend;
     uint32_t resume_entry_offset;
 } Rv64CodegenCtx;

@@ -23,16 +23,14 @@
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 
-extern const Rv64Reg rv64_alloc_regs[];
-extern const Rv64Freg rv64_alloc_fp_regs[];
-#define RV64_NUM_ALLOC_GP 21
-
 XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     RV64_CODEGEN_CHECK(ctx, ctx != NULL, "rv64_emit_call_ins: NULL ctx");
     RV64_CODEGEN_CHECK(ctx, ins != NULL, "rv64_emit_call_ins: NULL ins");
 
     switch (ins->op) {
         case XM_CALL_C: {
+            RV64_CODEGEN_CHECK(ctx, xm_helper_call_c_protocol_matches_flags(ctx->func, ins),
+                               "CALL_C post-call protocol flags mismatch");
             rv64_emit_call_args_from_pool(ctx, ins);
             rv64_emit_ptr_spill_writeback(ctx);
 
@@ -148,7 +146,7 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             int nsave = RV64_NGPR_CALLER_SAVE;
             int32_t leaf_frame = ((nsave * 8 + 15) & ~15);
             rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -leaf_frame));
-            for (int i = 0; i < nsave && i < RV64_NUM_ALLOC_GP; i++)
+            for (int i = 0; i < nsave && i < RV64_MAX_PHYS_REGS; i++)
                 rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SP, i * 8));
 
             /* Set up LP64D ABI: a0=coro, a1=extra_arg */
@@ -168,7 +166,7 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_A0));
 
             /* Restore caller-saved GP regs */
-            for (int i = 0; i < nsave && i < RV64_NUM_ALLOC_GP; i++)
+            for (int i = 0; i < nsave && i < RV64_MAX_PHYS_REGS; i++)
                 rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SP, i * 8));
             rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, leaf_frame));
 

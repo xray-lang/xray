@@ -34,6 +34,7 @@
 #include "xm_codegen_x64_internal.h"
 #include "xm_coalesce.h"
 #include "xm_code_alloc.h"
+#include "xm_metadata_verify.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 #include "../coro/xcoroutine.h" /* XM_SUSPEND_SPILL_MAX */
@@ -242,6 +243,7 @@ void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type, uint32_t target_blk, X
     p->target_blk = target_blk;
     p->type = type;
     p->cc = cc;
+    p->record = x64_patch_record_for(type, p->emit_pos);
 }
 
 /* ========== Gap Moves ========== */
@@ -604,10 +606,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
          * remains its initialiser).  ARM64 codegen emits the equivalent
          * sequence; this is the missing x64 mirror. */
         {
-            uint16_t op = blk->ins[i].op;
-            if (op == XM_CALL_C || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT ||
-                op == XM_CALL_KNOWN_REG || op == XM_CALL_KNOWN || op == XM_CALL ||
-                op == XM_CALL_C_LEAF) {
+            if (xm_ins_is_call_site(&blk->ins[i])) {
                 if (blk->exception_handler) {
                     /* In try block: load jit_ctx->exception, branch to
                      * catch handler if non-zero. */
@@ -1000,9 +999,18 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
         goto cleanup;
     }
 
-    result.code = code_mem;
     result.code_size = code_size;
     result.fast_entry_offset = ctx.fast_entry_offset;
+    result.nsuspend = ctx.nsuspend;
+    for (uint32_t i = 0; i < result.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        result.suspend_entries[i].cont_offset = ctx.suspend_cont_offsets[i];
+        result.suspend_entries[i].smap_id = ctx.suspend_smap_ids[i];
+        result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
+        result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
+    }
+    if (!xm_verify_metadata_or_fail(&result, 1, "cg-x64"))
+        goto cleanup;
+    result.code = code_mem;
     result.success = true;
 
 cleanup:

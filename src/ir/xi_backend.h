@@ -102,6 +102,7 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         /* Call family (the universal lowering target) */
         case XI_CALL:
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
         case XI_CALL_BUILTIN:
         case XI_EXTRACT:
 

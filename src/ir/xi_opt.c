@@ -22,6 +22,7 @@
 #include "xi_opt_sccp.h"
 #include "xi_opt_bce.h"
 #include "xi_opt_block_simplify.h"
+#include "xi_opt_devirt.h"
 #include "xi_opt_jump_thread.h"
 #include "xi_opt_strength.h"
 #include "xi_opt_tail_call.h"
@@ -984,6 +985,7 @@ static const XiPassDesc xi_pass_table[] = {
     {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
      0},
     {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"devirt", xi_opt_devirt, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"sccp", xi_opt_sccp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"range", xi_range_analyze, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
      XI_INV_RANGE_ANNOTATED},

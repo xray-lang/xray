@@ -30,6 +30,7 @@
 
 #include "xm_codegen_internal.h"
 #include "xm_coalesce.h"
+#include "xm_metadata_verify.h"
 #include "xm_peephole.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -59,6 +60,34 @@ void add_cs_patch(CodegenCtx *ctx, uint8_t pair) {
     ctx->ncs_patches++;
 }
 
+static XmPatchRecord a64_patch_record_for(PatchType type, uint32_t offset) {
+    switch (type) {
+        case PATCH_B:
+        case PATCH_DEOPT:
+            return xm_patch_record_make(XM_PATCH_MCINSN_ARM64_B, offset, 26, true);
+        case PATCH_BARRIER_FWD:
+        case PATCH_BARRIER_BACK:
+        case PATCH_CALL_C:
+        case PATCH_CALL_SELF:
+        case PATCH_CALL_SELF_FAST:
+            return xm_patch_record_make(XM_PATCH_MCINSN_ARM64_BL, offset, 26, true);
+        case PATCH_CBNZ:
+        case PATCH_DEOPT_CBNZ:
+            return xm_patch_record_make(XM_PATCH_MCINSN_ARM64_CBNZ, offset, 19, true);
+        case PATCH_CBZ:
+        case PATCH_DEOPT_CBZ:
+            return xm_patch_record_make(XM_PATCH_MCINSN_ARM64_CBZ, offset, 19, true);
+        case PATCH_B_COND:
+        case PATCH_DEOPT_NE:
+        case PATCH_DEOPT_EQ:
+        case PATCH_DEOPT_CS:
+            return xm_patch_record_make(XM_PATCH_MCINSN_ARM64_B_COND, offset, 19, true);
+        case PATCH_SAFEPOINT:
+            return xm_patch_record_make(XM_PATCH_MCINSN_NONE, offset, 0, false);
+    }
+    return xm_patch_record_make(XM_PATCH_MCINSN_NONE, offset, 0, false);
+}
+
 void add_patch(CodegenCtx *ctx, PatchType type, uint32_t target_blk, A64Reg reg) {
     if (ctx->npatch >= ctx->patches_cap) {
         uint32_t new_cap = ctx->patches_cap * 2;
@@ -71,6 +100,7 @@ void add_patch(CodegenCtx *ctx, PatchType type, uint32_t target_blk, A64Reg reg)
     p->target_blk = target_blk;
     p->type = type;
     p->reg = reg;
+    p->record = a64_patch_record_for(type, p->emit_idx);
 }
 
 /* ========== Rematerialization ========== */
@@ -444,6 +474,13 @@ void emit_jit_frame_pop(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_sub_imm(SCRATCH_REG, SCRATCH_REG, 1));
     // STR W16, [X28, #depth_offset]
     a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, JIT_CTX_REG, XM_JIT_FRAME_DEPTH_OFFSET));
+}
+
+XR_FUNC void emit_active_stack_map_from_call_proto(CodegenCtx *ctx) {
+    XR_DCHECK(ctx != NULL, "emit_active_stack_map_from_call_proto: NULL ctx");
+    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_PROTO_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG2, XM_PROTO_STACK_MAP_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));
 }
 
 // Build heap-allocated XrStackMapTable from collected entries.
@@ -1179,9 +1216,7 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
 
         // Exception check after call-sites
         {
-            uint16_t op = blk->ins[i].op;
-            if (op == XM_CALL_C || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT ||
-                op == XM_CALL_KNOWN_REG) {
+            if (xm_ins_is_call_site(&blk->ins[i])) {
                 if (blk->exception_handler) {
                     // In try block: branch to catch handler
                     a64_buf_emit(&ctx->buf,
@@ -1252,7 +1287,8 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
 
                     // False path label (B.cc lands here)
                     uint32_t false_pos = ctx->buf.count;
-                    int32_t bcond_offset = (int32_t) false_pos - (int32_t) bcond_pos;
+                    int32_t bcond_offset =
+                        a64_patch_offset(ctx, bcond_pos, false_pos, true, "fused B.cond");
                     ctx->buf.code[bcond_pos] = a64_b_cond(ctx->fused_false_cc, bcond_offset);
 
                     // False path: edge copies for s2, then B s2 (or fallthrough)
@@ -1279,7 +1315,7 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
 
                 // False path label (CBZ lands here)
                 uint32_t false_pos = ctx->buf.count;
-                int32_t cbz_offset = (int32_t) false_pos - (int32_t) cbz_pos;
+                int32_t cbz_offset = a64_patch_offset(ctx, cbz_pos, false_pos, true, "branch CBZ");
                 ctx->buf.code[cbz_pos] = a64_cbz(cond_reg, cbz_offset);
 
                 // False path: edge copies for s2, then B s2 (or fallthrough)
@@ -1512,7 +1548,7 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
 
     // Patch the skip branch: B over fast prologue to body start
     {
-        int32_t off = (int32_t) ctx.buf.count - (int32_t) skip_fast_idx;
+        int32_t off = a64_patch_offset(&ctx, skip_fast_idx, ctx.buf.count, false, "skip_fast B");
         ctx.buf.code[skip_fast_idx] = a64_b(off);
     }
 
@@ -1603,11 +1639,28 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
         return result;
     }
 
-    result.code = code_mem;
     result.code_size = code_size;
     // Convert instruction index to byte offset (ARM64: 4 bytes/insn)
     result.fast_entry_offset = ctx.fast_entry_offset * 4;
     result.stack_map = build_stack_map_table(&ctx, frame_size);
+    result.nsuspend = ctx.nsuspend;
+    for (uint32_t i = 0; i < result.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        result.suspend_entries[i].cont_offset = ctx.suspend_cont_offsets[i] * 4;
+        result.suspend_entries[i].smap_id = ctx.suspend_smap_ids[i];
+        result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
+        result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
+    }
+    if (!xm_verify_metadata_or_fail(&result, 4, "cg-arm64")) {
+        xr_free(result.stack_map);
+        result.stack_map = NULL;
+        xr_free(ctx.block_offsets);
+        xr_free(ctx.patches);
+        xr_free(ctx.cs_patches);
+        xr_free(ctx.vreg_override);
+        xra_result_free(ctx.xra);
+        return result;
+    }
+    result.code = code_mem;
     result.success = true;
 
     xr_free(ctx.block_offsets);

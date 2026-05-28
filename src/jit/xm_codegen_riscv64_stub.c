@@ -32,13 +32,9 @@
 #include "xm_codegen_riscv64_internal.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 
-/* Extern register tables (defined in xm_codegen_riscv64.c) */
-extern const Rv64Reg rv64_alloc_regs[];
-extern const Rv64Freg rv64_alloc_fp_regs[];
-
-#define RV64_NUM_ALLOC_GP 21
-#define RV64_NUM_ALLOC_FP 20
 #define RV64_SCRATCH_FP_REG RV64_FT11
 
 /* ========== Call-C Stub ========== */
@@ -47,14 +43,14 @@ extern const Rv64Freg rv64_alloc_fp_regs[];
  *   t6 (SCRATCH_REG) = C function pointer
  *   [s10 + EXTRA_ARG_OFFSET] = extra argument (pre-stored by codegen)
  *
- * Stub saves all 21 allocatable GP + 20 FP regs, sets up LP64D ABI call
+ * Stub saves all allocatable GP + FP regs, sets up LP64D ABI call
  * (a0=coro, a1=extra_arg), calls via JALR t6, saves result payload/tag,
  * restores all regs, returns payload in a0.
  *
  * Stack layout during stub (relative to sp at entry):
  *   [saved ra]        sp + save_frame - 8
- *   [21 GP regs]      sp + save_frame - 16 .. sp + save_frame - 176
- *   [20 FP regs]      sp + save_frame - 184 .. sp + save_frame - 336
+ *   [GP regs]         below saved ra
+ *   [FP regs]         below saved GP regs
  *   [alignment pad]   if needed
  */
 XR_FUNC void rv64_emit_call_c_stub(Rv64CodegenCtx *ctx) {
@@ -62,9 +58,7 @@ XR_FUNC void rv64_emit_call_c_stub(Rv64CodegenCtx *ctx) {
         return;
     ctx->call_c_stub = ctx->buf.count;
 
-    /* Total save: ra(8) + 21*GP(168) + 20*FP(160) = 336.
-     * Align to 16: 336 already 16-aligned. */
-    int32_t save_frame = 336;
+    int32_t save_frame = (int32_t) ((8 + RV64_MAX_PHYS_REGS * 8 + RV64_MAX_FP_REGS * 8 + 15) & ~15);
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -save_frame));
 
     /* Save ra (stub was reached via JAL, ra holds return address) */
@@ -72,19 +66,19 @@ XR_FUNC void rv64_emit_call_c_stub(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_RA, RV64_SP, off));
     off -= 8;
 
-    /* Save all 21 allocatable GP registers */
-    for (int i = 0; i < RV64_NUM_ALLOC_GP; i++) {
+    /* Save all allocatable GP registers */
+    for (int i = 0; i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SP, off));
         off -= 8;
     }
 
-    /* Save all 20 allocatable FP registers */
-    for (int i = 0; i < RV64_NUM_ALLOC_FP; i++) {
+    /* Save all allocatable FP registers */
+    for (int i = 0; i < RV64_MAX_FP_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_fsd(rv64_alloc_fp_regs[i], RV64_SP, off));
         off -= 8;
     }
 
-    XR_DCHECK(off == -8, "rv64 call_c_stub: save frame size mismatch");
+    XR_DCHECK(off >= 0 && off < 16, "rv64 call_c_stub: save frame size mismatch");
 
     /* Save SP to jit_ctx for GC stack map access */
     rv64_buf_emit(&ctx->buf,
@@ -106,15 +100,14 @@ XR_FUNC void rv64_emit_call_c_stub(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf,
                   rv64_sb(RV64_A1, RV64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_RESULT_TAG_OFFSET));
 
-    /* Restore all 20 FP registers */
-    off = save_frame - 8 - RV64_NUM_ALLOC_GP * 8 - 8;
-    for (int i = 0; i < RV64_NUM_ALLOC_FP; i++) {
+    /* Restore all allocatable FP registers */
+    for (int i = 0; i < RV64_MAX_FP_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_fld(rv64_alloc_fp_regs[i], RV64_SP,
-                                          save_frame - 8 - RV64_NUM_ALLOC_GP * 8 - (i + 1) * 8));
+                                          save_frame - 8 - RV64_MAX_PHYS_REGS * 8 - (i + 1) * 8));
     }
 
-    /* Restore all 21 GP registers */
-    for (int i = 0; i < RV64_NUM_ALLOC_GP; i++) {
+    /* Restore all allocatable GP registers */
+    for (int i = 0; i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf,
                       rv64_ld(rv64_alloc_regs[i], RV64_SP, save_frame - 8 - (i + 1) * 8));
     }
@@ -138,6 +131,13 @@ XR_FUNC void rv64_emit_barrier_stubs(Rv64CodegenCtx *ctx) {
     if (!ctx->has_barriers)
         return;
 
+    uintptr_t barrier_fwd_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_fwd, XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED);
+    uintptr_t barrier_back_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_barrier_back, XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED);
+    RV64_CODEGEN_CHECK(ctx, barrier_fwd_entry != 0, "runtime stub barrier_fwd ABI mismatch");
+    RV64_CODEGEN_CHECK(ctx, barrier_back_entry != 0, "runtime stub barrier_back ABI mismatch");
+
     /* Forward barrier stub */
     ctx->barrier_fwd_stub = ctx->buf.count;
 
@@ -150,7 +150,7 @@ XR_FUNC void rv64_emit_barrier_stubs(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG2, RV64_SP, bfwd_frame - 24)); /* child */
 
     int32_t boff = bfwd_frame - 32;
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_NUM_ALLOC_GP; i++) {
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SP, boff));
         boff -= 8;
     }
@@ -159,12 +159,12 @@ XR_FUNC void rv64_emit_barrier_stubs(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_A0, RV64_CORO_REG));
     rv64_buf_emit(&ctx->buf, rv64_ld(RV64_A1, RV64_SP, bfwd_frame - 16)); /* parent */
     rv64_buf_emit(&ctx->buf, rv64_ld(RV64_A2, RV64_SP, bfwd_frame - 24)); /* child */
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_fwd);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) barrier_fwd_entry);
     rv64_buf_emit(&ctx->buf, rv64_jalr(RV64_RA, RV64_SCRATCH_REG, 0));
 
     /* Restore caller-saved */
     boff = bfwd_frame - 32;
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_NUM_ALLOC_GP; i++) {
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SP, boff));
         boff -= 8;
     }
@@ -184,18 +184,18 @@ XR_FUNC void rv64_emit_barrier_stubs(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_SP, bback_frame - 16));
 
     boff = bback_frame - 24;
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_NUM_ALLOC_GP; i++) {
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SP, boff));
         boff -= 8;
     }
 
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_A0, RV64_CORO_REG));
     rv64_buf_emit(&ctx->buf, rv64_ld(RV64_A1, RV64_SP, bback_frame - 16));
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_barrier_back);
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) barrier_back_entry);
     rv64_buf_emit(&ctx->buf, rv64_jalr(RV64_RA, RV64_SCRATCH_REG, 0));
 
     boff = bback_frame - 24;
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_NUM_ALLOC_GP; i++) {
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++) {
         rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SP, boff));
         boff -= 8;
     }
@@ -224,14 +224,14 @@ XR_FUNC void rv64_emit_deopt_stub(Rv64CodegenCtx *ctx) {
     /* Save all allocatable GP registers to jit_ctx->deopt_regs[phys_reg_num].
      * Index by hardware register number for direct phys→deopt mapping. */
     int32_t gp_base = (int32_t) XM_JIT_DEOPT_REGS_OFFSET;
-    for (int i = 0; i < RV64_NUM_ALLOC_GP; i++) {
+    for (int i = 0; i < RV64_MAX_PHYS_REGS; i++) {
         Rv64Reg r = rv64_alloc_regs[i];
         rv64_buf_emit(&ctx->buf, rv64_sd(r, RV64_JIT_CTX_REG, gp_base + (int32_t) r * 8));
     }
 
     /* Save FP registers to jit_ctx->deopt_fp_regs[fpr_num] */
     int32_t fp_base = (int32_t) XM_JIT_DEOPT_FP_REGS_OFFSET;
-    for (int i = 0; i < RV64_NUM_ALLOC_FP; i++) {
+    for (int i = 0; i < RV64_MAX_FP_REGS; i++) {
         Rv64Freg f = rv64_alloc_fp_regs[i];
         rv64_buf_emit(&ctx->buf, rv64_fsd(f, RV64_JIT_CTX_REG, fp_base + (int32_t) f * 8));
     }
@@ -309,7 +309,7 @@ XR_FUNC uint32_t rv64_record_safepoint(Rv64CodegenCtx *ctx) {
         int8_t ri = xra_reg_at_pos(ctx->xra, v, pos);
         if (ri < 0)
             ri = xra_reg_at_pos(ctx->xra, v, pos + 1);
-        if (ri >= 0 && ri < RV64_NUM_ALLOC_GP) {
+        if (ri >= 0 && ri < RV64_MAX_PHYS_REGS) {
             reg_bitmap |= (1u << ri);
             if (ctx->xra && v < ctx->xra->nvreg && ctx->xra->valloc[v].spill >= 0) {
                 int16_t slot = ctx->xra->valloc[v].spill;
@@ -355,7 +355,7 @@ XR_FUNC void rv64_emit_ptr_spill_writeback(Rv64CodegenCtx *ctx) {
             slot = (int16_t) ctx->xra->nspill++;
             ctx->xra->valloc[v].spill = slot;
         }
-        if (slot >= 0 && slot < 32 && ri >= 0 && ri < RV64_NUM_ALLOC_GP) {
+        if (slot >= 0 && slot < 32 && ri >= 0 && ri < RV64_MAX_PHYS_REGS) {
             Rv64Reg reg = rv64_alloc_regs[ri];
             int32_t offset = -(RV64_SPILL_BASE + slot * 8);
             rv64_buf_emit(&ctx->buf, rv64_sd(reg, RV64_FP, offset));
@@ -384,7 +384,7 @@ XR_FUNC int rv64_live_fp(Rv64CodegenCtx *ctx, Rv64Freg *out) {
     uint32_t bid = ctx->cur_blk_id;
     uint32_t mask = (ctx->xra && bid < ctx->xra->nblk) ? ctx->xra->blk_fp_live[bid] : 0;
     int n = 0;
-    for (int r = 0; r < RV64_NUM_ALLOC_FP; r++) {
+    for (int r = 0; r < RV64_MAX_FP_REGS; r++) {
         if (mask & (1u << r))
             out[n++] = rv64_alloc_fp_regs[r];
     }

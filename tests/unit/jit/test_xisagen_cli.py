@@ -133,6 +133,17 @@ def main() -> int:
              "x64=" + str(tiny_isa)],
             "is not defined in xisa/arch/x64.isa",
         )
+        expect_fail(
+            ns.xisagen,
+            [
+                "patch-ranges",
+                str(tmp / "patch_ranges.h"),
+                "x64=" + str(tiny_isa),
+                "arm64=" + str(tiny_isa),
+                "riscv64=" + str(tiny_isa),
+            ],
+            "x64.call.rel32 is not defined",
+        )
 
     return 0
 

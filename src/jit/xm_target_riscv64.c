@@ -14,7 +14,7 @@
  * REGISTER ALLOCATION:
  *   Allocatable GPRs (20 total):
  *     Caller-saved (12): a0-a7 (x10-x17), t0-t3 (x5-x7,x28)
- *     Callee-saved (8):  s1 (x9), s2-s9 (x18-x25)
+ *     Callee-saved (8):  s1 (x9), s2-s8 (x18-x24)
  *   Reserved:
  *     x0=zero, x1=ra, x2=sp, x3=gp, x4=tp, s0/x8=FP,
  *     s10/x26=jit_ctx, s11/x27=coro, t5/x30=scratch2, t6/x31=scratch
@@ -35,7 +35,7 @@
 #include "xm_riscv64.h"
 
 /* Allocatable GPRs: caller-saved first, then callee-saved.
- * t0-t3 + a0-a7 (caller-saved), s1, s2-s9 (callee-saved). */
+ * t0-t3 + a0-a7 (caller-saved), s1, s2-s8 (callee-saved). */
 static const int rv64_gpr_alloc[] = {
     /* Caller-saved (first 12 entries) */
     RV64_A0,
@@ -59,7 +59,6 @@ static const int rv64_gpr_alloc[] = {
     RV64_S6,
     RV64_S7,
     RV64_S8,
-    RV64_S9,
 };
 
 /* Allocatable FPRs: caller-saved first, then callee-saved.
@@ -92,7 +91,7 @@ static const int rv64_fpr_alloc[] = {
 const XmTarget xm_target_riscv64 = {
     .name = "riscv64",
 
-    .ngpr = 20, /* a0-a7 + t0-t3 + s1 + s2-s9 */
+    .ngpr = 20, /* a0-a7 + t0-t3 + s1 + s2-s8 */
     .nfpr = 20, /* fa0-fa7 + ft0-ft3 + fs0-fs1 + fs2-fs7 */
 
     .gpr_alloc = rv64_gpr_alloc,
@@ -108,12 +107,12 @@ const XmTarget xm_target_riscv64 = {
     .lr_reg = RV64_RA, /* x1 = return address */
 
     /* Frame layout (preliminary, will be refined during codegen bringup):
-     * Callee-saved area: 8 GP (s1-s9 minus s10/s11) + ra + fp = 10 * 8 = 80B
-     * Plus 8 FP callee-saved (fs0-fs7) = 8 * 8 = 64B
-     * Stack map + safepoint = 16B
-     * Total frame_base = 160B */
-    .frame_base = 160,
-    .spill_base = 160,
+     * Stack map metadata: 16B
+     * GPR callee-saved: ra + fp + s1-s9 + s10 + s11 = 13 * 8 = 104B
+     * FPR callee-saved: fs0-fs7 = 8 * 8 = 64B
+     * Total frame_base = 184B, rounded to 192B */
+    .frame_base = 192,
+    .spill_base = 192,
     .max_spill_slots = 32,
 
     .max_vregs = 4096,

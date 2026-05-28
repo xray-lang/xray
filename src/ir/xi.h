@@ -149,6 +149,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_JSON_DECODE   char** field_names   field count
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
  *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
+ *  XI_CALL_METHOD_DIRECT method name      method index
  *  XI_CALL_BUILTIN  —                    builtin_id
  *  XI_EXTRACT       —                    result index (zero-based)
  *  XI_LOAD_UPVAL    —                    upvalue index
@@ -257,10 +258,11 @@ typedef enum {
     XI_TUPLE_GET,   /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
 
     /* Function calls */
-    XI_CALL,         /* function call: args[0]=callee, args[1..n]=params
-                      * aux_int bits 0-7: flags (1=self_call)
-                      * aux_int bits 8-15: nresults (0 means 1) */
-    XI_CALL_METHOD,  /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
+                     * aux_int bits 0-7: flags (1=self_call)
+                     * aux_int bits 8-15: nresults (0 means 1) */
+    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL_METHOD_DIRECT,
     XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_EXTRACT,      /* extract i-th result from multi-return call:
                       * args[0]=call_value, aux_int=result_index (zero-based offset) */

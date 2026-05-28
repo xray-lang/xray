@@ -307,6 +307,18 @@ XmRef xm_new_vreg(XmFunc *func, uint8_t type) {
     return XM_REF(XM_REF_VREG, idx);
 }
 
+static void xm_bind_suspend_point(XmFunc *func, XmRef dst) {
+    if (!xm_ref_is_vreg(dst)) {
+        XR_DCHECK(false, "xm_bind_suspend_point: XM_SUSPEND dst must be vreg");
+        return;
+    }
+    uint32_t vi = XM_REF_INDEX(dst);
+    if (vi >= func->nvreg)
+        return;
+    func->vregs[vi].call_arg_start = func->nsuspend++;
+    func->vregs[vi].call_nargs = 0;
+}
+
 XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, XmRef b) {
     XR_DCHECK(func != NULL, "xm_emit: NULL func");
     XR_DCHECK(blk != NULL, "xm_emit: NULL blk");
@@ -336,6 +348,8 @@ XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, Xm
         uint32_t di = XM_REF_INDEX(dst);
         func->vregs[di].def = ins;
     }
+    if (op == XM_SUSPEND)
+        xm_bind_suspend_point(func, dst);
 
     return dst;
 }
@@ -347,6 +361,7 @@ XmRef xm_emit_unary(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef
 void xm_emit_void(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, XmRef b) {
     XR_DCHECK(func != NULL, "xm_emit_void: NULL func");
     XR_DCHECK(blk != NULL, "xm_emit_void: NULL blk");
+    XR_DCHECK(op != XM_SUSPEND, "xm_emit_void: XM_SUSPEND requires a destination vreg");
     XmIns *ins = block_grow_ins(func, blk);
     if (!ins)
         return;
@@ -385,6 +400,8 @@ void xm_emit_raw(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef ds
     ins->args[0] = arg0;
     ins->args[1] = arg1;
     blk->nins++;
+    if (op == XM_SUSPEND)
+        xm_bind_suspend_point(func, dst);
 }
 
 /* ========== Call Arg Pool ========== */

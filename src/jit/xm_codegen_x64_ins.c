@@ -1382,11 +1382,12 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     /* Load suspend_state pointer: R11 = coro->jit_suspend */
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
-    CODEGEN_CHECK(ctx, suspend_id < 16, "suspend_id out of range");
+    CODEGEN_CHECK(ctx, suspend_id < XM_MAX_SUSPEND_ENTRIES, "suspend_id out of range");
 
     /* Save caller-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
-        x64_mov_mr(&ctx->buf, X64_SCRATCH_REG, i * 8, x64_alloc_regs[i]);
+        x64_mov_mr(&ctx->buf, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8,
+                   x64_alloc_regs[i]);
 
     /* Save callee-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLEE_SAVE_ALLOC; i++)
@@ -1459,7 +1460,8 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     /* Reload caller-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
-        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG, i * 8);
+        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG,
+                   (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8);
 
     /* Load await/channel result into dst */
     if (rd != X64_SCRATCH_REG) {
@@ -1481,14 +1483,14 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_SUSPEND_RESULT_TAG_OFF);
             x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, res_vreg_off, X64_RCX);
         }
-        if (suspend_id < 16) {
+        if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
             ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
             ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
         }
     }
 
     /* Record continuation point for resume entry jump table */
-    if (suspend_id < 16) {
+    if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
         ctx->suspend_cont_offsets[suspend_id] = ctx->buf.pos;
         ctx->suspend_smap_ids[suspend_id] = smap_id;
         ctx->suspend_result_regs[suspend_id] =

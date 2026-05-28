@@ -518,8 +518,28 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     if (direct_jit_ok && proto->jit_entry) {
         void *saved_proto = coro->jit_ctx->call_proto;
         void *saved_closure = coro->jit_ctx->call_closure;
+        void *saved_stack_map = coro->jit_ctx->active_stack_map;
+        uint32_t saved_safepoint_id = coro->jit_ctx->active_safepoint_id;
+        void *saved_frame_sp = coro->jit_ctx->jit_frame_sp;
+        void *saved_safepoint_saved_sp = coro->jit_ctx->safepoint_saved_sp;
+        uint32_t saved_frame_depth = coro->jit_ctx->jit_frame_depth;
+        bool pushed_frame = false;
+        if (saved_frame_sp) {
+            bool already_pushed =
+                saved_frame_depth > 0 &&
+                coro->jit_ctx->jit_frame_stack[saved_frame_depth - 1] == saved_frame_sp;
+            if (!already_pushed) {
+                if (saved_frame_depth >= XR_JIT_MAX_FRAME_DEPTH)
+                    return (XrJitResult) {XM_DEOPT_MARKER, 0};
+                coro->jit_ctx->jit_frame_stack[saved_frame_depth] = saved_frame_sp;
+                coro->jit_ctx->jit_frame_depth = saved_frame_depth + 1;
+                pushed_frame = true;
+            }
+        }
         coro->jit_ctx->call_proto = proto;
         coro->jit_ctx->call_closure = closure;
+        coro->jit_ctx->active_stack_map = proto->stack_map;
+        coro->jit_ctx->active_safepoint_id = UINT32_MAX;
         // Set param_tags for callee's dynamic op tag lookups.
         // Derive tags from callee's param_types (the STORE_CORO builder path
         // does NOT populate call_arg_tags, so we use declared types).
@@ -540,6 +560,14 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
 #endif
         coro->jit_ctx->call_proto = saved_proto;
         coro->jit_ctx->call_closure = saved_closure;
+        coro->jit_ctx->active_stack_map = saved_stack_map;
+        coro->jit_ctx->active_safepoint_id = saved_safepoint_id;
+        coro->jit_ctx->jit_frame_sp = saved_frame_sp;
+        coro->jit_ctx->safepoint_saved_sp = saved_safepoint_saved_sp;
+        if (pushed_frame) {
+            coro->jit_ctx->jit_frame_stack[saved_frame_depth] = NULL;
+            coro->jit_ctx->jit_frame_depth = saved_frame_depth;
+        }
         if (ret.payload != XM_DEOPT_MARKER)
             return ret;
         // Callee deoptimized — clear stale deopt_id so the outer JIT

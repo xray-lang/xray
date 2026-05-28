@@ -26,6 +26,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     switch (ins->op) {
         case XM_CALL_C: {
+            CODEGEN_CHECK(ctx, xm_helper_call_c_protocol_matches_flags(ctx->func, ins),
+                          "CALL_C post-call protocol flags mismatch");
             x64_emit_call_args_from_pool(ctx, ins);
             x64_emit_ptr_spill_writeback(ctx);
 
@@ -413,6 +415,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 }
             }
 
+            x64_emit_jit_frame_push(ctx);
+
             /* Fast path: load proto → jit_ctx->call_proto, then jit_entry */
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, callee_proto_ptr);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET,
@@ -425,6 +429,10 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
             uint32_t je_slow_pos = ctx->buf.pos;
             x64_emit32(&ctx->buf, 0);
+
+            x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET);
+            x64_mov_rm(&ctx->buf, X64_RCX, X64_RCX, (int32_t) XM_PROTO_STACK_MAP_OFFSET);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET, X64_RCX);
 
             /* Set call_closure from call_args[0] so callee can access upvalues */
             x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARGS_OFFSET);
@@ -493,6 +501,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Done label */
             uint32_t done_pos = ctx->buf.pos;
             x64_patch_rel32(&ctx->buf, jmp_done_pos, done_pos);
+
+            x64_emit_jit_frame_pop(ctx);
 
             /* Load call_result_tag → vreg_runtime_tags[vi] */
             if (xm_ref_is_vreg(ins->dst)) {
@@ -573,6 +583,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 }
             }
 
+            x64_emit_jit_frame_push(ctx);
+
             /* Load callee proto->jit_fast_entry to R11 */
             x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG,
                        (int32_t) XM_JIT_CALL_PROTO_OFFSET);
@@ -584,6 +596,10 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
             uint32_t je_slow_kr = ctx->buf.pos;
             x64_emit32(&ctx->buf, 0);
+
+            x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET);
+            x64_mov_rm(&ctx->buf, X64_RCX, X64_RCX, (int32_t) XM_PROTO_STACK_MAP_OFFSET);
+            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET, X64_RCX);
 
             /* Set call_closure from call_args[0] */
             x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARGS_OFFSET);
@@ -673,6 +689,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Done */
             uint32_t done_kr_pos = ctx->buf.pos;
             x64_patch_rel32(&ctx->buf, jmp_done_kr, done_kr_pos);
+
+            x64_emit_jit_frame_pop(ctx);
 
             /* Save RAX to R11 before restoring caller-saved regs */
             x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, X64_RAX);

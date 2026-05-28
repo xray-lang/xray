@@ -23,6 +23,8 @@
 #include "xm_codegen_riscv64_internal.h"
 #include "xm_helper_table.h"
 #include "xm_jit_runtime.h"
+#define XM_RUNTIME_STUBS_ENTRIES
+#include "xm_runtime_stubs_gen.h"
 #include "../coro/xcoroutine.h"
 #include <string.h>
 
@@ -1210,7 +1212,10 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 
     rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, RV64_JIT_CTX_REG, (int32_t) XM_JIT_DEOPT_ID_OFFSET));
 
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) (uintptr_t) xr_jit_alloc);
+    uintptr_t alloc_entry =
+        xm_runtime_stub_entry(XM_RUNTIME_STUB_alloc, XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+    RV64_CODEGEN_CHECK(ctx, alloc_entry != 0, "runtime stub alloc ABI mismatch");
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) alloc_entry);
     rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
     rv64_buf_emit(&ctx->buf, rv64_call(0));
     ctx->has_call_c = true;
@@ -1297,15 +1302,14 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     /* t6 = coro->jit_suspend */
     rv64_buf_emit(&ctx->buf,
                   rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
-    RV64_CODEGEN_CHECK(ctx, suspend_id < 16, "suspend_id out of range");
+    RV64_CODEGEN_CHECK(ctx, suspend_id < XM_MAX_SUSPEND_ENTRIES, "suspend_id out of range");
 
     /* Save caller-saved GP regs to suspend state */
-    extern const Rv64Reg rv64_alloc_regs[];
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < 21; i++)
-        rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SCRATCH_REG, i * 8));
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++)
+        rv64_buf_emit(&ctx->buf, rv64_sd(rv64_alloc_regs[i], RV64_SCRATCH_REG,
+                                         (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8));
 
     /* Save callee-saved GP regs */
-    extern const Rv64Reg rv64_callee_saved_regs[];
     for (int i = 0; i < RV64_NGPR_CALLEE_SAVE_ALLOC; i++)
         rv64_buf_emit(&ctx->buf,
                       rv64_sd(rv64_alloc_regs[RV64_NGPR_CALLER_SAVE + i], RV64_SCRATCH_REG,
@@ -1374,8 +1378,9 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                   rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
 
     /* Reload caller-saved GP regs */
-    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < 21; i++)
-        rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SCRATCH_REG, i * 8));
+    for (int i = 0; i < RV64_NGPR_CALLER_SAVE && i < RV64_MAX_PHYS_REGS; i++)
+        rv64_buf_emit(&ctx->buf, rv64_ld(rv64_alloc_regs[i], RV64_SCRATCH_REG,
+                                         (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8));
 
     /* Load await/channel result into dst */
     if (rd != RV64_SCRATCH_REG) {
@@ -1398,14 +1403,14 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                                               (int32_t) XM_SUSPEND_RESULT_TAG_OFF));
             rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG, res_vreg_off));
         }
-        if (suspend_id < 16) {
+        if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
             ctx->suspend_result_bc_slots[suspend_id] = res_bc_slot;
             ctx->suspend_result_tag_offs[suspend_id] = res_vreg_off;
         }
     }
 
     /* Record continuation for resume entry jump table */
-    if (suspend_id < 16) {
+    if (suspend_id < XM_MAX_SUSPEND_ENTRIES) {
         ctx->suspend_cont_offsets[suspend_id] = rv64_buf_offset(&ctx->buf);
         ctx->suspend_smap_ids[suspend_id] = smap_id;
         ctx->suspend_result_regs[suspend_id] =
@@ -1607,10 +1612,10 @@ XR_FUNC void rv64_emit_xm_ins(Rv64CodegenCtx *ctx, XmIns *ins) {
     XR_DCHECK(ins->op >= 0 && ins->op < XM_OP_COUNT, "rv64_emit_xm_ins: op out of range");
     Rv64InsHandler handler = rv64_ins_handlers[ins->op];
     if (handler) {
-        uint32_t pos_before = ctx->buf.pos;
+        uint32_t count_before = ctx->buf.count;
         handler(ctx, ins, rd);
-        /* Byte self-check: non-metadata ops must emit ≥ 1 byte */
-        if (ctx->buf.pos == pos_before && !rv64_op_allows_zero_emit(ins->op)) {
+        /* Instruction self-check: non-metadata ops must emit at least one instruction. */
+        if (ctx->buf.count == count_before && !rv64_op_allows_zero_emit(ins->op)) {
             RV64_CODEGEN_CHECK(ctx, false, "rv64 handler emitted 0 bytes for non-metadata op");
         }
     } else {
