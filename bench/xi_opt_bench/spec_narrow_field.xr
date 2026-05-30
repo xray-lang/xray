@@ -1,0 +1,29 @@
+class Payload {
+    x: int
+    y: int
+
+    constructor(x: int, y: int) {
+        this.x = x
+        this.y = y
+    }
+
+    sum() -> int {
+        return this.x + this.y
+    }
+}
+
+fn run(rounds: int) -> int {
+    let payload = new Payload(17, 29)
+    let total = 0
+    for (let i = 0; i < rounds; i++) {
+        total = total + payload.x + payload.y + payload.sum()
+    }
+    return total
+}
+
+fn main() {
+    let result = run(220000)
+    print("spec_narrow_field=${result}")
+}
+
+main()

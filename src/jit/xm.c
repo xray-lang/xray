@@ -12,6 +12,7 @@
  *   is allocated from its arena and freed in one shot.
  */
 
+#define XM_OPS_IMPL
 #include "xm.h"
 #include "xm_domtree.h"
 #include "xm_looptree.h"
@@ -141,6 +142,7 @@ void xm_func_destroy(XmFunc *func) {
     xr_free(func->consts);
     xr_free(func->const_ht);
     xr_free(func->call_arg_pool);
+    xr_free(func->pic_table);
     xr_free(func);
 }
 
@@ -306,6 +308,18 @@ XmRef xm_new_vreg(XmFunc *func, uint8_t type) {
     return XM_REF(XM_REF_VREG, idx);
 }
 
+static void xm_bind_suspend_point(XmFunc *func, XmRef dst) {
+    if (!xm_ref_is_vreg(dst)) {
+        XR_DCHECK(false, "xm_bind_suspend_point: XM_SUSPEND dst must be vreg");
+        return;
+    }
+    uint32_t vi = XM_REF_INDEX(dst);
+    if (vi >= func->nvreg)
+        return;
+    func->vregs[vi].call_arg_start = func->nsuspend++;
+    func->vregs[vi].call_nargs = 0;
+}
+
 XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, XmRef b) {
     XR_DCHECK(func != NULL, "xm_emit: NULL func");
     XR_DCHECK(blk != NULL, "xm_emit: NULL blk");
@@ -335,6 +349,8 @@ XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, Xm
         uint32_t di = XM_REF_INDEX(dst);
         func->vregs[di].def = ins;
     }
+    if (op == XM_SUSPEND)
+        xm_bind_suspend_point(func, dst);
 
     return dst;
 }
@@ -346,6 +362,7 @@ XmRef xm_emit_unary(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef
 void xm_emit_void(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, XmRef b) {
     XR_DCHECK(func != NULL, "xm_emit_void: NULL func");
     XR_DCHECK(blk != NULL, "xm_emit_void: NULL blk");
+    XR_DCHECK(op != XM_SUSPEND, "xm_emit_void: XM_SUSPEND requires a destination vreg");
     XmIns *ins = block_grow_ins(func, blk);
     if (!ins)
         return;
@@ -384,6 +401,8 @@ void xm_emit_raw(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef ds
     ins->args[0] = arg0;
     ins->args[1] = arg1;
     blk->nins++;
+    if (op == XM_SUSPEND)
+        xm_bind_suspend_point(func, dst);
 }
 
 /* ========== Call Arg Pool ========== */
@@ -590,117 +609,11 @@ void xm_phi_set_arg(XmPhi *phi, uint32_t pred_idx, XmRef val) {
 
 /* ========== Opcode Info ========== */
 
-static const char *op_names[] = {
-    [XM_ADD] = "add",
-    [XM_SUB] = "sub",
-    [XM_MUL] = "mul",
-    [XM_DIV] = "div",
-    [XM_MOD] = "mod",
-    [XM_NEG] = "neg",
-    [XM_AND] = "and",
-    [XM_OR] = "or",
-    [XM_XOR] = "xor",
-    [XM_NOT] = "not",
-    [XM_SHL] = "shl",
-    [XM_SHR] = "shr",
-    [XM_FADD] = "fadd",
-    [XM_FSUB] = "fsub",
-    [XM_FMUL] = "fmul",
-    [XM_FDIV] = "fdiv",
-    [XM_FNEG] = "fneg",
-    [XM_I2F] = "i2f",
-    [XM_F2I] = "f2i",
-    [XM_EQ] = "eq",
-    [XM_NE] = "ne",
-    [XM_LT] = "lt",
-    [XM_LE] = "le",
-    [XM_GT] = "gt",
-    [XM_GE] = "ge",
-    [XM_FEQ] = "feq",
-    [XM_FNE] = "fne",
-    [XM_FLT] = "flt",
-    [XM_FLE] = "fle",
-    [XM_BOX_I64] = "box.i64",
-    [XM_BOX_F64] = "box.f64",
-    [XM_UNBOX_I64] = "unbox.i64",
-    [XM_UNBOX_F64] = "unbox.f64",
-    [XM_TAG_CHECK] = "tag.check",
-    [XM_TAG_LOAD] = "tag.load",
-    [XM_LOAD] = "load",
-    [XM_STORE] = "store",
-    [XM_LOAD_FIELD] = "load.field",
-    [XM_STORE_FIELD] = "store.field",
-    [XM_ALLOC] = "alloc",
-    [XM_STORE_CORO] = "store_coro",
-    [XM_STORE_CORO_BYTE] = "store_coro.b",
-    [XM_LOAD_CORO] = "load_coro",
-    [XM_LOAD_CORO_BYTE] = "load_coro.b",
-    [XM_LOAD32S] = "load32s",
-    [XM_LOAD8Z] = "load8z",
-    [XM_LOAD8S] = "load8s",
-    [XM_STORE8] = "store8",
-    [XM_LOAD16Z] = "load16z",
-    [XM_LOAD16S] = "load16s",
-    [XM_STORE16] = "store16",
-    [XM_LOAD32Z] = "load32z",
-    [XM_STORE32] = "store32",
-    [XM_LOAD_F32] = "load.f32",
-    [XM_STORE_F32] = "store.f32",
-    [XM_GUARD_BOUNDS] = "guard.bounds",
-    [XM_CONST_I64] = "const.i64",
-    [XM_CONST_F64] = "const.f64",
-    [XM_CONST_PTR] = "const.ptr",
-    [XM_JMP] = "jmp",
-    [XM_BR] = "br",
-    [XM_RET] = "ret",
-    [XM_CALL] = "call",
-    [XM_CALL_C] = "call.c",
-    [XM_CALL_C_LEAF] = "call.c.leaf",
-    [XM_CALL_SELF_DIRECT] = "call.self.direct",
-    [XM_CALL_KNOWN_REG] = "call.known.reg",
-    [XM_CALL_INTRINSIC] = "call.intrinsic",
-    [XM_RT_ADD] = "rt.add",
-    [XM_RT_SUB] = "rt.sub",
-    [XM_RT_MUL] = "rt.mul",
-    [XM_RT_DIV] = "rt.div",
-    [XM_RT_MOD] = "rt.mod",
-    [XM_RT_UNM] = "rt.unm",
-    [XM_RT_LT] = "rt.lt",
-    [XM_RT_LE] = "rt.le",
-    [XM_RT_EQ] = "rt.eq",
-    [XM_RT_PRINT] = "rt.print",
-    [XM_RT_ARRAY_NEW] = "rt.array_new",
-    [XM_RT_ARRAY_PUSH] = "rt.array_push",
-    [XM_RT_ARRAY_LEN] = "rt.array_len",
-    [XM_RT_INDEX_GET] = "rt.index_get",
-    [XM_RT_INDEX_SET] = "rt.index_set",
-    [XM_RT_MAP_NEW] = "rt.map_new",
-    [XM_RT_ISNULL] = "rt.isnull",
-    [XM_SAFEPOINT] = "safepoint",
-    [XM_BARRIER_FWD] = "barrier.fwd",
-    [XM_BARRIER_BACK] = "barrier.back",
-    [XM_DEOPT] = "deopt",
-    [XM_GUARD_TAG] = "guard.tag",
-    [XM_GUARD_CLASS] = "guard.class",
-    [XM_GUARD_KLASS] = "guard.klass",
-    [XM_GUARD_NONNULL] = "guard.nonnull",
-    [XM_TRY_BEGIN] = "try.begin",
-    [XM_TRY_END] = "try.end",
-    [XM_THROW] = "throw",
-    [XM_CATCH] = "catch",
-    [XM_RETAIN] = "arc.retain",
-    [XM_RELEASE] = "arc.release",
-    [XM_LOAD_UPVAL] = "load.upval",
-    [XM_STORE_UPVAL] = "store.upval",
-    [XM_MOV] = "mov",
-    [XM_NOP] = "nop",
-    [XM_PHI] = "phi",
-    [XM_REDEFINE] = "redefine",
-};
+/* xm_op_info[] table instantiated from xm_ops_gen.h via XM_OPS_IMPL */
 
 const char *xm_op_name(uint16_t op) {
-    if (op < XM_OP_COUNT && op_names[op]) {
-        return op_names[op];
+    if (op < XM_OP_COUNT && xm_op_info[op].name) {
+        return xm_op_info[op].name;
     }
     if (op >= XM_MACH_BASE) {
         return "mach.???";

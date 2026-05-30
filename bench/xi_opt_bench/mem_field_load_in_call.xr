@@ -1,0 +1,33 @@
+class Cell {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+}
+
+fn opaque_mix(x: int) -> int {
+    let acc = x
+    for (let i = 0; i < 4; i++) {
+        acc = (acc * 13 + i * 11) % 97
+    }
+    return acc
+}
+
+fn run(cell: Cell, rounds: int) -> int {
+    let total = 0
+    for (let i = 0; i < rounds; i++) {
+        total = total + cell.value
+        total = total + opaque_mix(i)
+        total = total + cell.value
+    }
+    return total
+}
+
+fn main() {
+    let cell = new Cell(37)
+    let result = run(cell, 160000)
+    print("mem_field_load_in_call=${result}")
+}
+
+main()

@@ -605,7 +605,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 
     /* Transfer Xi IR ownership to child proto for JIT direct lowering */
-    child_proto->xi_func = child_func;
+    xi_emit_attach_ir(child_proto, child_func);
     uint16_t cidx = (uint16_t) v->aux_int;
     if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {
         ctx->func->children[cidx] = NULL;
@@ -969,7 +969,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
         xr_vm_proto_add_upvalue(child_proto, uv_idx, 0, 0, 0, cap->source, cap->type);
     }
 
-    child_proto->xi_func = child;
+    xi_emit_attach_ir(child_proto, child);
     ctx->func->children[child_func_idx] = NULL;
 
     return xr_vm_proto_add_proto(ctx->proto, child_proto);
@@ -1066,6 +1066,18 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             }
             desc->instance_methods[mi].closure_index = (uint32_t) pi;
             mi++;
+        }
+        if (mi < cdata->ninst) {
+            desc->instance_methods[mi].name = strdup("constructor");
+            desc->instance_methods[mi].param_count = 0;
+            desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
+            XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
+            int pi = emit_method_proto_impl(ctx, cdata->child_idx[mi]);
+            if (pi < 0) {
+                emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                return;
+            }
+            desc->instance_methods[mi].closure_index = (uint32_t) pi;
         }
     }
 

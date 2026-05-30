@@ -204,9 +204,9 @@ static const XaBuiltinHandleField g_gen_http_downloadresult_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_http_handles[] = {
-    {"HttpResponse", g_gen_http_httpresponse_fields, 6},
-    {"HttpRequest", g_gen_http_httprequest_fields, 7},
-    {"DownloadResult", g_gen_http_downloadresult_fields, 5},
+    {"HttpResponse", g_gen_http_httpresponse_fields, 6, NULL, 0},
+    {"HttpRequest", g_gen_http_httprequest_fields, 7, NULL, 0},
+    {"DownloadResult", g_gen_http_downloadresult_fields, 5, NULL, 0},
 };
 #define GEN_HTTP_HANDLE_COUNT 3
 
@@ -259,7 +259,7 @@ static const XaBuiltinHandleField g_gen_io_filestat_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_io_handles[] = {
-    {"FileStat", g_gen_io_filestat_fields, 10},
+    {"FileStat", g_gen_io_filestat_fields, 10, NULL, 0},
 };
 #define GEN_IO_HANDLE_COUNT 1
 
@@ -268,6 +268,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"readFile", "(path: string): string?", "Read entire file as string", true, false},
     {"readFileBytes", "(path: string): Array<uint8>?", "Read entire file as byte array", true,
      false},
+    {"readStdin", "(): string?", "Read all data from standard input", true, false},
     {"writeFile", "(path: string, data: string): bool", "Write string to file", true, false},
     {"writeFileBytes", "(path: string, data: Array<uint8>): bool", "Write byte array to file", true,
      false},
@@ -298,7 +299,7 @@ static const XaBuiltinMember g_gen_io_functions[] = {
     {"readDirRecursive", "(path: string): Array<string>", "List directory entries recursively",
      true, false},
 };
-#define GEN_IO_FUNCTION_COUNT 29
+#define GEN_IO_FUNCTION_COUNT 30
 
 // log module functions
 static const XaBuiltinMember g_gen_log_functions[] = {
@@ -389,7 +390,7 @@ static const XaBuiltinHandleField g_gen_net_udppacket_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_net_handles[] = {
-    {"UdpPacket", g_gen_net_udppacket_fields, 3},
+    {"UdpPacket", g_gen_net_udppacket_fields, 3, NULL, 0},
 };
 #define GEN_NET_HANDLE_COUNT 1
 
@@ -426,7 +427,7 @@ static const XaBuiltinHandleField g_gen_os_execresult_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_os_handles[] = {
-    {"ExecResult", g_gen_os_execresult_fields, 3},
+    {"ExecResult", g_gen_os_execresult_fields, 3, NULL, 0},
 };
 #define GEN_OS_HANDLE_COUNT 1
 
@@ -471,7 +472,7 @@ static const XaBuiltinHandleField g_gen_path_pathinfo_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_path_handles[] = {
-    {"PathInfo", g_gen_path_pathinfo_fields, 5},
+    {"PathInfo", g_gen_path_pathinfo_fields, 5, NULL, 0},
 };
 #define GEN_PATH_HANDLE_COUNT 1
 
@@ -548,7 +549,7 @@ static const XaBuiltinHandleField g_gen_url_url_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_url_handles[] = {
-    {"URL", g_gen_url_url_fields, 10},
+    {"URL", g_gen_url_url_fields, 10, NULL, 0},
 };
 #define GEN_URL_HANDLE_COUNT 1
 
@@ -585,8 +586,8 @@ static const XaBuiltinHandleField g_gen_ws_wsmessage_fields[] = {
 };
 
 static const XaBuiltinHandle g_gen_ws_handles[] = {
-    {"WsConn", g_gen_ws_wsconn_fields, 3},
-    {"WsMessage", g_gen_ws_wsmessage_fields, 3},
+    {"WsConn", g_gen_ws_wsconn_fields, 3, NULL, 0},
+    {"WsMessage", g_gen_ws_wsmessage_fields, 3, NULL, 0},
 };
 #define GEN_WS_HANDLE_COUNT 2
 

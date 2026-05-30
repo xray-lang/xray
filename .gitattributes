@@ -15,3 +15,9 @@
 # as vendored/generated/documentation.
 *.xr   linguist-detectable=true
 *.xrc  linguist-detectable=true
+
+# Mark xisagen-generated files so GitHub auto-collapses them in PRs.
+# These are derived from xisa/*.def and xisa/arch/*.isa — single source of truth
+# is the .def/.isa file; CI freshness check enforces consistency.
+*_gen.h  linguist-generated=true
+*_gen.c  linguist-generated=true

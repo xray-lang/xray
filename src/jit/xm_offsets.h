@@ -37,6 +37,7 @@
 #define XM_CORO_SUSPEND_SMAP_OFFSET offsetof(XrCoroutine, jit_suspend_smap_id)
 #define XM_CORO_SUSPEND_PTR_OFFSET offsetof(XrCoroutine, jit_suspend)
 // Sub-field offsets within XrJitSuspendState (for ARM64 codegen addressing)
+#define XM_SUSPEND_CALLER_SAVED_OFF offsetof(XrJitSuspendState, caller_saved)
 #define XM_SUSPEND_CALLEE_SAVED_OFF offsetof(XrJitSuspendState, callee_saved)
 #define XM_SUSPEND_RESULT_OFF offsetof(XrJitSuspendState, result)
 #define XM_SUSPEND_RESULT_TAG_OFF offsetof(XrJitSuspendState, result_tag)
@@ -97,6 +98,7 @@
 #define XM_PROTO_JIT_ENTRY_OFFSET 344
 #define XM_PROTO_JIT_FAST_ENTRY_OFFSET 352
 #define XM_PROTO_JIT_RESUME_ENTRY_OFFSET 360
+#define XM_PROTO_STACK_MAP_OFFSET 440
 
 /* ========== Object layout constants ========== */
 
@@ -187,6 +189,10 @@ _Static_assert(offsetof(XrProto, jit_entry) == XM_PROTO_JIT_ENTRY_OFFSET,
                "jit_entry offset mismatch");
 _Static_assert(offsetof(XrProto, jit_fast_entry) == XM_PROTO_JIT_FAST_ENTRY_OFFSET,
                "jit_fast_entry offset mismatch");
+_Static_assert(offsetof(XrProto, jit_resume_entry) == XM_PROTO_JIT_RESUME_ENTRY_OFFSET,
+               "jit_resume_entry offset mismatch");
+_Static_assert(offsetof(XrProto, stack_map) == XM_PROTO_STACK_MAP_OFFSET,
+               "stack_map offset mismatch");
 
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/ximmix.h"
@@ -240,6 +246,7 @@ _Static_assert(offsetof(XrClosure, proto) == XM_CLOSURE_PROTO_OFFSET,
 // JIT suspend state struct layout must match the old int64_t[40] layout
 _Static_assert(sizeof(XrJitSuspendState) == 40 * sizeof(int64_t),
                "XrJitSuspendState size mismatch");
+_Static_assert(XM_SUSPEND_CALLER_SAVED_OFF == 0, "caller_saved offset mismatch");
 _Static_assert(XM_SUSPEND_CALLEE_SAVED_OFF == 15 * 8, "callee_saved offset mismatch");
 _Static_assert(XM_SUSPEND_RESULT_OFF == 23 * 8, "result offset mismatch");
 _Static_assert(XM_SUSPEND_RESULT_TAG_OFF == 24 * 8, "result_tag offset mismatch");

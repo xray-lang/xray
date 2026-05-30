@@ -134,6 +134,10 @@ static inline const char *xi_op_name(uint16_t op) {
             return "CALL";
         case XI_CALL_METHOD:
             return "CALL_METHOD";
+        case XI_CALL_METHOD_DIRECT:
+            return "CALL_METHOD_DIRECT";
+        case XI_TAIL_CALL:
+            return "TAIL_CALL";
         case XI_CALL_BUILTIN:
             return "CALL_BUILTIN";
         case XI_EXTRACT:
@@ -198,6 +202,8 @@ static inline const char *xi_op_name(uint16_t op) {
             return "ISNULL";
         case XI_PHI:
             return "PHI";
+        case XI_SELECT:
+            return "SELECT";
         case XI_COPY:
             return "COPY";
         case XI_CLASS_CREATE:
@@ -230,6 +236,8 @@ static inline const char *xi_op_name(uint16_t op) {
             return "IMPORT_REF";
         case XI_REGEX_COMPILE:
             return "REGEX_COMPILE";
+        case XI_BOUNDS_CHECK:
+            return "BOUNDS_CHECK";
         case XI_RETAIN:
             return "RETAIN";
         case XI_RELEASE:
@@ -240,6 +248,18 @@ static inline const char *xi_op_name(uint16_t op) {
             return "STACK_ALLOC";
         case XI_CORO_OP:
             return "CORO_OP";
+        case XI_GUARD_TYPE:
+            return "GUARD_TYPE";
+        case XI_VEC_LOAD:
+            return "VEC_LOAD";
+        case XI_VEC_STORE:
+            return "VEC_STORE";
+        case XI_VEC_ADD:
+            return "VEC_ADD";
+        case XI_VEC_SUB:
+            return "VEC_SUB";
+        case XI_VEC_MUL:
+            return "VEC_MUL";
         default:
             return "???";
     }

@@ -1,0 +1,48 @@
+class AnimalBench {
+    seed: int
+
+    constructor(seed: int) {
+        this.seed = seed
+    }
+
+    score(x: int) -> int {
+        return this.seed + x
+    }
+}
+
+class DogBench extends AnimalBench {
+    constructor(seed: int) {
+        super(seed)
+    }
+
+    override score(x: int) -> int {
+        return this.seed + x * 2
+    }
+}
+
+class CatBench extends AnimalBench {
+    constructor(seed: int) {
+        super(seed)
+    }
+
+    override score(x: int) -> int {
+        return this.seed + x * 3
+    }
+}
+
+fn run(rounds: int) -> int {
+    let animals = [new DogBench(5), new CatBench(7)]
+    let total = 0
+    for (let i = 0; i < rounds; i++) {
+        let a = animals[i % animals.length]
+        total = total + a.score(i % 17)
+    }
+    return total
+}
+
+fn main() {
+    let result = run(120000)
+    print("oop_dispatch_poly=${result}")
+}
+
+main()

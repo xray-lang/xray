@@ -34,6 +34,7 @@
 #include "xm_codegen_x64_internal.h"
 #include "xm_coalesce.h"
 #include "xm_code_alloc.h"
+#include "xm_metadata_verify.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
 #include "../coro/xcoroutine.h" /* XM_SUSPEND_SPILL_MAX */
@@ -242,6 +243,7 @@ void x64_add_patch(X64CodegenCtx *ctx, X64PatchType type, uint32_t target_blk, X
     p->target_blk = target_blk;
     p->type = type;
     p->cc = cc;
+    p->record = x64_patch_record_for(type, p->emit_pos);
 }
 
 /* ========== Gap Moves ========== */
@@ -604,10 +606,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
          * remains its initialiser).  ARM64 codegen emits the equivalent
          * sequence; this is the missing x64 mirror. */
         {
-            uint16_t op = blk->ins[i].op;
-            if (op == XM_CALL_C || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT ||
-                op == XM_CALL_KNOWN_REG || op == XM_CALL_KNOWN || op == XM_CALL ||
-                op == XM_CALL_C_LEAF) {
+            if (xm_ins_is_call_site(&blk->ins[i])) {
                 if (blk->exception_handler) {
                     /* In try block: load jit_ctx->exception, branch to
                      * catch handler if non-zero. */
@@ -617,14 +616,12 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
                     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap,
                                   "too many patches (exc handler)");
                     X64BranchPatch *p = &ctx->patches[ctx->npatch];
-                    x64_emit8(&ctx->buf, 0x0F);
-                    x64_emit8(&ctx->buf, 0x85); /* JNE rel32 */
-                    p->emit_pos = ctx->buf.pos;
+                    x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);
+                    p->emit_pos = ctx->buf.pos - 4;
                     p->target_blk = blk->exception_handler->id;
                     p->type = X64_PATCH_JCC;
                     p->cc = X64_CC_NE;
                     ctx->npatch++;
-                    x64_emit32(&ctx->buf, 0);
                 } else if (blk->ins[i].flags & XM_FLAG_MAY_THROW) {
                     /* No catch handler but may throw: deopt to VM so its
                      * try-catch machinery unwinds through bytecode frames. */
@@ -648,13 +645,12 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             if (!is_next) {
                 /* Emit JMP rel32 with placeholder, record patch */
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
-                x64_emit8(&ctx->buf, 0xE9); /* JMP rel32 opcode */
-                p->emit_pos = ctx->buf.pos;
+                x64_jmp_rel32(&ctx->buf, 0);
+                p->emit_pos = ctx->buf.pos - 4;
                 p->target_blk = blk->s1->id;
                 p->type = X64_PATCH_JMP;
                 p->cc = X64_CC_E; /* unused */
                 ctx->npatch++;
-                x64_emit32(&ctx->buf, 0); /* placeholder rel32 */
             }
             break;
         }
@@ -671,57 +667,48 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             if (s1_is_next) {
                 /* Layout: JNE skip → edge_copies(s2) → JMP s2
                  *         skip: edge_copies(s1) → fallthrough to s1 */
-                x64_emit8(&ctx->buf, 0x0F);
-                x64_emit8(&ctx->buf, 0x85); /* JNE rel32 */
-                uint32_t skip_pos = ctx->buf.pos;
-                x64_emit32(&ctx->buf, 0);
+                x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);
+                uint32_t skip_pos = ctx->buf.pos - 4;
 
                 x64_emit_edge_copies(ctx, blk->s2, blk);
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
-                x64_emit8(&ctx->buf, 0xE9);
-                p->emit_pos = ctx->buf.pos;
+                x64_jmp_rel32(&ctx->buf, 0);
+                p->emit_pos = ctx->buf.pos - 4;
                 p->target_blk = blk->s2->id;
                 p->type = X64_PATCH_JMP;
                 p->cc = X64_CC_E;
                 ctx->npatch++;
-                x64_emit32(&ctx->buf, 0);
 
                 /* Patch JNE to here (true path) */
-                int32_t rel = (int32_t) (ctx->buf.pos - (skip_pos + 4));
-                memcpy(&ctx->buf.code[skip_pos], &rel, 4);
+                x64_patch_rel32(&ctx->buf, skip_pos, ctx->buf.pos);
                 x64_emit_edge_copies(ctx, blk->s1, blk);
                 /* s1 falls through */
             } else {
                 /* Layout: JE skip → edge_copies(s1) → JMP s1
                  *         skip: edge_copies(s2) → JMP/fallthrough s2 */
-                x64_emit8(&ctx->buf, 0x0F);
-                x64_emit8(&ctx->buf, 0x84); /* JE rel32 */
-                uint32_t skip_pos = ctx->buf.pos;
-                x64_emit32(&ctx->buf, 0);
+                x64_jcc_rel32(&ctx->buf, X64_CC_E, 0);
+                uint32_t skip_pos = ctx->buf.pos - 4;
 
                 x64_emit_edge_copies(ctx, blk->s1, blk);
                 X64BranchPatch *p1 = &ctx->patches[ctx->npatch];
-                x64_emit8(&ctx->buf, 0xE9);
-                p1->emit_pos = ctx->buf.pos;
+                x64_jmp_rel32(&ctx->buf, 0);
+                p1->emit_pos = ctx->buf.pos - 4;
                 p1->target_blk = blk->s1->id;
                 p1->type = X64_PATCH_JMP;
                 p1->cc = X64_CC_E;
                 ctx->npatch++;
-                x64_emit32(&ctx->buf, 0);
 
                 /* Patch JE to here (false path) */
-                int32_t rel = (int32_t) (ctx->buf.pos - (skip_pos + 4));
-                memcpy(&ctx->buf.code[skip_pos], &rel, 4);
+                x64_patch_rel32(&ctx->buf, skip_pos, ctx->buf.pos);
                 x64_emit_edge_copies(ctx, blk->s2, blk);
                 if (!s2_is_next) {
                     X64BranchPatch *p2 = &ctx->patches[ctx->npatch];
-                    x64_emit8(&ctx->buf, 0xE9);
-                    p2->emit_pos = ctx->buf.pos;
+                    x64_jmp_rel32(&ctx->buf, 0);
+                    p2->emit_pos = ctx->buf.pos - 4;
                     p2->target_blk = blk->s2->id;
                     p2->type = X64_PATCH_JMP;
                     p2->cc = X64_CC_E;
                     ctx->npatch++;
-                    x64_emit32(&ctx->buf, 0);
                 }
             }
             break;
@@ -813,6 +800,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
             break;
         }
         default:
+            CODEGEN_CHECK(ctx, false, "x64_emit_terminator: unhandled jump type");
             break;
     }
 }
@@ -935,9 +923,8 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
     x64_emit_prologue(&ctx);
 
     /* JMP over fast prologue to body start (placeholder, patched below) */
-    x64_emit8(&ctx.buf, 0xE9); /* JMP rel32 */
-    uint32_t skip_jmp_pos = ctx.buf.pos;
-    x64_emit32(&ctx.buf, 0);
+    x64_jmp_rel32(&ctx.buf, 0);
+    uint32_t skip_jmp_pos = ctx.buf.pos - 4;
 
     /* Emit fast prologue (register-based param passing for self-calls) */
     ctx.fast_entry_offset = ctx.buf.pos;
@@ -999,9 +986,19 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
         goto cleanup;
     }
 
-    result.code = code_mem;
     result.code_size = code_size;
     result.fast_entry_offset = ctx.fast_entry_offset;
+    result.nsuspend = ctx.nsuspend;
+    for (uint32_t i = 0; i < result.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        result.suspend_entries[i].cont_offset = ctx.suspend_cont_offsets[i];
+        result.suspend_entries[i].smap_id = ctx.suspend_smap_ids[i];
+        result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
+        result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
+    }
+    if (!xm_verify_metadata_or_fail(&result, 1, "cg-x64") ||
+        !xm_verify_post_call_records(&ctx.post_call_tracker, "cg-x64"))
+        goto cleanup;
+    result.code = code_mem;
     result.success = true;
 
 cleanup:

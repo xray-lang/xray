@@ -77,6 +77,40 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 }
 
+/* XI_TAIL_CALL: always emits OP_TAILCALL. Same layout as XI_CALL
+ * but the op absorbs the tail semantics. */
+XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t nargs = (uint8_t) (v->nargs - 1);
+
+    {
+        int span = nargs + 1;
+        uint8_t call_top = (uint8_t) (dst + span);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
+    }
+
+    uint8_t callee = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (callee != dst) {
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
+    }
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + a);
+        if (arg_reg != target) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+        }
+    }
+    emit_inst(ctx, CREATE_ABC(OP_TAILCALL, dst, nargs, 1));
+}
+
 /* Extract i-th result from a multi-return call */
 XR_FUNC void xi_emit_extract(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) {
@@ -163,6 +197,40 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
+}
+
+XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1 || v->aux_int < 0 || v->aux_int > 255 || v->nargs - 1 > 127) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t recv = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint8_t nargs = (uint8_t) (v->nargs - 1);
+
+    {
+        uint8_t call_top = (uint8_t) (dst + nargs + 2);
+        if (call_top > ctx->max_reg)
+            ctx->max_reg = call_top;
+    }
+
+    if (recv != (uint8_t) (dst + 1))
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst + 1, recv, 0));
+
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + 1 + a);
+        if (arg_reg != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
+    }
+
+    uint8_t c = nargs;
+    if (v->flags & XI_FLAG_TAIL)
+        c |= 0x80;
+    emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, (uint8_t) v->aux_int, c));
 }
 
 /* Builtin call: aux_int=builtin_id or aux=name string */

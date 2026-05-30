@@ -134,8 +134,9 @@ static void dump_value(FILE *out, const XiValue *v) {
     } else if (v->op == XI_STRUCT_NEW && v->aux) {
         XrStructLayout *sl = (XrStructLayout *) v->aux;
         fprintf(out, " [size=%u fields=%u]", sl->total_size, sl->field_count);
-    } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL ||
-               v->op == XI_STORE_UPVAL || v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
+    } else if (v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+               v->op == XI_CALL_BUILTIN || v->op == XI_LOAD_UPVAL || v->op == XI_STORE_UPVAL ||
+               v->op == XI_GET_SHARED || v->op == XI_SET_SHARED) {
         fprintf(out, " [aux=%" PRId64 "]", v->aux_int);
     } else if (v->op == XI_GET_GLOBAL || v->op == XI_SET_GLOBAL) {
         const char *nm = (const char *) v->aux;

@@ -1,0 +1,22 @@
+fn kernel(a: int, b: int) -> int {
+    let acc = a
+    for (let i = 0; i < 8; i++) {
+        acc = acc + b * i + 3
+    }
+    return acc
+}
+
+fn run(rounds: int) -> int {
+    let total = 0
+    for (let i = 0; i < rounds; i++) {
+        total = total + kernel(i, 7)
+    }
+    return total
+}
+
+fn main() {
+    let result = run(150000)
+    print("loop_unroll_inner=${result}")
+}
+
+main()

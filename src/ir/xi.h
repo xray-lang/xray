@@ -101,6 +101,13 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_ARC_INSERTED ((XiInvariantMask) (1u << 7))  /* RETAIN/RELEASE ops inserted */
 #define XI_INV_EFFECTS_VALID                                                                       \
     ((XiInvariantMask) (1u << 8)) /* per-value effect flags match opcode table */
+#define XI_INV_TBAA_ANNOTATED                                                                      \
+    ((XiInvariantMask) (1u << 9))                     /* every load/store carries a mem_group */
+#define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
+#define XI_INV_RANGE_ANNOTATED                                                                     \
+    ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
+#define XI_INV_IC_ATTACHED                                                                         \
+    ((XiInvariantMask) (1u << 12)) /* call-site values carry IC snapshot metadata */
 
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
@@ -144,8 +151,9 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_JSON_DECODE   char** field_names   field count
  *  XI_CALL          —                    bits[0:7]=flags, bits[8:15]=nresults
  *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
+ *  XI_CALL_METHOD_DIRECT method name      method index
  *  XI_CALL_BUILTIN  —                    builtin_id
- *  XI_EXTRACT       —                    result index (1-based)
+ *  XI_EXTRACT       —                    result index (zero-based)
  *  XI_LOAD_UPVAL    —                    upvalue index
  *  XI_STORE_UPVAL   —                    upvalue index
  *  XI_GET_SHARED    —                    shared slot index (relative)
@@ -252,13 +260,19 @@ typedef enum {
     XI_TUPLE_GET,   /* read tuple field: args[0]=tuple, aux_int=field_index (zero-based) */
 
     /* Function calls */
-    XI_CALL,         /* function call: args[0]=callee, args[1..n]=params
-                      * aux_int bits 0-7: flags (1=self_call)
-                      * aux_int bits 8-15: nresults (0 means 1) */
-    XI_CALL_METHOD,  /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL,        /* function call: args[0]=callee, args[1..n]=params
+                     * aux_int bits 0-7: flags (1=self_call)
+                     * aux_int bits 8-15: nresults (0 means 1) */
+    XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
+    XI_CALL_METHOD_DIRECT,
+    XI_TAIL_CALL,    /* general tail call: args[0]=callee, args[1..n]=params
+                      * Terminates the function — semantically a call + return.
+                      * The current frame is cleaned up (ARC release) before
+                      * transferring control.  aux_int mirrors XI_CALL encoding.
+                      * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
     XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_EXTRACT,      /* extract i-th result from multi-return call:
-                      * args[0]=call_value, aux_int=result_index (1-based offset) */
+                      * args[0]=call_value, aux_int=result_index (zero-based offset) */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
@@ -358,6 +372,12 @@ typedef enum {
 
     XI_REGEX_COMPILE, /* args[0]=pattern(str), args[1]=flags(str); compiles regex literal */
 
+    /* Bounds check (inserted before INDEX_GET/INDEX_SET by xi_lower).
+     * args[0]=index, args[1]=length; traps if index < 0 || index >= length.
+     * Result is args[0] (passthrough for SSA chain).
+     * BCE pass eliminates when range(idx) ⊆ [0, range(len).lo - 1]. */
+    XI_BOUNDS_CHECK,
+
     /* Ownership / ARC ops (inserted by xi_arc_insert after escape analysis) */
     XI_RETAIN,  /* args[0]=value; increment refcount (no-op for scalars) */
     XI_RELEASE, /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
@@ -373,6 +393,23 @@ typedef enum {
      * Emits dedicated opcodes (OP_SET_LOCAL, OP_GET_LOCAL, OP_SET_PRIORITY,
      * OP_LOCK_THREAD, OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
+
+    /* Speculative guard: deopt if runtime type ≠ expected type.
+     * args[0] = guarded value (tagged object).
+     * aux     = expected XrClass* (cast from pointer).
+     * Result  = args[0] re-typed to the narrower type.
+     * Inserted by xi_opt_spec_narrow when mono IC indicates a dominant
+     * receiver type.  Backend emits a type check + deopt side exit. */
+    XI_GUARD_TYPE,
+
+    /* SIMD / Vector ops for SLP vectorization.
+     * VF (vector factor) is encoded in aux_int.
+     * All vec ops operate on contiguous memory. */
+    XI_VEC_LOAD,  /* args[0]=base, args[1]=start_idx, aux_int=VF */
+    XI_VEC_STORE, /* args[0]=base, args[1]=vec_val, args[2]=start_idx, aux_int=VF */
+    XI_VEC_ADD,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+    XI_VEC_SUB,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+    XI_VEC_MUL,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
 
     XI_OP_COUNT /* sentinel */
 } XiOp;
@@ -455,6 +492,7 @@ typedef enum {
 #define XI_FLAG_READS_MEM (1 << 3)   /* reads heap memory (load_field, index_get, ...) */
 #define XI_FLAG_WRITES_MEM (1 << 4)  /* writes heap memory (store_field, index_set, ...) */
 #define XI_FLAG_TAIL (1 << 5)        /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+#define XI_FLAG_SPEC_CONST (1 << 6)  /* value is speculated constant (IC-guided, SCCP may fold) */
 
 /* Composite masks for query convenience */
 #define XI_FLAG_MEM_ANY (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
@@ -525,6 +563,8 @@ typedef struct XiValue {
                             * default XR_REP_TAGGED until STAGE_REPPED) */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result
                             * (set by xi_escape_analyze, default 0 = NO_ESCAPE) */
+    uint8_t mem_group;     /* XiMemGroup (TBAA): memory group for alias analysis
+                            * (set by xi_tbaa_annotate, default 0 = XI_MEM_NONE) */
     struct XrType *type;   /* authoritative compile-time type (never NULL) */
     int64_t aux_int;       /* auxiliary integer: const value, symbol ID, etc. */
     void *aux;             /* auxiliary pointer: proto, string literal, etc. */
@@ -583,6 +623,10 @@ typedef struct XiBlock {
      * A block is sealed when all its predecessors are known.
      * Loop headers are unsealed until the back edge is added. */
     bool sealed;
+
+    /* Profile-guided block frequency (0 = no profile).
+     * Set by xi_opt_block_layout from VM execution counts. */
+    uint32_t frequency;
 
     /* Back-pointer */
     struct XiFunc *func;
@@ -682,6 +726,35 @@ typedef struct XiFunc {
      * Automatically updated when stage advances. */
     XiInvariantMask invariant_mask;
 
+    /* CFG / analysis version tags.  cfg_version is bumped by
+     * xi_cfg_invalidate() whenever the CFG changes (block split /
+     * merge / edge rewrite).  *_version fields record the
+     * cfg_version observed when each analysis was last computed;
+     * the corresponding xi_ensure_*() entry point recomputes lazily
+     * only when its version lags cfg_version.
+     *
+     * Initial cfg_version is 1 (set by xi_func_new); all *_version
+     * default to 0 (calloc), so the first ensure() call always
+     * recomputes.
+     *
+     * loop_cache is owned by the XiFunc — callers of xi_ensure_loops()
+     * must NOT free the returned pointer; xi_func_free() handles
+     * release, and a CFG-version mismatch triggers re-release inside
+     * xi_ensure_loops(). */
+    uint64_t cfg_version;
+    uint64_t rpo_version;
+    uint64_t dom_version;
+    uint64_t loop_version;
+    struct XiLoopInfo *loop_cache;
+
+    /* Cache-miss counters — incremented at the bottom of each
+     * xi_compute_* entry point.  xi_pipeline_stats_dump reports these
+     * so XRAY_XI_STATS=1 can show whether the cache actually saved
+     * work across a pipeline run. */
+    uint32_t rpo_recomputes;
+    uint32_t dom_recomputes;
+    uint32_t loop_recomputes;
+
     /* VM entry metadata (propagated to XrProto during emission) */
     bool is_vararg;      /* has rest parameter (...args) */
     uint8_t entry_type;  /* 0=normal, 1=has_defaults, 2=generator */
@@ -710,72 +783,20 @@ typedef struct XiFunc {
 
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id; /* unique name suffix for generated C functions */
+
+    /* Analysis side-tables: opaque pointers owned by analysis passes.
+     * [0] = range table (xi_range.c), [1] = reserved.
+     * Freed by xi_func_free or re-running the analysis. */
+    void *analysis_data[2];
+
+    /* IC snapshot metadata: side table mapping call-site value IDs
+     * to inline cache classification from VM profiling.  Set by
+     * xi_ic_attach() before speculative passes; NULL when no IC
+     * data is available (AOT path or first-tier JIT). */
+    struct XiIcTable *ic_table;
 } XiFunc;
 
-/* ========== Arena Constants ========== */
-
-#define XI_ARENA_INITIAL_SIZE (64 * 1024) /* 64 KiB initial arena */
-
-/* ========== API: Function Lifecycle ========== */
-
-XR_FUNC XiFunc *xi_func_new(const char *name, struct XrType *return_type);
-XR_FUNC void xi_func_free(XiFunc *f);
-XR_FUNC void xi_func_set_stage_recursive(XiFunc *f, XiStage stage);
-
-/* Arena helper: allocate aligned memory from the function's bump allocator.
- * Used by xi_lower.c for phi arg arrays during Braun SSA construction. */
-XR_FUNC void *xi_func_arena_alloc(XiFunc *f, uint32_t size);
-
-/* Compute effect_summary by OR-ing all value flags in the function.
- * Recurses into children to propagate may-suspend etc. upward. */
-XR_FUNC void xi_func_compute_effects(XiFunc *f);
-
-/* ========== API: Block Management ========== */
-
-XR_FUNC XiBlock *xi_block_new(XiFunc *f);
-XR_FUNC void xi_block_add_pred(XiBlock *blk, XiBlock *pred);
-
-/* ========== API: Value Construction ========== */
-
-/* Create a new value and append to the given block. */
-XR_FUNC XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
-                              uint16_t nargs);
-
-/* Convenience: constant constructors.
- * Caller provides XrType* (obtained from XaAnalyzer/XrTypePool).
- * The IR module does not depend on XrayIsolate. */
-XR_FUNC XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type);
-XR_FUNC XiValue *xi_const_float(XiFunc *f, XiBlock *blk, double val, struct XrType *float_type);
-XR_FUNC XiValue *xi_const_bool(XiFunc *f, XiBlock *blk, bool val, struct XrType *bool_type);
-XR_FUNC XiValue *xi_const_null(XiFunc *f, XiBlock *blk, struct XrType *null_type);
-XR_FUNC XiValue *xi_const_str(XiFunc *f, XiBlock *blk, const char *str, struct XrType *str_type);
-XR_FUNC XiValue *xi_const_bigint(XiFunc *f, XiBlock *blk, const char *digits,
-                                 struct XrType *bigint_type);
-
-/* Convenience: binary op */
-XR_FUNC XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *lhs,
-                           XiValue *rhs);
-
-/* Convenience: unary op */
-XR_FUNC XiValue *xi_unary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, XiValue *arg);
-
-/* Convenience: function parameter */
-XR_FUNC XiValue *xi_param(XiFunc *f, XiBlock *blk, uint16_t index, struct XrType *type);
-
-/* ========== API: Phi Nodes ========== */
-
-XR_FUNC XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds);
-
-/* ========== API: Block Termination ========== */
-
-XR_FUNC void xi_block_set_return(XiBlock *blk, XiValue *val);
-XR_FUNC void xi_block_set_jump(XiBlock *blk, XiBlock *target);
-XR_FUNC void xi_block_set_if(XiBlock *blk, XiValue *cond, XiBlock *then_blk, XiBlock *else_blk);
-
-/* ========== API: Dump ========== */
-
-/* Print human-readable text representation to FILE* (pass stdout for console) */
-XR_FUNC void xi_func_dump(const XiFunc *f, void *stream);
+#include "xi_core_api.h"
 
 /* Module metadata, slot map, and closure pass are in xi_module.h */
 

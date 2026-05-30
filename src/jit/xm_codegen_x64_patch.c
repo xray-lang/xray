@@ -15,6 +15,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_jit_debug.h"
 
 /* ========== Edge Copies (Phi Resolution) ========== */
 
@@ -169,33 +170,77 @@ XR_FUNC void x64_emit_edge_copies(X64CodegenCtx *ctx, XmBlock *target, XmBlock *
 
 /* ========== Branch Patching ========== */
 
+static const char *x64_patch_type_name(int type) {
+    switch (type) {
+        case X64_PATCH_JMP:
+            return "JMP";
+        case X64_PATCH_JCC:
+            return "Jcc";
+        case X64_PATCH_CALL_C:
+            return "CALL call_c";
+        case X64_PATCH_DEOPT_JCC:
+            return "Jcc deopt";
+        case X64_PATCH_DEOPT_JMP:
+            return "JMP deopt";
+        case X64_PATCH_CALL_SELF:
+            return "CALL self";
+        case X64_PATCH_CALL_SELF_FAST:
+            return "CALL self_fast";
+        case X64_PATCH_BARRIER_FWD:
+            return "CALL barrier_fwd";
+        case X64_PATCH_BARRIER_BACK:
+            return "CALL barrier_back";
+        default:
+            return "block";
+    }
+}
+
+static void x64_patch_rel32_logged(X64CodegenCtx *ctx, uint32_t patch_pos, uint32_t target,
+                                   int type) {
+    bool was_overflow = ctx->buf.overflow;
+    x64_patch_rel32(&ctx->buf, patch_pos, target);
+    if (!was_overflow && ctx->buf.overflow) {
+        const char *kind = x64_patch_type_name(type);
+        int ilen = 0;
+        const char *iname = NULL;
+        if (patch_pos >= 1 && patch_pos < ctx->buf.capacity)
+            iname = jit_debug_x64_disasm_one(ctx->buf.code + (patch_pos > 6 ? patch_pos - 6 : 0),
+                                             patch_pos > 6 ? 12 : patch_pos + 6, &ilen);
+        xr_log_warning("x64-cg", "patch %s out of range: emit_pos=%u target=%u insn=%s", kind,
+                       patch_pos, target, iname ? iname : "(unknown)");
+        ctx->had_error = true;
+    }
+}
+
 XR_FUNC void x64_patch_branches(X64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
         X64BranchPatch *p = &ctx->patches[i];
+        p->record = x64_patch_record_for(p->type, p->emit_pos);
         switch (p->type) {
             case X64_PATCH_CALL_C:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->call_c_stub);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->call_c_stub, p->type);
                 break;
             case X64_PATCH_DEOPT_JCC:
             case X64_PATCH_DEOPT_JMP:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->deopt_stub);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->deopt_stub, p->type);
                 break;
             case X64_PATCH_CALL_SELF:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, 0); /* entry at offset 0 */
+                x64_patch_rel32_logged(ctx, p->emit_pos, 0, p->type);
                 break;
             case X64_PATCH_CALL_SELF_FAST:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->fast_entry_offset);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->fast_entry_offset, p->type);
                 break;
             case X64_PATCH_BARRIER_FWD:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->barrier_fwd_stub);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->barrier_fwd_stub, p->type);
                 break;
             case X64_PATCH_BARRIER_BACK:
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->barrier_back_stub);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->barrier_back_stub, p->type);
                 break;
             default:
                 CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets,
                               "x64_patch: target block OOB");
-                x64_patch_rel32(&ctx->buf, p->emit_pos, ctx->block_offsets[p->target_blk]);
+                x64_patch_rel32_logged(ctx, p->emit_pos, ctx->block_offsets[p->target_blk],
+                                       p->type);
                 break;
         }
     }

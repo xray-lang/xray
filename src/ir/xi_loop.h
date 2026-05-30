@@ -23,8 +23,18 @@
  *
  * INVARIANTS:
  *   Requires RPO + dominator tree computed via xi_analysis.h.
- *   Any pass that modifies the CFG must call xi_loopinfo_free()
- *   and recompute if loop info is still needed.
+ *
+ *   Two ownership models coexist:
+ *
+ *   - xi_compute_loops() returns a heap-allocated XiLoopInfo that
+ *     the caller must release with xi_loopinfo_free().  This entry
+ *     point is unconditional — every call re-derives the forest.
+ *
+ *   - xi_ensure_loops() returns a borrowed pointer owned by the
+ *     XiFunc.  It lazily reuses the cached forest when cfg_version
+ *     has not advanced since the last computation.  The cache is
+ *     freed by xi_func_free or transparently rebuilt when a CFG
+ *     change invalidates it.
  */
 
 #ifndef XI_LOOP_H
@@ -35,6 +45,38 @@
 #include <stdbool.h>
 
 /* ========== Loop Structures ========== */
+
+typedef enum XiIvKind {
+    XI_IV_BASIC = 1,
+    XI_IV_DERIVED = 2,
+    XI_IV_POLYNOMIAL = 3,
+} XiIvKind;
+
+typedef struct XiBasicIV {
+    XiValue *phi;       /* loop-carried phi value */
+    XiValue *start;     /* incoming value from preheader */
+    XiValue *next;      /* incoming value from latch */
+    XiValue *step;      /* loop-invariant step operand */
+    XiOp step_op;       /* XI_ADD or XI_SUB */
+    int64_t step_const; /* canonical signed step when step is const */
+    bool has_const_step;
+} XiBasicIV;
+
+typedef struct XiDerivedIV {
+    XiValue *value;      /* derived expression value */
+    XiValue *base;       /* basic IV phi value */
+    XiValue *scale;      /* loop-invariant scale, NULL means 1 */
+    XiValue *offset;     /* loop-invariant offset, NULL means 0 */
+    int64_t scale_const; /* known scale when constant */
+    int64_t offset_const;
+    bool has_const_scale;
+    bool has_const_offset;
+} XiDerivedIV;
+
+typedef struct XiPolynomialIV {
+    XiValue *value; /* polynomial expression value */
+    XiValue *base;  /* basic IV phi value */
+} XiPolynomialIV;
 
 typedef struct XiLoop {
     struct XiLoop *parent;  /* outer loop (NULL at forest root) */
@@ -50,6 +92,20 @@ typedef struct XiLoop {
 
     uint32_t depth; /* 1-based nesting depth */
     uint32_t id;    /* index in XiLoopInfo::all_loops[] */
+
+    XiBasicIV *basic_ivs;
+    uint32_t nbasic_ivs;
+    XiDerivedIV *derived_ivs;
+    uint32_t nderived_ivs;
+    XiPolynomialIV *polynomial_ivs;
+    uint32_t npolynomial_ivs;
+
+    /* Canonical trip count for the primary IV (basic_ivs[0]).
+     * Valid only when has_trip_count is true. Computed from the
+     * header's conditional branch comparing the IV phi against
+     * a constant bound with a constant step. */
+    uint32_t trip_count;
+    bool has_trip_count;
 } XiLoop;
 
 typedef struct XiLoopInfo {
@@ -63,12 +119,22 @@ typedef struct XiLoopInfo {
 /* ========== API ========== */
 
 /* Compute the natural-loop forest for the function.
- * Requires RPO + dominators already computed (xi_compute_rpo,
- * xi_compute_dominators).  Returns heap-allocated result.
- * Returns NULL if no loops found or on allocation failure. */
+ * Requires RPO + dominators already computed — call xi_ensure_dominators(f)
+ * first (or the unconditional xi_compute_rpo / xi_compute_dominators pair).
+ * Returns heap-allocated result, or NULL when there are no loops.
+ * Caller owns the result; release with xi_loopinfo_free. */
 XR_FUNC XiLoopInfo *xi_compute_loops(XiFunc *f);
 
-/* Free loop info and all associated memory. */
+/* Cached form: returns the borrowed XiLoopInfo* owned by f.
+ * Recomputes and replaces the cache only when f->loop_version lags
+ * f->cfg_version.  Returns NULL when the function has no loops
+ * (cached as a sentinel — subsequent calls remain hits).
+ * Callers MUST NOT free the result. */
+XR_FUNC XiLoopInfo *xi_ensure_loops(XiFunc *f);
+
+/* Free loop info and all associated memory.
+ * Only call this on the result of xi_compute_loops; never on the
+ * pointer returned by xi_ensure_loops. */
 XR_FUNC void xi_loopinfo_free(XiLoopInfo *info);
 
 /* Query: innermost loop nesting depth for block.
@@ -77,5 +143,12 @@ XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id);
 
 /* Query: does the given block belong to the given loop? */
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk);
+
+/* Compute the canonical trip count from the primary basic IV.
+ * Returns the trip count, or 0 if it cannot be determined.
+ * Requires: the loop has at least one basic IV with constant step,
+ * the header is an IF block comparing the IV phi against a constant
+ * bound, and the body entry is the true-branch successor. */
+XR_FUNC uint32_t xi_loop_trip_count(const XiLoop *loop);
 
 #endif  // XI_LOOP_H

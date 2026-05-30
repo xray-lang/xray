@@ -1,0 +1,35 @@
+# Codegen quarantine baseline (auto-generated)
+# Format: filename metric_name count
+src/jit/xm_x64.h emit 8
+src/jit/xm_x64.h case_xm 0
+src/jit/xm_x64.h func_def 66
+src/jit/xm_arm64.c emit 6
+src/jit/xm_arm64.c case_xm 0
+src/jit/xm_arm64.c func_def 2
+src/jit/xm_arm64.h emit 1
+src/jit/xm_arm64.h case_xm 0
+src/jit/xm_arm64.h func_def 2
+src/jit/xm_arm64_disasm.h emit 0
+src/jit/xm_arm64_disasm.h case_xm 0
+src/jit/xm_arm64_disasm.h func_def 0
+src/jit/xm_ops.h emit 0
+src/jit/xm_ops.h case_xm 0
+src/jit/xm_ops.h func_def 0
+src/jit/xm_codegen_ins.c emit 24
+src/jit/xm_codegen_ins.c case_xm 0
+src/jit/xm_codegen_ins.c func_def 1
+src/jit/xm_codegen_call.c emit 178
+src/jit/xm_codegen_call.c case_xm 6
+src/jit/xm_codegen_call.c func_def 0
+src/jit/xm_codegen_mem.c emit 217
+src/jit/xm_codegen_mem.c case_xm 61
+src/jit/xm_codegen_mem.c func_def 0
+src/jit/xm_codegen_x64_ins.c emit 0
+src/jit/xm_codegen_x64_ins.c case_xm 35
+src/jit/xm_codegen_x64_ins.c func_def 1
+src/jit/xm_codegen_x64_call.c emit 0
+src/jit/xm_codegen_x64_call.c case_xm 7
+src/jit/xm_codegen_x64_call.c func_def 1
+src/jit/xm_codegen_x64_mem.c emit 0
+src/jit/xm_codegen_x64_mem.c case_xm 35
+src/jit/xm_codegen_x64_mem.c func_def 1

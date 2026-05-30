@@ -95,12 +95,18 @@ typedef struct XiPassDesc {
      * Most optimization passes are stage-preserving (input == output). */
     XiStage input_stage;  /* minimum stage required (0 = any) */
     XiStage output_stage; /* stage after this pass (0 = unchanged) */
+
+    /* Analysis invariant contract: required bits must already be present
+     * before the pass runs; produced bits are marked present after it
+     * returns successfully. */
+    XiInvariantMask requires_inv_mask;
+    XiInvariantMask produces_inv_mask;
 } XiPassDesc;
 
 /* ========== Per-Pass Statistics ========== */
 
 /* Maximum number of distinct passes tracked in a single pipeline run. */
-#define XI_MAX_PASS_STATS 16
+#define XI_MAX_PASS_STATS 48
 
 typedef struct XiPassStats {
     const char *name;     /* pass name (from XiPassDesc) */
@@ -116,6 +122,13 @@ typedef struct XiPipelineStats {
     uint32_t npass;        /* number of distinct passes tracked */
     uint32_t total_rounds; /* fixed-point iterations completed */
     uint64_t total_ns;     /* wall-clock nanoseconds for the whole pipeline */
+
+    /* CFG-analysis cache miss counts copied from XiFunc when the
+     * pipeline finishes.  A low ratio of recomputes-to-pass-invocations
+     * means xi_ensure_* served most analysis queries from cache. */
+    uint32_t rpo_recomputes;
+    uint32_t dom_recomputes;
+    uint32_t loop_recomputes;
 } XiPipelineStats;
 
 /* ========== Pipeline API ========== */

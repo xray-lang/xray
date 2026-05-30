@@ -13,6 +13,8 @@
  */
 
 #include "xi.h"
+#include "xi_ic.h"
+#include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_effect.h"
 #include "../runtime/value/xtype.h" /* XR_REP_TAGGED */
@@ -132,6 +134,11 @@ XiFunc *xi_func_new(const char *name, struct XrType *return_type) {
         return NULL;
 
     f->return_type = return_type;
+    f->stage = XI_STAGE_RAW;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+    /* Start cfg_version at 1 so the calloc-zeroed rpo/dom versions
+     * deterministically trigger the first xi_ensure_*() recompute. */
+    f->cfg_version = 1;
 
     /* Initialize arena: allocate first chunk eagerly so the common
      * fast path in arena_alloc avoids a NULL check on every call. */
@@ -190,6 +197,18 @@ void xi_func_free(XiFunc *f) {
         f->module->init = NULL;
         xi_module_free(f->module);
         f->module = NULL;
+    }
+
+    /* Release the lazily-cached loop forest, if any. */
+    if (f->loop_cache) {
+        xi_loopinfo_free(f->loop_cache);
+        f->loop_cache = NULL;
+    }
+
+    /* Free IC snapshot metadata table, if any. */
+    if (f->ic_table) {
+        xi_ic_table_free(f->ic_table);
+        f->ic_table = NULL;
     }
 
     /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.
@@ -388,6 +407,25 @@ XiValue *xi_binary(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type, Xi
         /* Division/modulo may throw on zero divisor — must not be DCE'd */
         if (op == XI_DIV || op == XI_MOD)
             v->flags |= XI_FLAG_MAY_THROW;
+        /* XI_EQ / XI_NE are polymorphic: pure for primitives but
+         * deep-equality (reads heap content) for arrays/maps/objects/
+         * strings.  Without READS_MEM the shuffler / DCE / LICM may
+         * reorder the comparison across a mutating store, silently
+         * changing semantics (regression: 0680_deep_eq_cyclic). */
+        if (op == XI_EQ || op == XI_NE) {
+            const struct XrType *types[2] = {lhs->type, rhs->type};
+            for (int i = 0; i < 2; i++) {
+                const struct XrType *t = types[i];
+                if (!t)
+                    continue;
+                XrTypeKind k = t->kind;
+                if (k != XR_KIND_INT && k != XR_KIND_FLOAT && k != XR_KIND_BOOL &&
+                    k != XR_KIND_NULL && k != XR_KIND_UNIT && k != XR_KIND_ENUM) {
+                    v->flags |= XI_FLAG_READS_MEM;
+                    break;
+                }
+            }
+        }
     }
     return v;
 }

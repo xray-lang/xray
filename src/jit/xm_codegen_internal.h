@@ -14,6 +14,8 @@
 #include "xm_codegen.h"
 #include "xm_arm64.h"
 #include "xm_jit.h"
+#include "xm_patch_verify.h"
+#include "xm_verify_post_call.h"
 #include "xm_regalloc.h"
 #include "../runtime/value/xslot_type.h"
 #include "xm_target.h"
@@ -41,6 +43,17 @@
 
 #define JIT_FRAME_BASE 176
 #define SPILL_BASE 176
+#define A64_SUSPEND_CALLER_SAVE_COUNT 15
+#define A64_SUSPEND_CALLEE_SAVE_COUNT 8
+
+_Static_assert(A64_SUSPEND_CALLER_SAVE_COUNT <=
+                   (int) (sizeof(((XrJitSuspendState *) 0)->caller_saved) /
+                          sizeof(((XrJitSuspendState *) 0)->caller_saved[0])),
+               "arm64 caller-saved suspend capacity mismatch");
+_Static_assert(A64_SUSPEND_CALLEE_SAVE_COUNT <=
+                   (int) (sizeof(((XrJitSuspendState *) 0)->callee_saved) /
+                          sizeof(((XrJitSuspendState *) 0)->callee_saved[0])),
+               "arm64 callee-saved suspend capacity mismatch");
 
 /* ========== Branch Patching ========== */
 
@@ -68,6 +81,7 @@ typedef struct {
     uint32_t target_blk;
     PatchType type;
     A64Reg reg;
+    XmPatchRecord record;
 } BranchPatch;
 
 #define INIT_PATCHES 256
@@ -139,13 +153,19 @@ typedef struct {
     uint32_t nsmap;
 
     // Suspend/resume tracking
-    uint32_t suspend_cont_offsets[16];    // code offset of continuation point per suspend_id
-    uint32_t suspend_smap_ids[16];        // stack map id at each suspend point
-    uint8_t suspend_result_regs[16];      // physical register for await result per suspend_id
-    int16_t suspend_result_bc_slots[16];  // bc_slot of await result vreg per suspend_id
-    int32_t suspend_result_tag_offs[16];  // vreg_runtime_tags offset per suspend_id (-1=none)
-    uint32_t nsuspend;                    // number of suspend points emitted
-    uint32_t resume_entry_offset;         // code offset of resume entry (0 = none)
+    uint32_t suspend_cont_offsets[XM_MAX_SUSPEND_ENTRIES];  // code offset of continuation point per
+                                                            // suspend_id
+    uint32_t suspend_smap_ids[XM_MAX_SUSPEND_ENTRIES];      // stack map id at each suspend point
+    uint8_t suspend_result_regs[XM_MAX_SUSPEND_ENTRIES];  // physical register for await result per
+                                                          // suspend_id
+    int16_t suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];  // bc_slot of await result vreg per
+                                                              // suspend_id
+    int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];  // vreg_runtime_tags offset per
+                                                              // suspend_id (-1=none)
+    uint32_t nsuspend;                                        // number of suspend points emitted
+    uint32_t resume_entry_offset;  // code offset of resume entry (0 = none)
+
+    XmPostCallTracker post_call_tracker;
 } CodegenCtx;
 
 // Register allocation tables (defined in xm_codegen.c)
@@ -166,8 +186,19 @@ XR_FUNC uint32_t record_safepoint(CodegenCtx *ctx);
 XR_FUNC void emit_ptr_spill_writeback(CodegenCtx *ctx);
 XR_FUNC void emit_jit_frame_push(CodegenCtx *ctx);
 XR_FUNC void emit_jit_frame_pop(CodegenCtx *ctx);
+XR_FUNC void emit_active_stack_map_from_call_proto(CodegenCtx *ctx);
 XR_FUNC void add_patch(CodegenCtx *ctx, PatchType type, uint32_t target_blk, A64Reg reg);
 XR_FUNC void add_cs_patch(CodegenCtx *ctx, uint8_t pair);
+
+// Verified ARM64 PC-relative branch offset (in instructions) from `emit_idx`
+// to `target_idx`. `is_cond` selects the 19-bit conditional / cbz / cbnz
+// range; otherwise the 26-bit B / BL range is used. On range or alignment
+// failure, sets ctx->had_error, logs a warning, and returns 0 so the
+// resulting NOP-equivalent patch never produces a silent jump-to-self in
+// production code. Use this for ALL deferred and inline arm64 branch
+// patches; it is the single arm64 entry point into xm_patch_verify.h.
+XR_FUNC int32_t a64_patch_offset(CodegenCtx *ctx, uint32_t emit_idx, uint32_t target_idx,
+                                 bool is_cond, const char *kind);
 
 // Epilogue emission (defined in xm_codegen.c, used by XM_SUSPEND in xm_codegen_mem.c)
 XR_FUNC void emit_epilogue(CodegenCtx *ctx);

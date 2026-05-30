@@ -813,6 +813,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_io[] = {
         .summary = "Read file as lines",
     },
     {
+        .name = "readStdin",
+        .signature = "(): string?",
+        .summary = "Read all data from standard input",
+    },
+    {
         .name = "readlink",
         .signature = "(path: string): string?",
         .summary = "Read symlink target",
@@ -3649,6 +3654,7 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `io.readFile` | `(path: string): string?` | Read entire file as string |\n"
             "| `io.readFileBytes` | `(path: string): Array<uint8>?` | Read entire file as byte array |\n"
             "| `io.readLines` | `(path: string): Array<string>` | Read file as lines |\n"
+            "| `io.readStdin` | `(): string?` | Read all data from standard input |\n"
             "| `io.readlink` | `(path: string): string?` | Read symlink target |\n"
             "| `io.realpath` | `(path: string): string?` | Resolve to absolute path |\n"
             "| `io.remove` | `(path: string): bool` | Remove a file |\n"
@@ -3667,13 +3673,21 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "json",
-        .summary = "JSON parse/stringify, keys/values helpers",
+        .summary = "Built-in Json utility class for parse/stringify and object helpers",
         .body =
-            "# json module\n"
+            "# Json built-in utility\n"
             "\n"
-            "JSON parse/stringify, keys/values helpers.\n"
+            "Json is a built-in utility class; use Json.parse() and Json.stringify() directly without import.\n"
             "\n"
-            "Usage: `import json` then call `json.function()`.\n"
+            "Use it directly without `import`.\n"
+            "\n"
+            "### Common helpers\n"
+            "- `Json.parse(text)`\n"
+            "- `Json.stringify(value, indent?)`\n"
+            "- `Json.isValid(text)` / `Json.tryParse(text)`\n"
+            "- `Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`\n"
+            "- `Json.has(obj, key)` / `Json.get(obj, key, default?)`\n"
+            "- `Json.size(obj)` / `Json.isEmpty(obj)`\n"
             "",
         .symbols = NULL,
         .symbol_count = 0,
@@ -4587,7 +4601,6 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `gc` | Garbage collector control interface |\n"
     "| `http` | HTTP client/server, REST API, routing |\n"
     "| `io` | File I/O operations |\n"
-    "| `json` | JSON parse, stringify, keys, values |\n"
     "| `log` | Structured logging system |\n"
     "| `math` | Mathematical functions |\n"
     "| `net` | TCP/UDP/TLS networking |\n"
@@ -4602,6 +4615,8 @@ XR_DATADEF const char xmcp_generated_stdlib_list[] =
     "| `yaml` | YAML parsing |\n"
     "\n"
     "Usage: `import <module>` then call `module.function()`.\n"
+    "\n"
+    "Built-in JSON helpers are exposed as `Json.parse()` / `Json.stringify()` without `import`.\n"
     "";
 
 // clang-format on

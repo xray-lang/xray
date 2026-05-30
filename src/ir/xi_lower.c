@@ -652,7 +652,9 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
     if (!s)
         return NULL;
 
-    if (s->type == AST_EXPORT_STMT && s->as.export_stmt.declaration) {
+    if (s->type == AST_EXPORT_STMT) {
+        if (!s->as.export_stmt.declaration)
+            return s;
         s = s->as.export_stmt.declaration;
         *out_is_exported = true;
     }
@@ -683,8 +685,10 @@ static AstNode *prescan_extract_decl(XiLower *l, AstNode *s, const char **out_na
             *out_name = s->as.enum_decl.name;
             *out_sid = s->as.enum_decl.symbol_id;
             break;
-        default:
+        case AST_IMPORT_STMT:
             break;
+        default:
+            return NULL;
     }
     return s;
 }

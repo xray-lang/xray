@@ -163,6 +163,33 @@ static void test_emit_simple(void) {
     fprintf(stderr, " PASS\n");
 }
 
+static void test_suspend_metadata(void) {
+    fprintf(stderr, "  test_suspend_metadata...");
+
+    XmFunc *func = xm_func_new("suspend_metadata");
+    XmBlock *entry = xm_func_add_block(func, "entry");
+    XmRef discard = xm_const_i64(func, 0);
+
+    XmRef s0 = xm_emit(func, entry, XM_SUSPEND, XR_REP_TAGGED, XM_NONE, discard);
+    XmRef s1 = xm_emit(func, entry, XM_SUSPEND, XR_REP_TAGGED, XM_NONE, discard);
+    assert(func->nsuspend == 2);
+    assert(xm_ref_is_vreg(s0));
+    assert(xm_ref_is_vreg(s1));
+    assert(func->vregs[XM_REF_INDEX(s0)].call_arg_start == 0);
+    assert(func->vregs[XM_REF_INDEX(s1)].call_arg_start == 1);
+    assert(func->vregs[XM_REF_INDEX(s0)].call_nargs == 0);
+    assert(func->vregs[XM_REF_INDEX(s1)].call_nargs == 0);
+
+    XmRef raw_dst = xm_new_vreg(func, XR_REP_TAGGED);
+    xm_emit_raw(func, entry, XM_SUSPEND, XR_REP_TAGGED, raw_dst, XM_NONE, discard);
+    assert(func->nsuspend == 3);
+    assert(func->vregs[XM_REF_INDEX(raw_dst)].call_arg_start == 2);
+    assert(func->vregs[XM_REF_INDEX(raw_dst)].call_nargs == 0);
+
+    xm_func_destroy(func);
+    fprintf(stderr, " PASS\n");
+}
+
 /* ========== Test: Control flow (branch) ========== */
 
 static void test_control_flow(void) {
@@ -241,9 +268,9 @@ static void test_printer(void) {
 static void test_opcode_info(void) {
     fprintf(stderr, "  test_opcode_info...");
 
-    assert(strcmp(xm_op_name(XM_ADD), "add") == 0);
-    assert(strcmp(xm_op_name(XM_RET), "ret") == 0);
-    assert(strcmp(xm_op_name(XM_SAFEPOINT), "safepoint") == 0);
+    assert(strcmp(xm_op_name(XM_ADD), "ADD") == 0);
+    assert(strcmp(xm_op_name(XM_RET), "RET") == 0);
+    assert(strcmp(xm_op_name(XM_SAFEPOINT), "SAFEPOINT") == 0);
 
     assert(xm_op_is_commutative(XM_ADD));
     assert(xm_op_is_commutative(XM_MUL));
@@ -291,6 +318,7 @@ int main(void) {
     test_func_create();
     test_constants();
     test_emit_simple();
+    test_suspend_metadata();
     test_control_flow();
     test_printer();
     test_opcode_info();

@@ -540,7 +540,8 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
             break;
 
         default:
-            break;
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
     }
 }
 

@@ -218,7 +218,8 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABC(OP_CMP_NE_STRICT, dst, b, c));
             break;
         default:
-            break;
+            emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+            return;
     }
 }
 

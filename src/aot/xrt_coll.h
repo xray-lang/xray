@@ -345,7 +345,7 @@ typedef struct xrt_closure {
 
 static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     xrt_closure_t *c =
-        (xrt_closure_t *) XRT_MALLOC(sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue));
+        (xrt_closure_t *) xrt_arc_alloc(sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue));
     if (!c) {
         fprintf(stderr, "xrt_closure_new: out of memory\n");
         abort();

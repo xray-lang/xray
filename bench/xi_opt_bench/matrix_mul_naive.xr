@@ -1,0 +1,31 @@
+fn make_matrix(n: int, seed: int) -> Array<int> {
+    let data: Array<int> = []
+    for (let i = 0; i < n * n; i++) {
+        data.push((i * seed + 7) % 31)
+    }
+    return data
+}
+
+fn mmul_sum(a: Array<int>, b: Array<int>, n: int) -> int {
+    let total = 0
+    for (let i = 0; i < n; i++) {
+        for (let j = 0; j < n; j++) {
+            let cell = 0
+            for (let k = 0; k < n; k++) {
+                cell = cell + a[i * n + k] * b[k * n + j]
+            }
+            total = total + cell
+        }
+    }
+    return total
+}
+
+fn main() {
+    let n = 28
+    let a = make_matrix(n, 3)
+    let b = make_matrix(n, 5)
+    let result = mmul_sum(a, b, n)
+    print("matrix_mul_naive=${result}")
+}
+
+main()

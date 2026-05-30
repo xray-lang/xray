@@ -16,6 +16,7 @@
 
 #include "xi_emit_internal.h"
 #include "xi_analysis.h"
+#include "xi_opt.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
@@ -459,6 +460,8 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_TUPLE_GET] = xi_emit_tuple_get,
     [XI_CALL] = xi_emit_call,
     [XI_CALL_METHOD] = xi_emit_call_method,
+    [XI_CALL_METHOD_DIRECT] = xi_emit_call_method_direct,
+    [XI_TAIL_CALL] = xi_emit_tail_call,
     [XI_CALL_BUILTIN] = xi_emit_call_builtin,
     [XI_EXTRACT] = xi_emit_extract,
     [XI_CLOSURE_NEW] = xi_emit_closure_new,
@@ -526,8 +529,9 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
      * Force fresh allocation so dst > all previously allocated registers. */
     /* OP_CHAN_TRY_RECV clobbers R[dst+1] with the ok flag — treat it as
      * call-like so dst is beyond all live registers. */
-    bool call_like = (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_GO ||
-                      v->op == XI_MULTI_RET || v->op == XI_CHAN_TRY_RECV);
+    bool call_like =
+        (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+         v->op == XI_GO || v->op == XI_MULTI_RET || v->op == XI_CHAN_TRY_RECV);
     uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -911,9 +915,17 @@ cleanup:;
     return result;
 }
 
+static void prepare_ir_for_jit(XiFunc *ir) {
+    if (!ir || ir->stage >= XI_STAGE_REPPED)
+        return;
+    xi_opt_select_rep(ir);
+    xi_opt_box_elim(ir);
+}
+
 XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir) {
     XR_DCHECK(proto != NULL, "xi_emit_attach_ir: NULL proto");
     XR_DCHECK(proto->xi_func == NULL, "xi_emit_attach_ir: proto already has xi_func");
+    prepare_ir_for_jit(ir);
     proto->xi_func = ir;
 }
 

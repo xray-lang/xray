@@ -29,6 +29,21 @@ static bool is_simple_literal(AstNode *init) {
     }
 }
 
+static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
+    if (!cd)
+        return false;
+    for (int i = 0; i < cd->field_count; i++) {
+        if (cd->fields[i]->type != AST_FIELD_DECL)
+            continue;
+        FieldDeclNode *f = &cd->fields[i]->as.field_decl;
+        if (f->is_static)
+            continue;
+        if (f->initializer && !is_simple_literal(f->initializer))
+            return true;
+    }
+    return false;
+}
+
 /* Lower a class method body to a child XiFunc.
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
@@ -153,6 +168,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
 
     /* Count instance / static methods (skip static constructors) */
     uint16_t inst_n = 0, stat_n = 0;
+    bool has_ctor = false;
     for (int i = 0; i < cd->method_count; i++) {
         if (cd->methods[i]->type != AST_METHOD_DECL)
             continue;
@@ -161,29 +177,74 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
             continue;
         if (m->is_static)
             stat_n++;
-        else
+        else {
             inst_n++;
+            if (m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0))
+                has_ctor = true;
+        }
     }
+
+    bool synth_ctor = !has_ctor && class_has_complex_instance_initializer(cd);
+    if (synth_ctor)
+        inst_n++;
 
     /* Lower each method body to a child XiFunc, recording child indices */
     uint16_t total = inst_n + stat_n;
     uint16_t *cidx =
         total ? (uint16_t *) xi_func_arena_alloc(l->func, total * sizeof(uint16_t)) : NULL;
     uint16_t ci = 0;
+    bool emitted_synth_ctor = false;
     for (int i = 0; i < cd->method_count; i++) {
         if (cd->methods[i]->type != AST_METHOD_DECL)
             continue;
         MethodDeclNode *m = &cd->methods[i]->as.method_decl;
-        if (m->is_static_constructor)
+        if (m->is_static_constructor || m->is_static)
             continue;
 
-        XiFunc *mf = lower_method_as_func(l, m, !m->is_static, cd);
+        XiFunc *mf = lower_method_as_func(l, m, true, cd);
         if (!mf)
             continue;
         func_add_child(l->func, mf);
         if (cidx)
             cidx[ci] = (uint16_t) (l->func->nchildren - 1);
         ci++;
+    }
+
+    if (synth_ctor) {
+        MethodDeclNode synth = {0};
+        synth.name = "constructor";
+        synth.is_constructor = true;
+
+        XiFunc *mf = lower_method_as_func(l, &synth, true, cd);
+        if (mf) {
+            func_add_child(l->func, mf);
+            if (cidx)
+                cidx[ci] = (uint16_t) (l->func->nchildren - 1);
+            ci++;
+            emitted_synth_ctor = true;
+        }
+    }
+
+    for (int i = 0; i < cd->method_count; i++) {
+        if (cd->methods[i]->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+        if (m->is_static_constructor || !m->is_static)
+            continue;
+
+        XiFunc *mf = lower_method_as_func(l, m, false, cd);
+        if (!mf)
+            continue;
+        func_add_child(l->func, mf);
+        if (cidx)
+            cidx[ci] = (uint16_t) (l->func->nchildren - 1);
+        ci++;
+    }
+
+    if (synth_ctor && !emitted_synth_ctor) {
+        synth_ctor = false;
+        inst_n--;
+        total--;
     }
 
     /* Resolve super class from scope chain so the VM uses the
@@ -285,12 +346,32 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
                 if (cd->methods[i]->type != AST_METHOD_DECL)
                     continue;
                 MethodDeclNode *m = &cd->methods[i]->as.method_decl;
-                if (m->is_static_constructor)
+                if (m->is_static_constructor || m->is_static)
                     continue;
                 data->methods[mi].name = arena_strdup(l->func, m->name);
                 data->methods[mi].is_constructor =
                     m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
-                data->methods[mi].is_static = m->is_static;
+                data->methods[mi].is_static = false;
+                data->methods[mi].is_static_constructor = false;
+                mi++;
+            }
+            if (synth_ctor && mi < total) {
+                data->methods[mi].name = arena_strdup(l->func, "constructor");
+                data->methods[mi].is_constructor = true;
+                data->methods[mi].is_static = false;
+                data->methods[mi].is_static_constructor = false;
+                mi++;
+            }
+            for (int i = 0; i < cd->method_count && mi < total; i++) {
+                if (cd->methods[i]->type != AST_METHOD_DECL)
+                    continue;
+                MethodDeclNode *m = &cd->methods[i]->as.method_decl;
+                if (m->is_static_constructor || !m->is_static)
+                    continue;
+                data->methods[mi].name = arena_strdup(l->func, m->name);
+                data->methods[mi].is_constructor =
+                    m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+                data->methods[mi].is_static = true;
                 data->methods[mi].is_static_constructor = false;
                 mi++;
             }

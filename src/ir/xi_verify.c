@@ -16,6 +16,7 @@
 #include "xi_backend.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
+#include "xi_tbaa.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
@@ -44,7 +45,15 @@ static void verr(VerifyCtx *ctx, const char *fmt, ...) {
 
 /* ========== Individual Checks ========== */
 
-/* Check 1: function-level invariants */
+/* Check 1: function-level invariants.
+ *
+ * Xi IR carries an implicit invariant that block->id equals the block's
+ * index in f->blocks[].  Multiple passes (notably SCCP, xi_loop, and
+ * codegen lowering) index per-block scratch arrays by block id and pass
+ * succ->id directly to mark_edge / headers[] / etc. as an array index.
+ * Any pass that permutes f->blocks[] without resyncing block->id
+ * silently breaks downstream analyses; verify here so the offending
+ * pass is named immediately. */
 static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
     if (!f->name) {
         verr(ctx, "function has NULL name");
@@ -61,6 +70,17 @@ static void verify_func(VerifyCtx *ctx, const XiFunc *f) {
     if (f->entry != f->blocks[0]) {
         verr(ctx, "func '%s': entry != blocks[0]", f->name);
         return;
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk) {
+            verr(ctx, "func '%s': blocks[%u] is NULL", f->name, b);
+            return;
+        }
+        if (blk->id != b) {
+            verr(ctx, "func '%s': blocks[%u]->id is %u (must equal index)", f->name, b, blk->id);
+            return;
+        }
     }
 }
 
@@ -247,7 +267,7 @@ static void verify_cfg_edges(VerifyCtx *ctx, const XiFunc *f, const XiBlock *blk
                      blk->kind == XI_BLOCK_RETURN ? "RETURN" : "UNREACHABLE", blk->id, nsucc);
             }
             break;
-        default:
+        case XI_BLOCK_PLAIN:
             break;
     }
 }
@@ -334,9 +354,8 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
     if (ctx->failed)
         return;
 
-    /* Compute RPO and dominators (overwrites scratch fields on blocks). */
-    xi_compute_rpo(f);
-    xi_compute_dominators(f);
+    /* Ensure RPO and dominators are up to date (cached). */
+    xi_ensure_dominators(f);
 
     for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
         XiBlock *blk = f->blocks[b];
@@ -458,6 +477,7 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_TUPLE_GET] = 1,    /* args[0]=tuple */
     [XI_CALL] = 0xFF,      /* callee + params: variadic */
     [XI_CALL_METHOD] = 0xFF,
+    [XI_CALL_METHOD_DIRECT] = 0xFF,
     [XI_CALL_BUILTIN] = 0xFF,
     [XI_EXTRACT] = 1,
     [XI_CLOSURE_NEW] = 0xFF, /* captures: variadic */
@@ -512,6 +532,8 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_MOVE] = 1,
     [XI_STACK_ALLOC] = 0xFF, /* variadic: inherits args from original alloc op */
     [XI_CORO_OP] = 0xFF,     /* variadic: 0..2 args depending on Coro method */
+    [XI_BOUNDS_CHECK] = 2,   /* index, length */
+    [XI_GUARD_TYPE] = 1,     /* guarded value */
 };
 
 static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
@@ -549,6 +571,30 @@ static bool is_bool_producing_op(uint16_t op) {
            op == XI_ITER_VALID;
 }
 
+static bool verify_type_is_boolish(const XrType *type) {
+    return type && (type->kind == XR_KIND_BOOL || type->kind == XR_KIND_UNKNOWN);
+}
+
+static bool verify_type_is_truth_testable(const XrType *type) {
+    if (!type)
+        return false;
+    switch (type->kind) {
+        case XR_KIND_UNIT:
+        case XR_KIND_NEVER:
+            return false;
+        default:
+            return true;
+    }
+}
+
+static bool verify_type_assignable_or_unknown(XrType *target, XrType *source) {
+    if (!target || !source)
+        return true;
+    if (target->kind == XR_KIND_UNKNOWN || source->kind == XR_KIND_UNKNOWN)
+        return true;
+    return xr_type_assignable(target, source);
+}
+
 static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -557,6 +603,14 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
+        if (blk->kind == XI_BLOCK_IF && blk->control &&
+            !verify_type_is_truth_testable(blk->control->type)) {
+            uint32_t kind =
+                blk->control->type ? (uint32_t) blk->control->type->kind : XR_KIND_COUNT;
+            verr(ctx, "func '%s': IF block b%u control v%u is not truth-testable (kind=%u)",
+                 f->name, blk->id, blk->control->id, kind);
+            return;
+        }
         for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
             XiValue *v = blk->values[i];
             if (!v || !v->type)
@@ -581,21 +635,37 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             if (op == XI_SELECT && v->nargs == 3) {
                 /* Condition (arg[0]) should be bool */
                 if (v->args[0] && v->args[0]->type) {
-                    XrTypeKind ck = v->args[0]->type->kind;
-                    if (ck != XR_KIND_BOOL && ck != XR_KIND_UNKNOWN) {
+                    if (!verify_type_is_boolish(v->args[0]->type)) {
                         verr(ctx,
                              "func '%s': XI_SELECT v%u in b%u condition v%u "
                              "is not bool (kind=%u)",
-                             f->name, v->id, blk->id, v->args[0]->id, ck);
+                             f->name, v->id, blk->id, v->args[0]->id, v->args[0]->type->kind);
                         return;
                     }
+                }
+                if (v->args[1] && v->args[1]->type &&
+                    !verify_type_assignable_or_unknown(v->type, v->args[1]->type)) {
+                    verr(ctx,
+                         "func '%s': XI_SELECT v%u in b%u true arm v%u "
+                         "is not assignable to result type",
+                         f->name, v->id, blk->id, v->args[1]->id);
+                    return;
+                }
+                if (v->args[2] && v->args[2]->type &&
+                    !verify_type_assignable_or_unknown(v->type, v->args[2]->type)) {
+                    verr(ctx,
+                         "func '%s': XI_SELECT v%u in b%u false arm v%u "
+                         "is not assignable to result type",
+                         f->name, v->id, blk->id, v->args[2]->id);
+                    return;
                 }
             }
 
             /* XI_EXTRACT: arg[0] must be a call or multi-ret */
             if (op == XI_EXTRACT && v->nargs == 1 && v->args[0]) {
                 uint16_t src_op = v->args[0]->op;
-                if (src_op != XI_CALL && src_op != XI_CALL_METHOD && src_op != XI_CALL_BUILTIN &&
+                if (src_op != XI_CALL && src_op != XI_CALL_METHOD &&
+                    src_op != XI_CALL_METHOD_DIRECT && src_op != XI_CALL_BUILTIN &&
                     src_op != XI_MULTI_RET) {
                     verr(ctx,
                          "func '%s': XI_EXTRACT v%u in b%u extracts from "
@@ -700,9 +770,53 @@ static void verify_call_method_contract(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
+static void verify_call_method_direct_contract(VerifyCtx *ctx, const XiFunc *f) {
+    if (ctx->failed)
+        return;
+
+    for (uint32_t b = 0; b < f->nblocks && !ctx->failed; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues && !ctx->failed; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_CALL_METHOD_DIRECT)
+                continue;
+            if (!v->aux) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has NULL aux "
+                     "(expected method name string)",
+                     f->name, v->id, blk->id);
+                return;
+            }
+            if (v->nargs < 1) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has 0 args "
+                     "(needs at least receiver)",
+                     f->name, v->id, blk->id);
+                return;
+            }
+            if (v->aux_int < 0 || v->aux_int > 255) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has invalid "
+                     "method index=%lld",
+                     f->name, v->id, blk->id, (long long) v->aux_int);
+                return;
+            }
+            if (v->nargs - 1 > 127) {
+                verr(ctx,
+                     "func '%s': XI_CALL_METHOD_DIRECT v%u in b%u has too many "
+                     "arguments=%u",
+                     f->name, v->id, blk->id, (unsigned) (v->nargs - 1));
+                return;
+            }
+        }
+    }
+}
+
 /* ========== Check 13: Tail Call Safety ========== */
 
-/* XI_FLAG_TAIL may only appear on XI_CALL or XI_CALL_METHOD.
+/* XI_FLAG_TAIL may only appear on call ops.
  * XI_CALL with tail flag must either be a self-call (aux_int & 0xFF == 1)
  * or the callee must be typed as a function.  Class constructors etc.
  * are not safe tail-call targets because OP_TAILCALL only handles closures. */
@@ -720,7 +834,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             /* Only call ops may carry tail flag */
-            if (v->op != XI_CALL && v->op != XI_CALL_METHOD) {
+            if (v->op != XI_CALL && v->op != XI_CALL_METHOD && v->op != XI_CALL_METHOD_DIRECT) {
                 verr(ctx,
                      "func '%s': v%u %s in b%u has XI_FLAG_TAIL "
                      "but is not a call op",
@@ -982,6 +1096,21 @@ static bool is_narrow_op(uint16_t op) {
            op == XI_NARROW_I32 || op == XI_NARROW_U32 || op == XI_NARROW_F32;
 }
 
+static bool native_width_needs_narrow(uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_F32:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* XI_INDEX_SET on a sub-width typed array (Array<int8>, Array<uint16>, etc.)
  * must have a NARROW_* op feeding its value argument (args[2]).
  * Without narrowing, a full-width int64/f64 is stored into a narrow slot,
@@ -1008,7 +1137,7 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             struct XrType *elem = coll_type->container.element_type;
-            if (!elem || elem->native_width == 0)
+            if (!elem || !native_width_needs_narrow(elem->native_width))
                 continue;
 
             /* Sub-width element — args[2] must be a NARROW_* op */
@@ -1112,6 +1241,10 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_call_method_contract(&ctx, f);
     }
 
+    if (!ctx.failed) {
+        verify_call_method_direct_contract(&ctx, f);
+    }
+
     /* Tail call safety: only on call ops with valid callee */
     if (!ctx.failed) {
         verify_tail_calls(&ctx, f);
@@ -1132,6 +1265,37 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
     /* NARROW before typed-array store (all stages) */
     if (!ctx.failed) {
         verify_narrow_before_typed_store(&ctx, f);
+    }
+
+    /* TBAA annotation consistency (only when invariant bit is set) */
+    if (!ctx.failed && (f->invariant_mask & XI_INV_TBAA_ANNOTATED)) {
+        for (uint32_t bi = 0; bi < f->nblocks && !ctx.failed; bi++) {
+            XiBlock *blk = f->blocks[bi];
+            if (!blk)
+                continue;
+            for (uint32_t vi = 0; vi < blk->nvalues && !ctx.failed; vi++) {
+                XiValue *v = blk->values[vi];
+                if (!v)
+                    continue;
+                bool is_mem = xi_is_memory_op(v->op);
+                if (is_mem && v->mem_group == XI_MEM_NONE) {
+                    verr(&ctx, "v%u (%s): memory op has XI_MEM_NONE after TBAA annotation", v->id,
+                         xi_op_name(v->op));
+                } else if (!is_mem && v->op != XI_CALL && v->op != XI_CALL_METHOD &&
+                           v->op != XI_CALL_METHOD_DIRECT && v->op != XI_CALL_BUILTIN &&
+                           v->mem_group != XI_MEM_NONE) {
+                    verr(&ctx, "v%u (%s): non-memory op has mem_group=%u (expected XI_MEM_NONE)",
+                         v->id, xi_op_name(v->op), v->mem_group);
+                }
+            }
+        }
+    }
+
+    /* IC metadata table consistency (only when invariant bit is set) */
+    if (!ctx.failed && (f->invariant_mask & XI_INV_IC_ATTACHED)) {
+        if (!f->ic_table) {
+            verr(&ctx, "func '%s': XI_INV_IC_ATTACHED set but ic_table is NULL", f->name);
+        }
     }
 
     return !ctx.failed;

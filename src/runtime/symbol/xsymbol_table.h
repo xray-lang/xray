@@ -259,8 +259,11 @@ enum {
     // Result ADT methods
     SYMBOL_IS_OK,
     SYMBOL_IS_ERR,
+    SYMBOL_OK,
+    SYMBOL_ERR,
     SYMBOL_UNWRAP_OR,
     SYMBOL_UNWRAP,
+    SYMBOL_MAP_ERR,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

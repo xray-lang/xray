@@ -69,6 +69,11 @@ class Counter {
     }
 }
 
+class NoCtorDefaults {
+    nums: Array<int> = [1, 2]
+    settings: Map<string, int> = #{"port": 8080}
+}
+
 @test
 fn test_field_default_init() {
 
@@ -113,5 +118,22 @@ fn test_field_default_init() {
 
     print("c1 count: ${c1.count()}")  // expect: 2
     print("c2 count: ${c2.count()}")  // expect: 1
+}
+
+@test
+fn test_field_default_init_without_constructor() {
+    let a = new NoCtorDefaults()
+    let b = new NoCtorDefaults()
+
+    assert_eq(a.nums.length, 2)
+    assert_eq(a.settings["port"], 8080)
+
+    a.nums.push(3)
+    a.settings["port"] = 9090
+
+    assert_eq(a.nums.length, 3)
+    assert_eq(a.settings["port"], 9090)
+    assert_eq(b.nums.length, 2)
+    assert_eq(b.settings["port"], 8080)
 }
 

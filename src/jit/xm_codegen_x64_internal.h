@@ -18,6 +18,7 @@
 #include <setjmp.h>
 #include "xm_codegen.h"
 #include "xm_codegen_internal.h"
+#include "xm_verify_post_call.h"
 #include "xm_x64.h"
 #include "xm_jit.h"
 #include "xm_regalloc.h"
@@ -84,6 +85,16 @@
 #define X64_CALLEE_XMM_BYTES 0
 #endif
 
+_Static_assert(X64_NGPR_CALLER_SAVE + X64_NGPR_CALLEE_SAVE_ALLOC == X64_MAX_PHYS_REGS,
+               "x64 allocatable GP count mismatch");
+_Static_assert(X64_NGPR_CALLER_SAVE <= (int) (sizeof(((XrJitSuspendState *) 0)->caller_saved) /
+                                              sizeof(((XrJitSuspendState *) 0)->caller_saved[0])),
+               "x64 caller-saved suspend capacity mismatch");
+_Static_assert(X64_NGPR_CALLEE_SAVE_ALLOC <=
+                   (int) (sizeof(((XrJitSuspendState *) 0)->callee_saved) /
+                          sizeof(((XrJitSuspendState *) 0)->callee_saved[0])),
+               "x64 callee-saved suspend capacity mismatch");
+
 /*
  * Frame layout (x86-64, both ABIs):
  *
@@ -141,7 +152,26 @@ typedef struct {
     uint32_t target_blk;  // target block id
     X64PatchType type;
     X64Cond cc;  // condition code (for JCC patches)
+    XmPatchRecord record;
 } X64BranchPatch;
+
+static inline XmPatchRecord x64_patch_record_for(X64PatchType type, uint32_t offset) {
+    switch (type) {
+        case X64_PATCH_JMP:
+        case X64_PATCH_DEOPT_JMP:
+            return xm_patch_record_make(XM_PATCH_MCINSN_X64_JMP_REL32, offset, 32, true);
+        case X64_PATCH_JCC:
+        case X64_PATCH_DEOPT_JCC:
+            return xm_patch_record_make(XM_PATCH_MCINSN_X64_JCC_REL32, offset, 32, true);
+        case X64_PATCH_CALL_C:
+        case X64_PATCH_CALL_SELF:
+        case X64_PATCH_CALL_SELF_FAST:
+        case X64_PATCH_BARRIER_FWD:
+        case X64_PATCH_BARRIER_BACK:
+            return xm_patch_record_make(XM_PATCH_MCINSN_X64_CALL_REL32, offset, 32, true);
+    }
+    return xm_patch_record_make(XM_PATCH_MCINSN_NONE, offset, 0, false);
+}
 
 #define X64_INIT_PATCHES 256
 
@@ -201,13 +231,19 @@ typedef struct {
     bool has_barriers;
 
     /* Suspend/resume tracking (coroutine support) */
-    uint32_t suspend_cont_offsets[16];    // byte offset of continuation per suspend_id
-    uint32_t suspend_smap_ids[16];        // smap id at each suspend point
-    uint8_t suspend_result_regs[16];      // physical register for result per suspend_id
-    int16_t suspend_result_bc_slots[16];  // bc_slot of result vreg per suspend_id
-    int32_t suspend_result_tag_offs[16];  // vreg_runtime_tags offset per suspend_id (-1=none)
-    uint32_t nsuspend;                    // number of suspend points emitted
-    uint32_t resume_entry_offset;         // byte offset of resume entry (0 = none)
+    uint32_t
+        suspend_cont_offsets[XM_MAX_SUSPEND_ENTRIES];  // byte offset of continuation per suspend_id
+    uint32_t suspend_smap_ids[XM_MAX_SUSPEND_ENTRIES];  // smap id at each suspend point
+    uint8_t
+        suspend_result_regs[XM_MAX_SUSPEND_ENTRIES];  // physical register for result per suspend_id
+    int16_t
+        suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];  // bc_slot of result vreg per suspend_id
+    int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];  // vreg_runtime_tags offset per
+                                                              // suspend_id (-1=none)
+    uint32_t nsuspend;                                        // number of suspend points emitted
+    uint32_t resume_entry_offset;  // byte offset of resume entry (0 = none)
+
+    XmPostCallTracker post_call_tracker;
 } X64CodegenCtx;
 
 /* ========== Register Mapping ========== */
@@ -267,6 +303,9 @@ XR_FUNC int x64_live_gp(X64CodegenCtx *ctx, X64Reg *out, X64Reg exclude);
 
 /* Collect live FP registers, return count */
 XR_FUNC int x64_live_fp(X64CodegenCtx *ctx, X64Xmm *out);
+
+XR_FUNC void x64_emit_jit_frame_push(X64CodegenCtx *ctx);
+XR_FUNC void x64_emit_jit_frame_pop(X64CodegenCtx *ctx);
 
 /* Emit deopt_id store (for deopt stub identification) */
 XR_FUNC void x64_emit_deopt_id(X64CodegenCtx *ctx, XmIns *ins);

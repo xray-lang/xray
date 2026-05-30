@@ -428,7 +428,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         }
 
         if (!test) {
-            XiValue *val = xi_lower_expr(l, arm->body);
+            XiValue *val = NULL;
+            if (arm->body && arm->body->type == AST_BLOCK) {
+                xi_lower_stmt(l, arm->body);
+                if (l->cur_block)
+                    val = xi_const_null(l->func, l->cur_block, l->type_null);
+            } else {
+                val = xi_lower_expr(l, arm->body);
+            }
             if (l->cur_block) {
                 if (exit_count < 32) {
                     body_exits[exit_count] = l->cur_block;
@@ -447,7 +454,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             xi_lower_braun_seal(l, next_blk);
 
             l->cur_block = body_blk;
-            XiValue *val = xi_lower_expr(l, arm->body);
+            XiValue *val = NULL;
+            if (arm->body && arm->body->type == AST_BLOCK) {
+                xi_lower_stmt(l, arm->body);
+                if (l->cur_block)
+                    val = xi_const_null(l->func, l->cur_block, l->type_null);
+            } else {
+                val = xi_lower_expr(l, arm->body);
+            }
             if (l->cur_block) {
                 if (exit_count < 32) {
                     body_exits[exit_count] = l->cur_block;
@@ -1429,8 +1443,10 @@ static void lower_destructure_bind(XiLower *l, XrDestructurePattern *pat, XiValu
             xi_lower_braun_write(l, new_var, l->cur_block, src);
             break;
         }
-        default:
+        case PATTERN_SKIP:
             break;
+        default:
+            XR_CHECK(false, "xi_lower: invalid destructure pattern");
     }
 }
 
@@ -2202,7 +2218,7 @@ static void prescan_block_decls(XiLower *l, AstNode **stmts, int count) {
                 type = xi_lower_node_type(l, s);
                 break;
             default:
-                break;
+                continue;
         }
         if (!name)
             continue;

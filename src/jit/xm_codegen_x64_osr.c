@@ -236,10 +236,9 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
          * x64_emit_block earlier, so the displacement is known here. */
         uint32_t target =
             (snap_block_id < ctx->nblock_offsets) ? ctx->block_offsets[snap_block_id] : 0;
-        x64_emit8(&ctx->buf, 0xE9);
-        uint32_t rel_origin = ctx->buf.pos + 4;
-        int32_t rel = (int32_t) target - (int32_t) rel_origin;
-        x64_emit32(&ctx->buf, (uint32_t) rel);
+        x64_jmp_rel32(&ctx->buf, 0);
+        uint32_t emit_pos = ctx->buf.pos - 4;
+        x64_patch_rel32(&ctx->buf, emit_pos, target);
 
         result->nosr++;
     }
@@ -307,7 +306,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     /* === Save suspend_id to stack (before we clobber RCX with reg restore) === */
     x64_mov_rm32(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET);
     x64_push_r(&ctx->buf, X64_RCX);
-    CODEGEN_CHECK(ctx, ctx->nsuspend <= 16, "too many suspend points");
+    CODEGEN_CHECK(ctx, ctx->nsuspend <= XM_MAX_SUSPEND_ENTRIES, "too many suspend points");
 
     /* === Load suspend_state pointer into R11 === */
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
@@ -328,7 +327,8 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     /* === Reload ALL allocatable registers === */
     /* Caller-saved regs from caller_saved[] */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
-        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG, i * 8);
+        x64_mov_rm(&ctx->buf, x64_alloc_regs[i], X64_SCRATCH_REG,
+                   (int32_t) XM_SUSPEND_CALLER_SAVED_OFF + i * 8);
 
     /* Callee-saved allocatable regs from callee_saved[] */
     for (int i = 0; i < X64_NGPR_CALLEE_SAVE_ALLOC; i++)
@@ -343,15 +343,13 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     x64_pop_r(&ctx->buf, X64_SCRATCH_REG);
 
     /* === Per-suspend-id dispatch: CMP + JE chain === */
-    uint32_t trampoline_patches[16];
+    uint32_t trampoline_patches[XM_MAX_SUSPEND_ENTRIES];
     for (uint32_t i = 0; i < ctx->nsuspend; i++) {
         /* CMP R11d, i */
         x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) i);
         /* JE trampoline_i (placeholder) */
-        x64_emit8(&ctx->buf, 0x0F);
-        x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-        trampoline_patches[i] = ctx->buf.pos;
-        x64_emit32(&ctx->buf, 0);
+        x64_jcc_rel32(&ctx->buf, X64_CC_E, 0);
+        trampoline_patches[i] = ctx->buf.pos - 4;
     }
 
     /* Fallback: should not reach here. Return DEOPT_MARKER. */
@@ -380,10 +378,8 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
 
         /* JMP to continuation point in main function code */
         uint32_t cont = ctx->suspend_cont_offsets[i];
-        x64_emit8(&ctx->buf, 0xE9);
-        uint32_t jmp_pos = ctx->buf.pos;
-        x64_emit32(&ctx->buf, 0);
-        x64_patch_rel32(&ctx->buf, jmp_pos, cont);
+        x64_jmp_rel32(&ctx->buf, 0);
+        x64_patch_rel32(&ctx->buf, ctx->buf.pos - 4, cont);
     }
 
     result->resume_entry_offset = ctx->resume_entry_offset;

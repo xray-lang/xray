@@ -14,6 +14,7 @@
 #include "xi_lower_internal.h"
 #include "xi.h"
 #include "xi_effect.h"
+#include "xi_lower_expr_helpers.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -36,37 +37,7 @@
 #include <string.h>
 #include <stdio.h>
 
-/* Return the XrStructLayout for a struct instance type, or NULL.
- *
- * Order matters: kind narrows the union access before the is_value_type
- * read, so non-instance types (Array, Map, ...) never observe the bool
- * field even when type lowering hands us an unrelated XrType layout. */
-static XrStructLayout *struct_layout_of(struct XrType *t) {
-    if (!t)
-        return NULL;
-    if (t->kind != XR_KIND_INSTANCE && t->kind != XR_KIND_CLASS)
-        return NULL;
-    if (!t->is_value_type)
-        return NULL;
-    if (!t->instance.class_ref)
-        return NULL;
-    return t->instance.class_ref->struct_layout;
-}
-
-/* Find field index by name in a struct layout.  Returns -1 if not found. */
-static int struct_field_index(const XrStructLayout *layout, const char *name) {
-    if (!layout || !layout->field_names || !name)
-        return -1;
-    for (int i = 0; i < layout->field_count; i++) {
-        if (layout->field_names[i] && strcmp(layout->field_names[i], name) == 0)
-            return i;
-    }
-    return -1;
-}
-
 /* ========== Forward Declarations ========== */
-
-static XiValue *lower_short_circuit(XiLower *l, AstNode *node);
 
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
@@ -105,93 +76,6 @@ static void propagate_needs_cell(XiLower *l, int upval_idx) {
                 child->captures[ci].needs_cell = true;
             }
         }
-    }
-}
-
-/* Local type inference for binary ops when side table has no entry.
- * Mirrors the analyzer's xa_visit_binary() rules. */
-static struct XrType *infer_binary_type(XiLower *l, AstNodeType ast_type, struct XrType *left,
-                                        struct XrType *right) {
-    /* Comparison → bool */
-    if (ast_type >= AST_BINARY_EQ && ast_type <= AST_BINARY_GE)
-        return l->type_bool;
-    if (ast_type == AST_BINARY_EQ_STRICT || ast_type == AST_BINARY_NE_STRICT)
-        return l->type_bool;
-    /* Logical → bool */
-    if (ast_type == AST_BINARY_AND || ast_type == AST_BINARY_OR)
-        return l->type_bool;
-    /* Bitwise → int */
-    if (ast_type >= AST_BINARY_BAND && ast_type <= AST_BINARY_RSHIFT)
-        return l->type_int;
-    /* Arithmetic: promote float, otherwise preserve int */
-    if (left && left->kind == XR_KIND_FLOAT)
-        return l->type_float;
-    if (right && right->kind == XR_KIND_FLOAT)
-        return l->type_float;
-    if (left && left->kind == XR_KIND_INT && right && right->kind == XR_KIND_INT)
-        return l->type_int;
-    /* string + string → string */
-    if (left && left->kind == XR_KIND_STRING && right && right->kind == XR_KIND_STRING)
-        return l->type_string;
-    /* Fallback: use side table or operand type */
-    return left ? left : l->type_any;
-}
-
-/* Local type inference for unary ops. */
-static struct XrType *infer_unary_type(XiLower *l, AstNodeType ast_type, struct XrType *operand) {
-    switch (ast_type) {
-        case AST_UNARY_NEG:
-            return operand ? operand : l->type_int;
-        case AST_UNARY_NOT:
-            return l->type_bool;
-        case AST_UNARY_BNOT:
-            return l->type_int;
-        default:
-            return operand ? operand : l->type_any;
-    }
-}
-
-/* Map AST binary node type to Xi op. */
-static uint16_t binary_ast_to_xi_op(AstNodeType ast_type) {
-    switch (ast_type) {
-        case AST_BINARY_ADD:
-            return XI_ADD;
-        case AST_BINARY_SUB:
-            return XI_SUB;
-        case AST_BINARY_MUL:
-            return XI_MUL;
-        case AST_BINARY_DIV:
-            return XI_DIV;
-        case AST_BINARY_MOD:
-            return XI_MOD;
-        case AST_BINARY_BAND:
-            return XI_BAND;
-        case AST_BINARY_BOR:
-            return XI_BOR;
-        case AST_BINARY_BXOR:
-            return XI_BXOR;
-        case AST_BINARY_LSHIFT:
-            return XI_SHL;
-        case AST_BINARY_RSHIFT:
-            return XI_SHR;
-        case AST_BINARY_EQ:
-            return XI_EQ;
-        case AST_BINARY_NE:
-            return XI_NE;
-        case AST_BINARY_EQ_STRICT:
-            return XI_EQ_STRICT;
-        case AST_BINARY_NE_STRICT:
-            return XI_NE_STRICT;
-        case AST_BINARY_LT:
-            return XI_LT;
-        case AST_BINARY_LE:
-            return XI_LE;
-        case AST_BINARY_GT:
-            return XI_GT;
-        case AST_BINARY_GE:
-            return XI_GE;
-        default:
-            return XI_ADD; /* fallback */
     }
 }
 
@@ -278,9 +162,9 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     /* Prefer analyzer side table; fall back to local inference from operands */
     struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
     if (!result_type) {
-        result_type = infer_binary_type(l, node->type, lhs->type, rhs->type);
+        result_type = xi_lower_infer_binary_type(l, node->type, lhs->type, rhs->type);
     }
-    uint16_t op = binary_ast_to_xi_op(node->type);
+    uint16_t op = xi_lower_binary_ast_to_xi_op(node->type);
 
     return xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
 }
@@ -293,7 +177,7 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
     /* Prefer analyzer side table; fall back to local inference */
     struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
     if (!result_type) {
-        result_type = infer_unary_type(l, node->type, operand->type);
+        result_type = xi_lower_infer_unary_type(l, node->type, operand->type);
     }
     uint16_t op;
 
@@ -541,9 +425,9 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 
     /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
-    XrStructLayout *slayout = struct_layout_of(obj->type);
+    XrStructLayout *slayout = xi_lower_struct_layout_of(obj->type);
     if (slayout) {
-        int sidx = struct_field_index(slayout, ma->name);
+        int sidx = xi_lower_struct_field_index(slayout, ma->name);
         if (sidx >= 0) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_GET, result_type, 1);
             if (!v)
@@ -611,9 +495,9 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     struct XrType *result_type = val->type;
 
     /* Struct with compile-time layout → XI_STRUCT_SET */
-    XrStructLayout *slayout = struct_layout_of(obj->type);
+    XrStructLayout *slayout = xi_lower_struct_layout_of(obj->type);
     if (slayout) {
-        int sidx = struct_field_index(slayout, ms->member);
+        int sidx = xi_lower_struct_field_index(slayout, ms->member);
         if (sidx >= 0) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, result_type, 2);
             if (!v)
@@ -2049,7 +1933,18 @@ XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, XrTypeRef *tref, int
             case XR_TREF_NULL:
                 tid = 0;
                 break; /* XR_TID_NULL */
-            default:
+            case XR_TREF_UNKNOWN:
+            case XR_TREF_INT_WIDTH:
+            case XR_TREF_FLOAT_WIDTH:
+            case XR_TREF_NAMED:
+            case XR_TREF_GENERIC:
+            case XR_TREF_OPTIONAL:
+            case XR_TREF_UNION:
+            case XR_TREF_FUNCTION:
+            case XR_TREF_TUPLE:
+            case XR_TREF_OBJECT:
+            case XR_TREF_FIXED_ARRAY:
+            case XR_TREF_TYPE_PARAM:
                 break;
         }
         /* Generic containers: Array<T> → XR_TID_ARRAY, Map<K,V> → XR_TID_MAP, etc. */
@@ -2167,7 +2062,18 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
                 tid = 0;
                 tname = "null";
                 break; /* XR_TID_NULL */
-            default:
+            case XR_TREF_UNKNOWN:
+            case XR_TREF_INT_WIDTH:
+            case XR_TREF_FLOAT_WIDTH:
+            case XR_TREF_NAMED:
+            case XR_TREF_GENERIC:
+            case XR_TREF_OPTIONAL:
+            case XR_TREF_UNION:
+            case XR_TREF_FUNCTION:
+            case XR_TREF_TUPLE:
+            case XR_TREF_OBJECT:
+            case XR_TREF_FIXED_ARRAY:
+            case XR_TREF_TYPE_PARAM:
                 break;
         }
         if (tid < 0 && inner->kind == XR_TREF_NAMED && inner->name) {
@@ -2332,7 +2238,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
             for (int i = 0; i < n; i++) {
                 if (!val_vals[i] || !sl->field_names[i])
                     continue;
-                int fidx = struct_field_index(slayout, sl->field_names[i]);
+                int fidx = xi_lower_struct_field_index(slayout, sl->field_names[i]);
                 if (fidx < 0)
                     continue;
                 XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_unit, 2);
