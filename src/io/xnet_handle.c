@@ -20,6 +20,7 @@
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
+#include "../runtime/gc/xsystem_heap.h"
 
 #ifdef XR_ENABLE_TLS
 #include "../../stdlib/net/tls.h"
@@ -30,11 +31,12 @@
 static void *alloc_handle(struct XrayIsolate *X, size_t size) {
     XR_DCHECK(X != NULL, "net_handle: alloc requires isolate");
     /*
-     * Allocate on the calling coroutine's heap when available, mirror
-     * the xinstance / xexception pattern of falling back to the
-     * isolate gc for bootstrap paths that have no current coroutine
-     * (e.g. CLI / tests creating handles outside a scheduler).
+     * NetConn / NetListener must be shareable across coroutines (go accept
+     * → go serve). Allocate on the system shared heap like Channel.
      */
+    if (X->sys_heap) {
+        return xr_sysheap_alloc_shared(xr_isolate_get_sys_heap(X), size, XR_TINSTANCE);
+    }
     struct XrCoroutine *coro = xr_current_coro(X);
     void *obj = NULL;
     if (coro) {

@@ -236,10 +236,9 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
          * x64_emit_block earlier, so the displacement is known here. */
         uint32_t target =
             (snap_block_id < ctx->nblock_offsets) ? ctx->block_offsets[snap_block_id] : 0;
-        x64_emit8(&ctx->buf, 0xE9);
-        uint32_t rel_origin = ctx->buf.pos + 4;
-        int32_t rel = (int32_t) target - (int32_t) rel_origin;
-        x64_emit32(&ctx->buf, (uint32_t) rel);
+        x64_jmp_rel32(&ctx->buf, 0);
+        uint32_t emit_pos = ctx->buf.pos - 4;
+        x64_patch_rel32(&ctx->buf, emit_pos, target);
 
         result->nosr++;
     }
@@ -349,10 +348,8 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
         /* CMP R11d, i */
         x64_cmp_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) i);
         /* JE trampoline_i (placeholder) */
-        x64_emit8(&ctx->buf, 0x0F);
-        x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-        trampoline_patches[i] = ctx->buf.pos;
-        x64_emit32(&ctx->buf, 0);
+        x64_jcc_rel32(&ctx->buf, X64_CC_E, 0);
+        trampoline_patches[i] = ctx->buf.pos - 4;
     }
 
     /* Fallback: should not reach here. Return DEOPT_MARKER. */
@@ -381,10 +378,8 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
 
         /* JMP to continuation point in main function code */
         uint32_t cont = ctx->suspend_cont_offsets[i];
-        x64_emit8(&ctx->buf, 0xE9);
-        uint32_t jmp_pos = ctx->buf.pos;
-        x64_emit32(&ctx->buf, 0);
-        x64_patch_rel32(&ctx->buf, jmp_pos, cont);
+        x64_jmp_rel32(&ctx->buf, 0);
+        x64_patch_rel32(&ctx->buf, ctx->buf.pos - 4, cont);
     }
 
     result->resume_entry_offset = ctx->resume_entry_offset;

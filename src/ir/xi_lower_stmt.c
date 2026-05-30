@@ -428,7 +428,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         }
 
         if (!test) {
-            XiValue *val = xi_lower_expr(l, arm->body);
+            XiValue *val = NULL;
+            if (arm->body && arm->body->type == AST_BLOCK) {
+                xi_lower_stmt(l, arm->body);
+                if (l->cur_block)
+                    val = xi_const_null(l->func, l->cur_block, l->type_null);
+            } else {
+                val = xi_lower_expr(l, arm->body);
+            }
             if (l->cur_block) {
                 if (exit_count < 32) {
                     body_exits[exit_count] = l->cur_block;
@@ -447,7 +454,14 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
             xi_lower_braun_seal(l, next_blk);
 
             l->cur_block = body_blk;
-            XiValue *val = xi_lower_expr(l, arm->body);
+            XiValue *val = NULL;
+            if (arm->body && arm->body->type == AST_BLOCK) {
+                xi_lower_stmt(l, arm->body);
+                if (l->cur_block)
+                    val = xi_const_null(l->func, l->cur_block, l->type_null);
+            } else {
+                val = xi_lower_expr(l, arm->body);
+            }
             if (l->cur_block) {
                 if (exit_count < 32) {
                     body_exits[exit_count] = l->cur_block;

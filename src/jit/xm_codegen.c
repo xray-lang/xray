@@ -1403,7 +1403,9 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
             a64_buf_emit(&ctx->buf, a64_brk(1));
             break;
         default:
-            XR_DCHECK(false, "emit_terminator: unhandled jump type");
+            ctx->had_error = true;
+            xr_log_warning("cg-arm64", "emit_terminator: unhandled jump type %u",
+                           (unsigned) blk->jmp.type);
             break;
     }
 }
@@ -1650,7 +1652,8 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
         result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
         result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
     }
-    if (!xm_verify_metadata_or_fail(&result, 4, "cg-arm64")) {
+    if (!xm_verify_metadata_or_fail(&result, 4, "cg-arm64") ||
+        !xm_verify_post_call_records(&ctx.post_call_tracker, "cg-arm64")) {
         xr_free(result.stack_map);
         result.stack_map = NULL;
         xr_free(ctx.block_offsets);

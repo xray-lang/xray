@@ -103,6 +103,7 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_CALL:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+        case XI_TAIL_CALL:
         case XI_CALL_BUILTIN:
         case XI_EXTRACT:
 
@@ -176,6 +177,13 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
 
         /* Stack allocation (replaces heap alloc for NO_ESCAPE values) */
         case XI_STACK_ALLOC:
+
+        /* Vector ops */
+        case XI_VEC_LOAD:
+        case XI_VEC_STORE:
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
             return true;
 
         /* --- Non-legal (must be lowered before BACKEND) --- */

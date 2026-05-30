@@ -862,6 +862,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
         return xr_type_new_array(ctx->analyzer->isolate, xr_type_new_unknown(NULL));
 
     ArrayLiteralNode *arr = &node->as.array_literal;
+    XrType *target_elem_type = NULL;
     if (arr->count == 0) {
         // Empty array: use expected type if available
         if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
@@ -876,6 +877,7 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
     XrType *saved_expected = ctx->expected_type;
     if (ctx->expected_type && XR_TYPE_IS_ARRAY(ctx->expected_type) &&
         ctx->expected_type->container.element_type) {
+        target_elem_type = ctx->expected_type->container.element_type;
         ctx->expected_type = ctx->expected_type->container.element_type;
     } else {
         ctx->expected_type = NULL;
@@ -883,16 +885,28 @@ XrType *xa_visit_array_literal(XaInferContext *ctx, AstNode *node) {
 
     // Infer element type from first element
     XrType *elem_type = xa_visit_infer_expr(ctx, arr->elements[0]);
+    bool use_target_elem_type = (target_elem_type != NULL);
+    if (use_target_elem_type && !XR_TYPE_IS_UNKNOWN(elem_type) &&
+        !xa_typecheck_assignable(target_elem_type, elem_type)) {
+        use_target_elem_type = false;
+    }
 
     // Union with other element types
     for (int i = 1; i < arr->count; i++) {
         XrType *t = xa_visit_infer_expr(ctx, arr->elements[i]);
+        if (use_target_elem_type && !XR_TYPE_IS_UNKNOWN(t) &&
+            !xa_typecheck_assignable(target_elem_type, t)) {
+            use_target_elem_type = false;
+        }
         if (!xr_type_equals(elem_type, t)) {
             elem_type = xr_type_union(ctx->analyzer->isolate, elem_type, t);
         }
     }
 
     ctx->expected_type = saved_expected;
+    if (use_target_elem_type) {
+        return xr_type_new_array(ctx->analyzer->isolate, target_elem_type);
+    }
     return xr_type_new_array(ctx->analyzer->isolate, elem_type);
 }
 

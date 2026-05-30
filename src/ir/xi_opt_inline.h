@@ -43,6 +43,10 @@ typedef struct XiInlineCallSiteInfo {
     bool all_args_const;   /* all arguments are XI_CONST */
     bool single_call_site; /* callee only called once in whole program */
     uint32_t caller_size;  /* current caller value count (caps growth) */
+    /* IC profile data (from xi_ic_lookup, zero when unavailable). */
+    uint8_t ic_kind;       /* XiIcKind: NONE, MONO, POLY, MEGA */
+    uint32_t ic_hit_count; /* total IC invocations at this site */
+    float guard_penalty;   /* expected deopt cost (from xi_guard_cost) */
 } XiInlineCallSiteInfo;
 
 /* Compute the inline benefit score.

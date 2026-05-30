@@ -99,6 +99,13 @@ typedef struct XiLoop {
     uint32_t nderived_ivs;
     XiPolynomialIV *polynomial_ivs;
     uint32_t npolynomial_ivs;
+
+    /* Canonical trip count for the primary IV (basic_ivs[0]).
+     * Valid only when has_trip_count is true. Computed from the
+     * header's conditional branch comparing the IV phi against
+     * a constant bound with a constant step. */
+    uint32_t trip_count;
+    bool has_trip_count;
 } XiLoop;
 
 typedef struct XiLoopInfo {
@@ -136,5 +143,12 @@ XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id);
 
 /* Query: does the given block belong to the given loop? */
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk);
+
+/* Compute the canonical trip count from the primary basic IV.
+ * Returns the trip count, or 0 if it cannot be determined.
+ * Requires: the loop has at least one basic IV with constant step,
+ * the header is an IF block comparing the IV phi against a constant
+ * bound, and the body entry is the true-branch successor. */
+XR_FUNC uint32_t xi_loop_trip_count(const XiLoop *loop);
 
 #endif  // XI_LOOP_H

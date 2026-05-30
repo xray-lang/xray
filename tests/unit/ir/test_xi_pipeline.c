@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <time.h>
 
 /* ========== Test Infrastructure ========== */
 
@@ -595,6 +596,171 @@ TEST(e2e_range) {
     xr_vm_proto_free(p);
 }
 
+/* ========== Budget Stress Tests ========== */
+
+static char *gen_large_sequential(int nstmts) {
+    size_t cap = (size_t) nstmts * 40 + 256;
+    char *buf = (char *) malloc(cap);
+    if (!buf)
+        return NULL;
+    size_t pos = 0;
+    for (int i = 0; i < nstmts; i++)
+        pos += (size_t) snprintf(buf + pos, cap - pos, "let v%d = %d + %d\n", i, i, i * 2);
+    pos += (size_t) snprintf(buf + pos, cap - pos, "print(v%d)\n", nstmts - 1);
+    return buf;
+}
+
+static char *gen_nested_loops(int depth, int body_stmts) {
+    size_t cap = (size_t) (depth * 80 + body_stmts * 40 + 256);
+    char *buf = (char *) malloc(cap);
+    if (!buf)
+        return NULL;
+    size_t pos = 0;
+    pos += (size_t) snprintf(buf + pos, cap - pos, "let result = 0\n");
+    for (int d = 0; d < depth; d++)
+        pos += (size_t) snprintf(buf + pos, cap - pos,
+                                 "for (let i%d = 0; i%d < 3; i%d = i%d + 1) {\n", d, d, d, d);
+    for (int s = 0; s < body_stmts; s++)
+        pos += (size_t) snprintf(buf + pos, cap - pos, "result = result + %d\n", s + 1);
+    for (int d = 0; d < depth; d++)
+        pos += (size_t) snprintf(buf + pos, cap - pos, "}\n");
+    pos += (size_t) snprintf(buf + pos, cap - pos, "print(result)\n");
+    return buf;
+}
+
+static char *gen_many_functions(int nfuncs, int body_size) {
+    size_t cap = (size_t) (nfuncs * (body_size * 40 + 120) + 256);
+    char *buf = (char *) malloc(cap);
+    if (!buf)
+        return NULL;
+    size_t pos = 0;
+    for (int f = 0; f < nfuncs; f++) {
+        pos += (size_t) snprintf(buf + pos, cap - pos,
+                                 "fn func%d(x: int) -> int {\n  let acc = x\n", f);
+        for (int s = 0; s < body_size; s++)
+            pos += (size_t) snprintf(buf + pos, cap - pos, "  acc = acc + %d\n", s + 1);
+        pos += (size_t) snprintf(buf + pos, cap - pos, "  return acc\n}\n");
+    }
+    pos += (size_t) snprintf(buf + pos, cap - pos, "let r = func0(1)\n");
+    for (int f = 1; f < nfuncs; f++)
+        pos += (size_t) snprintf(buf + pos, cap - pos, "r = func%d(r)\n", f);
+    pos += (size_t) snprintf(buf + pos, cap - pos, "print(r)\n");
+    return buf;
+}
+
+static uint64_t clock_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+}
+
+TEST(stress_large_sequential_with_budget) {
+    char *src = gen_large_sequential(200);
+    assert(src != NULL);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.budget_ns = 2ULL * 1000 * 1000; /* 2 ms */
+
+    uint64_t t0 = clock_ns();
+    XrProto *p = compile_source(src, &cfg);
+    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
+
+    assert(p != NULL);
+    assert(elapsed_ms < 5000 && "budget stress should finish in < 5s");
+    printf("  200 stmts, 2ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
+
+    xr_vm_proto_free(p);
+    free(src);
+}
+
+TEST(stress_large_sequential_no_budget) {
+    char *src = gen_large_sequential(200);
+    assert(src != NULL);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.budget_ns = 0; /* unlimited */
+
+    uint64_t t0 = clock_ns();
+    XrProto *p = compile_source(src, &cfg);
+    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
+
+    assert(p != NULL);
+    assert(elapsed_ms < 10000 && "no-budget stress should finish in < 10s");
+    printf("  200 stmts, no budget -> %llu ms\n", (unsigned long long) elapsed_ms);
+
+    xr_vm_proto_free(p);
+    free(src);
+}
+
+TEST(stress_nested_loops_with_budget) {
+    char *src = gen_nested_loops(3, 20);
+    assert(src != NULL);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.budget_ns = 5ULL * 1000 * 1000; /* 5 ms */
+
+    uint64_t t0 = clock_ns();
+    XrProto *p = compile_source(src, &cfg);
+    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
+
+    assert(p != NULL);
+    assert(elapsed_ms < 5000 && "nested-loop stress should finish in < 5s");
+    printf("  3-deep loops, 5ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
+
+    xr_vm_proto_free(p);
+    free(src);
+}
+
+TEST(stress_many_functions_with_budget) {
+    char *src = gen_many_functions(20, 15);
+    assert(src != NULL);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.budget_ns = 3ULL * 1000 * 1000; /* 3 ms */
+
+    uint64_t t0 = clock_ns();
+    XrProto *p = compile_source(src, &cfg);
+    uint64_t elapsed_ms = (clock_ns() - t0) / 1000000;
+
+    assert(p != NULL);
+    assert(elapsed_ms < 5000 && "many-func stress should finish in < 5s");
+    printf("  20 funcs x 15 stmts, 3ms budget -> %llu ms\n", (unsigned long long) elapsed_ms);
+
+    xr_vm_proto_free(p);
+    free(src);
+}
+
+static char *gen_large_reuse(int nstmts) {
+    size_t cap = (size_t) nstmts * 30 + 256;
+    char *buf = (char *) malloc(cap);
+    if (!buf)
+        return NULL;
+    size_t pos = 0;
+    pos += (size_t) snprintf(buf + pos, cap - pos, "let acc = 0\n");
+    for (int i = 0; i < nstmts; i++)
+        pos += (size_t) snprintf(buf + pos, cap - pos, "acc = acc + %d\n", i + 1);
+    pos += (size_t) snprintf(buf + pos, cap - pos, "print(acc)\n");
+    return buf;
+}
+
+TEST(stress_budget_truncation_still_valid) {
+    char *src = gen_large_reuse(400);
+    assert(src != NULL);
+
+    XiPipelineConfig cfg = xi_pipeline_default_config();
+    cfg.budget_ns = 1ULL * 1000 * 1000; /* 1 ms: very tight */
+    cfg.run_verify = true;
+
+    XrProto *p = compile_source(src, &cfg);
+    assert(p != NULL);
+
+    int total = PROTO_CODE_COUNT(p);
+    assert(total > 0 && "truncated pipeline must still emit bytecode");
+
+    xr_vm_proto_free(p);
+    free(src);
+}
+
 /* ========== Pipeline Status API ========== */
 
 TEST(e2e_status_str) {
@@ -712,6 +878,14 @@ int main(void) {
 
     /* Range */
     run_e2e_range();
+
+    /* Budget stress tests */
+    printf("\n--- Budget Stress Tests ---\n");
+    run_stress_large_sequential_with_budget();
+    run_stress_large_sequential_no_budget();
+    run_stress_nested_loops_with_budget();
+    run_stress_many_functions_with_budget();
+    run_stress_budget_truncation_still_valid();
 
     /* API */
     run_e2e_status_str();

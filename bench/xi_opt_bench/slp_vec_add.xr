@@ -1,0 +1,27 @@
+fn make_data(n: int, seed: int) -> Array<int> {
+    let data: Array<int> = []
+    for (let i = 0; i < n; i++) {
+        data.push((i * seed + 19) % 4096)
+    }
+    return data
+}
+
+fn vec_add_sum(a: Array<int>, b: Array<int>, rounds: int) -> int {
+    let total = 0
+    let n = a.length
+    for (let r = 0; r < rounds; r++) {
+        for (let i = 0; i < n; i++) {
+            total = total + a[i] + b[i]
+        }
+    }
+    return total
+}
+
+fn main() {
+    let a = make_data(4096, 3)
+    let b = make_data(4096, 7)
+    let result = vec_add_sum(a, b, 128)
+    print("slp_vec_add=${result}")
+}
+
+main()

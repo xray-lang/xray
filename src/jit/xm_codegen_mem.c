@@ -166,7 +166,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                         break;
                     }
                     default:
-                        XR_DCHECK(false, "a64 RT_* mem: unreachable float op");
+                        ctx->had_error = true;
+                        xr_log_warning("cg-arm64", "RT_* mem: unreachable float op %u",
+                                       (unsigned) ins->op);
                         break;
                 }
             } else {

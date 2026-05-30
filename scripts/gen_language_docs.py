@@ -296,17 +296,20 @@ def render_stdlib_card(card_path: Path, fence_registry: dict[str, dict[str, str]
     if not summary:
         raise ValueError(f"{card_path}: missing summary")
     lang = card.get("lang", "en")
+    title = card.get("title", f"{module} module")
+    usage = card.get("usage", f"Usage: `import {module}` then call `{module}.function()`.")
     out: list[str] = []
     out.append("---")
     out.append(f"module: {module}")
     out.append(f"summary: {summary}")
     out.append("---")
-    out.append(f"# {module} module")
+    out.append(f"# {title}")
     lead = card.get("lead") or summary
     out.append("")
     out.append(lead.rstrip())
-    out.append("")
-    out.append(f"Usage: `import {module}` then call `{module}.function()`.")
+    if usage:
+        out.append("")
+        out.append(str(usage).rstrip())
     for section in card.get("sections", []):
         out.append("")
         out.extend(render_card_section(section, fence_registry, card_path, lang))

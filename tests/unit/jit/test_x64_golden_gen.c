@@ -629,7 +629,39 @@ int main(void) {
         check_golden("x64.xorpd (xmm0 xmm0)", &buf, exp, 4);
     }
 
-    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 75 total)\n", g_pass, g_fail);
+    /* x64.movss.rm: xmm0 rbp 8 → f3 0f 10 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movss_rm(&buf, X64_XMM0, X64_RBP, 8);
+    {
+        static const uint8_t exp[] = {0xf3, 0x0f, 0x10, 0x45, 0x08};
+        check_golden("x64.movss.rm (xmm0 rbp 8)", &buf, exp, 5);
+    }
+
+    /* x64.movss.mr: rbp 8 xmm0 → f3 0f 11 45 08 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_movss_mr(&buf, X64_RBP, 8, X64_XMM0);
+    {
+        static const uint8_t exp[] = {0xf3, 0x0f, 0x11, 0x45, 0x08};
+        check_golden("x64.movss.mr (rbp 8 xmm0)", &buf, exp, 5);
+    }
+
+    /* x64.cvtss2sd: xmm0 xmm1 → f3 0f 5a c1 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_cvtss2sd(&buf, X64_XMM0, X64_XMM1);
+    {
+        static const uint8_t exp[] = {0xf3, 0x0f, 0x5a, 0xc1};
+        check_golden("x64.cvtss2sd (xmm0 xmm1)", &buf, exp, 4);
+    }
+
+    /* x64.cvtsd2ss: xmm0 xmm1 → f2 0f 5a c1 */
+    x64_buf_init(&buf, mem, sizeof(mem));
+    x64_cvtsd2ss(&buf, X64_XMM0, X64_XMM1);
+    {
+        static const uint8_t exp[] = {0xf2, 0x0f, 0x5a, 0xc1};
+        check_golden("x64.cvtsd2ss (xmm0 xmm1)", &buf, exp, 4);
+    }
+
+    fprintf(stderr, "golden-bytes: %d passed, %d failed (of 79 total)\n", g_pass, g_fail);
     return g_fail > 0 ? 1 : 0;
 }
 

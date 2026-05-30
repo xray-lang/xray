@@ -18,6 +18,8 @@
 
 #include "../../src/base/xdefs.h"
 
+#include <stddef.h>
+
 struct XrayIsolate;
 struct XrModule;
 
@@ -65,6 +67,7 @@ struct XrModule;
  *   - tempFile()                  Create temporary file
  *   - tempDir()                   Create temporary directory
  */
+XR_FUNC char *xr_io_read_stdin_all(size_t *out_len);
 XR_FUNC struct XrModule *xr_load_module_io(struct XrayIsolate *isolate);
 
 #endif  // XR_STDLIB_IO_H

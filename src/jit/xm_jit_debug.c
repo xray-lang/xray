@@ -18,6 +18,9 @@
 #include "../base/xlog.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
+#include "xm_arm64_disasm_gen.h"
+#include "xm_riscv64_disasm_gen.h"
+#include "xm_x64_disasm_gen.h"
 
 #ifdef __aarch64__
 #include "xm_arm64_disasm.h"
@@ -42,6 +45,89 @@
  * handler; g_nregions uses atomic_uint for safe concurrent registration. */
 static JitCodeRegion g_regions[JIT_DEBUG_MAX_REGIONS];
 static atomic_uint g_nregions = 0;
+
+#define JIT_DEBUG_MAX_GUARD_PAGES 256
+static _Atomic(uintptr_t) g_guard_pages[JIT_DEBUG_MAX_GUARD_PAGES];
+static atomic_uint g_nguard_pages = 0;
+
+static void jit_debug_register_guard_page(void *page) {
+    if (!page)
+        return;
+    uint32_t idx = atomic_fetch_add_explicit(&g_nguard_pages, 1, memory_order_relaxed);
+    if (idx >= JIT_DEBUG_MAX_GUARD_PAGES) {
+        atomic_fetch_sub_explicit(&g_nguard_pages, 1, memory_order_relaxed);
+        return;
+    }
+    atomic_store_explicit(&g_guard_pages[idx], (uintptr_t) page, memory_order_release);
+}
+
+static void jit_debug_unregister_guard_page(void *page) {
+    if (!page)
+        return;
+    uint32_t n = atomic_load_explicit(&g_nguard_pages, memory_order_acquire);
+    for (uint32_t i = 0; i < n && i < JIT_DEBUG_MAX_GUARD_PAGES; i++) {
+        uintptr_t cur = atomic_load_explicit(&g_guard_pages[i], memory_order_acquire);
+        if (cur == (uintptr_t) page) {
+            atomic_store_explicit(&g_guard_pages[i], 0, memory_order_release);
+            return;
+        }
+    }
+}
+
+static void *jit_debug_find_guard_page_for_fault(const void *fault_addr) {
+    uint32_t n = atomic_load_explicit(&g_nguard_pages, memory_order_acquire);
+    for (uint32_t i = 0; i < n && i < JIT_DEBUG_MAX_GUARD_PAGES; i++) {
+        uintptr_t page = atomic_load_explicit(&g_guard_pages[i], memory_order_acquire);
+        if (page && jit_debug_is_guard_page_fault_addr(fault_addr, (void *) page))
+            return (void *) page;
+    }
+    return NULL;
+}
+
+XR_FUNC const char *jit_debug_disasm_mcinsn_name(JitDebugDisasmArch arch, uint32_t insn) {
+    switch (arch) {
+        case JIT_DEBUG_DISASM_ARM64: {
+            int id = xm_a64_disasm(insn);
+            return id == XM_A64_INSN_UNKNOWN ? "(unknown)" : xm_a64_insn_name(id);
+        }
+        case JIT_DEBUG_DISASM_RISCV64: {
+            int id = xm_rv64_disasm(insn);
+            return id == XM_RV64_INSN_UNKNOWN ? "(unknown)" : xm_rv64_insn_name(id);
+        }
+    }
+    return "(unknown)";
+}
+
+XR_FUNC int jit_debug_format_mcinsn(char *buf, size_t bufsz, JitDebugDisasmArch arch,
+                                    uint32_t insn) {
+    if (!buf || bufsz == 0)
+        return 0;
+    return snprintf(buf, bufsz, "%s", jit_debug_disasm_mcinsn_name(arch, insn));
+}
+
+XR_FUNC const char *jit_debug_x64_disasm_one(const uint8_t *code, size_t avail, int *out_len) {
+    int id = XM_X64_INSN_UNKNOWN;
+    int len = xm_x64_disasm(code, avail, &id);
+    if (out_len)
+        *out_len = len;
+    return (id == XM_X64_INSN_UNKNOWN) ? "(unknown)" : xm_x64_insn_name(id);
+}
+
+XR_FUNC bool jit_debug_is_guard_page_fault_addr(const void *fault_addr, const void *page) {
+    if (!fault_addr || !page)
+        return false;
+    uintptr_t addr = (uintptr_t) fault_addr;
+    uintptr_t base = (uintptr_t) page;
+    size_t page_size = xr_os_page_size();
+    return addr >= base && addr < base + page_size;
+}
+
+static XR_UNUSED void dump_mcinsn_word(FILE *out, const char *mark, JitDebugDisasmArch arch,
+                                       uint32_t off, uint32_t insn) {
+    char mcinsn[64];
+    jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), arch, insn);
+    fprintf(out, "  %s %04x:  %08x  %s\n", mark ? mark : "   ", off, insn, mcinsn);
+}
 
 XR_FUNC void jit_debug_register(const char *name, void *code, uint32_t size,
                                 uint32_t fast_entry_offset) {
@@ -88,25 +174,74 @@ XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
 #if defined(__aarch64__)
     uint32_t n_inst = size / 4;
     const uint32_t *insts = (const uint32_t *) code;
-    a64_disasm_dump(stderr, insts, n_inst, 0);
+    for (uint32_t i = 0; i < n_inst; i++) {
+        uint32_t off = i * 4;
+        char line[256];
+        char mcinsn[64];
+        a64_disasm_one(line, sizeof(line), insts[i], off);
+        jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_ARM64, insts[i]);
+        fprintf(stderr, "  %04x:  %08x  %-24s  %s\n", off, insts[i], mcinsn, line);
+    }
 #elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
-    /* No x64 disassembler yet — dump raw hex bytes */
-    const uint8_t *bytes = (const uint8_t *) code;
-    for (uint32_t off = 0; off < size; off += 16) {
-        fprintf(stderr, "  %04x:", off);
-        for (uint32_t j = 0; j < 16 && off + j < size; j++)
-            fprintf(stderr, " %02x", bytes[off + j]);
-        fprintf(stderr, "\n");
+    {
+        const uint8_t *bytes = (const uint8_t *) code;
+        uint32_t off = 0;
+        while (off < size) {
+            int insn_len = 0;
+            const char *name = jit_debug_x64_disasm_one(bytes + off, size - off, &insn_len);
+            if (insn_len <= 0)
+                insn_len = 1;
+            fprintf(stderr, "  %04x:  ", off);
+            for (int b = 0; b < insn_len && b < 10; b++)
+                fprintf(stderr, "%02x ", bytes[off + b]);
+            for (int b = insn_len; b < 10; b++)
+                fprintf(stderr, "   ");
+            fprintf(stderr, " %s\n", name);
+            off += (uint32_t) insn_len;
+        }
     }
 #elif defined(__riscv)
-    /* RISC-V: fixed 32-bit instructions — dump as hex words */
     uint32_t n_inst = size / 4;
     const uint32_t *insts = (const uint32_t *) code;
     for (uint32_t i = 0; i < n_inst; i++)
-        fprintf(stderr, "  %04x:  %08x\n", i * 4, insts[i]);
+        dump_mcinsn_word(stderr, "   ", JIT_DEBUG_DISASM_RISCV64, i * 4, insts[i]);
 #endif
 
     fprintf(stderr, "===== end %s =====\n\n", name ? name : "?");
+}
+
+/* ========== Deopt Diagnostic Logging ========== */
+
+XR_FUNC void jit_debug_log_deopt(const char *func_name, const void *code, uint32_t code_size,
+                                 uint32_t deopt_id, uint32_t bc_pc, int source_line) {
+    if (source_line > 0)
+        xr_log_debug("jit-deopt", "%s: deopt_id=%u bc_pc=%u line=%d code=%p size=%u",
+                     func_name ? func_name : "?", deopt_id, bc_pc, source_line, code, code_size);
+    else
+        xr_log_debug("jit-deopt", "%s: deopt_id=%u bc_pc=%u code=%p size=%u",
+                     func_name ? func_name : "?", deopt_id, bc_pc, code, code_size);
+
+    if (!code || code_size == 0)
+        return;
+
+    const JitCodeRegion *r = jit_debug_lookup(code);
+    if (!r)
+        return;
+
+    /* Dump the last few instructions before the deopt stub entry.
+     * The deopt stub is typically at the end of the function body,
+     * so dumping from the end of the main body gives context about
+     * what the function was doing when it deopted. */
+#if defined(__aarch64__)
+    (void) r;
+    xr_log_debug("jit-deopt", "  (use jit_debug_dump for full arm64 disasm)");
+#elif defined(__x86_64__) || defined(_M_X64) || defined(_M_AMD64)
+    (void) r;
+    xr_log_debug("jit-deopt", "  (use jit_debug_dump for full x64 disasm)");
+#elif defined(__riscv)
+    (void) r;
+    xr_log_debug("jit-deopt", "  (use jit_debug_dump for full riscv64 disasm)");
+#endif
 }
 
 /* ========== Guard Page Safepoint (ARM64 only — uses x28/x19 registers) ========== */
@@ -118,19 +253,22 @@ static uint32_t g_trampoline_size = 0;
 
 void *jit_guard_page_alloc(void) {
     // Start disarmed (R). Sysmon will flip to NONE periodically to arm.
-    return xr_os_mem_alloc(4096, XR_MEM_PROT_R);
+    void *page = xr_os_mem_alloc(xr_os_page_size(), XR_MEM_PROT_R);
+    jit_debug_register_guard_page(page);
+    return page;
 }
 
 void jit_guard_page_free(void *page) {
-    xr_os_mem_free(page, 4096);
+    jit_debug_unregister_guard_page(page);
+    xr_os_mem_free(page, xr_os_page_size());
 }
 
 void jit_guard_page_arm(void *page) {
-    xr_os_mem_protect(page, 4096, XR_MEM_PROT_NONE);
+    xr_os_mem_protect(page, xr_os_page_size(), XR_MEM_PROT_NONE);
 }
 
 void jit_guard_page_disarm(void *page) {
-    xr_os_mem_protect(page, 4096, XR_MEM_PROT_R);
+    xr_os_mem_protect(page, xr_os_page_size(), XR_MEM_PROT_R);
 }
 
 /*
@@ -235,25 +373,12 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *
 
     ucontext_t *uc = (ucontext_t *) ucontext;
 
-    // Read x28 (JIT_CTX_REG) from ucontext to get jit_ctx
-#if defined(XR_OS_MACOS)
-    uint64_t x28_val = uc->uc_mcontext->__ss.__x[28];
-#elif defined(XR_OS_LINUX)
-    uint64_t x28_val = uc->uc_mcontext.regs[28];
-#else
-    return false;
-#endif
-
-    if (!x28_val)
-        return false;
-
-    // Verify fault_addr matches jit_ctx->safepoint_page
-    XrJitScratch *jit_ctx = (XrJitScratch *) (uintptr_t) x28_val;
-    if (fault_addr != jit_ctx->safepoint_page)
+    void *guard_page = jit_debug_find_guard_page_for_fault(fault_addr);
+    if (!guard_page)
         return false;
 
     // This IS a guard page fault. Disarm first.
-    jit_guard_page_disarm(jit_ctx->safepoint_page);
+    jit_guard_page_disarm(guard_page);
 
     // Check if fault PC is in JIT code
     const JitCodeRegion *region = jit_debug_lookup(fault_pc);
@@ -262,6 +387,20 @@ static bool try_handle_guard_page_fault(void *fault_pc, void *fault_addr, void *
         // The faulting instruction will succeed on retry (page now PROT_READ).
         return true;
     }
+
+    // Read x28 (JIT_CTX_REG) from ucontext to get jit_ctx
+#if defined(XR_OS_MACOS)
+    uint64_t x28_val = uc->uc_mcontext->__ss.__x[28];
+#elif defined(XR_OS_LINUX)
+    uint64_t x28_val = uc->uc_mcontext.regs[28];
+#else
+    return true;
+#endif
+
+    if (!x28_val)
+        return true;
+
+    XrJitScratch *jit_ctx = (XrJitScratch *) (uintptr_t) x28_val;
 
     // JIT code fault: redirect to safepoint trampoline.
     // 1. Look up smap_id from fault PC offset in stack map table
@@ -355,26 +494,36 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                 uint32_t dend = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
                 const uint32_t *code = (const uint32_t *) r->code;
                 char line[256];
+                char mcinsn[64];
                 for (uint32_t i = dstart; i < dend; i++) {
                     uint32_t off = i * 4;
                     a64_disasm_one(line, sizeof(line), code[i], off);
-                    fprintf(stderr, "  %s %04x: %08x  %s\n", (i == crash_inst) ? ">>>" : "   ", off,
-                            code[i], line);
+                    jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_ARM64,
+                                            code[i]);
+                    fprintf(stderr, "  %s %04x: %08x  %-24s  %s\n",
+                            (i == crash_inst) ? ">>>" : "   ", off, code[i], mcinsn, line);
                 }
             }
 #elif defined(__x86_64__)
             {
-                /* x64: variable-length instructions, dump hex bytes */
-                uint32_t dstart = (offset > 32) ? offset - 32 : 0;
-                uint32_t dend = (offset + 32 < r->code_size) ? offset + 32 : r->code_size;
                 const uint8_t *bytes = (const uint8_t *) r->code;
-                for (uint32_t off = dstart; off < dend; off += 16) {
-                    fprintf(stderr,
-                            "  %s %04x:", (off <= offset && offset < off + 16) ? ">>>" : "   ",
-                            off);
-                    for (uint32_t j = 0; j < 16 && off + j < dend; j++)
-                        fprintf(stderr, " %02x", bytes[off + j]);
-                    fprintf(stderr, "\n");
+                uint32_t off = (offset > 40) ? offset - 40 : 0;
+                uint32_t dend = (offset + 40 < r->code_size) ? offset + 40 : r->code_size;
+                while (off < dend) {
+                    int ilen = 0;
+                    const char *iname =
+                        jit_debug_x64_disasm_one(bytes + off, r->code_size - off, &ilen);
+                    if (ilen <= 0)
+                        ilen = 1;
+                    const char *mark =
+                        (off <= offset && offset < off + (uint32_t) ilen) ? ">>>" : "   ";
+                    fprintf(stderr, "  %s %04x:  ", mark, off);
+                    for (int b = 0; b < ilen && b < 10; b++)
+                        fprintf(stderr, "%02x ", bytes[off + b]);
+                    for (int b = ilen; b < 10; b++)
+                        fprintf(stderr, "   ");
+                    fprintf(stderr, " %s\n", iname);
+                    off += (uint32_t) ilen;
                 }
             }
 #elif defined(__riscv)
@@ -385,8 +534,8 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                 uint32_t dend = (crash_inst + 10 < n_inst) ? crash_inst + 10 : n_inst;
                 const uint32_t *code = (const uint32_t *) r->code;
                 for (uint32_t i = dstart; i < dend; i++) {
-                    fprintf(stderr, "  %s %04x:  %08x\n", (i == crash_inst) ? ">>>" : "   ", i * 4,
-                            code[i]);
+                    dump_mcinsn_word(stderr, (i == crash_inst) ? ">>>" : "   ",
+                                     JIT_DEBUG_DISASM_RISCV64, i * 4, code[i]);
                 }
             }
 #endif
@@ -400,20 +549,40 @@ static void jit_crash_handler(int sig, siginfo_t *info, void *ucontext) {
                         offset);
 #if defined(__aarch64__)
                 uint32_t n_inst = r->code_size / 4;
-                a64_disasm_dump(f, (const uint32_t *) r->code, n_inst, 0);
+                const uint32_t *code = (const uint32_t *) r->code;
+                for (uint32_t i = 0; i < n_inst; i++) {
+                    uint32_t off = i * 4;
+                    char line[256];
+                    char mcinsn[64];
+                    a64_disasm_one(line, sizeof(line), code[i], off);
+                    jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_ARM64,
+                                            code[i]);
+                    fprintf(f, "  %04x:  %08x  %-24s  %s\n", off, code[i], mcinsn, line);
+                }
 #elif defined(__x86_64__)
-                const uint8_t *bytes = (const uint8_t *) r->code;
-                for (uint32_t off = 0; off < r->code_size; off += 16) {
-                    fprintf(f, "  %04x:", off);
-                    for (uint32_t j = 0; j < 16 && off + j < r->code_size; j++)
-                        fprintf(f, " %02x", bytes[off + j]);
-                    fprintf(f, "\n");
+                {
+                    const uint8_t *bytes = (const uint8_t *) r->code;
+                    uint32_t off = 0;
+                    while (off < r->code_size) {
+                        int ilen = 0;
+                        const char *iname =
+                            jit_debug_x64_disasm_one(bytes + off, r->code_size - off, &ilen);
+                        if (ilen <= 0)
+                            ilen = 1;
+                        fprintf(f, "  %04x:  ", off);
+                        for (int b = 0; b < ilen && b < 10; b++)
+                            fprintf(f, "%02x ", bytes[off + b]);
+                        for (int b = ilen; b < 10; b++)
+                            fprintf(f, "   ");
+                        fprintf(f, " %s\n", iname);
+                        off += (uint32_t) ilen;
+                    }
                 }
 #elif defined(__riscv)
                 uint32_t n_inst = r->code_size / 4;
                 const uint32_t *code = (const uint32_t *) r->code;
                 for (uint32_t i = 0; i < n_inst; i++)
-                    fprintf(f, "  %04x:  %08x\n", i * 4, code[i]);
+                    dump_mcinsn_word(f, "   ", JIT_DEBUG_DISASM_RISCV64, i * 4, code[i]);
 #endif
                 fclose(f);
                 fprintf(stderr, "[JIT-CRASH] Full dump saved to %s\n", fname);
@@ -659,7 +828,30 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
         fprintf(stderr, "  in JIT  = %s+0x%zx  (region %p, size %u, fast=+0x%x)\n",
                 region->name ? region->name : "?", off, region->code, region->code_size,
                 region->fast_entry_offset);
-        /* Print a short hex dump around the fault PC. */
+#ifdef _M_X64
+        /* Disassemble code around crash point using generated x64 disasm */
+        const uint8_t *bytes = (const uint8_t *) region->code;
+        uint32_t doff = (off > 40) ? (uint32_t) (off - 40) : 0;
+        uint32_t dend = (off + 40 < region->code_size) ? (uint32_t) (off + 40) : region->code_size;
+        fprintf(stderr, "  [JIT-CRASH] Code around crash point:\n");
+        while (doff < dend) {
+            int ilen = 0;
+            const char *iname =
+                jit_debug_x64_disasm_one(bytes + doff, region->code_size - doff, &ilen);
+            if (ilen <= 0)
+                ilen = 1;
+            const char *mark =
+                (doff <= (uint32_t) off && (uint32_t) off < doff + (uint32_t) ilen) ? ">>>" : "   ";
+            fprintf(stderr, "  %s %04x:  ", mark, doff);
+            for (int b = 0; b < ilen && b < 10; b++)
+                fprintf(stderr, "%02x ", bytes[doff + b]);
+            for (int b = ilen; b < 10; b++)
+                fprintf(stderr, "   ");
+            fprintf(stderr, " %s\n", iname);
+            doff += (uint32_t) ilen;
+        }
+#else
+        /* Fallback: hex dump for non-x64 Windows (unlikely) */
         size_t start = off >= 8 ? off - 8 : 0;
         size_t end = off + 16 < region->code_size ? off + 16 : region->code_size;
         fprintf(stderr, "  bytes   =");
@@ -668,6 +860,7 @@ static LONG WINAPI jit_veh(EXCEPTION_POINTERS *info) {
                     i == off ? "]" : "");
         }
         fprintf(stderr, "\n");
+#endif
     } else {
         fprintf(stderr, "  in JIT  = (not in JIT code)\n");
     }

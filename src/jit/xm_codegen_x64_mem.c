@@ -24,6 +24,7 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_dispatch_emit_gen.h"
 #include "xm_helper_table.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
@@ -180,13 +181,12 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_emit_deopt_id(ctx, ins);
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *p = &ctx->patches[ctx->npatch];
-            x64_emit8(&ctx->buf, 0xE9); /* JMP rel32 */
-            p->emit_pos = ctx->buf.pos;
+            x64_jmp_rel32(&ctx->buf, 0);
+            p->emit_pos = ctx->buf.pos - 4;
             p->target_blk = 0;
             p->type = X64_PATCH_DEOPT_JMP;
             p->cc = X64_CC_E; /* unused */
             ctx->npatch++;
-            x64_emit32(&ctx->buf, 0);
             ctx->has_deopt = true;
             break;
         }
@@ -287,7 +287,7 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                         break;
                     }
                     default:
-                        XR_DCHECK(false, "x64 RT_* mem: unreachable float op");
+                        CODEGEN_CHECK(ctx, false, "x64 RT_* mem: unreachable float op");
                         break;
                 }
             } else {
@@ -295,13 +295,12 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 x64_emit_deopt_id(ctx, ins);
                 CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
-                x64_emit8(&ctx->buf, 0xE9);
-                p->emit_pos = ctx->buf.pos;
+                x64_jmp_rel32(&ctx->buf, 0);
+                p->emit_pos = ctx->buf.pos - 4;
                 p->target_blk = 0;
                 p->type = X64_PATCH_DEOPT_JMP;
                 p->cc = X64_CC_E;
                 ctx->npatch++;
-                x64_emit32(&ctx->buf, 0);
                 ctx->has_deopt = true;
             }
             break;
@@ -362,33 +361,31 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                     fb = X64_XMM15;
                     x64_cvtsi2sd(&ctx->buf, fb, gb);
                 }
-                x64_ucomisd(&ctx->buf, fa, fb);
-                /* UCOMISD sets ZF/CF for unordered float comparison.
-                 * SETcc to get 0/1 result in rd. */
-                X64Cond cc;
+                XmOp cmp_op = XM_FEQ;
                 if (ins->op == XM_RT_LT)
-                    cc = X64_CC_B; /* CF=1 → below */
+                    cmp_op = XM_FLT;
                 else if (ins->op == XM_RT_LE)
-                    cc = X64_CC_BE; /* CF=1 or ZF=1 */
-                else
-                    cc = X64_CC_E; /* ZF=1 */
-                x64_xor_rr(&ctx->buf, rd, rd);
-                /* SETcc r8: 0F 9x /0 — set low byte of rd */
-                x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40); /* REX prefix */
-                x64_emit8(&ctx->buf, 0x0F);
-                x64_emit8(&ctx->buf, (uint8_t) (0x90 | cc));
-                x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
+                    cmp_op = XM_FLE;
+                bool ok;
+                if (rd == X64_SCRATCH_REG) {
+                    x64_push_r(&ctx->buf, X64_RAX);
+                    ok = xm_dispatch_emit_x64_fcmp_rr_cc(cmp_op, &ctx->buf, rd, fa, fb, X64_RAX);
+                    x64_pop_r(&ctx->buf, X64_RAX);
+                } else {
+                    ok = xm_dispatch_emit_x64_fcmp_rr_cc(cmp_op, &ctx->buf, rd, fa, fb,
+                                                         X64_SCRATCH_REG);
+                }
+                CODEGEN_CHECK(ctx, ok, "x64 generated mem runtime fcmp_rr_cc dispatch rejected op");
             } else {
                 x64_emit_deopt_id(ctx, ins);
                 CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
                 X64BranchPatch *p = &ctx->patches[ctx->npatch];
-                x64_emit8(&ctx->buf, 0xE9);
-                p->emit_pos = ctx->buf.pos;
+                x64_jmp_rel32(&ctx->buf, 0);
+                p->emit_pos = ctx->buf.pos - 4;
                 p->target_blk = 0;
                 p->type = X64_PATCH_DEOPT_JMP;
                 p->cc = X64_CC_E;
                 ctx->npatch++;
-                x64_emit32(&ctx->buf, 0);
                 ctx->has_deopt = true;
             }
             break;
@@ -430,13 +427,12 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* CALL call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *p = &ctx->patches[ctx->npatch];
-            x64_emit8(&ctx->buf, 0xE8);
-            p->emit_pos = ctx->buf.pos;
+            x64_call_rel32(&ctx->buf, 0);
+            p->emit_pos = ctx->buf.pos - 4;
             p->target_blk = 0;
             p->type = X64_PATCH_CALL_C;
             p->cc = X64_CC_E;
             ctx->npatch++;
-            x64_emit32(&ctx->buf, 0);
             ctx->has_call_c = true;
 
             /* Result ptr in RAX */
@@ -515,13 +511,12 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* CALL call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *pa = &ctx->patches[ctx->npatch];
-            x64_emit8(&ctx->buf, 0xE8);
-            pa->emit_pos = ctx->buf.pos;
+            x64_call_rel32(&ctx->buf, 0);
+            pa->emit_pos = ctx->buf.pos - 4;
             pa->target_blk = 0;
             pa->type = X64_PATCH_CALL_C;
             pa->cc = X64_CC_E;
             ctx->npatch++;
-            x64_emit32(&ctx->buf, 0);
             ctx->has_call_c = true;
             break;
         }
@@ -542,11 +537,8 @@ bool x64_emit_mem_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             X64Reg val = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
             x64_xor_rr(&ctx->buf, rd, rd);
             x64_test_rr(&ctx->buf, val, val);
-            /* SETcc: SETE rd (ZF=1 → null → result=1) */
-            x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);
-            x64_emit8(&ctx->buf, 0x0F);
-            x64_emit8(&ctx->buf, 0x94); /* SETE */
-            x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
+            /* SETE rd: ZF=1 (val == 0) means null, produce 1 in low byte. */
+            x64_setcc(&ctx->buf, X64_CC_E, rd);
             break;
         }
 
@@ -569,10 +561,8 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_GC_OFFSET);
     /* TEST R11, R11 → JZ slow_path (gc == NULL) */
     x64_test_rr(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG);
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_E));
-    uint32_t jz_slow = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0);
+    x64_jcc_rel32(&ctx->buf, X64_CC_E, 0);
+    uint32_t jz_slow = ctx->buf.pos - 4;
 
     /* RCX = gc->cursor, compute new_cursor = cursor + size */
     x64_mov_rm(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_IMMIX_CURSOR_OFFSET);
@@ -581,10 +571,8 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_mov_rm(&ctx->buf, rd, X64_SCRATCH_REG, (int32_t) XM_IMMIX_LIMIT_OFFSET);
     /* CMP new_cursor, limit → JA slow_path (new_cursor > limit) */
     x64_cmp_rr(&ctx->buf, X64_RCX, rd);
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_A));
-    uint32_t ja_slow = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0);
+    x64_jcc_rel32(&ctx->buf, X64_CC_A, 0);
+    uint32_t ja_slow = ctx->buf.pos - 4;
 
     /* Commit: gc->cursor = new_cursor */
     x64_mov_mr(&ctx->buf, X64_SCRATCH_REG, (int32_t) XM_IMMIX_CURSOR_OFFSET, X64_RCX);
@@ -641,9 +629,8 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_GC_GCDEBT_OFFSET, X64_SCRATCH_REG);
 
     /* JMP alloc_done (skip slow path) */
-    x64_emit8(&ctx->buf, 0xE9);
-    uint32_t jmp_done = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0);
+    x64_jmp_rel32(&ctx->buf, 0);
+    uint32_t jmp_done = ctx->buf.pos - 4;
 
     /* --- Slow path: CALL_C to xr_jit_alloc --- */
     uint32_t slow_path = ctx->buf.pos;
@@ -665,13 +652,12 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) alloc_entry);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *cp_a = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE8);
-    cp_a->emit_pos = ctx->buf.pos;
+    x64_call_rel32(&ctx->buf, 0);
+    cp_a->emit_pos = ctx->buf.pos - 4;
     cp_a->target_blk = 0;
     cp_a->type = X64_PATCH_CALL_C;
     cp_a->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_call_c = true;
 
     if (rd != X64_RAX)

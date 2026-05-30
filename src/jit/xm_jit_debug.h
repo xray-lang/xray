@@ -22,6 +22,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "../base/xdefs.h"
 
 #define JIT_DEBUG_MAX_REGIONS 256
@@ -32,6 +33,12 @@ typedef struct {
     uint32_t code_size;          // size in bytes
     uint32_t fast_entry_offset;  // instruction offset to fast entry
 } JitCodeRegion;
+
+typedef enum {
+    JIT_DEBUG_DISASM_ARM64 = 0,
+    JIT_DEBUG_DISASM_RISCV64 = 1,
+    JIT_DEBUG_DISASM_X64 = 2,
+} JitDebugDisasmArch;
 
 /* ========== Platform-independent API ========== */
 
@@ -44,14 +51,31 @@ XR_FUNC void jit_debug_register(const char *name, void *code, uint32_t size,
  * Works on both ARM64 and x64 (register dump is platform-specific). */
 XR_FUNC void jit_debug_install_crash_handler(void);
 
-/* Dump code of a JIT-compiled function to stderr.
- * ARM64: full disassembly; x64: hex byte dump. */
+/* Dump code of a JIT-compiled function to stderr with disassembly. */
 XR_FUNC void jit_debug_dump(const char *name, const void *code, uint32_t size,
                             uint32_t fast_entry_offset);
+
+XR_FUNC const char *jit_debug_disasm_mcinsn_name(JitDebugDisasmArch arch, uint32_t insn);
+
+/* Decode one x64 instruction and return its mcinsn name.
+ * Returns instruction length via *out_len (0 if unrecognized). */
+XR_FUNC const char *jit_debug_x64_disasm_one(const uint8_t *code, size_t avail, int *out_len);
+
+XR_FUNC int jit_debug_format_mcinsn(char *buf, size_t bufsz, JitDebugDisasmArch arch,
+                                    uint32_t insn);
+
+XR_FUNC bool jit_debug_is_guard_page_fault_addr(const void *fault_addr, const void *page);
 
 /* Lookup which JIT function contains a given PC (NULL if not found).
  * Safe to call from signal handler (lock-free read). */
 XR_FUNC const JitCodeRegion *jit_debug_lookup(const void *pc);
+
+/* Log deopt event with generated disasm context.
+ * Emits function name, deopt_id, bc_pc, source_line, and surrounding
+ * instruction disassembly via xr_log_debug("jit-deopt", ...).
+ * source_line: 0 means unknown (pre-linemap callers pass 0). */
+XR_FUNC void jit_debug_log_deopt(const char *func_name, const void *code, uint32_t code_size,
+                                 uint32_t deopt_id, uint32_t bc_pc, int source_line);
 
 /* ========== Guard Page Safepoint (ARM64 only) ========== */
 

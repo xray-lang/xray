@@ -32,6 +32,7 @@
 #include <setjmp.h>
 #include "xm_codegen.h"
 #include "xm_codegen_internal.h"
+#include "xm_verify_post_call.h"
 #include "xm_riscv64.h"
 #include "xm_jit.h"
 #include "xm_regalloc.h"
@@ -204,6 +205,8 @@ typedef struct {
     int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];
     uint32_t nsuspend;
     uint32_t resume_entry_offset;
+
+    XmPostCallTracker post_call_tracker;
 } Rv64CodegenCtx;
 
 /* ========== Register Mapping ========== */

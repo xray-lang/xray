@@ -20,6 +20,7 @@
 #include "xi_analysis.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
+#include "../runtime/value/xtype.h"
 #include <string.h>
 
 /* ========== Helpers ========== */
@@ -391,6 +392,8 @@ static void analyze_derived_ivs(XiLoop *loop) {
 static void analyze_loop_ivs(XiLoop *loop) {
     analyze_basic_ivs(loop);
     analyze_derived_ivs(loop);
+    loop->trip_count = xi_loop_trip_count(loop);
+    loop->has_trip_count = (loop->trip_count > 0);
 }
 
 /* Allocate and populate an XiLoop from header + body bitmap. */
@@ -680,4 +683,100 @@ XR_FUNC uint32_t xi_block_loop_depth(const XiLoopInfo *info, uint32_t blk_id) {
 
 XR_FUNC bool xi_loop_contains_block(const XiLoop *loop, const XiBlock *blk) {
     return loop_contains_block_raw(loop, blk);
+}
+
+XR_FUNC uint32_t xi_loop_trip_count(const XiLoop *loop) {
+    if (!loop || loop->nbasic_ivs == 0)
+        return 0;
+
+    const XiBasicIV *biv = &loop->basic_ivs[0];
+    if (!biv->has_const_step || biv->step_const == 0)
+        return 0;
+    if (!biv->start || biv->start->op != XI_CONST)
+        return 0;
+    if (!biv->start->type || biv->start->type->kind != XR_KIND_INT)
+        return 0;
+
+    XiBlock *header = loop->header;
+    if (!header || header->kind != XI_BLOCK_IF)
+        return 0;
+    XiValue *cond = header->control;
+    if (!cond || cond->nargs != 2)
+        return 0;
+
+    XiValue *limit_val = NULL;
+    bool iv_is_lhs = false;
+    if (cond->args[0] == biv->phi && cond->args[1] && cond->args[1]->op == XI_CONST) {
+        limit_val = cond->args[1];
+        iv_is_lhs = true;
+    } else if (cond->args[1] == biv->phi && cond->args[0] && cond->args[0]->op == XI_CONST) {
+        limit_val = cond->args[0];
+        iv_is_lhs = false;
+    }
+    if (!limit_val || !limit_val->type || limit_val->type->kind != XR_KIND_INT)
+        return 0;
+
+    int64_t start = biv->start->aux_int;
+    int64_t step = biv->step_const;
+    int64_t limit = limit_val->aux_int;
+
+    XiBlock *body_entry = header->succs[0];
+    if (!body_entry || !loop_contains_block_raw(loop, body_entry))
+        return 0;
+
+    int64_t range = 0;
+    bool valid = false;
+
+    if (biv->step_op == XI_ADD && step > 0) {
+        if (iv_is_lhs && cond->op == XI_LT) {
+            range = limit - start;
+            valid = range > 0;
+        } else if (iv_is_lhs && cond->op == XI_LE) {
+            range = limit - start + 1;
+            valid = range > 0;
+        } else if (!iv_is_lhs && cond->op == XI_GT) {
+            range = limit - start;
+            valid = range > 0;
+        } else if (!iv_is_lhs && cond->op == XI_GE) {
+            range = limit - start + 1;
+            valid = range > 0;
+        } else if (iv_is_lhs && cond->op == XI_NE) {
+            range = limit - start;
+            valid = range > 0 && (range % step == 0);
+        }
+    } else if (biv->step_op == XI_ADD && step < 0) {
+        int64_t abs_step = -step;
+        if (iv_is_lhs && cond->op == XI_GT) {
+            range = start - limit;
+            valid = range > 0;
+        } else if (iv_is_lhs && cond->op == XI_GE) {
+            range = start - limit + 1;
+            valid = range > 0;
+        } else if (!iv_is_lhs && cond->op == XI_LT) {
+            range = start - limit;
+            valid = range > 0;
+        }
+        if (valid)
+            step = abs_step;
+    } else if (biv->step_op == XI_SUB && step < 0) {
+        int64_t abs_step = -step;
+        if (iv_is_lhs && cond->op == XI_GT) {
+            range = start - limit;
+            valid = range > 0;
+        } else if (iv_is_lhs && cond->op == XI_GE) {
+            range = start - limit + 1;
+            valid = range > 0;
+        }
+        if (valid)
+            step = abs_step;
+    }
+
+    if (!valid || range <= 0 || step <= 0)
+        return 0;
+
+    uint32_t trip = (uint32_t) ((range + step - 1) / step);
+    if (trip > 1000000)
+        return 0;
+
+    return trip;
 }

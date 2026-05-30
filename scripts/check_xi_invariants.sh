@@ -201,32 +201,84 @@ fi
 # INV-13: No functions > 150 lines in src/ir/
 # --------------------------------------------------------------------------
 echo "--- INV-13: Function length check (src/ir/) ---"
+# Allowlist: pre-existing long functions grandfathered before strict enforcement.
+# New code must not exceed 150 lines per function. Entries are "file:line" pairs.
+# Each entry MUST be reviewed and removed when the function is refactored.
+INV13_ALLOWLIST=(
+    "xi_emit.c:xi_emit"
+    "xi_emit_cf.c:emit_block"
+    "xi_emit_object.c:emit_class_create_impl"
+    "xi_escape.c:use_escape_level"
+    "xi_loop.c:xi_compute_loops"
+    "xi_lower_class.inc.c:xi_lower_class_decl"
+    "xi_lower_expr.c:lower_call"
+    "xi_lower_expr.c:lower_new_expr"
+    "xi_lower_expr.c:xi_lower_expr"
+    "xi_lower_stmt.c:lower_try_catch_impl"
+)
+is_allowlisted() {
+    local file="$1" fname="$2"
+    local base; base=$(basename "$file")
+    for entry in "${INV13_ALLOWLIST[@]}"; do
+        local afile="${entry%%:*}"
+        local afunc="${entry##*:}"
+        if [ "$base" = "$afile" ] && echo "$fname" | grep -q "$afunc"; then
+            return 0
+        fi
+    done
+    return 1
+}
 LONG_FUNCS=0
+NEW_LONG=0
 for f in src/ir/*.c; do
     [ -f "$f" ] || continue
-    # Simple heuristic: count lines between function opening brace and closing
-    # at column 0. Exact parsing would need a C parser; this catches gross
-    # violations.
     awk '
     /^[A-Za-z_].*\(/ && /\{[[:space:]]*$/ { start = NR; fname = $0; next }
     /^\}/ && start > 0 {
         len = NR - start
         if (len > 150) {
-            printf "  %s:%d: function ~%d lines (>150): %s\n", FILENAME, start, len, fname
-            found = 1
+            printf "%s|%d|%d|%s\n", FILENAME, start, len, fname
         }
         start = 0
     }
-    END { exit (found ? 1 : 0) }
-    ' found=0 "$f" 2>/dev/null
-    if [ $? -ne 0 ]; then
-        LONG_FUNCS=1
-    fi
+    ' "$f" 2>/dev/null | while IFS='|' read -r file line len fname; do
+        if is_allowlisted "$file" "$fname"; then
+            if [ "${VERBOSE}" -eq 1 ]; then
+                printf "  [ALLOW] %s:%d: ~%d lines: %s\n" "$file" "$line" "$len" "$fname"
+            fi
+        else
+            printf "  [NEW-VIOLATION] %s:%d: ~%d lines (>150): %s\n" "$file" "$line" "$len" "$fname"
+            echo "FAIL" > /tmp/xi_inv13_fail 2>/dev/null || true
+        fi
+    done
 done
-if [ "$LONG_FUNCS" -eq 0 ]; then
-    pass "All functions in src/ir/ <= 150 lines"
+if [ -f /tmp/xi_inv13_fail ]; then
+    rm -f /tmp/xi_inv13_fail
+    fail "New functions exceeding 150 lines found in src/ir/"
 else
-    warn "Functions exceeding 150 lines found (pre-existing; new code must comply)"
+    rm -f /tmp/xi_inv13_fail
+    pass "No new functions exceed 150 lines in src/ir/"
+fi
+
+# --------------------------------------------------------------------------
+# INV-10: Pipeline stats slot sync (pass table entries match stats capacity)
+# --------------------------------------------------------------------------
+echo "--- INV-10: Pipeline stats slot sync ---"
+if [ -f src/ir/xi_opt.c ] && [ -f src/ir/xi_pass.h ]; then
+    PASS_COUNT=$(awk '/static const XiPassDesc xi_pass_table\[\]/{in_table=1} in_table {print} in_table && /^};/{exit}' \
+        src/ir/xi_opt.c \
+        | grep -cE '\{"[a-z0-9_]+",' || true)
+    MAX_STATS=$(grep -oE 'XI_MAX_PASS_STATS[[:space:]]+[0-9]+' src/ir/xi_pass.h \
+        | grep -oE '[0-9]+' || true)
+    if [ -z "$MAX_STATS" ]; then
+        warn "XI_MAX_PASS_STATS not found in xi_pass.h"
+    elif [ "$PASS_COUNT" -gt "$MAX_STATS" ]; then
+        fail "Pass table has $PASS_COUNT entries but XI_MAX_PASS_STATS is only $MAX_STATS"
+    else
+        pass "Pass table ($PASS_COUNT entries) fits within XI_MAX_PASS_STATS ($MAX_STATS)"
+    fi
+else
+    warn "xi_opt.c or xi_pass.h not found, skipping"
 fi
 
 # --------------------------------------------------------------------------
@@ -249,10 +301,8 @@ if [ -f src/ir/xi_opt.c ]; then
     if [ -z "$MISSING" ]; then
         pass "All xi_opt_* functions referenced in xi_opt.c"
     else
-        warn "Some xi_opt_* not found in xi_opt.c (may be helpers, not passes):"
-        if [ "$VERBOSE" -eq 1 ]; then
-            printf "$MISSING"
-        fi
+        fail "xi_opt_* functions not found in xi_opt.c (must register or mark as static helper):"
+        printf "$MISSING"
     fi
 else
     warn "xi_opt.c not found, skipping"
@@ -318,7 +368,7 @@ if [ "${#NO_COVERAGE[@]}" -gt 0 ]; then
         printf "    %s\n" "$entry"
     done
 elif [ "${#MISSING_DEDICATED[@]}" -gt 0 ]; then
-    warn "Passes covered only by test_xi_opt.c (consider promoting to dedicated test):"
+    fail "Passes covered only by test_xi_opt.c (must have dedicated test):"
     for entry in "${MISSING_DEDICATED[@]}"; do
         printf "    %s\n" "$entry"
     done

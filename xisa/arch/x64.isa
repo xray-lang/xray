@@ -897,3 +897,51 @@
   :golden-bytes   (((xmm0 xmm0) "66 0f 57 c0"))
   :golden-asm     (((xmm0 xmm0) "xorpd xmm0, xmm0"))
   :external-reference llvm-mc)
+
+; ==================================================================
+; SSE: scalar single (F32) support
+; ==================================================================
+
+(define-mcinsn x64.movss.rm
+  :operands       (($dst reg:xmm) ($base reg:gpr64) ($disp imm:i32))
+  :constraints    ()
+  :encoding       (sse-rm 0xf3 0x0f 0x10 $dst $base $disp)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      9
+  :golden-bytes   (((xmm0 rbp 8) "f3 0f 10 45 08"))
+  :golden-asm     (((xmm0 rbp 8) "movss xmm0, dword ptr [rbp+8]"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.movss.mr
+  :operands       (($base reg:gpr64) ($disp imm:i32) ($src reg:xmm))
+  :constraints    ()
+  :encoding       (sse-rm 0xf3 0x0f 0x11 $src $base $disp)
+  :flags          (memory)
+  :min-bytes      4
+  :max-bytes      9
+  :golden-bytes   (((rbp 8 xmm0) "f3 0f 11 45 08"))
+  :golden-asm     (((rbp 8 xmm0) "movss dword ptr [rbp+8], xmm0"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.cvtss2sd
+  :operands       (($dst reg:xmm) ($src reg:xmm))
+  :constraints    ()
+  :encoding       (sse-rr 0xf3 0x0f 0x5a $dst $src)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      5
+  :golden-bytes   (((xmm0 xmm1) "f3 0f 5a c1"))
+  :golden-asm     (((xmm0 xmm1) "cvtss2sd xmm0, xmm1"))
+  :external-reference llvm-mc)
+
+(define-mcinsn x64.cvtsd2ss
+  :operands       (($dst reg:xmm) ($src reg:xmm))
+  :constraints    ()
+  :encoding       (sse-rr 0xf2 0x0f 0x5a $dst $src)
+  :flags          ()
+  :min-bytes      4
+  :max-bytes      5
+  :golden-bytes   (((xmm0 xmm1) "f2 0f 5a c1"))
+  :golden-asm     (((xmm0 xmm1) "cvtsd2ss xmm0, xmm1"))
+  :external-reference llvm-mc)

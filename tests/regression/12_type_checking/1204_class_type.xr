@@ -110,6 +110,14 @@ fn test_polymorphism() {
     assert_eq(animals[1].speak(), "Rex barks")
 }
 
+@test
+fn test_array_literal_contextual_supertype() {
+    let animals: Array<Animal> = [Animal("Generic"), Dog("Rex", "Lab")]
+    assert_eq(animals.length, 2)
+    assert_eq(animals[0].speak(), "Generic makes a sound")
+    assert_eq(animals[1].speak(), "Rex barks")
+}
+
 // ===== Static Members =====
 class Counter {
     static count: int = 0

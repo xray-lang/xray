@@ -15,6 +15,7 @@
 #include "xm_arm64.h"
 #include "xm_jit.h"
 #include "xm_patch_verify.h"
+#include "xm_verify_post_call.h"
 #include "xm_regalloc.h"
 #include "../runtime/value/xslot_type.h"
 #include "xm_target.h"
@@ -163,6 +164,8 @@ typedef struct {
                                                               // suspend_id (-1=none)
     uint32_t nsuspend;                                        // number of suspend points emitted
     uint32_t resume_entry_offset;  // code offset of resume entry (0 = none)
+
+    XmPostCallTracker post_call_tracker;
 } CodegenCtx;
 
 // Register allocation tables (defined in xm_codegen.c)

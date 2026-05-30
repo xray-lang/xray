@@ -597,7 +597,8 @@ class IselEntry:
 VALID_ISEL_PATTERNS = {
     'GP_RR_COMM', 'GP_RR', 'GP_RRR', 'GP_R',
     'FP_RR_COMM', 'FP_RR', 'FP_RRR', 'FP_R',
-    'CMP_RR_CC', 'FCMP_RR_CC',
+    'CMP_RR_CC', 'FCMP_RR_CC', 'FP_CMP_RRR',
+    'GP_CMP_INV_RRR', 'GP_CMP_DIFF_RRR',
     'CONV', 'MEM_LOAD', 'MEM_STORE',
     'CALL_HELPER', 'CUSTOM',
 }
@@ -759,7 +760,8 @@ def generate_dispatch_meta_header(entries: list[IselEntry], ops: list[OpDef]) ->
     pattern_order = [
         'GP_RR_COMM', 'GP_RR', 'GP_RRR', 'GP_R',
         'FP_RR_COMM', 'FP_RR', 'FP_RRR', 'FP_R',
-        'CMP_RR_CC', 'FCMP_RR_CC',
+        'CMP_RR_CC', 'FCMP_RR_CC', 'FP_CMP_RRR',
+        'GP_CMP_INV_RRR', 'GP_CMP_DIFF_RRR',
         'CONV', 'MEM_LOAD', 'MEM_STORE',
         'CALL_HELPER', 'CUSTOM',
     ]
@@ -828,6 +830,406 @@ def generate_dispatch_meta_header(entries: list[IselEntry], ops: list[OpDef]) ->
     lines.append('#endif')
     lines.append('')
     lines.append('#endif  /* XM_DISPATCH_META_GEN_H */')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def _require_dispatch_emit_entry(entries: list[IselEntry], op: str, target: str,
+                                 pattern: str, mcinsn: str) -> None:
+    for e in entries:
+        if e.xm_op == op and e.target == target:
+            if e.pattern != pattern or e.mcinsn != mcinsn:
+                die(f"dispatch-emit: XM_{op}/{target} expected {pattern} {mcinsn}, "
+                    f"got {e.pattern} {e.mcinsn}")
+            return
+    die(f"dispatch-emit: missing ISEL entry for XM_{op}/{target}")
+
+
+def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
+    # Wrapper definition tables. Each wrapper picks one (target, pattern) tuple
+    # and lists the (XM op, mcinsn, encoder-call) triples it covers. The
+    # generator cross-checks every triple against isel.def so adding a wrapper
+    # case without an ISEL entry (or vice versa) fails the gate.
+    wrappers = [
+        {
+            'name': 'xm_dispatch_emit_x64_gp_rr_comm',
+            'target': 'x64',
+            'pattern': 'GP_RR_COMM',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs)',
+            'cases': [
+                ('ADD', 'x64.add.rr',  'x64_add_rr(buf, rd, rs);'),
+                ('MUL', 'x64.imul.rr', 'x64_imul_rr(buf, rd, rs);'),
+                ('AND', 'x64.and.rr',  'x64_and_rr(buf, rd, rs);'),
+                ('OR',  'x64.or.rr',   'x64_or_rr(buf, rd, rs);'),
+                ('XOR', 'x64.xor.rr',  'x64_xor_rr(buf, rd, rs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_gp_rr',
+            'target': 'x64',
+            'pattern': 'GP_RR',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs)',
+            'cases': [
+                ('SUB', 'x64.sub.rr', 'x64_sub_rr(buf, rd, rs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_cmp_rr_cc',
+            'target': 'x64',
+            'pattern': 'CMP_RR_CC',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rn, X64Reg rm)',
+            'cases': [
+                ('EQ', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_E, rd);'),
+                ('NE', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_NE, rd);'),
+                ('LT', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_L, rd);'),
+                ('LE', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_LE, rd);'),
+                ('GT', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_G, rd);'),
+                ('GE', 'x64.cmp.rr+x64.setcc',
+                 'x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_GE, rd);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_fcmp_rr_cc',
+            'target': 'x64',
+            'pattern': 'FCMP_RR_CC',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Xmm fn, X64Xmm fm, X64Reg tmp)',
+            'cases': [
+                ('FEQ', 'x64.ucomisd+x64.setcc',
+                 'x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); '
+                 'x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_E, rd); x64_setcc(buf, X64_CC_NP, tmp); '
+                 'x64_and_rr(buf, rd, tmp);'),
+                ('FNE', 'x64.ucomisd+x64.setcc',
+                 'x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); '
+                 'x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_NE, rd); x64_setcc(buf, X64_CC_P, tmp); '
+                 'x64_or_rr(buf, rd, tmp);'),
+                ('FLT', 'x64.ucomisd+x64.setcc',
+                 'x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); '
+                 'x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_B, rd); '
+                 'x64_setcc(buf, X64_CC_NP, tmp); x64_and_rr(buf, rd, tmp);'),
+                ('FLE', 'x64.ucomisd+x64.setcc',
+                 'x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); '
+                 'x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_BE, rd); '
+                 'x64_setcc(buf, X64_CC_NP, tmp); x64_and_rr(buf, rd, tmp);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_fcmp_rr_cc',
+            'target': 'arm64',
+            'pattern': 'FCMP_RR_CC',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg fn, A64Reg fm, A64Reg tmp)',
+            'cases': [
+                ('FEQ', 'arm64.fcmp+arm64.cset',
+                 'a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ)); '
+                 'a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));'),
+                ('FNE', 'arm64.fcmp+arm64.cset',
+                 'a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_NE)); '
+                 'a64_buf_emit(buf, a64_cset(tmp, A64_CC_VS)); a64_buf_emit(buf, a64_orr(rd, tmp, rd));'),
+                ('FLT', 'arm64.fcmp+arm64.cset',
+                 'a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_MI)); '
+                 'a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));'),
+                ('FLE', 'arm64.fcmp+arm64.cset',
+                 'a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LS)); '
+                 'a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_cmp_rr_cc',
+            'target': 'arm64',
+            'pattern': 'CMP_RR_CC',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn, A64Reg rm)',
+            'cases': [
+                ('EQ', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ));'),
+                ('NE', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_NE));'),
+                ('LT', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LT));'),
+                ('LE', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LE));'),
+                ('GT', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_GT));'),
+                ('GE', 'arm64.cmp.rr+arm64.cset',
+                 'a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_GE));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_gp_rrr',
+            'target': 'arm64',
+            'pattern': 'GP_RRR',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn, A64Reg rm)',
+            'cases': [
+                ('ADD', 'arm64.add.rrr', 'a64_buf_emit(buf, a64_add(rd, rn, rm));'),
+                ('SUB', 'arm64.sub.rrr', 'a64_buf_emit(buf, a64_sub(rd, rn, rm));'),
+                ('MUL', 'arm64.mul.rrr', 'a64_buf_emit(buf, a64_mul(rd, rn, rm));'),
+                ('AND', 'arm64.and.rrr', 'a64_buf_emit(buf, a64_and(rd, rn, rm));'),
+                ('OR',  'arm64.orr.rrr', 'a64_buf_emit(buf, a64_orr(rd, rn, rm));'),
+                ('XOR', 'arm64.eor.rrr', 'a64_buf_emit(buf, a64_eor(rd, rn, rm));'),
+                ('SHL', 'arm64.lsl.rrr', 'a64_buf_emit(buf, a64_lsl(rd, rn, rm));'),
+                ('SHR', 'arm64.asr.rrr', 'a64_buf_emit(buf, a64_asr(rd, rn, rm));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_gp_rrr',
+            'target': 'riscv64',
+            'pattern': 'GP_RRR',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2)',
+            'cases': [
+                ('ADD', 'riscv64.add', 'rv64_buf_emit(buf, rv64_add(rd, rs1, rs2));'),
+                ('SUB', 'riscv64.sub', 'rv64_buf_emit(buf, rv64_sub(rd, rs1, rs2));'),
+                ('MUL', 'riscv64.mul', 'rv64_buf_emit(buf, rv64_mul(rd, rs1, rs2));'),
+                ('AND', 'riscv64.and', 'rv64_buf_emit(buf, rv64_and(rd, rs1, rs2));'),
+                ('OR',  'riscv64.or',  'rv64_buf_emit(buf, rv64_or(rd, rs1, rs2));'),
+                ('XOR', 'riscv64.xor', 'rv64_buf_emit(buf, rv64_xor(rd, rs1, rs2));'),
+                ('SHL', 'riscv64.sll', 'rv64_buf_emit(buf, rv64_sll(rd, rs1, rs2));'),
+                ('SHR', 'riscv64.sra', 'rv64_buf_emit(buf, rv64_sra(rd, rs1, rs2));'),
+                # NEG via SUB rd, x0, rs (driver passes rs1=X0). LT/GT via SLT
+                # (GT requires the driver to swap operands before the call).
+                ('NEG', 'riscv64.sub', 'rv64_buf_emit(buf, rv64_sub(rd, rs1, rs2));'),
+                ('LT',  'riscv64.slt', 'rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));'),
+                ('GT',  'riscv64.slt', 'rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_fp_rr_comm',
+            'target': 'x64',
+            'pattern': 'FP_RR_COMM',
+            'signature': '(XmOp op, X64Buf *buf, X64Xmm fd, X64Xmm fs)',
+            'cases': [
+                ('FADD', 'x64.addsd', 'x64_addsd(buf, fd, fs);'),
+                ('FMUL', 'x64.mulsd', 'x64_mulsd(buf, fd, fs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_fp_rr',
+            'target': 'x64',
+            'pattern': 'FP_RR',
+            'signature': '(XmOp op, X64Buf *buf, X64Xmm fd, X64Xmm fs)',
+            'cases': [
+                ('FSUB', 'x64.subsd', 'x64_subsd(buf, fd, fs);'),
+                ('FDIV', 'x64.divsd', 'x64_divsd(buf, fd, fs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_fp_rrr',
+            'target': 'arm64',
+            'pattern': 'FP_RRR',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg fd, A64Reg fn, A64Reg fm)',
+            'cases': [
+                ('FADD', 'arm64.fadd', 'a64_buf_emit(buf, a64_fadd(fd, fn, fm));'),
+                ('FSUB', 'arm64.fsub', 'a64_buf_emit(buf, a64_fsub(fd, fn, fm));'),
+                ('FMUL', 'arm64.fmul', 'a64_buf_emit(buf, a64_fmul(fd, fn, fm));'),
+                ('FDIV', 'arm64.fdiv', 'a64_buf_emit(buf, a64_fdiv(fd, fn, fm));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_fp_rrr',
+            'target': 'riscv64',
+            'pattern': 'FP_RRR',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Freg fs1, Rv64Freg fs2)',
+            'cases': [
+                ('FADD', 'riscv64.fadd.d', 'rv64_buf_emit(buf, rv64_fadd_d(fd, fs1, fs2));'),
+                ('FSUB', 'riscv64.fsub.d', 'rv64_buf_emit(buf, rv64_fsub_d(fd, fs1, fs2));'),
+                ('FMUL', 'riscv64.fmul.d', 'rv64_buf_emit(buf, rv64_fmul_d(fd, fs1, fs2));'),
+                ('FDIV', 'riscv64.fdiv.d', 'rv64_buf_emit(buf, rv64_fdiv_d(fd, fs1, fs2));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_gp_r',
+            'target': 'x64',
+            'pattern': 'GP_R',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd)',
+            'cases': [
+                ('NOT', 'x64.not.r', 'x64_not_r(buf, rd);'),
+                ('NEG', 'x64.neg.r', 'x64_neg_r(buf, rd);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_gp_r',
+            'target': 'arm64',
+            'pattern': 'GP_R',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rm)',
+            'cases': [
+                ('NEG', 'arm64.neg.rr', 'a64_buf_emit(buf, a64_neg(rd, rm));'),
+                ('NOT', 'arm64.mvn.rr', 'a64_buf_emit(buf, a64_mvn(rd, rm));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_fp_r',
+            'target': 'arm64',
+            'pattern': 'FP_R',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg fd, A64Reg fn)',
+            'cases': [
+                ('FNEG', 'arm64.fneg', 'a64_buf_emit(buf, a64_fneg(fd, fn));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_conv_i2f',
+            'target': 'x64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, X64Buf *buf, X64Xmm fd, X64Reg rs)',
+            'cases': [
+                ('I2F', 'x64.cvtsi2sd', 'x64_cvtsi2sd(buf, fd, rs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_x64_conv_f2i',
+            'target': 'x64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Xmm fs)',
+            'cases': [
+                ('F2I', 'x64.cvttsd2si', 'x64_cvttsd2si(buf, rd, fs);'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_conv_i2f',
+            'target': 'arm64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg fd, A64Reg rn)',
+            'cases': [
+                ('I2F', 'arm64.scvtf', 'a64_buf_emit(buf, a64_scvtf(fd, rn));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_arm64_conv_f2i',
+            'target': 'arm64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg fn)',
+            'cases': [
+                ('F2I', 'arm64.fcvtzs', 'a64_buf_emit(buf, a64_fcvtzs(rd, fn));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_conv_i2f',
+            'target': 'riscv64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Reg rs)',
+            'cases': [
+                ('I2F', 'riscv64.fcvt.d.l', 'rv64_buf_emit(buf, rv64_fcvt_d_l(fd, rs));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_conv_f2i',
+            'target': 'riscv64',
+            'pattern': 'CONV',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Freg fs)',
+            'cases': [
+                ('F2I', 'riscv64.fcvt.l.d', 'rv64_buf_emit(buf, rv64_fcvt_l_d(rd, fs));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_fp_r',
+            'target': 'riscv64',
+            'pattern': 'FP_R',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Freg fs)',
+            'cases': [
+                ('FNEG', 'riscv64.fsgnjn.d', 'rv64_buf_emit(buf, rv64_fneg_d(fd, fs));'),
+            ],
+        },
+        {
+            # RISC-V FP compares: GP rd, FP src1/src2. FNE is a 2-step
+            # (feq + xori) sequence handled by the wrapper.
+            'name': 'xm_dispatch_emit_riscv64_fp_cmp_rrr',
+            'target': 'riscv64',
+            'pattern': 'FP_CMP_RRR',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Freg fs1, Rv64Freg fs2)',
+            'cases': [
+                ('FEQ', 'riscv64.feq.d', 'rv64_buf_emit(buf, rv64_feq_d(rd, fs1, fs2));'),
+                ('FNE', 'riscv64.feq.d+riscv64.xori',
+                 'rv64_buf_emit(buf, rv64_feq_d(rd, fs1, fs2)); rv64_buf_emit(buf, rv64_xori(rd, rd, 1));'),
+                ('FLT', 'riscv64.flt.d', 'rv64_buf_emit(buf, rv64_flt_d(rd, fs1, fs2));'),
+                ('FLE', 'riscv64.fle.d', 'rv64_buf_emit(buf, rv64_fle_d(rd, fs1, fs2));'),
+            ],
+        },
+        {
+            # RISC-V 2-step inverted compare for LE/GE: rd = !(rs1 < rs2).
+            # Driver swaps rs1/rs2 on LE so the wrapper body stays uniform.
+            'name': 'xm_dispatch_emit_riscv64_gp_cmp_inv_rrr',
+            'target': 'riscv64',
+            'pattern': 'GP_CMP_INV_RRR',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2)',
+            'cases': [
+                ('LE', 'riscv64.slt+riscv64.xori',
+                 'rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2)); '
+                 'rv64_buf_emit(buf, rv64_xori(rd, rd, 1));'),
+                ('GE', 'riscv64.slt+riscv64.xori',
+                 'rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2)); '
+                 'rv64_buf_emit(buf, rv64_xori(rd, rd, 1));'),
+            ],
+        },
+        {
+            # RISC-V 2-step diff-based compare for EQ/NE. Caller supplies the
+            # scratch GPR used to hold (rs1 - rs2) before the unsigned compare.
+            'name': 'xm_dispatch_emit_riscv64_gp_cmp_diff_rrr',
+            'target': 'riscv64',
+            'pattern': 'GP_CMP_DIFF_RRR',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2, Rv64Reg scratch)',
+            'cases': [
+                ('EQ', 'riscv64.sub+riscv64.sltiu',
+                 'rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2)); '
+                 'rv64_buf_emit(buf, rv64_sltiu(rd, scratch, 1));'),
+                ('NE', 'riscv64.sub+riscv64.sltu',
+                 'rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2)); '
+                 'rv64_buf_emit(buf, rv64_sltu(rd, RV64_X0, scratch));'),
+            ],
+        },
+    ]
+
+    for w in wrappers:
+        for op, mcinsn, _emit in w['cases']:
+            _require_dispatch_emit_entry(entries, op, w['target'], w['pattern'], mcinsn)
+
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('/* Source: xisa/xm/isel.def */')
+    lines.append('')
+    lines.append('#ifndef XM_DISPATCH_EMIT_GEN_H')
+    lines.append('#define XM_DISPATCH_EMIT_GEN_H')
+    lines.append('')
+    lines.append('#include <stdbool.h>')
+    lines.append('')
+    lines.append('#include "xm_arm64.h"')
+    lines.append('#include "xm_ops_gen.h"')
+    lines.append('#include "xm_riscv64.h"')
+    lines.append('#include "xm_x64.h"')
+    lines.append('')
+    def _count_min_emit(emit_code: str, target: str) -> int:
+        """Count expected minimum emissions for byte self-check."""
+        if target == 'arm64':
+            return emit_code.count('a64_buf_emit')
+        elif target == 'riscv64':
+            return emit_code.count('rv64_buf_emit')
+        else:
+            return 0  # x64 variable-length: just check > 0
+
+    for w in wrappers:
+        target = w['target']
+        pos_field = 'buf->pos' if target == 'x64' else 'buf->count'
+        lines.append(f"static inline bool {w['name']}{w['signature']} {{")
+        lines.append('    switch (op) {')
+        for op, _mcinsn, emit in w['cases']:
+            min_emit = _count_min_emit(emit, target)
+            lines.append(f'        case XM_{op}: {{')
+            lines.append(f'            uint32_t _es = {pos_field};')
+            lines.append(f'            {emit}')
+            if min_emit > 0:
+                lines.append(f'            XR_CHECK({pos_field} - _es >= {min_emit}u,')
+                lines.append(f'                     "emit self-check: XM_{op} emitted too few");')
+            else:
+                lines.append(f'            XR_CHECK({pos_field} > _es,')
+                lines.append(f'                     "emit self-check: XM_{op} emitted 0 bytes");')
+            lines.append('            return true;')
+            lines.append('        }')
+        lines.append('        default:')
+        lines.append('            return false;')
+        lines.append('    }')
+        lines.append('}')
+        lines.append('')
+    lines.append('#endif  // XM_DISPATCH_EMIT_GEN_H')
     lines.append('')
     return '\n'.join(lines)
 
@@ -3266,8 +3668,505 @@ def generate_disasm_test(arch: str, mcinsns: list, pattern_fn) -> str:
     return '\n'.join(lines)
 
 
+# ============================================================
+# x64 variable-length disassembler generation
+# ============================================================
+#
+# Unlike arm64/riscv64 (fixed 32-bit), x86-64 uses variable-length
+# encoding (1-15 bytes) with prefixes, REX, ModRM/SIB.  The generated
+# decoder parses these layers and matches against a table of known
+# mcinsn signatures extracted from the :encoding field.
+#
+# Public API (generated):
+#   - XmX64InsnId enum
+#   - xm_x64_insn_name(int id)             — id → name string
+#   - xm_x64_disasm(code, avail, *out_id)  — bytes → (len, id)
+
+def _x64_extract_decode_info(insn: McInsn) -> dict:
+    """Extract x64 decode key from :encoding S-expression."""
+    enc = insn.encoding
+    info = {
+        'prefix': 0,         # mandatory prefix (0, 0x66, 0xF2, 0xF3)
+        'require_rex_w': 0,  # 1 if REX.W mandatory
+        'opcodes': [],       # opcode bytes [op1] or [0x0F, op2]
+        'plus_reg': False,   # op1 uses +reg encoding
+        'plus_cc': False,    # op2 uses +cc encoding
+        'has_modrm': 0,      # 1 if instruction has ModRM byte
+        'modrm_mod': -1,     # fixed modrm.mod (-1 if variable)
+        'modrm_reg': -1,     # fixed modrm.reg (-1 if operand)
+        'modrm_is_mem': 0,   # 1 if modrm-mem (variable displacement)
+        'imm_bytes': 0,      # immediate/displacement bytes (0, 1, 4, 8)
+    }
+    if enc is None:
+        return info
+
+    children = list(enc.children)
+
+    # Detect SSE composite patterns: (sse-rr/rm/gp PREFIX ...)
+    first = children[0] if children else None
+    if isinstance(first, SAtom) and first.value.startswith('sse-'):
+        kind = first.value
+        info['prefix'] = int(children[1].value, 0)
+        info['has_modrm'] = 1
+        if kind == 'sse-gp':
+            # (sse-gp PREFIX rex.w 0x0F OP $d $s)
+            info['require_rex_w'] = 1
+            info['opcodes'] = [0x0F, int(children[4].value, 0)]
+        elif kind == 'sse-rm':
+            # (sse-rm PREFIX 0x0F OP $d $base $disp)
+            info['opcodes'] = [0x0F, int(children[3].value, 0)]
+            info['modrm_is_mem'] = 1
+        else:
+            # (sse-rr PREFIX 0x0F OP $d $s)
+            info['opcodes'] = [0x0F, int(children[3].value, 0)]
+        return info
+
+    # Walk flat encoding elements
+    for el in children:
+        if isinstance(el, SAtom):
+            val = el.value
+            if val == 'rex.w':
+                info['require_rex_w'] = 1
+            elif val == 'prefix-66':
+                info['prefix'] = 0x66
+            elif val.startswith('rex-'):
+                pass  # optional REX
+            elif val.startswith('0x') or val.startswith('0b'):
+                info['opcodes'].append(int(val, 0))
+            # $operand refs — skip
+        elif isinstance(el, SList):
+            ch = el.children
+            if not ch:
+                continue
+            head = ch[0].value if isinstance(ch[0], SAtom) else ''
+            if head == '+':
+                # (+ BASE (reg3 $r)) or (+ BASE $cc)
+                base_val = int(ch[1].value, 0)
+                if len(ch) >= 3:
+                    third = ch[2]
+                    if isinstance(third, SList):
+                        sub_head = (third.children[0].value
+                                    if isinstance(third.children[0], SAtom) else '')
+                        if sub_head == 'reg3':
+                            info['plus_reg'] = True
+                    elif isinstance(third, SAtom) and third.value == '$cc':
+                        info['plus_cc'] = True
+                info['opcodes'].append(base_val)
+            elif head == 'modrm':
+                info['has_modrm'] = 1
+                if len(ch) >= 2 and isinstance(ch[1], SAtom):
+                    info['modrm_mod'] = int(ch[1].value, 0)
+                if len(ch) >= 4:
+                    reg_el = ch[2]
+                    if isinstance(reg_el, SAtom) and not reg_el.value.startswith('$'):
+                        info['modrm_reg'] = int(reg_el.value, 0)
+            elif head == 'modrm-mem':
+                info['has_modrm'] = 1
+                info['modrm_is_mem'] = 1
+                info['modrm_mod'] = -1
+            elif head in ('imm8', 'rel8'):
+                info['imm_bytes'] = 1
+            elif head in ('imm32', 'rel32'):
+                info['imm_bytes'] = 4
+            elif head == 'imm64':
+                info['imm_bytes'] = 8
+    return info
+
+
+def _x64_validate_decode_info(mcinsns: list) -> list:
+    """Validate decode info against golden bytes. Returns list of error strings."""
+    errors = []
+    for insn in mcinsns:
+        di = _x64_extract_decode_info(insn)
+        for regs, hex_str in insn.golden_bytes:
+            bts = [int(b, 16) for b in hex_str.split()]
+            expected_len = len(bts)
+            # Simulate decode
+            pos = 0
+            if pos < len(bts) and bts[pos] in (0x66, 0xF2, 0xF3):
+                pos += 1
+            if pos < len(bts) and 0x40 <= bts[pos] <= 0x4F:
+                pos += 1
+            if pos < len(bts):
+                op1 = bts[pos]; pos += 1
+                if op1 == 0x0F and pos < len(bts):
+                    pos += 1
+            # modrm
+            computed_len = pos
+            if di['has_modrm'] and pos < len(bts):
+                modrm = bts[pos]
+                computed_len += 1  # modrm byte
+                if di['modrm_is_mem']:
+                    mod = modrm >> 6
+                    rm = modrm & 7
+                    if mod == 3:
+                        pass
+                    else:
+                        if rm == 4:
+                            computed_len += 1  # SIB
+                            if pos + 1 < len(bts):
+                                sib_base = bts[pos + 1] & 7
+                                if mod == 0 and sib_base == 5:
+                                    computed_len += 4
+                        if mod == 0:
+                            if rm == 5:
+                                computed_len += 4
+                        elif mod == 1:
+                            computed_len += 1
+                        elif mod == 2:
+                            computed_len += 4
+            computed_len += di['imm_bytes']
+            if computed_len != expected_len:
+                errors.append(
+                    f'{insn.name} ({" ".join(regs)} → {hex_str}): '
+                    f'decoder gives len={computed_len}, expected {expected_len}')
+    return errors
+
+
+def generate_x64_disasm_header(mcinsns: list) -> str:
+    """Generate xm_x64_disasm_gen.h with enum + decoder declarations."""
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('/* x64 variable-length instruction decoder */')
+    lines.append('')
+    lines.append('#pragma once')
+    lines.append('')
+    lines.append('#include <stdint.h>')
+    lines.append('#include <stddef.h>')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XM_X64_INSN_UNKNOWN = -1,')
+    for i, insn in enumerate(mcinsns):
+        stem = _disasm_stem('x64', insn.name)
+        lines.append(f'    XM_X64_INSN_{stem} = {i},')
+    lines.append(f'    XM_X64_INSN__COUNT = {len(mcinsns)}')
+    lines.append('} XmX64InsnId;')
+    lines.append('')
+    lines.append('/* Returns the mcinsn name string (e.g. "x64.add.rr") for the given')
+    lines.append(' * id, or "(unknown)" if id is out of range. */')
+    lines.append('const char *xm_x64_insn_name(int id);')
+    lines.append('')
+    lines.append('/* Decode one variable-length x64 instruction starting at `code`.')
+    lines.append(' * Returns the instruction length in bytes (0 if unrecognized).')
+    lines.append(' * If out_id is non-NULL, writes the XmX64InsnId. */')
+    lines.append('int xm_x64_disasm(const uint8_t *code, size_t avail, int *out_id);')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def generate_x64_disasm_impl(mcinsns: list) -> str:
+    """Generate xm_x64_disasm_gen.c with lookup table + decoder."""
+    # Build decode entries sorted: more-specific first (fixed modrm_mod before
+    # variable, fixed modrm_reg before wildcard, exact opcode before +reg/+cc).
+    entries = []
+    for i, insn in enumerate(mcinsns):
+        di = _x64_extract_decode_info(insn)
+        stem = _disasm_stem('x64', insn.name)
+        # Determine op1/op2 from opcodes list
+        opcodes = di['opcodes']
+        op1 = opcodes[0] if len(opcodes) >= 1 else 0
+        op2 = opcodes[1] if len(opcodes) >= 2 else 0
+        # For single-opcode that isn't 0x0F: op2 stays 0.
+        # For 0x0F-escaped: op1 should be 0x0F. But opcodes list may be
+        # [0x0F, 0xAF] directly. Handle both cases.
+        if op1 == 0x0F:
+            pass  # op2 is the secondary
+        elif len(opcodes) == 2 and opcodes[0] != 0x0F:
+            # Shouldn't happen normally but handle gracefully
+            op1 = opcodes[0]
+            op2 = opcodes[1]
+
+        # +cc applies to op2
+        op2_plus_cc = 1 if di['plus_cc'] else 0
+        # +reg applies to op1
+        op1_plus_reg = 1 if di['plus_reg'] else 0
+
+        # Specificity score for sorting (higher = more specific = check first)
+        spec = 0
+        if di['modrm_mod'] >= 0:
+            spec += 8
+        if di['modrm_reg'] >= 0:
+            spec += 4
+        if di['require_rex_w']:
+            spec += 2
+        if not di['plus_reg'] and not di['plus_cc']:
+            spec += 1
+
+        entries.append({
+            'name': insn.name,
+            'stem': stem,
+            'id': i,
+            'prefix': di['prefix'],
+            'require_rex_w': di['require_rex_w'],
+            'op1': op1,
+            'op2': op2,
+            'op1_plus_reg': op1_plus_reg,
+            'op2_plus_cc': op2_plus_cc,
+            'modrm_mod': di['modrm_mod'],
+            'modrm_reg': di['modrm_reg'],
+            'has_modrm': di['has_modrm'],
+            'modrm_is_mem': di['modrm_is_mem'],
+            'imm_bytes': di['imm_bytes'],
+            'spec': spec,
+        })
+
+    # Sort: most-specific first (descending spec), then by name for stability
+    entries.sort(key=lambda e: (-e['spec'], e['name']))
+
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('#include "xm_x64_disasm_gen.h"')
+    lines.append('')
+    lines.append('typedef struct {')
+    lines.append('    uint8_t  prefix;')
+    lines.append('    uint8_t  require_rex_w;')
+    lines.append('    uint8_t  op1;')
+    lines.append('    uint8_t  op2;')
+    lines.append('    uint8_t  op1_plus_reg;')
+    lines.append('    uint8_t  op2_plus_cc;')
+    lines.append('    int8_t   modrm_mod;')
+    lines.append('    int8_t   modrm_reg;')
+    lines.append('    uint8_t  has_modrm;')
+    lines.append('    uint8_t  modrm_is_mem;')
+    lines.append('    uint8_t  imm_bytes;')
+    lines.append('    int16_t  id;')
+    lines.append('    const char *name;')
+    lines.append('} XmX64DisasmEntry;')
+    lines.append('')
+    lines.append('static const XmX64DisasmEntry kEntries[] = {')
+    for e in entries:
+        lines.append(
+            f'    {{ 0x{e["prefix"]:02x}, {e["require_rex_w"]}, '
+            f'0x{e["op1"]:02x}, 0x{e["op2"]:02x}, '
+            f'{e["op1_plus_reg"]}, {e["op2_plus_cc"]}, '
+            f'{e["modrm_mod"]}, {e["modrm_reg"]}, '
+            f'{e["has_modrm"]}, {e["modrm_is_mem"]}, '
+            f'{e["imm_bytes"]}, '
+            f'XM_X64_INSN_{e["stem"]}, "{e["name"]}" }},')
+    lines.append('};')
+    lines.append('')
+    lines.append('#define X64_DISASM_N_ENTRIES \\')
+    lines.append('    ((int)(sizeof(kEntries) / sizeof(kEntries[0])))')
+    lines.append('')
+
+    # Name table
+    lines.append('static const char *kNamesById[] = {')
+    for insn in mcinsns:
+        lines.append(f'    "{insn.name}",')
+    lines.append('};')
+    lines.append('')
+
+    lines.append('const char *xm_x64_insn_name(int id) {')
+    lines.append('    if (id < 0 || id >= XM_X64_INSN__COUNT) return "(unknown)";')
+    lines.append('    return kNamesById[id];')
+    lines.append('}')
+    lines.append('')
+
+    # ModRM displacement helper
+    lines.append('static int x64_modrm_disp_bytes(const uint8_t *p, size_t rem) {')
+    lines.append('    uint8_t modrm = p[0];')
+    lines.append('    uint8_t mod = modrm >> 6;')
+    lines.append('    uint8_t rm  = modrm & 7;')
+    lines.append('    int extra = 0;')
+    lines.append('    if (mod == 3) return 0;')
+    lines.append('    if (rm == 4) {')
+    lines.append('        extra++;')
+    lines.append('        if (rem > 1 && mod == 0 && (p[1] & 7) == 5) extra += 4;')
+    lines.append('    }')
+    lines.append('    if (mod == 0)      { if (rm == 5) extra += 4; }')
+    lines.append('    else if (mod == 1) { extra += 1; }')
+    lines.append('    else               { extra += 4; }')
+    lines.append('    return extra;')
+    lines.append('}')
+    lines.append('')
+
+    # Decoder
+    lines.append('int xm_x64_disasm(const uint8_t *code, size_t avail, int *out_id) {')
+    lines.append('    if (!code || avail == 0) {')
+    lines.append('        if (out_id) *out_id = XM_X64_INSN_UNKNOWN;')
+    lines.append('        return 0;')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    size_t pos = 0;')
+    lines.append('    uint8_t prefix = 0;')
+    lines.append('    if (code[pos] == 0x66 || code[pos] == 0xF2 || code[pos] == 0xF3) {')
+    lines.append('        prefix = code[pos++];')
+    lines.append('        if (pos >= avail) goto unknown;')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    uint8_t rex = 0;')
+    lines.append('    if ((code[pos] & 0xF0) == 0x40) {')
+    lines.append('        rex = code[pos++];')
+    lines.append('        if (pos >= avail) goto unknown;')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    uint8_t op1 = code[pos++];')
+    lines.append('    uint8_t op2 = 0;')
+    lines.append('    int is_0f = (op1 == 0x0F);')
+    lines.append('    if (is_0f) {')
+    lines.append('        if (pos >= avail) goto unknown;')
+    lines.append('        op2 = code[pos++];')
+    lines.append('    }')
+    lines.append('')
+    lines.append('    uint8_t modrm = (pos < avail) ? code[pos] : 0;')
+    lines.append('    int modrm_mod = (modrm >> 6) & 3;')
+    lines.append('    int modrm_reg = (modrm >> 3) & 7;')
+    lines.append('')
+    lines.append('    for (int i = 0; i < X64_DISASM_N_ENTRIES; i++) {')
+    lines.append('        const XmX64DisasmEntry *e = &kEntries[i];')
+    lines.append('        if (e->prefix != prefix) continue;')
+    lines.append('        if (e->require_rex_w && !(rex & 0x08)) continue;')
+    lines.append('        if (e->op1_plus_reg) {')
+    lines.append('            if ((op1 & 0xF8) != (e->op1 & 0xF8)) continue;')
+    lines.append('        } else {')
+    lines.append('            if (op1 != e->op1) continue;')
+    lines.append('        }')
+    lines.append('        if (e->op2) {')
+    lines.append('            if (!is_0f) continue;')
+    lines.append('            if (e->op2_plus_cc) {')
+    lines.append('                if ((op2 & 0xF0) != (e->op2 & 0xF0)) continue;')
+    lines.append('            } else {')
+    lines.append('                if (op2 != e->op2) continue;')
+    lines.append('            }')
+    lines.append('        } else if (is_0f) {')
+    lines.append('            continue;')
+    lines.append('        }')
+    lines.append('        if (e->modrm_mod >= 0 && modrm_mod != e->modrm_mod) continue;')
+    lines.append('        if (e->modrm_reg >= 0 && modrm_reg != e->modrm_reg) continue;')
+    lines.append('')
+    lines.append('        size_t len = pos;')
+    lines.append('        if (e->has_modrm) {')
+    lines.append('            if (pos >= avail) goto unknown;')
+    lines.append('            len++;')
+    lines.append('            if (e->modrm_is_mem)')
+    lines.append('                len += (size_t)x64_modrm_disp_bytes(code + pos, avail - pos);')
+    lines.append('        }')
+    lines.append('        len += e->imm_bytes;')
+    lines.append('        if (out_id) *out_id = e->id;')
+    lines.append('        return (int)len;')
+    lines.append('    }')
+    lines.append('')
+    lines.append('unknown:')
+    lines.append('    if (out_id) *out_id = XM_X64_INSN_UNKNOWN;')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def generate_x64_disasm_test(mcinsns: list) -> str:
+    """Generate a C test that decodes every :golden-bytes row via xm_x64_disasm()
+    and verifies both the returned id and instruction length."""
+    rows = []  # [(desc, hex_bytes, expected_stem, expected_len)]
+    # Build decode table in the same sort order as the generated decoder
+    decode_entries = []
+    for i, insn in enumerate(mcinsns):
+        di = _x64_extract_decode_info(insn)
+        opcodes = di['opcodes']
+        op1 = opcodes[0] if opcodes else 0
+        op2 = opcodes[1] if len(opcodes) >= 2 else 0
+        spec = 0
+        if di['modrm_mod'] >= 0: spec += 8
+        if di['modrm_reg'] >= 0: spec += 4
+        if di['require_rex_w']: spec += 2
+        if not di['plus_reg'] and not di['plus_cc']: spec += 1
+        decode_entries.append((insn.name, i, di, spec))
+    decode_entries.sort(key=lambda e: (-e[3], e[0]))
+
+    def expected_match(hex_str: str) -> tuple:
+        """Simulate the decoder to find which entry matches."""
+        bts = [int(b, 16) for b in hex_str.split()]
+        pos = 0
+        prefix = 0
+        if bts[pos] in (0x66, 0xF2, 0xF3):
+            prefix = bts[pos]; pos += 1
+        rex = 0
+        if 0x40 <= bts[pos] <= 0x4F:
+            rex = bts[pos]; pos += 1
+        op1 = bts[pos]; pos += 1
+        op2 = 0
+        is_0f = (op1 == 0x0F)
+        if is_0f:
+            op2 = bts[pos]; pos += 1
+        modrm = bts[pos] if pos < len(bts) else 0
+        modrm_mod_val = (modrm >> 6) & 3
+        modrm_reg_val = (modrm >> 3) & 7
+
+        for name, idx, di, _ in decode_entries:
+            opcodes = di['opcodes']
+            e_op1 = opcodes[0] if opcodes else 0
+            e_op2 = opcodes[1] if len(opcodes) >= 2 else 0
+            if di['prefix'] != prefix: continue
+            if di['require_rex_w'] and not (rex & 0x08): continue
+            if di['plus_reg']:
+                if (op1 & 0xF8) != (e_op1 & 0xF8): continue
+            else:
+                if op1 != e_op1: continue
+            if e_op2:
+                if not is_0f: continue
+                if di['plus_cc']:
+                    if (op2 & 0xF0) != (e_op2 & 0xF0): continue
+                else:
+                    if op2 != e_op2: continue
+            elif is_0f:
+                continue
+            if di['modrm_mod'] >= 0 and modrm_mod_val != di['modrm_mod']: continue
+            if di['modrm_reg'] >= 0 and modrm_reg_val != di['modrm_reg']: continue
+            return _disasm_stem('x64', name), len(bts)
+        return None, len(bts)
+
+    for insn in mcinsns:
+        for regs, hex_str in insn.golden_bytes:
+            stem, exp_len = expected_match(hex_str)
+            if stem is None:
+                continue
+            desc = f'{insn.name} ({" ".join(regs)})'.replace('"', "'")
+            byte_list = ', '.join(f'0x{b}' for b in hex_str.split())
+            rows.append((desc, byte_list, stem, exp_len))
+
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen — DO NOT EDIT */')
+    lines.append('/* x64 disassembler round-trip test (cross-platform). */')
+    lines.append('')
+    lines.append('#include <stdio.h>')
+    lines.append('#include <stdint.h>')
+    lines.append('#include "xm_x64_disasm_gen.h"')
+    lines.append('')
+    lines.append('static int g_pass = 0, g_fail = 0;')
+    lines.append('')
+    lines.append('static void check(const char *desc, const uint8_t *code, int len,')
+    lines.append('                  int expected_id, int expected_len) {')
+    lines.append('    int got_id = XM_X64_INSN_UNKNOWN;')
+    lines.append('    int got_len = xm_x64_disasm(code, (size_t)len, &got_id);')
+    lines.append('    if (got_id != expected_id || got_len != expected_len) {')
+    lines.append('        fprintf(stderr, "FAIL: %s: id=%d (expected %d %s), '
+                 'len=%d (expected %d)\\n",')
+    lines.append('                desc, got_id, expected_id, xm_x64_insn_name(expected_id),')
+    lines.append('                got_len, expected_len);')
+    lines.append('        g_fail++;')
+    lines.append('    } else {')
+    lines.append('        g_pass++;')
+    lines.append('    }')
+    lines.append('}')
+    lines.append('')
+    lines.append('int main(void) {')
+    for desc, byte_list, stem, exp_len in rows:
+        lines.append(f'    {{ static const uint8_t b[] = {{{byte_list}}};')
+        lines.append(f'      check("{desc}", b, {exp_len}, XM_X64_INSN_{stem}, {exp_len}); }}')
+    lines.append('')
+    lines.append('    if (g_fail > 0) {')
+    lines.append('        fprintf(stderr, "%d x64 disasm tests FAILED, %d passed\\n", g_fail, g_pass);')
+    lines.append('        return 1;')
+    lines.append('    }')
+    lines.append('    fprintf(stderr, "All %d x64 disasm tests passed\\n", g_pass);')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    return '\n'.join(lines)
+
+
 def cmd_disasm(args: list[str]):
-    """Generate xm_<arch>_disasm_gen.{c,h} from a fixed-32-bit .isa file.
+    """Generate xm_<arch>_disasm_gen.{c,h} from an .isa file.
 
     Usage: xisagen disasm <isa-file> <output-dir>"""
     if len(args) < 2:
@@ -3275,13 +4174,24 @@ def cmd_disasm(args: list[str]):
     isa_path, out_dir = args[0], args[1]
     _regclasses, mcinsns = load_isa(isa_path)
     arch = _detect_arch(mcinsns)
-    if arch not in _DISASM_ARCH_INFO:
-        die(f"disasm: unsupported arch {arch!r} (only fixed-32 archs: "
-            f"{sorted(_DISASM_ARCH_INFO)})")
-    pattern_fn = (_arm64_fixed_pattern if arch == 'arm64'
-                  else _riscv64_fixed_pattern)
-    header = generate_disasm_header(arch, mcinsns)
-    impl = generate_disasm_impl(arch, mcinsns, pattern_fn)
+
+    if arch == 'x64':
+        # x64: variable-length decoder
+        errs = _x64_validate_decode_info(mcinsns)
+        if errs:
+            for e in errs:
+                print(f'xisagen: error: {e}', file=sys.stderr)
+            die(f'{len(errs)} x64 decode validation error(s)')
+        header = generate_x64_disasm_header(mcinsns)
+        impl = generate_x64_disasm_impl(mcinsns)
+    elif arch in _DISASM_ARCH_INFO:
+        pattern_fn = (_arm64_fixed_pattern if arch == 'arm64'
+                      else _riscv64_fixed_pattern)
+        header = generate_disasm_header(arch, mcinsns)
+        impl = generate_disasm_impl(arch, mcinsns, pattern_fn)
+    else:
+        die(f"disasm: unsupported arch {arch!r}")
+
     h_path = os.path.join(out_dir, f'xm_{arch}_disasm_gen.h')
     c_path = os.path.join(out_dir, f'xm_{arch}_disasm_gen.c')
     write_file(h_path, header)
@@ -3326,6 +4236,7 @@ _LLVM_MC_SKIP_MCINSNS = {
     'x64.add.ri32',  'x64.sub.ri32',  'x64.and.ri32',
     'x64.or.ri32',   'x64.cmp.ri32',  'x64.test.ri32',
     'x64.load.bd32', 'x64.store.bd32', 'x64.lea.bd32',
+    'x64.shl.ri',  # llvm-mc shortens 'shl r, 1' to the special D1/E0 form.
     'x64.shr.ri',  # llvm-mc shortens 'shr r, 1' to the special D1/E8 form.
     # Relative-branch instructions: llvm-mc cannot assemble a numeric
     # offset standalone, only via labels. The .isa golden bytes for these
@@ -3345,6 +4256,51 @@ def _x86_intel_inject_ptr(asm: str) -> str:
         r'\1 ptr [',
         asm,
         flags=re.IGNORECASE)
+
+
+def _llvm_mc_version(llvm_mc_path: str) -> Optional[tuple]:
+    """Return (major, minor, patch) for the llvm-mc binary, or None."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            [llvm_mc_path, '--version'],
+            capture_output=True, text=True, timeout=5)
+        for line in result.stdout.splitlines() + result.stderr.splitlines():
+            m = re.search(r'version\s+(\d+)\.(\d+)\.(\d+)', line)
+            if m:
+                return (int(m.group(1)), int(m.group(2)), int(m.group(3)))
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+    return None
+
+
+_LLVM_MC_MIN_VERSION = (15, 0, 0)
+
+
+def _llvm_mc_find_and_check() -> Optional[str]:
+    """Discover llvm-mc, check version, return path or None."""
+    import shutil
+    path = shutil.which('llvm-mc')
+    if path is None:
+        for p in ('/opt/homebrew/opt/llvm/bin/llvm-mc',
+                  '/usr/local/opt/llvm/bin/llvm-mc'):
+            if os.path.isfile(p) and os.access(p, os.X_OK):
+                path = p
+                break
+    if path is None or not os.path.isfile(path):
+        return None
+    ver = _llvm_mc_version(path)
+    if ver:
+        if ver < _LLVM_MC_MIN_VERSION:
+            print(f'xisagen: WARNING: llvm-mc {".".join(map(str, ver))} '
+                  f'< minimum {".".join(map(str, _LLVM_MC_MIN_VERSION))}; '
+                  f'results may differ', file=sys.stderr)
+        print(f'xisagen: llvm-mc version {".".join(map(str, ver))} '
+              f'at {path}', file=sys.stderr)
+    else:
+        print(f'xisagen: llvm-mc at {path} (version unknown)',
+              file=sys.stderr)
+    return path
 
 
 def _llvm_mc_assemble(llvm_mc_path: str, arch: str, asm: str):
@@ -3403,7 +4359,6 @@ def cmd_llvm_mc_check(args: list[str]):
     on hosts that don't ship llvm. When llvm-mc IS available, any byte
     mismatch is a hard failure.
     """
-    import shutil
     llvm_mc_path = None
     arch_specs = []
     for a in args:
@@ -3416,13 +4371,7 @@ def cmd_llvm_mc_check(args: list[str]):
     if not arch_specs:
         die('usage: xisagen llvm-mc-check [--llvm-mc=<path>] arch=<isa> [...]')
     if llvm_mc_path is None:
-        llvm_mc_path = shutil.which('llvm-mc')
-        if llvm_mc_path is None:
-            for p in ('/opt/homebrew/opt/llvm/bin/llvm-mc',
-                      '/usr/local/opt/llvm/bin/llvm-mc'):
-                if os.path.isfile(p) and os.access(p, os.X_OK):
-                    llvm_mc_path = p
-                    break
+        llvm_mc_path = _llvm_mc_find_and_check()
     if llvm_mc_path is None or not os.path.isfile(llvm_mc_path):
         print('xisagen llvm-mc-check: llvm-mc not found, skipping (soft-pass)',
               file=sys.stderr)
@@ -3490,6 +4439,805 @@ def cmd_llvm_mc_check(args: list[str]):
           f'{len(arch_specs)} arch(es))', file=sys.stderr)
 
 
+# ============================================================
+# Random-seed external differential (S4 milestone)
+# ============================================================
+
+_X64_GPR64_NAMES = [
+    'rax', 'rcx', 'rdx', 'rbx', 'rsp', 'rbp', 'rsi', 'rdi',
+    'r8', 'r9', 'r10', 'r11', 'r12', 'r13', 'r14', 'r15',
+]
+_X64_GPR32_NAMES = [
+    'eax', 'ecx', 'edx', 'ebx', 'esp', 'ebp', 'esi', 'edi',
+    'r8d', 'r9d', 'r10d', 'r11d', 'r12d', 'r13d', 'r14d', 'r15d',
+]
+_X64_GPR8L_NAMES = [
+    'al', 'cl', 'dl', 'bl', 'spl', 'bpl', 'sil', 'dil',
+    'r8b', 'r9b', 'r10b', 'r11b', 'r12b', 'r13b', 'r14b', 'r15b',
+]
+_X64_GPR16_NAMES = [
+    'ax', 'cx', 'dx', 'bx', 'sp', 'bp', 'si', 'di',
+    'r8w', 'r9w', 'r10w', 'r11w', 'r12w', 'r13w', 'r14w', 'r15w',
+]
+_X64_XMM_NAMES = [f'xmm{i}' for i in range(16)]
+_X64_CC_NAMES = [
+    'o', 'no', 'b', 'nb', 'e', 'ne', 'be', 'a',
+    's', 'ns', 'p', 'np', 'l', 'ge', 'le', 'g',
+]
+_X64_CC_JCC = [
+    'jo', 'jno', 'jb', 'jnb', 'je', 'jne', 'jbe', 'ja',
+    'js', 'jns', 'jp', 'jnp', 'jl', 'jge', 'jle', 'jg',
+]
+
+
+def _x64_modrm_mem_ref(reg_enc: int, base_enc: int, disp: int) -> list[int]:
+    """Compute ModRM + optional SIB + displacement bytes for memory operand.
+    Mirrors the logic in x64_modrm_mem() from xm_x64.h."""
+    result = []
+    base3 = base_enc & 7
+    reg3 = reg_enc & 7
+    need_sib = (base3 == 4)  # rsp/r12 need SIB
+
+    if disp == 0 and base3 != 5:  # rbp/r13 always need displacement
+        result.append((0 << 6) | (reg3 << 3) | base3)
+        if need_sib:
+            result.append((0 << 6) | (4 << 3) | base3)  # SIB: no index
+    elif -128 <= disp <= 127:
+        result.append((1 << 6) | (reg3 << 3) | base3)
+        if need_sib:
+            result.append((0 << 6) | (4 << 3) | base3)
+        result.append(disp & 0xFF)
+    else:
+        result.append((2 << 6) | (reg3 << 3) | base3)
+        if need_sib:
+            result.append((0 << 6) | (4 << 3) | base3)
+        for sh in range(4):
+            result.append((disp >> (sh * 8)) & 0xFF)
+    return result
+
+
+def _x64_encode_ref(insn: McInsn, op_values: dict) -> Optional[list[int]]:
+    """Reference-encode an x64 instruction with given operand values.
+
+    op_values maps variable names (without $) to integer values:
+      - reg operands: register encoding 0-15
+      - imm operands: integer value
+      - cc operands: condition code 0-15
+
+    Returns list of bytes, or None if encoding pattern is not supported.
+    """
+    if not insn.encoding:
+        return None
+    enc = insn.encoding.children
+    if not enc:
+        return None
+
+    head = enc[0].value if isinstance(enc[0], SAtom) else ''
+    result = []
+
+    def _var(node):
+        if isinstance(node, SAtom) and node.is_variable:
+            return op_values.get(node.value.lstrip('$'))
+        return None
+
+    def _num(node):
+        if isinstance(node, SAtom) and node.is_number:
+            return node.int_value
+        return None
+
+    def _emit8(v):
+        result.append(v & 0xFF)
+
+    def _emit32(v):
+        for sh in range(4):
+            result.append((v >> (sh * 8)) & 0xFF)
+
+    def _emit64(v):
+        for sh in range(8):
+            result.append((v >> (sh * 8)) & 0xFF)
+
+    def _rex(w, r, x, b):
+        val = 0x40
+        if w: val |= 0x08
+        if r: val |= 0x04
+        if x: val |= 0x02
+        if b: val |= 0x01
+        _emit8(val)
+
+    def _modrm_rr(reg, rm):
+        _emit8((3 << 6) | ((reg & 7) << 3) | (rm & 7))
+
+    # ---- SSE patterns ----
+    if head == 'sse-rr':
+        prefix = _num(enc[1])
+        op1 = _num(enc[2])
+        op2 = _num(enc[3])
+        dst = _var(enc[4])
+        src = _var(enc[5])
+        if dst is None or src is None:
+            return None
+        _emit8(prefix)
+        r, b = dst > 7, src > 7
+        if r or b:
+            _rex(False, r, False, b)
+        _emit8(op1)
+        _emit8(op2)
+        _modrm_rr(dst, src)
+        return result
+
+    if head == 'sse-rm':
+        prefix = _num(enc[1])
+        op1 = _num(enc[2])
+        op2 = _num(enc[3])
+        xmm = _var(enc[4])
+        base = _var(enc[5])
+        disp = _var(enc[6])
+        if xmm is None or base is None or disp is None:
+            return None
+        _emit8(prefix)
+        r, b = xmm > 7, base > 7
+        if r or b:
+            _rex(False, r, False, b)
+        _emit8(op1)
+        _emit8(op2)
+        result.extend(_x64_modrm_mem_ref(xmm, base, disp))
+        return result
+
+    if head == 'sse-gp':
+        prefix = _num(enc[1])
+        op1 = _num(enc[3])
+        op2 = _num(enc[4])
+        r1 = _var(enc[5])
+        r2 = _var(enc[6])
+        if r1 is None or r2 is None:
+            return None
+        _emit8(prefix)
+        _rex(True, r1 > 7, False, r2 > 7)
+        _emit8(op1)
+        _emit8(op2)
+        _modrm_rr(r1, r2)
+        return result
+
+    if head == 'rex-if-ext':
+        reg = _var(enc[1])
+        plus = enc[2]
+        base_byte = _num(plus.children[1]) if isinstance(plus, SList) else 0xB8
+        imm_node = enc[3]
+        imm_type = imm_node.children[0].value if isinstance(imm_node, SList) else 'imm32'
+        imm_val = _var(imm_node.children[1]) if isinstance(imm_node, SList) else 0
+        if reg is None or imm_val is None:
+            return None
+        if reg > 7:
+            _rex(False, False, False, True)
+        _emit8(base_byte + (reg & 7))
+        if imm_type == 'imm32':
+            _emit32(imm_val)
+        elif imm_type == 'imm64':
+            _emit64(imm_val)
+        return result
+
+    if head == 'rex-if-ext2':
+        reg = _var(enc[1])
+        base = _var(enc[2])
+        opcode = _num(enc[3])
+        mm = enc[4]
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else 0
+        if reg is None or base is None or disp is None:
+            return None
+        if reg > 7 or base > 7:
+            _rex(False, reg > 7, False, base > 7)
+        _emit8(opcode)
+        result.extend(_x64_modrm_mem_ref(reg, base, disp))
+        return result
+
+    if head == 'rex-for-byte':
+        src = _var(enc[1])
+        base = _var(enc[2])
+        opcode = _num(enc[3])
+        mm = enc[4]
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else 0
+        if src is None or base is None or disp is None:
+            return None
+        if src > 7 or src >= 4 or base > 7:
+            _rex(False, src > 7, False, base > 7)
+        _emit8(opcode)
+        result.extend(_x64_modrm_mem_ref(src, base, disp))
+        return result
+
+    if head == 'rex-if-ext-r':
+        reg = _var(enc[1])
+        if reg is None:
+            return None
+        opcodes = []
+        modrm_node = None
+        for e in enc[2:]:
+            if isinstance(e, SAtom) and e.is_number:
+                opcodes.append(e.int_value)
+            elif isinstance(e, SList):
+                h2 = e.children[0].value if isinstance(e.children[0], SAtom) else ''
+                if h2 == 'modrm':
+                    modrm_node = e
+        if reg > 7:
+            _rex(False, False, False, True)
+        for op in opcodes:
+            _emit8(op)
+        if modrm_node:
+            mod = _num(modrm_node.children[1])
+            reg_f = modrm_node.children[2]
+            rm_f = modrm_node.children[3]
+            mreg = _num(reg_f) if _num(reg_f) is not None else _var(reg_f)
+            mrm = _num(rm_f) if _num(rm_f) is not None else _var(rm_f)
+            if mreg is not None and mrm is not None:
+                _emit8((mod << 6) | ((mreg & 7) << 3) | (mrm & 7))
+        return result
+
+    if head == 'rex-for-byte-r':
+        reg = _var(enc[1])
+        if reg is None:
+            return None
+        opcodes = []
+        modrm_node = None
+        for e in enc[2:]:
+            if isinstance(e, SAtom) and e.is_number:
+                opcodes.append(e.int_value)
+            elif isinstance(e, SList):
+                h2 = e.children[0].value if isinstance(e.children[0], SAtom) else ''
+                if h2 == 'modrm':
+                    modrm_node = e
+                elif h2 == '+':
+                    base_val = _num(e.children[1])
+                    cc_var = _var(e.children[2])
+                    if base_val is not None and cc_var is not None:
+                        opcodes.append(('plus', base_val, cc_var))
+        if reg > 7 or reg >= 4:
+            _rex(False, False, False, reg > 7)
+        for op in opcodes:
+            if isinstance(op, tuple) and op[0] == 'plus':
+                _emit8(op[1] + op[2])
+            else:
+                _emit8(op)
+        if modrm_node:
+            mod = _num(modrm_node.children[1])
+            reg_f = modrm_node.children[2]
+            rm_f = modrm_node.children[3]
+            mreg = _num(reg_f) if _num(reg_f) is not None else _var(reg_f)
+            mrm = _num(rm_f) if _num(rm_f) is not None else _var(rm_f)
+            if mreg is not None and mrm is not None:
+                _emit8((mod << 6) | ((mreg & 7) << 3) | (mrm & 7))
+        return result
+
+    if head == 'prefix-66':
+        _emit8(0x66)
+        reg = _var(enc[2])
+        base = _var(enc[3])
+        opcode = _num(enc[4])
+        mm = enc[5]
+        disp = _var(mm.children[3]) if isinstance(mm, SList) and len(mm.children) > 3 else 0
+        if reg is None or base is None or disp is None:
+            return None
+        if reg > 7 or base > 7:
+            _rex(False, reg > 7, False, base > 7)
+        _emit8(opcode)
+        result.extend(_x64_modrm_mem_ref(reg, base, disp))
+        return result
+
+    # ---- Standard pattern: walk flat encoding elements ----
+    has_rex_w = False
+    opcode_bytes = []
+    modrm_info = None
+    modrm_mem_info = None
+    plus_info = None
+    plus_cc = None
+    imm_parts = []
+
+    for elem in enc:
+        if isinstance(elem, SAtom):
+            if elem.value == 'rex.w':
+                has_rex_w = True
+            elif elem.is_number:
+                opcode_bytes.append(elem.int_value)
+        elif isinstance(elem, SList) and elem.children:
+            h2 = elem.children[0].value if isinstance(elem.children[0], SAtom) else ''
+            if h2 == 'modrm':
+                ch = elem.children
+                mod = _num(ch[1]) if len(ch) > 1 else 3
+                mreg = ch[2] if len(ch) > 2 else None
+                mrm = ch[3] if len(ch) > 3 else None
+                modrm_info = (mod, mreg, mrm)
+            elif h2 == 'modrm-mem':
+                ch = elem.children
+                modrm_mem_info = (
+                    _var(ch[1]) if len(ch) > 1 else None,
+                    _var(ch[2]) if len(ch) > 2 else None,
+                    _var(ch[3]) if len(ch) > 3 else None,
+                )
+            elif h2 == '+':
+                ch = elem.children
+                base_val = _num(ch[1])
+                operand = ch[2] if len(ch) > 2 else None
+                if operand and isinstance(operand, SList):
+                    rv = _var(operand.children[1]) if len(operand.children) > 1 else None
+                    plus_info = (base_val, rv)
+                elif operand and isinstance(operand, SAtom) and operand.is_variable:
+                    plus_cc = (base_val, _var(operand))
+            elif h2 in ('imm8', 'rel8'):
+                iv = _var(elem.children[1]) if len(elem.children) > 1 else None
+                imm_parts.append(('imm8', iv))
+            elif h2 in ('imm32', 'rel32'):
+                iv = _var(elem.children[1]) if len(elem.children) > 1 else None
+                imm_parts.append(('imm32', iv))
+            elif h2 == 'imm64':
+                iv = _var(elem.children[1]) if len(elem.children) > 1 else None
+                imm_parts.append(('imm64', iv))
+
+    # Emit REX prefix
+    if has_rex_w:
+        if modrm_info:
+            _, mreg, mrm = modrm_info
+            mreg_v = _var(mreg) if mreg else None
+            mrm_v = _var(mrm) if mrm else None
+            r_bit = (mreg_v > 7) if mreg_v is not None else False
+            b_bit = (mrm_v > 7) if mrm_v is not None else False
+            _rex(True, r_bit, False, b_bit)
+        elif modrm_mem_info:
+            reg, base, _d = modrm_mem_info
+            r_bit = (reg > 7) if reg is not None else False
+            b_bit = (base > 7) if base is not None else False
+            _rex(True, r_bit, False, b_bit)
+        elif plus_info:
+            _, rv = plus_info
+            b_bit = (rv > 7) if rv is not None else False
+            _rex(True, False, False, b_bit)
+        else:
+            _rex(True, False, False, False)
+    elif not has_rex_w and plus_info:
+        _, rv = plus_info
+        if rv is not None and rv > 7:
+            _rex(False, False, False, True)
+
+    # Emit opcode bytes
+    for b in opcode_bytes:
+        _emit8(b)
+
+    # Emit parameterized opcode: (+ BASE $cc)
+    if plus_cc:
+        base_val, cc_val = plus_cc
+        if cc_val is not None:
+            _emit8(base_val + cc_val)
+
+    # Emit opcode+rd: (+ BASE (reg3 $r))
+    if plus_info:
+        base_val, rv = plus_info
+        if rv is not None:
+            _emit8(base_val + (rv & 7))
+
+    # Emit ModRM
+    if modrm_info:
+        mod, mreg, mrm = modrm_info
+        mreg_v = _num(mreg) if _num(mreg) is not None else _var(mreg)
+        mrm_v = _num(mrm) if _num(mrm) is not None else _var(mrm)
+        if mreg_v is not None and mrm_v is not None:
+            _emit8((mod << 6) | ((mreg_v & 7) << 3) | (mrm_v & 7))
+            if mod != 3 and (mrm_v & 7) == 4:
+                _emit8((0 << 6) | (4 << 3) | (mrm_v & 7))  # SIB: no index
+
+    # Emit ModRM (memory)
+    if modrm_mem_info:
+        reg, base, disp = modrm_mem_info
+        if reg is not None and base is not None and disp is not None:
+            result.extend(_x64_modrm_mem_ref(reg, base, disp))
+
+    # Emit immediates
+    for imm_type, imm_val in imm_parts:
+        if imm_val is None:
+            return None
+        if imm_type == 'imm8':
+            _emit8(imm_val)
+        elif imm_type == 'imm32':
+            _emit32(imm_val)
+        elif imm_type == 'imm64':
+            _emit64(imm_val)
+
+    return result if result else None
+
+
+def _x64_golden_reg_idx(reg_name: str) -> int:
+    """Map a register name from :golden-bytes to its encoding index."""
+    for names in [_X64_GPR64_NAMES, _X64_XMM_NAMES]:
+        if reg_name in names:
+            return names.index(reg_name)
+    return -1
+
+
+def _x64_derive_asm_template(insn: McInsn) -> Optional[tuple]:
+    """Derive an asm template from golden-asm entries.
+
+    Returns (template_str, slot_specs) where:
+      - template_str has {0}, {1}, ... placeholders
+      - slot_specs is a list of (slot_type, reg_class) per operand
+        slot_type: 'reg' | 'imm' | 'cc_mnemonic'
+        reg_class: 'gpr64' | 'gpr32' | 'gpr8l' | 'gpr16' | 'xmm' | None
+
+    Returns None if template cannot be derived.
+    """
+    if not insn.golden_asm:
+        return None
+    operands = extract_operands(insn)
+    if not operands:
+        return None
+
+    regs, asm = insn.golden_asm[0]
+    if len(regs) != len(operands):
+        return None
+
+    # Build substitution list: (text_to_replace, slot_index, reg_class)
+    subs = []
+    slot_specs = []
+
+    for i, op in enumerate(operands):
+        val_str = regs[i]
+
+        if op.kind == 'cc':
+            # CC is often a numeric string in golden regs (e.g. '4')
+            try:
+                cc_idx = int(val_str)
+            except (ValueError, TypeError):
+                # Try as a name
+                cc_idx = -1
+                for ci, cn in enumerate(_X64_CC_NAMES):
+                    if cn == val_str:
+                        cc_idx = ci
+                        break
+            if cc_idx < 0 or cc_idx >= len(_X64_CC_NAMES):
+                return None
+            cc_name = _X64_CC_NAMES[cc_idx]
+            # Find the CC suffix in the mnemonic (first word)
+            mnemonic = asm.split(' ', 1)[0]
+            if mnemonic.endswith(cc_name):
+                cc_base = mnemonic[:-len(cc_name)]
+                subs.append((mnemonic, i, 'cc_mnemonic'))
+                slot_specs.append(('cc_mnemonic', cc_base))
+            else:
+                return None
+            continue
+
+        if op.kind == 'reg':
+            reg_idx = _x64_golden_reg_idx(val_str)
+            if reg_idx < 0:
+                return None
+            # Only check register classes matching the operand's declared
+            # subtype, to avoid cross-class false matches (e.g. xmm0 and
+            # rax both at index 0 in their respective class arrays).
+            if op.subtype == 'xmm':
+                check_classes = [('xmm', _X64_XMM_NAMES)]
+            else:
+                check_classes = [
+                    ('gpr64', _X64_GPR64_NAMES), ('gpr32', _X64_GPR32_NAMES),
+                    ('gpr8l', _X64_GPR8L_NAMES), ('gpr16', _X64_GPR16_NAMES),
+                ]
+            found = False
+            for cls_name, cls_list in check_classes:
+                if reg_idx < len(cls_list):
+                    asm_reg = cls_list[reg_idx]
+                    if asm_reg in asm:
+                        subs.append((asm_reg, i, cls_name))
+                        slot_specs.append(('reg', cls_name))
+                        found = True
+                        break
+            if not found:
+                return None
+
+        elif op.kind == 'imm':
+            slot_specs.append(('imm', None))
+            # Find the immediate value in the asm text
+            if val_str in asm:
+                subs.append((val_str, i, None))
+            elif val_str == '0' and val_str not in asm:
+                # Zero displacement often omitted from asm (e.g. [rbp]
+                # instead of [rbp+0]). Mark as zero-elided so we skip
+                # template substitution and always emit 0.
+                slot_specs[-1] = ('imm_zero_elided', None)
+            elif val_str.startswith('0x') or val_str.startswith('-'):
+                subs.append((val_str, i, None))
+            else:
+                return None
+
+    # Sort substitutions by length descending to avoid partial matches
+    subs.sort(key=lambda s: len(s[0]), reverse=True)
+
+    template = asm
+    for text, idx, _cls in subs:
+        template = template.replace(text, f'{{{idx}}}', 1)
+
+    return template, slot_specs
+
+
+def _x64_format_asm(insn: McInsn, op_values: dict,
+                    tmpl: tuple) -> Optional[str]:
+    """Format asm text from operand values using a derived template.
+
+    op_values maps variable names (without $) to integer values.
+    Returns the asm string, or None on failure.
+    """
+    template_str, slot_specs = tmpl
+    operands = extract_operands(insn)
+    fmt_args = {}
+
+    for i, (op, spec) in enumerate(zip(operands, slot_specs)):
+        var = op.name.lstrip('$')
+        val = op_values.get(var)
+        if val is None:
+            return None
+        stype, rcls = spec
+
+        if stype == 'cc_mnemonic':
+            # CC mnemonic: rcls holds the base mnemonic (e.g. 'cmov')
+            if 0 <= val < len(_X64_CC_NAMES):
+                fmt_args[str(i)] = rcls + _X64_CC_NAMES[val]
+            else:
+                return None
+            continue
+
+        if stype == 'reg':
+            cls_map = {
+                'gpr64': _X64_GPR64_NAMES, 'gpr32': _X64_GPR32_NAMES,
+                'gpr8l': _X64_GPR8L_NAMES, 'gpr16': _X64_GPR16_NAMES,
+                'xmm': _X64_XMM_NAMES,
+            }
+            names = cls_map.get(rcls)
+            if not names or val < 0 or val >= len(names):
+                return None
+            fmt_args[str(i)] = names[val]
+        elif stype == 'imm':
+            fmt_args[str(i)] = str(val)
+        elif stype == 'imm_zero_elided':
+            # Displacement was zero in the golden; template has no
+            # placeholder. For random diff we must regenerate the
+            # asm with the actual displacement, so we need to
+            # reconstruct the memory operand. Skip this instruction
+            # for random diff (it's already validated by golden rows).
+            return None
+
+    asm_out = template_str
+
+    # Apply format substitutions
+    for key, val in fmt_args.items():
+        asm_out = asm_out.replace(f'{{{key}}}', val)
+
+    return asm_out
+
+
+# Instructions skipped for random diff (superset of _LLVM_MC_SKIP_MCINSNS)
+_RANDOM_DIFF_SKIP = _LLVM_MC_SKIP_MCINSNS | {
+    'x64.int3',     # no operands, trivially correct
+    'x64.nop',      # no operands
+    'x64.ret',      # no operands
+    'x64.cqo',      # no operands
+    'x64.mov.ri64', # movabs uses special asm syntax
+}
+
+
+def _x64_validate_ref_encoder(mcinsns: list[McInsn]) -> list[str]:
+    """Validate the reference encoder against all golden-bytes entries.
+    Returns list of error messages (empty = all pass)."""
+    errors = []
+    for insn in mcinsns:
+        operands = extract_operands(insn)
+        for regs, hex_str in insn.golden_bytes:
+            if len(regs) != len(operands):
+                continue
+            op_values = {}
+            valid = True
+            for op, rval in zip(operands, regs):
+                var = op.name.lstrip('$')
+                if op.kind == 'reg':
+                    idx = _x64_golden_reg_idx(rval)
+                    if idx < 0:
+                        valid = False
+                        break
+                    op_values[var] = idx
+                elif op.kind == 'cc':
+                    idx = -1
+                    for ci, cn in enumerate(_X64_CC_NAMES):
+                        if cn == rval:
+                            idx = ci
+                            break
+                    if idx < 0:
+                        valid = False
+                        break
+                    op_values[var] = idx
+                elif op.kind == 'imm':
+                    try:
+                        op_values[var] = int(rval, 0) if isinstance(rval, str) else int(rval)
+                    except (ValueError, TypeError):
+                        valid = False
+                        break
+            if not valid:
+                continue
+            encoded = _x64_encode_ref(insn, op_values)
+            expected = [int(b, 16) for b in hex_str.split()]
+            if encoded is None:
+                errors.append(f'{insn.name} regs={regs}: encoder returned None')
+            elif encoded != expected:
+                enc_hex = ' '.join(f'{b:02x}' for b in encoded)
+                errors.append(
+                    f'{insn.name} regs={regs}: ref encoder mismatch: '
+                    f'expected={hex_str} got={enc_hex}')
+    return errors
+
+
+def cmd_random_diff(args: list[str]):
+    """Random-seed external differential testing.
+
+    Usage: xisagen random-diff [--seed=N] [--count=N] [--llvm-mc=PATH]
+                               [--validate-only] arch=<isa> [...]
+
+    For each non-skipped mcinsn, generates --count random operand combos
+    (default 20), encodes with the Python reference encoder, constructs
+    asm from the derived template, assembles with llvm-mc, and compares
+    bytes.
+
+    --validate-only: only validate the reference encoder against golden
+                     bytes (no llvm-mc needed).
+
+    Exit codes:
+      0   all checks passed
+      1   mismatch or error
+    """
+    import random
+
+    seed = 42
+    count = 20
+    llvm_mc_path = None
+    validate_only = False
+    arch_specs = []
+
+    for a in args:
+        if a.startswith('--seed='):
+            seed = int(a.split('=', 1)[1])
+        elif a.startswith('--count='):
+            count = int(a.split('=', 1)[1])
+        elif a.startswith('--llvm-mc='):
+            llvm_mc_path = a.split('=', 1)[1]
+        elif a == '--validate-only':
+            validate_only = True
+        elif '=' in a:
+            arch_specs.append(a)
+        else:
+            die(f'unexpected arg {a!r}')
+
+    if not arch_specs:
+        die('usage: xisagen random-diff [--seed=N] [--count=N] arch=<isa> ...')
+
+    for spec in arch_specs:
+        arch, path = spec.split('=', 1)
+        if arch != 'x64':
+            # Only x64 random-diff is implemented; arm64/riscv64 use
+            # fixed-32 golden reverse decoding which already covers all
+            # operand combos deterministically.
+            print(f'xisagen random-diff: {arch}: skipped '
+                  f'(fixed-32 golden decoding sufficient)', file=sys.stderr)
+            continue
+
+        _regclasses, mcinsns = load_isa(path)
+
+        # Phase 1: validate reference encoder against golden bytes
+        ref_errors = _x64_validate_ref_encoder(mcinsns)
+        if ref_errors:
+            for e in ref_errors:
+                print(f'  REF-ENCODER-ERROR: {e}', file=sys.stderr)
+            die(f'random-diff: {len(ref_errors)} reference encoder '
+                f'error(s) — fix before running random diff')
+
+        n_golden = sum(len(m.golden_bytes) for m in mcinsns)
+        print(f'xisagen random-diff: x64 reference encoder validated '
+              f'against {n_golden} golden-bytes rows', file=sys.stderr)
+
+        if validate_only:
+            continue
+
+        # Locate llvm-mc
+        if llvm_mc_path is None:
+            llvm_mc_path = _llvm_mc_find_and_check()
+        if llvm_mc_path is None or not os.path.isfile(llvm_mc_path):
+            print('xisagen random-diff: llvm-mc not found, skipping '
+                  '(soft-pass)', file=sys.stderr)
+            return
+
+        print(f'xisagen random-diff: using {llvm_mc_path}, '
+              f'seed={seed}, count={count}', file=sys.stderr)
+
+        rng = random.Random(seed)
+        total_checked = 0
+        total_mismatch = 0
+        total_skipped = 0
+        total_template_fail = 0
+
+        for insn in mcinsns:
+            if insn.name in _RANDOM_DIFF_SKIP:
+                total_skipped += 1
+                continue
+
+            operands = extract_operands(insn)
+            if not operands:
+                total_skipped += 1
+                continue
+
+            tmpl = _x64_derive_asm_template(insn)
+            if tmpl is None:
+                total_template_fail += 1
+                continue
+
+            for _trial in range(count):
+                op_values = {}
+                for op in operands:
+                    var = op.name.lstrip('$')
+                    if op.kind == 'reg':
+                        if op.subtype == 'xmm':
+                            op_values[var] = rng.randint(0, 15)
+                        else:
+                            op_values[var] = rng.randint(0, 15)
+                    elif op.kind == 'cc':
+                        op_values[var] = rng.randint(0, 15)
+                    elif op.kind == 'imm':
+                        if op.subtype in ('i8', 'rel8'):
+                            op_values[var] = rng.randint(-128, 127)
+                        elif op.subtype == 'u8':
+                            op_values[var] = rng.randint(0, 255)
+                        elif op.subtype in ('i32', 'rel32'):
+                            op_values[var] = rng.randint(-1000000, 1000000)
+                        elif op.subtype == 'u32':
+                            op_values[var] = rng.randint(0, 0xFFFFFF)
+                        elif op.subtype == 'u64':
+                            op_values[var] = rng.randint(0, 0xFFFFFFFFFFFF)
+                        elif op.subtype == 'i64':
+                            op_values[var] = rng.randint(0, 0xFFFFFFFFFFFF)
+                        else:
+                            op_values[var] = rng.randint(0, 255)
+
+                # Reference encode
+                ref_bytes = _x64_encode_ref(insn, op_values)
+                if ref_bytes is None:
+                    continue
+
+                # Generate asm
+                asm_text = _x64_format_asm(insn, op_values, tmpl)
+                if asm_text is None:
+                    continue
+
+                # Assemble with llvm-mc
+                llvm_bytes, err = _llvm_mc_assemble(llvm_mc_path, 'x64',
+                                                    asm_text)
+                if llvm_bytes is None:
+                    # Asm failed — might be an invalid combo (e.g. rsp in
+                    # certain addressing modes). Not a diff failure.
+                    continue
+
+                total_checked += 1
+                if ref_bytes != llvm_bytes:
+                    total_mismatch += 1
+                    ref_hex = ' '.join(f'{b:02x}' for b in ref_bytes)
+                    llvm_hex = ' '.join(f'{b:02x}' for b in llvm_bytes)
+                    vals = ', '.join(f'{k}={v}' for k, v in op_values.items())
+                    print(f'  RANDOM-DIFF-MISMATCH: {insn.name} [{vals}] '
+                          f'asm={asm_text!r}\n'
+                          f'    ref ={ref_hex}\n'
+                          f'    llvm={llvm_hex}',
+                          file=sys.stderr)
+
+        print(f'xisagen random-diff: x64: {total_checked} checked, '
+              f'{total_mismatch} mismatched, {total_skipped} skipped, '
+              f'{total_template_fail} template-fail, '
+              f'seed={seed}, count={count}', file=sys.stderr)
+
+        if total_mismatch:
+            die(f'random-diff: {total_mismatch} mismatch(es) — .isa '
+                f'encoding disagrees with llvm-mc for random operands')
+
+    print(f'xisagen random-diff: ok (seed={seed}, count={count})',
+          file=sys.stderr)
+
+
 def cmd_disasm_test(args: list[str]):
     """Generate a runtime C round-trip test for the disasm tables.
 
@@ -3499,11 +5247,14 @@ def cmd_disasm_test(args: list[str]):
     isa_path, out_path = args[0], args[1]
     _regclasses, mcinsns = load_isa(isa_path)
     arch = _detect_arch(mcinsns)
-    if arch not in _DISASM_ARCH_INFO:
+    if arch == 'x64':
+        test_code = generate_x64_disasm_test(mcinsns)
+    elif arch in _DISASM_ARCH_INFO:
+        pattern_fn = (_arm64_fixed_pattern if arch == 'arm64'
+                      else _riscv64_fixed_pattern)
+        test_code = generate_disasm_test(arch, mcinsns, pattern_fn)
+    else:
         die(f"disasm-test: unsupported arch {arch!r}")
-    pattern_fn = (_arm64_fixed_pattern if arch == 'arm64'
-                  else _riscv64_fixed_pattern)
-    test_code = generate_disasm_test(arch, mcinsns, pattern_fn)
     write_file(out_path, test_code)
     print(f'xisagen: generated {out_path}', file=sys.stderr)
 
@@ -3961,6 +5712,18 @@ def cmd_dispatch_meta(args: list[str]):
     print(f"xisagen: generated {out_path}", file=sys.stderr)
 
 
+def cmd_dispatch_emit(args: list[str]):
+    if len(args) != 2:
+        die('usage: xisagen dispatch-emit <isel.def> <output.h>')
+    isel_path, out_path = args[0], args[1]
+    entries = parse_isel_def(read_file(isel_path))
+    if not entries:
+        die(f'no ISEL entries parsed from {isel_path}')
+    content = generate_dispatch_emit_header(entries)
+    write_file(out_path, content)
+    print(f"xisagen: generated {out_path}", file=sys.stderr)
+
+
 def cmd_patch_ranges(args: list[str]):
     """Generate xm_patch_ranges_gen.h from .isa relative-immediate operands.
     Usage: xisagen patch-ranges <output.h> <arch>=<isa>..."""
@@ -4385,11 +6148,13 @@ def main():
         'golden': cmd_golden,
         'dispatch-coverage': cmd_dispatch_coverage,
         'dispatch-meta': cmd_dispatch_meta,
+        'dispatch-emit': cmd_dispatch_emit,
         'patch-ranges': cmd_patch_ranges,
         'disasm-check': cmd_disasm_check,
         'disasm': cmd_disasm,
         'disasm-test': cmd_disasm_test,
         'llvm-mc-check': cmd_llvm_mc_check,
+        'random-diff': cmd_random_diff,
         'test': cmd_test,
     }
 

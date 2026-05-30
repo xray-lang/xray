@@ -15,6 +15,7 @@
 #if defined(__aarch64__)
 
 #include "xm_codegen_internal.h"
+#include "xm_jit_debug.h"
 #include "xm_patch_verify.h"
 #include "../base/xlog.h"
 #define XM_RUNTIME_STUBS_ENTRIES
@@ -428,8 +429,12 @@ XR_FUNC int32_t a64_patch_offset(CodegenCtx *ctx, uint32_t emit_idx, uint32_t ta
     bool ok = is_cond ? xm_patch_calc_arm64_bcond(emit_idx, target_idx, &off)
                       : xm_patch_calc_arm64_b(emit_idx, target_idx, &off);
     if (!ok) {
-        xr_log_warning("a64-cg", "patch %s out of range: emit_idx=%u target=%u", kind, emit_idx,
-                       target_idx);
+        uint32_t insn_word = (emit_idx < ctx->buf.count) ? ctx->buf.code[emit_idx] : 0;
+        char mcinsn[64];
+        jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_ARM64, insn_word);
+        xr_log_warning("a64-cg",
+                       "patch %s out of range: emit_idx=%u target=%u insn=0x%08x mcinsn=%s", kind,
+                       emit_idx, target_idx, insn_word, mcinsn);
         ctx->had_error = true;
         return 0;
     }

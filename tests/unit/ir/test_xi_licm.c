@@ -505,6 +505,137 @@ TEST(no_hoist_call) {
     xi_func_free(f);
 }
 
+/* ========== Alias-aware: TBAA group interaction matrix ========== */
+
+/* Helper: build a loop with a load (read_group) and a store (write_group)
+ * in the body.  Returns true if the load was hoisted to entry. */
+static bool check_hoist(uint8_t read_group, uint8_t write_group) {
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+
+    entry->kind = XI_BLOCK_PLAIN;
+    wire(entry, header, 0);
+
+    header->kind = XI_BLOCK_IF;
+    wire(header, body, 0);
+    wire(header, exit_blk, 1);
+
+    body->kind = XI_BLOCK_PLAIN;
+    wire(body, header, 0);
+
+    exit_blk->kind = XI_BLOCK_RETURN;
+
+    XiValue *obj = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    XiValue *val = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+
+    XiValue *cond = xi_value_new(f, header, XI_CONST, &stub_int, 0);
+    cond->aux_int = 1;
+    header->control = cond;
+
+    XiValue *load = xi_value_new(f, body, XI_LOAD_FIELD, &stub_int, 1);
+    load->args[0] = obj;
+    load->mem_group = read_group;
+    load->flags = XI_FLAG_READS_MEM;
+
+    XiValue *store = xi_value_new(f, body, XI_STORE_FIELD, &stub_int, 2);
+    store->args[0] = obj;
+    store->args[1] = val;
+    store->mem_group = write_group;
+    store->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    xi_opt_licm(f);
+
+    bool hoisted = false;
+    for (uint32_t i = 0; i < entry->nvalues; i++) {
+        if (entry->values[i] == load)
+            hoisted = true;
+    }
+
+    xi_func_free(f);
+    return hoisted;
+}
+
+/* Disjoint group pairs: load should be hoisted */
+TEST(alias_field_vs_array) {
+    ASSERT(check_hoist(XI_MEM_FIELD, XI_MEM_ARRAY));
+}
+TEST(alias_field_vs_struct) {
+    ASSERT(check_hoist(XI_MEM_FIELD, XI_MEM_STRUCT));
+}
+TEST(alias_array_vs_struct) {
+    ASSERT(check_hoist(XI_MEM_ARRAY, XI_MEM_STRUCT));
+}
+TEST(alias_array_vs_shared) {
+    ASSERT(check_hoist(XI_MEM_ARRAY, XI_MEM_SHARED));
+}
+TEST(alias_struct_vs_upval) {
+    ASSERT(check_hoist(XI_MEM_STRUCT, XI_MEM_UPVAL));
+}
+TEST(alias_upval_vs_array) {
+    ASSERT(check_hoist(XI_MEM_UPVAL, XI_MEM_ARRAY));
+}
+TEST(alias_json_vs_array) {
+    ASSERT(check_hoist(XI_MEM_JSON, XI_MEM_ARRAY));
+}
+TEST(alias_tuple_vs_field) {
+    ASSERT(check_hoist(XI_MEM_TUPLE, XI_MEM_FIELD));
+}
+TEST(alias_chan_vs_struct) {
+    ASSERT(check_hoist(XI_MEM_CHAN, XI_MEM_STRUCT));
+}
+TEST(alias_shared_vs_json) {
+    ASSERT(check_hoist(XI_MEM_SHARED, XI_MEM_JSON));
+}
+TEST(alias_global_vs_array) {
+    ASSERT(check_hoist(XI_MEM_GLOBAL, XI_MEM_ARRAY));
+}
+TEST(alias_tls_vs_field) {
+    ASSERT(check_hoist(XI_MEM_TLS, XI_MEM_FIELD));
+}
+
+/* Same group: load must NOT be hoisted */
+TEST(alias_field_vs_field) {
+    ASSERT(!check_hoist(XI_MEM_FIELD, XI_MEM_FIELD));
+}
+TEST(alias_array_vs_array) {
+    ASSERT(!check_hoist(XI_MEM_ARRAY, XI_MEM_ARRAY));
+}
+TEST(alias_struct_vs_struct) {
+    ASSERT(!check_hoist(XI_MEM_STRUCT, XI_MEM_STRUCT));
+}
+TEST(alias_json_vs_json) {
+    ASSERT(!check_hoist(XI_MEM_JSON, XI_MEM_JSON));
+}
+TEST(alias_upval_vs_upval) {
+    ASSERT(!check_hoist(XI_MEM_UPVAL, XI_MEM_UPVAL));
+}
+TEST(alias_shared_vs_shared) {
+    ASSERT(!check_hoist(XI_MEM_SHARED, XI_MEM_SHARED));
+}
+
+/* TOP group: always aliases → load must NOT be hoisted */
+TEST(alias_field_vs_top) {
+    ASSERT(!check_hoist(XI_MEM_FIELD, XI_MEM_TOP));
+}
+TEST(alias_top_vs_array) {
+    ASSERT(!check_hoist(XI_MEM_TOP, XI_MEM_ARRAY));
+}
+
+/* CONST group: always safe to hoist even with same-group store */
+TEST(alias_const_vs_field) {
+    ASSERT(check_hoist(XI_MEM_CONST, XI_MEM_FIELD));
+}
+TEST(alias_const_vs_array) {
+    ASSERT(check_hoist(XI_MEM_CONST, XI_MEM_ARRAY));
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -518,6 +649,33 @@ int main(void) {
     run_no_hoist_load_with_store_dep();
     run_no_loop_no_change();
     run_no_hoist_call();
+
+    /* Alias-aware TBAA group interaction */
+    run_alias_field_vs_array();
+    run_alias_field_vs_struct();
+    run_alias_array_vs_struct();
+    run_alias_array_vs_shared();
+    run_alias_struct_vs_upval();
+    run_alias_upval_vs_array();
+    run_alias_json_vs_array();
+    run_alias_tuple_vs_field();
+    run_alias_chan_vs_struct();
+    run_alias_shared_vs_json();
+    run_alias_global_vs_array();
+    run_alias_tls_vs_field();
+
+    run_alias_field_vs_field();
+    run_alias_array_vs_array();
+    run_alias_struct_vs_struct();
+    run_alias_json_vs_json();
+    run_alias_upval_vs_upval();
+    run_alias_shared_vs_shared();
+
+    run_alias_field_vs_top();
+    run_alias_top_vs_array();
+
+    run_alias_const_vs_field();
+    run_alias_const_vs_array();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

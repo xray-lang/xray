@@ -1,0 +1,26 @@
+fn build_data(n: int) -> Array<int> {
+    let data: Array<int> = []
+    for (let i = 0; i < n; i++) {
+        data.push((i * 17 + 3) % 1024)
+    }
+    return data
+}
+
+fn sum_bounds(data: Array<int>, rounds: int) -> int {
+    let total = 0
+    let n = data.length
+    for (let r = 0; r < rounds; r++) {
+        for (let i = 0; i < n; i++) {
+            total = total + data[i]
+        }
+    }
+    return total
+}
+
+fn main() {
+    let data = build_data(4096)
+    let result = sum_bounds(data, 256)
+    print("array_sum_bounds=${result}")
+}
+
+main()

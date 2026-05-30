@@ -465,6 +465,20 @@ XR_FUNC void x64_movq_gp_xmm(X64Buf *buf, X64Reg dst, X64Xmm src);
 /* XORPD xmm, xmm:  66 0F 57 /r  (bitwise XOR of packed doubles) */
 XR_FUNC void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src);
 
+/* ========== SSE scalar single (F32) ========== */
+
+/* MOVSS xmm, [base+disp]:  F3 0F 10 /r */
+XR_FUNC void x64_movss_rm(X64Buf *buf, X64Xmm dst, X64Reg base, int32_t disp);
+
+/* MOVSS [base+disp], xmm:  F3 0F 11 /r */
+XR_FUNC void x64_movss_mr(X64Buf *buf, X64Reg base, int32_t disp, X64Xmm src);
+
+/* CVTSS2SD xmm, xmm:  F3 0F 5A /r */
+XR_FUNC void x64_cvtss2sd(X64Buf *buf, X64Xmm dst, X64Xmm src);
+
+/* CVTSD2SS xmm, xmm:  F2 0F 5A /r */
+XR_FUNC void x64_cvtsd2ss(X64Buf *buf, X64Xmm dst, X64Xmm src);
+
 /* ========== Patch Helpers ========== */
 
 /* Patch a rel32 at the given byte offset to jump to target_offset */

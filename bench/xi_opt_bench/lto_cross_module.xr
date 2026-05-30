@@ -1,0 +1,26 @@
+fn tiny_a(x: int) -> int {
+    return x * 3 + 1
+}
+
+fn tiny_b(x: int) -> int {
+    return tiny_a(x) - 2
+}
+
+fn tiny_c(x: int) -> int {
+    return tiny_b(x) + tiny_a(x / 2)
+}
+
+fn run(rounds: int) -> int {
+    let total = 0
+    for (let i = 0; i < rounds; i++) {
+        total = total + tiny_c(i % 1024)
+    }
+    return total
+}
+
+fn main() {
+    let result = run(220000)
+    print("lto_cross_module=${result}")
+}
+
+main()

@@ -27,6 +27,7 @@
 #include "xm_codegen_riscv64_internal.h"
 #include "xm_coalesce.h"
 #include "xm_code_alloc.h"
+#include "xm_jit_debug.h"
 #include "xm_metadata_verify.h"
 #include "xm_offsets.h"
 #include "xm_patch_verify.h"
@@ -739,12 +740,39 @@ static void rv64_emit_block(Rv64CodegenCtx *ctx, uint32_t block_idx) {
             break;
         }
         default:
-            XR_DCHECK(false, "rv64_emit_terminator: unhandled jump type");
+            RV64_CODEGEN_CHECK(ctx, false, "rv64_emit_terminator: unhandled jump type");
             break;
     }
 }
 
 /* ========== Branch Patch Resolution ========== */
+
+/* On range / alignment failure, decode the placeholder instruction word with
+ * the generated rv64 disassembler and emit a warning naming the mcinsn so the
+ * developer can see which patch site overflowed without re-running. */
+static bool rv64_patch_calc_jal_logged(Rv64CodegenCtx *ctx, uint32_t emit_idx, uint32_t target_idx,
+                                       int32_t *out, const char *kind) {
+    if (xm_patch_calc_rv64_jal(emit_idx, target_idx, out))
+        return true;
+    uint32_t insn = (emit_idx < ctx->buf.count) ? ctx->buf.code[emit_idx] : 0;
+    char mcinsn[64];
+    jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_RISCV64, insn);
+    xr_log_warning("rv64-cg", "patch %s out of range: emit_idx=%u target=%u insn=0x%08x mcinsn=%s",
+                   kind, emit_idx, target_idx, insn, mcinsn);
+    return false;
+}
+
+static bool rv64_patch_calc_branch_logged(Rv64CodegenCtx *ctx, uint32_t emit_idx,
+                                          uint32_t target_idx, int32_t *out, const char *kind) {
+    if (xm_patch_calc_rv64_branch(emit_idx, target_idx, out))
+        return true;
+    uint32_t insn = (emit_idx < ctx->buf.count) ? ctx->buf.code[emit_idx] : 0;
+    char mcinsn[64];
+    jit_debug_format_mcinsn(mcinsn, sizeof(mcinsn), JIT_DEBUG_DISASM_RISCV64, insn);
+    xr_log_warning("rv64-cg", "patch %s out of range: emit_idx=%u target=%u insn=0x%08x mcinsn=%s",
+                   kind, emit_idx, target_idx, insn, mcinsn);
+    return false;
+}
 
 static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
     for (uint32_t i = 0; i < ctx->npatch; i++) {
@@ -759,9 +787,10 @@ static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
                 RV64_CODEGEN_CHECK(ctx, p->target_blk < ctx->nblock_offsets,
                                    "patch JAL: target block OOB");
                 target_idx = ctx->block_offsets[p->target_blk];
-                RV64_CODEGEN_CHECK(ctx,
-                                   xm_patch_calc_rv64_jal(p->emit_idx, target_idx, &byte_offset),
-                                   "patch JAL: offset out of range");
+                RV64_CODEGEN_CHECK(
+                    ctx,
+                    rv64_patch_calc_jal_logged(ctx, p->emit_idx, target_idx, &byte_offset, "JAL"),
+                    "patch JAL: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_j(byte_offset);
                 break;
             case RV64_PATCH_BRANCH:
@@ -769,7 +798,8 @@ static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
                                    "patch branch: target block OOB");
                 target_idx = ctx->block_offsets[p->target_blk];
                 RV64_CODEGEN_CHECK(ctx,
-                                   xm_patch_calc_rv64_branch(p->emit_idx, target_idx, &byte_offset),
+                                   rv64_patch_calc_branch_logged(ctx, p->emit_idx, target_idx,
+                                                                 &byte_offset, "branch"),
                                    "patch branch: offset out of range");
                 switch (p->cc) {
                     case RV64_CC_EQ:
@@ -790,21 +820,24 @@ static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
                 }
                 break;
             case RV64_PATCH_CALL_C:
-                RV64_CODEGEN_CHECK(
-                    ctx, xm_patch_calc_rv64_jal(p->emit_idx, ctx->call_c_stub, &byte_offset),
-                    "patch CALL_C: offset out of range");
+                RV64_CODEGEN_CHECK(ctx,
+                                   rv64_patch_calc_jal_logged(ctx, p->emit_idx, ctx->call_c_stub,
+                                                              &byte_offset, "CALL_C"),
+                                   "patch CALL_C: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
                 break;
             case RV64_PATCH_DEOPT_JAL:
-                RV64_CODEGEN_CHECK(
-                    ctx, xm_patch_calc_rv64_jal(p->emit_idx, ctx->deopt_stub, &byte_offset),
-                    "patch deopt JAL: offset out of range");
+                RV64_CODEGEN_CHECK(ctx,
+                                   rv64_patch_calc_jal_logged(ctx, p->emit_idx, ctx->deopt_stub,
+                                                              &byte_offset, "deopt JAL"),
+                                   "patch deopt JAL: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_j(byte_offset);
                 break;
             case RV64_PATCH_DEOPT_BRANCH:
-                RV64_CODEGEN_CHECK(
-                    ctx, xm_patch_calc_rv64_branch(p->emit_idx, ctx->deopt_stub, &byte_offset),
-                    "patch deopt branch: offset out of range");
+                RV64_CODEGEN_CHECK(ctx,
+                                   rv64_patch_calc_branch_logged(ctx, p->emit_idx, ctx->deopt_stub,
+                                                                 &byte_offset, "deopt branch"),
+                                   "patch deopt branch: offset out of range");
                 switch (p->cc) {
                     case RV64_CC_NE:
                         ctx->buf.code[p->emit_idx] = rv64_bne(p->rs1, p->rs2, byte_offset);
@@ -818,21 +851,26 @@ static void rv64_patch_branches(Rv64CodegenCtx *ctx) {
                 }
                 break;
             case RV64_PATCH_BARRIER_FWD:
-                RV64_CODEGEN_CHECK(
-                    ctx, xm_patch_calc_rv64_jal(p->emit_idx, ctx->barrier_fwd_stub, &byte_offset),
-                    "patch barrier forward: offset out of range");
+                RV64_CODEGEN_CHECK(ctx,
+                                   rv64_patch_calc_jal_logged(ctx, p->emit_idx,
+                                                              ctx->barrier_fwd_stub, &byte_offset,
+                                                              "barrier_fwd"),
+                                   "patch barrier forward: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
                 break;
             case RV64_PATCH_BARRIER_BACK:
-                RV64_CODEGEN_CHECK(
-                    ctx, xm_patch_calc_rv64_jal(p->emit_idx, ctx->barrier_back_stub, &byte_offset),
-                    "patch barrier back: offset out of range");
+                RV64_CODEGEN_CHECK(ctx,
+                                   rv64_patch_calc_jal_logged(ctx, p->emit_idx,
+                                                              ctx->barrier_back_stub, &byte_offset,
+                                                              "barrier_back"),
+                                   "patch barrier back: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
                 break;
             case RV64_PATCH_CALL_SELF:
                 target_idx = ctx->fast_entry_offset / 4;
                 RV64_CODEGEN_CHECK(ctx,
-                                   xm_patch_calc_rv64_jal(p->emit_idx, target_idx, &byte_offset),
+                                   rv64_patch_calc_jal_logged(ctx, p->emit_idx, target_idx,
+                                                              &byte_offset, "self-call"),
                                    "patch self-call: offset out of range");
                 ctx->buf.code[p->emit_idx] = rv64_call(byte_offset);
                 break;
@@ -1015,7 +1053,8 @@ XR_FUNC XmCodegenResult xm_codegen_riscv64(XmFunc *func, XmCodeAlloc *alloc) {
         result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
         result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
     }
-    if (!xm_verify_metadata_or_fail(&result, 4, "cg-rv64"))
+    if (!xm_verify_metadata_or_fail(&result, 4, "cg-rv64") ||
+        !xm_verify_post_call_records(&ctx.post_call_tracker, "cg-rv64"))
         goto cleanup;
     result.code = code_mem;
     result.success = true;

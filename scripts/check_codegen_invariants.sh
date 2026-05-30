@@ -252,6 +252,11 @@ if ! python3 tools/xisagen/xisagen.py dispatch-meta xisa/xm/isel.def xisa/xm/ops
     red "FAIL: xisagen dispatch-meta failed."
     EXIT=1
 fi
+if ! python3 tools/xisagen/xisagen.py dispatch-emit xisa/xm/isel.def \
+        "${TMPDIR_PATH}/src/jit/xm_dispatch_emit_gen.h" >/dev/null 2>&1; then
+    red "FAIL: xisagen dispatch-emit failed."
+    EXIT=1
+fi
 if ! python3 tools/xisagen/xisagen.py patch-ranges \
         "${TMPDIR_PATH}/src/jit/xm_patch_ranges_gen.h" \
         x64=xisa/arch/x64.isa \
@@ -295,6 +300,7 @@ for rel in \
     src/jit/xm_riscv64_disasm_gen.h \
     src/jit/xm_dispatch_coverage_gen.h \
     src/jit/xm_dispatch_meta_gen.h \
+    src/jit/xm_dispatch_emit_gen.h \
     src/jit/xm_patch_ranges_gen.h \
     tests/unit/jit/test_x64_golden_gen.c \
     tests/unit/jit/test_arm64_golden_gen.c \
@@ -461,6 +467,7 @@ if python3 tools/xisagen/xisagen.py llvm-mc-check \
         green "OK: llvm-mc unavailable on this host (soft-skip)."
     else
         green "OK: every :golden-asm row matches llvm-mc (or is encoding-pinned)."
+        sed -n 's/^xisagen: /  /p' /tmp/xray_llvm_mc.log || true
         sed -n 's/^xisagen llvm-mc-check: /  /p' /tmp/xray_llvm_mc.log || true
     fi
 else
@@ -470,6 +477,17 @@ else
     echo "  Either correct the .isa encoding/golden-bytes, or — if llvm-mc"
     echo "  assembled a semantically-equivalent shorter form — add the mcinsn"
     echo "  to _LLVM_MC_SKIP_MCINSNS in tools/xisagen/xisagen.py with rationale."
+    EXIT=1
+fi
+
+# ----------------------------------------------------------------------------
+# 8. S0 pointer boundary audit
+# ----------------------------------------------------------------------------
+section "S0 pointer boundary audit"
+if bash scripts/check_pointer_boundary.sh; then
+    green "Pointer boundary checks passed."
+else
+    red "Pointer boundary audit failed."
     EXIT=1
 fi
 

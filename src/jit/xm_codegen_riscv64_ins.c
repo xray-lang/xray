@@ -21,6 +21,8 @@
 #ifdef __riscv
 
 #include "xm_codegen_riscv64_internal.h"
+#include "xm_dispatch_meta.h"
+#include "xm_dispatch_emit_gen.h"
 #include "xm_helper_table.h"
 #include "xm_jit_runtime.h"
 #define XM_RUNTIME_STUBS_ENTRIES
@@ -65,19 +67,22 @@ static void rv64_h_const_f64(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 static void rv64_h_add(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_add(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_sub(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_sub(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_mul(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_mul(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 /* RISC-V DIV: no trap on div-by-zero (returns -1) or INT64_MIN/-1 (returns INT64_MIN).
@@ -97,7 +102,8 @@ static void rv64_h_mod(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 
 static void rv64_h_neg(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-    rv64_buf_emit(&ctx->buf, rv64_sub(rd, RV64_X0, rs));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, RV64_X0, rs),
+                       "riscv64 generated gp_rrr dispatch rejected NEG");
 }
 
 /* ========== Bitwise Logic ========== */
@@ -105,19 +111,22 @@ static void rv64_h_neg(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 static void rv64_h_and(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_and(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_or(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_or(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_xor(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_xor(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_not(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -133,13 +142,15 @@ static void rv64_h_not(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 static void rv64_h_shl(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_sll(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 static void rv64_h_shr(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_sra(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected op");
 }
 
 /* ========== Integer Comparison ========== */
@@ -154,36 +165,43 @@ static void rv64_h_cmp_int(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     switch (ins->op) {
         case XM_LT:
             /* rd = (rs1 < rs2) ? 1 : 0 */
-            rv64_buf_emit(&ctx->buf, rv64_slt(rd, rs1, rs2));
+            RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(XM_LT, &ctx->buf, rd, rs1, rs2),
+                               "riscv64 generated gp_rrr dispatch rejected XM_LT");
             break;
         case XM_GE:
-            /* rd = !(rs1 < rs2) = (rs1 >= rs2)
-             * slt tmp, rs1, rs2; xori rd, tmp, 1 */
-            rv64_buf_emit(&ctx->buf, rv64_slt(rd, rs1, rs2));
-            rv64_buf_emit(&ctx->buf, rv64_xori(rd, rd, 1));
+            /* rd = !(rs1 < rs2) = (rs1 >= rs2): slt tmp, rs1, rs2; xori rd, tmp, 1 */
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_gp_cmp_inv_rrr(XM_GE, &ctx->buf, rd, rs1, rs2),
+                "riscv64 generated gp_cmp_inv_rrr dispatch rejected XM_GE");
             break;
         case XM_GT:
-            /* rd = (rs2 < rs1) — swap operands */
-            rv64_buf_emit(&ctx->buf, rv64_slt(rd, rs2, rs1));
+            /* rd = (rs2 < rs1) — swap operands at the wrapper call. */
+            RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(XM_GT, &ctx->buf, rd, rs2, rs1),
+                               "riscv64 generated gp_rrr dispatch rejected XM_GT");
             break;
         case XM_LE:
-            /* rd = !(rs2 < rs1) = (rs1 <= rs2)
-             * slt tmp, rs2, rs1; xori rd, tmp, 1 */
-            rv64_buf_emit(&ctx->buf, rv64_slt(rd, rs2, rs1));
-            rv64_buf_emit(&ctx->buf, rv64_xori(rd, rd, 1));
+            /* rd = !(rs2 < rs1) = (rs1 <= rs2): swap rs1/rs2 at the wrapper call so
+             * the wrapper body is the canonical slt(rd, a, b) + xori(rd, rd, 1). */
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_gp_cmp_inv_rrr(XM_LE, &ctx->buf, rd, rs2, rs1),
+                "riscv64 generated gp_cmp_inv_rrr dispatch rejected XM_LE");
             break;
         case XM_EQ:
             /* rd = (rs1 == rs2): sub tmp, rs1, rs2; sltiu rd, tmp, 1 */
-            rv64_buf_emit(&ctx->buf, rv64_sub(RV64_SCRATCH_REG, rs1, rs2));
-            rv64_buf_emit(&ctx->buf, rv64_sltiu(rd, RV64_SCRATCH_REG, 1));
+            RV64_CODEGEN_CHECK(ctx,
+                               xm_dispatch_emit_riscv64_gp_cmp_diff_rrr(XM_EQ, &ctx->buf, rd, rs1,
+                                                                        rs2, RV64_SCRATCH_REG),
+                               "riscv64 generated gp_cmp_diff_rrr dispatch rejected XM_EQ");
             break;
         case XM_NE:
             /* rd = (rs1 != rs2): sub tmp, rs1, rs2; sltu rd, x0, tmp */
-            rv64_buf_emit(&ctx->buf, rv64_sub(RV64_SCRATCH_REG, rs1, rs2));
-            rv64_buf_emit(&ctx->buf, rv64_sltu(rd, RV64_X0, RV64_SCRATCH_REG));
+            RV64_CODEGEN_CHECK(ctx,
+                               xm_dispatch_emit_riscv64_gp_cmp_diff_rrr(XM_NE, &ctx->buf, rd, rs1,
+                                                                        rs2, RV64_SCRATCH_REG),
+                               "riscv64 generated gp_cmp_diff_rrr dispatch rejected XM_NE");
             break;
         default:
-            XR_DCHECK(false, "rv64_h_cmp_int: unreachable opcode");
+            RV64_CODEGEN_CHECK(ctx, false, "rv64_h_cmp_int: unreachable opcode");
             break;
     }
 }
@@ -195,7 +213,8 @@ static void rv64_h_fadd(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Freg fs1 = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     Rv64Freg fs2 = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT10);
-    rv64_buf_emit(&ctx->buf, rv64_fadd_d(fd, fs1, fs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_rrr(ins->op, &ctx->buf, fd, fs1, fs2),
+                       "riscv64 generated fp_rrr dispatch rejected op");
 }
 
 static void rv64_h_fsub(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -203,7 +222,8 @@ static void rv64_h_fsub(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Freg fs1 = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     Rv64Freg fs2 = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT10);
-    rv64_buf_emit(&ctx->buf, rv64_fsub_d(fd, fs1, fs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_rrr(ins->op, &ctx->buf, fd, fs1, fs2),
+                       "riscv64 generated fp_rrr dispatch rejected op");
 }
 
 static void rv64_h_fmul(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -211,7 +231,8 @@ static void rv64_h_fmul(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Freg fs1 = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     Rv64Freg fs2 = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT10);
-    rv64_buf_emit(&ctx->buf, rv64_fmul_d(fd, fs1, fs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_rrr(ins->op, &ctx->buf, fd, fs1, fs2),
+                       "riscv64 generated fp_rrr dispatch rejected op");
 }
 
 static void rv64_h_fdiv(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -219,7 +240,8 @@ static void rv64_h_fdiv(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Freg fs1 = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     Rv64Freg fs2 = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT10);
-    rv64_buf_emit(&ctx->buf, rv64_fdiv_d(fd, fs1, fs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_rrr(ins->op, &ctx->buf, fd, fs1, fs2),
+                       "riscv64 generated fp_rrr dispatch rejected op");
 }
 
 static void rv64_h_fneg(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
@@ -227,7 +249,8 @@ static void rv64_h_fneg(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Freg fs = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     /* FNEG.D = FSGNJN.D rd, rs, rs (hardware instruction, no XOR hack) */
-    rv64_buf_emit(&ctx->buf, rv64_fneg_d(fd, fs));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_r(ins->op, &ctx->buf, fd, fs),
+                       "riscv64 generated fp_r dispatch rejected op");
 }
 
 /* ========== Float Conversion ========== */
@@ -236,12 +259,14 @@ static void rv64_h_i2f(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     (void) rd;
     Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
     Rv64Reg rs = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-    rv64_buf_emit(&ctx->buf, rv64_fcvt_d_l(fd, rs));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_conv_i2f(ins->op, &ctx->buf, fd, rs),
+                       "riscv64 generated conv_i2f dispatch rejected op");
 }
 
 static void rv64_h_f2i(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fs = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
-    rv64_buf_emit(&ctx->buf, rv64_fcvt_l_d(rd, fs));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_conv_f2i(ins->op, &ctx->buf, rd, fs),
+                       "riscv64 generated conv_f2i dispatch rejected op");
 }
 
 /* ========== Float Comparison ========== */
@@ -252,25 +277,9 @@ static void rv64_h_cmp_float(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Freg fs1 = rv64_get_fp_operand(ctx, ins->args[0], RV64_FT11);
     Rv64Freg fs2 = rv64_get_fp_operand(ctx, ins->args[1], RV64_FT10);
 
-    switch (ins->op) {
-        case XM_FEQ:
-            rv64_buf_emit(&ctx->buf, rv64_feq_d(rd, fs1, fs2));
-            break;
-        case XM_FNE:
-            /* !(fs1 == fs2): feq.d tmp, fs1, fs2; xori rd, tmp, 1 */
-            rv64_buf_emit(&ctx->buf, rv64_feq_d(rd, fs1, fs2));
-            rv64_buf_emit(&ctx->buf, rv64_xori(rd, rd, 1));
-            break;
-        case XM_FLT:
-            rv64_buf_emit(&ctx->buf, rv64_flt_d(rd, fs1, fs2));
-            break;
-        case XM_FLE:
-            rv64_buf_emit(&ctx->buf, rv64_fle_d(rd, fs1, fs2));
-            break;
-        default:
-            XR_DCHECK(false, "rv64_h_cmp_float: unreachable opcode");
-            break;
-    }
+    /* All FP compares (FEQ/FNE/FLT/FLE) now use generated wrapper. */
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_fp_cmp_rrr(ins->op, &ctx->buf, rd, fs1, fs2),
+                       "riscv64 generated fp_cmp_rrr dispatch rejected op");
 }
 
 /* ========== Move / Redefine ========== */
@@ -410,7 +419,7 @@ static void rv64_h_subword(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "rv64_h_subword: unreachable opcode");
+            RV64_CODEGEN_CHECK(ctx, false, "rv64_h_subword: unreachable opcode");
             break;
     }
 }
@@ -511,7 +520,7 @@ static void rv64_h_coro(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "rv64_h_coro: unreachable opcode");
+            RV64_CODEGEN_CHECK(ctx, false, "rv64_h_coro: unreachable opcode");
             break;
     }
 }
@@ -685,7 +694,7 @@ static void rv64_h_guard(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "rv64_h_guard: unreachable opcode");
+            RV64_CODEGEN_CHECK(ctx, false, "rv64_h_guard: unreachable opcode");
             break;
     }
 }
@@ -772,7 +781,7 @@ static void rv64_h_rt_arith(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                 break;
             }
             default:
-                XR_DCHECK(false, "rv64_h_rt_arith: unreachable float op");
+                RV64_CODEGEN_CHECK(ctx, false, "rv64_h_rt_arith: unreachable float op");
                 break;
         }
     } else {
@@ -847,7 +856,7 @@ static void rv64_h_rt_cmp(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                 rv64_buf_emit(&ctx->buf, rv64_feq_d(rd, fa, fb));
                 break;
             default:
-                XR_DCHECK(false, "rv64_h_rt_cmp: unreachable cmp op");
+                RV64_CODEGEN_CHECK(ctx, false, "rv64_h_rt_cmp: unreachable cmp op");
                 break;
         }
     } else {
@@ -1609,16 +1618,26 @@ XR_FUNC void rv64_emit_xm_ins(Rv64CodegenCtx *ctx, XmIns *ins) {
     RV64_CODEGEN_CHECK(ctx, ins != NULL, "rv64_emit_xm_ins: NULL ins");
     Rv64Reg rd = rv64_get_reg(ctx, ins->dst);
 
-    XR_DCHECK(ins->op >= 0 && ins->op < XM_OP_COUNT, "rv64_emit_xm_ins: op out of range");
+    RV64_CODEGEN_CHECK(ctx, ins->op < XM_OP_COUNT, "rv64_emit_xm_ins: op out of range");
+    const XmDispatchMeta *meta = xm_dispatch_meta_find((XmOp) ins->op, XM_DISPATCH_BACKEND_RISCV64);
+    if (!meta) {
+        xr_log_warning("rv64-cg", "missing generated dispatch metadata for %s (%u)",
+                       xm_op_name(ins->op), (uint32_t) ins->op);
+        RV64_CODEGEN_CHECK(ctx, false, "missing generated dispatch metadata");
+    }
     Rv64InsHandler handler = rv64_ins_handlers[ins->op];
     if (handler) {
         uint32_t count_before = ctx->buf.count;
         handler(ctx, ins, rd);
         /* Instruction self-check: non-metadata ops must emit at least one instruction. */
         if (ctx->buf.count == count_before && !rv64_op_allows_zero_emit(ins->op)) {
+            xr_log_warning("rv64-cg", "handler emitted 0 bytes for %s; declared mcinsns=%s",
+                           xm_op_name(ins->op), meta->mcinsns);
             RV64_CODEGEN_CHECK(ctx, false, "rv64 handler emitted 0 bytes for non-metadata op");
         }
     } else {
+        xr_log_warning("rv64-cg", "unhandled %s in generated dispatch metadata; mcinsns=%s",
+                       xm_op_name(ins->op), meta->mcinsns);
         RV64_CODEGEN_CHECK(ctx, false, "unhandled Xm opcode in riscv64 backend");
     }
 }

@@ -28,6 +28,7 @@
 #include "xm_target.h"
 #include "xm_pass.h"
 #include "xm_printer.h"
+#include "xm_jit_debug.h"
 #include "../runtime/value/xchunk.h"
 #include "xm_eligibility.h"
 #include "../runtime/value/xslot_type.h"
@@ -74,6 +75,7 @@
 #include "xm_jit_runtime.h"
 #include "xm_jit_internal.h"
 #include "xi_to_xm.h"
+#include "../ir/xi_jit_profile.h"
 
 /* ========== Unified Install Helper ========== */
 
@@ -474,6 +476,17 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     /* Xi IR → Xm lowering (sole compilation path).
      * xi_to_xm_lower ensures select_rep is run if not already at REPPED. */
     if (proto->xi_func) {
+        if (is_recompile && !conservative) {
+            XiJitProfileInput profile = {
+                .ic_fields = ic_snap.ic_fields,
+                .ic_methods = ic_snap.ic_methods,
+                .block_freq = NULL,
+                .block_freq_count = 0,
+                .loop_trip_estimate =
+                    atomic_load_explicit(&proto->exec_count, memory_order_relaxed),
+            };
+            (void) xi_jit_apply_profile((XiFunc *) proto->xi_func, &profile);
+        }
         const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods) ? &ic_snap : NULL;
         func = xi_to_xm_lower((XiFunc *) proto->xi_func, proto, (XiSlotMap *) proto->xi_slot_map,
                               ic_ptr, jit->isolate);
@@ -890,6 +903,23 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
         // Record deopt for statistics
         if (coro->isolate && coro->isolate->vm.jit)
             coro->isolate->vm.jit->stats_deopt_total++;
+
+        // Log deopt with generated disasm context (debug builds only)
+        {
+            XrProto *dp = (XrProto *) coro->jit_ctx->call_proto;
+            uint32_t did = coro->jit_ctx->deopt_id;
+            if (did == UINT32_MAX)
+                did = coro->jit_ctx->invoke_deopt_id;
+            uint32_t bpc = UINT32_MAX;
+            if (dp && dp->deopt_table && did < dp->ndeopt)
+                bpc = ((XmRtDeoptEntry *) dp->deopt_table)[did].bc_pc;
+            const char *dname = (dp && dp->name) ? XR_STRING_CHARS(dp->name) : NULL;
+            int src_line = 0;
+            if (dp && bpc < (uint32_t) PROTO_LINE_COUNT(dp))
+                src_line = PROTO_LINE(dp, bpc);
+            jit_debug_log_deopt(dname, dp ? dp->jit_entry : NULL, 0, did, bpc, src_line);
+        }
+
         // Recovery happens in VM via xm_jit_deopt_recover().
         return XM_JIT_DEOPT;
     }
@@ -994,6 +1024,20 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
             exc.heap_type = (uint16_t) ((XrGCHeader *) exc.ptr)->type;
             coro->jit_ctx->exception = NULL;
             xr_vm_unwind_with_trace(coro->isolate, exc);
+        }
+        // Log resume-path deopt with generated disasm context
+        {
+            uint32_t did = coro->jit_ctx->deopt_id;
+            if (did == UINT32_MAX)
+                did = coro->jit_ctx->invoke_deopt_id;
+            uint32_t bpc = UINT32_MAX;
+            if (proto && proto->deopt_table && did < proto->ndeopt)
+                bpc = ((XmRtDeoptEntry *) proto->deopt_table)[did].bc_pc;
+            const char *dname = (proto && proto->name) ? XR_STRING_CHARS(proto->name) : NULL;
+            int src_line = 0;
+            if (proto && bpc < (uint32_t) PROTO_LINE_COUNT(proto))
+                src_line = PROTO_LINE(proto, bpc);
+            jit_debug_log_deopt(dname, proto ? proto->jit_entry : NULL, 0, did, bpc, src_line);
         }
         return XM_JIT_DEOPT;
     }

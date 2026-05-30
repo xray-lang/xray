@@ -5,26 +5,24 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_opt_tail_call.c - Self-tail-call to loop transformation
+ * xi_opt_tail_call.c - Tail call optimization
  *
- * ALGORITHM:
- *   For each RETURN block whose control is the result of an XI_CALL:
- *     1. Resolve the callee.  If it is the same XiFunc (self-recursive),
- *        and the call result is used only as the return value, it is
- *        a self-tail-call.
- *     2. Replace the call with XI_COPY ops that write new argument
- *        values into phi nodes at the entry block.
- *     3. Change the block from RETURN to PLAIN with a back-edge to
- *        a loop header (inserted between entry and original successors).
+ * TWO TRANSFORMATIONS:
  *
- *   The transformation introduces a loop header with phi nodes that
- *   merge the initial parameter values (from the original entry) with
- *   the updated values (from the tail-call site).
+ *   1. Self-tail-call → loop (existing):
+ *      For each RETURN block whose control is the result of an XI_CALL
+ *      to the same function, replace with a back-edge to a loop header.
+ *
+ *   2. General tail call promotion (new):
+ *      For non-self calls in tail position (XI_CALL/XI_CALL_METHOD with
+ *      XI_FLAG_TAIL), convert the op to XI_TAIL_CALL.  This signals the
+ *      backend to emit a tail jump (frame cleanup + jmp) instead of
+ *      call + ret.
  *
  * LIMITATIONS:
- *   - Only self-recursion (callee == current function).
- *   - Call result must be the sole return value (no post-call ops).
- *   - Does not handle mutual recursion.
+ *   - Self-recursion only for the loop transform.
+ *   - General tail calls require callee to be a safe target (checked
+ *     by the lowering phase which sets XI_FLAG_TAIL).
  */
 
 #include "xi_opt_tail_call.h"
@@ -268,48 +266,92 @@ static void replace_params_with_phis(XiFunc *f, XiBlock *header) {
     }
 }
 
+/* ========== General Tail Call Promotion ========== */
+
+/* Find a general (non-self) tail call in a RETURN block.
+ * Returns the call value if found, NULL otherwise. */
+static XiValue *find_general_tail_call(const XiBlock *blk) {
+    if (blk->kind != XI_BLOCK_RETURN || !blk->control)
+        return NULL;
+
+    XiValue *ret_val = blk->control;
+
+    /* The return value must be a call op with XI_FLAG_TAIL set. */
+    if (!(ret_val->flags & XI_FLAG_TAIL))
+        return NULL;
+
+    bool is_call = (ret_val->op == XI_CALL || ret_val->op == XI_CALL_METHOD ||
+                    ret_val->op == XI_CALL_METHOD_DIRECT);
+    if (!is_call)
+        return NULL;
+
+    /* Must be the last value in the block. */
+    if (blk->nvalues == 0 || blk->values[blk->nvalues - 1] != ret_val)
+        return NULL;
+
+    return ret_val;
+}
+
+/* Promote a flagged call to XI_TAIL_CALL op. */
+static bool promote_to_tail_call(XiValue *call) {
+    if (!call)
+        return false;
+    call->op = XI_TAIL_CALL;
+    call->flags &= ~XI_FLAG_TAIL; /* flag absorbed into op */
+    return true;
+}
+
 /* ========== Pass Driver ========== */
 
 XR_FUNC XiPassChange xi_opt_tail_call(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_tail_call: NULL func");
 
-    if (f->nblocks < 2 || f->nparams == 0 || f->nparams > 64)
-        return xi_pass_no_change();
+    bool cfg_changed = false;
+    bool values_changed = false;
 
-    /* Scan for self-tail-call sites. */
-    uint32_t tail_count = 0;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        if (find_self_tail_call(f->blocks[b], f))
-            tail_count++;
+    /* Phase 1: Self-tail-call → loop transformation. */
+    if (f->nblocks >= 2 && f->nparams > 0 && f->nparams <= 64) {
+        uint32_t tail_count = 0;
+        for (uint32_t b = 0; b < f->nblocks; b++) {
+            if (find_self_tail_call(f->blocks[b], f))
+                tail_count++;
+        }
+
+        if (tail_count > 0) {
+            XiBlock *header = insert_loop_header(f);
+            if (header) {
+                replace_params_with_phis(f, header);
+                for (uint32_t b = 0; b < f->nblocks; b++) {
+                    XiBlock *blk = f->blocks[b];
+                    XiValue *call = find_self_tail_call(blk, f);
+                    if (!call)
+                        continue;
+                    if (rewrite_tail_call(f, blk, call, header)) {
+                        cfg_changed = true;
+                        values_changed = true;
+                    }
+                }
+            }
+        }
     }
 
-    if (tail_count == 0)
-        return xi_pass_no_change();
-
-    /* Insert loop header. */
-    XiBlock *header = insert_loop_header(f);
-    if (!header)
-        return xi_pass_no_change();
-
-    /* Replace param references with header phi values. */
-    replace_params_with_phis(f, header);
-
-    /* Rewrite each tail-call block. */
-    bool any = false;
+    /* Phase 2: Promote remaining XI_FLAG_TAIL calls to XI_TAIL_CALL.
+     * These are general (non-self) tail calls that the backend can
+     * lower to tail jumps (frame cleanup + jmp). */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
-        XiValue *call = find_self_tail_call(blk, f);
+        XiValue *call = find_general_tail_call(blk);
         if (!call)
             continue;
-        if (rewrite_tail_call(f, blk, call, header))
-            any = true;
+        if (promote_to_tail_call(call))
+            values_changed = true;
     }
 
-    if (!any)
+    if (!cfg_changed && !values_changed)
         return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();
-    chg.cfg_changed = true;
-    chg.values_changed = true;
+    chg.cfg_changed = cfg_changed;
+    chg.values_changed = values_changed;
     return chg;
 }
