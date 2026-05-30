@@ -7,6 +7,9 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_opt.h"
+#include "../../../src/ir/xi_opt_block_simplify.h"
+#include "../../../src/ir/xi_opt_jump_thread.h"
+#include "../../../src/ir/xi_tbaa.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -543,230 +546,7 @@ TEST(opt_run_combined) {
     xi_func_free(f);
 }
 
-/* ========== Strength Reduction Tests ========== */
-
-TEST(strength_add_zero) {
-    /* x + 0 -> x (copy) */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, x, c0);
-    xi_block_set_return(blk, add);
-
-    xi_opt_strength_reduce(f);
-
-    assert(add->op == XI_COPY && "x + 0 should become COPY");
-    assert(add->args[0] == x && "should copy x");
-    xi_func_free(f);
-}
-
-TEST(strength_zero_add) {
-    /* 0 + x -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *add = xi_binary(f, blk, XI_ADD, &stub_int, c0, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(add->op == XI_COPY && add->args[0] == x);
-    xi_func_free(f);
-}
-
-TEST(strength_mul_zero) {
-    /* x * 0 -> 0 */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, x, c0);
-
-    xi_opt_strength_reduce(f);
-
-    assert(mul->op == XI_CONST && mul->aux_int == 0 && "x * 0 should be 0");
-    xi_func_free(f);
-}
-
-TEST(strength_mul_one) {
-    /* x * 1 -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
-    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, x, c1);
-
-    xi_opt_strength_reduce(f);
-
-    assert(mul->op == XI_COPY && mul->args[0] == x && "x * 1 should become COPY");
-    xi_func_free(f);
-}
-
-TEST(strength_sub_self) {
-    /* x - x -> 0 */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *sub = xi_binary(f, blk, XI_SUB, &stub_int, x, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(sub->op == XI_CONST && sub->aux_int == 0 && "x - x should be 0");
-    xi_func_free(f);
-}
-
-TEST(strength_xor_self) {
-    /* x ^ x -> 0 */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *xr = xi_binary(f, blk, XI_BXOR, &stub_int, x, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(xr->op == XI_CONST && xr->aux_int == 0 && "x ^ x should be 0");
-    xi_func_free(f);
-}
-
-TEST(strength_and_zero) {
-    /* x & 0 -> 0 */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *band = xi_binary(f, blk, XI_BAND, &stub_int, x, c0);
-
-    xi_opt_strength_reduce(f);
-
-    assert(band->op == XI_CONST && band->aux_int == 0);
-    xi_func_free(f);
-}
-
-TEST(strength_div_one) {
-    /* x / 1 -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
-    XiValue *div = xi_binary(f, blk, XI_DIV, &stub_int, x, c1);
-
-    xi_opt_strength_reduce(f);
-
-    assert(div->op == XI_COPY && div->args[0] == x && "x / 1 should copy x");
-    xi_func_free(f);
-}
-
-TEST(strength_shl_zero) {
-    /* x << 0 -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *shl = xi_binary(f, blk, XI_SHL, &stub_int, x, c0);
-
-    xi_opt_strength_reduce(f);
-
-    assert(shl->op == XI_COPY && shl->args[0] == x);
-    xi_func_free(f);
-}
-
-TEST(strength_one_mul) {
-    /* 1 * x -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *c1 = xi_const_int(f, blk, 1, &stub_int);
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, c1, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(mul->op == XI_COPY && mul->args[0] == x && "1 * x should become COPY");
-    xi_func_free(f);
-}
-
-TEST(strength_zero_mul_lhs) {
-    /* 0 * x -> 0 */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *mul = xi_binary(f, blk, XI_MUL, &stub_int, c0, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(mul->op == XI_CONST && mul->aux_int == 0 && "0 * x should be 0");
-    xi_func_free(f);
-}
-
-TEST(strength_and_self) {
-    /* x & x -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *band = xi_binary(f, blk, XI_BAND, &stub_int, x, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(band->op == XI_COPY && band->args[0] == x && "x & x should be COPY x");
-    xi_func_free(f);
-}
-
-TEST(strength_or_self) {
-    /* x | x -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *bor = xi_binary(f, blk, XI_BOR, &stub_int, x, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(bor->op == XI_COPY && bor->args[0] == x && "x | x should be COPY x");
-    xi_func_free(f);
-}
-
-TEST(strength_or_zero_lhs) {
-    /* 0 | x -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *bor = xi_binary(f, blk, XI_BOR, &stub_int, c0, x);
-
-    xi_opt_strength_reduce(f);
-
-    assert(bor->op == XI_COPY && bor->args[0] == x);
-    xi_func_free(f);
-}
-
-TEST(strength_shr_zero) {
-    /* x >> 0 -> x */
-    XiFunc *f = make_func("test", &stub_int);
-    XiBlock *blk = f->entry;
-
-    XiValue *x = xi_param(f, blk, 0, &stub_int);
-    XiValue *c0 = xi_const_int(f, blk, 0, &stub_int);
-    XiValue *shr = xi_binary(f, blk, XI_SHR, &stub_int, x, c0);
-
-    xi_opt_strength_reduce(f);
-
-    assert(shr->op == XI_COPY && shr->args[0] == x);
-    xi_func_free(f);
-}
+/* Strength reduction tests live in test_xi_strength.c (dedicated). */
 
 TEST(phi_simplify_non_trivial) {
     /* phi(a, b) with a != b should NOT be simplified */
@@ -795,6 +575,8 @@ TEST(phi_simplify_non_trivial) {
     assert(use->args[0] == &phi->value && "use should still reference phi");
     xi_func_free(f);
 }
+
+/* GVN-PRE tests live in test_xi_gvn_pre.c (dedicated). */
 
 /* ========== Verification Tests ========== */
 
@@ -1084,6 +866,36 @@ TEST(tuple_new_eliminated_after_full_projection) {
     xi_func_free(f);
 }
 
+TEST(tuple_get_fold_clears_tbaa_metadata) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *e0 = xi_const_int(f, blk, 100, &stub_int);
+    XiValue *tup = xi_value_new(f, blk, XI_TUPLE_NEW, &stub_int, 1);
+    tup->args[0] = e0;
+    tup->aux_int = 1;
+
+    XiValue *get = xi_value_new(f, blk, XI_TUPLE_GET, &stub_int, 1);
+    get->args[0] = tup;
+    get->aux_int = 0;
+    xi_block_set_return(blk, get);
+
+    xi_tbaa_annotate(f);
+    assert(get->mem_group == XI_MEM_TUPLE && "TUPLE_GET should be annotated before folding");
+
+    xi_opt_const_fold(f);
+
+    assert(get->op == XI_COPY && "TUPLE_GET(TUPLE_NEW, 0) should collapse to COPY");
+    assert(get->mem_group == XI_MEM_NONE && "COPY must not keep TUPLE_GET memory group");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "folded COPY should satisfy TBAA verifier");
+    xi_func_free(f);
+}
+
 /* ========== BOX/UNBOX Peephole Tests ========== */
 
 TEST(box_elim_unbox_of_box) {
@@ -1140,6 +952,221 @@ TEST(box_elim_no_false_positive) {
     xi_func_free(f);
 }
 
+/* ========== Block Simplify Tests ========== */
+
+TEST(block_simplify_single_pred_empty_block) {
+    /* entry --> empty --> exit
+     * 'empty' is PLAIN, has no values and one pred, one succ → it can
+     * be eliminated and the function can collapse into a single block. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiBlock *empty = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    empty->sealed = true;
+    exit_blk->sealed = true;
+
+    xi_block_set_jump(entry, empty);
+    xi_block_set_jump(empty, exit_blk);
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 7, &stub_int));
+
+    XiPassChange chg = xi_opt_block_simplify(f);
+
+    assert(chg.cfg_changed && "block_simplify should report a CFG change");
+    assert(f->nblocks <= 2 && "single-pred chain should collapse");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "IR should remain valid after block_simplify");
+    xi_func_free(f);
+}
+
+TEST(block_simplify_keeps_ir_valid_for_multi_pred_empty) {
+    /* Two branches funnel through a shared empty PLAIN block before
+     * reaching the join. block_simplify must not corrupt the CFG —
+     * either it leaves the empty block in place or it correctly
+     * stitches every predecessor through. The hard contract is: the
+     * IR must remain a valid SSA program. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+    XiBlock *funnel = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    then_blk->sealed = true;
+    else_blk->sealed = true;
+    funnel->sealed = true;
+    exit_blk->sealed = true;
+
+    xi_block_set_if(entry, cond, then_blk, else_blk);
+    xi_block_set_jump(then_blk, funnel);
+    xi_block_set_jump(else_blk, funnel);
+    xi_block_set_jump(funnel, exit_blk);
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 9, &stub_int));
+
+    (void) xi_opt_block_simplify(f);
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "block_simplify must preserve SSA validity on multi-pred empty");
+    xi_func_free(f);
+}
+
+TEST(block_simplify_preserves_phi_when_merging) {
+    /* exit block has a phi over its two preds. block_simplify must not
+     * desync npreds and phi.nargs while operating on the shape. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    then_blk->sealed = true;
+    else_blk->sealed = true;
+    exit_blk->sealed = true;
+
+    xi_block_set_if(entry, cond, then_blk, else_blk);
+    XiValue *t = xi_const_int(f, then_blk, 1, &stub_int);
+    XiValue *e = xi_const_int(f, else_blk, 2, &stub_int);
+    xi_block_set_jump(then_blk, exit_blk);
+    xi_block_set_jump(else_blk, exit_blk);
+
+    XiPhi *phi = xi_phi_new(f, exit_blk, &stub_int, 2);
+    phi->value.args[0] = t;
+    phi->value.args[1] = e;
+    xi_block_set_return(exit_blk, &phi->value);
+
+    (void) xi_opt_block_simplify(f);
+
+    /* Whichever shape survives, all phis in surviving blocks must agree
+     * with their block's npreds. */
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (XiPhi *p = blk->phis; p; p = p->next) {
+            assert(p->value.nargs == blk->npreds &&
+                   "phi.nargs must match block.npreds after block_simplify");
+        }
+    }
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok);
+    xi_func_free(f);
+}
+
+/* ========== Jump Thread Tests ========== */
+
+TEST(jump_thread_basic_redirect) {
+    /* entry tests cmp; both branches funnel into 'merge' which tests
+     * the same cmp again. Both incoming edges should be threaded to
+     * the matching successor of merge, leaving merge unreachable. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *x = xi_param(f, entry, 0, &stub_int);
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *cmp = xi_binary(f, entry, XI_EQ, &stub_bool, x, zero);
+
+    XiBlock *a_blk = xi_block_new(f);
+    XiBlock *b_blk = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    XiBlock *t_blk = xi_block_new(f);
+    XiBlock *f_blk = xi_block_new(f);
+    a_blk->sealed = true;
+    b_blk->sealed = true;
+    merge->sealed = true;
+    t_blk->sealed = true;
+    f_blk->sealed = true;
+
+    xi_block_set_if(entry, cmp, a_blk, b_blk);
+    xi_block_set_jump(a_blk, merge);
+    xi_block_set_jump(b_blk, merge);
+    xi_block_set_if(merge, cmp, t_blk, f_blk);
+    xi_block_set_return(t_blk, xi_const_int(f, t_blk, 100, &stub_int));
+    xi_block_set_return(f_blk, xi_const_int(f, f_blk, 200, &stub_int));
+
+    XiPassChange chg = xi_opt_jump_thread(f);
+
+    assert(chg.cfg_changed && "jump_thread should redirect both edges");
+    assert(a_blk->succs[0] == t_blk && "a_blk should now jump straight to t_blk");
+    assert(b_blk->succs[0] == f_blk && "b_blk should now jump straight to f_blk");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "IR must remain valid after jump_thread");
+    xi_func_free(f);
+}
+
+TEST(jump_thread_keeps_ir_valid_when_dest_has_phi) {
+    /* Same threading shape, but t_blk holds a phi anchored to merge.
+     * Naive redirect would attach a fresh predecessor to t_blk without
+     * extending the phi argument list, breaking npreds == phi.nargs.
+     * The pass must either correctly extend the phi or refuse to
+     * thread; either way the verifier must pass. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *x = xi_param(f, entry, 0, &stub_int);
+    XiValue *zero = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *cmp = xi_binary(f, entry, XI_EQ, &stub_bool, x, zero);
+
+    XiBlock *a_blk = xi_block_new(f);
+    XiBlock *b_blk = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+    XiBlock *t_blk = xi_block_new(f);
+    XiBlock *f_blk = xi_block_new(f);
+    a_blk->sealed = true;
+    b_blk->sealed = true;
+    merge->sealed = true;
+    t_blk->sealed = true;
+    f_blk->sealed = true;
+
+    xi_block_set_if(entry, cmp, a_blk, b_blk);
+    xi_block_set_jump(a_blk, merge);
+    xi_block_set_jump(b_blk, merge);
+    XiValue *m_val = xi_const_int(f, merge, 99, &stub_int);
+    xi_block_set_if(merge, cmp, t_blk, f_blk);
+
+    XiPhi *phi = xi_phi_new(f, t_blk, &stub_int, 1);
+    phi->value.args[0] = m_val;
+    xi_block_set_return(t_blk, &phi->value);
+    xi_block_set_return(f_blk, xi_const_int(f, f_blk, 200, &stub_int));
+
+    (void) xi_opt_jump_thread(f);
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (XiPhi *p = blk->phis; p; p = p->next) {
+            assert(p->value.nargs == blk->npreds &&
+                   "phi.nargs must match block.npreds after jump_thread");
+        }
+    }
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "IR must remain valid after jump_thread on a phi-bearing dest");
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1183,22 +1210,8 @@ int main(void) {
     run_phi_simplify_trivial();
     run_phi_simplify_non_trivial();
 
-    /* Strength reduction */
-    run_strength_add_zero();
-    run_strength_zero_add();
-    run_strength_mul_zero();
-    run_strength_mul_one();
-    run_strength_sub_self();
-    run_strength_xor_self();
-    run_strength_and_zero();
-    run_strength_div_one();
-    run_strength_shl_zero();
-    run_strength_one_mul();
-    run_strength_zero_mul_lhs();
-    run_strength_and_self();
-    run_strength_or_self();
-    run_strength_or_zero_lhs();
-    run_strength_shr_zero();
+    /* GVN-PRE: covered by test_xi_gvn_pre.c (dedicated). */
+    /* Strength reduction: covered by test_xi_strength.c (dedicated). */
 
     /* Verification */
     run_verify_valid_func();
@@ -1221,11 +1234,21 @@ int main(void) {
     run_tuple_get_of_tuple_new_second();
     run_tuple_get_unrelated_source_keeps_op();
     run_tuple_new_eliminated_after_full_projection();
+    run_tuple_get_fold_clears_tbaa_metadata();
 
     /* BOX/UNBOX peephole */
     run_box_elim_unbox_of_box();
     run_box_elim_box_of_unbox();
     run_box_elim_no_false_positive();
+
+    /* Block simplify */
+    run_block_simplify_single_pred_empty_block();
+    run_block_simplify_keeps_ir_valid_for_multi_pred_empty();
+    run_block_simplify_preserves_phi_when_merging();
+
+    /* Jump thread */
+    run_jump_thread_basic_redirect();
+    run_jump_thread_keeps_ir_valid_when_dest_has_phi();
 
     printf("\n=== %d/%d Xi Opt tests passed ===\n", tests_passed, tests_passed + tests_failed);
     return tests_failed > 0 ? 1 : 0;

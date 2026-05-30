@@ -292,8 +292,6 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABC(OP_UNLOCK_THREAD, 0, 0, 0));
             return;
         }
-        default:
-            break;
     }
 
     /* OP_CORO_CTRL sub-opcodes: A=dst, B=first_arg_reg, C=sub_opcode */

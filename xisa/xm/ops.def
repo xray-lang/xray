@@ -1,0 +1,180 @@
+// xisa/xm/ops.def — XmOp declarative definition (source of truth for L1)
+//
+// Format: XM_DEF(name, class, nargs, result_rep, effects)
+//
+// Fields:
+//   name       — enum value XM_<name> (e.g. ADD → XM_ADD)
+//   class      — opcode category for dispatch grouping
+//   nargs      — number of XmRef arguments (0, 1, or 2)
+//   result_rep — result representation: I64 | F64 | PTR | TAGGED | VOID
+//   effects    — side-effect flags (bitwise OR): NONE | GC | THROW | SUSPEND | DEOPT | WRITE | READ
+//
+// IMPORTANT: Order determines enum numeric value. Do not reorder without
+// updating all dispatch tables that use indexed arrays.
+//
+// Generator output: xm_ops_gen.h (enum + XmOpInfo metadata table)
+//
+// ─── Integer Arithmetic / Logic (0-11) ────────────────────────────────────────
+
+XM_DEF(ADD,    ARITH, 2, I64,  NONE)
+XM_DEF(SUB,    ARITH, 2, I64,  NONE)
+XM_DEF(MUL,    ARITH, 2, I64,  NONE)
+XM_DEF(DIV,    ARITH, 2, I64,  NONE)
+XM_DEF(MOD,    ARITH, 2, I64,  NONE)
+XM_DEF(NEG,    ARITH, 1, I64,  NONE)
+XM_DEF(AND,    ARITH, 2, I64,  NONE)
+XM_DEF(OR,     ARITH, 2, I64,  NONE)
+XM_DEF(XOR,    ARITH, 2, I64,  NONE)
+XM_DEF(NOT,    ARITH, 1, I64,  NONE)
+XM_DEF(SHL,    ARITH, 2, I64,  NONE)
+XM_DEF(SHR,    ARITH, 2, I64,  NONE)
+
+// ─── Float Arithmetic (12-16) ─────────────────────────────────────────────────
+
+XM_DEF(FADD,   FLOAT, 2, F64,  NONE)
+XM_DEF(FSUB,   FLOAT, 2, F64,  NONE)
+XM_DEF(FMUL,   FLOAT, 2, F64,  NONE)
+XM_DEF(FDIV,   FLOAT, 2, F64,  NONE)
+XM_DEF(FNEG,   FLOAT, 1, F64,  NONE)
+
+// ─── Type Conversion (17-18) ──────────────────────────────────────────────────
+
+XM_DEF(I2F,    CONV,  1, F64,  NONE)
+XM_DEF(F2I,    CONV,  1, I64,  NONE)
+
+// ─── Comparison (19-28) ───────────────────────────────────────────────────────
+
+XM_DEF(EQ,     CMP,   2, I64,  NONE)
+XM_DEF(NE,     CMP,   2, I64,  NONE)
+XM_DEF(LT,     CMP,   2, I64,  NONE)
+XM_DEF(LE,     CMP,   2, I64,  NONE)
+XM_DEF(GT,     CMP,   2, I64,  NONE)
+XM_DEF(GE,     CMP,   2, I64,  NONE)
+XM_DEF(FEQ,    CMP,   2, I64,  NONE)
+XM_DEF(FNE,    CMP,   2, I64,  NONE)
+XM_DEF(FLT,    CMP,   2, I64,  NONE)
+XM_DEF(FLE,    CMP,   2, I64,  NONE)
+
+// ─── Tagged Value Operations (29-34) ──────────────────────────────────────────
+
+XM_DEF(BOX_I64,    TAGGED, 1, TAGGED, NONE)
+XM_DEF(BOX_F64,    TAGGED, 1, TAGGED, NONE)
+XM_DEF(UNBOX_I64,  TAGGED, 1, I64,    NONE)
+XM_DEF(UNBOX_F64,  TAGGED, 1, F64,    NONE)
+XM_DEF(TAG_CHECK,  TAGGED, 2, VOID,   DEOPT)
+XM_DEF(TAG_LOAD,   TAGGED, 1, I64,    READ)
+
+// ─── Memory (35-55) ──────────────────────────────────────────────────────────
+
+XM_DEF(LOAD,            MEM, 2, TAGGED, READ)
+XM_DEF(STORE,           MEM, 2, VOID,   WRITE)
+XM_DEF(LOAD_FIELD,      MEM, 2, TAGGED, READ)
+XM_DEF(STORE_FIELD,     MEM, 2, VOID,   WRITE)
+XM_DEF(ALLOC,           MEM, 2, PTR,    GC)
+XM_DEF(STORE_CORO,      MEM, 1, VOID,   WRITE)
+XM_DEF(STORE_CORO_BYTE, MEM, 1, VOID,   WRITE)
+XM_DEF(LOAD_CORO,       MEM, 1, I64,    READ)
+XM_DEF(LOAD_CORO_BYTE,  MEM, 1, I64,    READ)
+XM_DEF(LOAD32S,         MEM, 2, I64,    READ)
+XM_DEF(LOAD8Z,          MEM, 1, I64,    READ)
+XM_DEF(LOAD8S,          MEM, 1, I64,    READ)
+XM_DEF(STORE8,          MEM, 2, VOID,   WRITE)
+XM_DEF(LOAD16Z,         MEM, 1, I64,    READ)
+XM_DEF(LOAD16S,         MEM, 1, I64,    READ)
+XM_DEF(STORE16,         MEM, 2, VOID,   WRITE)
+XM_DEF(LOAD32Z,         MEM, 1, I64,    READ)
+XM_DEF(STORE32,         MEM, 2, VOID,   WRITE)
+XM_DEF(LOAD_F32,        MEM, 1, F64,    READ)
+XM_DEF(STORE_F32,       MEM, 2, VOID,   WRITE)
+XM_DEF(GUARD_BOUNDS,    MEM, 2, VOID,   DEOPT)
+
+// ─── Constants (56-58) ────────────────────────────────────────────────────────
+
+XM_DEF(CONST_I64, CONST, 1, I64,    NONE)
+XM_DEF(CONST_F64, CONST, 1, F64,    NONE)
+XM_DEF(CONST_PTR, CONST, 1, PTR,    NONE)
+
+// ─── Control Flow (59-61) ─────────────────────────────────────────────────────
+
+XM_DEF(JMP,              CTRL, 0, VOID,   NONE)
+XM_DEF(BR,               CTRL, 1, VOID,   NONE)
+XM_DEF(RET,              CTRL, 1, VOID,   NONE)
+
+// ─── Call (62-70) ─────────────────────────────────────────────────────────────
+
+XM_DEF(CALL,             CALL, 2, TAGGED, GC|THROW|SUSPEND)
+XM_DEF(CALL_C,           CALL, 2, TAGGED, GC|THROW)
+XM_DEF(CALL_C_LEAF,      CALL, 2, TAGGED, NONE)
+XM_DEF(CALL_SELF_DIRECT, CALL, 2, TAGGED, GC|THROW|SUSPEND)
+XM_DEF(CALL_DIRECT,      CALL, 2, TAGGED, GC|THROW|SUSPEND)
+XM_DEF(CALL_KNOWN,       CALL, 2, TAGGED, GC|THROW|SUSPEND)
+XM_DEF(CALL_KNOWN_REG,   CALL, 2, TAGGED, GC|THROW|SUSPEND)
+XM_DEF(CALL_INTRINSIC,   CALL, 2, TAGGED, GC|THROW)
+
+// ─── Runtime Helpers (71-87) ──────────────────────────────────────────────────
+
+XM_DEF(RT_ADD,        RT, 2, TAGGED, GC|DEOPT)
+XM_DEF(RT_SUB,        RT, 2, TAGGED, GC|DEOPT)
+XM_DEF(RT_MUL,        RT, 2, TAGGED, GC|DEOPT)
+XM_DEF(RT_DIV,        RT, 2, TAGGED, GC|DEOPT)
+XM_DEF(RT_MOD,        RT, 2, TAGGED, GC|DEOPT)
+XM_DEF(RT_UNM,        RT, 1, TAGGED, GC|DEOPT)
+XM_DEF(RT_LT,         RT, 2, I64,    DEOPT)
+XM_DEF(RT_LE,         RT, 2, I64,    DEOPT)
+XM_DEF(RT_EQ,         RT, 2, I64,    DEOPT)
+XM_DEF(RT_PRINT,      RT, 2, VOID,   GC)
+XM_DEF(RT_ARRAY_NEW,  RT, 1, PTR,    GC)
+XM_DEF(RT_ARRAY_PUSH, RT, 2, VOID,   GC)
+XM_DEF(RT_ARRAY_LEN,  RT, 1, I64,    NONE)
+XM_DEF(RT_INDEX_GET,  RT, 2, TAGGED, GC|THROW)
+XM_DEF(RT_INDEX_SET,  RT, 2, VOID,   GC|THROW)
+XM_DEF(RT_MAP_NEW,    RT, 1, PTR,    GC)
+XM_DEF(RT_ISNULL,     RT, 1, I64,    NONE)
+
+// ─── Runtime Interaction / Guards (88-95) ─────────────────────────────────────
+
+XM_DEF(SAFEPOINT,     GUARD, 0, VOID,   GC|SUSPEND)
+XM_DEF(BARRIER_FWD,   GUARD, 1, VOID,   WRITE)
+XM_DEF(BARRIER_BACK,  GUARD, 1, VOID,   WRITE)
+XM_DEF(DEOPT,         GUARD, 0, VOID,   DEOPT)
+XM_DEF(GUARD_TAG,     GUARD, 2, VOID,   DEOPT)
+XM_DEF(GUARD_CLASS,   GUARD, 2, VOID,   DEOPT)
+XM_DEF(GUARD_KLASS,   GUARD, 2, VOID,   DEOPT)
+XM_DEF(GUARD_NONNULL, GUARD, 1, VOID,   DEOPT)
+
+// ─── Coroutine (96) ───────────────────────────────────────────────────────────
+
+XM_DEF(SUSPEND, CORO, 2, TAGGED, GC|SUSPEND)
+
+// ─── Exception Handling (97-100) ──────────────────────────────────────────────
+
+XM_DEF(TRY_BEGIN, EH, 0, VOID, NONE)
+XM_DEF(TRY_END,   EH, 0, VOID, NONE)
+XM_DEF(THROW,     EH, 1, VOID, THROW)
+XM_DEF(CATCH,     EH, 0, PTR,  NONE)
+
+// ─── Defer (101) ─────────────────────────────────────────────────────────────
+
+XM_DEF(DEFER_PUSH, MISC, 2, VOID, NONE)
+
+// ─── ARC (102-103) ───────────────────────────────────────────────────────────
+
+XM_DEF(RETAIN,  ARC, 1, VOID, NONE)
+XM_DEF(RELEASE, ARC, 1, VOID, NONE)
+
+// ─── Upvalue Access (104-105) ─────────────────────────────────────────────────
+
+XM_DEF(LOAD_UPVAL,  UPVAL, 1, TAGGED, READ)
+XM_DEF(STORE_UPVAL, UPVAL, 2, VOID,   WRITE)
+
+// ─── Conditional Select (106-107) ─────────────────────────────────────────────
+
+XM_DEF(SELECT_COND, SELECT, 1, VOID,   NONE)
+XM_DEF(SELECT,      SELECT, 2, TAGGED, NONE)
+
+// ─── Miscellaneous (108-111) ──────────────────────────────────────────────────
+
+XM_DEF(MOV,      MISC, 1, TAGGED, NONE)
+XM_DEF(NOP,      MISC, 0, VOID,   NONE)
+XM_DEF(PHI,      MISC, 0, TAGGED, NONE)
+XM_DEF(REDEFINE, MISC, 1, TAGGED, NONE)

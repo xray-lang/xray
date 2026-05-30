@@ -974,6 +974,28 @@ TEST(tools_call_run_basic_print_returns_structured) {
     xjson_free(result);
 }
 
+TEST(resources_read_stdlib_list_omits_json_module) {
+    XmcpServer server = test_server();
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://stdlib/modules");
+
+    XrJsonValue *result = call_resources_read(&server, params);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *contents = xjson_get_array(result, "contents");
+    ASSERT_NOT_NULL(contents);
+    ASSERT_EQ(xjson_array_len(contents), 1);
+
+    XrJsonValue *item = xjson_array_get(contents, 0);
+    const char *text = xjson_get_string(item, "text");
+    ASSERT_NOT_NULL(text);
+    ASSERT(strstr(text, "| `json` |") == NULL);
+    ASSERT_NOT_NULL(strstr(text, "Json.parse()"));
+
+    xjson_free(params);
+    xjson_free(result);
+}
+
 TEST(tools_call_run_output_truncated) {
     /* Print a 50-byte line and clamp outputLimit to 10 bytes. */
     XmcpServer server = test_server_with_runner(true);
@@ -1164,6 +1186,32 @@ TEST(tools_call_stdlib_search_returns_structured_content) {
     ASSERT_NOT_NULL(xjson_get_string(first, "module"));
     ASSERT_NOT_NULL(xjson_get_string(first, "summary"));
     ASSERT(xjson_get_int_or(first, "score", 0) > 0);
+
+    xjson_free(params);
+    xjson_free(result);
+    xmcp_knowledge_free(server.knowledge);
+}
+
+TEST(tools_call_stdlib_search_json_reports_builtin_usage) {
+    XmcpServer server = test_server();
+    test_server_load_knowledge(&server);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "name", "xray_stdlib_search");
+    XrJsonValue *args = xjson_new_object();
+    XJSON_SET_STRING(args, "query", "json");
+    xjson_object_set(params, "arguments", args);
+
+    XrJsonValue *result = call_tools_call(&server, params);
+    ASSERT_NOT_NULL(result);
+    ASSERT(xjson_get_bool(result, "isError") == false);
+    XrJsonValue *structured = xjson_get_object(result, "structuredContent");
+    ASSERT_NOT_NULL(structured);
+    const char *content = xjson_get_string(structured, "content");
+    ASSERT_NOT_NULL(content);
+    ASSERT_NOT_NULL(strstr(content, "## Built-in: Json"));
+    ASSERT_NOT_NULL(strstr(content, "Json.parse()"));
+    ASSERT(strstr(content, "import json") == NULL);
 
     xjson_free(params);
     xjson_free(result);
@@ -1421,6 +1469,33 @@ TEST(resources_read_topic_template) {
 
     XrJsonValue *item = xjson_array_get(contents, 0);
     ASSERT_STR_EQ(xjson_get_string(item, "uri"), "xray://spec/topic/variables");
+
+    xmcp_knowledge_free(server.knowledge);
+    xjson_free(params);
+    xjson_free(result);
+}
+
+TEST(resources_read_json_builtin_template) {
+    XmcpServer server = test_server();
+    server.knowledge = xmcp_knowledge_new();
+    xmcp_knowledge_load(server.knowledge);
+
+    XrJsonValue *params = xjson_new_object();
+    XJSON_SET_STRING(params, "uri", "xray://stdlib/json");
+
+    XrJsonValue *result = call_resources_read(&server, params);
+    ASSERT_NOT_NULL(result);
+
+    XrJsonValue *contents = xjson_get_array(result, "contents");
+    ASSERT_NOT_NULL(contents);
+    ASSERT_EQ(xjson_array_len(contents), 1);
+
+    XrJsonValue *item = xjson_array_get(contents, 0);
+    const char *text = xjson_get_string(item, "text");
+    ASSERT_NOT_NULL(text);
+    ASSERT_NOT_NULL(strstr(text, "Json.parse(text)"));
+    ASSERT_NOT_NULL(strstr(text, "Use it directly without `import`."));
+    ASSERT(strstr(text, "import json") == NULL);
 
     xmcp_knowledge_free(server.knowledge);
     xjson_free(params);
@@ -1725,7 +1800,8 @@ TEST(knowledge_get_stdlib_list) {
     const char *sl = xmcp_knowledge_get_stdlib_list();
     ASSERT_NOT_NULL(sl);
     ASSERT(strstr(sl, "http") != NULL);
-    ASSERT(strstr(sl, "json") != NULL);
+    ASSERT(strstr(sl, "| `json` |") == NULL);
+    ASSERT(strstr(sl, "Json.parse()") != NULL);
 }
 
 /* =========================================================================
@@ -1824,6 +1900,7 @@ int main(void) {
     /* Knowledge tools */
     RUN_TEST(tools_call_syntax_lookup_returns_structured_content);
     RUN_TEST(tools_call_stdlib_search_returns_structured_content);
+    RUN_TEST(tools_call_stdlib_search_json_reports_builtin_usage);
     RUN_TEST(tools_call_definition_returns_structured_content);
     RUN_TEST(tools_call_definition_not_found_is_structured);
 
@@ -1836,6 +1913,7 @@ int main(void) {
     RUN_TEST(resources_list_has_required_fields);
     RUN_TEST(resources_list_uris);
     RUN_TEST(resources_read_cheatsheet);
+    RUN_TEST(resources_read_stdlib_list_omits_json_module);
     RUN_TEST(resources_read_unknown_uri);
     RUN_TEST(resources_read_missing_uri);
 
@@ -1844,6 +1922,7 @@ int main(void) {
     RUN_TEST(resource_templates_have_required_fields);
     RUN_TEST(resource_templates_uris);
     RUN_TEST(resources_read_topic_template);
+    RUN_TEST(resources_read_json_builtin_template);
     RUN_TEST(resources_read_stdlib_template);
 
     /* Prompts */

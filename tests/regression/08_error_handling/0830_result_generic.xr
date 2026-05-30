@@ -42,3 +42,24 @@
     let r: Result = Result.Ok("hello")
     assert(r != null)
 }
+
+@test fn result_ok_err_accessors() {
+    let ok_res: Result<int, string> = Result.Ok(42)
+    let err_res: Result<int, string> = Result.Err("oops")
+
+    assert_eq(ok_res.ok(), 42)
+    assert_eq(ok_res.err(), null)
+    assert_eq(err_res.ok(), null)
+    assert_eq(err_res.err(), "oops")
+}
+
+@test fn result_map_err_maps_err_only() {
+    let ok_res: Result<int, string> = Result.Ok(7)
+    let err_res: Result<int, string> = Result.Err("oops")
+
+    let mapped_ok = ok_res.mapErr((e) -> e + "!")
+    let mapped_err = err_res.mapErr((e) -> e + "!")
+
+    assert_eq(mapped_ok.ok(), 7)
+    assert_eq(mapped_err.err(), "oops!")
+}

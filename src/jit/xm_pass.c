@@ -193,8 +193,6 @@ static void gvn_normalize(XmIns *ins) {
         case XM_GE:
             ins->op = XM_LE;
             goto swap_args;
-        default:
-            break;
     }
     return;
 swap_args: {
@@ -1482,9 +1480,6 @@ XmPassChange xm_pass_canonicalize(XmFunc *func) {
                     }
                     break;
                 }
-
-                default:
-                    break;
             }
 
             if (ins->op != prev_op || ins->args[0] != prev_a0 || ins->args[1] != prev_a1)

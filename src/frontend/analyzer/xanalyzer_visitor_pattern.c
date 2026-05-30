@@ -311,7 +311,11 @@ XrType *xa_visit_match_expr(XaInferContext *ctx, AstNode *node) {
         // Infer body type
         XrType *arm_type = xr_type_new_unknown(NULL);
         if (arm_node->body) {
-            arm_type = xa_visit_infer_expr(ctx, arm_node->body);
+            if (arm_node->body->type == AST_BLOCK) {
+                xa_visit_block_stmt(ctx, arm_node->body);
+            } else {
+                arm_type = xa_visit_infer_expr(ctx, arm_node->body);
+            }
         }
 
         if (has_binding) {

@@ -18,6 +18,7 @@
 
 #include "../../base/xdefs.h"
 #include <stdbool.h>
+#include <signal.h>
 #include <stddef.h>
 
 #define XMCP_STDIO_MAX_LINE (16u * 1024u * 1024u)
@@ -36,6 +37,7 @@ typedef struct XmcpStdioTransport {
     size_t read_cap;
     size_t read_len;
     size_t max_line;
+    volatile sig_atomic_t *interrupt_flag;
 } XmcpStdioTransport;
 
 XR_FUNC bool xmcp_stdio_init(XmcpStdioTransport *transport, int read_fd, int write_fd,

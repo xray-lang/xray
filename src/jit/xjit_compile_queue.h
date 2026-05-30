@@ -45,8 +45,10 @@ typedef struct XmJitState XmJitState;
 // Bundled compilation output written by bg thread, installed by main thread.
 // All fields are written BEFORE jit_entry_pending is published.
 typedef struct XmBgResult {
-    void *code;         // compiled machine code entry point
-    void *fast_entry;   // fast entry (skip param setup)
+    void *code;        // compiled machine code entry point
+    void *fast_entry;  // fast entry (skip param setup)
+    uint32_t code_size;
+    uint32_t fast_entry_offset;
     void *deopt_table;  // XmRtDeoptEntry array
     uint32_t ndeopt;
     void *osr_entries;  // XmOsrEntry array

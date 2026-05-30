@@ -412,13 +412,27 @@ vmcase(OP_INVOKE_DIRECT) {
     int nargs = c_raw & 0x7F;
 
     XrValue receiver = R(a + 1);
-    XrClass *cls;
+    XrClass *cls = NULL;
     if (XR_IS_STRUCT_REF(receiver)) {
         // Stack-allocated struct: class ptr at head
         cls = *(XrClass **) xr_to_struct_ptr(receiver);
     } else {
+        if (XR_UNLIKELY(!XR_IS_INSTANCE(receiver))) {
+            XrProto *cur_proto = cl ? cl->proto : NULL;
+            const char *fn = (cur_proto && cur_proto->name) ? cur_proto->name->data : "<anonymous>";
+            int pc_idx = (cur_proto && pc) ? (int) (pc - 1 - PROTO_CODE_BASE(cur_proto)) : -1;
+            int line = (cur_proto && pc_idx >= 0 && pc_idx < (int) PROTO_LINE_COUNT(cur_proto))
+                           ? PROTO_LINE(cur_proto, pc_idx)
+                           : 0;
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
+                             "direct invoke receiver is not an instance in %s at pc %d line %d", fn,
+                             pc_idx, line);
+        }
         XrInstance *inst_obj = xr_value_to_instance(receiver);
         cls = xr_instance_get_class(inst_obj);
+    }
+    if (XR_UNLIKELY(cls == NULL || method_idx < 0 || method_idx >= cls->method_count)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "direct invoke method index out of bounds");
     }
     XrMethod *method = &cls->methods[method_idx];
 
@@ -434,6 +448,9 @@ vmcase(OP_INVOKE_DIRECT) {
     }
 
     XrClosure *closure = method->as.closure;
+    if (XR_UNLIKELY(closure == NULL || closure->proto == NULL)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "direct invoke target is not a closure");
+    }
 
     if (is_tail_direct) {
         // Tail call: reuse current stack frame; callee maxstack may be larger.

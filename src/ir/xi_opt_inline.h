@@ -26,8 +26,52 @@
 #include "xi.h"
 #include "xi_pass.h"
 
-/* Maximum callee cost (sum of values across all blocks) for inlining. */
-#define XI_INLINE_MAX_COST 30
+/* ========== Cost Model ========== */
+
+/* Callee-intrinsic cost factors. */
+typedef struct XiInlineCostModel {
+    uint32_t value_count;  /* total values (incl. phis) */
+    uint32_t call_count;   /* internal call instructions */
+    uint32_t branch_count; /* IF/switch blocks */
+    bool has_loop;         /* contains a back-edge */
+    bool calls_self;       /* recursive (must never inline) */
+    bool has_throw;        /* contains XI_THROW */
+} XiInlineCostModel;
+
+/* Call-site specific information (used to boost or penalize). */
+typedef struct XiInlineCallSiteInfo {
+    bool all_args_const;   /* all arguments are XI_CONST */
+    bool single_call_site; /* callee only called once in whole program */
+    uint32_t caller_size;  /* current caller value count (caps growth) */
+    /* IC profile data (from xi_ic_lookup, zero when unavailable). */
+    uint8_t ic_kind;       /* XiIcKind: NONE, MONO, POLY, MEGA */
+    uint32_t ic_hit_count; /* total IC invocations at this site */
+    float guard_penalty;   /* expected deopt cost (from xi_guard_cost) */
+} XiInlineCallSiteInfo;
+
+/* Compute the inline benefit score.
+ * Positive = beneficial to inline.  Decision: inline if benefit > 0. */
+XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site);
+
+/* Per-pass inline budget scaled by caller's current value count.
+ *   < 100        -> XI_INLINE_MAX_PER_PASS + 2  (small caller, cheap to grow)
+ *   100..300     -> XI_INLINE_MAX_PER_PASS      (default)
+ *   > 300        -> XI_INLINE_MAX_PER_PASS - 2  (large caller, cap growth)
+ *
+ * The xi_inline_benefit() function additionally penalises callers >300
+ * by -15, so the two mechanisms compose: large callers see both fewer
+ * call sites considered per pass and stricter benefit thresholds. */
+XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size);
+
+/* Absolute upper bound on callee size (never inline above this). */
+#define XI_INLINE_MAX_COST 60
+
+/* Soft threshold for benefit calculation base penalty. */
+#define XI_INLINE_BASE_THRESHOLD 30
+
+/* Default per-pass inlines (used as the medium-caller anchor of
+ * xi_inline_budget()). */
+#define XI_INLINE_MAX_PER_PASS 4
 
 /* Run inlining on the function.  May inline multiple call sites. */
 XR_FUNC XiPassChange xi_opt_inline(XiFunc *f);

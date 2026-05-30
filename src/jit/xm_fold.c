@@ -146,8 +146,6 @@ static bool fold_int_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, Xm
                     return true;
                 }
                 break;
-            default:
-                break;
         }
     }
 
@@ -184,8 +182,6 @@ static bool fold_int_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, Xm
                     return true;
                 }
                 break;
-            default:
-                break;
         }
     }
 
@@ -202,8 +198,6 @@ static bool fold_int_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, Xm
             case XM_OR:
                 *result = a;
                 return true;
-            default:
-                break;
         }
     }
 
@@ -313,8 +307,6 @@ static bool fold_float_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, 
                     return true;
                 }
                 break;
-            default:
-                break;
         }
     }
 
@@ -332,8 +324,6 @@ static bool fold_float_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, 
                     *result = b;
                     return true;
                 }
-                break;
-            default:
                 break;
         }
     }

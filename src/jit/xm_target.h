@@ -75,5 +75,6 @@ extern const XmTarget *xm_current_target;
 // Built-in target definitions
 extern const XmTarget xm_target_arm64;
 extern const XmTarget xm_target_x64;
+extern const XmTarget xm_target_riscv64;
 
 #endif  // XM_TARGET_H

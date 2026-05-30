@@ -226,7 +226,7 @@ XR_FUNC XrJsonValue *xmcp_tool_xray_definition(XmcpServer *server, const XmcpCal
     snprintf(msg, sizeof(msg),
              "No definition found for \"%s\".\n\n"
              "Try: language keywords (class, chan, enum), stdlib modules "
-             "(http, json), or module.symbol format (http.Server).",
+             "(http, io), built-ins like Json, or module.symbol format (http.Server).",
              symbol);
     return xmcp_make_text_structured_result(
         msg, make_definition_result_content(symbol, "none", false, msg), false);

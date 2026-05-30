@@ -66,11 +66,8 @@ jobs:
     # Release builds historically have a couple of unit-test SEGFAULTs
     # that need separate investigation; running them here would block
     # all releases. Regression tests below are full e2e validation.
-    # Some regression tests cover in-progress features and are expected
-    # to fail until implemented.
     - name: Regression Tests (Unix)
       if: runner.os != 'Windows'
-      continue-on-error: true
       run: |
         chmod +x ./scripts/run_regression_tests.sh
         ./scripts/run_regression_tests.sh
@@ -83,7 +80,7 @@ jobs:
         mkdir -p dist
         cp build/xray dist/
         cp -r stdlib dist/
-        cp README.md LICENSE dist/ 2>/dev/null || true
+        cp README.md LICENSE dist/
         cd dist && tar -czf ../${{ matrix.artifact }}.tar.gz *
 
     - name: Package (Windows)

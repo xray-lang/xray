@@ -26,16 +26,18 @@ jobs:
 
   # ===========================================================================
   # Reverse-invariant seed checks (codegen hardening foundation).
-  # Three lightweight grep-based gates:
+  # Lightweight source-of-truth and quarantine gates:
   #   E.1  no new silent fallback (default: break;) outside the
   #        recorded baseline in tests/baseline_silent_fallback.txt
   #   E.2  no legacy_helper / old_emit / XR_COMPAT / deprecated_call
   #        wrappers anywhere in src/
-  #   E.3  build/generated/ is never tracked by git
+  #   E.3  generated codegen artifacts match xisa truth sources
+  #   E.4  quarantined codegen files cannot gain hand-written encoding,
+  #        hand-written XM dispatch, or new emit helper definitions
   # Plus an expiry gate on tests/known_failures.txt: every active
   # suppression entry must carry ISSUE / ADDED <= 30 days / OWNER.
   # See scripts/check_codegen_invariants.sh and
-  #     scripts/check_known_failures_freshness.sh for details.
+  #     scripts/check_codegen_quarantine.sh for codegen rules.
   # ===========================================================================
   reverse-invariants:
     runs-on: ubuntu-latest
@@ -43,10 +45,15 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Codegen invariants (silent fallback / legacy wrappers / generated tree)
+    - name: Codegen invariants (silent fallback / legacy wrappers / generated artifacts)
       run: |
         chmod +x ./scripts/check_codegen_invariants.sh
         ./scripts/check_codegen_invariants.sh
+
+    - name: Codegen quarantine (no growth in hand-written encoding)
+      run: |
+        chmod +x ./scripts/check_codegen_quarantine.sh
+        ./scripts/check_codegen_quarantine.sh
 
     - name: known_failures.txt freshness (<= 30 days)
       run: |
@@ -118,9 +125,6 @@ jobs:
 
     - name: Regression Tests (Unix)
       if: runner.os != 'Windows'
-      # Some regression tests cover in-progress features (generics,
-      # struct, JIT deopt) and are expected to fail until implemented.
-      continue-on-error: true
       run: |
         chmod +x ./scripts/run_regression_tests.sh
         ./scripts/run_regression_tests.sh
@@ -189,9 +193,6 @@ jobs:
   static-analysis:
     runs-on: ubuntu-latest
     name: Static Analysis (clang-tidy)
-    # Many clang-analyzer-core.* false positives on complex control flow.
-    # Report results without blocking the pipeline.
-    continue-on-error: true
 
     steps:
     - uses: actions/checkout@v4
@@ -284,7 +285,6 @@ jobs:
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1
 
     - name: Run regression tests with ${{ matrix.sanitizer.name }}
-      continue-on-error: true
       run: |
         chmod +x ./scripts/run_regression_tests.sh
         ./scripts/run_regression_tests.sh
@@ -329,7 +329,7 @@ jobs:
     - name: Run regression tests
       run: |
         chmod +x ./scripts/run_regression_tests.sh
-        ./scripts/run_regression_tests.sh || true  # Don't fail on test failures
+        ./scripts/run_regression_tests.sh
       env:
         XRAY_PATH: ./build/xray
 
@@ -424,11 +424,9 @@ jobs:
   # live in nightly.yml because they are either slower or more
   # platform-specific.
   #
-  # continue-on-error is set to true during the W1 baseline so the
-  # first full-matrix run produces complete sanitizer output for
-  # triage. It MUST flip to false at the 082 W3 checkpoint; the
-  # tightening is tracked in tests/known_failures.txt with a 30-day
-  # expiry gate, which fails CI on its own if the deadline slips.
+  # Only the Linux MSan slot is informational: GitHub-hosted Ubuntu
+  # runners do not ship an instrumented libc / libc++, so cross-library
+  # false positives are expected. All other JIT-force slots hard-fail.
   # ===========================================================================
   jit-force-pr:
     needs: [arch-lint, reverse-invariants]
@@ -453,12 +451,10 @@ jobs:
             # GitHub-hosted ubuntu runners do not ship an instrumented
             # libc, so cross-library false positives are expected to
             # appear until either an MSan-instrumented libc / libc++ is
-            # vendored or per-library blacklists are tightened. The
-            # job-level `continue-on-error: true` (W1 baseline) keeps
-            # this matrix slot informational while the real signal-to-
-            # noise ratio is measured.
+            # vendored or per-library blacklists are tightened.
             os: ubuntu-latest
             short_name: linux-msan
+            continue_on_error: true
             cmake_flags: >-
               -DCMAKE_BUILD_TYPE=Debug
               -DENABLE_MSAN=ON
@@ -509,19 +505,16 @@ jobs:
 
     runs-on: ${{ matrix.os }}
     name: JIT-force PR (${{ matrix.short_name }})
-    # W1 baseline: the matrix is expected to surface latent codegen
-    # bugs as it ramps up. Tightening is tracked by
-    # tests/known_failures.txt with a 30-day expiry gate.
-    continue-on-error: true
+    continue-on-error: ${{ matrix.continue_on_error || false }}
 
     env:
       XRAY_JIT_FORCE: "1"
       ASAN_OPTIONS: "detect_leaks=0:abort_on_error=1:symbolize=1:strict_string_checks=1:detect_stack_use_after_return=1:poison_partial=1"
       UBSAN_OPTIONS: "print_stacktrace=1:halt_on_error=1"
-      # MSan reports on this matrix are informational (continue-on-error
-      # at job level). halt_on_error=0 lets each test surface every
-      # uninit read instead of aborting on the first one, which gives
-      # a clearer picture of the false-positive surface from
+      # MSan reports on the linux-msan slot are informational.
+      # halt_on_error=0 lets each test surface every uninit read
+      # instead of aborting on the first one, which gives a clearer
+      # picture of the false-positive surface from
       # non-instrumented system libraries.
       MSAN_OPTIONS: "halt_on_error=0:print_stats=1:abort_on_error=0:exit_code=86"
       # Dump per-test stdout/stderr (incl. sanitizer reports) at the

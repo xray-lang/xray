@@ -62,8 +62,10 @@ static void test_func_stage_default(void) {
     XiFunc *f = xi_func_new("test_fn", &stub_int);
     assert(f != NULL);
 
-    /* xi_func_new zero-inits, so stage should be XI_STAGE_RAW (==0) */
+    /* xi_func_new initializes a self-consistent RAW stage contract. */
     assert(f->stage == XI_STAGE_RAW);
+    assert((f->invariant_mask & xi_stage_invariants(XI_STAGE_RAW)) ==
+           xi_stage_invariants(XI_STAGE_RAW));
 
     /* Can manually advance stage */
     f->stage = XI_STAGE_CANONICAL;
@@ -114,11 +116,15 @@ static void test_pass_desc_fields(void) {
         .flags = XI_PASS_NONE,
         .input_stage = XI_STAGE_RAW,
         .output_stage = XI_STAGE_RAW,
+        .requires_inv_mask = XI_INV_TBAA_ANNOTATED,
+        .produces_inv_mask = XI_INV_RANGE_ANNOTATED,
     };
 
     assert(desc.input_stage == XI_STAGE_RAW);
     assert(desc.output_stage == XI_STAGE_RAW);
     assert(desc.output_stage >= desc.input_stage);
+    assert(desc.requires_inv_mask == XI_INV_TBAA_ANNOTATED);
+    assert(desc.produces_inv_mask == XI_INV_RANGE_ANNOTATED);
 
     /* A stage-transition pass would have output > input */
     XiPassDesc transition = {
@@ -128,10 +134,13 @@ static void test_pass_desc_fields(void) {
         .flags = XI_PASS_REQUIRED,
         .input_stage = XI_STAGE_RAW,
         .output_stage = XI_STAGE_CANONICAL,
+        .requires_inv_mask = 0,
+        .produces_inv_mask = XI_INV_EVAL_ORDER,
     };
 
     assert(transition.output_stage > transition.input_stage);
     assert(transition.flags & XI_PASS_REQUIRED);
+    assert(transition.produces_inv_mask == XI_INV_EVAL_ORDER);
 
     printf("  PASS\n");
 }
@@ -210,6 +219,31 @@ static void test_stage_monotonicity(void) {
     printf("  PASS\n");
 }
 
+static void test_pass_order_and_invariants(void) {
+    printf("--- test_pass_order_and_invariants ---\n");
+
+    assert(xi_pass_order_check());
+
+    XiFunc *f = xi_func_new("pass_inv_fn", &stub_int);
+    assert(f != NULL);
+    f->stage = XI_STAGE_RAW;
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *c42 = xi_const_int(f, entry, 42, &stub_int);
+    assert(c42 != NULL);
+    xi_block_set_return(entry, c42);
+
+    xi_opt_run_pipeline(f, XI_OPT_FULL);
+
+    assert(f->invariant_mask & XI_INV_TBAA_ANNOTATED);
+    assert(f->invariant_mask & XI_INV_RANGE_ANNOTATED);
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -221,6 +255,7 @@ int main(void) {
     test_pass_desc_fields();
     test_verify_with_stage();
     test_stage_monotonicity();
+    test_pass_order_and_invariants();
 
     printf("\n=== All stage contract tests passed ===\n");
     return 0;

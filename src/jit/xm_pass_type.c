@@ -211,8 +211,6 @@ static void type_prop_scan_once(XmFunc *func) {
                         case VTAG_BOOL:
                             func->vregs[dvi].xrtype = t_bool;
                             break;
-                        default:
-                            break;
                     }
                 }
             }
@@ -538,8 +536,6 @@ static void type_prop_scan_once(XmFunc *func) {
                             case XR_REP_PTR:
                                 rv = VTAG_PTR;
                                 break;
-                            default:
-                                break;
                         }
                         if (rv != VTAG_TAGGED)
                             refine_vreg_vtag(func, dvi, rv);
@@ -741,8 +737,6 @@ static void type_prop_scan_once(XmFunc *func) {
                             case XR_REP_PTR:
                                 rv = VTAG_PTR;
                                 break;
-                            default:
-                                break;
                         }
                         if (rv != VTAG_TAGGED) {
                             ins->ctype.kind = vtag_to_type_kind(rv);
@@ -766,9 +760,6 @@ static void type_prop_scan_once(XmFunc *func) {
                         ins->ctype.kind = XM_TK_PTR;
                     break;
                 }
-
-                default:
-                    break;
             }
         }
     }
@@ -917,17 +908,12 @@ XmPassChange xm_pass_specialize(XmFunc *func) {
                             case XM_RT_DIV:
                                 ins->op = XM_FDIV;
                                 break;
-                            default:
-                                break;
                         }
                         ins->rep = XR_REP_F64;
                         ins->flags &= ~XM_FLAG_SIDE_EFFECT;
                     }
                     break;
                 }
-
-                default:
-                    break;
             }
             if (ins->op != orig_op)
                 n_spec++;
@@ -1376,8 +1362,6 @@ XmPassChange xm_pass_range_analysis(XmFunc *func) {
                             ranges[dvi].known = true;
                             changed = true;
                         }
-                        break;
-                    default:
                         break;
                 }
             }

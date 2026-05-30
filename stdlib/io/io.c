@@ -64,6 +64,68 @@ extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
 // bytes. Callers needing >2 GiB inputs must stream the file manually.
 #define IO_MAX_READ_BYTES ((long) INT32_MAX)
 
+XR_FUNC char *xr_io_read_stdin_all(size_t *out_len) {
+    if (out_len)
+        *out_len = 0;
+
+    clearerr(stdin);
+
+    size_t cap = 4096;
+    size_t len = 0;
+    char *buf = (char *) xr_malloc(cap + 1);
+    if (!buf)
+        return NULL;
+
+    for (;;) {
+        size_t avail = cap - len;
+        size_t nread = fread(buf + len, 1, avail, stdin);
+        len += nread;
+
+        if (nread < avail) {
+            if (ferror(stdin)) {
+                xr_free(buf);
+                return NULL;
+            }
+            break;
+        }
+
+        if (cap >= (size_t) IO_MAX_READ_BYTES) {
+            xr_free(buf);
+            return NULL;
+        }
+
+        size_t new_cap = cap * 2;
+        if (new_cap > (size_t) IO_MAX_READ_BYTES)
+            new_cap = (size_t) IO_MAX_READ_BYTES;
+        char *new_buf = (char *) xr_realloc(buf, new_cap + 1);
+        if (!new_buf) {
+            xr_free(buf);
+            return NULL;
+        }
+        buf = new_buf;
+        cap = new_cap;
+    }
+
+    buf[len] = '\0';
+    if (out_len)
+        *out_len = len;
+    return buf;
+}
+
+static XrValue io_readStdin(XrayIsolate *X, XrValue *args, int argc) {
+    (void) args;
+    (void) argc;
+
+    size_t len = 0;
+    char *buf = xr_io_read_stdin_all(&len);
+    if (!buf)
+        return xr_null();
+
+    XrString *str = xr_string_intern(X, buf, len, 0);
+    xr_free(buf);
+    return xr_string_value(str);
+}
+
 // readFile(path) - Read file content
 static XrValue io_readFile(XrayIsolate *X, XrValue *args, int argc) {
     if (argc < 1)
@@ -960,6 +1022,7 @@ static XrValue io_readDirRecursive(XrayIsolate *X, XrValue *args, int argc) {
 XR_DEFINE_BUILTIN(io_readFile, "readFile", "(path: string): string?", "Read entire file as string")
 XR_DEFINE_BUILTIN(io_readFileBytes, "readFileBytes", "(path: string): Array<uint8>?",
                   "Read entire file as byte array")
+XR_DEFINE_BUILTIN(io_readStdin, "readStdin", "(): string?", "Read all data from standard input")
 XR_DEFINE_BUILTIN(io_writeFile, "writeFile", "(path: string, data: string): bool",
                   "Write string to file")
 XR_DEFINE_BUILTIN(io_writeFileBytes, "writeFileBytes", "(path: string, data: Array<uint8>): bool",
@@ -1007,6 +1070,7 @@ XR_FUNC XrModule *xr_load_module_io(XrayIsolate *isolate) {
     // File read/write
     XRS_EXPORT(mod, isolate, "readFile", io_readFile);
     XRS_EXPORT(mod, isolate, "readFileBytes", io_readFileBytes);
+    XRS_EXPORT(mod, isolate, "readStdin", io_readStdin);
     XRS_EXPORT(mod, isolate, "writeFile", io_writeFile);
     XRS_EXPORT(mod, isolate, "writeFileBytes", io_writeFileBytes);
     XRS_EXPORT(mod, isolate, "appendFile", io_appendFile);

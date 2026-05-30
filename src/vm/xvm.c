@@ -343,7 +343,10 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
                 /* Update cached local variables (don't goto startfunc - that restarts execution!) \
                  */                                                                                \
                 ci = &VM_FRAMES[VM_FRAME_COUNT - 1];                                               \
+                frame = ci;                                                                        \
+                cl = ci->closure;                                                                  \
                 base = VM_STACK + ci->base_offset;                                                 \
+                k = (XrValue *) cl->proto->constants.data;                                         \
             }                                                                                      \
         } else if (vm_ctx) {                                                                       \
             /* Defensive: static stack boundary check (no growth possible) */                      \
@@ -362,6 +365,16 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
     } while (0)
 
 #define savepc() (ci->pc = pc)
+#define VM_REFRESH_FRAME_CACHE()                                                                   \
+    do {                                                                                           \
+        if (VM_FRAME_COUNT > 0) {                                                                  \
+            ci = &VM_FRAMES[VM_FRAME_COUNT - 1];                                                   \
+            frame = ci;                                                                            \
+            cl = ci->closure;                                                                      \
+            base = VM_STACK + ci->base_offset;                                                     \
+            k = cl && cl->proto ? (XrValue *) cl->proto->constants.data : NULL;                    \
+        }                                                                                          \
+    } while (0)
 
 /* Per-coroutine GC safepoint: check if GC is requested and trigger
 ** at a safe point where the VM stack is in a consistent state.
@@ -528,11 +541,11 @@ startfunc:
     k = (XrValue *) cl->proto->constants.data;
     frame = ci;
 
-    // Check for continuation function return value (C frames only;
-    // u.c is a union branch invalid for bytecode frames)
-    if ((ci->call_status & XR_CALL_C) && ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
+    // Deliver yieldable C function result (XR_CALL_C may already be cleared by unroll)
+    if (ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
         base[ci->u.c.result_slot] = ci->u.c.cfunc_result;
         ci->u.c.has_cfunc_result = false;
+        ci->call_status &= ~XR_CALL_C;
     }
 
     // Allocate struct_area for native struct storage.

@@ -245,6 +245,26 @@ static const XiFunc *cg_lookup_method(XiCgenCtx *ctx, const char *name, const ch
     return class_name ? NULL : last_match;
 }
 
+static const XiFunc *cg_lookup_method_by_index(XiCgenCtx *ctx, const char *class_name,
+                                               int method_idx, const char **out_prefix) {
+    if (!class_name || method_idx < 0)
+        return NULL;
+    for (uint16_t s = 0; ctx->module && s < ctx->module->nslots; s++) {
+        const XiClassData *cd = ctx->module->slot_classes ? ctx->module->slot_classes[s] : NULL;
+        if (!cd || !cd->class_name || strcmp(cd->class_name, class_name) != 0)
+            continue;
+        if ((uint16_t) method_idx >= cd->ninst || !cd->child_idx)
+            return NULL;
+        uint16_t child_idx = cd->child_idx[method_idx];
+        if (child_idx >= ctx->module->init->nchildren)
+            return NULL;
+        if (out_prefix)
+            *out_prefix = NULL;
+        return ctx->module->init->children[child_idx];
+    }
+    return NULL;
+}
+
 /* Initialize ctx from XiModule metadata.  Reads slot_funcs/slot_classes
  * directly from the module struct — no IR block scanning required. */
 static void cg_init_from_module(XiCgenCtx *ctx, XiModule *mod) {
@@ -477,6 +497,10 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         case XI_PARAM:
             fprintf(out, "p%u", (unsigned) v->aux_int);
+            if (cg_rep(v) == XR_REP_I64)
+                fprintf(out, ".i");
+            else if (cg_rep(v) == XR_REP_F64)
+                fprintf(out, ".f");
             break;
 
         case XI_COPY:
@@ -1237,10 +1261,11 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
          *   1. Super call (aux_int bit 0) → find parent class constructor
          *   2. Class instance method → direct C call
          *   3. Builtin method → xrt_method_N runtime dispatch */
-        case XI_CALL_METHOD: {
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT: {
             XR_DCHECK(v->nargs >= 1, "XI_CALL_METHOD: need receiver");
             const char *method = (const char *) v->aux;
-            bool is_super = (v->aux_int & 1) != 0;
+            bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
             const XiFunc *mfunc = NULL;
             const char *method_prefix = NULL;
 
@@ -1276,7 +1301,11 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 const char *recv_class = NULL;
                 if (v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INSTANCE)
                     recv_class = v->args[0]->type->instance.class_name;
-                mfunc = cg_lookup_method(ctx, method, recv_class, &method_prefix);
+                if (v->op == XI_CALL_METHOD_DIRECT)
+                    mfunc = cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int,
+                                                      &method_prefix);
+                else
+                    mfunc = cg_lookup_method(ctx, method, recv_class, &method_prefix);
             }
             uint16_t nargs = (uint16_t) (v->nargs - 1);
 

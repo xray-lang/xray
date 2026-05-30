@@ -250,10 +250,14 @@ static void append_available_modules(char *buf, size_t cap, size_t *len, XmcpKno
     XR_DCHECK(buf != NULL, "append_available_modules: NULL buf");
     XR_DCHECK(len != NULL, "append_available_modules: NULL len");
     XR_DCHECK(kb != NULL, "append_available_modules: NULL kb");
+    int emitted = 0;
     for (int i = 0; i < kb->module_count; i++) {
-        if (i > 0)
+        if (strcasecmp(kb->modules[i].name, "json") == 0)
+            continue;
+        if (emitted > 0)
             *len += (size_t) snprintf(buf + *len, cap - *len, ", ");
         *len += (size_t) snprintf(buf + *len, cap - *len, "%s", kb->modules[i].name);
+        emitted++;
     }
 }
 
@@ -433,9 +437,16 @@ char *xmcp_knowledge_search_stdlib(XmcpKnowledge *kb, const char *query, const c
             if (m->symbol->summary && m->symbol->summary[0] != '\0')
                 len += (size_t) snprintf(text + len, cap - len, "%s\n\n", m->symbol->summary);
         } else {
-            len += (size_t) snprintf(text + len, cap - len, "## Module: %s\n\n", m->module->name);
-            len += (size_t) snprintf(text + len, cap - len, "Import: `import %s`\n\n",
-                                     m->module->name);
+            if (strcmp(m->module->name, "json") == 0) {
+                len += (size_t) snprintf(text + len, cap - len, "## Built-in: Json\n\n");
+                len += (size_t) snprintf(text + len, cap - len,
+                                         "Use directly: `Json.parse()` / `Json.stringify()`\n\n");
+            } else {
+                len +=
+                    (size_t) snprintf(text + len, cap - len, "## Module: %s\n\n", m->module->name);
+                len += (size_t) snprintf(text + len, cap - len, "Import: `import %s`\n\n",
+                                         m->module->name);
+            }
             len += (size_t) snprintf(text + len, cap - len, "%s\n\n", m->module->summary);
         }
         if (len > cap - 512) {

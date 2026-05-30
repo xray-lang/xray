@@ -26,6 +26,11 @@
 
 #define XMCP_STDIO_READ_BUF_INIT 4096u
 
+static bool xmcp_stdio_interrupted(const XmcpStdioTransport *transport) {
+    XR_DCHECK(transport != NULL, "xmcp_stdio_interrupted: NULL transport");
+    return transport->interrupt_flag != NULL && *transport->interrupt_flag != 0;
+}
+
 static bool xmcp_stdio_ensure_capacity(XmcpStdioTransport *transport, size_t needed) {
     XR_DCHECK(transport != NULL, "xmcp_stdio_ensure_capacity: NULL transport");
     if (transport->read_cap >= needed)
@@ -50,6 +55,17 @@ static bool xmcp_stdio_ensure_capacity(XmcpStdioTransport *transport, size_t nee
     return true;
 }
 
+static void xmcp_stdio_consume(XmcpStdioTransport *transport, size_t consumed) {
+    XR_DCHECK(transport != NULL, "xmcp_stdio_consume: NULL transport");
+    XR_DCHECK(consumed <= transport->read_len, "xmcp_stdio_consume: consumed beyond buffer");
+    size_t remaining = transport->read_len - consumed;
+    if (remaining > 0)
+        memmove(transport->read_buf, transport->read_buf + consumed, remaining);
+    transport->read_len = remaining;
+    if (transport->read_buf && transport->read_cap > transport->read_len)
+        transport->read_buf[transport->read_len] = '\0';
+}
+
 static char *xmcp_stdio_extract_line(XmcpStdioTransport *transport, size_t line_len,
                                      size_t consumed) {
     XR_DCHECK(transport != NULL, "xmcp_stdio_extract_line: NULL transport");
@@ -59,13 +75,54 @@ static char *xmcp_stdio_extract_line(XmcpStdioTransport *transport, size_t line_
     memcpy(line, transport->read_buf, line_len);
     line[line_len] = '\0';
 
-    size_t remaining = transport->read_len - consumed;
-    if (remaining > 0)
-        memmove(transport->read_buf, transport->read_buf + consumed, remaining);
-    transport->read_len = remaining;
-    if (transport->read_buf && transport->read_cap > transport->read_len)
-        transport->read_buf[transport->read_len] = '\0';
+    xmcp_stdio_consume(transport, consumed);
     return line;
+}
+
+static XmcpStdioReadStatus xmcp_stdio_recover_oversized_line(XmcpStdioTransport *transport) {
+    XR_DCHECK(transport != NULL, "xmcp_stdio_recover_oversized_line: NULL transport");
+
+    void *newline = memchr(transport->read_buf, '\n', transport->read_len);
+    if (newline) {
+        size_t consumed = (size_t) (((char *) newline - transport->read_buf) + 1);
+        xmcp_stdio_consume(transport, consumed);
+        return XMCP_STDIO_READ_TOO_LARGE;
+    }
+
+    transport->read_len = 0;
+    if (transport->read_buf && transport->read_cap > 0)
+        transport->read_buf[0] = '\0';
+
+    for (;;) {
+        if (xmcp_stdio_interrupted(transport))
+            return XMCP_STDIO_READ_EOF;
+        char discard_buf[1024];
+        ssize_t n = xmcp_read_fd(transport->read_fd, discard_buf, sizeof(discard_buf));
+        if (n < 0) {
+            if (errno == EINTR) {
+                if (xmcp_stdio_interrupted(transport))
+                    return XMCP_STDIO_READ_EOF;
+                continue;
+            }
+            return XMCP_STDIO_READ_ERROR;
+        }
+        if (n == 0)
+            return XMCP_STDIO_READ_ERROR;
+
+        newline = memchr(discard_buf, '\n', (size_t) n);
+        if (!newline)
+            continue;
+
+        size_t trailing = (size_t) n - (size_t) (((char *) newline - discard_buf) + 1);
+        if (trailing > 0) {
+            if (!xmcp_stdio_ensure_capacity(transport, trailing + 1))
+                return XMCP_STDIO_READ_ERROR;
+            memcpy(transport->read_buf, (char *) newline + 1, trailing);
+            transport->read_len = trailing;
+            transport->read_buf[transport->read_len] = '\0';
+        }
+        return XMCP_STDIO_READ_TOO_LARGE;
+    }
 }
 
 XR_FUNC bool xmcp_stdio_init(XmcpStdioTransport *transport, int read_fd, int write_fd,
@@ -101,6 +158,8 @@ XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transpor
     *out_len = 0;
 
     for (;;) {
+        if (xmcp_stdio_interrupted(transport))
+            return XMCP_STDIO_READ_EOF;
         void *newline = memchr(transport->read_buf, '\n', transport->read_len);
         if (newline) {
             size_t pos = (size_t) ((char *) newline - transport->read_buf);
@@ -108,7 +167,7 @@ XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transpor
             if (line_len > 0 && transport->read_buf[line_len - 1] == '\r')
                 line_len--;
             if (line_len > transport->max_line)
-                return XMCP_STDIO_READ_TOO_LARGE;
+                return xmcp_stdio_recover_oversized_line(transport);
             char *line = xmcp_stdio_extract_line(transport, line_len, pos + 1);
             if (!line)
                 return XMCP_STDIO_READ_ERROR;
@@ -118,19 +177,22 @@ XR_FUNC XmcpStdioReadStatus xmcp_stdio_read_message(XmcpStdioTransport *transpor
         }
 
         if (transport->read_len > transport->max_line + 1)
-            return XMCP_STDIO_READ_TOO_LARGE;
+            return xmcp_stdio_recover_oversized_line(transport);
 
         size_t needed = transport->read_len + 1024 + 1;
         if (needed > transport->max_line + 3)
             needed = transport->max_line + 3;
         if (!xmcp_stdio_ensure_capacity(transport, needed))
-            return XMCP_STDIO_READ_TOO_LARGE;
+            return XMCP_STDIO_READ_ERROR;
 
         ssize_t n = xmcp_read_fd(transport->read_fd, transport->read_buf + transport->read_len,
                                  transport->read_cap - transport->read_len - 1);
         if (n < 0) {
-            if (errno == EINTR)
+            if (errno == EINTR) {
+                if (xmcp_stdio_interrupted(transport))
+                    return XMCP_STDIO_READ_EOF;
                 continue;
+            }
             return XMCP_STDIO_READ_ERROR;
         }
         if (n == 0) {

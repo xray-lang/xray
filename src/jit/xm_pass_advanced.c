@@ -233,8 +233,6 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
                 }
                 break;
             }
-            default:
-                break;
         }
 
         // Clone Phi nodes
@@ -452,8 +450,6 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
                     loc_def[nloc] = i;
                     loc_skip[nloc] = false;
                     nloc++;
-                    break;
-                default:
                     break;
             }
         }
@@ -724,8 +720,6 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
                     g_def_blk[ng] = bi;
                     g_def_ins[ng] = i;
                     ng++;
-                    break;
-                default:
                     break;
             }
         }

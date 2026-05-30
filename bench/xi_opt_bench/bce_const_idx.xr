@@ -1,0 +1,21 @@
+// Benchmark: BCE with constant index
+// Tests elimination of bounds checks when index is provably safe
+//
+// Run: xray bench/xi_opt_bench/bce_const_idx.xr
+
+let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let sum = 0
+
+// All these accesses should have bounds checks eliminated
+sum = sum + arr[0]
+sum = sum + arr[1]
+sum = sum + arr[2]
+sum = sum + arr[3]
+sum = sum + arr[4]
+sum = sum + arr[5]
+sum = sum + arr[6]
+sum = sum + arr[7]
+sum = sum + arr[8]
+sum = sum + arr[9]
+
+print(sum)

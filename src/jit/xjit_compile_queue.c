@@ -24,6 +24,7 @@
 #include "xjit_compile_queue.h"
 #include "xm_jit.h"
 #include "xi_to_xm.h"
+#include "../ir/xi_jit_profile.h"
 #include "xm_pass.h"
 #include "xm_codegen.h"
 #include "xm_code_alloc.h"
@@ -89,6 +90,17 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
     const XmICSnapshot *ic_ptr = (ic_snap.ic_fields || ic_snap.ic_methods) ? &ic_snap : NULL;
     XmFunc *func = NULL;
     if (proto->xi_func) {
+        if (is_recompile) {
+            XiJitProfileInput profile = {
+                .ic_fields = ic_snap.ic_fields,
+                .ic_methods = ic_snap.ic_methods,
+                .block_freq = NULL,
+                .block_freq_count = 0,
+                .loop_trip_estimate =
+                    atomic_load_explicit(&proto->exec_count, memory_order_relaxed),
+            };
+            (void) xi_jit_apply_profile((XiFunc *) proto->xi_func, &profile);
+        }
         func = xi_to_xm_lower((XiFunc *) proto->xi_func, proto, (XiSlotMap *) proto->xi_slot_map,
                               ic_ptr, NULL);
     }
@@ -125,6 +137,8 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
     XmCodegenResult res = xm_codegen_arm64(func, &q->worker_code_alloc[worker_id]);
 #elif defined(__x86_64__) || defined(_M_X64)
     XmCodegenResult res = xm_codegen_x64(func, &q->worker_code_alloc[worker_id]);
+#elif defined(__riscv)
+    XmCodegenResult res = xm_codegen_riscv64(func, &q->worker_code_alloc[worker_id]);
 #else
     XmCodegenResult res = {.success = false, .error = "unsupported architecture"};
 #endif
@@ -147,6 +161,8 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
 
     bgr->code = res.code;
     bgr->fast_entry = (char *) res.code + res.fast_entry_offset;
+    bgr->code_size = res.code_size;
+    bgr->fast_entry_offset = res.fast_entry_offset;
     bgr->resume_entry =
         res.resume_entry_offset ? (char *) res.code + res.resume_entry_offset : NULL;
     bgr->opt_level = (uint8_t) opt;

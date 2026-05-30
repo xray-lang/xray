@@ -14,11 +14,211 @@ project(Xray
     LANGUAGES C CXX ASM
 )
 
+find_program(XRAY_PYTHON NAMES python3 python py)
+if(NOT XRAY_PYTHON)
+    message(FATAL_ERROR "Python 3 interpreter is required to configure and build Xray")
+endif()
+execute_process(
+    COMMAND ${XRAY_PYTHON} -c "import sys; sys.exit(0 if sys.version_info[0] == 3 else 1)"
+    RESULT_VARIABLE XRAY_PYTHON_VERSION_RESULT
+    OUTPUT_QUIET
+    ERROR_QUIET
+)
+if(NOT XRAY_PYTHON_VERSION_RESULT EQUAL 0)
+    message(FATAL_ERROR "Python 3 interpreter is required, but ${XRAY_PYTHON} is not Python 3")
+endif()
+
 # Generate xray_version.h from template (single source of truth)
 configure_file(
     "${CMAKE_SOURCE_DIR}/include/xray_version.h.in"
     "${CMAKE_SOURCE_DIR}/include/xray_version.h"
     @ONLY
+)
+
+# ============================================================================
+# XISA Code Generation (Python xisagen: .def → generated headers)
+# ============================================================================
+# Uses tools/xisagen/xisagen.py to regenerate headers from .def sources.
+# Generated headers are checked into git, so this only runs when .def changes.
+
+set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
+
+set(XRAY_GEN_XM_C_SRC
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
+)
+
+set(XRAY_GEN_XM_OPS_DEPS
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
+    ${XRAY_GEN_XM_C_SRC}
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
+)
+set_source_files_properties(${XRAY_GEN_XM_C_SRC} PROPERTIES GENERATED TRUE)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} ops
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMENT "xisagen: generating xm_ops_gen.h from ops.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} helpers
+            ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
+    COMMENT "xisagen: generating xm_helpers_gen.h from helpers.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} runtime-stubs
+            ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
+    COMMENT "xisagen: generating xm_runtime_stubs_gen.h from runtime_stubs.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} x64impl
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+    COMMENT "xisagen: generating xm_x64_gen.c from x64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} arm64impl
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+    COMMENT "xisagen: generating xm_arm64_gen.c from arm64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} riscv64impl
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating xm_riscv64_gen.c from riscv64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_BINARY_DIR}/isel_validated.stamp
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} isel
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/isel_validated.stamp
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: validating isel.def coverage (ops × 3 backends, mcinsn xref)"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-coverage
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+    COMMENT "xisagen: generating xm_dispatch_coverage_gen.h from isel.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-meta
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
+    COMMENT "xisagen: generating xm_dispatch_meta_gen.h from isel.def"
+)
+
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-emit
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
+    COMMENT "xisagen: generating xm_dispatch_emit_gen.h from isel.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} patch-ranges
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
+            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating xm_patch_ranges_gen.h from .isa branch immediates"
+)
+
+# Disassembler tables (fixed-32 archs only). Generates header+impl pairs
+# exporting xm_<short>_disasm() / xm_<short>_insn_name() for runtime
+# patch verification, deopt logs, and S4 external-diff scaffolding.
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
+            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
+    COMMENT "xisagen: generating xm_arm64_disasm_gen.{c,h} from arm64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
+            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
+    COMMENT "xisagen: generating xm_riscv64_disasm_gen.{c,h} from riscv64.isa"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
+            ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
+            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+            ${CMAKE_SOURCE_DIR}/src/jit
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
+    COMMENT "xisagen: generating xm_x64_disasm_gen.{c,h} from x64.isa"
+)
+
+list(APPEND XRAY_GEN_XM_OPS_DEPS ${CMAKE_BINARY_DIR}/isel_validated.stamp)
+
+add_custom_target(gen-xm-ops DEPENDS
+    ${XRAY_GEN_XM_OPS_DEPS}
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -402,6 +602,8 @@ file(GLOB VM_SRC "src/vm/*.c")
 # the computed-goto switch. They are not standalone translation units.
 list(FILTER VM_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB JIT_SRC "src/jit/*.c")
+list(APPEND JIT_SRC ${XRAY_GEN_XM_C_SRC} "${CMAKE_CURRENT_SOURCE_DIR}/src/jit/xm_dispatch_meta.c")
+list(REMOVE_DUPLICATES JIT_SRC)
 file(GLOB IR_SRC "src/ir/*.c")
 list(FILTER IR_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB MODULE_SRC "src/module/*.c")
@@ -550,7 +752,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-
+add_dependencies(xray_core gen-xm-ops)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(
@@ -647,7 +849,7 @@ else()
 endif()
 
 add_custom_target(regen-language-docs
-    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+    COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
         ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
         --root ${CMAKE_CURRENT_SOURCE_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -664,11 +866,11 @@ if(XR_BUILD_MCP)
     add_compile_definitions(XR_HAS_MCP=1)
     set(_xmcp_builtin_dump ${CMAKE_CURRENT_BINARY_DIR}/xmcp_builtin_dump.json)
     add_custom_target(regen-mcp-knowledge
-        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
             --root ${CMAKE_CURRENT_SOURCE_DIR}
         COMMAND $<TARGET_FILE:xray> builtin-dump > ${_xmcp_builtin_dump}
-        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 python3
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
             ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_mcp_knowledge.py
             --docs ${CMAKE_CURRENT_SOURCE_DIR}/docs/knowledge
             --spec ${CMAKE_CURRENT_SOURCE_DIR}/LANGUAGE_SPEC_CN.md

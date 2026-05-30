@@ -15,6 +15,8 @@
 #ifdef __aarch64__
 
 #include "xm_codegen_internal.h"
+#include "xm_dispatch_meta.h"
+#include "xm_dispatch_emit_gen.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 
@@ -48,6 +50,38 @@ static bool try_get_imm12(CodegenCtx *ctx, XmRef ref, uint32_t *out_imm) {
     return false;
 }
 
+static bool a64_meta_allows_zero_emit(const XmDispatchMeta *meta) {
+    return meta->mcinsn_count == 0;
+}
+
+static bool a64_check_emit_progress(CodegenCtx *ctx, XmIns *ins, const XmDispatchMeta *meta,
+                                    uint32_t count_before) {
+    if (ctx->buf.count != count_before || a64_meta_allows_zero_emit(meta))
+        return true;
+    xr_log_warning("jit", "handler emitted 0 instructions for %s; declared mcinsns=%s",
+                   xm_op_name(ins->op), meta->mcinsns);
+    ctx->had_error = true;
+    return false;
+}
+
+static bool a64_emit_generated_gp_rrr(CodegenCtx *ctx, XmIns *ins, A64Reg rd, A64Reg rn,
+                                      A64Reg rm) {
+    if (xm_dispatch_emit_arm64_gp_rrr(ins->op, &ctx->buf, rd, rn, rm))
+        return true;
+    xr_log_warning("jit", "generated ARM64 gp_rrr dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
+static bool a64_emit_generated_cmp_rr_cc(CodegenCtx *ctx, XmIns *ins, A64Reg rd, A64Reg rn,
+                                         A64Reg rm) {
+    if (xm_dispatch_emit_arm64_cmp_rr_cc(ins->op, &ctx->buf, rd, rn, rm))
+        return true;
+    xr_log_warning("jit", "generated ARM64 cmp_rr_cc dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
 /* ========== Integer Arithmetic Handlers ========== */
 
 static void a64_h_add(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
@@ -61,7 +95,8 @@ static void a64_h_add(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     } else {
         A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
         A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-        a64_buf_emit(&ctx->buf, a64_add(rd, rn, rm));
+        if (!a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm))
+            return;
     }
 }
 
@@ -73,14 +108,15 @@ static void a64_h_sub(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     } else {
         A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
         A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-        a64_buf_emit(&ctx->buf, a64_sub(rd, rn, rm));
+        if (!a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm))
+            return;
     }
 }
 
 static void a64_h_mul(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_mul(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_div(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
@@ -104,9 +140,17 @@ static void a64_h_mod(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     a64_buf_emit(&ctx->buf, a64_msub(rd, SCRATCH_REG, rm, rn));
 }
 
+static bool a64_emit_generated_gp_r(CodegenCtx *ctx, XmIns *ins, A64Reg rd, A64Reg rm) {
+    if (xm_dispatch_emit_arm64_gp_r(ins->op, &ctx->buf, rd, rm))
+        return true;
+    xr_log_warning("jit", "generated ARM64 gp_r dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
 static void a64_h_neg(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rm = xra_operand(ctx, ins->args[0], SCRATCH_REG);
-    a64_buf_emit(&ctx->buf, a64_neg(rd, rm));
+    (void) a64_emit_generated_gp_r(ctx, ins, rd, rm);
 }
 
 /* ========== Bitwise / Shift ========== */
@@ -114,79 +158,112 @@ static void a64_h_neg(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 static void a64_h_and(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_and(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_or(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_orr(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_xor(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_eor(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_not(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rm = xra_operand(ctx, ins->args[0], SCRATCH_REG);
-    a64_buf_emit(&ctx->buf, a64_mvn(rd, rm));
+    (void) a64_emit_generated_gp_r(ctx, ins, rd, rm);
 }
 
 static void a64_h_shl(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_lsl(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_shr(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_asr(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 /* ========== Float Arithmetic ========== */
 
+static bool a64_emit_generated_fp_rrr(CodegenCtx *ctx, XmIns *ins, A64Reg fd, A64Reg fn,
+                                      A64Reg fm) {
+    if (xm_dispatch_emit_arm64_fp_rrr(ins->op, &ctx->buf, fd, fn, fm))
+        return true;
+    xr_log_warning("jit", "generated ARM64 fp_rrr dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
 static void a64_h_fadd(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     A64Reg dm = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_fadd(rd, dn, dm));
+    (void) a64_emit_generated_fp_rrr(ctx, ins, rd, dn, dm);
 }
 
 static void a64_h_fsub(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     A64Reg dm = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_fsub(rd, dn, dm));
+    (void) a64_emit_generated_fp_rrr(ctx, ins, rd, dn, dm);
 }
 
 static void a64_h_fmul(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     A64Reg dm = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_fmul(rd, dn, dm));
+    (void) a64_emit_generated_fp_rrr(ctx, ins, rd, dn, dm);
 }
 
 static void a64_h_fdiv(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     A64Reg dm = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_fdiv(rd, dn, dm));
+    (void) a64_emit_generated_fp_rrr(ctx, ins, rd, dn, dm);
+}
+
+static bool a64_emit_generated_fp_r(CodegenCtx *ctx, XmIns *ins, A64Reg fd, A64Reg fn) {
+    if (xm_dispatch_emit_arm64_fp_r(ins->op, &ctx->buf, fd, fn))
+        return true;
+    xr_log_warning("jit", "generated ARM64 fp_r dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
 }
 
 static void a64_h_fneg(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-    a64_buf_emit(&ctx->buf, a64_fneg(rd, dn));
+    (void) a64_emit_generated_fp_r(ctx, ins, rd, dn);
 }
 
 /* ========== Type Conversion ========== */
 
+static bool a64_emit_generated_conv_i2f(CodegenCtx *ctx, XmIns *ins, A64Reg fd, A64Reg rn) {
+    if (xm_dispatch_emit_arm64_conv_i2f(ins->op, &ctx->buf, fd, rn))
+        return true;
+    xr_log_warning("jit", "generated ARM64 conv_i2f dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
+static bool a64_emit_generated_conv_f2i(CodegenCtx *ctx, XmIns *ins, A64Reg rd, A64Reg fn) {
+    if (xm_dispatch_emit_arm64_conv_f2i(ins->op, &ctx->buf, rd, fn))
+        return true;
+    xr_log_warning("jit", "generated ARM64 conv_f2i dispatch rejected %s", xm_op_name(ins->op));
+    ctx->had_error = true;
+    return false;
+}
+
 static void a64_h_i2f(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-    a64_buf_emit(&ctx->buf, a64_scvtf(rd, rn));
+    (void) a64_emit_generated_conv_i2f(ctx, ins, rd, rn);
 }
 
 static void a64_h_f2i(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-    a64_buf_emit(&ctx->buf, a64_fcvtzs(rd, dn));
+    (void) a64_emit_generated_conv_f2i(ctx, ins, rd, dn);
 }
 
 /* ========== Float Comparison ========== */
@@ -194,30 +271,26 @@ static void a64_h_f2i(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 static void a64_h_cmp_float(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg dn = xra_arg(ctx, ins->args[0], SCRATCH_REG);
     A64Reg dm = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_fcmp(dn, dm));
+    A64Reg tmp = SCRATCH_REG2;
+
+    /* Handle alias: if rd aliases SCRATCH_REG2, use SCRATCH_REG as tmp */
+    if (rd == SCRATCH_REG2) {
+        tmp = SCRATCH_REG;
+        XR_DCHECK(rd != tmp, "a64_h_cmp_float: rd aliases both scratch regs");
+    }
+
     /* CMP+BR fusion: skip CSET when fused with BR terminator */
     if (!xm_ref_is_none(ctx->fused_cmp_ref) && xm_ref_is_vreg(ins->dst) &&
-        ins->dst == ctx->fused_cmp_ref)
+        ins->dst == ctx->fused_cmp_ref) {
+        a64_buf_emit(&ctx->buf, a64_fcmp(dn, dm));
         return;
-    A64Cond cc;
-    switch (ins->op) {
-        case XM_FEQ:
-            cc = A64_CC_EQ;
-            break;
-        case XM_FNE:
-            cc = A64_CC_NE;
-            break;
-        case XM_FLT:
-            cc = A64_CC_MI;
-            break;
-        case XM_FLE:
-            cc = A64_CC_LS;
-            break;
-        default:
-            cc = A64_CC_AL;
-            break;
     }
-    a64_buf_emit(&ctx->buf, a64_cset(rd, cc));
+
+    if (!xm_dispatch_emit_arm64_fcmp_rr_cc(ins->op, &ctx->buf, rd, dn, dm, tmp)) {
+        xr_log_warning("jit", "generated ARM64 fcmp_rr_cc dispatch rejected %s",
+                       xm_op_name(ins->op));
+        ctx->had_error = true;
+    }
 }
 
 /* ========== Integer Comparison ========== */
@@ -225,36 +298,13 @@ static void a64_h_cmp_float(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 static void a64_h_cmp_int(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     A64Reg rn = xra_operand(ctx, ins->args[0], SCRATCH_REG);
     A64Reg rm = xra_operand(ctx, ins->args[1], SCRATCH_REG2);
-    a64_buf_emit(&ctx->buf, a64_cmp(rn, rm));
     /* CMP+BR fusion: skip CSET when fused with BR terminator */
     if (!xm_ref_is_none(ctx->fused_cmp_ref) && xm_ref_is_vreg(ins->dst) &&
-        ins->dst == ctx->fused_cmp_ref)
+        ins->dst == ctx->fused_cmp_ref) {
+        a64_buf_emit(&ctx->buf, a64_cmp(rn, rm));
         return;
-    A64Cond cc;
-    switch (ins->op) {
-        case XM_LT:
-            cc = A64_CC_LT;
-            break;
-        case XM_LE:
-            cc = A64_CC_LE;
-            break;
-        case XM_GT:
-            cc = A64_CC_GT;
-            break;
-        case XM_GE:
-            cc = A64_CC_GE;
-            break;
-        case XM_EQ:
-            cc = A64_CC_EQ;
-            break;
-        case XM_NE:
-            cc = A64_CC_NE;
-            break;
-        default:
-            cc = A64_CC_AL;
-            break;
     }
-    a64_buf_emit(&ctx->buf, a64_cset(rd, cc));
+    (void) a64_emit_generated_cmp_rr_cc(ctx, ins, rd, rn, rm);
 }
 
 /* ========== Constants ========== */
@@ -361,6 +411,22 @@ static void a64_h_unbox_f64(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     }
 }
 
+/* ========== Pseudo / Marker Handlers ==========
+ * NOP emits a real ARM64 NOP because generated metadata declares arm64.nop.
+ * Marker ops emit no machine code: PHI is resolved by register allocator edge
+ * copies; TRY_BEGIN / TRY_END are EH markers; THROW is lowered through CALL_C. */
+static void a64_h_nop(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
+    (void) ins;
+    (void) rd;
+    a64_buf_emit(&ctx->buf, a64_nop());
+}
+
+static void a64_h_marker(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
+    (void) ctx;
+    (void) ins;
+    (void) rd;
+}
+
 /* ========== Dispatch Table ========== */
 
 static const A64InsHandler a64_ins_handlers[XM_OP_COUNT] = {
@@ -404,6 +470,12 @@ static const A64InsHandler a64_ins_handlers[XM_OP_COUNT] = {
     [XM_BOX_F64] = a64_h_box,
     [XM_UNBOX_I64] = a64_h_unbox_i64,
     [XM_UNBOX_F64] = a64_h_unbox_f64,
+    [XM_NOP] = a64_h_nop,
+    /* Pseudo / marker ops that emit no code on arm64 (see a64_h_nop above) */
+    [XM_PHI] = a64_h_marker,
+    [XM_TRY_BEGIN] = a64_h_marker,
+    [XM_TRY_END] = a64_h_marker,
+    [XM_THROW] = a64_h_marker,
     /* All other opcodes (mem, call, etc.) handled by fallback chain */
 };
 
@@ -414,21 +486,41 @@ XR_FUNC void a64_emit_xm_ins(CodegenCtx *ctx, XmIns *ins) {
     XR_DCHECK(ins != NULL, "a64_emit_xm_ins: NULL ins");
     A64Reg rd = xra_get(ctx, ins->dst);
 
-    if (ins->op >= 0 && ins->op < XM_OP_COUNT) {
-        A64InsHandler handler = a64_ins_handlers[ins->op];
-        if (handler) {
-            handler(ctx, ins, rd);
+    if (ins->op < XM_OP_COUNT) {
+        const XmDispatchMeta *meta =
+            xm_dispatch_meta_find((XmOp) ins->op, XM_DISPATCH_BACKEND_ARM64);
+        if (!meta) {
+            xr_log_warning("jit", "missing generated dispatch metadata for %s (%u)",
+                           xm_op_name(ins->op), (uint32_t) ins->op);
+            ctx->had_error = true;
             return;
         }
+        A64InsHandler handler = a64_ins_handlers[ins->op];
+        if (handler) {
+            uint32_t count_before = ctx->buf.count;
+            handler(ctx, ins, rd);
+            a64_check_emit_progress(ctx, ins, meta, count_before);
+            return;
+        }
+
+        uint32_t count_before = ctx->buf.count;
+        if (xm_emit_call_ops(ctx, ins, rd)) {
+            a64_check_emit_progress(ctx, ins, meta, count_before);
+            return;
+        }
+        count_before = ctx->buf.count;
+        if (xm_emit_mem_ops(ctx, ins, rd)) {
+            a64_check_emit_progress(ctx, ins, meta, count_before);
+            return;
+        }
+        xr_log_warning("jit", "unhandled Xm opcode %s in a64_emit_xm_ins; mcinsns=%s",
+                       xm_op_name(ins->op), meta->mcinsns);
+        ctx->had_error = true;
+        return;
     }
 
-    /* Fallback: delegate to sub-emit functions (call ops, mem ops) */
-    if (xm_emit_call_ops(ctx, ins, rd))
-        return;
-    if (xm_emit_mem_ops(ctx, ins, rd))
-        return;
-    xr_log_warning("jit", "unhandled Xm opcode %d in a64_emit_xm_ins", ins->op);
-    a64_buf_emit(&ctx->buf, a64_nop());
+    xr_log_warning("jit", "Xm opcode %u out of range in a64_emit_xm_ins", (uint32_t) ins->op);
+    ctx->had_error = true;
 }
 
 #endif /* __aarch64__ */

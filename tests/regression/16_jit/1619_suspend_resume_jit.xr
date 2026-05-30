@@ -1,0 +1,55 @@
+// Test: S8.5 suspend/resume — coroutine suspend and resume with JIT.
+// Verifies that JIT-compiled functions survive coroutine suspension
+// and resumption with correct state preservation.
+
+fn compute(x: int) -> int {
+    let sum = 0
+    for (let i = 0; i < x; i++) {
+        sum = sum + i
+    }
+    return sum
+}
+
+// Basic go/await with JIT-eligible function
+@test
+fn test_jit_go_await() {
+    let t = go compute(100)
+    let result = await t
+    assert_eq(result, 4950)
+}
+
+// Multiple concurrent JIT tasks
+@test
+fn test_jit_concurrent_tasks() {
+    let t1 = go compute(50)
+    let t2 = go compute(30)
+    let t3 = go compute(20)
+
+    let r1 = await t1
+    let r2 = await t2
+    let r3 = await t3
+
+    // sum(0..49) = 1225, sum(0..29) = 435, sum(0..19) = 190
+    assert_eq(r1 + r2 + r3, 1850)
+}
+
+// Chain: JIT function calls another JIT function inside coroutine
+fn jit_chain_inner(n: int) -> int {
+    return n * 2 + 1
+}
+
+fn jit_chain_outer(n: int) -> int {
+    let sum = 0
+    for (let i = 0; i < n; i++) {
+        sum = sum + jit_chain_inner(i)
+    }
+    return sum
+}
+
+@test
+fn test_jit_chain_in_coroutine() {
+    let t = go jit_chain_outer(20)
+    let result = await t
+    // sum(2i+1 for i=0..19) = 2*sum(0..19) + 20 = 2*190 + 20 = 400
+    assert_eq(result, 400)
+}

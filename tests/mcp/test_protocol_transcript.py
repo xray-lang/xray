@@ -4,13 +4,16 @@ from __future__ import annotations
 import argparse
 import json
 import queue
+import signal
 import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any
 
 
 ERR_PARSE = -32700
+ERR_INVALID_REQUEST = -32600
 ERR_METHOD_NOT_FOUND = -32601
 ERR_INVALID_PARAMS = -32602
 ERR_NOT_INITIALIZED = -32002
@@ -189,6 +192,37 @@ def test_parse_error_and_content_length_line(xray: Path) -> None:
         session.close()
 
 
+def test_oversized_line_does_not_close_server(xray: Path) -> None:
+    session = McpSession(xray)
+    try:
+        session.send_raw("x" * (16 * 1024 * 1024 + 32) + "\n")
+        assert_error(session.recv(timeout=20.0), None, ERR_INVALID_REQUEST)
+
+        initialize(session, 1)
+        mark_initialized(session)
+        session.send(request("ping", 2, {}))
+        response = session.recv()
+        assert response.get("id") == 2, response
+        assert response.get("result") == {}, response
+    finally:
+        session.close()
+
+
+def test_sigterm_stops_server_cleanly(xray: Path) -> None:
+    session = McpSession(xray)
+    time.sleep(0.2)
+    session.proc.send_signal(signal.SIGTERM)
+    try:
+        session.proc.wait(timeout=5)
+    except subprocess.TimeoutExpired as exc:
+        session.proc.kill()
+        session.proc.wait(timeout=5)
+        raise AssertionError(f"SIGTERM did not stop MCP server; stderr={session.stderr_text()}") from exc
+    session._stdout_thread.join(timeout=1)
+    session._stderr_thread.join(timeout=1)
+    assert session.proc.returncode == 0, session.stderr_text()
+
+
 def test_runner_stdout_is_protocol_isolated(xray: Path) -> None:
     session = McpSession(xray, enable_runner=True)
     try:
@@ -273,6 +307,13 @@ def test_resources_read_protocol_paths(xray: Path) -> None:
         assert static_contents[0]["uri"] == "xray://spec/cheatsheet", static_response
         assert isinstance(static_contents[0].get("text"), str), static_response
 
+        session.send(request("resources/read", 5, {"uri": "xray://stdlib/modules"}))
+        modules_response = session.recv()
+        assert modules_response.get("id") == 5, modules_response
+        modules_text = modules_response["result"]["contents"][0].get("text", "")
+        assert "| `json` |" not in modules_text, modules_response
+        assert "Json.parse()" in modules_text, modules_response
+
         session.send(request("resources/read", 3, {"uri": "xray://spec/topic/class"}))
         topic_response = session.recv()
         assert topic_response.get("id") == 3, topic_response
@@ -287,7 +328,9 @@ def test_resources_read_protocol_paths(xray: Path) -> None:
         stdlib_contents = stdlib_response["result"]["contents"]
         assert isinstance(stdlib_contents, list), stdlib_response
         assert stdlib_contents[0]["uri"] == "xray://stdlib/json", stdlib_response
-        assert "json" in stdlib_contents[0].get("text", "").lower(), stdlib_response
+        stdlib_text = stdlib_contents[0].get("text", "")
+        assert "Json.parse(text)" in stdlib_text, stdlib_response
+        assert "import json" not in stdlib_text, stdlib_response
     finally:
         session.close()
 
@@ -382,6 +425,8 @@ def main() -> int:
         test_lifecycle_and_tools_list,
         test_unknown_request_and_notification,
         test_parse_error_and_content_length_line,
+        test_oversized_line_does_not_close_server,
+        test_sigterm_stops_server_cleanly,
         test_runner_stdout_is_protocol_isolated,
         test_resources_and_prompts_protocol_paths,
         test_resources_read_protocol_paths,

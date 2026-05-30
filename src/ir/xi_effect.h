@@ -137,6 +137,8 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         /* --- Calls: conservatively assume all effects --- */
         case XI_CALL:
         case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+        case XI_TAIL_CALL:
         case XI_CALL_BUILTIN:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
 
@@ -158,6 +160,10 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_FINALLY:
         case XI_END_TRY:
             return XI_FLAG_SIDE_EFFECT;
+
+        /* --- Bounds check: traps on out-of-bounds --- */
+        case XI_BOUNDS_CHECK:
+            return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
 
         /* --- Assert: side effect + may throw --- */
         case XI_ASSERT:
@@ -206,6 +212,20 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         /* --- Stack allocation --- */
         case XI_STACK_ALLOC:
             return XI_FLAG_SIDE_EFFECT;
+
+        /* --- Speculative guard: may deopt --- */
+        case XI_GUARD_TYPE:
+            return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+        /* --- Vector ops --- */
+        case XI_VEC_LOAD:
+            return XI_FLAG_READS_MEM;
+        case XI_VEC_STORE:
+            return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+        case XI_VEC_ADD:
+        case XI_VEC_SUB:
+        case XI_VEC_MUL:
+            return 0; /* pure arithmetic */
 
         case XI_OP_COUNT:
             break;

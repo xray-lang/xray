@@ -27,20 +27,112 @@
  */
 
 #include "xi_opt_inline.h"
+#include "xi_ic.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
 
 /* ========== Cost Model ========== */
 
-static uint32_t callee_cost(const XiFunc *callee) {
-    uint32_t cost = 0;
+/* Analyze callee to build a detailed cost model. */
+static XiInlineCostModel analyze_callee(const XiFunc *callee) {
+    XiInlineCostModel m = {0};
     for (uint32_t b = 0; b < callee->nblocks; b++) {
-        cost += callee->blocks[b]->nvalues;
-        for (const XiPhi *p = callee->blocks[b]->phis; p; p = p->next)
-            cost++;
+        const XiBlock *blk = callee->blocks[b];
+        m.value_count += blk->nvalues;
+        for (const XiPhi *p = blk->phis; p; p = p->next)
+            m.value_count++;
+
+        if (blk->kind == XI_BLOCK_IF)
+            m.branch_count++;
+
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+                v->op == XI_CALL_BUILTIN)
+                m.call_count++;
+            if (v->op == XI_THROW)
+                m.has_throw = true;
+        }
+
+        /* Back-edge detection: successor with lower block id indicates loop. */
+        for (int s = 0; s < 2; s++) {
+            if (blk->succs[s] && blk->succs[s]->id <= blk->id)
+                m.has_loop = true;
+        }
     }
-    return cost;
+    m.calls_self = false; /* checked separately at call site */
+    return m;
+}
+
+/* Compute caller's current total value count. */
+static uint32_t caller_total_values(const XiFunc *f) {
+    uint32_t total = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        total += f->blocks[b]->nvalues;
+        for (const XiPhi *p = f->blocks[b]->phis; p; p = p->next)
+            total++;
+    }
+    return total;
+}
+
+/* Check if all call arguments (excluding callee itself) are constants. */
+static bool all_args_are_const(const XiValue *call_val) {
+    for (uint16_t a = 1; a < call_val->nargs; a++) {
+        if (!call_val->args[a] || call_val->args[a]->op != XI_CONST)
+            return false;
+    }
+    return true;
+}
+
+/* Benefit scoring:
+ *   base = THRESHOLD - value_count   (bigger callee = lower base)
+ *   + all_args_const * 15             (constant args enable specialization)
+ *   + single_call_site * 10           (no code duplication)
+ *   - call_count * 3                  (nested calls reduce benefit)
+ *   - branch_count * 2                (complex control flow)
+ *   - has_loop * 20                   (loop body expansion)
+ *   - has_throw * 5                   (exception path pollution)
+ *   - (caller_size > 300) * 15        (cap growth in large functions) */
+XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site) {
+    XR_DCHECK(cost != NULL && site != NULL, "inline_benefit: NULL arg");
+
+    if (cost->calls_self)
+        return -1000; /* never inline recursion */
+
+    int score = (int) XI_INLINE_BASE_THRESHOLD - (int) cost->value_count;
+
+    if (site->all_args_const)
+        score += 15;
+    if (site->single_call_site)
+        score += 10;
+
+    /* IC-guided bonuses: hot monomorphic sites are strongly favoured. */
+    if (site->ic_kind == 1 /* XI_IC_MONO */) {
+        score += 20;
+        if (site->ic_hit_count > 100)
+            score += 10;
+    } else if (site->ic_kind == 2 /* XI_IC_POLY */) {
+        score += 5;
+    }
+
+    score -= (int) cost->call_count * 3;
+    score -= (int) cost->branch_count * 2;
+    if (cost->has_loop)
+        score -= 20;
+    if (cost->has_throw)
+        score -= 5;
+    if (site->caller_size > 300)
+        score -= 15;
+
+    /* Deopt cost penalty: high guard miss-rate sites are less attractive.
+     * A penalty > 50 strongly discourages inlining unstable speculations. */
+    if (site->guard_penalty > 0.0f)
+        score -= (int) (site->guard_penalty * 0.1f);
+
+    return score;
 }
 
 /* ========== Callee Resolution ========== */
@@ -90,10 +182,74 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     return cloned;
 }
 
+static bool callee_result_shape(const XiFunc *callee, bool *out_multi_ret, uint16_t *out_elems) {
+    if (!callee || !out_multi_ret || !out_elems)
+        return false;
+
+    bool seen_return = false;
+    bool multi_ret = false;
+    uint16_t elems = 0;
+
+    for (uint32_t b = 0; b < callee->nblocks; b++) {
+        const XiBlock *blk = callee->blocks[b];
+        if (!blk || blk->kind != XI_BLOCK_RETURN)
+            continue;
+
+        const XiValue *ret = blk->control;
+        bool cur_multi_ret = ret && ret->op == XI_MULTI_RET;
+        uint16_t cur_elems = ret ? 1 : 0;
+        if (cur_multi_ret)
+            cur_elems = ret->nargs;
+
+        if (cur_elems > 16)
+            return false;
+        if (!seen_return) {
+            seen_return = true;
+            multi_ret = cur_multi_ret;
+            elems = cur_elems;
+            continue;
+        }
+        if (multi_ret != cur_multi_ret || elems != cur_elems)
+            return false;
+    }
+
+    *out_multi_ret = multi_ret;
+    *out_elems = elems;
+    return true;
+}
+
+static bool call_extracts_fit_result_shape(const XiFunc *caller, const XiValue *call_val,
+                                           uint16_t nresult_elems) {
+    if (!caller || !call_val)
+        return false;
+
+    for (uint32_t b = 0; b < caller->nblocks; b++) {
+        const XiBlock *blk = caller->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v || v->op != XI_EXTRACT || v->nargs < 1 || v->args[0] != call_val)
+                continue;
+            if ((uint32_t) v->aux_int >= nresult_elems)
+                return false;
+        }
+    }
+
+    return true;
+}
+
 /* ========== Single Call Site Inlining ========== */
 
 static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_idx,
                              XiValue *call_val, XiFunc *callee) {
+    bool shape_multi_ret = false;
+    uint16_t shape_elems = 0;
+    if (!callee_result_shape(callee, &shape_multi_ret, &shape_elems))
+        return false;
+    if (!call_extracts_fit_result_shape(caller, call_val, shape_elems))
+        return false;
+
     uint32_t callee_max_id = callee->next_value_id;
     XiValue **value_map = (XiValue **) xr_calloc(callee_max_id, sizeof(XiValue *));
     if (!value_map)
@@ -112,45 +268,36 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     /* Create continuation block (values after the call). */
-    XiBlock *cont_blk = (XiBlock *) xr_calloc(1, sizeof(XiBlock));
+    XiBlock *cont_blk = xi_block_new(caller);
     if (!cont_blk) {
         xr_free(value_map);
         return false;
     }
-    cont_blk->id = caller->next_block_id++;
     cont_blk->kind = call_blk->kind;
     cont_blk->control = call_blk->control;
     cont_blk->succs[0] = call_blk->succs[0];
     cont_blk->succs[1] = call_blk->succs[1];
-    cont_blk->func = caller;
-
-    /* Grow caller's block array if needed */
-    if (caller->nblocks >= caller->blocks_cap) {
-        uint32_t new_cap = caller->blocks_cap ? caller->blocks_cap * 2 : 16;
-        XiBlock **tmp = (XiBlock **) xr_malloc(new_cap * sizeof(XiBlock *));
-        if (!tmp) {
-            xr_free(value_map);
-            xr_free(cont_blk);
-            return false;
-        }
-        if (caller->blocks)
-            memcpy(tmp, caller->blocks, caller->nblocks * sizeof(XiBlock *));
-        caller->blocks = tmp;
-        caller->blocks_cap = new_cap;
-    }
-    caller->blocks[caller->nblocks++] = cont_blk;
 
     /* Move post-call values to continuation block. */
     uint32_t post_start = call_idx + 1;
     uint32_t post_count = call_blk->nvalues - post_start;
     if (post_count > 0) {
-        cont_blk->values = (XiValue **) xr_malloc(post_count * sizeof(XiValue *));
-        if (cont_blk->values) {
+        if (post_count > cont_blk->values_cap) {
+            XiValue **new_values =
+                (XiValue **) xi_func_arena_alloc(caller, post_count * sizeof(XiValue *));
+            if (!new_values) {
+                xr_free(value_map);
+                return false;
+            }
+            cont_blk->values = new_values;
             cont_blk->values_cap = post_count;
-            for (uint32_t i = 0; i < post_count; i++)
-                cont_blk->values[i] = call_blk->values[post_start + i];
-            cont_blk->nvalues = post_count;
         }
+        for (uint32_t i = 0; i < post_count; i++) {
+            cont_blk->values[i] = call_blk->values[post_start + i];
+            if (cont_blk->values[i])
+                cont_blk->values[i]->block = cont_blk;
+        }
+        cont_blk->nvalues = post_count;
     }
 
     /* Truncate call_blk: remove the call and everything after it. */
@@ -165,28 +312,13 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     }
 
     for (uint32_t bi = 0; bi < callee_nblk; bi++) {
-        XiBlock *new_blk = (XiBlock *) xr_calloc(1, sizeof(XiBlock));
+        XiBlock *new_blk = xi_block_new(caller);
         if (!new_blk) {
             xr_free(value_map);
             xr_free(cloned_blks);
             return false;
         }
-        new_blk->id = caller->next_block_id++;
-        new_blk->func = caller;
         cloned_blks[bi] = new_blk;
-
-        /* Grow caller's block array */
-        if (caller->nblocks >= caller->blocks_cap) {
-            uint32_t new_cap = caller->blocks_cap ? caller->blocks_cap * 2 : 16;
-            XiBlock **tmp = (XiBlock **) xr_malloc(new_cap * sizeof(XiBlock *));
-            if (!tmp)
-                continue;
-            if (caller->blocks)
-                memcpy(tmp, caller->blocks, caller->nblocks * sizeof(XiBlock *));
-            caller->blocks = tmp;
-            caller->blocks_cap = new_cap;
-        }
-        caller->blocks[caller->nblocks++] = new_blk;
     }
 
     /* Collect return values and blocks for the join phi. */
@@ -286,19 +418,9 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     for (uint32_t r = 0; r < nret; r++)
         xi_block_add_pred(cont_blk, ret_blocks[r]);
 
-    /* Determine if the callee uses multi-value return (XI_MULTI_RET). */
-    bool is_multi_ret = false;
-    uint16_t nresult_elems = 1;
-    for (uint32_t r = 0; r < nret; r++) {
-        if (ret_values[r] && ret_values[r]->op == XI_MULTI_RET) {
-            is_multi_ret = true;
-            nresult_elems = ret_values[r]->nargs;
-            break;
-        }
-    }
+    bool is_multi_ret = shape_multi_ret;
+    uint16_t nresult_elems = shape_elems;
     XR_DCHECK(nresult_elems <= 16, "inline: too many multi-return elements");
-    if (nresult_elems > 16)
-        nresult_elems = 16;
 
     /* Build per-element result values.
      * Single return block  → use value directly.
@@ -341,7 +463,7 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
             /* Rewrite XI_EXTRACT into XI_COPY forwarding the element value.
              * DCE will clean up the now-redundant copy. */
-            if (is_multi_ret && v->op == XI_EXTRACT && v->nargs >= 1 && v->args[0] == call_val) {
+            if (v->op == XI_EXTRACT && v->nargs >= 1 && v->args[0] == call_val) {
                 uint32_t idx = (uint32_t) v->aux_int;
                 XiValue *elem = (idx < nresult_elems) ? results[idx] : NULL;
                 if (elem) {
@@ -375,17 +497,26 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
 
 /* ========== Pass Driver ========== */
 
+XR_FUNC uint32_t xi_inline_budget(uint32_t caller_size) {
+    if (caller_size < 100)
+        return XI_INLINE_MAX_PER_PASS + 2;
+    if (caller_size > 300)
+        return XI_INLINE_MAX_PER_PASS - 2;
+    return XI_INLINE_MAX_PER_PASS;
+}
+
 XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_opt_inline: NULL func");
 
     bool any_inlined = false;
 
-    /* Single scan: inline up to 4 call sites per pass invocation
-     * to limit code growth. */
+    /* Single scan: inline up to budget call sites per pass invocation
+     * to limit code growth.  Budget scales with caller size. */
     uint32_t inlined_count = 0;
-    const uint32_t max_inline_per_pass = 4;
+    uint32_t caller_size = caller_total_values(f);
+    uint32_t budget = xi_inline_budget(caller_size);
 
-    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < max_inline_per_pass; bi++) {
+    for (uint32_t bi = 0; bi < f->nblocks && inlined_count < budget; bi++) {
         XiBlock *blk = f->blocks[bi];
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
@@ -399,11 +530,33 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             if (callee == f)
                 continue; /* no self-recursion */
-
-            uint32_t cost = callee_cost(callee);
-            if (cost > XI_INLINE_MAX_COST)
-                continue;
             if (callee->nblocks == 0)
+                continue;
+
+            XiInlineCostModel cm = analyze_callee(callee);
+            if (cm.value_count > XI_INLINE_MAX_COST)
+                continue;
+            /* callee == f is filtered above; calls_self stays false here.
+             * The benefit function still honours calls_self, so any future
+             * indirect-recursion analysis can set it before scoring. */
+
+            XiInlineCallSiteInfo si = {
+                .all_args_const = all_args_are_const(v),
+                .single_call_site = false, /* conservative: unknown */
+                .caller_size = caller_size,
+                .ic_kind = 0,
+                .ic_hit_count = 0,
+                .guard_penalty = 0.0f,
+            };
+
+            /* Populate IC profile data when available. */
+            const XiIcMeta *ic = xi_ic_lookup(f, v->id);
+            if (ic) {
+                si.ic_kind = (uint8_t) ic->kind;
+                si.ic_hit_count = ic->total_count;
+            }
+
+            if (xi_inline_benefit(&cm, &si) <= 0)
                 continue;
 
             if (inline_call_site(f, blk, vi, v, callee)) {
