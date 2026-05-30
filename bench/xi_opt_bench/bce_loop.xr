@@ -1,0 +1,14 @@
+// Benchmark: BCE in loop
+// Tests elimination of bounds checks when loop index is provably safe
+//
+// Run: xray bench/xi_opt_bench/bce_loop.xr
+
+let arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+let sum = 0
+
+// Loop with provably safe index range
+for (let i = 0; i < arr.length; i++) {
+    sum = sum + arr[i]
+}
+
+print(sum)

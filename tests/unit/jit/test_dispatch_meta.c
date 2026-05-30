@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define XM_DISPATCH_META_IMPL
-#include "xm_dispatch_meta_gen.h"
+#include "xm_dispatch_meta.h"
 
 static int g_fail = 0;
 
@@ -15,19 +14,10 @@ static void check_bool(const char *label, bool cond) {
     }
 }
 
-static const XmDispatchMeta *find_meta(XmOp op, XmDispatchBackend backend) {
-    for (uint32_t i = 0; i < XM_DISPATCH_META_COUNT; ++i) {
-        const XmDispatchMeta *m = &xm_dispatch_meta[i];
-        if (m->op == op && m->backend == backend)
-            return m;
-    }
-    return NULL;
-}
-
 static void check_entry(const char *label, XmOp op, XmDispatchBackend backend,
                         XmIselPattern pattern, uint8_t mcinsn_count, bool custom,
                         const char *mcinsns) {
-    const XmDispatchMeta *m = find_meta(op, backend);
+    const XmDispatchMeta *m = xm_dispatch_meta_find(op, backend);
     if (!m) {
         fprintf(stderr, "FAIL: %s: missing metadata entry\n", label);
         g_fail++;
@@ -43,38 +33,33 @@ int main(void) {
     check_bool("backend count", XM_DISPATCH_BACKEND__COUNT == 3);
     check_bool("meta count", XM_DISPATCH_META_COUNT == XM_OP_COUNT * XM_DISPATCH_BACKEND__COUNT);
 
-    bool seen[XM_OP_COUNT][XM_DISPATCH_BACKEND__COUNT] = {{false}};
-    for (uint32_t i = 0; i < XM_DISPATCH_META_COUNT; ++i) {
-        const XmDispatchMeta *m = &xm_dispatch_meta[i];
-        if ((uint32_t) m->op >= XM_OP_COUNT) {
-            fprintf(stderr, "FAIL: op out of range at metadata row %u\n", i);
-            g_fail++;
-            continue;
-        }
-        if ((uint32_t) m->backend >= XM_DISPATCH_BACKEND__COUNT) {
-            fprintf(stderr, "FAIL: backend out of range at metadata row %u\n", i);
-            g_fail++;
-            continue;
-        }
-        if (seen[m->op][m->backend]) {
-            fprintf(stderr, "FAIL: duplicate metadata row op=%u backend=%u\n", (uint32_t) m->op,
-                    (uint32_t) m->backend);
-            g_fail++;
-            continue;
-        }
-        seen[m->op][m->backend] = true;
-        check_bool("mcinsn_count matches placeholder",
-                   (m->mcinsn_count == 0) == (strcmp(m->mcinsns, "-") == 0));
-        check_bool("custom flag matches pattern",
-                   m->custom == (m->pattern == XM_ISEL_PATTERN_CUSTOM));
-    }
-
     for (uint32_t op = 0; op < XM_OP_COUNT; ++op) {
         for (uint32_t backend = 0; backend < XM_DISPATCH_BACKEND__COUNT; ++backend) {
-            if (!seen[op][backend]) {
+            const XmDispatchMeta *m = xm_dispatch_meta_find((XmOp) op, (XmDispatchBackend) backend);
+            if (!m) {
                 fprintf(stderr, "FAIL: missing metadata row op=%u backend=%u\n", op, backend);
                 g_fail++;
+                continue;
             }
+            if ((uint32_t) m->op >= XM_OP_COUNT) {
+                fprintf(stderr, "FAIL: op out of range op=%u backend=%u\n", op, backend);
+                g_fail++;
+                continue;
+            }
+            if ((uint32_t) m->backend >= XM_DISPATCH_BACKEND__COUNT) {
+                fprintf(stderr, "FAIL: backend out of range op=%u backend=%u\n", op, backend);
+                g_fail++;
+                continue;
+            }
+            if ((uint32_t) m->op != op || (uint32_t) m->backend != backend) {
+                fprintf(stderr, "FAIL: wrong metadata row op=%u backend=%u\n", op, backend);
+                g_fail++;
+                continue;
+            }
+            check_bool("mcinsn_count matches placeholder",
+                       (m->mcinsn_count == 0) == (strcmp(m->mcinsns, "-") == 0));
+            check_bool("custom flag matches pattern",
+                       m->custom == (m->pattern == XM_ISEL_PATTERN_CUSTOM));
         }
     }
 
@@ -86,6 +71,12 @@ int main(void) {
                 "arm64.sdiv.rrr+arm64.msub.rrrr");
     check_entry("ALLOC x64", XM_ALLOC, XM_DISPATCH_BACKEND_X64, XM_ISEL_PATTERN_CUSTOM, 0, true,
                 "-");
+    check_bool("missing op lookup",
+               xm_dispatch_meta_find((XmOp) XM_OP_COUNT, XM_DISPATCH_BACKEND_X64) == NULL);
+    check_bool("missing backend lookup",
+               xm_dispatch_meta_find(XM_ADD, XM_DISPATCH_BACKEND__COUNT) == NULL);
+    check_bool("mcinsns helper", strcmp(xm_dispatch_meta_mcinsns(XM_ADD, XM_DISPATCH_BACKEND_ARM64),
+                                        "arm64.add.rrr") == 0);
 
     if (g_fail > 0) {
         fprintf(stderr, "%d dispatch metadata checks failed\n", g_fail);

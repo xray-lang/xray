@@ -101,6 +101,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_CALL:
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+        case XI_TAIL_CALL:
         case XI_CALL_BUILTIN:
             /* Callee might store the argument in a heap object.
              * A more precise analysis would use callee summaries. */
@@ -440,4 +441,46 @@ XR_FUNC void xi_escape_analyze(XiFunc *f) {
     }
 
     analyze_func(f);
+}
+
+/* ========== Cross-Function Escape Summary ========== */
+
+/* Compute a summary of how each parameter escapes, so callers
+ * can use precise escape info instead of conservative HEAP_ESCAPE. */
+XR_FUNC bool xi_escape_compute_summary(const XiFunc *f, XiEscapeSummary *summary) {
+    if (!f || !summary)
+        return false;
+
+    summary->valid = false;
+    summary->nparams = 0;
+    summary->return_escape = (uint8_t) XI_ESC_NONE;
+
+    if (f->nparams > XI_ESC_SUMMARY_MAX_PARAMS)
+        return false;
+
+    summary->nparams = (uint8_t) f->nparams;
+
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        if (f->params[p])
+            summary->param_escape[p] = f->params[p]->escape;
+        else
+            summary->param_escape[p] = (uint8_t) XI_ESC_HEAP;
+    }
+
+    /* Determine return escape: scan all RETURN blocks for the
+     * escape level of their control value. */
+    XiEscapeLevel ret_esc = XI_ESC_NONE;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || blk->kind != XI_BLOCK_RETURN)
+            continue;
+        if (blk->control) {
+            XiEscapeLevel esc = (XiEscapeLevel) blk->control->escape;
+            if (esc > ret_esc)
+                ret_esc = esc;
+        }
+    }
+    summary->return_escape = (uint8_t) ret_esc;
+    summary->valid = true;
+    return true;
 }

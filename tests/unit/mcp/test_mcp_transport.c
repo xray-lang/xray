@@ -211,6 +211,59 @@ TEST(reject_too_large_line) {
     test_close(fds[0]);
 }
 
+TEST(recover_after_too_large_line) {
+    int fds[2];
+    ASSERT(test_pipe(fds) == 0);
+
+    size_t oversized_len = 9;
+    const char *tail = "{\"id\":2}\n";
+    size_t total_len = oversized_len + 1 + strlen(tail);
+    char *input = xr_malloc(total_len + 1);
+    ASSERT(input != NULL);
+    memset(input, 'a', oversized_len);
+    input[oversized_len] = '\n';
+    memcpy(input + oversized_len + 1, tail, strlen(tail) + 1);
+
+    ASSERT(write_all(fds[1], input, total_len));
+    xr_free(input);
+    test_close(fds[1]);
+
+    XmcpStdioTransport transport;
+    ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 8));
+    char *message = NULL;
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) ==
+           XMCP_STDIO_READ_TOO_LARGE);
+    ASSERT(message == NULL);
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_OK);
+    ASSERT_STR_EQ(message, "{\"id\":2}");
+    xr_free(message);
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_EOF);
+
+    xmcp_stdio_destroy(&transport);
+    test_close(fds[0]);
+}
+
+TEST(interrupt_flag_returns_eof) {
+    int fds[2];
+    ASSERT(test_pipe(fds) == 0);
+
+    XmcpStdioTransport transport;
+    ASSERT(xmcp_stdio_init(&transport, fds[0], -1, 1024));
+    volatile sig_atomic_t interrupted = 1;
+    transport.interrupt_flag = &interrupted;
+
+    char *message = NULL;
+    size_t message_len = 0;
+    ASSERT(xmcp_stdio_read_message(&transport, &message, &message_len) == XMCP_STDIO_READ_EOF);
+    ASSERT(message == NULL);
+    ASSERT(message_len == 0);
+
+    xmcp_stdio_destroy(&transport);
+    test_close(fds[1]);
+    test_close(fds[0]);
+}
+
 TEST(write_message_appends_newline_only) {
     int fds[2];
     ASSERT(test_pipe(fds) == 0);
@@ -269,6 +322,8 @@ int main(void) {
     RUN_TEST(read_multiple_messages);
     RUN_TEST(content_length_is_plain_line);
     RUN_TEST(reject_too_large_line);
+    RUN_TEST(recover_after_too_large_line);
+    RUN_TEST(interrupt_flag_returns_eof);
     RUN_TEST(write_message_appends_newline_only);
     RUN_TEST(write_rejects_embedded_newline);
     RUN_TEST(write_rejects_embedded_cr);

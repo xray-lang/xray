@@ -280,7 +280,7 @@ def generate_header(type_results, module_results):
                 lines.append(f"static const XaBuiltinHandle g_gen_{mod_name}_handles[] = {{")
                 for handle in mod_data['handles']:
                     var_name = f"g_gen_{mod_name}_{handle['name'].lower()}_fields"
-                    lines.append(f'    {{"{handle["name"]}", {var_name}, {len(handle["fields"])}}},')
+                    lines.append(f'    {{"{handle["name"]}", {var_name}, {len(handle["fields"])}, NULL, 0}},')
                 lines.append("};")
                 lines.append(f"#define GEN_{mod_name.upper()}_HANDLE_COUNT {len(mod_data['handles'])}")
                 lines.append("")

@@ -1501,6 +1501,11 @@ int32_t xr_string_ord(XrString *str) {
     if (!str || str->length == 0)
         return -1;
 
+    /* Single-byte strings from byteAt() on binary buffers are raw octets,
+     * not UTF-8 code units — return the unsigned byte value directly. */
+    if (str->length == 1)
+        return (unsigned char) str->data[0];
+
     uint32_t cp;
     xr_utf8_decode(str->data, str->length, &cp);
     return (int32_t) cp;

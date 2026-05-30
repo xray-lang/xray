@@ -27,6 +27,22 @@
 #include "xi_opt_strength.h"
 #include "xi_opt_tail_call.h"
 #include "xi_opt_ivsr.h"
+#include "xi_opt_loop_peel.h"
+#include "xi_opt_loop_unroll.h"
+#include "xi_opt_loop_split.h"
+#include "xi_opt_loop_inv_branch.h"
+#include "xi_opt_spec_narrow.h"
+#include "xi_opt_guard_combine.h"
+#include "xi_opt_guard_motion.h"
+#include "xi_opt_spec_inline.h"
+#include "xi_guard_cost.h"
+#include "xi_opt_spec_const.h"
+#include "xi_block_layout.h"
+#include "xi_opt_slp.h"
+#include "xi_opt_loop_vec.h"
+#include "xi_opt_reduction.h"
+#include "xi_opt_call_specialize.h"
+#include "xi_opt_comptime.h"
 #include "xi_range.h"
 #include "xi_analysis.h"
 #include "xi_pass.h"
@@ -998,12 +1014,42 @@ static const XiPassDesc xi_pass_table[] = {
     {"licm", xi_opt_licm, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
      XI_INV_TBAA_ANNOTATED, 0},
     {"ivsr", xi_opt_ivsr, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"loop_peel", xi_opt_loop_peel, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"loop_unroll", xi_opt_loop_unroll, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"loop_split", xi_opt_loop_split, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"loop_inv_branch", xi_opt_loop_inv_branch, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"inline", xi_opt_inline, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"tail_call", xi_opt_tail_call, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"ifconv", xi_opt_ifconv, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"jump_thread", xi_opt_jump_thread, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
      0, 0},
     {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
+     0, 0},
+    {"spec_narrow", xi_opt_spec_narrow, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     0},
+    {"guard_combine", xi_opt_guard_combine, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
+     XI_STAGE_RAW, 0, 0},
+    {"guard_motion", xi_opt_guard_motion, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
+     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"spec_inline", xi_opt_spec_inline, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
+     0, 0},
+    {"guard_cost", xi_guard_cost_fill, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     XI_INV_GUARD_COST},
+    {"spec_const", xi_opt_spec_const, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
+     XI_STAGE_RAW, 0, 0},
+    {"slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"loop_vec", xi_opt_loop_vec, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     0},
+    {"reduction", xi_opt_reduction, XI_OPT_FULL, XI_PASS_NEEDS_LOOP, XI_STAGE_RAW, XI_STAGE_RAW, 0,
+     0},
+    {"call_specialize", xi_opt_call_specialize, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW,
+     XI_STAGE_RAW, 0, 0},
+    {"comptime_eval", xi_opt_comptime_eval, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
      0, 0},
 };
 
@@ -1159,8 +1205,40 @@ static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
     (XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |            \
      XI_FLAG_MAY_SUSPEND)
 
-static bool shuffle_is_effectful(const XiValue *v) {
-    return (v->flags & XI_SHUFFLE_EFFECT_MASK) != 0;
+/* Returns true if value v participates in the emit-time var coalescing chain.
+ * Any value with a var_id is a destructive update of that user variable, and
+ * any value reading a same-block value or phi that has a var_id is a read
+ * of that variable's current SSA register.  The emit pipeline coalesces all
+ * SSA versions of the same var_id into a single VM register, so swapping
+ * "read of old version" past "destructive update" silently changes which
+ * value the register holds — exactly the kind of corruption the shuffle
+ * mode is designed to expose, but only valid if shuffle itself respects
+ * the implicit ordering.  Treating var-touching values as effectful chains
+ * them all in original order, which is correct (just less aggressive than
+ * the data-flow-only model used previously). */
+static bool shuffle_touches_var(const XiBlock *blk, const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->var_id != 0xFF)
+        return true;
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        XiValue *arg = v->args[a];
+        if (!arg)
+            continue;
+        /* Read of a same-block SSA value that itself carries a var_id, or
+         * a phi belonging to this block that does so. */
+        if (arg->block == blk && arg->var_id != 0xFF)
+            return true;
+        if (arg->op == XI_PHI && arg->block == blk && arg->var_id != 0xFF)
+            return true;
+    }
+    return false;
+}
+
+static bool shuffle_is_effectful(const XiBlock *blk, const XiValue *v) {
+    if (v->flags & XI_SHUFFLE_EFFECT_MASK)
+        return true;
+    return shuffle_touches_var(blk, v);
 }
 
 /* Count incoming edges for each value: intra-block data deps + effect chain.
@@ -1176,7 +1254,7 @@ static void shuffle_count_indeg(const XiBlock *blk, uint32_t *indeg) {
             if (arg && arg->block == blk && arg->op != XI_PHI)
                 indeg[i]++;
         }
-        if (shuffle_is_effectful(v)) {
+        if (shuffle_is_effectful(blk, v)) {
             if (prev_effect >= 0)
                 indeg[i]++;
             prev_effect = (int32_t) i;
@@ -1186,11 +1264,12 @@ static void shuffle_count_indeg(const XiBlock *blk, uint32_t *indeg) {
 
 /* For each value, record the index of its immediate effect-chain predecessor
  * in the original ordering, or -1 if none. */
-static void shuffle_build_effect_pred(XiValue *const *values, uint32_t n, int32_t *effect_pred) {
+static void shuffle_build_effect_pred(const XiBlock *blk, XiValue *const *values, uint32_t n,
+                                      int32_t *effect_pred) {
     int32_t pe = -1;
     for (uint32_t i = 0; i < n; i++) {
         effect_pred[i] = -1;
-        if (shuffle_is_effectful(values[i])) {
+        if (shuffle_is_effectful(blk, values[i])) {
             effect_pred[i] = pe;
             pe = (int32_t) i;
         }
@@ -1199,10 +1278,10 @@ static void shuffle_build_effect_pred(XiValue *const *values, uint32_t n, int32_
 
 /* After value `idx` (== placed_v) has been emitted, decrement indeg of each
  * remaining value and push newly-ready indices onto `ready`. */
-static void shuffle_release_dependents(XiValue *const *values, uint32_t n, uint32_t idx,
-                                       XiValue *placed_v, const int32_t *effect_pred,
+static void shuffle_release_dependents(const XiBlock *blk, XiValue *const *values, uint32_t n,
+                                       uint32_t idx, XiValue *placed_v, const int32_t *effect_pred,
                                        uint32_t *indeg, uint32_t *ready, uint32_t *ready_count) {
-    bool placed_is_effect = shuffle_is_effectful(placed_v);
+    bool placed_is_effect = shuffle_is_effectful(blk, placed_v);
     bool placed_is_phi = placed_v->op == XI_PHI;
     for (uint32_t j = 0; j < n; j++) {
         if (indeg[j] == 0 || indeg[j] == UINT32_MAX)
@@ -1248,7 +1327,7 @@ static void shuffle_block_values(XiBlock *blk) {
 
     XiValue **result = blk->values;
     shuffle_count_indeg(blk, indeg);
-    shuffle_build_effect_pred(result, n, effect_pred);
+    shuffle_build_effect_pred(blk, result, n, effect_pred);
 
     uint32_t ready_count = 0;
     for (uint32_t i = 0; i < n; i++) {
@@ -1266,7 +1345,7 @@ static void shuffle_block_values(XiBlock *blk) {
         out[placed++] = placed_v;
         indeg[idx] = UINT32_MAX; /* sentinel: already placed */
 
-        shuffle_release_dependents(result, n, idx, placed_v, effect_pred, indeg, ready,
+        shuffle_release_dependents(blk, result, n, idx, placed_v, effect_pred, indeg, ready,
                                    &ready_count);
     }
 
@@ -1353,8 +1432,15 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
     if (shuffle_blocks < 0) {
         const char *env = getenv("XRAY_XI_SHUFFLE");
         shuffle_blocks = (env && env[0] == '1') ? 1 : 0;
-        if (shuffle_blocks)
-            srand((unsigned) xr_time_monotonic_ns());
+        if (shuffle_blocks) {
+            /* XRAY_XI_SHUFFLE_SEED=N — deterministic shuffle for repro.
+             * Defaults to time-based seed when unset / 0. */
+            const char *seed_env = getenv("XRAY_XI_SHUFFLE_SEED");
+            unsigned seed = (seed_env && seed_env[0]) ? (unsigned) strtoul(seed_env, NULL, 10) : 0;
+            if (seed == 0)
+                seed = (unsigned) xr_time_monotonic_ns();
+            srand(seed);
+        }
     }
 
     /* XRAY_XI_PASS=pass:key=value[,pass:key=value,...]
@@ -1440,14 +1526,68 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
             }
 
             /* Shuffle blocks[1..n-1] (preserve entry at [0]) to catch
-             * passes that assume RPO or insertion order. */
+             * passes that assume RPO or insertion order.  Xi IR carries
+             * an implicit invariant that block->id equals its index in
+             * f->blocks[] (several passes — notably SCCP — index
+             * per-block scratch by id and pass succ->id to mark_edge as
+             * an array index).  After permuting the array we must
+             * re-sync ids so the invariant holds, then bump cfg_version
+             * so any cached RPO / dom / loop info recomputes. */
             if (shuffle_blocks && f->nblocks > 2) {
+                /* XI_TRY values carry the finally block id in aux_int, so
+                 * the permutation below would leave them dangling — the
+                 * stored id refers to whatever block now occupies that
+                 * slot, not the original finally target.  Capture the
+                 * (try_value, finally_block) pointer pairs first, swap
+                 * the array, resync ids, then rewrite aux_int with each
+                 * finally block's new id. */
+                struct {
+                    XiValue *try_v;
+                    XiBlock *finally_blk;
+                } *try_finally_map = NULL;
+                uint32_t try_finally_count = 0;
+                uint32_t try_finally_cap = 0;
+                for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+                    XiBlock *blk = f->blocks[bi];
+                    for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+                        XiValue *v = blk->values[vi];
+                        if (v->op != XI_TRY || v->aux_int < 0)
+                            continue;
+                        if ((uint64_t) v->aux_int >= f->nblocks)
+                            continue;
+                        if (try_finally_count == try_finally_cap) {
+                            uint32_t new_cap = try_finally_cap ? try_finally_cap * 2 : 8;
+                            void *tmp =
+                                xr_realloc(try_finally_map, new_cap * sizeof(*try_finally_map));
+                            if (!tmp)
+                                break;
+                            try_finally_map = tmp;
+                            try_finally_cap = new_cap;
+                        }
+                        try_finally_map[try_finally_count].try_v = v;
+                        try_finally_map[try_finally_count].finally_blk =
+                            f->blocks[(uint32_t) v->aux_int];
+                        try_finally_count++;
+                    }
+                }
+
                 for (uint32_t si = f->nblocks - 1; si > 1; si--) {
                     uint32_t sj = 1 + (uint32_t) (rand() % si);
                     XiBlock *tmp = f->blocks[si];
                     f->blocks[si] = f->blocks[sj];
                     f->blocks[sj] = tmp;
                 }
+                for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+                    f->blocks[bi]->id = bi;
+                }
+                /* Rewrite XI_TRY.aux_int with each finally block's new id. */
+                for (uint32_t i = 0; i < try_finally_count; i++) {
+                    try_finally_map[i].try_v->aux_int =
+                        (int64_t) try_finally_map[i].finally_blk->id;
+                }
+                xr_free(try_finally_map);
+
+                xi_cfg_invalidate(f);
                 /* Shuffle values within each block (randomized topo sort
                  * respecting data deps and side-effect ordering). */
                 for (uint32_t bi = 0; bi < f->nblocks; bi++) {

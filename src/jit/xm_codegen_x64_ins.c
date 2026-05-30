@@ -15,6 +15,8 @@
 #if defined(__x86_64__) || defined(_M_X64)
 
 #include "xm_codegen_x64_internal.h"
+#include "xm_dispatch_meta.h"
+#include "xm_dispatch_emit_gen.h"
 #include "xm_helper_table.h"
 #include "xm_jit_runtime.h"
 #include "../coro/xcoroutine.h"
@@ -218,6 +220,11 @@ static void x64_emit_noncommutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XmRef arg0
 /* ========== Handler type ========== */
 typedef void (*X64InsHandler)(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd);
 
+static void x64_emit_generated_sub_rr(X64Buf *buf, X64Reg dst, X64Reg src) {
+    XR_CHECK(xm_dispatch_emit_x64_gp_rr(XM_SUB, buf, dst, src),
+             "x64 generated gp_rr dispatch rejected SUB");
+}
+
 /* ========== Constants ========== */
 
 static void x64_h_const(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
@@ -248,16 +255,18 @@ static void x64_h_const_f64(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 static void x64_h_add(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0], ins->args[1], X64_SCRATCH_REG);
-    x64_add_rr(&ctx->buf, rd, rm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_rr_comm(ins->op, &ctx->buf, rd, rm),
+                  "x64 generated gp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_sub(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
-    x64_emit_noncommutative_gp(ctx, rd, ins->args[0], ins->args[1], x64_sub_rr);
+    x64_emit_noncommutative_gp(ctx, rd, ins->args[0], ins->args[1], x64_emit_generated_sub_rr);
 }
 
 static void x64_h_mul(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0], ins->args[1], X64_SCRATCH_REG);
-    x64_imul_rr(&ctx->buf, rd, rm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_rr_comm(ins->op, &ctx->buf, rd, rm),
+                  "x64 generated gp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
@@ -292,10 +301,8 @@ static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
      * The wrap path produces the same result IDIV would if x64 did not
      * trap: -rn for DIV (NEG wraps INT64_MIN to itself), 0 for MOD. */
     x64_cmp_ri(&ctx->buf, rm, -1);
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
-    uint32_t jne_normal_d = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0); /* patched to .normal */
+    x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);
+    uint32_t jne_normal_d = ctx->buf.pos - 4;
 
     /* Wrap path: rm == -1 */
     if (is_div) {
@@ -305,9 +312,8 @@ static void x64_h_div_mod(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     } else {
         x64_xor_rr(&ctx->buf, rd, rd);
     }
-    x64_emit8(&ctx->buf, 0xE9);
-    uint32_t jmp_done_d = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0); /* patched to .done */
+    x64_jmp_rel32(&ctx->buf, 0);
+    uint32_t jmp_done_d = ctx->buf.pos - 4;
 
     /* .normal: standard IDIV. */
     x64_patch_rel32(&ctx->buf, jne_normal_d, ctx->buf.pos);
@@ -325,31 +331,36 @@ static void x64_h_neg(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     if (rm != rd)
         x64_mov_rr(&ctx->buf, rd, rm);
-    x64_neg_r(&ctx->buf, rd);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_r(ins->op, &ctx->buf, rd),
+                  "x64 generated gp_r dispatch rejected op");
 }
 
 /* ========== Bitwise ========== */
 
 static void x64_h_and(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0], ins->args[1], X64_SCRATCH_REG);
-    x64_and_rr(&ctx->buf, rd, rm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_rr_comm(ins->op, &ctx->buf, rd, rm),
+                  "x64 generated gp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_or(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0], ins->args[1], X64_SCRATCH_REG);
-    x64_or_rr(&ctx->buf, rd, rm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_rr_comm(ins->op, &ctx->buf, rd, rm),
+                  "x64 generated gp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_xor(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_prepare_commutative_gp(ctx, rd, ins->args[0], ins->args[1], X64_SCRATCH_REG);
-    x64_xor_rr(&ctx->buf, rd, rm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_rr_comm(ins->op, &ctx->buf, rd, rm),
+                  "x64 generated gp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_not(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rm = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     if (rm != rd)
         x64_mov_rr(&ctx->buf, rd, rm);
-    x64_not_r(&ctx->buf, rd);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_r(ins->op, &ctx->buf, rd),
+                  "x64 generated gp_r dispatch rejected op");
 }
 
 /* ========== Shifts ========== */
@@ -376,23 +387,6 @@ static void x64_h_shr(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 /* ========== Integer Comparison ========== */
 
-static X64Cond x64_int_cmp_cc(uint16_t op) {
-    if (op == XM_EQ)
-        return X64_CC_E;
-    if (op == XM_NE)
-        return X64_CC_NE;
-    if (op == XM_LT)
-        return X64_CC_L;
-    if (op == XM_LE)
-        return X64_CC_LE;
-    if (op == XM_GT)
-        return X64_CC_G;
-    if (op == XM_GE)
-        return X64_CC_GE;
-    XR_DCHECK(false, "x64_int_cmp_cc: unreachable opcode");
-    return X64_CC_E;
-}
-
 static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
@@ -400,39 +394,48 @@ static void x64_h_cmp_int(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, rm);
         rm = X64_SCRATCH_REG;
     }
-    x64_cmp_rr(&ctx->buf, rn, rm);
-    X64Cond cc = x64_int_cmp_cc(ins->op);
-    /* Zero without clobbering CMP flags (MOV doesn't affect flags) */
-    x64_mov_ri32(&ctx->buf, rd, 0);
-    x64_setcc(&ctx->buf, cc, rd);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_cmp_rr_cc(ins->op, &ctx->buf, rd, rn, rm),
+                  "x64 generated cmp_rr_cc dispatch rejected op");
 }
 
 /* ========== Float Arithmetic ========== */
+
+static void x64_emit_generated_fsub(X64Buf *buf, X64Xmm dst, X64Xmm src) {
+    XR_CHECK(xm_dispatch_emit_x64_fp_rr(XM_FSUB, buf, dst, src),
+             "x64 generated fp_rr dispatch rejected FSUB");
+}
+
+static void x64_emit_generated_fdiv(X64Buf *buf, X64Xmm dst, X64Xmm src) {
+    XR_CHECK(xm_dispatch_emit_x64_fp_rr(XM_FDIV, buf, dst, src),
+             "x64 generated fp_rr dispatch rejected FDIV");
+}
 
 static void x64_h_fadd(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0], ins->args[1], X64_SCRATCH_XMM);
-    x64_addsd(&ctx->buf, fd, fm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_fp_rr_comm(ins->op, &ctx->buf, fd, fm),
+                  "x64 generated fp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_fsub(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-    x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_subsd);
+    x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_emit_generated_fsub);
 }
 
 static void x64_h_fmul(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Xmm fm = x64_prepare_commutative_fp(ctx, fd, ins->args[0], ins->args[1], X64_SCRATCH_XMM);
-    x64_mulsd(&ctx->buf, fd, fm);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_fp_rr_comm(ins->op, &ctx->buf, fd, fm),
+                  "x64 generated fp_rr_comm dispatch rejected op");
 }
 
 static void x64_h_fdiv(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
-    x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_divsd);
+    x64_emit_noncommutative_fp(ctx, fd, ins->args[0], ins->args[1], x64_emit_generated_fdiv);
 }
 
 static void x64_h_fneg(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
@@ -452,42 +455,47 @@ static void x64_h_i2f(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-    x64_cvtsi2sd(&ctx->buf, fd, rn);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_conv_i2f(ins->op, &ctx->buf, fd, rn),
+                  "x64 generated conv_i2f dispatch rejected op");
 }
 
 static void x64_h_f2i(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-    x64_cvttsd2si(&ctx->buf, rd, fn);
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_conv_f2i(ins->op, &ctx->buf, rd, fn),
+                  "x64 generated conv_f2i dispatch rejected op");
 }
 
 /* ========== Float Comparison ========== */
 
+static void x64_emit_generated_fcmp(X64CodegenCtx *ctx, XmOp op, X64Reg rd, X64Xmm fn, X64Xmm fm) {
+    bool ok;
+    if (rd == X64_SCRATCH_REG) {
+        x64_push_r(&ctx->buf, X64_RAX);
+        ok = xm_dispatch_emit_x64_fcmp_rr_cc(op, &ctx->buf, rd, fn, fm, X64_RAX);
+        x64_pop_r(&ctx->buf, X64_RAX);
+    } else {
+        ok = xm_dispatch_emit_x64_fcmp_rr_cc(op, &ctx->buf, rd, fn, fm, X64_SCRATCH_REG);
+    }
+    CODEGEN_CHECK(ctx, ok, "x64 generated fcmp_rr_cc dispatch rejected op");
+}
+
 static void x64_h_cmp_float(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Xmm fn = x64_get_fp_operand(ctx, ins->args[0], X64_SCRATCH_XMM);
-    X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-    x64_ucomisd(&ctx->buf, fn, fm);
-    x64_xor_rr(&ctx->buf, rd, rd);
-    switch (ins->op) {
-        case XM_FEQ:
-            x64_setcc(&ctx->buf, X64_CC_E, rd);
-            x64_setcc(&ctx->buf, X64_CC_NP, X64_SCRATCH_REG);
-            x64_and_rr(&ctx->buf, rd, X64_SCRATCH_REG);
-            break;
-        case XM_FNE:
-            x64_setcc(&ctx->buf, X64_CC_NE, rd);
-            x64_setcc(&ctx->buf, X64_CC_P, X64_SCRATCH_REG);
-            x64_or_rr(&ctx->buf, rd, X64_SCRATCH_REG);
-            break;
-        case XM_FLT:
-            x64_setcc(&ctx->buf, X64_CC_B, rd);
-            break;
-        case XM_FLE:
-            x64_setcc(&ctx->buf, X64_CC_BE, rd);
-            break;
-        default:
-            XR_DCHECK(false, "x64_h_cmp_float: unreachable opcode");
-            break;
+    if (fn == X64_SCRATCH_XMM && ins->args[0] != ins->args[1] &&
+        x64_arg_needs_scratch_fp(ctx, ins->args[1])) {
+        x64_sub_ri(&ctx->buf, X64_RSP, 16);
+        x64_movsd_mr(&ctx->buf, X64_RSP, 0, X64_XMM14);
+        x64_movsd_rr(&ctx->buf, X64_XMM14, X64_SCRATCH_XMM);
+        X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
+        CODEGEN_CHECK(ctx, fm == X64_SCRATCH_XMM,
+                      "x64_h_cmp_float: expected arg1 to land in scratch");
+        x64_emit_generated_fcmp(ctx, ins->op, rd, X64_XMM14, fm);
+        x64_movsd_rm(&ctx->buf, X64_XMM14, X64_RSP, 0);
+        x64_add_ri(&ctx->buf, X64_RSP, 16);
+        return;
     }
+    X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
+    x64_emit_generated_fcmp(ctx, ins->op, rd, fn, fm);
 }
 
 /* ========== Move / Redefine ========== */
@@ -625,7 +633,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "x64_h_subword: unreachable opcode");
+            CODEGEN_CHECK(ctx, false, "x64_h_subword: unreachable opcode");
             break;
     }
 }
@@ -636,40 +644,16 @@ static void x64_h_load_f32(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
     X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-    /* MOVSS xmm_scratch, [addr]:  F3 0F 10 /r */
-    x64_emit8(&ctx->buf, 0xF3);
-    if (X64_SCRATCH_XMM > 7 || addr > 7)
-        x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) | ((addr > 7) ? 1 : 0));
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, 0x10);
-    x64_modrm_mem(&ctx->buf, X64_SCRATCH_XMM & 7, addr, 0);
-    /* CVTSS2SD fd, xmm_scratch:  F3 0F 5A /r */
-    x64_emit8(&ctx->buf, 0xF3);
-    if ((int) fd > 7 || X64_SCRATCH_XMM > 7)
-        x64_emit8(&ctx->buf, 0x40 | (((int) fd > 7) ? 4 : 0) | ((X64_SCRATCH_XMM > 7) ? 1 : 0));
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, 0x5A);
-    x64_emit8(&ctx->buf, 0xC0 | (((int) fd & 7) << 3) | (X64_SCRATCH_XMM & 7));
+    x64_movss_rm(&ctx->buf, X64_SCRATCH_XMM, addr, 0);
+    x64_cvtss2sd(&ctx->buf, fd, X64_SCRATCH_XMM);
 }
 
 static void x64_h_store_f32(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
     X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
-    /* CVTSD2SS xmm_scratch, fm:  F2 0F 5A /r */
-    x64_emit8(&ctx->buf, 0xF2);
-    if (X64_SCRATCH_XMM > 7 || (int) fm > 7)
-        x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) | (((int) fm > 7) ? 1 : 0));
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, 0x5A);
-    x64_emit8(&ctx->buf, 0xC0 | ((X64_SCRATCH_XMM & 7) << 3) | ((int) fm & 7));
-    /* MOVSS [addr], xmm_scratch:  F3 0F 11 /r */
-    x64_emit8(&ctx->buf, 0xF3);
-    if (X64_SCRATCH_XMM > 7 || addr > 7)
-        x64_emit8(&ctx->buf, 0x40 | ((X64_SCRATCH_XMM > 7) ? 4 : 0) | ((addr > 7) ? 1 : 0));
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, 0x11);
-    x64_modrm_mem(&ctx->buf, X64_SCRATCH_XMM & 7, addr, 0);
+    x64_cvtsd2ss(&ctx->buf, X64_SCRATCH_XMM, fm);
+    x64_movss_mr(&ctx->buf, addr, 0, X64_SCRATCH_XMM);
 }
 
 /* ========== Coro/context access ========== */
@@ -726,7 +710,7 @@ static void x64_h_coro(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "x64_h_coro: unreachable opcode");
+            CODEGEN_CHECK(ctx, false, "x64_h_coro: unreachable opcode");
             break;
     }
 }
@@ -965,7 +949,7 @@ static void x64_h_guard(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         default:
-            XR_DCHECK(false, "x64_h_guard: unreachable opcode");
+            CODEGEN_CHECK(ctx, false, "x64_h_guard: unreachable opcode");
             break;
     }
 }
@@ -977,13 +961,12 @@ static void x64_h_deopt(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_emit_deopt_id(ctx, ins);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE9);
-    p->emit_pos = ctx->buf.pos;
+    x64_jmp_rel32(&ctx->buf, 0);
+    p->emit_pos = ctx->buf.pos - 4;
     p->target_blk = 0;
     p->type = X64_PATCH_DEOPT_JMP;
     p->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_deopt = true;
 }
 
@@ -1059,20 +1042,19 @@ static void x64_h_rt_arith(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 break;
             }
             default:
-                XR_DCHECK(false, "x64_h_rt_arith: unreachable float op");
+                CODEGEN_CHECK(ctx, false, "x64_h_rt_arith: unreachable float op");
                 break;
         }
     } else {
         x64_emit_deopt_id(ctx, ins);
         CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
         X64BranchPatch *p = &ctx->patches[ctx->npatch];
-        x64_emit8(&ctx->buf, 0xE9);
-        p->emit_pos = ctx->buf.pos;
+        x64_jmp_rel32(&ctx->buf, 0);
+        p->emit_pos = ctx->buf.pos - 4;
         p->target_blk = 0;
         p->type = X64_PATCH_DEOPT_JMP;
         p->cc = X64_CC_E;
         ctx->npatch++;
-        x64_emit32(&ctx->buf, 0);
         ctx->has_deopt = true;
     }
 }
@@ -1132,30 +1114,30 @@ static void x64_h_rt_cmp(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             fb = X64_XMM15;
             x64_cvtsi2sd(&ctx->buf, fb, gb);
         }
-        x64_ucomisd(&ctx->buf, fa, fb);
-        X64Cond cc;
+        XmOp cmp_op = XM_FEQ;
         if (ins->op == XM_RT_LT)
-            cc = X64_CC_B;
+            cmp_op = XM_FLT;
         else if (ins->op == XM_RT_LE)
-            cc = X64_CC_BE;
-        else
-            cc = X64_CC_E;
-        x64_xor_rr(&ctx->buf, rd, rd);
-        x64_emit8(&ctx->buf, (rd > 7) ? 0x41 : 0x40);
-        x64_emit8(&ctx->buf, 0x0F);
-        x64_emit8(&ctx->buf, (uint8_t) (0x90 | cc));
-        x64_emit8(&ctx->buf, (uint8_t) (0xC0 | ((uint8_t) rd & 7)));
+            cmp_op = XM_FLE;
+        bool ok;
+        if (rd == X64_SCRATCH_REG) {
+            x64_push_r(&ctx->buf, X64_RAX);
+            ok = xm_dispatch_emit_x64_fcmp_rr_cc(cmp_op, &ctx->buf, rd, fa, fb, X64_RAX);
+            x64_pop_r(&ctx->buf, X64_RAX);
+        } else {
+            ok = xm_dispatch_emit_x64_fcmp_rr_cc(cmp_op, &ctx->buf, rd, fa, fb, X64_SCRATCH_REG);
+        }
+        CODEGEN_CHECK(ctx, ok, "x64 generated runtime fcmp_rr_cc dispatch rejected op");
     } else {
         x64_emit_deopt_id(ctx, ins);
         CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
         X64BranchPatch *p = &ctx->patches[ctx->npatch];
-        x64_emit8(&ctx->buf, 0xE9);
-        p->emit_pos = ctx->buf.pos;
+        x64_jmp_rel32(&ctx->buf, 0);
+        p->emit_pos = ctx->buf.pos - 4;
         p->target_blk = 0;
         p->type = X64_PATCH_DEOPT_JMP;
         p->cc = X64_CC_E;
         ctx->npatch++;
-        x64_emit32(&ctx->buf, 0);
         ctx->has_deopt = true;
     }
 }
@@ -1190,13 +1172,12 @@ static void x64_h_rt_collection(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p_an = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE8);
-    p_an->emit_pos = ctx->buf.pos;
+    x64_call_rel32(&ctx->buf, 0);
+    p_an->emit_pos = ctx->buf.pos - 4;
     p_an->target_blk = 0;
     p_an->type = X64_PATCH_CALL_C;
     p_an->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_call_c = true;
 
     if (xm_ref_is_vreg(ins->dst)) {
@@ -1271,13 +1252,12 @@ static void x64_h_rt_array_push(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p_ap = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE8);
-    p_ap->emit_pos = ctx->buf.pos;
+    x64_call_rel32(&ctx->buf, 0);
+    p_ap->emit_pos = ctx->buf.pos - 4;
     p_ap->target_blk = 0;
     p_ap->type = X64_PATCH_CALL_C;
     p_ap->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_call_c = true;
 }
 
@@ -1443,10 +1423,8 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     /* Check result: RAX == 0 -> blocked, RAX != 0 -> inline resume */
     x64_test_rr(&ctx->buf, X64_RAX, X64_RAX);
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, (uint8_t) (0x80 | X64_CC_NE));
-    uint32_t jne_not_blocked = ctx->buf.pos;
-    x64_emit32(&ctx->buf, 0);
+    x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);
+    uint32_t jne_not_blocked = ctx->buf.pos - 4;
 
     /* Blocked path: return SUSPEND_MARKER */
     x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t) XM_SUSPEND_MARKER);
@@ -1512,13 +1490,12 @@ static void x64_h_barrier_fwd(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         x64_mov_rr(&ctx->buf, X64_RCX, child_reg);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *bp = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE8);
-    bp->emit_pos = ctx->buf.pos;
+    x64_call_rel32(&ctx->buf, 0);
+    bp->emit_pos = ctx->buf.pos - 4;
     bp->target_blk = 0;
     bp->type = X64_PATCH_BARRIER_FWD;
     bp->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_barriers = true;
 }
 
@@ -1529,13 +1506,12 @@ static void x64_h_barrier_back(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, container_reg);
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *bp = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0xE8);
-    bp->emit_pos = ctx->buf.pos;
+    x64_call_rel32(&ctx->buf, 0);
+    bp->emit_pos = ctx->buf.pos - 4;
     bp->target_blk = 0;
     bp->type = X64_PATCH_BARRIER_BACK;
     bp->cc = X64_CC_E;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0);
     ctx->has_barriers = true;
 }
 
@@ -1736,16 +1712,26 @@ XR_FUNC void x64_emit_xm_ins(X64CodegenCtx *ctx, XmIns *ins) {
     CODEGEN_CHECK(ctx, ins != NULL, "x64_emit_xm_ins: NULL ins");
     X64Reg rd = x64_get_reg(ctx, ins->dst);
 
-    XR_DCHECK(ins->op >= 0 && ins->op < XM_OP_COUNT, "x64_emit_xm_ins: op out of range");
+    CODEGEN_CHECK(ctx, ins->op < XM_OP_COUNT, "x64_emit_xm_ins: op out of range");
+    const XmDispatchMeta *meta = xm_dispatch_meta_find((XmOp) ins->op, XM_DISPATCH_BACKEND_X64);
+    if (!meta) {
+        xr_log_warning("x64-cg", "missing generated dispatch metadata for %s (%u)",
+                       xm_op_name(ins->op), (uint32_t) ins->op);
+        CODEGEN_CHECK(ctx, false, "missing generated dispatch metadata");
+    }
     X64InsHandler handler = x64_ins_handlers[ins->op];
     if (handler) {
         uint32_t pos_before = ctx->buf.pos;
         handler(ctx, ins, rd);
         /* Byte self-check: non-metadata ops must emit ≥ 1 byte */
         if (ctx->buf.pos == pos_before && !x64_op_allows_zero_emit(ins->op)) {
+            xr_log_warning("x64-cg", "handler emitted 0 bytes for %s; declared mcinsns=%s",
+                           xm_op_name(ins->op), meta->mcinsns);
             CODEGEN_CHECK(ctx, false, "x64 handler emitted 0 bytes for non-metadata op");
         }
     } else {
+        xr_log_warning("x64-cg", "unhandled %s in generated dispatch metadata; mcinsns=%s",
+                       xm_op_name(ins->op), meta->mcinsns);
         CODEGEN_CHECK(ctx, false, "unhandled Xm opcode in x64 backend");
     }
 }

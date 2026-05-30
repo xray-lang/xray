@@ -35,6 +35,7 @@
 #include "../ir/xi_pipeline.h"
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
+#include "xi_lto.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
 #include <string.h>
@@ -337,6 +338,14 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     /* --- Resolve XI_IMPORT_REF using graph (before graph is freed) --- */
     for (int ti = 0; ti < nmodules; ti++) {
         xi_resolve_imports(ir_funcs[ti], graph, paths[ti], modules, nmodules);
+    }
+
+    /* --- Cross-module LTO: direct-bind imported callees --- */
+    {
+        XiLtoContext lto;
+        if (xi_lto_context_init(&lto, modules, (uint32_t) nmodules))
+            (void) xi_lto_link_modules(&lto);
+        xi_lto_context_free(&lto);
     }
 
     /* Graph ASTs must not be freed before compilation is done.

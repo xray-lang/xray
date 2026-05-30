@@ -461,6 +461,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_CALL] = xi_emit_call,
     [XI_CALL_METHOD] = xi_emit_call_method,
     [XI_CALL_METHOD_DIRECT] = xi_emit_call_method_direct,
+    [XI_TAIL_CALL] = xi_emit_tail_call,
     [XI_CALL_BUILTIN] = xi_emit_call_builtin,
     [XI_EXTRACT] = xi_emit_extract,
     [XI_CLOSURE_NEW] = xi_emit_closure_new,

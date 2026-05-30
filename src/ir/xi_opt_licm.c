@@ -204,6 +204,7 @@ static bool block_append_value(XiBlock *blk, XiValue *v) {
         blk->values_cap = new_cap;
     }
     blk->values[blk->nvalues++] = v;
+    v->block = blk;
     return true;
 }
 

@@ -14,6 +14,7 @@
 
 #include "xm_jit.h"
 #include "xm_jit_internal.h"
+#include "xm_jit_debug.h"
 #include "xm.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
@@ -695,6 +696,8 @@ void xm_jit_install_bg_result(XrProto *proto) {
         .nosr = bgr->nosr,
     };
     xm_jit_install_to_proto(proto, &idata);
+    const char *fname = proto->name ? XR_STRING_CHARS(proto->name) : "?";
+    jit_debug_register(fname, bgr->code, bgr->code_size, bgr->fast_entry_offset);
     xr_free(bgr);
 }
 

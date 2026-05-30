@@ -1,0 +1,100 @@
+// Test: S8.1 call ABI parity — JIT call convention matches VM for
+// various argument counts, types, and return types.
+
+fn no_args() -> int {
+    return 42
+}
+
+fn one_arg(x: int) -> int {
+    return x + 1
+}
+
+fn two_args(a: int, b: int) -> int {
+    return a * b
+}
+
+fn many_args(a: int, b: int, c: int, d: int, e: int, f: int) -> int {
+    return a + b + c + d + e + f
+}
+
+fn float_args(x: float, y: float) -> float {
+    return x + y
+}
+
+fn mixed_args(a: int, b: float, c: int) -> float {
+    return b + a + c
+}
+
+fn string_arg(s: string) -> int {
+    return s.length
+}
+
+fn returns_string(x: int) -> string {
+    return "v=" + string(x)
+}
+
+fn returns_bool(x: int) -> bool {
+    return x > 10
+}
+
+// Chain: JIT calls JIT calls JIT (multi-frame ABI)
+fn chain_c(x: int) -> int {
+    return x * 3
+}
+fn chain_b(x: int) -> int {
+    return chain_c(x) + 1
+}
+fn chain_a(x: int) -> int {
+    return chain_b(x) + 2
+}
+
+@test
+fn test_abi_no_args() {
+    assert_eq(no_args(), 42)
+}
+
+@test
+fn test_abi_one_arg() {
+    assert_eq(one_arg(10), 11)
+}
+
+@test
+fn test_abi_two_args() {
+    assert_eq(two_args(6, 7), 42)
+}
+
+@test
+fn test_abi_many_args() {
+    assert_eq(many_args(1, 2, 3, 4, 5, 6), 21)
+}
+
+@test
+fn test_abi_float_args() {
+    assert_eq(float_args(1.5, 2.5), 4.0)
+}
+
+@test
+fn test_abi_mixed_args() {
+    assert_eq(mixed_args(10, 3.14, 20), 33.14)
+}
+
+@test
+fn test_abi_string_arg() {
+    assert_eq(string_arg("hello"), 5)
+}
+
+@test
+fn test_abi_returns_string() {
+    assert_eq(returns_string(42), "v=42")
+}
+
+@test
+fn test_abi_returns_bool() {
+    assert_eq(returns_bool(20), true)
+    assert_eq(returns_bool(5), false)
+}
+
+@test
+fn test_abi_chain() {
+    assert_eq(chain_a(10), 33)
+}

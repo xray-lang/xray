@@ -208,6 +208,244 @@ TEST(polynomial_iv_marker) {
     xi_func_free(fx.f);
 }
 
+/* ========== Trip Count Tests ========== */
+
+typedef struct TripCountFixture {
+    XiFunc *f;
+    XiBlock *entry;
+    XiBlock *header;
+    XiBlock *body;
+    XiBlock *exit_blk;
+    XiPhi *phi;
+    XiValue *start_val;
+    XiValue *limit_val;
+    XiValue *step_val;
+    XiValue *next;
+    XiValue *cond;
+} TripCountFixture;
+
+static bool make_trip_count_loop(TripCountFixture *fx, int64_t start, int64_t limit, int64_t step,
+                                 uint16_t step_op, uint16_t cmp_op) {
+    fx->f = xi_func_new("trip_count_test", &stub_int);
+    if (!fx->f)
+        return false;
+    fx->entry = xi_block_new(fx->f);
+    fx->header = xi_block_new(fx->f);
+    fx->body = xi_block_new(fx->f);
+    fx->exit_blk = xi_block_new(fx->f);
+    if (!fx->entry || !fx->header || !fx->body || !fx->exit_blk)
+        return false;
+
+    fx->start_val = xi_const_int(fx->f, fx->entry, start, &stub_int);
+    fx->limit_val = xi_const_int(fx->f, fx->header, limit, &stub_int);
+    fx->step_val = xi_const_int(fx->f, fx->entry, step, &stub_int);
+    if (!fx->start_val || !fx->limit_val || !fx->step_val)
+        return false;
+
+    xi_block_set_jump(fx->entry, fx->header);
+
+    fx->phi = xi_phi_new(fx->f, fx->header, &stub_int, fx->header->npreds + 1);
+    if (!fx->phi)
+        return false;
+
+    fx->cond = xi_binary(fx->f, fx->header, cmp_op, &stub_bool, &fx->phi->value, fx->limit_val);
+    if (!fx->cond)
+        return false;
+
+    xi_block_set_if(fx->header, fx->cond, fx->body, fx->exit_blk);
+    xi_block_set_jump(fx->body, fx->header);
+
+    fx->next = xi_binary(fx->f, fx->body, step_op, &stub_int, &fx->phi->value, fx->step_val);
+    if (!fx->next)
+        return false;
+
+    int pre_idx = pred_index(fx->header, fx->entry);
+    int latch_idx = pred_index(fx->header, fx->body);
+    if (pre_idx < 0 || latch_idx < 0)
+        return false;
+    fx->phi->value.args[pre_idx] = fx->start_val;
+    fx->phi->value.args[latch_idx] = fx->next;
+
+    xi_block_set_return(fx->exit_blk, &fx->phi->value);
+    fx->entry->sealed = true;
+    fx->header->sealed = true;
+    fx->body->sealed = true;
+    fx->exit_blk->sealed = true;
+    return true;
+}
+
+TEST(trip_count_simple_lt) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 10, 1, XI_ADD, XI_LT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    ASSERT(info->nloop == 1);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 10);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_le) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 9, 1, XI_ADD, XI_LE));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 10);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_step_2) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 10, 2, XI_ADD, XI_LT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 5);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_step_3_uneven) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 10, 3, XI_ADD, XI_LT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 4);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_nonzero_start) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 5, 15, 1, XI_ADD, XI_LT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 10);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_countdown_sub) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 10, 0, 1, XI_SUB, XI_GT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 10);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_countdown_ge) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 10, 1, 1, XI_SUB, XI_GE));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 10);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_unknown_non_const_bound) {
+    LoopFixture fx = {0};
+    ASSERT(make_counted_loop(&fx, 1, XI_ADD));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(!loop->has_trip_count);
+    ASSERT(loop->trip_count == 0);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_ne_exact) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 10, 2, XI_ADD, XI_NE));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == 5);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_ne_inexact_rejected) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 10, 3, XI_ADD, XI_NE));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+    ASSERT(!loop->has_trip_count);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_api_direct_call) {
+    TripCountFixture fx = {0};
+    ASSERT(make_trip_count_loop(&fx, 0, 4, 1, XI_ADD, XI_LT));
+    ASSERT(verify_func(fx.f));
+
+    XiLoopInfo *info = compute_loop_info(fx.f);
+    ASSERT(info != NULL);
+    XiLoop *loop = info->all_loops[0];
+
+    uint32_t tc = xi_loop_trip_count(loop);
+    ASSERT(tc == 4);
+    ASSERT(loop->has_trip_count);
+    ASSERT(loop->trip_count == tc);
+
+    xi_loopinfo_free(info);
+    xi_func_free(fx.f);
+}
+
+TEST(trip_count_null_safety) {
+    ASSERT(xi_loop_trip_count(NULL) == 0);
+}
+
 TEST(reject_loop_variant_step) {
     LoopFixture fx = {0};
     ASSERT(make_counted_loop(&fx, 1, XI_ADD));
@@ -236,6 +474,20 @@ int main(void) {
     run_derived_linear_ivs();
     run_polynomial_iv_marker();
     run_reject_loop_variant_step();
+
+    printf("\n--- Trip Count Tests ---\n\n");
+    run_trip_count_simple_lt();
+    run_trip_count_le();
+    run_trip_count_step_2();
+    run_trip_count_step_3_uneven();
+    run_trip_count_nonzero_start();
+    run_trip_count_countdown_sub();
+    run_trip_count_countdown_ge();
+    run_trip_count_unknown_non_const_bound();
+    run_trip_count_ne_exact();
+    run_trip_count_ne_inexact_rejected();
+    run_trip_count_api_direct_call();
+    run_trip_count_null_safety();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

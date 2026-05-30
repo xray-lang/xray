@@ -18,6 +18,7 @@
 #include <setjmp.h>
 #include "xm_codegen.h"
 #include "xm_codegen_internal.h"
+#include "xm_verify_post_call.h"
 #include "xm_x64.h"
 #include "xm_jit.h"
 #include "xm_regalloc.h"
@@ -241,6 +242,8 @@ typedef struct {
                                                               // suspend_id (-1=none)
     uint32_t nsuspend;                                        // number of suspend points emitted
     uint32_t resume_entry_offset;  // byte offset of resume entry (0 = none)
+
+    XmPostCallTracker post_call_tracker;
 } X64CodegenCtx;
 
 /* ========== Register Mapping ========== */

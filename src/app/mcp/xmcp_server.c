@@ -399,6 +399,7 @@ XmcpServer *xmcp_server_new(const XmcpServerOptions *options) {
         xr_free(s);
         return NULL;
     }
+    s->transport.interrupt_flag = &s->shutdown;
     s->log_level = 2; /* info */
 
     /* Disable stdout buffering so responses reach the client immediately */
@@ -461,7 +462,7 @@ int xmcp_server_run(XmcpServer *s) {
         if (status == XMCP_STDIO_READ_TOO_LARGE) {
             mcp_log(s, 0, "input line exceeds MCP stdio limit");
             mcp_send_error(s, NULL, XMCP_ERR_INVALID_REQ, "Invalid Request: message too large");
-            break;
+            continue;
         }
         if (status != XMCP_STDIO_READ_OK) {
             mcp_log(s, 0, "stdio read error");

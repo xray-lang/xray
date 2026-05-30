@@ -106,7 +106,7 @@ typedef struct XiPassDesc {
 /* ========== Per-Pass Statistics ========== */
 
 /* Maximum number of distinct passes tracked in a single pipeline run. */
-#define XI_MAX_PASS_STATS 32
+#define XI_MAX_PASS_STATS 48
 
 typedef struct XiPassStats {
     const char *name;     /* pass name (from XiPassDesc) */

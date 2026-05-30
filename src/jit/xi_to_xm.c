@@ -36,6 +36,7 @@
 #include "../vm/xic_method.h"
 #include "../runtime/class/xmethod.h"
 #include "../runtime/closure/xclosure.h"
+#include "xm_pic.h"
 #include <string.h>
 
 /* ========== Lowering Context ========== */
@@ -260,18 +261,57 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
 
 /* ========== IC Query Helpers ========== */
 
+/* Attach a PIC to the XmFunc from an IC method table entry.
+ * Returns the pic_table index (used as PIC ID in codegen), or -1 on failure. */
+static int attach_pic(LowerCtx *ctx, const XrICMethod *ic) {
+    if (!ic || ic->count < 2 || ic->is_megamorphic)
+        return -1;
+    XmFunc *func = ctx->xm_func;
+    if (func->npic >= func->pic_cap) {
+        uint32_t new_cap = func->pic_cap ? func->pic_cap * 2 : 4;
+        struct XmPic *new_tbl = xr_malloc(new_cap * sizeof(struct XmPic));
+        if (!new_tbl)
+            return -1;
+        if (func->pic_table) {
+            memcpy(new_tbl, func->pic_table, func->npic * sizeof(struct XmPic));
+            xr_free(func->pic_table);
+        }
+        func->pic_table = new_tbl;
+        func->pic_cap = new_cap;
+    }
+    uint32_t idx = func->npic++;
+    xm_pic_import_ic_method(&func->pic_table[idx], ic);
+    return (int) idx;
+}
+
 /* Look up method IC for a given bytecode instruction offset.
  * Returns the IC entry if monomorphic (single klass), NULL otherwise. */
+static int ic_method_speculate_index(const XrICMethod *ic) {
+    if (!ic || ic->count == 0 || ic->is_megamorphic)
+        return -1;
+    if (ic->count == 1)
+        return 0;
+
+    int best = 0;
+    for (int i = 1; i < ic->count; i++) {
+        if (ic->entries[i].hit_count > ic->entries[best].hit_count)
+            best = i;
+    }
+    return best;
+}
+
 static const XrICMethod *ic_method_lookup(const LowerCtx *ctx, int bc_pc) {
     if (!ctx->ic || !ctx->ic->ic_methods || bc_pc < 0)
         return NULL;
     XrICMethod *ic = xr_ic_method_table_get(ctx->ic->ic_methods, bc_pc);
     if (!ic)
         return NULL;
-    /* Only speculate on monomorphic call sites (exactly 1 klass seen) */
-    if (ic->count != 1 || ic->is_megamorphic)
+    if (ic->count == 0 || ic->is_megamorphic)
         return NULL;
-    if (!ic->entries[0].klass || !ic->entries[0].method)
+    int idx = ic_method_speculate_index(ic);
+    if (idx < 0)
+        return NULL;
+    if (!ic->entries[idx].klass || !ic->entries[idx].method)
         return NULL;
     return ic;
 }
@@ -647,9 +687,10 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         int bc_pc = slot_map_bc_pc(ctx, v->id);
         const XrICMethod *mic = ic_method_lookup(ctx, bc_pc);
         if (mic) {
-            XR_DCHECK(mic->count == 1, "method IC must be monomorphic here");
-            XrClass *klass = mic->entries[0].klass;
-            XrMethod *method = mic->entries[0].method;
+            int ic_idx = ic_method_speculate_index(mic);
+            XR_DCHECK(ic_idx >= 0 && ic_idx < mic->count, "method IC speculate index out of range");
+            XrClass *klass = mic->entries[ic_idx].klass;
+            XrMethod *method = mic->entries[ic_idx].method;
             XR_DCHECK(klass != NULL && method != NULL, "method IC entry must be non-null");
 
             /* Only speculate on closure methods with a valid proto */
@@ -734,15 +775,19 @@ generic_call:
         int method_sym = (int) (v->aux_int >> 1);
         XR_DCHECK(method_sym > 0, "XI_CALL_METHOD: method_sym=0, lowering failed to "
                                   "resolve SymbolId");
-        /* super.method() needs to walk the parent class chain, but
-         * xr_jit_invoke_method only resolves on the receiver's own class.
-         * No JIT helper exists yet for super dispatch — bail and let the
-         * VM's vm_superinvoke handle it. */
         if (is_super) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
         }
         int bc_pc = slot_map_bc_pc(ctx, v->id);
+
+        /* Attach PIC for poly call sites so codegen can emit fast dispatch. */
+        if (ctx->ic && ctx->ic->ic_methods && bc_pc >= 0) {
+            XrICMethod *mic = xr_ic_method_table_get(ctx->ic->ic_methods, bc_pc);
+            if (mic && mic->count >= 2 && !mic->is_megamorphic)
+                attach_pic(ctx, mic);
+        }
+
         uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
         int64_t encoded = ((int64_t) method_sym << 32) | ((int64_t) (did & 0xFFFF) << 16) |
                           ((int64_t) nargs & 0xFF);
@@ -1707,6 +1752,12 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
         if (!xi_blk)
             continue;
         XmBlock *xm_blk = get_block(&ctx, xi_blk);
+
+        /* Propagate Xi block frequency to Xm for codegen fall-through decisions. */
+        if (xi_blk->frequency > 0) {
+            uint32_t freq = xi_blk->frequency;
+            xm_blk->branch_taken_pct = (freq > 100) ? 100 : (uint8_t) freq;
+        }
 
         /* Snapshot handler before lowering (XI_TRY may change depth).
          * If this block is itself the handler of the topmost try (catch

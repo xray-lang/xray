@@ -19,14 +19,14 @@
  *       [then values] + [else values] + XI_SELECT per phi
  *     join_blk: phis removed, predecessors = [ifblk only]
  *
- *   Iterates up to 3 rounds for nested diamond flattening.
+ *   Single-pass: nested diamonds are handled by jump_threading +
+ *   block_simplify, so IfConv only needs one scan.
  */
 
 #include "xi_opt_ifconv.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 
-#define IFCONV_MAX_ROUNDS 3
 #define IFCONV_MAX_INS 2
 #define IFCONV_MAX_PHIS 2
 
@@ -177,11 +177,9 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
     if (f->nblocks < 3)
         return xi_pass_no_change();
 
-    bool ever_converted = false;
+    bool converted_any = false;
 
-    for (int round = 0; round < IFCONV_MAX_ROUNDS; round++) {
-        bool converted_any = false;
-
+    {
         for (uint32_t bi = 0; bi < f->nblocks; bi++) {
             XiBlock *ifblk = f->blocks[bi];
             if (ifblk->kind != XI_BLOCK_IF)
@@ -271,14 +269,10 @@ XR_FUNC XiPassChange xi_opt_ifconv(XiFunc *f) {
             join_blk->phis = NULL; /* phis replaced by selects */
 
             converted_any = true;
-            ever_converted = true;
         }
-
-        if (!converted_any)
-            break;
     }
 
-    if (!ever_converted)
+    if (!converted_any)
         return xi_pass_no_change();
 
     XiPassChange chg = xi_pass_no_change();

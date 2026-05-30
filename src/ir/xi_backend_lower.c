@@ -19,6 +19,7 @@
 
 #include "xi_backend.h"
 #include "xi_effect.h"
+#include "xi_vec_scalar_lower.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 
@@ -118,6 +119,9 @@ XR_FUNC void xi_backend_lower(XiFunc *f) {
         return;
 
     XR_DCHECK(f->stage >= XI_STAGE_REPPED, "xi_backend_lower: requires STAGE_REPPED");
+
+    /* Scalar-expand vector ops before other backend lowering. */
+    (void) xi_vec_scalar_lower(f);
 
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];

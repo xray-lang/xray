@@ -63,9 +63,24 @@ XR_FUNC uint32_t xi_compute_rpo(XiFunc *f) {
      * are unreachable via normal successor edges.  BFS-assign RPO
      * numbers AFTER normal blocks so they appear later in RPO order
      * than their containing try blocks.  This ensures the dominator
-     * algorithm processes predecessors before exception handlers. */
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
+     * algorithm processes predecessors before exception handlers.
+     *
+     * The BFS must process try blocks in *normal-RPO* order rather than
+     * `f->blocks[]` storage order: nested try/catch creates handlers whose
+     * predecessors live in an outer handler, so the outer must be numbered
+     * first.  XRAY_XI_SHUFFLE permutes `f->blocks[]` and would otherwise
+     * scramble that order and leave inner handlers numbered before their
+     * outer-handler predecessors, breaking the dominator pre-condition. */
+    for (uint32_t pass_rpo = 1; pass_rpo <= reachable; pass_rpo++) {
+        XiBlock *blk = NULL;
+        for (uint32_t b = 0; b < f->nblocks; b++) {
+            if (f->blocks[b]->rpo == pass_rpo) {
+                blk = f->blocks[b];
+                break;
+            }
+        }
+        if (!blk)
+            continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (!v || v->op != XI_TRY)

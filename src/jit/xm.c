@@ -142,6 +142,7 @@ void xm_func_destroy(XmFunc *func) {
     xr_free(func->consts);
     xr_free(func->const_ht);
     xr_free(func->call_arg_pool);
+    xr_free(func->pic_table);
     xr_free(func);
 }
 

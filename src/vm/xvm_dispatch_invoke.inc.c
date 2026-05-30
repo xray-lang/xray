@@ -418,11 +418,11 @@ vmcase(OP_INVOKE_DIRECT) {
         cls = *(XrClass **) xr_to_struct_ptr(receiver);
     } else {
         if (XR_UNLIKELY(!XR_IS_INSTANCE(receiver))) {
-            const char *fn =
-                (cl && cl->proto && cl->proto->name) ? cl->proto->name->data : "<anonymous>";
-            int pc_idx = (int) (pc - 1 - PROTO_CODE_BASE(cl->proto));
-            int line = (pc_idx >= 0 && pc_idx < (int) PROTO_LINE_COUNT(cl->proto))
-                           ? PROTO_LINE(cl->proto, pc_idx)
+            XrProto *cur_proto = cl ? cl->proto : NULL;
+            const char *fn = (cur_proto && cur_proto->name) ? cur_proto->name->data : "<anonymous>";
+            int pc_idx = (cur_proto && pc) ? (int) (pc - 1 - PROTO_CODE_BASE(cur_proto)) : -1;
+            int line = (cur_proto && pc_idx >= 0 && pc_idx < (int) PROTO_LINE_COUNT(cur_proto))
+                           ? PROTO_LINE(cur_proto, pc_idx)
                            : 0;
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD,
                              "direct invoke receiver is not an instance in %s at pc %d line %d", fn,

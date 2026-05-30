@@ -27,6 +27,7 @@
  */
 
 #include "xi_opt_inline.h"
+#include "xi_ic.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -49,7 +50,8 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             const XiValue *v = blk->values[vi];
             if (!v)
                 continue;
-            if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_BUILTIN)
+            if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
+                v->op == XI_CALL_BUILTIN)
                 m.call_count++;
             if (v->op == XI_THROW)
                 m.has_throw = true;
@@ -107,6 +109,15 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
     if (site->single_call_site)
         score += 10;
 
+    /* IC-guided bonuses: hot monomorphic sites are strongly favoured. */
+    if (site->ic_kind == 1 /* XI_IC_MONO */) {
+        score += 20;
+        if (site->ic_hit_count > 100)
+            score += 10;
+    } else if (site->ic_kind == 2 /* XI_IC_POLY */) {
+        score += 5;
+    }
+
     score -= (int) cost->call_count * 3;
     score -= (int) cost->branch_count * 2;
     if (cost->has_loop)
@@ -115,6 +126,11 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
         score -= 5;
     if (site->caller_size > 300)
         score -= 15;
+
+    /* Deopt cost penalty: high guard miss-rate sites are less attractive.
+     * A penalty > 50 strongly discourages inlining unstable speculations. */
+    if (site->guard_penalty > 0.0f)
+        score -= (int) (site->guard_penalty * 0.1f);
 
     return score;
 }
@@ -528,7 +544,17 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 .all_args_const = all_args_are_const(v),
                 .single_call_site = false, /* conservative: unknown */
                 .caller_size = caller_size,
+                .ic_kind = 0,
+                .ic_hit_count = 0,
+                .guard_penalty = 0.0f,
             };
+
+            /* Populate IC profile data when available. */
+            const XiIcMeta *ic = xi_ic_lookup(f, v->id);
+            if (ic) {
+                si.ic_kind = (uint8_t) ic->kind;
+                si.ic_hit_count = ic->total_count;
+            }
 
             if (xi_inline_benefit(&cm, &si) <= 0)
                 continue;

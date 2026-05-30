@@ -209,3 +209,21 @@ fn test_match_no_branch_throws() {
     }
     assert_eq(caught, true)
 }
+
+@test
+fn test_match_block_arm_return() {
+    fn classify(n: int) -> string {
+        match (n) {
+            1 -> {
+                return "one"
+            }
+            _ -> {
+                return "other"
+            }
+        }
+        return "unreachable"
+    }
+
+    assert_eq(classify(1), "one")
+    assert_eq(classify(2), "other")
+}

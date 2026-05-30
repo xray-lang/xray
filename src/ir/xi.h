@@ -106,6 +106,8 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
 #define XI_INV_RANGE_ANNOTATED                                                                     \
     ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
+#define XI_INV_IC_ATTACHED                                                                         \
+    ((XiInvariantMask) (1u << 12)) /* call-site values carry IC snapshot metadata */
 
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
@@ -263,6 +265,11 @@ typedef enum {
                      * aux_int bits 8-15: nresults (0 means 1) */
     XI_CALL_METHOD, /* method call: args[0]=recv, aux_int=(sym<<1)|super, args[1..n]=params */
     XI_CALL_METHOD_DIRECT,
+    XI_TAIL_CALL,    /* general tail call: args[0]=callee, args[1..n]=params
+                      * Terminates the function — semantically a call + return.
+                      * The current frame is cleaned up (ARC release) before
+                      * transferring control.  aux_int mirrors XI_CALL encoding.
+                      * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
     XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
     XI_EXTRACT,      /* extract i-th result from multi-return call:
                       * args[0]=call_value, aux_int=result_index (zero-based offset) */
@@ -387,6 +394,23 @@ typedef enum {
      * OP_LOCK_THREAD, OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
 
+    /* Speculative guard: deopt if runtime type ≠ expected type.
+     * args[0] = guarded value (tagged object).
+     * aux     = expected XrClass* (cast from pointer).
+     * Result  = args[0] re-typed to the narrower type.
+     * Inserted by xi_opt_spec_narrow when mono IC indicates a dominant
+     * receiver type.  Backend emits a type check + deopt side exit. */
+    XI_GUARD_TYPE,
+
+    /* SIMD / Vector ops for SLP vectorization.
+     * VF (vector factor) is encoded in aux_int.
+     * All vec ops operate on contiguous memory. */
+    XI_VEC_LOAD,  /* args[0]=base, args[1]=start_idx, aux_int=VF */
+    XI_VEC_STORE, /* args[0]=base, args[1]=vec_val, args[2]=start_idx, aux_int=VF */
+    XI_VEC_ADD,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+    XI_VEC_SUB,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+    XI_VEC_MUL,   /* args[0]=vec_a, args[1]=vec_b, aux_int=VF */
+
     XI_OP_COUNT /* sentinel */
 } XiOp;
 
@@ -468,6 +492,7 @@ typedef enum {
 #define XI_FLAG_READS_MEM (1 << 3)   /* reads heap memory (load_field, index_get, ...) */
 #define XI_FLAG_WRITES_MEM (1 << 4)  /* writes heap memory (store_field, index_set, ...) */
 #define XI_FLAG_TAIL (1 << 5)        /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
+#define XI_FLAG_SPEC_CONST (1 << 6)  /* value is speculated constant (IC-guided, SCCP may fold) */
 
 /* Composite masks for query convenience */
 #define XI_FLAG_MEM_ANY (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
@@ -598,6 +623,10 @@ typedef struct XiBlock {
      * A block is sealed when all its predecessors are known.
      * Loop headers are unsealed until the back edge is added. */
     bool sealed;
+
+    /* Profile-guided block frequency (0 = no profile).
+     * Set by xi_opt_block_layout from VM execution counts. */
+    uint32_t frequency;
 
     /* Back-pointer */
     struct XiFunc *func;
@@ -759,6 +788,12 @@ typedef struct XiFunc {
      * [0] = range table (xi_range.c), [1] = reserved.
      * Freed by xi_func_free or re-running the analysis. */
     void *analysis_data[2];
+
+    /* IC snapshot metadata: side table mapping call-site value IDs
+     * to inline cache classification from VM profiling.  Set by
+     * xi_ic_attach() before speculative passes; NULL when no IC
+     * data is available (AOT path or first-tier JIT). */
+    struct XiIcTable *ic_table;
 } XiFunc;
 
 #include "xi_core_api.h"

@@ -39,8 +39,6 @@
 
 /* ========== Forward Declarations ========== */
 
-static XiValue *lower_short_circuit(XiLower *l, AstNode *node);
-
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
  * every intermediate level up to the defining SRC_REG capture needs

@@ -549,6 +549,14 @@ XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue re
         base[a] = xr_bool(!is_ok);
         return XR_DISP_NEXT;
     }
+    if (nargs == 0 && method_symbol == SYMBOL_OK) {
+        base[a] = is_ok ? payload : xr_null();
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 0 && method_symbol == SYMBOL_ERR) {
+        base[a] = is_ok ? xr_null() : payload;
+        return XR_DISP_NEXT;
+    }
     if (nargs == 1 && method_symbol == SYMBOL_UNWRAP_OR) {
         base[a] = is_ok ? payload : base[a + 2];
         return XR_DISP_NEXT;
@@ -586,6 +594,31 @@ XR_FUNC XrDispatchAction vm_invoke_adt_instance(XrayIsolate *isolate, XrValue re
             VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "Result.map: failed to construct Ok variant");
         }
         base[a] = XR_FROM_PTR(ok_inst);
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 1 && method_symbol == SYMBOL_MAP_ERR) {
+        if (is_ok) {
+            base[a] = receiver;
+            return XR_DISP_NEXT;
+        }
+        XrValue fn_val = base[a + 2];
+        if (!xr_value_is_closure(fn_val)) {
+            VM_THROW(frame, pc, XR_ERR_TYPE_MISMATCH,
+                     "Result.mapErr() argument must be a function");
+        }
+        XrClosure *fn = xr_value_to_closure(fn_val);
+        XrValue call_args[1] = {payload};
+        XrValue mapped = xr_vm_call_closure(isolate, fn, call_args, 1);
+        XrVMContext *ctx = xr_vm_current_ctx(isolate);
+        if (!XR_IS_NULL(ctx->current_exception)) {
+            return XR_DISP_RAISE;
+        }
+        XrInstance *err_inst = xr_enum_adt_construct(isolate, enum_type, 1, &mapped, 1);
+        if (!err_inst) {
+            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY,
+                     "Result.mapErr: failed to construct Err variant");
+        }
+        base[a] = XR_FROM_PTR(err_inst);
         return XR_DISP_NEXT;
     }
 

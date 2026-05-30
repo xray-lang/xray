@@ -68,4 +68,36 @@ static inline XiEscapeLevel xi_esc_join(XiEscapeLevel a, XiEscapeLevel b) {
  * Must be called after lowering (stage >= RAW). */
 XR_FUNC void xi_escape_analyze(XiFunc *f);
 
+/* ========== Cross-Function Escape Summary ========== */
+
+/* Maximum parameter count for escape summary (beyond this, use conservative). */
+#define XI_ESC_SUMMARY_MAX_PARAMS 16
+
+/* Per-function escape summary: records the worst-case escape level
+ * for each parameter and the return value.
+ *
+ * Produced by xi_escape_compute_summary() after intraprocedural escape
+ * analysis.  Consumed by callers to avoid the conservative HEAP_ESCAPE
+ * assumption for call arguments. */
+typedef struct XiEscapeSummary {
+    uint8_t param_escape[XI_ESC_SUMMARY_MAX_PARAMS]; /* XiEscapeLevel per param */
+    uint8_t return_escape; /* escape level of values reachable from return */
+    uint8_t nparams;       /* number of valid entries in param_escape */
+    bool valid;            /* set true after successful computation */
+} XiEscapeSummary;
+
+/* Compute escape summary for f after escape analysis has run.
+ * Stores result in summary (caller-allocated).
+ * Returns true on success, false if f is NULL or has too many params. */
+XR_FUNC bool xi_escape_compute_summary(const XiFunc *f, XiEscapeSummary *summary);
+
+/* Query the escape level imposed on a call argument using the callee's
+ * summary.  Returns HEAP_ESCAPE if no summary is available (conservative). */
+static inline XiEscapeLevel xi_escape_summary_for_arg(const XiEscapeSummary *summary,
+                                                      uint16_t arg_idx) {
+    if (!summary || !summary->valid || arg_idx >= summary->nparams)
+        return XI_ESC_HEAP;
+    return (XiEscapeLevel) summary->param_escape[arg_idx];
+}
+
 #endif  // XI_ESCAPE_H

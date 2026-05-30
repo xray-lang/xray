@@ -620,6 +620,12 @@ typedef struct XmFunc {
     bool has_coro_deopt;  // contains AWAIT/SCOPE_EXIT (OSR unsafe)
     bool conservative;    // compiled in conservative mode (no type speculation)
 
+    // PIC (Polymorphic Inline Cache) dispatch table.
+    // Indexed by call-site deopt_id. Codegen emits multi-target dispatch stubs.
+    struct XmPic *pic_table;
+    uint32_t npic;
+    uint32_t pic_cap;
+
     // Suspend point tracking (for resume entry generation)
     uint32_t nsuspend;                                    // number of XM_SUSPEND instructions
     void *suspend_block_helpers[XM_MAX_SUSPEND_ENTRIES];  // per-suspend block helper fn ptr (NULL =

@@ -66,7 +66,7 @@ ISEL(MOD,  arm64,   CUSTOM,      arm64.sdiv.rrr+arm64.msub.rrrr, "rd = rn - (rn/
 ISEL(MOD,  riscv64, GP_RRR,      riscv64.rem,          "hardware remainder instruction")
 
 ISEL(NEG,  x64,     GP_R,        x64.neg.r)
-ISEL(NEG,  arm64,   GP_RRR,      arm64.sub.rrr,       "SUB rd, XZR, rm")
+ISEL(NEG,  arm64,   GP_R,        arm64.neg.rr,        "NEG rd, rm = SUB rd, XZR, rm alias")
 ISEL(NEG,  riscv64, GP_RRR,      riscv64.sub,          "SUB rd, x0, rs")
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -86,8 +86,8 @@ ISEL(XOR,  arm64,   GP_RRR,      arm64.eor.rrr)
 ISEL(XOR,  riscv64, GP_RRR,      riscv64.xor)
 
 ISEL(NOT,  x64,     GP_R,        x64.not.r)
-ISEL(NOT,  arm64,   GP_RRR,      arm64.mvn.rr,        "ORN rd, XZR, rm")
-ISEL(NOT,  riscv64, GP_RRR,      riscv64.xori,         "XORI rd, rs, -1")
+ISEL(NOT,  arm64,   GP_R,        arm64.mvn.rr,        "MVN rd, rm = ORN rd, XZR, rm alias")
+ISEL(NOT,  riscv64, CUSTOM,      riscv64.xori,         "pseudo: XORI rd, rs, -1 (imm form, not 3-reg)")
 
 ISEL(SHL,  x64,     CUSTOM,      x64.shl.rcl,         "shift count must be in CL")
 ISEL(SHL,  arm64,   GP_RRR,      arm64.lsl.rrr)
@@ -142,11 +142,11 @@ ISEL(F2I,  riscv64, CONV,        riscv64.fcvt.l.d)
 
 ISEL(EQ,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=E")
 ISEL(EQ,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=EQ")
-ISEL(EQ,   riscv64, CMP_RR_CC,   riscv64.sub+riscv64.sltiu, "rd = (rs1-rs2) == 0 → sub+sltiu(1)")
+ISEL(EQ,   riscv64, GP_CMP_DIFF_RRR, riscv64.sub+riscv64.sltiu, "rd = (rs1-rs2) == 0 → sub+sltiu(1)")
 
 ISEL(NE,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=NE")
 ISEL(NE,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=NE")
-ISEL(NE,   riscv64, CMP_RR_CC,   riscv64.sub+riscv64.sltu, "rd = (rs1-rs2) != 0 → sub+sltu(x0,rd)")
+ISEL(NE,   riscv64, GP_CMP_DIFF_RRR, riscv64.sub+riscv64.sltu, "rd = (rs1-rs2) != 0 → sub+sltu(x0,rd)")
 
 ISEL(LT,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=L")
 ISEL(LT,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=LT")
@@ -154,7 +154,7 @@ ISEL(LT,   riscv64, GP_RRR,      riscv64.slt)
 
 ISEL(LE,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=LE")
 ISEL(LE,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=LE")
-ISEL(LE,   riscv64, CMP_RR_CC,   riscv64.slt+riscv64.xori, "!(rs2 < rs1) → slt(tmp,rs2,rs1)+xori(rd,tmp,1)")
+ISEL(LE,   riscv64, GP_CMP_INV_RRR, riscv64.slt+riscv64.xori, "!(rs2 < rs1) → slt(tmp,rs2,rs1)+xori(rd,tmp,1); driver swaps rs1/rs2")
 
 ISEL(GT,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=G")
 ISEL(GT,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=GT")
@@ -162,7 +162,7 @@ ISEL(GT,   riscv64, GP_RRR,      riscv64.slt,             "swap operands: slt(rd
 
 ISEL(GE,   x64,     CMP_RR_CC,   x64.cmp.rr+x64.setcc,  "cc=GE")
 ISEL(GE,   arm64,   CMP_RR_CC,   arm64.cmp.rr+arm64.cset, "cc=GE")
-ISEL(GE,   riscv64, CMP_RR_CC,   riscv64.slt+riscv64.xori, "!(rs1 < rs2) → slt(tmp,rs1,rs2)+xori(rd,tmp,1)")
+ISEL(GE,   riscv64, GP_CMP_INV_RRR, riscv64.slt+riscv64.xori, "!(rs1 < rs2) → slt(tmp,rs1,rs2)+xori(rd,tmp,1)")
 
 # ═══════════════════════════════════════════════════════════════════════
 # Float Comparison
@@ -173,19 +173,19 @@ ISEL(GE,   riscv64, CMP_RR_CC,   riscv64.slt+riscv64.xori, "!(rs1 < rs2) → slt
 
 ISEL(FEQ,  x64,     FCMP_RR_CC,  x64.ucomisd+x64.setcc, "E && NP")
 ISEL(FEQ,  arm64,   FCMP_RR_CC,  arm64.fcmp+arm64.cset,  "cc=EQ")
-ISEL(FEQ,  riscv64, GP_RRR,      riscv64.feq.d)
+ISEL(FEQ,  riscv64, FP_CMP_RRR,  riscv64.feq.d)
 
 ISEL(FNE,  x64,     FCMP_RR_CC,  x64.ucomisd+x64.setcc, "NE || P")
 ISEL(FNE,  arm64,   FCMP_RR_CC,  arm64.fcmp+arm64.cset,  "cc=NE")
-ISEL(FNE,  riscv64, CMP_RR_CC,   riscv64.feq.d+riscv64.xori, "feq+xori(rd,rd,1)")
+ISEL(FNE,  riscv64, FP_CMP_RRR,  riscv64.feq.d+riscv64.xori, "feq+xori(rd,rd,1)")
 
 ISEL(FLT,  x64,     FCMP_RR_CC,  x64.ucomisd+x64.setcc, "B")
 ISEL(FLT,  arm64,   FCMP_RR_CC,  arm64.fcmp+arm64.cset,  "cc=MI")
-ISEL(FLT,  riscv64, GP_RRR,      riscv64.flt.d)
+ISEL(FLT,  riscv64, FP_CMP_RRR,  riscv64.flt.d)
 
 ISEL(FLE,  x64,     FCMP_RR_CC,  x64.ucomisd+x64.setcc, "BE")
 ISEL(FLE,  arm64,   FCMP_RR_CC,  arm64.fcmp+arm64.cset,  "cc=LS")
-ISEL(FLE,  riscv64, GP_RRR,      riscv64.fle.d)
+ISEL(FLE,  riscv64, FP_CMP_RRR,  riscv64.fle.d)
 
 # ═══════════════════════════════════════════════════════════════════════
 # Tagged Value / Box / Unbox

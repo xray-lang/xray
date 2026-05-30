@@ -1067,6 +1067,18 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
             desc->instance_methods[mi].closure_index = (uint32_t) pi;
             mi++;
         }
+        if (mi < cdata->ninst) {
+            desc->instance_methods[mi].name = strdup("constructor");
+            desc->instance_methods[mi].param_count = 0;
+            desc->instance_methods[mi].flags |= XMETHOD_FLAG_CONSTRUCTOR;
+            XR_DCHECK(cdata->child_idx != NULL, "child_idx must be set");
+            int pi = emit_method_proto_impl(ctx, cdata->child_idx[mi]);
+            if (pi < 0) {
+                emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                return;
+            }
+            desc->instance_methods[mi].closure_index = (uint32_t) pi;
+        }
     }
 
     /* Static methods */

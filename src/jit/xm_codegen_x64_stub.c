@@ -268,14 +268,12 @@ XR_FUNC void x64_emit_deopt_stub(X64CodegenCtx *ctx) {
 void x64_emit_deopt_jcc(X64CodegenCtx *ctx, X64Cond cc) {
     CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
     X64BranchPatch *p = &ctx->patches[ctx->npatch];
-    x64_emit8(&ctx->buf, 0x0F);
-    x64_emit8(&ctx->buf, (uint8_t) (0x80 | cc)); /* Jcc rel32 */
-    p->emit_pos = ctx->buf.pos;
+    x64_jcc_rel32(&ctx->buf, cc, 0);
+    p->emit_pos = ctx->buf.pos - 4;
     p->target_blk = 0;
     p->type = X64_PATCH_DEOPT_JCC;
     p->cc = cc;
     ctx->npatch++;
-    x64_emit32(&ctx->buf, 0); /* placeholder rel32 */
     ctx->has_deopt = true;
 }
 

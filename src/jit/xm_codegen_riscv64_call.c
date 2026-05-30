@@ -83,13 +83,15 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
             rv64_buf_emit(&ctx->buf, rv64_call(0)); /* placeholder */
             ctx->has_call_c = true;
-
+            bool rv64_cc_emitted_deopt = false;
             if (xm_helper_call_c_needs_deopt_check(ctx->func, ins)) {
-                /* Check if C helper requested deopt: if jit_ctx->deopt_id != 0 */
                 rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG2, RV64_JIT_CTX_REG,
                                                  (int32_t) XM_JIT_DEOPT_ID_OFFSET));
                 rv64_emit_deopt_branch(ctx, RV64_SCRATCH_REG2);
+                rv64_cc_emitted_deopt = true;
             }
+            xm_post_call_record(&ctx->post_call_tracker, ctx->buf.count * 4, ctx->func, ins,
+                                rv64_cc_emitted_deopt ? (XM_HPC_DEOPT | XM_HPC_SUSPEND) : 0);
 
             /* Move result payload (a0) to dst register */
             if (xm_ref_is_vreg(ins->dst)) {

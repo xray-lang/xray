@@ -156,18 +156,17 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;
+            bool a64_cc_emitted_deopt = false;
             if (xm_helper_call_c_needs_deopt_check(ctx->func, ins)) {
-                // Check if C helper requested deopt (e.g. yieldable cfunc)
                 a64_buf_emit(&ctx->buf,
                              a64_ldr_w(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
                 add_patch(ctx, PATCH_DEOPT_CBNZ, 0, SCRATCH_REG2);
                 a64_buf_emit(&ctx->buf, a64_nop());
                 ctx->has_deopt = true;
+                a64_cc_emitted_deopt = true;
             }
-            // stub returns x0=payload; tag is in jit_ctx->call_result_tag
-            // (call_c_stub stores C helper's x1 there to avoid clobbering
-            // alloc_regs[0]=x1 which may hold a live vreg across the call)
-            // Move payload to dst register
+            xm_post_call_record(&ctx->post_call_tracker, ctx->buf.count * 4, ctx->func, ins,
+                                a64_cc_emitted_deopt ? (XM_HPC_DEOPT | XM_HPC_SUSPEND) : 0);
             if (rd != A64_XZR) {
                 bool dst_fp = false;
                 if (xm_ref_is_vreg(ins->dst)) {
@@ -563,9 +562,17 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // deopt_id (set by callee's deopt stub) before C bridge retry
             uint32_t cascade_direct = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
+            // Pop frame stack to undo the fast path push at line 480.
+            // Then jump to slow_path (which doesn't push, C bridge handles it).
+            // Jump to done_skip_pop to skip done_label pop (C bridge already popped).
+            emit_jit_frame_pop(ctx);
+            uint32_t b_cascade_done_skip = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());
 
             // --- Slow path: C bridge fallback ---
             uint32_t slow_path = ctx->buf.count;
+            // C bridge (xr_jit_call_func) handles frame depth internally,
+            // so JIT codegen does NOT push/pop here.
 
             // Restore x17 = nargs (was set earlier, might be clobbered)
             if (!xm_ref_is_none(ins->args[0])) {
@@ -618,7 +625,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 a64_patch_offset(ctx, cbz_entry_idx, slow_path, true, "call_direct CBZ entry");
             ctx->buf.code[cbz_entry_idx] = a64_cbz(SCRATCH_REG, off2);
 
-            // Patch B → done
+            // Patch B → done (fast path only)
             int32_t off3 =
                 a64_patch_offset(ctx, b_done_idx, done_label, false, "call_direct B done");
             ctx->buf.code[b_done_idx] = a64_b(off3);
@@ -628,7 +635,19 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                                                      "call_direct B.EQ cascade");
             ctx->buf.code[beq_cascade_direct] = a64_b_cond(A64_CC_EQ, off_cascade_d);
 
+            // Patch B cascade_done_skip → done_skip_pop (skip done_label pop)
+            uint32_t done_skip_pop = ctx->buf.count;
+            int32_t off_cascade_skip = a64_patch_offset(ctx, b_cascade_done_skip, done_skip_pop,
+                                                        false, "call_direct B cascade_done_skip");
+            ctx->buf.code[b_cascade_done_skip] = a64_b(off_cascade_skip);
+
+            // Patch slow path fallthrough → done_skip_pop (skip done_label pop)
+            int32_t off_slow_skip = a64_patch_offset(ctx, slow_path, done_skip_pop, false,
+                                                     "call_direct slow path skip pop");
+            ctx->buf.code[slow_path] = a64_b(off_slow_skip);
+
             // Pop frame stack + restore caller's stack map in jit_ctx
+            // Only executed on fast path (slow path jumps to done_skip_pop)
             emit_jit_frame_pop(ctx);
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, A64_FP, FRAME_SMAP_PTR_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));
@@ -765,9 +784,17 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Cascade handler: clear stale deopt_id before C bridge retry
             uint32_t cascade_known = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
+            // Pop frame stack to undo the fast path push at line 719.
+            // Then jump to done_skip_pop (C bridge handles frame depth internally).
+            emit_jit_frame_pop(ctx);
+            uint32_t b_cascade_done_skip_known = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());
 
             // --- Slow path: fallback to xr_jit_call_func C bridge ---
             uint32_t slow_path = ctx->buf.count;
+            // C bridge (xr_jit_call_func) handles frame depth internally,
+            // so JIT codegen does NOT push/pop here.
+
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, nargs_val);
             a64_load_imm64(&ctx->buf, SCRATCH_REG,
                            (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
@@ -790,7 +817,20 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                                                      "call_known B.EQ cascade");
             ctx->buf.code[beq_cascade_known] = a64_b_cond(A64_CC_EQ, off_cascade_k);
 
+            // Patch B cascade_done_skip → done_skip_pop (skip done_label pop)
+            uint32_t done_skip_pop = ctx->buf.count;
+            int32_t off_cascade_skip_k =
+                a64_patch_offset(ctx, b_cascade_done_skip_known, done_skip_pop, false,
+                                 "call_known B cascade_done_skip");
+            ctx->buf.code[b_cascade_done_skip_known] = a64_b(off_cascade_skip_k);
+
+            // Patch slow path fallthrough → done_skip_pop (skip done_label pop)
+            int32_t off_slow_skip_k = a64_patch_offset(ctx, slow_path, done_skip_pop, false,
+                                                       "call_known slow path skip pop");
+            ctx->buf.code[slow_path] = a64_b(off_slow_skip_k);
+
             // Pop frame stack + restore caller's stack map in jit_ctx
+            // Only executed on fast path (slow path jumps to done_skip_pop)
             emit_jit_frame_pop(ctx);
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, A64_FP, FRAME_SMAP_PTR_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));
@@ -957,9 +997,17 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Cascade handler: clear stale deopt_id before C bridge retry
             uint32_t cascade_fast = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, JIT_CTX_REG, XM_JIT_DEOPT_ID_OFFSET));
+            // Pop frame stack to undo the fast path push at line 901.
+            // Then jump to done_skip_pop (C bridge handles frame depth internally).
+            emit_jit_frame_pop(ctx);
+            uint32_t b_cascade_done_skip_fast = ctx->buf.count;
+            a64_buf_emit(&ctx->buf, a64_nop());
 
             // --- Slow path ---
             uint32_t slow_path_fast = ctx->buf.count;
+            // C bridge (xr_jit_call_func) handles frame depth internally,
+            // so JIT codegen does NOT push/pop here.
+
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, (uint64_t) nargs_reg);
             a64_load_imm64(&ctx->buf, SCRATCH_REG,
                            (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
@@ -982,7 +1030,20 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                                                      "call_known_reg B.EQ cascade");
             ctx->buf.code[beq_cascade_fast] = a64_b_cond(A64_CC_EQ, off_cascade_f);
 
+            // Patch B cascade_done_skip → done_skip_pop (skip done_label pop)
+            uint32_t done_skip_pop = ctx->buf.count;
+            int32_t off_cascade_skip_f =
+                a64_patch_offset(ctx, b_cascade_done_skip_fast, done_skip_pop, false,
+                                 "call_known_reg B cascade_done_skip");
+            ctx->buf.code[b_cascade_done_skip_fast] = a64_b(off_cascade_skip_f);
+
+            // Patch slow path fallthrough → done_skip_pop (skip done_label pop)
+            int32_t off_slow_skip_f = a64_patch_offset(ctx, slow_path_fast, done_skip_pop, false,
+                                                       "call_known_reg slow path skip pop");
+            ctx->buf.code[slow_path_fast] = a64_b(off_slow_skip_f);
+
             // Pop frame stack + restore caller's stack map in jit_ctx
+            // Only executed on fast path (slow path jumps to done_skip_pop)
             emit_jit_frame_pop(ctx);
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, A64_FP, FRAME_SMAP_PTR_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));

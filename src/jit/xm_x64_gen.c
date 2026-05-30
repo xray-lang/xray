@@ -533,6 +533,66 @@ void x64_xorpd(X64Buf *buf, X64Xmm dst, X64Xmm src) {
     x64_modrm(buf, 0x3, (uint8_t) dst & 7, (uint8_t) src & 7);
 }
 
+/* x64.movss.rm */
+void x64_movss_rm(X64Buf *buf, X64Xmm dst, X64Reg base, int32_t disp) {
+    XR_DCHECK(buf != NULL, "x64_movss_rm: NULL buf");
+    x64_emit8(buf, 0xf3);
+    {
+        bool r = ((int) dst > 7);
+        bool b = (base > 7);
+        if (r || b)
+            x64_rex(buf, false, r, false, b);
+    }
+    x64_emit8(buf, 0x0f);
+    x64_emit8(buf, 0x10);
+    x64_modrm_mem(buf, (X64Reg) ((int) dst & 7), base, disp);
+}
+
+/* x64.movss.mr */
+void x64_movss_mr(X64Buf *buf, X64Reg base, int32_t disp, X64Xmm src) {
+    XR_DCHECK(buf != NULL, "x64_movss_mr: NULL buf");
+    x64_emit8(buf, 0xf3);
+    {
+        bool r = ((int) src > 7);
+        bool b = (base > 7);
+        if (r || b)
+            x64_rex(buf, false, r, false, b);
+    }
+    x64_emit8(buf, 0x0f);
+    x64_emit8(buf, 0x11);
+    x64_modrm_mem(buf, (X64Reg) ((int) src & 7), base, disp);
+}
+
+/* x64.cvtss2sd */
+void x64_cvtss2sd(X64Buf *buf, X64Xmm dst, X64Xmm src) {
+    XR_DCHECK(buf != NULL, "x64_cvtss2sd: NULL buf");
+    x64_emit8(buf, 0xf3);
+    {
+        bool r = ((int) dst > 7);
+        bool b = ((int) src > 7);
+        if (r || b)
+            x64_rex(buf, false, r, false, b);
+    }
+    x64_emit8(buf, 0x0f);
+    x64_emit8(buf, 0x5a);
+    x64_modrm(buf, 0x3, (uint8_t) dst & 7, (uint8_t) src & 7);
+}
+
+/* x64.cvtsd2ss */
+void x64_cvtsd2ss(X64Buf *buf, X64Xmm dst, X64Xmm src) {
+    XR_DCHECK(buf != NULL, "x64_cvtsd2ss: NULL buf");
+    x64_emit8(buf, 0xf2);
+    {
+        bool r = ((int) dst > 7);
+        bool b = ((int) src > 7);
+        if (r || b)
+            x64_rex(buf, false, r, false, b);
+    }
+    x64_emit8(buf, 0x0f);
+    x64_emit8(buf, 0x5a);
+    x64_modrm(buf, 0x3, (uint8_t) dst & 7, (uint8_t) src & 7);
+}
+
 /* ========== Combined imm8/imm32 Wrappers ========== */
 
 void x64_add_ri(X64Buf *buf, X64Reg dst, int32_t imm) {

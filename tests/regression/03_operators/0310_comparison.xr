@@ -2,6 +2,8 @@
 // 作者：xingleixu@gmail.com
 // 测试：比较运算符
 
+import math
+
 // ===== 等于 =====
 
 @test
@@ -149,5 +151,43 @@ fn test_chain_comparison() {
     let x = 5
     assert_eq(3 < x && x < 10, true)
     assert_eq(0 <= x && x <= 10, true)
+}
+
+fn rt_numeric_lt(a: int | float, b: int | float) -> bool {
+    return a < b
+}
+
+fn rt_numeric_le(a: int | float, b: int | float) -> bool {
+    return a <= b
+}
+
+fn rt_numeric_eq(a: int | float, b: int | float) -> bool {
+    return a == b
+}
+
+@test
+fn test_runtime_float_comparison_jit() {
+    for (let i = 0; i < 260; i++) {
+        assert_eq(rt_numeric_lt(1.25, 2.5), true)
+        assert_eq(rt_numeric_lt(2.5, 1.25), false)
+        assert_eq(rt_numeric_le(2.5, 2.5), true)
+        assert_eq(rt_numeric_le(3.5, 2.5), false)
+        assert_eq(rt_numeric_eq(2.5, 2.5), true)
+        assert_eq(rt_numeric_eq(2.5, 2.75), false)
+    }
+}
+
+@test
+fn test_float_nan_comparison() {
+    assert_eq(math.NAN == math.NAN, false)
+    assert_eq(math.NAN != math.NAN, true)
+    assert_eq(math.NAN < 1.0, false)
+    assert_eq(math.NAN <= 1.0, false)
+
+    for (let i = 0; i < 260; i++) {
+        assert_eq(rt_numeric_eq(math.NAN, math.NAN), false)
+        assert_eq(rt_numeric_lt(math.NAN, 1.0), false)
+        assert_eq(rt_numeric_le(math.NAN, 1.0), false)
+    }
 }
 
