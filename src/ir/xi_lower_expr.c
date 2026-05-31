@@ -254,6 +254,8 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             {"Range", XR_GLOBAL_VAR_RANGE},
             {"DateTime", XR_GLOBAL_VAR_DATETIME},
             {"Atomic", XR_GLOBAL_VAR_ATOMIC},
+            {"Result", XR_GLOBAL_VAR_RESULT},
+            {"Ordering", XR_GLOBAL_VAR_ORDERING},
         };
         for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
             if (strcmp(name, builtin_classes[i].name) == 0) {

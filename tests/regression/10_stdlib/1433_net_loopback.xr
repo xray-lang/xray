@@ -1,0 +1,74 @@
+// 1433_net_loopback.xr
+// 作者：xingleixu@gmail.com
+// 测试：TCP loopback over coroutines — yieldable handle results + cross-go handles
+//
+// 覆盖：
+//   - net.accept / net.dial / net.read / net.write 的 yieldable 返回值必须写回
+//     调用者寄存器（typeof 为 NetConn / string，而非 int / module）。
+//   - NetListener / NetConn 跨 `go` 边界传参后在子协程中仍然有效（fd >= 0，
+//     可读写），因为 handle 分配在共享 sysheap 上。
+//   - net.read 返回的二进制数据用 byteAt / ord 逐字节还原，高位字节 (>= 0x80)
+//     保持原始 octet。
+
+import net
+
+// Accept one client and echo back whatever it sends, then close.
+// `lst` and the accepted `conn` cross `go` boundaries here.
+fn acceptEcho(lst: NetListener) {
+    let conn = net.accept(lst)!
+    go serveEcho(conn)
+}
+
+fn serveEcho(c: NetConn) {
+    let data = net.read(c)!
+    net.write(c, data)
+    net.close(c)
+}
+
+@test
+fn test_loopback_echo() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    // Listener handle passed into a child coroutine (Gap 008 path).
+    go acceptEcho(lst)
+
+    // Dial / write / read are yieldable; their results must be delivered
+    // to the caller's registers (Gap 007 path).
+    let c = net.dial("127.0.0.1", port)!
+    assert_true(net.fd(c) >= 0)
+
+    let n = net.write(c, "hello")
+    assert_eq(n, 5)
+
+    let resp = net.read(c)!
+    assert_eq(resp, "hello")
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_loopback_binary_high_bytes() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    go acceptEcho(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    // "é€" = 0xC3 0xA9 0xE2 0x82 0xAC — contains high bytes.
+    net.write(c, "é€")
+
+    let resp = net.read(c)!
+    assert_eq(resp.byteLength, 5)
+    assert_eq(resp.byteAt(0).ord(), 195)
+    assert_eq(resp.byteAt(1).ord(), 169)
+    assert_eq(resp.byteAt(2).ord(), 226)
+    assert_eq(resp.byteAt(3).ord(), 130)
+    assert_eq(resp.byteAt(4).ord(), 172)
+
+    net.close(c)
+    net.close(lst)
+}

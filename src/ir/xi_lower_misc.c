@@ -25,19 +25,46 @@
 #include "../runtime/class/xenum.h"
 #include "../runtime/class/xclass.h"
 #include "../runtime/object/xstring.h"
+#include "../base/xglobal_indices.h"
 
 #include <string.h>
 #include <stdio.h>
 
 /* ========== Enum Access ========== */
 
+/* Prelude enums (Result, Ordering) have a single canonical XrEnumType bound
+ * into a VM builtin slot; they are not per-module declarations.  Returns the
+ * builtin global index, or -1 for ordinary user enums. */
+static int prelude_enum_builtin_index(const char *enum_name) {
+    if (!enum_name)
+        return -1;
+    if (strcmp(enum_name, "Result") == 0)
+        return XR_GLOBAL_VAR_RESULT;
+    if (strcmp(enum_name, "Ordering") == 0)
+        return XR_GLOBAL_VAR_ORDERING;
+    return -1;
+}
+
 XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
     EnumAccessNode *ea = &node->as.enum_access;
     XR_DCHECK(ea->enum_name != NULL, "enum access must have enum name");
 
-    /* Resolve the enum type variable, then GETPROP for the member */
-    int var_id = xi_lower_var_create(l, 0, ea->enum_name, l->type_any);
-    XiValue *enum_val = xi_lower_braun_read(l, var_id, l->cur_block);
+    /* Resolve the enum type value, then GETPROP for the member.  Prelude
+     * enums resolve to a shared builtin slot; user enums to the shared
+     * variable created by their declaration. */
+    XiValue *enum_val;
+    int builtin_idx = prelude_enum_builtin_index(ea->enum_name);
+    if (builtin_idx >= 0) {
+        enum_val = xi_value_new(l->func, l->cur_block, XI_GET_BUILTIN, l->type_any, 0);
+        if (!enum_val)
+            return NULL;
+        enum_val->aux_int = builtin_idx;
+        enum_val->aux = (void *) arena_strdup(l->func, ea->enum_name);
+        enum_val->line = (uint32_t) node->line;
+    } else {
+        int var_id = xi_lower_var_create(l, 0, ea->enum_name, l->type_any);
+        enum_val = xi_lower_braun_read(l, var_id, l->cur_block);
+    }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, result_type, 1);

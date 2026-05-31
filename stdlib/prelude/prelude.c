@@ -73,7 +73,10 @@ extern void xr_netlistener_register_class(XrayIsolate *isolate);
 
 #include "../../src/base/xglobal_indices.h"
 #include "../../src/runtime/class/xclass_system.h"
+#include "../../src/runtime/class/xclass.h"
+#include "../../src/runtime/class/xenum.h"
 #include "../../src/runtime/value/xvalue.h"
+#include "../../src/base/xmalloc.h"
 
 /* Bind a unified-class XrClass into the VM builtins slot keyed by a
  * predefined XR_GLOBAL_VAR_* index. The IR lowerer's builtin_classes
@@ -88,6 +91,87 @@ static void bind_class_global(XrayIsolate *X, int global_index, void *cls) {
         if (X->vm.builtin_count < XR_USER_GLOBALS_START)
             X->vm.builtin_count = XR_USER_GLOBALS_START;
     }
+}
+
+/* Build one canonical prelude enum and bind it into a VM builtin slot so
+ * every compilation unit (entry file and imported modules) resolves the
+ * same XrEnumType — giving cross-module `Result` / `Ordering` values a
+ * single type identity.  Replaces the former per-module AST injection,
+ * which created a distinct enum type per module and broke cross-module
+ * pattern matching.  Members/values are interned/copied by
+ * xr_enum_type_new, so the input arrays are freed here. */
+static XrEnumType *make_prelude_enum(XrayIsolate *X, const char *name, const char **member_names,
+                                     const int *member_values, int count, const int *payload_counts,
+                                     bool is_adt) {
+    char **names = (char **) xr_malloc(sizeof(char *) * (size_t) count);
+    XrValue *values = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) count);
+    if (!names || !values) {
+        xr_free(names);
+        xr_free(values);
+        return NULL;
+    }
+    for (int i = 0; i < count; i++) {
+        size_t len = strlen(member_names[i]) + 1;
+        names[i] = (char *) xr_malloc(len);
+        if (names[i])
+            memcpy(names[i], member_names[i], len);
+        values[i] = xr_int(member_values[i]);
+    }
+
+    XrEnumType *et = xr_enum_type_new(X, name, XR_TINT, names, values, count);
+
+    if (et && is_adt) {
+        et->is_adt = true;
+        et->payload_counts = (int *) xr_calloc((size_t) count, sizeof(int));
+        int max_pc = 0;
+        if (et->payload_counts) {
+            for (int i = 0; i < count; i++) {
+                int pc = payload_counts ? payload_counts[i] : 0;
+                et->payload_counts[i] = pc;
+                if (pc > max_pc)
+                    max_pc = pc;
+            }
+        }
+        et->max_payload = max_pc;
+        if (et->enum_class && max_pc > 0) {
+            et->enum_class->field_count = (uint16_t) (1 + max_pc);
+            et->enum_class->own_field_count = (uint16_t) (1 + max_pc);
+            et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
+        }
+    }
+
+    for (int i = 0; i < count; i++)
+        xr_free(names[i]);
+    xr_free(names);
+    xr_free(values);
+    return et;
+}
+
+static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
+    if (!X)
+        return;
+
+    /* Result<T, E> { Ok(T), Err(E) } — ADT enum with one payload per variant */
+    static const char *result_members[] = {"Ok", "Err"};
+    static const int result_values[] = {0, 1};
+    static const int result_payloads[] = {1, 1};
+    XrEnumType *result_et =
+        make_prelude_enum(X, "Result", result_members, result_values, 2, result_payloads, true);
+    if (result_et)
+        X->vm.builtins[XR_GLOBAL_VAR_RESULT] = XR_FROM_PTR(result_et);
+
+    /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — values
+     * must match XrAtomicOrdering. */
+    static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
+                                             "SeqCst"};
+    static const int ordering_values[] = {0, 1, 2, 3, 4};
+    XrEnumType *ordering_et =
+        make_prelude_enum(X, "Ordering", ordering_members, ordering_values, 5, NULL, false);
+    if (ordering_et)
+        X->vm.builtins[XR_GLOBAL_VAR_ORDERING] = XR_FROM_PTR(ordering_et);
+
+    if (X->vm.builtin_count < XR_USER_GLOBALS_START)
+        X->vm.builtin_count = XR_USER_GLOBALS_START;
 }
 
 void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
@@ -132,6 +216,10 @@ XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
      * usable without a separate `import datetime`, at the cost of always
      * linking those four stdlib modules into the binary. */
     xr_prelude_register_all_native_types(isolate);
+
+    /* Bind canonical Result / Ordering enum types into VM builtin slots so
+     * every module shares one identity (replaces per-module AST injection). */
+    xr_prelude_register_builtin_enums(isolate);
 
     XrModule *module = xr_module_create_native(isolate, "prelude");
     if (!module)
