@@ -441,7 +441,16 @@ XR_FUNC void xa_visit_add_symbol_checked(XaInferContext *ctx, XaSymbol *symbol, 
                                   existing->location.column == symbol->location.column;
         if (!same_source_symbol) {
             char msg[256];
-            snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope", symbol->name);
+            /* Result / Ordering are canonical builtin prelude enums bound to a
+             * single type identity; they are reserved and cannot be
+             * redeclared (the lowerer always resolves them to their builtin
+             * slot, so allowing a redefinition would silently mis-resolve). */
+            if (existing->is_builtin && existing->kind == XA_SYM_ENUM)
+                snprintf(msg, sizeof(msg),
+                         "'%s' is a builtin prelude enum and cannot be redeclared", symbol->name);
+            else
+                snprintf(msg, sizeof(msg), "Symbol '%s' is redefined in the same scope",
+                         symbol->name);
             XrLocation loc = {.file = ctx->file_path,
                               .line = line > 0 ? line : (int) symbol->location.line,
                               .column = (int) symbol->location.column};

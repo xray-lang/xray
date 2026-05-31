@@ -18,6 +18,31 @@ fn test_byte_at_out_of_bounds() {
     assert_eq(s.byteAt(100), null)
 }
 
+// ===== byteAt + ord on raw octets (binary I/O) =====
+// Single-byte strings from byteAt() on binary buffers are raw octets, not
+// UTF-8 code units. ord() must return the unsigned byte 0..255 directly,
+// never the UTF-8 replacement char (0xFFFD). codePointAt() must NOT be used
+// to recover high bytes — it UTF-8-decodes and corrupts octets >= 0x80.
+
+@test
+fn test_byte_at_ord_high_bytes() {
+    // "é" = 0xC3 0xA9, "€" = 0xE2 0x82 0xAC in UTF-8
+    let s = "é€"
+    assert_eq(s.byteLength, 5)
+    assert_eq(s.byteAt(0).ord(), 195)  // 0xC3
+    assert_eq(s.byteAt(1).ord(), 169)  // 0xA9
+    assert_eq(s.byteAt(2).ord(), 226)  // 0xE2
+    assert_eq(s.byteAt(3).ord(), 130)  // 0x82
+    assert_eq(s.byteAt(4).ord(), 172)  // 0xAC
+}
+
+@test
+fn test_byte_at_ord_ascii_matches_octet() {
+    let s = "ACGT"
+    assert_eq(s.byteAt(0).ord(), 65)
+    assert_eq(s.byteAt(3).ord(), 84)
+}
+
 // ===== reverse (ASCII data only — Unicode reverse is char-aware) =====
 
 @test

@@ -167,6 +167,58 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
     register_builtin_var(analyzer, "__dir__", t_string, true);
 }
 
+// Register a prelude enum symbol into the analyzer's global scope so it is
+// visible in every compilation unit (entry file and imported modules alike)
+// with a single canonical identity — mirroring how the runtime binds the
+// matching XrEnumType into a builtin global slot.  member_names are stable
+// string literals; payload_counts is copied (NULL for simple enums).
+static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const char **member_names,
+                                  int member_count, const int *payload_counts, bool is_adt) {
+    XR_DCHECK(analyzer != NULL, "register_prelude_enum: NULL analyzer");
+    XaSymbol *sym = xa_symbol_new(name, XA_SYM_ENUM);
+    sym->location.line = 0;
+    sym->is_builtin = true;
+    sym->is_const = true;
+    xa_scope_add_symbol(analyzer->global_scope, sym);
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+    if (!links)
+        return;
+    links->type = xr_type_new_enum(analyzer->isolate, name);
+    links->declared_type = links->type;
+    links->is_definitely_assigned = true;
+    links->is_adt_enum = is_adt;
+    links->enum_value_type = xr_type_new_int(NULL);
+
+    if (member_count > 0) {
+        links->enum_member_names =
+            (const char **) xr_malloc(sizeof(const char *) * (size_t) member_count);
+        for (int i = 0; i < member_count; i++)
+            links->enum_member_names[i] = member_names[i];
+        links->enum_member_count = member_count;
+
+        if (is_adt) {
+            links->enum_payload_counts = (int *) xr_calloc((size_t) member_count, sizeof(int));
+            links->enum_payload_types =
+                (XrType ***) xr_calloc((size_t) member_count, sizeof(XrType **));
+            for (int i = 0; i < member_count; i++)
+                links->enum_payload_counts[i] = payload_counts ? payload_counts[i] : 0;
+        }
+    }
+}
+
+// Register prelude ADT enums (Result) and simple enums (Ordering) so they are
+// available without a per-module declaration.  The runtime binds the matching
+// canonical XrEnumType into XR_GLOBAL_VAR_RESULT / XR_GLOBAL_VAR_ORDERING.
+static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
+    static const char *result_members[] = {"Ok", "Err"};
+    static const int result_payloads[] = {1, 1};
+    register_prelude_enum(analyzer, "Result", result_members, 2, result_payloads, true);
+
+    static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
+                                             "SeqCst"};
+    register_prelude_enum(analyzer, "Ordering", ordering_members, 5, NULL, false);
+}
+
 // Create analyzer
 XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // Ensure process-level type singletons are initialized (idempotent)
@@ -210,6 +262,10 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
 
     // Register Codegen builtin functions/constructors
     xa_register_codegen_builtins(analyzer);
+
+    // Register prelude ADT/simple enums (Result, Ordering) with single
+    // canonical identity, visible in every compilation unit.
+    xa_register_prelude_enums(analyzer);
 
     // Default options
     analyzer->strict_null_checks = false;
