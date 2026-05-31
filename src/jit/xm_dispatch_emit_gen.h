@@ -16,31 +16,36 @@ static inline bool xm_dispatch_emit_x64_gp_rr_comm(XmOp op, X64Buf *buf, X64Reg 
         case XM_ADD: {
             uint32_t _es = buf->pos;
             x64_add_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_ADD emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_ADD emitted 0 bytes");
             return true;
         }
         case XM_MUL: {
             uint32_t _es = buf->pos;
             x64_imul_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_MUL emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_MUL emitted 0 bytes");
             return true;
         }
         case XM_AND: {
             uint32_t _es = buf->pos;
             x64_and_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_AND emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_AND emitted 0 bytes");
             return true;
         }
         case XM_OR: {
             uint32_t _es = buf->pos;
             x64_or_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_OR emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_OR emitted 0 bytes");
             return true;
         }
         case XM_XOR: {
             uint32_t _es = buf->pos;
             x64_xor_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_XOR emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_XOR emitted 0 bytes");
             return true;
         }
         default:
@@ -53,7 +58,8 @@ static inline bool xm_dispatch_emit_x64_gp_rr(XmOp op, X64Buf *buf, X64Reg rd, X
         case XM_SUB: {
             uint32_t _es = buf->pos;
             x64_sub_rr(buf, rd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_SUB emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_SUB emitted 0 bytes");
             return true;
         }
         default:
@@ -61,55 +67,48 @@ static inline bool xm_dispatch_emit_x64_gp_rr(XmOp op, X64Buf *buf, X64Reg rd, X
     }
 }
 
-static inline bool xm_dispatch_emit_x64_cmp_rr_cc(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rn,
-                                                  X64Reg rm) {
+static inline bool xm_dispatch_emit_x64_cmp_rr_cc(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rn, X64Reg rm) {
     switch (op) {
         case XM_EQ: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_E, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_EQ emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_E, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_EQ emitted 0 bytes");
             return true;
         }
         case XM_NE: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_NE, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_NE emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_NE, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_NE emitted 0 bytes");
             return true;
         }
         case XM_LT: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_L, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_LT emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_L, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LT emitted 0 bytes");
             return true;
         }
         case XM_LE: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_LE, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_LE emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_LE, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LE emitted 0 bytes");
             return true;
         }
         case XM_GT: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_G, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_GT emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_G, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_GT emitted 0 bytes");
             return true;
         }
         case XM_GE: {
             uint32_t _es = buf->pos;
-            x64_cmp_rr(buf, rn, rm);
-            x64_mov_ri32(buf, rd, 0);
-            x64_setcc(buf, X64_CC_GE, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_GE emitted 0 bytes");
+            x64_cmp_rr(buf, rn, rm); x64_mov_ri32(buf, rd, 0); x64_setcc(buf, X64_CC_GE, rd);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_GE emitted 0 bytes");
             return true;
         }
         default:
@@ -117,51 +116,34 @@ static inline bool xm_dispatch_emit_x64_cmp_rr_cc(XmOp op, X64Buf *buf, X64Reg r
     }
 }
 
-static inline bool xm_dispatch_emit_x64_fcmp_rr_cc(XmOp op, X64Buf *buf, X64Reg rd, X64Xmm fn,
-                                                   X64Xmm fm, X64Reg tmp) {
+static inline bool xm_dispatch_emit_x64_fcmp_rr_cc(XmOp op, X64Buf *buf, X64Reg rd, X64Xmm fn, X64Xmm fm, X64Reg tmp) {
     switch (op) {
         case XM_FEQ: {
             uint32_t _es = buf->pos;
-            x64_xor_rr(buf, rd, rd);
-            x64_xor_rr(buf, tmp, tmp);
-            x64_ucomisd(buf, fn, fm);
-            x64_setcc(buf, X64_CC_E, rd);
-            x64_setcc(buf, X64_CC_NP, tmp);
-            x64_and_rr(buf, rd, tmp);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FEQ emitted 0 bytes");
+            x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_E, rd); x64_setcc(buf, X64_CC_NP, tmp); x64_and_rr(buf, rd, tmp);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FEQ emitted 0 bytes");
             return true;
         }
         case XM_FNE: {
             uint32_t _es = buf->pos;
-            x64_xor_rr(buf, rd, rd);
-            x64_xor_rr(buf, tmp, tmp);
-            x64_ucomisd(buf, fn, fm);
-            x64_setcc(buf, X64_CC_NE, rd);
-            x64_setcc(buf, X64_CC_P, tmp);
-            x64_or_rr(buf, rd, tmp);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FNE emitted 0 bytes");
+            x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_NE, rd); x64_setcc(buf, X64_CC_P, tmp); x64_or_rr(buf, rd, tmp);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FNE emitted 0 bytes");
             return true;
         }
         case XM_FLT: {
             uint32_t _es = buf->pos;
-            x64_xor_rr(buf, rd, rd);
-            x64_xor_rr(buf, tmp, tmp);
-            x64_ucomisd(buf, fn, fm);
-            x64_setcc(buf, X64_CC_B, rd);
-            x64_setcc(buf, X64_CC_NP, tmp);
-            x64_and_rr(buf, rd, tmp);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FLT emitted 0 bytes");
+            x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_B, rd); x64_setcc(buf, X64_CC_NP, tmp); x64_and_rr(buf, rd, tmp);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FLT emitted 0 bytes");
             return true;
         }
         case XM_FLE: {
             uint32_t _es = buf->pos;
-            x64_xor_rr(buf, rd, rd);
-            x64_xor_rr(buf, tmp, tmp);
-            x64_ucomisd(buf, fn, fm);
-            x64_setcc(buf, X64_CC_BE, rd);
-            x64_setcc(buf, X64_CC_NP, tmp);
-            x64_and_rr(buf, rd, tmp);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FLE emitted 0 bytes");
+            x64_xor_rr(buf, rd, rd); x64_xor_rr(buf, tmp, tmp); x64_ucomisd(buf, fn, fm); x64_setcc(buf, X64_CC_BE, rd); x64_setcc(buf, X64_CC_NP, tmp); x64_and_rr(buf, rd, tmp);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FLE emitted 0 bytes");
             return true;
         }
         default:
@@ -169,43 +151,34 @@ static inline bool xm_dispatch_emit_x64_fcmp_rr_cc(XmOp op, X64Buf *buf, X64Reg 
     }
 }
 
-static inline bool xm_dispatch_emit_arm64_fcmp_rr_cc(XmOp op, A64Buf *buf, A64Reg rd, A64Reg fn,
-                                                     A64Reg fm, A64Reg tmp) {
+static inline bool xm_dispatch_emit_arm64_fcmp_rr_cc(XmOp op, A64Buf *buf, A64Reg rd, A64Reg fn, A64Reg fm, A64Reg tmp) {
     switch (op) {
         case XM_FEQ: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_fcmp(fn, fm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ));
-            a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC));
-            a64_buf_emit(buf, a64_and(rd, tmp, rd));
-            XR_CHECK(buf->count - _es >= 4u, "emit self-check: XM_FEQ emitted too few");
+            a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ)); a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));
+            XR_CHECK(buf->count - _es >= 4u,
+                     "emit self-check: XM_FEQ emitted too few");
             return true;
         }
         case XM_FNE: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_fcmp(fn, fm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_NE));
-            a64_buf_emit(buf, a64_cset(tmp, A64_CC_VS));
-            a64_buf_emit(buf, a64_orr(rd, tmp, rd));
-            XR_CHECK(buf->count - _es >= 4u, "emit self-check: XM_FNE emitted too few");
+            a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_NE)); a64_buf_emit(buf, a64_cset(tmp, A64_CC_VS)); a64_buf_emit(buf, a64_orr(rd, tmp, rd));
+            XR_CHECK(buf->count - _es >= 4u,
+                     "emit self-check: XM_FNE emitted too few");
             return true;
         }
         case XM_FLT: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_fcmp(fn, fm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_MI));
-            a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC));
-            a64_buf_emit(buf, a64_and(rd, tmp, rd));
-            XR_CHECK(buf->count - _es >= 4u, "emit self-check: XM_FLT emitted too few");
+            a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_MI)); a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));
+            XR_CHECK(buf->count - _es >= 4u,
+                     "emit self-check: XM_FLT emitted too few");
             return true;
         }
         case XM_FLE: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_fcmp(fn, fm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_LS));
-            a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC));
-            a64_buf_emit(buf, a64_and(rd, tmp, rd));
-            XR_CHECK(buf->count - _es >= 4u, "emit self-check: XM_FLE emitted too few");
+            a64_buf_emit(buf, a64_fcmp(fn, fm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LS)); a64_buf_emit(buf, a64_cset(tmp, A64_CC_VC)); a64_buf_emit(buf, a64_and(rd, tmp, rd));
+            XR_CHECK(buf->count - _es >= 4u,
+                     "emit self-check: XM_FLE emitted too few");
             return true;
         }
         default:
@@ -213,49 +186,48 @@ static inline bool xm_dispatch_emit_arm64_fcmp_rr_cc(XmOp op, A64Buf *buf, A64Re
     }
 }
 
-static inline bool xm_dispatch_emit_arm64_cmp_rr_cc(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn,
-                                                    A64Reg rm) {
+static inline bool xm_dispatch_emit_arm64_cmp_rr_cc(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn, A64Reg rm) {
     switch (op) {
         case XM_EQ: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_EQ emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_EQ));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_EQ emitted too few");
             return true;
         }
         case XM_NE: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_NE));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_NE emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_NE));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_NE emitted too few");
             return true;
         }
         case XM_LT: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_LT));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_LT emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LT));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_LT emitted too few");
             return true;
         }
         case XM_LE: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_LE));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_LE emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_LE));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_LE emitted too few");
             return true;
         }
         case XM_GT: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_GT));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_GT emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_GT));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_GT emitted too few");
             return true;
         }
         case XM_GE: {
             uint32_t _es = buf->count;
-            a64_buf_emit(buf, a64_cmp(rn, rm));
-            a64_buf_emit(buf, a64_cset(rd, A64_CC_GE));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_GE emitted too few");
+            a64_buf_emit(buf, a64_cmp(rn, rm)); a64_buf_emit(buf, a64_cset(rd, A64_CC_GE));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_GE emitted too few");
             return true;
         }
         default:
@@ -263,55 +235,62 @@ static inline bool xm_dispatch_emit_arm64_cmp_rr_cc(XmOp op, A64Buf *buf, A64Reg
     }
 }
 
-static inline bool xm_dispatch_emit_arm64_gp_rrr(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn,
-                                                 A64Reg rm) {
+static inline bool xm_dispatch_emit_arm64_gp_rrr(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rn, A64Reg rm) {
     switch (op) {
         case XM_ADD: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_add(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_ADD emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_ADD emitted too few");
             return true;
         }
         case XM_SUB: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_sub(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SUB emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SUB emitted too few");
             return true;
         }
         case XM_MUL: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_mul(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_MUL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_MUL emitted too few");
             return true;
         }
         case XM_AND: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_and(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_AND emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_AND emitted too few");
             return true;
         }
         case XM_OR: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_orr(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_OR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_OR emitted too few");
             return true;
         }
         case XM_XOR: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_eor(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_XOR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_XOR emitted too few");
             return true;
         }
         case XM_SHL: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_lsl(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SHL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SHL emitted too few");
             return true;
         }
         case XM_SHR: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_asr(rd, rn, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SHR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SHR emitted too few");
             return true;
         }
         default:
@@ -319,73 +298,83 @@ static inline bool xm_dispatch_emit_arm64_gp_rrr(XmOp op, A64Buf *buf, A64Reg rd
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_gp_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1,
-                                                   Rv64Reg rs2) {
+static inline bool xm_dispatch_emit_riscv64_gp_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2) {
     switch (op) {
         case XM_ADD: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_add(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_ADD emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_ADD emitted too few");
             return true;
         }
         case XM_SUB: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_sub(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SUB emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SUB emitted too few");
             return true;
         }
         case XM_MUL: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_mul(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_MUL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_MUL emitted too few");
             return true;
         }
         case XM_AND: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_and(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_AND emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_AND emitted too few");
             return true;
         }
         case XM_OR: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_or(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_OR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_OR emitted too few");
             return true;
         }
         case XM_XOR: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_xor(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_XOR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_XOR emitted too few");
             return true;
         }
         case XM_SHL: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_sll(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SHL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SHL emitted too few");
             return true;
         }
         case XM_SHR: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_sra(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_SHR emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_SHR emitted too few");
             return true;
         }
         case XM_NEG: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_sub(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_NEG emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_NEG emitted too few");
             return true;
         }
         case XM_LT: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_LT emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LT emitted too few");
             return true;
         }
         case XM_GT: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_GT emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_GT emitted too few");
             return true;
         }
         default:
@@ -398,13 +387,15 @@ static inline bool xm_dispatch_emit_x64_fp_rr_comm(XmOp op, X64Buf *buf, X64Xmm 
         case XM_FADD: {
             uint32_t _es = buf->pos;
             x64_addsd(buf, fd, fs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FADD emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FADD emitted 0 bytes");
             return true;
         }
         case XM_FMUL: {
             uint32_t _es = buf->pos;
             x64_mulsd(buf, fd, fs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FMUL emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FMUL emitted 0 bytes");
             return true;
         }
         default:
@@ -417,13 +408,15 @@ static inline bool xm_dispatch_emit_x64_fp_rr(XmOp op, X64Buf *buf, X64Xmm fd, X
         case XM_FSUB: {
             uint32_t _es = buf->pos;
             x64_subsd(buf, fd, fs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FSUB emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FSUB emitted 0 bytes");
             return true;
         }
         case XM_FDIV: {
             uint32_t _es = buf->pos;
             x64_divsd(buf, fd, fs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_FDIV emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_FDIV emitted 0 bytes");
             return true;
         }
         default:
@@ -431,31 +424,34 @@ static inline bool xm_dispatch_emit_x64_fp_rr(XmOp op, X64Buf *buf, X64Xmm fd, X
     }
 }
 
-static inline bool xm_dispatch_emit_arm64_fp_rrr(XmOp op, A64Buf *buf, A64Reg fd, A64Reg fn,
-                                                 A64Reg fm) {
+static inline bool xm_dispatch_emit_arm64_fp_rrr(XmOp op, A64Buf *buf, A64Reg fd, A64Reg fn, A64Reg fm) {
     switch (op) {
         case XM_FADD: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fadd(fd, fn, fm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FADD emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FADD emitted too few");
             return true;
         }
         case XM_FSUB: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fsub(fd, fn, fm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FSUB emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FSUB emitted too few");
             return true;
         }
         case XM_FMUL: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fmul(fd, fn, fm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FMUL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FMUL emitted too few");
             return true;
         }
         case XM_FDIV: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fdiv(fd, fn, fm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FDIV emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FDIV emitted too few");
             return true;
         }
         default:
@@ -463,31 +459,34 @@ static inline bool xm_dispatch_emit_arm64_fp_rrr(XmOp op, A64Buf *buf, A64Reg fd
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_fp_rrr(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Freg fs1,
-                                                   Rv64Freg fs2) {
+static inline bool xm_dispatch_emit_riscv64_fp_rrr(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Freg fs1, Rv64Freg fs2) {
     switch (op) {
         case XM_FADD: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fadd_d(fd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FADD emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FADD emitted too few");
             return true;
         }
         case XM_FSUB: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fsub_d(fd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FSUB emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FSUB emitted too few");
             return true;
         }
         case XM_FMUL: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fmul_d(fd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FMUL emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FMUL emitted too few");
             return true;
         }
         case XM_FDIV: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fdiv_d(fd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FDIV emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FDIV emitted too few");
             return true;
         }
         default:
@@ -500,13 +499,15 @@ static inline bool xm_dispatch_emit_x64_gp_r(XmOp op, X64Buf *buf, X64Reg rd) {
         case XM_NOT: {
             uint32_t _es = buf->pos;
             x64_not_r(buf, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_NOT emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_NOT emitted 0 bytes");
             return true;
         }
         case XM_NEG: {
             uint32_t _es = buf->pos;
             x64_neg_r(buf, rd);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_NEG emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_NEG emitted 0 bytes");
             return true;
         }
         default:
@@ -519,13 +520,15 @@ static inline bool xm_dispatch_emit_arm64_gp_r(XmOp op, A64Buf *buf, A64Reg rd, 
         case XM_NEG: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_neg(rd, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_NEG emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_NEG emitted too few");
             return true;
         }
         case XM_NOT: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_mvn(rd, rm));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_NOT emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_NOT emitted too few");
             return true;
         }
         default:
@@ -538,7 +541,8 @@ static inline bool xm_dispatch_emit_arm64_fp_r(XmOp op, A64Buf *buf, A64Reg fd, 
         case XM_FNEG: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fneg(fd, fn));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FNEG emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FNEG emitted too few");
             return true;
         }
         default:
@@ -551,7 +555,8 @@ static inline bool xm_dispatch_emit_x64_conv_i2f(XmOp op, X64Buf *buf, X64Xmm fd
         case XM_I2F: {
             uint32_t _es = buf->pos;
             x64_cvtsi2sd(buf, fd, rs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_I2F emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_I2F emitted 0 bytes");
             return true;
         }
         default:
@@ -564,7 +569,8 @@ static inline bool xm_dispatch_emit_x64_conv_f2i(XmOp op, X64Buf *buf, X64Reg rd
         case XM_F2I: {
             uint32_t _es = buf->pos;
             x64_cvttsd2si(buf, rd, fs);
-            XR_CHECK(buf->pos > _es, "emit self-check: XM_F2I emitted 0 bytes");
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_F2I emitted 0 bytes");
             return true;
         }
         default:
@@ -577,7 +583,8 @@ static inline bool xm_dispatch_emit_arm64_conv_i2f(XmOp op, A64Buf *buf, A64Reg 
         case XM_I2F: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_scvtf(fd, rn));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_I2F emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_I2F emitted too few");
             return true;
         }
         default:
@@ -590,7 +597,8 @@ static inline bool xm_dispatch_emit_arm64_conv_f2i(XmOp op, A64Buf *buf, A64Reg 
         case XM_F2I: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_fcvtzs(rd, fn));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_F2I emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_F2I emitted too few");
             return true;
         }
         default:
@@ -598,13 +606,13 @@ static inline bool xm_dispatch_emit_arm64_conv_f2i(XmOp op, A64Buf *buf, A64Reg 
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_conv_i2f(XmOp op, Rv64Buf *buf, Rv64Freg fd,
-                                                     Rv64Reg rs) {
+static inline bool xm_dispatch_emit_riscv64_conv_i2f(XmOp op, Rv64Buf *buf, Rv64Freg fd, Rv64Reg rs) {
     switch (op) {
         case XM_I2F: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fcvt_d_l(fd, rs));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_I2F emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_I2F emitted too few");
             return true;
         }
         default:
@@ -612,13 +620,13 @@ static inline bool xm_dispatch_emit_riscv64_conv_i2f(XmOp op, Rv64Buf *buf, Rv64
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_conv_f2i(XmOp op, Rv64Buf *buf, Rv64Reg rd,
-                                                     Rv64Freg fs) {
+static inline bool xm_dispatch_emit_riscv64_conv_f2i(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Freg fs) {
     switch (op) {
         case XM_F2I: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fcvt_l_d(rd, fs));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_F2I emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_F2I emitted too few");
             return true;
         }
         default:
@@ -631,7 +639,8 @@ static inline bool xm_dispatch_emit_riscv64_fp_r(XmOp op, Rv64Buf *buf, Rv64Freg
         case XM_FNEG: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fneg_d(fd, fs));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FNEG emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FNEG emitted too few");
             return true;
         }
         default:
@@ -639,32 +648,34 @@ static inline bool xm_dispatch_emit_riscv64_fp_r(XmOp op, Rv64Buf *buf, Rv64Freg
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_fp_cmp_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd,
-                                                       Rv64Freg fs1, Rv64Freg fs2) {
+static inline bool xm_dispatch_emit_riscv64_fp_cmp_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Freg fs1, Rv64Freg fs2) {
     switch (op) {
         case XM_FEQ: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_feq_d(rd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FEQ emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FEQ emitted too few");
             return true;
         }
         case XM_FNE: {
             uint32_t _es = buf->count;
-            rv64_buf_emit(buf, rv64_feq_d(rd, fs1, fs2));
-            rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_FNE emitted too few");
+            rv64_buf_emit(buf, rv64_feq_d(rd, fs1, fs2)); rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_FNE emitted too few");
             return true;
         }
         case XM_FLT: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_flt_d(rd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FLT emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FLT emitted too few");
             return true;
         }
         case XM_FLE: {
             uint32_t _es = buf->count;
             rv64_buf_emit(buf, rv64_fle_d(rd, fs1, fs2));
-            XR_CHECK(buf->count - _es >= 1u, "emit self-check: XM_FLE emitted too few");
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_FLE emitted too few");
             return true;
         }
         default:
@@ -672,21 +683,20 @@ static inline bool xm_dispatch_emit_riscv64_fp_cmp_rrr(XmOp op, Rv64Buf *buf, Rv
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_gp_cmp_inv_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd,
-                                                           Rv64Reg rs1, Rv64Reg rs2) {
+static inline bool xm_dispatch_emit_riscv64_gp_cmp_inv_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2) {
     switch (op) {
         case XM_LE: {
             uint32_t _es = buf->count;
-            rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));
-            rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_LE emitted too few");
+            rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2)); rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_LE emitted too few");
             return true;
         }
         case XM_GE: {
             uint32_t _es = buf->count;
-            rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2));
-            rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_GE emitted too few");
+            rv64_buf_emit(buf, rv64_slt(rd, rs1, rs2)); rv64_buf_emit(buf, rv64_xori(rd, rd, 1));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_GE emitted too few");
             return true;
         }
         default:
@@ -694,22 +704,20 @@ static inline bool xm_dispatch_emit_riscv64_gp_cmp_inv_rrr(XmOp op, Rv64Buf *buf
     }
 }
 
-static inline bool xm_dispatch_emit_riscv64_gp_cmp_diff_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd,
-                                                            Rv64Reg rs1, Rv64Reg rs2,
-                                                            Rv64Reg scratch) {
+static inline bool xm_dispatch_emit_riscv64_gp_cmp_diff_rrr(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs1, Rv64Reg rs2, Rv64Reg scratch) {
     switch (op) {
         case XM_EQ: {
             uint32_t _es = buf->count;
-            rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2));
-            rv64_buf_emit(buf, rv64_sltiu(rd, scratch, 1));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_EQ emitted too few");
+            rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2)); rv64_buf_emit(buf, rv64_sltiu(rd, scratch, 1));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_EQ emitted too few");
             return true;
         }
         case XM_NE: {
             uint32_t _es = buf->count;
-            rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2));
-            rv64_buf_emit(buf, rv64_sltu(rd, RV64_X0, scratch));
-            XR_CHECK(buf->count - _es >= 2u, "emit self-check: XM_NE emitted too few");
+            rv64_buf_emit(buf, rv64_sub(scratch, rs1, rs2)); rv64_buf_emit(buf, rv64_sltu(rd, RV64_X0, scratch));
+            XR_CHECK(buf->count - _es >= 2u,
+                     "emit self-check: XM_NE emitted too few");
             return true;
         }
         default:
