@@ -96,7 +96,7 @@ invoke_dispatch:;
                 }
                 if (_rs == XR_RESUME_CHANNEL_CLOSED) {
                     xr_coro_resume_store(_cur, XR_RESUME_OK);
-                    _cur->wait_channel = NULL;
+                    atomic_store_explicit(&_cur->wait_channel, NULL, memory_order_relaxed);
                 }
             }
             if (_cur)

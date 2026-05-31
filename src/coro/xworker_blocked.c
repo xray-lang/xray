@@ -168,8 +168,9 @@ void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
     worker->p.blocked_tail = coro;
 
     // If has Channel, add to hash table (use wait_link to avoid conflict with sched_link/MPSC)
-    if (coro->wait_channel) {
-        XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, coro->wait_channel);
+    void *wch = atomic_load_explicit(&coro->wait_channel, memory_order_acquire);
+    if (wch) {
+        XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, wch);
         if (bucket) {
             if (coro->wait_send) {
                 coro->wait_link = NULL;
@@ -241,7 +242,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     worker->p.blocked_count--;
 
     // Clear blocked info
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->wait_link = NULL;
 
     // Cancel timer (sendTimeout/recvTimeout scenario)
@@ -252,10 +253,13 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     // Critical: set resume status so instruction detects resume from Channel block
     xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
 
-    // Set ready state and add to this Worker's LIFO slot for locality
-    xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-    xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-    xr_worker_push_lifo(worker, coro);
+    // Atomically claim BLOCKED->READY and enqueue to this Worker's LIFO slot
+    // for locality. A racing cross-worker waker (channel_wake_coro_ex on the
+    // close path) may have already claimed it; only the winner enqueues so the
+    // coro is never double-pushed.
+    if (xr_coro_claim_wake(coro)) {
+        xr_worker_push_lifo(worker, coro);
+    }
 
     // Reclaim the bucket if this was the last waiter on the channel.
     bucket_reclaim_if_empty(worker, bucket);
@@ -298,7 +302,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     worker->p.blocked_count--;
 
     // Clear blocked info, but don't enqueue (caller responsible)
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->wait_link = NULL;
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
@@ -327,14 +331,12 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         worker_blocked_list_remove(worker, coro);
         worker->p.blocked_count--;
 
-        coro->wait_channel = NULL;
+        atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         coro->wait_link = NULL;
-        // Guard: skip coros already woken by channel_wake_coro_ex (close path).
-        // channel_wake_coro_ex clears BLOCKED before we get here; pushing a
-        // non-BLOCKED coro would double-enqueue it in the run queue.
-        if (xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)) {
-            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+        // Claim the wake atomically: a racing waker (e.g. channel_wake_coro_ex
+        // on the close path) may have already taken this coro BLOCKED->READY.
+        // Only the claim winner enqueues, so the coro is never double-pushed.
+        if (xr_coro_claim_wake(coro)) {
             xr_worker_push(worker, coro);
         }
 
@@ -349,12 +351,9 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         worker_blocked_list_remove(worker, coro);
         worker->p.blocked_count--;
 
-        coro->wait_channel = NULL;
+        atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         coro->wait_link = NULL;
-        // Guard: skip coros already woken (see sender guard comment above)
-        if (xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED)) {
-            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+        if (xr_coro_claim_wake(coro)) {
             xr_worker_push(worker, coro);
         }
 

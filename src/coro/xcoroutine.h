@@ -332,7 +332,11 @@ typedef struct XrCoroutine {
 
     /* === Channel Blocking === */
     struct XrCoroutine *wait_link;  // channel waitq linkage (separate from sched_link)
-    void *wait_channel;
+    /* The channel this coro is blocked on. Written by the blocker (under the
+     * channel lock) and cleared by whichever waker claims the wake, which may
+     * run on a different worker; also read lock-free by GC root marking and
+     * blocked-list routing. Atomic to keep all of those races well-defined. */
+    _Atomic(void *) wait_channel;
     bool wait_send;
     XrValue send_value;
     XrValue *recv_slot;

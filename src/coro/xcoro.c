@@ -903,7 +903,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->result = xr_null();
     coro->error = xr_null();
     coro->task = NULL;
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->await_results = NULL;
     coro->current_scope = NULL;
     coro->vm_ctx.stack_top = coro->vm_ctx.stack;
@@ -1273,7 +1273,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->result = xr_null();
 }
 
@@ -1379,18 +1379,10 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X || !gp)
         return;
 
-    // CAS loop: atomically BLOCKED -> READY (prevents double-wake)
-    uint32_t old_flags = xr_coro_flags_load(gp);
-    for (;;) {
-        if (!(old_flags & XR_CORO_FLG_BLOCKED)) {
-            return;  // Already woken by another thread
-        }
-        uint32_t new_flags =
-            (old_flags & ~(XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK)) | XR_CORO_FLG_READY;
-        if (xr_coro_flags_cas(gp, &old_flags, new_flags)) {
-            break;  // CAS succeeded, we own the wake
-        }
-        // CAS failed, old_flags updated, retry
+    // Atomically claim the BLOCKED -> READY transition; only the winner
+    // enqueues. Prevents double-wake when multiple paths race on this coro.
+    if (!xr_coro_claim_wake(gp)) {
+        return;  // Already woken by another thread
     }
 
     XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
