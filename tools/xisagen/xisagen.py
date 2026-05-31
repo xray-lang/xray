@@ -29,14 +29,14 @@ def die(msg: str):
 
 def read_file(path: str) -> str:
     try:
-        with open(path, 'r') as f:
+        with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except OSError as e:
         die(f"cannot read {path}: {e}")
 
 def write_file(path: str, content: str):
     os.makedirs(os.path.dirname(path) or '.', exist_ok=True)
-    with open(path, 'w') as f:
+    with open(path, 'w', encoding='utf-8') as f:
         f.write(content)
 
 # ============================================================
@@ -5277,9 +5277,9 @@ def cmd_isel(args: list[str]):
         die('usage: xisagen isel <isel.def> <ops.def> [<arch>=<isa>]...')
     isel_path, ops_path = args[0], args[1]
     arch_isa_args = args[2:]
-    with open(isel_path) as f:
+    with open(isel_path, encoding='utf-8') as f:
         isel_text = f.read()
-    with open(ops_path) as f:
+    with open(ops_path, encoding='utf-8') as f:
         ops_text = f.read()
     entries = parse_isel_def(isel_text)
     ops = parse_ops_def(ops_text)
@@ -5662,7 +5662,7 @@ def cmd_dispatch_coverage(args: list[str]):
     if len(args) != 2:
         die('usage: xisagen dispatch-coverage <isel.def> <output.h>')
     isel_path, out_path = args[0], args[1]
-    with open(isel_path) as f:
+    with open(isel_path, encoding='utf-8') as f:
         isel_text = f.read()
     entries = parse_isel_def(isel_text)
     if not entries:
