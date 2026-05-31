@@ -27,7 +27,7 @@ def fnv1a(s: str) -> int:
 
 def extract_names(path: str) -> List[str]:
     """Extract strings from xr_builtin_symbol_names[] in the source file."""
-    with open(path) as f:
+    with open(path, encoding='utf-8') as f:
         src = f.read()
     # Match the entire array
     m = re.search(
