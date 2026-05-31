@@ -354,21 +354,16 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->vm_ctx.stack_capacity = INITIAL_STACK_CAPACITY;
             coro->vm_ctx.frames = (XrBcCallFrame *) (block + stack_bytes);
             coro->vm_ctx.frame_capacity = INITIAL_FRAME_CAPACITY;
-            // Zero the entire VM stack. Conservative GC root scanning in
-            // mark_coro_roots walks every slot up to frame_end (which
-            // tracks proto->maxstacksize, not stack_top), so any slot a
-            // running frame has not yet stored into is still read by the
-            // collector. Without this memset those slots hold raw bytes
-            // from xr_malloc (or stale data popped off the per-worker
-            // slab free list), surfacing under MSan as use-of-
-            // uninitialized-value inside xr_coro_gc_markvalue.
-            memset(block, 0, stack_bytes);
+            memset(block, 0, stack_bytes + frames_bytes);
         }
         if (!is_clean) {
-            // Fresh allocation: stack already zeroed above (if block was
-            // freshly attached), so stack[0] = xr_null() is the natural
-            // value already. Recycled coros are zeroed by recycle_local.
-            coro->vm_ctx.stack[0] = xr_null();
+            // Slab-free-list or pool path: stack pointer already set but
+            // contents may be stale. Conservative GC scanning in
+            // mark_coro_roots walks every slot up to proto->maxstacksize
+            // (not stack_top), so all unwritten slots must be zeroed.
+            size_t total = sizeof(XrValue) * (size_t) coro->vm_ctx.stack_capacity +
+                           sizeof(XrBcCallFrame) * (size_t) coro->vm_ctx.frame_capacity;
+            memset(coro->vm_ctx.stack, 0, total);
         }
     }
 
@@ -1367,8 +1362,10 @@ XrCoroutine *xr_current_coro(XrayIsolate *X) {
         return NULL;
 
     XrWorker *worker = xr_current_worker();
-    if (worker && worker->m && worker->m->current_coro) {
-        return worker->m->current_coro;
+    if (worker && worker->m) {
+        XrCoroutine *c = atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed);
+        if (c)
+            return c;
     }
     // Fallback: before VM starts, use main coroutine
     return X->main_coro;

@@ -486,7 +486,10 @@ void xr_runtime_force_stop(XrRuntime *runtime) {
         return;
     atomic_store(&runtime->running, false);
     for (int i = 0; i < runtime->worker_count; i++) {
-        XrCoroutine *coro = runtime->workers[i].m ? runtime->workers[i].m->current_coro : NULL;
+        XrCoroutine *coro =
+            runtime->workers[i].m
+                ? atomic_load_explicit(&runtime->workers[i].m->current_coro, memory_order_relaxed)
+                : NULL;
         if (coro) {
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
         }

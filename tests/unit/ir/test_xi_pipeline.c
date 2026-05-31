@@ -19,6 +19,9 @@
 #include <string.h>
 #include <assert.h>
 #include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 /* ========== Test Infrastructure ========== */
 
@@ -649,9 +652,16 @@ static char *gen_many_functions(int nfuncs, int body_size) {
 }
 
 static uint64_t clock_ns(void) {
+#ifdef _WIN32
+    LARGE_INTEGER freq, counter;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&counter);
+    return (uint64_t) (counter.QuadPart * 1000000000ULL / (uint64_t) freq.QuadPart);
+#else
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint64_t) ts.tv_sec * 1000000000ULL + (uint64_t) ts.tv_nsec;
+#endif
 }
 
 TEST(stress_large_sequential_with_budget) {

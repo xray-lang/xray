@@ -117,7 +117,7 @@ static void sysmon_check(XrRuntime *runtime) {
             // === Level 2 (100ms): warning log (once) ===
             if (!runtime->sysmon_state[i].warned && elapsed_us >= XR_SYSMON_WARN_US) {
                 runtime->sysmon_state[i].warned = true;
-                XrCoroutine *coro = wm->current_coro;
+                XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
                 xr_log_warning("sysmon",
                                "Worker %d stuck for %lldms"
                                " (coroutine: %s, hb=%llu)",
@@ -128,7 +128,7 @@ static void sysmon_check(XrRuntime *runtime) {
 
             // === Level 3 (5s): mark coroutine for cancellation ===
             if (elapsed_us >= XR_SYSMON_CANCEL_US) {
-                XrCoroutine *coro = wm->current_coro;
+                XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
                 if (coro && !xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                     xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
                     // Diagnostic: read from vm_ctx (active during execution)
