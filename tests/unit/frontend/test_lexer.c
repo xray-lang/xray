@@ -135,7 +135,6 @@ TEST(lexer_coro_keywords) {
 TEST(lexer_other_keywords) {
     assert_token(scan_single("try"), TK_TRY, "try");
     assert_token(scan_single("catch"), TK_CATCH, "catch");
-    assert_token(scan_single("finally"), TK_FINALLY, "finally");
     assert_token(scan_single("throw"), TK_THROW, "throw");
     assert_token(scan_single("import"), TK_IMPORT, "import");
     assert_token(scan_single("export"), TK_EXPORT, "export");
@@ -469,7 +468,6 @@ TEST(lexer_keyword_table_completeness) {
         {"extends", TK_EXTENDS},
         {"false", TK_FALSE},
         {"final", TK_FINAL},
-        {"finally", TK_FINALLY},
         {"float", TK_FLOAT},
         {"float32", TK_FLOAT32},
         {"float64", TK_FLOAT64},

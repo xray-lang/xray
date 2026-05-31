@@ -203,9 +203,9 @@ fn test_match_no_branch_throws() {
             2 -> "two"
         }
         assert_eq(result, "unreachable")
-    } catch (e) {
+    } catch panic (p) {
         caught = true
-        assert(e.message.includes("E0442"))
+        assert(p.message.includes("E0442"))
     }
     assert_eq(caught, true)
 }

@@ -61,7 +61,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 | **Types** | Static typing + type inference; declarations rarely require explicit type annotations, but the type system is fully visible at compile time |
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
 | **Execution** | VM interpreter / JIT / AOT — all transparent to the developer; semantics are strictly identical across modes |
-| **Error handling** | Exception machinery (throw / try / catch / finally) + `Result<T,E>` + nullable types (T?) + `defer`-based resource management |
+| **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + `Result<T,E>` + nullable types (T?) + `defer`-based resource management |
 | **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + runtime reflection (Reflect) + reified generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
 
@@ -199,9 +199,9 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 | `operator` | operator overloading |
 | `is` `as` | runtime type check / cast |
 
-#### 1.5.3 Exception Handling
+#### 1.5.3 Error Handling
 
-`try` `catch` `finally` `throw`
+`try` `catch` `panic` `throw` `defer`
 
 #### 1.5.4 Module System
 
@@ -1689,38 +1689,45 @@ fn pair(a: int, b: int) -> (int, int) {
 - Allowed only inside a function body (including closures); a top-level `return` is the compile error `E0306`.
 - The returned value's type must be compatible with the function's declared return type.
 
-### 4.8 `throw` / `try` / `catch` / `finally`
+### 4.8 `throw` / `try` / `catch`
 
 ```ebnf
-ThrowStmt ::= 'throw' Expression
+ThrowStmt     ::= 'throw' Expression
 
-TryStmt       ::= 'try' Block CatchClause* FinallyClause?
+TryStmt       ::= 'try' Block CatchClause+
 CatchClause   ::= 'catch' '(' Identifier (':' Type)? ')' Block
-FinallyClause ::= 'finally' Block
+                | 'catch' 'panic' '(' Identifier ')' Block
 ```
 
 ```xray
-try { throw new Exception("inline") } catch (e) { print(e.message) }
+enum AppError { NotFound, Timeout(ms: int) }
 
-try {
-    risky()
-} catch (e) {
-    log.error("failed:", e.message)
-} finally {
-    cleanup()
+// Recoverable errors: enum values flow through the value-return channel,
+// caught by catch (e)
+try { throw AppError.NotFound } catch (e) {
+    match (e) {
+        AppError.NotFound -> log.error("not found"),
+        AppError.Timeout(ms) -> log.error("timeout after ${ms}ms")
+    }
 }
 
-throw new Exception("error message")        // ✅ Exception-derived
-throw new HttpError(500, "internal")        // ✅ user Exception subclass
-// throw "msg"                              // ❌ E0370: must be Exception-derived
+// catch panic (p) is a separate boundary for runtime faults
+// (div-by-zero, out-of-bounds, expr!)
+try { risky() } catch panic (p) {
+    log.error("fault:", p)
+}
+
+throw AppError.NotFound                      // value-return error channel
+// There is no finally; use defer for deterministic cleanup (see §4.9)
 ```
 
 **Semantics**:
-- A `try` must be followed by at least one of `catch` or `finally`.
-- The `e` in `catch (e)` defaults to type `Exception`; a type annotation `catch (e: HttpError)` performs type filtering; multiple `catch` clauses match in declaration order.
-- `finally` is **always executed**, regardless of whether an exception was thrown or `return` was used.
-- The static type of the `throw` operand must be `Exception`-derived (`E0370`).
-- For full exception semantics see [§8](#8-error-handling).
+- A `try` must be followed by at least one `catch` or `catch panic` clause.
+- `catch (e)` catches recoverable errors propagated through the value-return channel (a user `throw <enum>`); use `match (e)` to destructure the error value.
+- `catch panic (p)` catches runtime faults (div-by-zero, out-of-bounds, `expr!`, `assert`), strictly separated from recoverable errors.
+- The `throw` operand is an error value (typically an enum) propagated through the value-return channel: zero-cost, no stack unwinding.
+- There is no `finally`: use `defer` (§4.9) for deterministic cleanup.
+- For full error semantics see [§8](#8-error-handling).
 
 ### 4.9 `defer`
 
@@ -1747,9 +1754,9 @@ fn process() {
 **Semantics**:
 - Runs at the **end of the function scope** (not the block scope, unlike Swift).
 - **LIFO**: multiple `defer` statements run in reverse declaration order.
-- **Always executes**: runs even if the function exits via an exception (similar to `finally`).
-- Difference from `finally`: `defer` is bound to the function scope, `finally` is bound to a `try` block.
-- An exception in a `defer` body **replaces** any in-flight exception (Go-style semantics).
+- **Always executes**: runs on normal `return`, on an error propagating through the value-return channel, and on a cross-frame panic unwind.
+- `defer` is Xray's only deterministic-cleanup mechanism (replacing other languages' `finally`): it is bound to the function scope, not to a block.
+- An error thrown inside a `defer` body **replaces** any in-flight error (Go-style semantics).
 
 ### 4.10 Built-in Print Functions
 
@@ -2614,7 +2621,7 @@ match (result) {
 
 // Wildcards skip payload fields you don't care about
 match (event) {
-    NetEvent.Error(code, _) if (code >= 500) -> throw new Exception("server error: ${code}"),
+    NetEvent.Error(code, _) if (code >= 500) -> throw NetErr.ServerFault(code),
     _                                         -> continue,
 }
 
@@ -2903,229 +2910,270 @@ Xray uses a layered memory management strategy:
 
 ## 8. Error Handling
 
-> Source of truth: `src/runtime/error/xerror.c`, `src/vm/xvm_exception.c`, `stdlib/types/exception.xr`, `stdlib/types/result.xr`.
+> Source of truth: `src/vm/xvm_dispatch_exception.inc.c`, `src/vm/xvm_dispatch_misc.inc.c`, `src/runtime/object/xexception.c`, `stdlib/prelude/prelude.c`.
 
-### 8.0 Design philosophy: dual track
+### 8.0 Design philosophy: value-return + panic boundary
 
-Xray ships two complementary error-handling mechanisms side by side:
+Xray's error handling is split into two strictly separated channels:
 
-| Mechanism | When to use | Failure visibility |
-|--|--|--|
-| **Exceptions** (`throw` / `try` / `catch`) | Genuinely rare; propagation through many layers; fatal errors; framework / top-level fallback | Implicit (does not pollute intermediate signatures) |
-| **Result** (`Result<T, E>` enum) | Library APIs with an explicit failure mode; the caller must handle exhaustively; serializable errors | Explicit (visible at compile time) |
+| Channel | Syntax | Use case | Runtime cost |
+|--|--|--|--|
+| **Value-return channel** (`throw <enum>` / `try` / `catch`) | Business errors, recoverable failures | **Zero overhead** (no extra instructions on the happy path) |
+| **Panic channel** (`catch panic`) | Runtime faults (OOB, division by zero, non-exhaustive match) | Limited stack unwinding |
 
-The two tracks have **complementary, non-overlapping responsibilities**:
+Design principles:
 
-- Function signatures **do not** mark `throws` (no Java/Swift-style mandatory throws declarations). When you want compile-time visibility into possible failure, return `Result<T, E>`.
-- `Exception` is the unified base class of the exception track (see §8.1.4); `Result<T, E>` is a prelude enum (see §8.2).
-- The three sugar keywords `try!` / `try?` / `catch!` bridge between the two tracks (see §8.3).
+- **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no Exception allocation.
+- **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
+- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Use `Result<T, E>` return values when explicit failure visibility is needed.
+- **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
 
-### 8.1 Exception mechanism
+### 8.1 Value-return error channel
 
 #### 8.1.1 `throw` expression
 
-`throw expr` raises an exception. **The static type of `expr` must be `Exception` or a subclass.** Anything else is rejected at compile time (error code `E0370` `XR_ERR_ANALYZE_THROW_NON_EXCEPTION`):
+`throw expr` raises an enum error value. `expr` must be a variant of an enum type:
 
 ```xray
-throw new Exception("oops")                 // ✅
-throw new HttpError(404, "not found")       // ✅ custom Exception subclass
-throw "oops"                                // ❌ E0370: throw must be an Exception subclass
-throw 42                                    // ❌ E0370
-throw { code: 500 }                         // ❌ E0370
-throw null                                  // ❌ E0370 (static type is null)
-```
+enum AppErr { NotFound, InvalidInput(string) }
 
-> **Design note**: early versions of xray allowed `throw` of arbitrary values (strings, integers, objects). The current version tightens this rule, in line with Python 3 / Java / Swift, to require an Exception subclass. This matches xray's "no `any` type" principle—`e` in `catch (e)` always has the static type `Exception`, so tools can provide stable completion and type analysis.
+throw AppErr.NotFound                       // ✅ simple enum variant
+throw AppErr.InvalidInput("bad format")     // ✅ ADT enum variant with payload
+```
 
 After a throw:
 
 ```
-throw point → unwind the call stack → run defer / finally on the way → catch handles → otherwise keep unwinding → coroutine terminates
+throw point → write to pending_error → return up the call stack → run defer on the way → catch handles → otherwise keep returning → top-level diagnostic
 ```
 
-An unhandled top-level exception terminates the current coroutine:
+- No stack frame unwinding (unlike traditional exception unwinding)
+- Zero overhead on the happy path; only a conditional branch on the error path
+- Unhandled top-level errors print `[Uncaught Error] <enum value>`, exit code = 1
 
-- Child coroutine: by default the stack is printed to stderr and the coroutine ends; the parent is **not** notified automatically (exceptions **do not propagate across coroutines**, see §8.1.6).
-- Main coroutine: the process exits with code `1`.
-
-#### 8.1.2 `try` / `catch` / `finally`
+#### 8.1.2 `try` / `catch`
 
 ```xray
+enum IOErr { Timeout, Refused(string) }
+
 try {
-    risky()
+    connect(host)
 } catch (e) {
-    log.error(e.message)
-} finally {
-    cleanup()
+    match (e) {
+        IOErr.Timeout -> log("timeout"),
+        IOErr.Refused(reason) -> log("refused: " + reason),
+    }
 }
 ```
 
 **Execution order**:
 
 1. Run the `try` block.
-2. If an exception escapes, try each `catch` clause in declaration order; the first match runs its body.
-3. The `finally` block runs whether or not an exception occurred (guaranteed).
-4. With no `catch`, the exception keeps propagating after `finally`.
+2. If a `throw` escapes, try each `catch` clause in declaration order; the first match runs its body.
+3. If no `catch` matches, the error keeps propagating up the call stack.
 
 **Typed catch and multiple catch clauses**:
 
-A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test for a match. Multiple `catch` clauses are matched in declaration order; the first match runs:
+A `catch` variable may be typed `catch (e: T)`; the runtime uses `is T` to test the enum type. Multiple `catch` clauses are matched in declaration order:
 
 ```xray
+enum NetErr { Timeout, Refused }
+enum DbErr { ConnLost, QueryFailed(string) }
+
 try {
     riskyIO()
-} catch (e: HttpError) {
-    log.error("HTTP:", e.statusCode)
-} catch (e: DbError) {
-    log.error("DB:", e.query)
+} catch (e: NetErr) {
+    log("network:", e)
+} catch (e: DbErr) {
+    log("database:", e)
 } catch (e) {
-    log.error("unexpected:", e.message)
+    log("unexpected:", e)
 }
 ```
 
 **Rules**:
-- An untyped `catch (e)` is the "catch-all" clause and matches any exception; the static type of `e` is `Exception`.
-- A typed `catch (e: T)` matches only when the exception value satisfies `is T`; the static type of `e` is `T`.
+- An untyped `catch (e)` is the catch-all and matches any error value.
+- A typed `catch (e: EnumType)` matches only when the error value satisfies `is EnumType`.
 - Multiple `catch` clauses are tried in declaration order; the first match wins.
-- If every typed clause fails to match and there is no catch-all, the exception is rethrown automatically.
-- A `try` **must** be followed by at least one of `catch` or `finally`.
+- If every typed clause fails and there is no catch-all, the error continues propagating.
+- A `try` **must** be followed by at least one of `catch` or `catch panic`.
 
-#### 8.1.3 Rethrowing
+#### 8.1.3 Rethrowing and error conversion
 
-A `catch` block may rethrow the original exception or throw a new one:
+A `catch` block may rethrow the original error or throw a different enum variant:
 
 ```xray
+enum LowErr { Fail }
+enum HighErr { Upstream }
+
 try {
-    fetch(url)
-} catch (e) {
-    log.error("network failed:", e.message)
-    throw new ServiceError("upstream unavailable", e)  // chain the original through `cause`
+    lowLevelCall()
+} catch (e: LowErr) {
+    log("low-level failed")
+    throw HighErr.Upstream
 }
 ```
 
-#### 8.1.4 The `Exception` class
+#### 8.1.4 Recommended enum error design
 
-`Exception` is the prelude's built-in class (declared in `stdlib/types/exception.xr`); it can be `new`'d directly:
+Define business errors as ADT enums with context-carrying payloads:
+
+```xray
+enum HttpErr {
+    NotFound(string),
+    ServerError(int, string),
+    Timeout,
+}
+
+enum ParseErr {
+    Empty,
+    InvalidChar(string, int),
+    Overflow,
+}
+
+fn fetchUser(id: int) -> User {
+    if (id <= 0) { throw HttpErr.NotFound("user not found") }
+    // ...
+}
+
+try {
+    let user = fetchUser(-1)
+} catch (e: HttpErr) {
+    match (e) {
+        HttpErr.NotFound(msg) -> log("404:", msg),
+        HttpErr.ServerError(code, msg) -> log(string(code) + ":", msg),
+        HttpErr.Timeout -> log("timeout"),
+    }
+}
+```
+
+ADT enums let `match` check exhaustiveness at compile time.
+
+#### 8.1.5 Errors and coroutine boundaries
+
+Value-return errors **do not propagate across coroutines automatically**. An uncaught error in a child coroutine:
+
+- Terminates the child, error recorded in `coro.error`
+- The parent is **not** notified automatically
+
+Ways to pass child coroutine errors:
+
+1. **Explicit Channel**:
+
+```xray
+enum WorkerErr { Failed(string) }
+const err_ch = Channel<string>(1)
+
+go {
+    try {
+        riskyWork()
+        err_ch.send("ok")
+    } catch (e) {
+        err_ch.send("error")
+    }
+}
+
+let result = err_ch.recv()
+if (result != "ok") { log("worker failed") }
+```
+
+2. **Structured concurrency `linked scope`** (recommended, see §10.5): child errors propagate to the parent scope automatically, routed through the correct channel (value-return enum errors via `catch`, panics via `catch panic`).
+
+### 8.2 Panic channel
+
+#### 8.2.1 What is a panic
+
+A panic represents a **program bug or runtime invariant violation**, not business logic:
+
+- Array out-of-bounds access
+- Integer division by zero
+- Non-exhaustive match
+- Null reference dereference
+- Runtime type assertion failure
+
+Panics propagate via limited stack unwinding and generate `Exception` objects with stack traces.
+
+#### 8.2.2 `catch panic`
+
+`catch panic` catches runtime faults from the panic channel:
+
+```xray
+try {
+    let arr: Array<int> = [1, 2, 3]
+    let v = arr[10]                          // OOB → panic
+} catch panic {
+    log("runtime fault caught")
+}
+
+try {
+    let n = 10 / 0                           // division by zero → panic
+} catch panic {
+    log("division by zero caught")
+}
+```
+
+**`catch` and `catch panic` can coexist**, handling both channels:
+
+```xray
+enum AppErr { InvalidArg }
+
+try {
+    process(input)
+} catch (e: AppErr) {
+    log("business error:", e)                // value-return channel
+} catch panic {
+    log("runtime fault!")                    // panic channel
+}
+```
+
+#### 8.2.3 The `Exception` class
+
+`Exception` is now **used only by the panic channel**. The VM constructs `Exception` objects automatically on runtime faults:
 
 ```xray
 @native
 class Exception {
-    message: string             // human-readable message
-    stack: Array<string>        // automatically captured stack, one formatted frame per entry
+    message: string             // human-readable message (e.g. "index out of bounds")
+    stack: Array<string>        // automatically captured call stack
     cause: Exception?           // chained cause
-    code: int                   // error code (auto-parsed from "E0xxx: ..." prefix; defaults to 0)
-    data: Json?                 // when a non-Exception value is thrown, the original is wrapped here
+    code: int                   // error code
+    data: Json?                 // additional data
 
     constructor(message: string = "", cause: Exception? = null)
     fn toString() -> string
 }
 ```
 
-Field semantics:
+User code generally does not construct `Exception` directly — use `throw <enum>` for business errors.
 
-- `message`: human-readable error message (passed at construction time).
-- `stack`: `Array<string>`. Empty at construction; as the throw passes through other frames, a formatted frame description (e.g. `"at f (line N)"`) is pushed for each. Users may iterate, join, or take its length; reads and writes are allowed but the runtime does not depend on user mutation.
-- `cause`: optional cause exception, used for error chains.
-- `code`: integer error code. When the VM raises an exception, the message has an `"E0xxx: ..."` prefix; the primitive constructor parses the prefix and writes `code`. For user-thrown exceptions `code` is `0`.
-- `data`: `Json?`. When `throw <non-Exception value>` is wrapped at runtime, the original value is stored here; `catch` can recover it via `e.data`.
+### 8.3 `defer` — resource cleanup
 
-Construction:
-
-```xray
-throw new Exception("connection refused")
-throw new Exception("upstream failed", originalErr)
-```
-
-#### 8.1.5 Custom `Exception` subclasses
-
-Define business-specific errors by extending `Exception`:
-
-```xray
-class HttpError extends Exception {
-    statusCode: int
-    constructor(statusCode: int, message: string, cause: Exception? = null) {
-        super(message, cause)
-        this.statusCode = statusCode
-    }
-}
-
-class DbError extends Exception {
-    table: string
-    constructor(table: string, message: string) {
-        super(message)
-        this.table = table
-    }
-}
-
-throw new HttpError(404, "not found")
-
-try {
-    fetchUser(id)
-} catch (e: HttpError) {
-    log.error("http", e.statusCode, e.message)
-}
-```
-
-Subclasses inherit `message` / `stack` / `cause` and `toString()` automatically and may add arbitrary business fields.
-
-#### 8.1.6 Exceptions and coroutine boundaries
-
-Exceptions **do not propagate across coroutines**. An unhandled exception inside a child coroutine:
-
-- Terminates the child coroutine immediately.
-- Default behaviour: prints the exception's `toString()` and `stack` to stderr.
-- The parent coroutine is **not** notified automatically.
-
-To pass child errors back, use a Channel explicitly:
-
-```xray
-const err_ch = Channel<Exception?>(1)
-
-go {
-    try {
-        risky()
-        err_ch.send(null)
-    } catch (e) {
-        err_ch.send(e)
-    }
-}
-
-let err = err_ch.recv()
-if (err != null) { log.error(err.message) }
-```
-
-Or use the structured-concurrency `scope` block (see §10.5), which propagates a child exception to the parent automatically.
-
-#### 8.1.7 `defer`
-
-`defer` is a resource-cleanup statement that runs **whenever** the enclosing scope exits (with or without an exception). Syntax: see §4.9. Relationship with `try / finally`:
-
-- The two can be mixed.
-- Multiple `defer`s in the same scope run in **LIFO** order.
-- Mandatory order during stack unwinding:
-  1. The `finally` block of inner `try` runs first.
-  2. Then the current scope's `defer`s run in LIFO order.
-  3. Control returns to the caller (or the exception keeps unwinding).
+`defer` is a function-scoped cleanup statement guaranteed to run when the function exits (whether by normal return, `throw`, or panic). Syntax: see §4.9.
 
 ```xray
 fn fetch(url: string) -> string {
     let conn = open(url)
-    defer conn.close()                       // conn is guaranteed to close, no matter what
+    defer conn.close()                       // conn is guaranteed to close
 
-    try {
-        return conn.read()
-    } catch (e) {
-        log.error(e.message)
-        throw e                              // rethrow; defer still runs
+    let data = conn.read()
+    if (data.isEmpty()) {
+        throw FetchErr.Empty                 // defer still runs
     }
+    return data
 }
 ```
 
-### 8.2 `Result<T, E>`
+**Rules**:
+- `defer` is function-scoped (Go model), runs when the function exits in **LIFO** order
+- Multiple `defer`s in the same function run in reverse order
+- `defer` executes on `throw`, `return`, and panic
+- `defer` blocks should not throw errors (behaviour is undefined)
 
-#### 8.2.1 Type and construction
+### 8.4 `Result<T, E>`
 
-`Result<T, E>` is the prelude's built-in ADT enum (declared in `stdlib/types/result.xr`):
+#### 8.4.1 Type and construction
+
+`Result<T, E>` is the prelude's built-in ADT enum:
 
 ```xray
 @native
@@ -3138,8 +3186,8 @@ enum Result<T, E> {
 Construction and destructuring:
 
 ```xray
-let r1: Result<int, ParseError> = Result.Ok(42)
-let r2: Result<int, ParseError> = Result.Err(ParseError.Empty)
+let r1: Result<int, string> = Result.Ok(42)
+let r2: Result<int, string> = Result.Err("parse failed")
 
 match (r1) {
     Result.Ok(v)  -> print("got:", v),
@@ -3147,21 +3195,18 @@ match (r1) {
 }
 ```
 
-#### 8.2.2 Choosing the error type `E`
+#### 8.4.2 Choosing the error type `E`
 
 `E` may be any type; recommended styles:
 
 | Failure shape | E type | Example |
 |--|--|--|
-| Multiple enumerable failure causes | User-defined ADT enum | `enum ParseError { Empty, NotNumber(s: string), Overflow }` |
+| Multiple enumerable failure causes | User-defined ADT enum | `enum ParseErr { Empty, NotNumber(string), Overflow }` |
 | Single string reason | `string` | `Result<int, string>` |
-| Exception object (bridge to the exception track) | `Exception` subclass | `Result<T, Exception>` |
 
-**Strongly prefer ADT enums**—they let `match` check exhaustiveness at compile time.
+**Strongly prefer ADT enums** — they let `match` check exhaustiveness at compile time.
 
-#### 8.2.3 Methods on `Result`
-
-`Result<T, E>` is an enum with methods (see §5.6.7). The full signature (declared in `stdlib/types/result.xr`):
+#### 8.4.3 Methods on `Result`
 
 ```xray
 @native
@@ -3175,7 +3220,6 @@ enum Result<T, E> {
     fn ok() -> T?                                          // Ok(v) -> v; Err -> null
     fn err() -> E?                                         // Err(e) -> e; Ok -> null
 
-    fn unwrap() -> T                                       // throw on Err (requires E to subclass Exception)
     fn unwrapOr(default: T) -> T                           // return default on Err
     fn unwrapOrElse(handler: (E) -> T) -> T                // compute via handler on Err
 
@@ -3185,11 +3229,11 @@ enum Result<T, E> {
 }
 ```
 
-`map` / `mapErr` are the "transform the inner without breaking the outer" shortcut, replacing repetitive `match` boilerplate:
+`map` / `mapErr` are the "transform the inner without breaking the outer" shortcut:
 
 ```xray
 // Without map: 5 lines
-let r2: Result<float, ParseError>
+let r2: Result<float, string>
 match (parseInt(s)) {
     Result.Ok(n)  -> r2 = Result.Ok(n.toFloat()),
     Result.Err(e) -> r2 = Result.Err(e),
@@ -3199,182 +3243,93 @@ match (parseInt(s)) {
 let r2 = parseInt(s).map(n -> n.toFloat())
 ```
 
-#### 8.2.4 Error type conversion: explicit `mapErr` is mandatory
+#### 8.4.4 Error type conversion: explicit `mapErr` is mandatory
 
 When composing `Result`s across layers, the `Err` type is **not** converted automatically. The caller must call `.mapErr(...)` explicitly:
 
 ```xray
-fn loadConfig(text: string) -> Result<Config, ConfigError> {
-    let json = try! parseJson(text).mapErr(e -> ConfigError.BadJson(e))
-    //                              ^^^^^^^^ explicit: ParseError → ConfigError
-    let port = try! json["port"].toInt().mapErr(e -> ConfigError.BadField("port", e))
+fn loadConfig(text: string) -> Result<Config, ConfigErr> {
+    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
+    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port"))
     return Result.Ok(Config(port: port))
 }
 ```
 
-Each `.mapErr(...)` is one human-readable line of **error-upgrade path**—better than Rust's implicit `From::from` conversion.
+### 8.5 Bridges: `try!` / `try?`
 
-### 8.3 Bridges: `try!` / `try?` / `catch!`
+#### 8.5.1 `try! e` — early exit
 
-These three sugar keywords cover every track-bridging case and also serve as same-track early-exit sugar.
-
-#### 8.3.1 `try! e` — early exit or cross-track upgrade
-
-The static type of the expression after `try!` **must** be `Result<T, E>` or `T?`. Other types are a compile error (`E0821` `XR_ERR_TRY_BANG_BAD_OPERAND`).
-
-The behaviour is double-dispatched on the type of `e` and the enclosing function's return type:
+The static type of the expression after `try!` **must** be `Result<T, E>` or `T?`.
 
 | Type of `e` | Enclosing return type | Behaviour |
 |--|--|--|
 | `Result<T, E>` | `Result<_, E>` | `Err(e)` → `return Result.Err(e)`; `Ok(v)` → `v` |
-| `Result<T, E>` | other | `Err(e)` → `throw e` (requires `E` to subclass `Exception`, otherwise `E0822`); `Ok(v)` → `v` |
+| `Result<T, E>` | other | `Err(e)` → `throw e` (propagates Err value through value-return channel); `Ok(v)` → `v` |
 | `T?` | `_?` | `null` → `return null`; `v` → `v` |
-| `T?` | other | `null` → `throw new NullThrowError("try! on null")`; `v` → `v` |
+| `T?` | other | `null` → panic; `v` → `v` |
 
-Examples:
+Example:
 
 ```xray
 // Same-track early exit
-fn parsePair(s: string) -> Result<(int, int), ParseError> {
+fn parsePair(s: string) -> Result<(int, int), ParseErr> {
     let parts = s.split(",")
-    if (parts.length != 2) return Result.Err(ParseError.Empty)
-    let a = try! parseInt(parts[0])              // Err early-returns Err
+    if (parts.length != 2) { return Result.Err(ParseErr.Empty) }
+    let a = try! parseInt(parts[0])
     let b = try! parseInt(parts[1])
     return Result.Ok((a, b))
 }
-
-// Cross-track upgrade (Result → exception)
-fn dangerous(s: string) -> int {
-    let n = try! parseInt(s)                     // Err throws
-    return n * 2
-}
-
-// Optional early exit
-fn lookupTwo(m: Map<string, int>, k1: string, k2: string) -> int? {
-    let v1 = try! m.get(k1)                      // null early-returns null
-    let v2 = try! m.get(k2)
-    return v1 + v2
-}
 ```
 
-> **`try!` is not a mandatory ceremony for throwing calls**—xray does **not** force `try` before every potentially throwing call, unlike Swift. `try!` is only for `Result` / `Optional` early exit or upgrade.
-
-#### 8.3.2 `try? e` — failure becomes null
+#### 8.5.2 `try? e` — failure becomes null
 
 `try?` collapses any failure into `null`, discarding the cause.
 
 | Type of `e` | Type of `try? e` | Behaviour |
 |--|--|--|
-| `Result<T, E>` | `T?` | `Err` → `null` (cause discarded); `Ok(v)` → `v` |
-| Ordinary throwing call returning `T` | `T?` | Throw → `null`; success → `v` |
+| `Result<T, E>` | `T?` | `Err` → `null`; `Ok(v)` → `v` |
+| Fallible call returning `T` | `T?` | Error → `null`; success → `v` |
 | `T?` | `T?` | Pass-through |
 
 ```xray
-let n: int? = try? parseInt(s)              // Err becomes null
-let v: Json? = try? http.get(url).json()    // throw becomes null
-```
-
-`try?` fits "the caller does not care about the cause, only wants a default" cases, often paired with `??`:
-
-```xray
+let n: int? = try? parseInt(s)
 let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
 ```
 
-#### 8.3.3 `catch! { ... }` — condense an exception block into a Result
-
-`catch!` condenses a block that may throw into `Result<T, Exception>`:
-
-```xray
-let r: Result<Server, Exception> = catch! {
-    let cfg = loadConfig(path)
-    let conn = openDb(cfg.dbUrl)
-    return startServer(cfg, conn)
-}
-
-match (r) {
-    Result.Ok(s)  -> s.run(),
-    Result.Err(e) -> log.error("startup failed:", e.message),
-}
-```
-
-Rules:
-
-- The block's last expression or `return v` becomes the `Ok(v)` value.
-- **Any exception** that escapes the block is caught and wrapped as `Err(e)`.
-- The static type of `e` is `Exception` (so the result is always `Result<T, Exception>`).
-- `return v` inside the block returns from the **`catch!` block**, not from the enclosing function.
-- `defer` inside the block runs as usual.
-- Type filtering is not supported—use a hand-written `try` / `catch` to filter specific exceptions.
-
-#### 8.3.4 `Result.unwrap()` — Result upgraded to an exception
-
-`unwrap()` is the reverse bridge: turn `Err(e)` into `throw e`:
-
-```xray
-let cfg = loadConfig(text).unwrap()         // throws on Err (requires E to subclass Exception)
-```
-
-If `E` is not an `Exception` subclass, this is a compile error (use `unwrapOr(...)` or `match` instead).
-
-#### 8.3.5 Bridging matrix
-
-```
-                   ┌──────────────────────────────────────────┐
-                   │  ↓ Exception track (throw / catch)       │
-                   │                                          │
-       catch! { } ─┤◄── exception → Result<T, Exception>     │
-                   │                                          │
-       try? expr  ─┤◄── exception → T? (cause discarded)     │
-                   │                                          │
-       try { } catch (e) { ... }    full exception flow      │
-                   └──────────────────────────────────────────┘
-                                    ▲
-                                    │  unwrap / unwrapOr / try!
-                                    │
-                   ┌──────────────────────────────────────────┐
-                   │  ↑ Result track (Result<T, E>)           │
-                   │                                          │
-       try! result ─┤── same-track early exit / cross throw  │
-                   │                                          │
-       try? result ─┤── Err → null (cause discarded)         │
-                   │                                          │
-       result.ok()  ─── Result<T,E> → T?                     │
-                   └──────────────────────────────────────────┘
-```
-
-### 8.4 Optional and error handling
+### 8.6 Optional and error handling
 
 `T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
 
 - **Failure with no cause**: `T?` is more concise than `Result<T, ()>`.
-- Cooperates with `try!` / `try?` (see §8.3.1 / §8.3.2).
+- Cooperates with `try!` / `try?` (see §8.5.1 / §8.5.2).
 - Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
-- Do not use `T?` as a generic error return—if a cause is needed, return `Result<T, E>`.
+- Do not use `T?` as a generic error return — if a cause is needed, return `Result<T, E>`.
 
-### 8.5 Decision tree: which mechanism to choose
+### 8.7 Decision tree: which mechanism to choose
 
 Choose by "**how the caller has to handle the failure**":
 
 ```
 Does the caller need to handle the failure?
 │
-├─ No (fatal / unrecoverable / cross-layer fallback)
+├─ No (fatal / unrecoverable / program bug)
 │   ↓
-│   throw / try-catch
+│   panic (triggered automatically by the runtime; catch panic for outer fallback)
 │
-├─ Yes, with structured causes; the caller should match exhaustively
+├─ Yes, with structured causes
 │   ↓
-│   Result<T, E>, with E as an ADT enum
+│   throw <enum>, catch to handle (zero-overhead value-return channel)
+│   or Result<T, E> return value (compile-time visible)
 │
-├─ Yes, but the failure simply means "no value" without a cause
+├─ Yes, but the failure simply means "no value"
 │   ↓
 │   T? + ?? / ?. / try?
 │
-├─ Yes, and the function has ≥3 normal states (not just success/fail)
+├─ Yes, and the function has ≥3 normal states
 │   ↓
-│   Use a user ADT enum directly as the return type
+│   User ADT enum directly as the return type
 │
-└─ Yes, returning multiple co-equal values (not "success/failure")
+└─ Yes, returning multiple co-equal values (not success/failure)
     ↓
     tuple (a, b, ...)
 ```
@@ -3383,59 +3338,68 @@ Reference table:
 
 | Case | Recommended | Example |
 |--|--|--|
-| Parsing, decoding, state transitions | `Result<T, E>` | `parseInt(s) -> Result<int, ParseError>` |
+| Business errors, recoverable failures | `throw <enum>` + `catch` | `throw ParseErr.Empty` |
+| Parsing, decoding, state transitions | `Result<T, E>` | `parseInt(s) -> Result<int, ParseErr>` |
 | Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
-| IO, network, unrecoverable | `throw` + top-level `catch` | `readFile(p) -> Bytes` (may throw IOError) |
+| Runtime fault fallback | `catch panic` | Array OOB, division by zero |
 | Multi-branch result | enum | `nextEvent() -> NetEvent` |
-| Primary result + metadata | tuple | `parse(s) -> (Ast, int)` // ast + bytes consumed |
+| Primary result + metadata | tuple | `parse(s) -> (Ast, int)` |
 
-### 8.6 Common patterns
+### 8.8 Common patterns
 
-#### Pattern 1: library APIs use Result, business boundaries use exceptions
+#### Pattern 1: enum errors + defer for resource cleanup
 
 ```xray
-// Library layer: Result
-fn parseConfig(text: string) -> Result<Config, ConfigError> {
-    let json = try! parseJson(text).mapErr(e -> ConfigError.BadJson(e))
-    return Result.Ok(Config(port: json["port"].toInt().unwrap()))
+enum ConnErr { Refused, Timeout, Reset }
+
+fn fetchData(host: string) -> string {
+    let conn = connect(host)
+    defer conn.close()
+
+    if (!conn.isAlive()) { throw ConnErr.Timeout }
+    return conn.read()
 }
 
-// Business layer: compose Results
-fn loadConfig(path: string) -> Result<Config, ConfigError> {
-    let text = readFile(path)                    // may throw IOError
-    return parseConfig(text)
-}
-
-// Top level: exception catch as the safety net (must be called explicitly; there is no implicit main)
 fn main() {
     try {
-        let cfg = loadConfig("app.toml").unwrap()
-        startServer(cfg)
-    } catch (e: IOError) {
-        log.error("config missing:", e.message)
-        exit(1)
-    } catch (e: ConfigError) {
-        log.error("bad config:", e)
-        exit(2)
+        let data = fetchData("api.example.com")
+        print(data)
+    } catch (e: ConnErr) {
+        match (e) {
+            ConnErr.Refused -> print("connection refused"),
+            ConnErr.Timeout -> print("timeout"),
+            ConnErr.Reset -> print("connection reset"),
+        }
     }
 }
 
-main()                                     // explicit entry
+main()
 ```
 
-#### Pattern 2: condense an exception block into a Result (RPC / serialization)
+#### Pattern 2: Result for library APIs
 
 ```xray
-fn handleRequest(req: Request) -> Response {
-    let r: Result<Json, Exception> = catch! {
-        let user = db.query(req.userId)         // may throw DbError
-        return user.toJson()                    // may throw SerializeError
-    }
-    match (r) {
-        Result.Ok(json) -> Response.success(json),
-        Result.Err(e)   -> Response.error(500, e.message),
+enum ConfigErr { BadJson(string), BadField(string) }
+
+fn parseConfig(text: string) -> Result<Config, ConfigErr> {
+    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
+    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port"))
+    return Result.Ok(Config(port: port))
+}
+
+fn main() {
+    match (parseConfig(configText)) {
+        Result.Ok(cfg) -> startServer(cfg),
+        Result.Err(e) -> {
+            match (e) {
+                ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
+                ConfigErr.BadField(f) -> print("bad field:", f),
+            }
+        },
     }
 }
+
+main()
 ```
 
 #### Pattern 3: `try?` + `??` for default values
@@ -3443,6 +3407,18 @@ fn handleRequest(req: Request) -> Response {
 ```xray
 let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
 let user = (try? db.findUser(id)) ?? guestUser
+```
+
+#### Pattern 4: catch panic for runtime fault fallback
+
+```xray
+fn safeDivide(a: int, b: int) -> string {
+    try {
+        return string(a / b)
+    } catch panic {
+        return "error: division by zero"
+    }
+}
 ```
 
 ---
@@ -4809,7 +4785,7 @@ class Exception {
 
 The operand of a `throw` expression must have a static type that is `Exception` or one of its subclasses (see §8.1.1); other types are rejected at compile time (error code `E0370`). Runtime errors thrown by the VM also use this `Exception` type.
 
-Stack unwinding: the VM's `xvm_unwind_stack()` walks the try-table to find catch handlers, releasing locals frame by frame and running `finally` / `defer` along the way before jumping to the catch. See §8 for details.
+Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
 ### 16.7 Result Runtime
 
@@ -5296,9 +5272,8 @@ BreakStmt    ::= 'break'
 ContinueStmt ::= 'continue'
 
 ThrowStmt ::= 'throw' Expression
-TryStmt   ::= 'try' Block CatchClause? FinallyClause?
-CatchClause ::= 'catch' ('(' Identifier (':' Type)? ')')? Block
-FinallyClause ::= 'finally' Block
+TryStmt   ::= 'try' Block CatchClause+
+CatchClause ::= 'catch' 'panic'? ('(' Identifier (':' Type)? ')')? Block
 
 DeferStmt ::= 'defer' (Expression | Block)
 
@@ -5414,7 +5389,6 @@ The full set of 63 reserved keywords sorted alphabetically; see [§1.5](#15-keyw
 | `extends` | §5.3 |
 | `false` | §1.6.4 |
 | `final` | §5.3 |
-| `finally` | §8 |
 | `float` `float32` `float64` | §2.3.2 |
 | `fn` | §5.2 |
 | `for` | §4.4 |

@@ -24,6 +24,8 @@
 #include "xstruct_layout.h"
 #include "../../base/xdefs.h"
 
+typedef struct XrErrorSet XrErrorSet;
+
 /* ========== XrRep - Machine Representation ========== */
 /*
  * Replaces XmType. Derived from XrType via xr_type_rep().
@@ -152,6 +154,7 @@ struct XrType {
             XrType ***type_param_constraints;
             int *type_param_constraint_counts;
             int type_param_count;
+            XrErrorSet *error_set;  // NULL = infallible; non-NULL = may throw these errors
         } function;
 
         // For literal types
@@ -504,6 +507,11 @@ XR_FUNC XrType *xr_type_new_function(XrayIsolate *X, XrType **param_types, int p
 XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, const char **names,
                                               XrType ***constraint_lists,
                                               const int *constraint_counts, int count);
+
+// API: Function error set (value-return error system)
+XR_FUNC void xr_type_set_error_set(XrType *func_type, XrErrorSet *error_set);
+XR_FUNC XrErrorSet *xr_type_get_error_set(const XrType *func_type);
+XR_FUNC bool xr_type_is_fallible(const XrType *func_type);
 
 // API: Tuple type (for multi-value return)
 XR_FUNC XrType *xr_type_new_tuple(XrayIsolate *X, XrType **element_types, int count);

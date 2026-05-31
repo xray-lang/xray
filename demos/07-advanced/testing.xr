@@ -3,6 +3,8 @@
 //
 // Run: xray test demos/07-advanced/testing.xr
 
+enum TestErr { Expected(string) }
+
 // === Basic tests ===
 @test
 fn test_arithmetic() {
@@ -43,7 +45,7 @@ fn test_nullable() {
 @test
 fn test_exceptions() {
     assert_throws(() -> {
-        throw new Exception("expected error")
+        throw TestErr.Expected("expected error")
     })
 }
 

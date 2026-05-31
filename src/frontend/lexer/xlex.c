@@ -964,7 +964,6 @@ static const char *token_names[] = {
     // Exception handling
     [TK_TRY] = "try",
     [TK_CATCH] = "catch",
-    [TK_FINALLY] = "finally",
     [TK_THROW] = "throw",
 
     // Module system

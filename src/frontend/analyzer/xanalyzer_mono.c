@@ -526,8 +526,6 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.optional_chain.chain_type = node->as.optional_chain.chain_type;
             break;
         case AST_FORCE_UNWRAP:
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
             n->as.unary.operand = xr_ast_clone(node->as.unary.operand, map, mc);
             break;
 
@@ -555,7 +553,6 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
                     dst_tc->catch_clauses[ci] = dc;
                 }
             }
-            dst_tc->finally_body = xr_ast_clone(src_tc->finally_body, map, mc);
             break;
         }
         case AST_THROW_STMT:
@@ -595,9 +592,6 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.match_arm.pattern = xr_ast_clone(node->as.match_arm.pattern, map, mc);
             n->as.match_arm.guard = xr_ast_clone(node->as.match_arm.guard, map, mc);
             n->as.match_arm.body = xr_ast_clone(node->as.match_arm.body, map, mc);
-            break;
-        case AST_CATCH_EXPR:
-            n->as.catch_expr.body = xr_ast_clone(node->as.catch_expr.body, map, mc);
             break;
 
         // === Pattern nodes ===
@@ -1120,8 +1114,6 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
             collect_instantiation_sites(node->as.unary.operand, registry, collector);
             break;
         case AST_EXPR_STMT:
@@ -1209,7 +1201,6 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
                 if (cc)
                     collect_instantiation_sites(cc->body, registry, collector);
             }
-            collect_instantiation_sites(node->as.try_catch.finally_body, registry, collector);
             break;
         case AST_THROW_STMT:
             collect_instantiation_sites(node->as.throw_stmt.expression, registry, collector);
@@ -1225,9 +1216,6 @@ static void collect_instantiation_sites(AstNode *node, XaGenericRegistry *regist
         case AST_MATCH_ARM:
             collect_instantiation_sites(node->as.match_arm.guard, registry, collector);
             collect_instantiation_sites(node->as.match_arm.body, registry, collector);
-            break;
-        case AST_CATCH_EXPR:
-            collect_instantiation_sites(node->as.catch_expr.body, registry, collector);
             break;
         case AST_IS_EXPR:
             collect_instantiation_sites(node->as.is_expr.expr, registry, collector);
@@ -1363,8 +1351,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
             rewrite_call_sites(node->as.unary.operand, registry, collector);
             break;
         case AST_EXPR_STMT:
@@ -1418,7 +1404,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
                 if (cc)
                     rewrite_call_sites(cc->body, registry, collector);
             }
-            rewrite_call_sites(node->as.try_catch.finally_body, registry, collector);
             break;
         case AST_THROW_STMT:
             rewrite_call_sites(node->as.throw_stmt.expression, registry, collector);
@@ -1434,9 +1419,6 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
         case AST_MATCH_ARM:
             rewrite_call_sites(node->as.match_arm.guard, registry, collector);
             rewrite_call_sites(node->as.match_arm.body, registry, collector);
-            break;
-        case AST_CATCH_EXPR:
-            rewrite_call_sites(node->as.catch_expr.body, registry, collector);
             break;
         case AST_GO_EXPR:
             rewrite_call_sites(node->as.go_expr.expr, registry, collector);

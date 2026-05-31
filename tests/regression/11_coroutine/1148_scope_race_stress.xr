@@ -29,6 +29,8 @@
 // by Test 3 (independent JIT bug; the scope race fix being verified
 // here is in the interpreter / runtime path, not in the JIT).
 
+enum RaceErr { Msg(string) }
+
 const ITERATIONS = 50
 const FAILING_PER_SCOPE = 200
 const SUCCEEDING_PER_SCOPE = 50
@@ -41,7 +43,7 @@ fn make_failing(id: int) -> int {
     for (let k = 0; k < 50; k++) {
         x = x + k
     }
-    throw new Exception("err_" + string(id))
+    throw RaceErr.Msg("err_" + string(id))
     return x
 }
 
@@ -82,12 +84,9 @@ fn test_supervisor_no_torn_pushes() {
             }
         }
         for (let j = 0; j < errs.length; j++) {
-            let e = errs[j]
-            // Every slot must be a non-empty string with the err_ prefix
-            // produced by make_failing. A torn push or NULL slot would
-            // either be the empty string or fail startsWith.
+            let e = string(errs[j])
             assert(e.length >= 4, "torn slot: short string")
-            assert(e.startsWith("err_"), "torn slot: bad prefix")
+            assert(e.includes("err_"), "torn slot: bad prefix")
         }
     }
 }

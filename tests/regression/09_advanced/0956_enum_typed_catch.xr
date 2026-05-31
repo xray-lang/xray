@@ -1,0 +1,67 @@
+// REGRESSION: typed catch on enum error values (`catch (e: SomeEnum)`).
+// The value-return error channel carries `throw <enum>` values; a typed
+// multi-catch must route each error to the clause whose enum type matches.
+// This exercises the runtime `is <EnumType>` identity check used to select
+// the matching catch branch.
+
+enum NetErr { Timeout, Refused }
+enum DiskErr { Full, ReadOnly }
+
+fn fail(kind: int) -> int {
+    if (kind == 0) { throw NetErr.Timeout }
+    if (kind == 1) { throw DiskErr.Full }
+    return kind
+}
+
+// Route by enum type: NetErr → "net", DiskErr → "disk".
+fn classify(kind: int) -> string {
+    let tag = "none"
+    try {
+        fail(kind)
+    } catch (e: NetErr) {
+        tag = "net"
+    } catch (e: DiskErr) {
+        tag = "disk"
+    }
+    return tag
+}
+
+@test
+fn test_typed_enum_catch_first() {
+    assert_eq(classify(0), "net")
+}
+
+@test
+fn test_typed_enum_catch_second() {
+    assert_eq(classify(1), "disk")
+}
+
+@test
+fn test_typed_enum_no_throw() {
+    assert_eq(classify(2), "none")
+}
+
+// Typed enum catch followed by a catch-all: a non-matching enum must fall
+// through the typed clause into the catch-all rather than propagating.
+fn classify_with_default(kind: int) -> string {
+    let tag = "none"
+    try {
+        fail(kind)
+    } catch (e: NetErr) {
+        tag = "net"
+    } catch (e) {
+        tag = "other"
+    }
+    return tag
+}
+
+@test
+fn test_typed_enum_then_catchall_match() {
+    assert_eq(classify_with_default(0), "net")
+}
+
+@test
+fn test_typed_enum_then_catchall_fallthrough() {
+    // DiskErr.Full does not match `catch (e: NetErr)` → catch-all "other".
+    assert_eq(classify_with_default(1), "other")
+}

@@ -222,6 +222,10 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst);
 
 /* ========== Handler Declarations (xi_emit_eh.c) ========== */
 XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_err_set(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_err_return(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, uint8_t dst);
+XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_finally(EmitCtx *ctx, XiValue *v, uint8_t dst);

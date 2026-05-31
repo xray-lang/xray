@@ -237,7 +237,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
                 if (cc)
                     check_node(ctx, cc->body);
             }
-            check_node(ctx, node->as.try_catch.finally_body);
             break;
 
         case AST_FUNCTION_DECL:

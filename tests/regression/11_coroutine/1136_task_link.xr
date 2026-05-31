@@ -2,8 +2,10 @@
 
 import time
 
+enum LinkErr { Msg(string) }
+
 fn failing() -> int {
-    throw new Exception("link error")
+    throw LinkErr.Msg("link error")
     return 0
 }
 fn slow_work() -> int {

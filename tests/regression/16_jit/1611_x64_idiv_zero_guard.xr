@@ -41,7 +41,7 @@ fn test_idiv_zero_caught() {
         // If we get here, no exception was thrown — the JIT either
         // produced wrong results or never re-entered the VM.
         msg = "no exception thrown, got q=" + string(q)
-    } catch (e) {
+    } catch panic (p) {
         caught = true
     }
     assert(caught, "div-by-zero must throw (catch did not run): " + msg)
@@ -55,7 +55,7 @@ fn test_imod_zero_caught() {
     try {
         let r = 100 % z
         msg = "no exception thrown, got r=" + string(r)
-    } catch (e) {
+    } catch panic (p) {
         caught = true
     }
     assert(caught, "mod-by-zero must throw (catch did not run): " + msg)
@@ -75,7 +75,7 @@ fn test_idiv_zero_in_loop() {
     let z = make_zero()
     try {
         acc = acc + (1000 / z)
-    } catch (e) {
+    } catch panic (p) {
         caught = true
     }
     assert(caught, "hot-loop div-by-zero must throw, acc=" + string(acc))

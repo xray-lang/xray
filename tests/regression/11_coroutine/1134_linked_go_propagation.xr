@@ -1,7 +1,9 @@
 // Test standalone linked go error propagation (outside scope)
 
+enum LinkErr { Msg(string) }
+
 fn failing() -> int {
-    throw new Exception("linked child error")
+    throw LinkErr.Msg("linked child error")
     return 0
 }
 fn slow_work() -> int {

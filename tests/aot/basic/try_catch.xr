@@ -1,15 +1,41 @@
-// AOT basic test: try/catch exception handling (same-function)
-fn safe_double(x: int) -> int {
-    try {
-        if (x < 0) {
-            throw new Exception("negative")
-        }
-        return x * 2
-    } catch (e) {
-        return -1
-    }
+// AOT test: try-catch over the value-return error channel + defer cleanup.
+// Output is validated by diffing the VM and AOT runs.
+
+enum AppErr {
+    Bad(code: int)
 }
 
-print(safe_double(5))    // 10
-print(safe_double(-3))   // -1
-print(safe_double(0))    // 0
+fn test_normal() -> int {
+    let result = 0
+    try {
+        result = 10
+    } catch (e) {
+        result = -1
+    }
+    return result
+}
+
+fn test_caught() -> int {
+    let result = 0
+    try {
+        throw AppErr.Bad(7)
+        result = 10
+    } catch (e) {
+        match (e) { AppErr.Bad(c) -> { result = c } }
+    }
+    return result
+}
+
+fn test_defer_cleanup() -> int {
+    let log: Array<int> = []
+    fn body() {
+        defer { log.push(100) }
+        throw AppErr.Bad(1)
+    }
+    try { body() } catch (e) { log.push(1) }
+    return log[0] + log[1]
+}
+
+print(test_normal())         // 10
+print(test_caught())         // 7
+print(test_defer_cleanup())  // 101

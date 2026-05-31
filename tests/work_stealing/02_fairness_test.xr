@@ -6,6 +6,9 @@
 ** 测试方法：启动多个计算密集型协程，检查执行次数是否均衡
 */
 import time
+
+enum WsErr { Failed(string) }
+
 print("========== 测试2：工作窃取公平性 ==========")
 /* 测试参数 */
 const CORO_COUNT = 8
@@ -89,6 +92,6 @@ for (let i = 0; i < CORO_COUNT; i++) {
 if (all_executed) {
     print("✓ 所有协程都获得了执行机会")
 } else {
-    throw new Exception("有协程未执行")
+    throw WsErr.Failed("有协程未执行")
 }
 print("========== 测试2 完成 ==========")

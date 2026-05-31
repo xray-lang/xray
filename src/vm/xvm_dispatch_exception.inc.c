@@ -115,15 +115,17 @@ vmcase(OP_FINALLY) {
 }
 
 vmcase(OP_END_TRY) {
-    // End try-catch-finally block
+    /* End of a panic-handler (catch panic) scope.  OP_TRY/OP_END_TRY
+     * and the handler stack belong exclusively to the panic channel;
+     * the value-return error channel never uses them. */
     TRACE_EXECUTION();
 
     if (VM_HANDLER_COUNT > 0) {
         XrExceptionHandler *handler = &VM_HANDLERS[VM_HANDLER_COUNT - 1];
 
-        // Check for pending exception that needs re-throw:
-        // 1. Uncaught exception (try-finally without catch)
-        // 2. Exception thrown during catch, finally just finished
+        // Pending panic that must keep unwinding:
+        //   1. uncaught panic in try-finally (no catch panic)
+        //   2. panic raised inside the panic handler, finally just ran
         bool has_pending =
             !XR_IS_NULL(handler->exception) && (!handler->caught || handler->in_finally);
         if (has_pending) {
@@ -131,14 +133,11 @@ vmcase(OP_END_TRY) {
             VM_DEC_HANDLER_COUNT;  // Pop handler
             xr_vm_throw_exception(isolate, exc);
 
-            // Check if there are upper handlers reachable in this scope
             if (!xr_vm_is_catch_reachable(isolate)) {
                 return XR_VM_RUNTIME_ERROR;
             }
-            // Jump to upper handler
             goto startfunc;
         } else {
-            // Normal end, pop handler
             VM_DEC_HANDLER_COUNT;
         }
     }
@@ -196,4 +195,61 @@ vmcase(OP_THROW) {
 
     // Jump to catch or finally, continue execution
     goto startfunc;
+}
+
+/* ========== Value-Return Error Channel (new error system) ========== */
+
+vmcase(OP_ERR_SET) {
+    /* Write R[A] into the error channel without returning.
+     * Used for throw inside try body: sets pending_error, then
+     * control jumps to catch via normal CFG (JMP). */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    vm_ctx->pending_error = R(a);
+    vm_ctx->pending_error_tag = 1;
+    vmbreak;
+}
+
+vmcase(OP_ERR_RETURN) {
+    /* Write R[A] into the error channel and return from the function.
+     * Pure value-return: no handler stack, no unwind.  The caller
+     * observes pending_error_tag via OP_ERR_CHECK / OP_ERR_HAS. */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    vm_ctx->pending_error = R(a);
+    vm_ctx->pending_error_tag = 1;
+    vm_ctx->last_nret = 0;
+    goto return_with_defer;
+}
+
+vmcase(OP_ERR_CHECK) {
+    /* Inserted after a fallible call when not inside a local catch.
+     * If the callee set pending_error, propagate by returning from
+     * the current function (pure value-return, no unwind). */
+    TRACE_EXECUTION();
+    if (vm_ctx->pending_error_tag != 0) {
+        vm_ctx->last_nret = 0;
+        goto return_with_defer;
+    }
+    vmbreak;
+}
+
+vmcase(OP_ERR_HAS) {
+    /* R[A] = (pending_error_tag != 0).
+     * Used in try body: the result feeds an IF branch to catch. */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    R(a) = xr_bool(vm_ctx->pending_error_tag != 0);
+    vmbreak;
+}
+
+vmcase(OP_ERR_CATCH) {
+    /* Bind the pending error into R[A] and clear the channel.
+     * Used at the start of a catch block. */
+    TRACE_EXECUTION();
+    int a = GETARG_A(i);
+    R(a) = vm_ctx->pending_error;
+    vm_ctx->pending_error = xr_null();
+    vm_ctx->pending_error_tag = 0;
+    vmbreak;
 }

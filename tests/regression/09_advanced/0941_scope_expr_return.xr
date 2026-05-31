@@ -3,12 +3,14 @@
 // Bug: xi_lower_scope_block returned NULL instead of the exit value,
 // so `let errors = supervisor scope { ... }` got null instead of Array.
 
+enum ScopeErr { Msg(string) }
+
 fn child_ok() -> int {
     return 42
 }
 
 fn child_fail(msg: string) -> int {
-    throw new Exception(msg)
+    throw ScopeErr.Msg(msg)
     return 0
 }
 
@@ -46,7 +48,7 @@ fn test_supervisor_scope_single_failure() {
         go child_fail("single")
     }
     assert_eq(errors.length, 1)
-    assert_eq(errors[0], "single")
+    assert(string(errors[0]).includes("single"), "error should contain 'single'")
 }
 
 @test

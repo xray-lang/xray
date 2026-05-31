@@ -109,11 +109,22 @@ def parse_frontmatter(text: str) -> tuple[dict[str, Any], str]:
 # C string emission
 # ---------------------------------------------------------------------------
 
+_HEX_DIGITS = set("0123456789abcdefABCDEF")
+
+
 def c_escape(s: str) -> str:
     """Escape a single text line for inclusion in a C string literal."""
     out: list[str] = []
+    prev_was_hex_escape = False
     for ch in s:
         code = ord(ch)
+        # A literal hex digit immediately after a `\xHH` byte escape would be
+        # swallowed by the escape (C has no fixed-length \x), so split the
+        # literal with `""` to bound the escape.  Adjacent escapes are safe:
+        # the next `\` terminates the preceding \x.
+        if prev_was_hex_escape and ch in _HEX_DIGITS:
+            out.append('""')
+        prev_was_hex_escape = False
         if ch == "\\":
             out.append("\\\\")
         elif ch == '"':
@@ -129,10 +140,12 @@ def c_escape(s: str) -> str:
             out.append(ch)
         elif code < 0x20:
             out.append(f"\\x{code:02x}")
+            prev_was_hex_escape = True
         else:
             # UTF-8 encode and emit each byte as \xHH so source stays ASCII.
             for byte in ch.encode("utf-8"):
                 out.append(f"\\x{byte:02x}")
+            prev_was_hex_escape = True
     return "".join(out)
 
 

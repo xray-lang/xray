@@ -3,9 +3,11 @@
 // EXPECTED: done
 // Test: Try-catch exception handling in JIT
 
+enum JitErr { Negative(string) }
+
 fn may_throw(x: int) -> int {
     if (x < 0) {
-        throw new Exception("negative")
+        throw JitErr.Negative("negative")
     }
     return x
 }

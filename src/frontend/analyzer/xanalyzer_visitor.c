@@ -14,6 +14,7 @@
  */
 
 #include "xanalyzer_visitor_internal.h"
+#include "xanalyzer_errorset.h"
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 #include "../../module/xmodule_graph.h"
@@ -931,8 +932,6 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 xa_visit_collect(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
             }
-            if (tc->finally_body)
-                xa_visit_collect(ctx, tc->finally_body);
             break;
         }
         case AST_SELECT_STMT: {
@@ -1201,10 +1200,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
         case AST_FORCE_UNWRAP:
             result = xa_visit_force_unwrap(ctx, node);
             break;
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
-            result = xa_visit_try_expr(ctx, node);
-            break;
         case AST_AS_EXPR:
             result = xa_visit_as_expr(ctx, node);
             break;
@@ -1252,12 +1247,6 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
             break;
         case AST_MOVE_EXPR:
             result = xa_visit_move_expr(ctx, node);
-            break;
-        case AST_CATCH_EXPR:
-            /* Visit body for symbol resolution */
-            if (node->as.catch_expr.body)
-                xa_visit_infer_expr(ctx, node->as.catch_expr.body);
-            result = xr_type_new_named_instance(ctx->analyzer->isolate, "Result");
             break;
         case AST_SUPER_CALL: {
             /* Visit all arguments to resolve symbol_ids. */
@@ -1808,28 +1797,29 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 xa_visit_infer_stmt(ctx, cc->body);
                 xa_analyzer_exit_scope(ctx->analyzer);
             }
-            if (tc->finally_body)
-                xa_visit_infer_stmt(ctx, tc->finally_body);
             break;
         }
         case AST_THROW_STMT:
             if (node->as.throw_stmt.expression) {
                 XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
-                /* Strict throw: only Exception or a subclass is allowed.
-                 * Skip the check when the inferred type is unknown
-                 * (parser/type errors elsewhere already surface). */
+                /* Allow throw of: (1) enum value (new error model), or
+                 * (2) Exception / subclass (legacy, removed in M7).
+                 * Skip the check when the inferred type is unknown. */
                 if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {
-                    XrType *exc = xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
-                    bool ok = exc && (xr_type_is_named_class(thrown, "Exception") ||
-                                      xr_type_is_subclass_of(thrown, exc));
+                    bool ok = XR_TYPE_IS_ENUM(thrown);
+                    if (!ok) {
+                        XrType *exc =
+                            xr_type_new_named_instance(ctx->analyzer->isolate, "Exception");
+                        ok = exc && (xr_type_is_named_class(thrown, "Exception") ||
+                                     xr_type_is_subclass_of(thrown, exc));
+                    }
                     if (!ok) {
                         XrLocation loc = {
                             .file = ctx->file_path, .line = node->line, .column = node->column};
                         char msg[256];
                         snprintf(msg, sizeof(msg),
-                                 "throw expression must be an Exception or a subclass; "
-                                 "got '%s'. Wrap the value with `new Exception(...)` or a "
-                                 "user-defined Exception subclass.",
+                                 "throw expression must be an enum value or an Exception; "
+                                 "got '%s'",
                                  xr_type_to_string(thrown));
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_THROW_NON_EXCEPTION, msg, &loc);
@@ -2298,6 +2288,7 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
  *   Pass 1   -> Symbol collection
  *   Pass 1.5 -> Class inheritance linking
  *   Pass 2   -> Type inference and checking
+ *   Pass 3   -> Error set inference (value-return error system)
  * ========================================================================== */
 
 void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
@@ -2316,6 +2307,9 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
 
     // Pass 2: Infer types
     xa_visit_infer(ctx, ast);
+
+    // Pass 3: Infer error sets for functions (value-return error system)
+    xa_infer_error_sets(analyzer, ast);
 
     xa_infer_context_free(ctx);
 }

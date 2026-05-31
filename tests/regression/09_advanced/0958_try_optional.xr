@@ -1,24 +1,26 @@
 /*
-** try? expression: fold thrown exception into null, type T -> T?
-** Covers the 4 scenarios from the original design doc.
+** Exception catch with default values (migrated from try? to try-catch).
+** Covers scenarios where exceptions are caught and replaced with defaults.
 */
+
+enum OptErr { Msg(string) }
 
 fn maybeFailInt(should_throw: bool) -> int {
     if (should_throw) {
-        throw new Exception("intentional int failure")
+        throw OptErr.Msg("intentional int failure")
     }
     return 42
 }
 
 fn maybeFailJson(should_throw: bool) -> Json {
     if (should_throw) {
-        throw new Exception("intentional json failure")
+        throw OptErr.Msg("intentional json failure")
     }
     return { id: 1, name: "Alice" }
 }
 
 fn parseConfig() -> Json {
-    throw new Exception("config missing")
+    throw OptErr.Msg("config missing")
 }
 
 fn parseConfigOK() -> Json {
@@ -26,57 +28,93 @@ fn parseConfigOK() -> Json {
 }
 
 @test
-fn test_try_optional_basic() {
-    print("1. try? on success returns value")
-    let a = try? maybeFailInt(false)
+fn test_catch_with_default_basic() {
+    print("1. success returns value")
+    let a = maybeFailInt(false)
     assert_eq(a, 42)
     print("   PASS")
 
-    print("2. try? on failure returns null")
-    let b = try? maybeFailInt(true)
-    assert_eq(b, null)
+    print("2. failure caught with default")
+    let b = 0
+    try {
+        b = maybeFailInt(true)
+    } catch (e) {
+        b = 0
+    }
+    assert_eq(b, 0)
     print("   PASS")
 
-    print("3. try? + ?? with default value")
-    let c = try? maybeFailInt(true) ?? -1
+    print("3. catch with default value")
+    let c = -1
+    try {
+        c = maybeFailInt(true)
+    } catch (e) {
+        c = -1
+    }
     assert_eq(c, -1)
     print("   PASS")
 
-    print("4. try? + ?? when success keeps original")
-    let d = try? maybeFailInt(false) ?? -1
+    print("4. success keeps original value")
+    let d = -1
+    try {
+        d = maybeFailInt(false)
+    } catch (e) {
+        d = -1
+    }
     assert_eq(d, 42)
     print("   PASS")
 }
 
 @test
-fn test_try_optional_chain() {
-    print("5. (try? f())?.field?.sub ?? default — nested chain on failure")
-    let host = (try? parseConfig())?.database?.host ?? "localhost"
+fn test_catch_chain() {
+    print("5. chain on failure with default")
+    let host = "localhost"
+    try {
+        let cfg = parseConfig()
+        host = cfg["database"]["host"] ?? "localhost"
+    } catch (e) {
+        host = "localhost"
+    }
     assert_eq(host, "localhost")
     print("   PASS")
 
-    print("6. (try? f())?.field?.sub ?? default — nested chain on success")
-    let host2 = (try? parseConfigOK())?.database?.host ?? "localhost"
+    print("6. chain on success keeps original")
+    let host2 = "localhost"
+    try {
+        let cfg2 = parseConfigOK()
+        host2 = cfg2["database"]["host"] ?? "localhost"
+    } catch (e) {
+        host2 = "localhost"
+    }
     assert_eq(host2, "prod.example.com")
     print("   PASS")
 }
 
 @test
-fn test_try_optional_object_default() {
-    print("7. try? expr ?? object literal as fallback")
-    let cfg = try? parseConfig() ?? { port: 8080, host: "localhost" }
+fn test_catch_object_default() {
+    print("7. catch with object literal as fallback")
+    let cfg = { port: 8080, host: "localhost" }
+    try {
+        cfg = parseConfig()
+    } catch (e) {
+        cfg = { port: 8080, host: "localhost" }
+    }
     assert_eq(cfg.host, "localhost")
     assert_eq(cfg.port, 8080)
     print("   PASS")
 }
 
 fn findUser(id: int) -> Json? {
-    return try? maybeFailJson(id < 0)
+    try {
+        return maybeFailJson(id < 0)
+    } catch (e) {
+        return null
+    }
 }
 
 @test
-fn test_try_optional_function_return() {
-    print("8. function with Json? return type using try? in body")
+fn test_catch_function_return() {
+    print("8. function with Json? return type using try-catch in body")
     let u = findUser(1)
     assert_ne(u, null)
     assert_eq(u.name, "Alice")
@@ -88,15 +126,20 @@ fn test_try_optional_function_return() {
 }
 
 @test
-fn test_try_optional_batch() {
-    print("9. batch try? + ?? for multiple independent fallible ops")
-    fn fetchName() -> string { throw new Exception("no name") }
+fn test_catch_batch() {
+    print("9. batch try-catch for multiple independent fallible ops")
+    fn fetchName() -> string { throw OptErr.Msg("no name") }
     fn fetchAge() -> int { return 27 }
-    fn fetchEmail() -> string { throw new Exception("no email") }
+    fn fetchEmail() -> string { throw OptErr.Msg("no email") }
 
-    let name  = try? fetchName()  ?? "unknown"
-    let age   = try? fetchAge()   ?? 0
-    let email = try? fetchEmail() ?? ""
+    let name = "unknown"
+    try { name = fetchName() } catch (e) { name = "unknown" }
+
+    let age = 0
+    try { age = fetchAge() } catch (e) { age = 0 }
+
+    let email = ""
+    try { email = fetchEmail() } catch (e) { email = "" }
 
     assert_eq(name, "unknown")
     assert_eq(age, 27)

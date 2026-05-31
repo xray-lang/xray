@@ -499,7 +499,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
                 if (cc)
                     canon_node(ctx, cc->body);
             }
-            canon_node(ctx, node->as.try_catch.finally_body);
             break;
 
         case AST_MATCH_EXPR: {
@@ -651,8 +650,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
             break;
 
         case AST_FORCE_UNWRAP:
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
             canon_node(ctx, node->as.unary.operand);
             break;
 

@@ -546,8 +546,6 @@ static void collect_tokens_ast(SemanticTokenContext *ctx, AstNode *node) {
                 collect_tokens_ast(ctx, cc->body);
                 ctx->current_scope = saved;
             }
-
-            collect_tokens_ast(ctx, tc->finally_body);
             break;
         }
 

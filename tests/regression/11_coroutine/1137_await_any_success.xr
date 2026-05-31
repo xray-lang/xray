@@ -3,11 +3,13 @@
 ** 作者：xingleixu@gmail.com
 */
 
+enum CoroErr { Msg(string) }
+
 fn success() -> int {
     return 42
 }
 fn failing() -> int {
-    throw new Exception("error")
+    throw CoroErr.Msg("error")
     return 0
 }
 

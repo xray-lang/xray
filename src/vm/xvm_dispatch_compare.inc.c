@@ -260,6 +260,23 @@ vmcase(OP_IS) {
             XrClass *inst_cls = xr_instance_get_class(xr_value_to_instance(val));
             result = xr_class_instanceof(inst_cls, target_cls);
         }
+    } else if (xr_value_is_instance(type_val)) {
+        /* Enum type identity check (`e is SomeEnum`).  The bare enum name
+         * resolves to an XrEnumType value; an enum value is either a
+         * singleton XrEnumValue (simple enum) or an XrInstance whose class
+         * is the enum's class (ADT enum variant). */
+        XrClass *type_cls = xr_instance_get_class(xr_value_to_instance(type_val));
+        if (type_cls && type_cls->builtin_kind == XR_BK_ENUM_TYPE && xr_value_is_instance(val)) {
+            XrEnumType *et = XR_TO_ENUM_TYPE(type_val);
+            XrClass *vcls = xr_instance_get_class(xr_value_to_instance(val));
+            if (vcls && vcls->builtin_kind == XR_BK_ENUM_VALUE) {
+                XrEnumValue *ev = XR_TO_ENUM_VALUE(val);
+                result = (ev->parent_type == et) ||
+                         (ev->enum_name != NULL && et->name != NULL && ev->enum_name == et->name);
+            } else if (vcls != NULL && et->enum_class != NULL) {
+                result = (vcls == et->enum_class);
+            }
+        }
     }
 
     R(dest) = xr_bool(result);

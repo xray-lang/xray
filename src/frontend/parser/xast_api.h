@@ -248,9 +248,9 @@ XR_FUNC AstNode *xr_ast_enum_index(XrayIsolate *X, AstNode *collection, AstNode 
 XR_FUNC XrCatchClause *xr_ast_catch_clause(XrayIsolate *X, const char *var_name, int var_line,
                                            int var_column, XrTypeRef *type, AstNode *body);
 
-// Create try-catch-finally statement node (multi-catch)
+// Create try-catch statement node (multi-catch)
 XR_FUNC AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, XrCatchClause **clauses,
-                                  int catch_count, AstNode *finally_body, int line);
+                                  int catch_count, int line);
 
 // Create throw statement node
 XR_FUNC AstNode *xr_ast_throw_stmt(XrayIsolate *X, AstNode *expression, int line);
@@ -377,9 +377,6 @@ XR_FUNC AstNode *xr_ast_cancelled_expr(XrayIsolate *X, int line);
 
 // Create move expression node (explicit ownership transfer)
 XR_FUNC AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column);
-
-// Create catch! expression node (wraps body in Result.Ok/Err)
-XR_FUNC AstNode *xr_ast_catch_expr(XrayIsolate *X, AstNode *body, int line);
 
 // Debug: print AST structure
 XR_FUNC void xr_ast_print(AstNode *node, int indent);

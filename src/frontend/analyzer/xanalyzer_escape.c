@@ -423,7 +423,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
                     ea_pop_scope(ctx);
                 }
             }
-            ea_walk(ctx, node->as.try_catch.finally_body);
             break;
 
         case AST_RETURN_STMT:
@@ -463,8 +462,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
         case AST_FORCE_UNWRAP:
-        case AST_TRY_OPTIONAL:
-        case AST_TRY_FORCE:
             ea_walk(ctx, node->as.unary.operand);
             break;
 
@@ -554,10 +551,6 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
             for (int i = 0; i < node->as.match_expr.arm_count; i++) {
                 ea_walk(ctx, node->as.match_expr.arms[i]);
             }
-            break;
-
-        case AST_CATCH_EXPR:
-            ea_walk(ctx, node->as.catch_expr.body);
             break;
 
         case AST_MATCH_ARM:

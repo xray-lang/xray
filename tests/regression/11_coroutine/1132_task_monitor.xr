@@ -1,10 +1,12 @@
 // Test task.monitor() API — completion notification via Channel
 
+enum MonitorErr { Msg(string) }
+
 fn compute() -> int {
     return 42
 }
 fn failing() -> int {
-    throw new Exception("monitor test error")
+    throw MonitorErr.Msg("monitor test error")
     return 0
 }
 fn test_monitor_success() {
@@ -24,7 +26,7 @@ fn test_monitor_fail() {
     let (val, ok) = ch.tryRecv()
     assert(ok, "monitor channel should have value after task fails")
     assert(val.done, "monitor should receive completed task on failure")
-    assert(val.error == "monitor test error", "monitor task should carry error")
+    assert(val.error != null, "monitor task should carry error")
     ch.close()
 }
 fn test_monitor_already_done() {

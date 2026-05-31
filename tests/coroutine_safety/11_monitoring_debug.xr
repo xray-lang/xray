@@ -8,6 +8,8 @@
 // - 错误传播：协程中的异常处理
 print("========== 测试11：协程监控与调试 ==========")
 
+enum MonDebugErr { Msg(string) }
+
 // 测试1：协程状态查询
 fn test_coro_status_query() {
     let ch = new Channel(1)
@@ -105,7 +107,7 @@ fn test_batch_status_query() {
 // 测试5：协程错误捕获
 fn test_coro_error_capture() {
     fn failing_task() {
-        throw new Exception("Something went wrong!")
+        throw MonDebugErr.Msg("Something went wrong!")
     }
     fn safe_task() {
         return "success"

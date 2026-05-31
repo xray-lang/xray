@@ -1061,7 +1061,8 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
     }
 
     if (VM_MODULE_BASE >= 0 && VM_FRAME_COUNT == VM_MODULE_BASE) {
-        // Module execution complete, return to caller
+        if (vm_ctx->pending_error_tag != 0)
+            return XR_VM_RUNTIME_ERROR;
         return XR_VM_OK;
     }
 

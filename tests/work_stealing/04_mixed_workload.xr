@@ -6,6 +6,9 @@
 ** 测试方法：同时运行计算密集型和 IO 密集型协程
 */
 import time
+
+enum WsErr { Failed(string) }
+
 print("========== 测试4：混合负载测试 ==========")
 /* 测试参数 */
 const CPU_COROS = 20
@@ -71,7 +74,7 @@ if (cpu_completed == CPU_COROS && io_completed == IO_COROS) {
 } else {
     print("
 ✗ 测试失败")
-    throw new Exception("混合负载测试失败")
+    throw WsErr.Failed("混合负载测试失败")
 }
 /* 性能分析：总时间应该接近 IO 等待时间，而不是 CPU + IO */
 let expected_sequential = (CPU_COROS * 10) + (IO_COROS * IO_SLEEP_MS)

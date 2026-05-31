@@ -1754,10 +1754,6 @@ void xr_ast_print(AstNode *node, int indent) {
                         xr_ast_print(c->body, indent + 2);
                 }
             }
-            if (node->as.try_catch.finally_body) {
-                printf("%*sFinally Block:\n", (indent + 1) * 2, "");
-                xr_ast_print(node->as.try_catch.finally_body, indent + 2);
-            }
             break;
 
         case AST_THROW_STMT:
@@ -1783,17 +1779,17 @@ XrCatchClause *xr_ast_catch_clause(XrayIsolate *X, const char *var_name, int var
     c->type = type;
     c->body = body;
     c->symbol_id = 0;
+    c->is_panic = false;
     return c;
 }
 
-// Create try-catch-finally statement node (multi-catch)
+// Create try-catch statement node (multi-catch)
 AstNode *xr_ast_try_catch(XrayIsolate *X, AstNode *try_body, XrCatchClause **clauses,
-                          int catch_count, AstNode *finally_body, int line) {
+                          int catch_count, int line) {
     AstNode *node = alloc_node(X, AST_TRY_CATCH, line);
     node->as.try_catch.try_body = try_body;
     node->as.try_catch.catch_clauses = clauses;
     node->as.try_catch.catch_count = catch_count;
-    node->as.try_catch.finally_body = finally_body;
     return node;
 }
 
@@ -2118,12 +2114,5 @@ AstNode *xr_ast_move_expr(XrayIsolate *X, AstNode *expr, int line, int column) {
     AstNode *node = alloc_node(X, AST_MOVE_EXPR, line);
     node->column = column;
     node->as.move_expr.expr = expr;
-    return node;
-}
-
-// Create catch! expression node
-AstNode *xr_ast_catch_expr(XrayIsolate *X, AstNode *body, int line) {
-    AstNode *node = alloc_node(X, AST_CATCH_EXPR, line);
-    node->as.catch_expr.body = body;
     return node;
 }

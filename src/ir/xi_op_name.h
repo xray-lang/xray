@@ -174,6 +174,14 @@ static inline const char *xi_op_name(uint16_t op) {
             return "YIELD";
         case XI_THROW:
             return "THROW";
+        case XI_ERR_SET:
+            return "ERR_SET";
+        case XI_ERR_RETURN:
+            return "ERR_RETURN";
+        case XI_ERR_CHECK:
+            return "ERR_CHECK";
+        case XI_ERR_CATCH:
+            return "ERR_CATCH";
         case XI_ITER_NEW:
             return "ITER_NEW";
         case XI_ITER_NEXT:

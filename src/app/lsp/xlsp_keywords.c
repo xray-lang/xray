@@ -22,7 +22,7 @@ const char *xr_keywords[] = {
     "extends", "implements", "constructor", "this", "super", "new", "static", "private", "public",
     "abstract", "override", "operator",
     // Exception
-    "try", "catch", "finally", "throw",
+    "try", "catch", "throw",
     // Module
     "import", "export", "from", "as",
     // Coroutine

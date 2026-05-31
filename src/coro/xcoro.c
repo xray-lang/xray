@@ -102,6 +102,8 @@ void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
     ctx->module_base_frame = 0;
     ctx->handler_count = 0;
     ctx->current_exception = xr_null();
+    ctx->pending_error = xr_null();
+    ctx->pending_error_tag = 0;
     ctx->current_coro = coro;
     ctx->instruction_count = 0;
     ctx->preempt_pending = false;
@@ -1515,6 +1517,7 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
         // linked scope: deterministic "first failure wins" under the lock.
         if (XR_IS_NULL(scope->first_error)) {
             scope->first_error = err;
+            scope->first_error_is_value = coro->error_is_value;
         }
     } else if (scope->mode == XR_SCOPE_SUPERVISOR) {
         // supervisor scope: append every error; errors[] is preallocated.

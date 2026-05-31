@@ -92,21 +92,21 @@ typedef struct ContinueStmtNode {
 
 /* ========== Exception Handling ========== */
 
-// A single catch clause: catch (e) or catch (e: HttpError)
+// A single catch clause: catch (e), catch (e: HttpError), or catch panic (p)
 typedef struct XrCatchClause {
     char *var_name;
     int var_line;     // Line of catch variable (1-indexed)
     int var_column;   // Column of catch variable (1-indexed)
-    XrTypeRef *type;  // Type filter annotation (NULL = catch-all Exception)
+    XrTypeRef *type;  // Type filter annotation (NULL = catch-all)
     AstNode *body;
     uint32_t symbol_id;  // Analyzer-assigned unique ID; 0 = unresolved
+    bool is_panic;       // true = catch panic (p) clause (M6 connects to panic channel)
 } XrCatchClause;
 
 typedef struct TryCatchNode {
     AstNode *try_body;
     XrCatchClause **catch_clauses;  // Array of catch clauses (top-down order)
-    int catch_count;                // Number of catch clauses (0 = try-finally only)
-    AstNode *finally_body;
+    int catch_count;                // Number of catch clauses (>= 1)
 } TryCatchNode;
 
 typedef struct ThrowStmtNode {
@@ -245,11 +245,5 @@ typedef struct MoveExprNode {
 typedef struct CancelledExprNode {
     int placeholder;
 } CancelledExprNode;
-
-// catch! { body } expression — evaluates body, returns Result.Ok(value)
-// on success and Result.Err(exception) on throw.
-typedef struct CatchExprNode {
-    AstNode *body;  // block to execute
-} CatchExprNode;
 
 #endif  // XAST_NODES_STMT_H
