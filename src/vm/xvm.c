@@ -182,10 +182,14 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
         vm_ctx->frame_count = (v);                                                                 \
     } while (0)
 
-// Catchable runtime error: creates exception, does stack unwinding,
-// jumps to catch handler if available, otherwise returns hard error.
-// After this macro, control never falls through — it either gotos
-// startfunc (catch handler) or returns XR_VM_RUNTIME_ERROR.
+/* Panic: an unrecoverable runtime fault (div-by-zero, out-of-bounds,
+ * failed `expr!`, assert, stack overflow, OOM).  Panics use the limited
+ * unwinding path and are caught ONLY by `catch panic (p)` — they never
+ * touch the value-return error channel (pending_error).  If no panic
+ * handler is reachable, the VM fail-fasts (returns XR_VM_RUNTIME_ERROR).
+ *
+ * After this macro control never falls through: it either gotos
+ * startfunc (panic handler) or returns XR_VM_RUNTIME_ERROR. */
 #define VM_RUNTIME_ERROR(code, fmt, ...)                                                           \
     do {                                                                                           \
         XrValue _exc = xr_exception_newf(isolate, (code), fmt, ##__VA_ARGS__);                     \

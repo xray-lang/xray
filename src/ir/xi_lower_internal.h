@@ -130,13 +130,23 @@ XR_FUNC XiValue *xi_lower_pattern_test(XiLower *l, XiValue *subject, struct AstN
 struct XrTypeRef;
 XR_FUNC XiValue *xi_lower_is_test(XiLower *l, XiValue *val, struct XrTypeRef *tref, int line);
 
+/* ========== Error Propagation (xi_lower_misc.c) ========== */
+
+/* Insert error channel check after a fallible call.  If inside a try
+ * block, jumps to the current catch target.  Otherwise propagates by
+ * writing error + returning from the function. */
+XR_FUNC void xi_lower_insert_err_check(XiLower *l, struct AstNode *node);
+
+/* Re-propagate a materialized error value through the value channel,
+ * running any finally blocks it escapes (see xi_lower_stmt.c). */
+XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, struct AstNode *node);
+
 /* ========== Misc Expression Lowering (xi_lower_misc.c) ========== */
 
 XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_enum_convert(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_cancelled_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, struct AstNode *node);
-XR_FUNC XiValue *xi_lower_catch_expr(XiLower *l, struct AstNode *node);
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, struct AstNode *node);
 
 #endif  // XI_LOWER_INTERNAL_H

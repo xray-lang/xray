@@ -278,7 +278,6 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 if (cc)
                     visit_node(ctx, cc->body, current_dir);
             }
-            visit_node(ctx, node->as.try_catch.finally_body, current_dir);
             break;
 
         case AST_EXPORT_STMT:

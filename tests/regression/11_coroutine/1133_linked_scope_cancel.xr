@@ -1,8 +1,11 @@
 // Test linked scope sibling cancellation: when one child fails,
-// all other children are cancelled and scope throws first error.
+// all other children are cancelled and the scope re-raises the first
+// error through the value-return channel to the parent's `catch (e)`.
+
+enum ChildErr { Failed }
 
 fn failing() -> int {
-    throw new Exception("child error")
+    throw ChildErr.Failed
     return 0
 }
 fn ok() -> int {

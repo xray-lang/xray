@@ -370,9 +370,6 @@ static void find_symbol_definition(AstNode *node, RenameContext *ctx) {
                     ctx->current_scope = saved_scope;
                 }
             }
-
-            // Search in finally body
-            find_symbol_definition(tc->finally_body, ctx);
             break;
         }
 
@@ -729,9 +726,6 @@ static void collect_rename_locations(AstNode *node, RenameContext *ctx) {
                 collect_rename_locations(cc->body, ctx);
                 ctx->current_scope = saved_scope;
             }
-
-            // Process finally body
-            collect_rename_locations(tc->finally_body, ctx);
             break;
         }
 

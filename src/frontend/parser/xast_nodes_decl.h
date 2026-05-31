@@ -58,7 +58,9 @@ typedef struct FunctionDeclNode {
     int attr_count;
     XrGenericParam **type_params;
     int type_param_count;
-    uint32_t symbol_id;  // Unique ID from analyzer; 0 = unresolved / anonymous
+    uint32_t symbol_id;        // Unique ID from analyzer; 0 = unresolved / anonymous
+    XrTypeRef **throws_types;  // Optional `throws E1 | E2` error type annotations
+    int throws_count;          // Number of throws type refs (0 = not annotated)
 } FunctionDeclNode;
 
 /* ========== OOP: class / struct / interface / methods ========== */

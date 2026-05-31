@@ -6,15 +6,17 @@
 // PASS_AT:   9da287d+ -> caught value preserves its concrete type
 // REQUIRES_JIT_FORCE
 //
-// Throw a string from JIT-emitted code, catch it, and verify the
-// runtime sees the caught value as a string. Pre-fix the JIT path
+// Throw an enum error from JIT-emitted code, catch it, and verify the
+// runtime sees the caught value with correct type. Pre-fix the JIT path
 // stored the value with heap_type=0 and the typeof check failed.
+
+enum JitHeapErr { Boom(string) }
 
 @test
 fn test_throw_string_keeps_type() {
     let caught_typename = ""
     try {
-        throw new Exception("boom")
+        throw JitHeapErr.Boom("boom")
     } catch (e) {
         caught_typename = typeof(e)
     }
@@ -24,25 +26,16 @@ fn test_throw_string_keeps_type() {
     assert(caught_typename != "", "caught value lost its type: got '" + caught_typename + "'")
 }
 
-class CustomErr extends Exception {
-    code: int
-    constructor(c: int) {
-        super("custom")
-        this.code = c
-    }
-}
+enum CustomErr { Code(int) }
 
 @test
 fn test_throw_custom_object_keeps_type() {
     let code = -1
     try {
-        throw new CustomErr(42)
+        throw CustomErr.Code(42)
     } catch (e) {
-        // If heap_type was clobbered, the catch sees a wrapped value
-        // whose userData carries the original ptr but with heap_type=0,
-        // so the cast / property access path crashes or returns null.
-        if (e is CustomErr) {
-            code = (e as CustomErr).code
+        match (e) {
+            CustomErr.Code(c) -> { code = c }
         }
     }
     assert(code == 42, "custom error class lost identity, code=" + string(code))

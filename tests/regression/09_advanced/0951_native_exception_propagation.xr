@@ -8,7 +8,7 @@ fn test_json_stringify_catches_function() {
     let caught = false
     try {
         Json.stringify(obj)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
     }
     assert_eq(caught, true)
@@ -22,7 +22,7 @@ fn test_json_stringify_catches_nested() {
     let msg = ""
     try {
         Json.stringify(obj)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
         msg = string(e)
     }
@@ -44,7 +44,7 @@ fn test_exception_after_catch_continues() {
     let step2 = false
     try {
         Json.stringify(obj)
-    } catch (e) {
+    } catch panic (e) {
         step1 = true
     }
     step2 = true
@@ -60,7 +60,7 @@ fn test_multiple_catch_blocks() {
         let obj = { handler: f }
         try {
             Json.stringify(obj)
-        } catch (e) {
+        } catch panic (e) {
             count = count + 1
         }
     }

@@ -1,0 +1,90 @@
+// enum-based throw (value-return error system, M1)
+// Verifies that the analyzer accepts throw of enum values
+// and that the existing try-catch mechanism handles them.
+
+enum ParseErr {
+    Empty,
+    InvalidChar
+}
+
+enum IoErr {
+    NotFound,
+    PermissionDenied
+}
+
+fn might_fail(s: string) -> int {
+    if (s == "") {
+        throw ParseErr.Empty
+    }
+    return 42
+}
+
+fn openFile(path: string) -> string {
+    if (path == "") {
+        throw IoErr.NotFound
+    }
+    return "content"
+}
+
+fn readConfig() -> string {
+    const content = openFile("config.txt")
+    return content
+}
+
+@test fn enum_throw_happy_path() {
+    let result = 0
+    try {
+        result = might_fail("hello")
+    } catch (e) {
+        result = -1
+    }
+    assert_eq(result, 42)
+}
+
+@test fn enum_throw_caught() {
+    let result = ""
+    try {
+        openFile("")
+    } catch (e) {
+        result = "caught"
+    }
+    assert_eq(result, "caught")
+}
+
+@test fn enum_throw_propagation() {
+    let result = ""
+    try {
+        result = readConfig()
+    } catch (e) {
+        result = "caught"
+    }
+    assert_eq(result, "content")
+}
+
+@test fn enum_throw_multiple_types() {
+    fn riskyOp(mode: int) -> string {
+        if (mode == 0) {
+            throw ParseErr.Empty
+        }
+        if (mode == 1) {
+            throw IoErr.PermissionDenied
+        }
+        return "ok"
+    }
+
+    let r1 = ""
+    try {
+        r1 = riskyOp(2)
+    } catch (e) {
+        r1 = "error"
+    }
+    assert_eq(r1, "ok")
+
+    let r2 = ""
+    try {
+        r2 = riskyOp(0)
+    } catch (e) {
+        r2 = "parse_error"
+    }
+    assert_eq(r2, "parse_error")
+}

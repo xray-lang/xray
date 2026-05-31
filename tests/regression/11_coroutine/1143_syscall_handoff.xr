@@ -7,6 +7,9 @@
 */
 
 import time
+
+enum HandoffErr { Failed(string) }
+
 fn slow_worker(ch: Channel<string>) {
     time.sleep(200)
     ch.send("slow done")
@@ -52,7 +55,7 @@ fn test_syscall_handoff() {
     if (fast_done == FAST_COUNT && slow_done) {
         print("handoff test passed")
     } else {
-        throw new Exception("handoff test failed")
+        throw HandoffErr.Failed("handoff test failed")
     }
 }
 

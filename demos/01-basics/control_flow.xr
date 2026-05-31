@@ -73,18 +73,26 @@ print(classify(-5))
 print(classify(50))
 print(classify(200))
 
-// === try / catch / finally ===
+// === try / catch + defer cleanup ===
+// Errors are enum values thrown through the value-return channel; `defer`
+// provides deterministic cleanup that runs on every exit path.
+enum MathError {
+    DivByZero
+}
+
 fn safeDivide(a: int, b: int) -> int {
-    if (b == 0) { throw new Exception("division by zero") }
+    if (b == 0) { throw MathError.DivByZero }
     return a / b
 }
 
-try {
-    print("10 / 3 = ${safeDivide(10, 3)}")
-    print("10 / 0 = ${safeDivide(10, 0)}")
-} catch (e) {
-    print("Error: ${e}")
-} finally {
-    print("cleanup done")
+fn runDivision() {
+    defer { print("cleanup done") }
+    try {
+        print("10 / 3 = ${safeDivide(10, 3)}")
+        print("10 / 0 = ${safeDivide(10, 0)}")
+    } catch (e) {
+        print("Error: division by zero")
+    }
 }
+runDivision()
 

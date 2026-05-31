@@ -9,6 +9,7 @@
  */
 
 #include "xtype.h"
+#include "xerror_set.h"
 #include "../class/xclass_info.h"
 #include "xtype_pool.h"
 #include "../../base/xmalloc.h"
@@ -553,6 +554,26 @@ XR_FUNC void xr_type_set_function_type_params(XrayIsolate *X, XrType *type, cons
             type->function.type_param_constraint_counts[i] = 0;
         }
     }
+}
+
+/* ========== Function Error Set API ========== */
+
+void xr_type_set_error_set(XrType *func_type, XrErrorSet *error_set) {
+    if (!func_type || func_type->kind != XR_KIND_FUNCTION)
+        return;
+    func_type->function.error_set = error_set;
+}
+
+XrErrorSet *xr_type_get_error_set(const XrType *func_type) {
+    if (!func_type || func_type->kind != XR_KIND_FUNCTION)
+        return NULL;
+    return func_type->function.error_set;
+}
+
+bool xr_type_is_fallible(const XrType *func_type) {
+    if (!func_type || func_type->kind != XR_KIND_FUNCTION)
+        return false;
+    return func_type->function.error_set != NULL;
 }
 
 // Tuple type (for multi-value return, compile-time only)
@@ -1552,6 +1573,8 @@ bool xr_type_equals(XrType *a, XrType *b) {
                 return false;
             }
         }
+        if (!xr_error_set_equals(a->function.error_set, b->function.error_set))
+            return false;
         return true;
     }
     if (a->kind == XR_KIND_JSON) {

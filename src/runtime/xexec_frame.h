@@ -132,11 +132,15 @@ typedef struct XrVMContext {
     int frame_capacity;
     int module_base_frame;  // module boundary for error trace
 
-    // Exception handling
+    // Exception handling (legacy, retained for panic — M6 narrows)
     XrExceptionHandler *handlers;  // handler stack
     int handler_count;
     int handler_capacity;
     XrValue current_exception;  // active exception being handled
+
+    // Value-return error channel (new error system)
+    XrValue pending_error;       // error enum value (NULL_VAL = no error)
+    uint16_t pending_error_tag;  // global error tag (0 = no error)
 
     // Closure support
     void *current_coro;  // owning coroutine (XrCoroutine*)

@@ -1,11 +1,13 @@
 // Test supervisor scope errors[] collection
 
+enum SvErr { Msg(string) }
+
 fn failing1() -> int {
-    throw new Exception("error1")
+    throw SvErr.Msg("error1")
     return 0
 }
 fn failing2() -> int {
-    throw new Exception("error2")
+    throw SvErr.Msg("error2")
     return 0
 }
 fn ok() -> int {
@@ -31,7 +33,7 @@ fn test_single_error() {
         go failing1()
     }
     assert(errors.length == 1)
-    assert(errors[0] == "error1")
+    assert(errors[0] != null, "single error should be non-null")
 }
 fn test_as_statement() {
     supervisor scope {

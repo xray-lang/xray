@@ -1,7 +1,13 @@
 // 0955_exception_stack_array.xr
 // 作者：xingleixu@gmail.com
-// 测试：Exception.stack 是 Array<string>（F035 回归）
+// 测试：栈轨迹是 Array<string>（F035 回归）
 // spec §16.6 / §18.8 声明 stack: Array<string>，每帧一行格式化字符串。
+//
+// 栈轨迹属于 panic 通道：运行时故障（除零、断言失败等）unwind 时记录
+// 调用链，由 `catch panic (p)` 捕获，p.stack 暴露 Array<string>。
+// 用户错误（`throw <enum>`）走值返回通道，不携带栈轨迹。
+
+fn mkzero() -> int { return 0 }
 
 @test
 fn test_new_exception_stack_is_array() {
@@ -11,55 +17,58 @@ fn test_new_exception_stack_is_array() {
 
 @test
 fn test_new_exception_stack_initially_empty() {
-    // 直接 new 不经过 throw 控制流，stack 为空数组
+    // 直接 new 不经过 unwind 控制流，stack 为空数组
     let e = new Exception("hello")
     assert_eq(e.stack.length, 0)
 }
 
 @test
-fn test_caught_exception_stack_is_array() {
-    fn inner() {
-        throw new Exception("from inner")
+fn test_panic_stack_is_array() {
+    fn inner() -> int {
+        let z = mkzero()
+        return 100 / z  // div-by-zero -> panic
     }
     let stack_type = ""
     try {
         inner()
-    } catch (e) {
-        stack_type = typeof(e.stack)
+    } catch panic (p) {
+        stack_type = typeof(p.stack)
     }
     assert_eq(stack_type, "Array")
 }
 
 @test
-fn test_caught_exception_stack_has_frames() {
-    fn level2() {
-        throw new Exception("oops")
+fn test_panic_stack_has_frames() {
+    fn level2() -> int {
+        let z = mkzero()
+        return 100 / z
     }
-    fn level1() {
-        level2()
+    fn level1() -> int {
+        return level2()
     }
     let frames = 0
     try {
         level1()
-    } catch (e) {
-        frames = e.stack.length
+    } catch panic (p) {
+        frames = p.stack.length
     }
-    // 至少 1 帧（throw 点本身），具体数量取决于内联 / 调度细节
+    // 至少 1 帧（panic 点本身），具体数量取决于内联 / 调度细节
     assert(frames >= 1)
 }
 
 @test
-fn test_caught_exception_stack_frames_are_strings() {
-    fn inner() {
-        throw new Exception("oops")
+fn test_panic_stack_frames_are_strings() {
+    fn inner() -> int {
+        let z = mkzero()
+        return 100 / z
     }
     let all_strings = true
     try {
         inner()
-    } catch (e) {
+    } catch panic (p) {
         let idx = 0
-        while (idx < e.stack.length) {
-            if (typeof(e.stack[idx]) != "string") {
+        while (idx < p.stack.length) {
+            if (typeof(p.stack[idx]) != "string") {
                 all_strings = false
             }
             idx = idx + 1

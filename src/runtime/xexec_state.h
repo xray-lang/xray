@@ -140,10 +140,14 @@ typedef struct XrVMState {
     int frame_count;                      // current call depth
     int module_base_frame;                // module boundary for stack trace
 
-    // Exception handling
+    // Exception handling (legacy, retained for panic)
     XrExceptionHandler exception_handlers[XR_EXCEPTION_HANDLERS_MAX];
     int handler_count;
     XrValue current_exception;  // active exception
+
+    // Value-return error channel (new error system)
+    XrValue pending_error;       // error enum value (NULL_VAL = no error)
+    uint16_t pending_error_tag;  // global error tag (0 = no error)
 
     // Closure support
     void *strings_map;  // interned strings table

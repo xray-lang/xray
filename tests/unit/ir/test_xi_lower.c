@@ -357,18 +357,19 @@ TEST(throw_stmt) {
     assert(f != NULL);
     /* Should have: entry + then(throw) + else + merge */
     assert(f->nblocks >= 3);
-    /* Find the throw block — should be UNREACHABLE */
-    int found_throw = 0;
+    /* Find the throw block — should use XI_ERR_RETURN (value-return
+     * error channel) and terminate with RETURN kind. */
+    int found_err_return = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
-            if (blk->values[i]->op == XI_THROW) {
-                found_throw = 1;
-                assert(blk->kind == XI_BLOCK_UNREACHABLE);
+            if (blk->values[i]->op == XI_ERR_RETURN) {
+                found_err_return = 1;
+                assert(blk->kind == XI_BLOCK_RETURN);
             }
         }
     }
-    assert(found_throw && "should have THROW op");
+    assert(found_err_return && "should have ERR_RETURN op");
     xi_func_free(f);
 }
 
@@ -470,35 +471,32 @@ TEST(try_catch) {
     assert(f != NULL);
     /* try-catch generates: entry, try_blk, catch_blk, merge */
     assert(f->nblocks >= 3);
-    /* Verify XI_TRY and XI_CATCH ops are present */
-    int found_try = 0, found_catch = 0;
+    /* New error model: catch block uses XI_ERR_CATCH to read the
+     * error channel.  No XI_TRY/XI_CATCH (those are for panic). */
+    int found_err_catch = 0;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v->op == XI_TRY)
-                found_try = 1;
-            if (v->op == XI_CATCH)
-                found_catch = 1;
+            if (v->op == XI_ERR_CATCH)
+                found_err_catch = 1;
         }
     }
-    assert(found_try && "should have XI_TRY op");
-    assert(found_catch && "should have XI_CATCH op");
+    assert(found_err_catch && "should have XI_ERR_CATCH op");
     xi_func_free(f);
 }
 
-TEST(try_catch_finally) {
+TEST(try_catch_defer) {
     XiFunc *f = lower_source("let x = 0\n"
+                             "defer { x = 9 }\n"
                              "try {\n"
                              "    x = 1\n"
                              "} catch (e) {\n"
                              "    x = 2\n"
-                             "} finally {\n"
-                             "    print(x)\n"
                              "}\n");
     assert(f != NULL);
-    /* try + catch + finally + merge = at least 4 blocks */
-    assert(f->nblocks >= 4);
+    /* try + catch + merge = at least 3 blocks */
+    assert(f->nblocks >= 3);
     xi_func_free(f);
 }
 
@@ -840,7 +838,7 @@ int main(void) {
     run_map_literal();
     run_match_expr();
     run_try_catch();
-    run_try_catch_finally();
+    run_try_catch_defer();
     run_object_literal();
     run_nested_function();
     run_function_expr();

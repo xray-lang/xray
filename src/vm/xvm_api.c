@@ -212,7 +212,11 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     XrValue return_value = xr_null();
     if (exec_result == XR_VM_OK) {
         return_value = result_slot[0];
-    } else {
+    } else if (ctx->pending_error_tag == 0) {
+        /* A pending_error means the closure propagated a recoverable error
+         * through the value-return channel; the C caller inspects
+         * pending_error and decides what to do, so this is not a failure
+         * worth logging.  Only warn for genuine panics / runtime faults. */
         if (!isolate->suppress_exception_print) {
             xr_log_warning("vm", "xr_vm_call_closure: execution failed with error %d", exec_result);
         }

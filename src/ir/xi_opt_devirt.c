@@ -74,6 +74,76 @@ static int find_instance_method_index(const XiClassData *data, const char *metho
     return -1;
 }
 
+/* True iff `class_name` or any of its ancestors declares an instance
+ * method named `method`. */
+static bool method_in_class_or_ancestors(const XiFunc *f, const XiFunc *root,
+                                         const char *class_name, const char *method, int depth) {
+    if (!class_name || depth >= 8)
+        return false;
+    const XiFunc *owner = NULL;
+    const XiClassData *data = find_class_data(f, root, class_name, &owner);
+    if (!data)
+        return false;
+    if (find_instance_method_index(data, method) >= 0)
+        return true;
+    return method_in_class_or_ancestors(f, root, data->super_name, method, depth + 1);
+}
+
+/* Count of instance methods in the FLATTENED runtime layout of `class_name`,
+ * matching finalize_methods(): parent's flat count + own non-override
+ * instance methods.  Overrides reuse the parent slot and do not grow it. */
+static int flat_instance_method_count(const XiFunc *f, const XiFunc *root, const char *class_name,
+                                      int depth) {
+    if (!class_name || depth >= 8)
+        return 0;
+    const XiFunc *owner = NULL;
+    const XiClassData *data = find_class_data(f, root, class_name, &owner);
+    if (!data)
+        return 0;
+    int parent_count = flat_instance_method_count(f, root, data->super_name, depth + 1);
+    int own_nonoverride = 0;
+    for (uint16_t i = 0; i < data->ninst && i < data->nmethod; i++) {
+        const XiClassMethod *m = &data->methods[i];
+        if (m->is_static || m->is_static_constructor)
+            continue;
+        if (!method_in_class_or_ancestors(f, root, data->super_name, m->name, 0))
+            own_nonoverride++;
+    }
+    return parent_count + own_nonoverride;
+}
+
+/* Flat runtime index of `method` in `class_name`'s flattened methods[],
+ * matching the layout the VM's OP_INVOKE_DIRECT indexes (cls->methods[]).
+ * Returns -1 if not found.  Mirrors finalize_methods(): inherited methods
+ * occupy [0, parent_flat_count); an own override reuses the parent's slot;
+ * an own new method is appended after the parent block in declaration order. */
+static int flat_method_index(const XiFunc *f, const XiFunc *root, const char *class_name,
+                             const char *method, int depth) {
+    if (!class_name || depth >= 8)
+        return -1;
+    const XiFunc *owner = NULL;
+    const XiClassData *data = find_class_data(f, root, class_name, &owner);
+    if (!data)
+        return -1;
+    int parent_count = flat_instance_method_count(f, root, data->super_name, depth + 1);
+    int own_nonoverride = 0;
+    for (uint16_t i = 0; i < data->ninst && i < data->nmethod; i++) {
+        const XiClassMethod *m = &data->methods[i];
+        if (m->is_static || m->is_static_constructor)
+            continue;
+        bool is_override = method_in_class_or_ancestors(f, root, data->super_name, m->name, 0);
+        if (m->name && strcmp(m->name, method) == 0) {
+            if (is_override)
+                return flat_method_index(f, root, data->super_name, method, depth + 1);
+            return parent_count + own_nonoverride;
+        }
+        if (!is_override)
+            own_nonoverride++;
+    }
+    /* Not declared here — inherited from a parent. */
+    return flat_method_index(f, root, data->super_name, method, depth + 1);
+}
+
 /* Walk the inheritance chain to find a method.  If the concrete class
  * does not define the method, check the parent class data. */
 static const XiClassData *find_method_in_hierarchy(const XiFunc *f, const XiFunc *root,
@@ -150,11 +220,20 @@ static bool devirt_resolve(const XiFunc *f, const XiFunc *root, const XaClassHie
         find_method_in_hierarchy(f, root, class_name, method_name, &method_idx, &owner);
     if (!data || method_idx < 0 || method_idx > 255)
         return false;
+    /* method_idx is the own-method index within `data`; it indexes child_idx
+     * (the IR child-function table) for the validity guard below. */
     if (!owner || !data->child_idx || data->child_idx[method_idx] >= owner->nchildren ||
         !owner->children[data->child_idx[method_idx]])
         return false;
 
-    *out_idx = method_idx;
+    /* OP_INVOKE_DIRECT indexes the receiver class's FLATTENED runtime
+     * methods[] (inherited methods first), which differs from the own-method
+     * index when the class has inherited methods.  Emit the flat index. */
+    int flat_idx = flat_method_index(f, root, class_name, method_name, 0);
+    if (flat_idx < 0 || flat_idx > 255)
+        return false;
+
+    *out_idx = flat_idx;
     return true;
 }
 

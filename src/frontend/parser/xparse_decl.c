@@ -1447,13 +1447,14 @@ AstNode *xr_parse_declaration(Parser *parser) {
 // ========== Exception handling parse functions ==========
 
 /*
- * Parse try-catch-finally statement.
- * Supports multiple typed catch clauses:
+ * Parse try-catch statement.
+ * Supports multiple typed catch clauses and an optional panic boundary:
  *   try { ... }
  *   catch (e: HttpError) { ... }
  *   catch (e: DbError)   { ... }
  *   catch (e)            { ... }   // catch-all
- *   finally { ... }
+ *   catch panic (p)      { ... }   // recoverable-fault boundary
+ * There is no `finally`; use `defer` for cleanup (runs on all exits).
  */
 AstNode *xr_parse_try_statement(Parser *parser) {
     XR_DCHECK(parser != NULL, "parse_try_statement: NULL parser");
@@ -1473,10 +1474,20 @@ AstNode *xr_parse_try_statement(Parser *parser) {
 
     while (xr_parser_check(parser, TK_CATCH)) {
         xr_parser_advance(parser);  // consume 'catch'
+
+        /* `catch panic (p)` — panic boundary (recoverable-fault channel).
+         * `panic` is a contextual keyword here, not a reserved word. */
+        bool is_panic = false;
+        if (parser->current.type == TK_NAME && parser->current.length == 5 &&
+            memcmp(parser->current.start, "panic", 5) == 0) {
+            is_panic = true;
+            xr_parser_advance(parser);  // consume 'panic'
+        }
+
         xr_parser_consume(parser, TK_LPAREN, "expected '(' after catch");
 
         if (parser->current.type != TK_NAME) {
-            xr_parser_error_expected_name(parser, "expected exception variable name");
+            xr_parser_error_expected_name(parser, "expected catch variable name");
             return NULL;
         }
 
@@ -1502,27 +1513,19 @@ AstNode *xr_parse_try_statement(Parser *parser) {
 
         XrCatchClause *clause =
             xr_ast_catch_clause(parser->X, var_name, var_line, var_column, type_ann, body);
+        clause->is_panic = is_panic;
         XR_PARSE_PUSH(parser, clauses, catch_count, catch_cap, clause);
     }
 
-    // Optional finally block
-    AstNode *finally_body = NULL;
-    if (xr_parser_match(parser, TK_FINALLY)) {
-        xr_parser_consume(parser, TK_LBRACE, "expected '{' after finally");
-        finally_body = xr_parse_block(parser);
-    }
-
-    // Need at least one catch or finally
-    if (catch_count == 0 && !finally_body) {
-        xr_parser_error(parser, "try statement requires catch or finally block");
+    // Need at least one catch clause
+    if (catch_count == 0) {
+        xr_parser_error(parser, "try statement requires a catch block");
         return NULL;
     }
 
-    AstNode *node = xr_ast_try_catch(parser->X, try_body, clauses, catch_count, finally_body, line);
-    // Span ends at the last block present (finally > last catch > try).
-    AstNode *last_block = finally_body;
-    if (!last_block && catch_count > 0)
-        last_block = clauses[catch_count - 1]->body;
+    AstNode *node = xr_ast_try_catch(parser->X, try_body, clauses, catch_count, line);
+    // Span ends at the last block present (last catch > try).
+    AstNode *last_block = clauses[catch_count - 1]->body;
     if (!last_block)
         last_block = try_body;
     if (last_block) {

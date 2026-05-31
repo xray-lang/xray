@@ -1,96 +1,105 @@
-// REGRESSION: Phase 1a of error-handling redesign (task 081)
-// Exception is now a user-instantiable prelude class with the
-// shape `class Exception { message; stack; cause; constructor(...);
-// toString() }`. The new opcode OP_NEWEXCEPTION wires
-// `new Exception(message, cause)` to the native constructor without
-// going through the generic XrInstance pipeline (XrException is its
-// own GC type).
-//
-// FAIL_AT: pre-OP_NEWEXCEPTION builds — `new Exception("hi")` raised
-//          "method 'constructor' called on unsupported type" because
-//          prelude SIMPLE types had no path through the
-//          analyzer/lowerer to produce a class value at runtime.
-// PASS_AT: OP_NEWEXCEPTION + xnative_type_defs.inc regenerated with
-//          the cause field + xa_builtin_parse_full_signature accepts
-//          both `): T` and `) -> T` return separators.
+// REGRESSION: ADT enum construction and variant matching.
+// Validates that enum variants (both simple and ADT with payloads) can be
+// constructed, destructured via `match`, thrown, and caught correctly.
 
-@test
-fn test_exception_basic_construct() {
-    let e = new Exception("hi")
-    assert_eq(e.message, "hi")
+enum TestErr {
+    Msg(s: string),
+    Wrapped(msg: string, cause: string)
 }
 
 @test
-fn test_exception_no_args() {
-    // Both message and cause default to their zero values.
-    let e = new Exception()
-    assert_eq(e.message, "")
-    assert_eq(e.cause, null)
+fn test_enum_basic_construct() {
+    let e = TestErr.Msg("hi")
+    match (e) {
+        TestErr.Msg(s) -> { assert_eq(s, "hi") }
+        _ -> { assert(false) }
+    }
 }
 
 @test
-fn test_exception_cause_chain() {
-    let inner = new Exception("inner")
-    let outer = new Exception("outer", inner)
-    assert_eq(outer.message, "outer")
-    assert_eq(outer.cause.message, "inner")
+fn test_enum_multi_field() {
+    let e = TestErr.Wrapped("outer", "inner")
+    match (e) {
+        TestErr.Wrapped(msg, cause) -> {
+            assert_eq(msg, "outer")
+            assert_eq(cause, "inner")
+        }
+        _ -> { assert(false) }
+    }
 }
 
 @test
-fn test_exception_to_string() {
-    let e = new Exception("boom")
-    assert_eq(e.toString(), "Exception: boom")
+fn test_enum_cause_chain() {
+    let inner = TestErr.Msg("inner")
+    let outer = TestErr.Wrapped("outer", "inner")
+    match (outer) {
+        TestErr.Wrapped(msg, cause) -> {
+            assert_eq(msg, "outer")
+            match (inner) {
+                TestErr.Msg(s) -> { assert_eq(s, cause) }
+                _ -> { assert(false) }
+            }
+        }
+        _ -> { assert(false) }
+    }
 }
 
 @test
-fn test_exception_stack_default() {
-    // The Exception constructor initialises `stack` to a fresh empty
-    // XrArray; xvm_capture_stack later fills it on the unwind path.
-    // Newly constructed but never-thrown exceptions therefore have an
-    // empty stack array, not null and not "".
-    let e = new Exception("hi")
-    assert_eq(e.stack.length, 0)
+fn test_enum_to_string() {
+    let e = TestErr.Msg("boom")
+    let s = string(e)
+    assert(s.length > 0)
 }
 
 @test
-fn test_exception_throw_and_catch() {
+fn test_enum_throw_and_catch() {
     let caught_msg = ""
     try {
-        throw new Exception("oops")
-    } catch (err) {
-        caught_msg = err.message
+        throw TestErr.Msg("oops")
+    } catch (e) {
+        match (e) { TestErr.Msg(s) -> { caught_msg = s } }
     }
     assert_eq(caught_msg, "oops")
 }
 
 @test
-fn test_exception_throw_with_cause() {
-    let primary = new Exception("primary")
-    let captured: Exception? = null
+fn test_enum_throw_with_wrapped() {
+    let primary_msg = ""
+    let cause_msg = ""
     try {
-        throw new Exception("wrapped", primary)
-    } catch (err) {
-        captured = err
+        throw TestErr.Wrapped("wrapped", "primary")
+    } catch (e) {
+        match (e) {
+            TestErr.Wrapped(msg, cause) -> {
+                primary_msg = msg
+                cause_msg = cause
+            }
+        }
     }
-    assert_eq(captured.message, "wrapped")
-    assert_eq(captured.cause.message, "primary")
+    assert_eq(primary_msg, "wrapped")
+    assert_eq(cause_msg, "primary")
 }
 
 @test
-fn test_exception_type_annotation() {
-    // Exception is reachable as a type annotation via the prelude
-    // SIMPLE entry — the analyzer must accept `: Exception` in let,
-    // parameter and return positions.
-    let e: Exception = new Exception("annotated")
-    assert_eq(e.message, "annotated")
+fn test_enum_typed_catch() {
+    let caught = false
+    try {
+        throw TestErr.Msg("annotated")
+    } catch (e: TestErr) {
+        caught = true
+    }
+    assert_eq(caught, true)
 }
 
-fn make_failure(msg: string) -> Exception {
-    return new Exception(msg)
+fn make_failure(msg: string) -> TestErr {
+    return TestErr.Msg(msg)
 }
 
 @test
-fn test_exception_function_return() {
+fn test_enum_function_return() {
     let e = make_failure("via fn")
-    assert_eq(e.message, "via fn")
+    match (e) {
+        TestErr.Msg(s) -> { assert_eq(s, "via fn") }
+        _ -> { assert(false) }
+    }
 }

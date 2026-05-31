@@ -224,6 +224,8 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
     // Initialize exception handling stack
     isolate->vm.handler_count = 0;
     isolate->vm.current_exception = xr_null();
+    isolate->vm.pending_error = xr_null();
+    isolate->vm.pending_error_tag = 0;
 
     // Symbol table already initialized when XrayIsolate created (per-isolate)
     if (isolate && isolate->symbol_table) {

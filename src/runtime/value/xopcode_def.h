@@ -219,6 +219,11 @@
     _(FINALLY, FMT_NONE, KOP_NONE, "finally block")                                                \
     _(END_TRY, FMT_NONE, KOP_NONE, "try block end")                                                \
     _(THROW, FMT_A, KOP_A_USE, "throw R[A]")                                                       \
+    _(ERR_SET, FMT_A, KOP_A_USE, "pending_error = R[A]; set error tag (no return)")                \
+    _(ERR_RETURN, FMT_A, KOP_A_USE, "write R[A] to error channel + return")                        \
+    _(ERR_CHECK, FMT_A, KOP_A_LOAD, "check pending_error; if set, propagate (return)")             \
+    _(ERR_HAS, FMT_A, KOP_A_LOAD, "R[A] = (pending_error_tag != 0)")                               \
+    _(ERR_CATCH, FMT_A, KOP_A_LOAD, "R[A] = pending_error; clear error channel")                   \
     _(SPILL, FMT_AB, KOP_AB_UNARY, "S[A] = R[B] (spill register to slot)")                         \
     _(RELOAD, FMT_AB, KOP_AB_UNARY, "R[A] = S[B] (reload from slot)")                              \
     _(BOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as i64)")                                    \

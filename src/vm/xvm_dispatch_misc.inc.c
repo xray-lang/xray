@@ -214,10 +214,22 @@ vmcase(OP_SCOPE_EXIT) {
 
         // All children done
         if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
-            // linked scope: throw first error
             XrValue err = scope->first_error;
+            bool err_is_value = scope->first_error_is_value;
             current->current_scope = scope->parent;
             xr_free(scope);
+            if (err_is_value) {
+                /* Child failed via the value-return channel (user
+                 * `throw <enum>`).  Re-raise on the same channel so the
+                 * parent's `catch (e)` observes it.  The lowerer emits an
+                 * XI_ERR_CHECK right after the scope block to route this to
+                 * the catch (inside try) or propagate it (fallible fn). */
+                vm_ctx->pending_error = err;
+                vm_ctx->pending_error_tag = 1;
+                vmbreak;
+            }
+            /* Child failed via the panic channel — re-raise as a panic so the
+             * parent's `catch panic` observes it. */
             XrValue exc = err;
             if (!xr_value_is_exception(isolate, exc)) {
                 exc = xr_exception_from_value(isolate, exc);
@@ -252,6 +264,26 @@ vmcase(OP_SCOPE_EXIT) {
                 spin = 0;
                 xr_thread_yield();
             }
+        }
+        if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
+            XrValue err = scope->first_error;
+            bool err_is_value = scope->first_error_is_value;
+            sched->current_scope = scope->parent;
+            xr_free(scope);
+            if (err_is_value) {
+                vm_ctx->pending_error = err;
+                vm_ctx->pending_error_tag = 1;
+                vmbreak;
+            }
+            XrValue exc = err;
+            if (!xr_value_is_exception(isolate, exc)) {
+                exc = xr_exception_from_value(isolate, exc);
+            }
+            savepc();
+            xr_vm_unwind_with_trace(isolate, exc);
+            if (!xr_vm_is_catch_reachable(isolate))
+                return XR_VM_RUNTIME_ERROR;
+            goto startfunc;
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
             // Main thread: no coro for array alloc, use null

@@ -6,6 +6,9 @@
 ** 测试方法：协程 A 创建协程 B，B 创建 C...形成链式创建
 */
 import time
+
+enum WsErr { Failed(string) }
+
 print("========== 测试6：链式创建测试 ==========")
 /* 测试参数 */
 const CHAIN_DEPTH = 10
@@ -71,6 +74,6 @@ if (result.sum > 0) {
 } else {
     print("
 ✗ 测试失败")
-    throw new Exception("链式创建测试失败")
+    throw WsErr.Failed("链式创建测试失败")
 }
 print("========== 测试6 完成 ==========")

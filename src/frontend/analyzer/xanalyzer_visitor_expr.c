@@ -1496,60 +1496,6 @@ XrType *xa_visit_force_unwrap(XaInferContext *ctx, AstNode *node) {
     return inner;
 }
 
-/* Try-modified expression: try? expr / try! expr.
- *
- *   try? expr  folds any thrown exception into null, so the static type
- *              becomes T?.  Combine with ?? / ?. to build robust chains.
- *   try! expr  asserts that expr does not throw; if it does, the program
- *              panics at runtime.  The static type is unchanged from the
- *              operand.
- *
- * When the operand type is Result<T, E>, try!/try? performs value-level
- * unwrap instead of exception control:
- *   try! Result<T,E> → T   (Err causes early return from enclosing fn)
- *   try? Result<T,E> → T?  (Err becomes null, error cause discarded) */
-XrType *xa_visit_try_expr(XaInferContext *ctx, AstNode *node) {
-    if (!ctx || !node)
-        return xr_type_new_unknown(NULL);
-    XrType *inner = xa_visit_infer_expr(ctx, node->as.unary.operand);
-    if (!inner)
-        return xr_type_new_unknown(NULL);
-
-    /* Result<T, E> operand: unwrap to T or T?.
-     * Result<T,E> appears as XR_KIND_INSTANCE (generic annotation) or
-     * XR_KIND_ENUM (non-generic usage). */
-    bool is_result = false;
-    if (inner->kind == XR_KIND_INSTANCE && inner->instance.class_name &&
-        strcmp(inner->instance.class_name, "Result") == 0)
-        is_result = true;
-    else if (inner->kind == XR_KIND_ENUM && inner->enum_type.enum_name &&
-             strcmp(inner->enum_type.enum_name, "Result") == 0)
-        is_result = true;
-    if (is_result) {
-        /* Enum types don't carry generic args, so the unwrapped payload
-         * type is unknown at static analysis time. Runtime handles the
-         * correct type. Using unknown allows downstream assignments
-         * (e.g. let x: int = try! parse(s)) to pass the analyzer. */
-        XrType *unwrapped = xr_type_new_unknown(NULL);
-        if (node->type == AST_TRY_OPTIONAL) {
-            return xr_type_make_nullable(ctx->analyzer->isolate, unwrapped);
-        }
-        return unwrapped;
-    }
-
-    if (node->type == AST_TRY_OPTIONAL) {
-        // try? widens the type to nullable.  If the operand was already
-        // nullable, make_nullable is a no-op (T? remains T?).
-        if (inner->is_nullable) {
-            return inner;
-        }
-        return xr_type_make_nullable(ctx->analyzer->isolate, inner);
-    }
-
-    // AST_TRY_FORCE: type is unchanged.  Runtime panic on throw.
-    return inner;
-}
-
 XrType *xa_visit_function_expr(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !ctx->analyzer || !node)
         return xr_type_new_function(NULL, NULL, 0, xr_type_new_unknown(NULL), false);

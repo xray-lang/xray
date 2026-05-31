@@ -129,10 +129,9 @@ typedef enum {
     TK_TYPE_ALIAS,   // type (type alias definition)
 
     // Exception handling keywords
-    TK_TRY,      // try
-    TK_CATCH,    // catch
-    TK_FINALLY,  // finally
-    TK_THROW,    // throw
+    TK_TRY,    // try
+    TK_CATCH,  // catch
+    TK_THROW,  // throw
 
     // Module system keywords
     TK_IMPORT,  // import

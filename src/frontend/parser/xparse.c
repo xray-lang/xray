@@ -136,9 +136,9 @@ static ParseRule rules[] = {
     [TK_PRIVATE] = {NULL, NULL, PREC_NONE},
     [TK_PUBLIC] = {NULL, NULL, PREC_NONE},
     [TK_MATCH] = {xr_parse_match_expr, NULL, PREC_NONE},  // match expression
-    [TK_TRY] = {xr_parse_try_expr, NULL, PREC_NONE},      // try? / try! expression
-    [TK_CATCH] = {xr_parse_catch_expr, NULL, PREC_NONE},  // catch! { body } expression
-    [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},            // _ wildcard (pattern only)
+    [TK_TRY] = {NULL, NULL, PREC_NONE},
+    [TK_CATCH] = {NULL, NULL, PREC_NONE},
+    [TK_UNDERSCORE] = {NULL, NULL, PREC_NONE},  // _ wildcard (pattern only)
 
     // Coroutine keywords
     [TK_GO] = {xr_parse_go_expr, NULL, PREC_NONE},        // go expression
@@ -775,17 +775,7 @@ AstNode *xr_parse_statement(Parser *parser) {
 
     // Exception handling
     if (parser->current.type == TK_TRY) {
-        // Lookahead disambiguation: 'try { ... }' is a statement,
-        // but 'try? expr' / 'try! expr' are expressions (used as
-        // expression-statements via the fallthrough below).
-        Parser checkpoint = *parser;
-        xr_parser_advance(parser);
-        bool is_expr_form = (parser->current.type == TK_QUESTION || parser->current.type == TK_NOT);
-        *parser = checkpoint;
-        if (!is_expr_form) {
-            return xr_parse_try_statement(parser);
-        }
-        // fall through to xr_parse_expr_statement at the bottom
+        return xr_parse_try_statement(parser);
     }
     if (parser->current.type == TK_THROW) {
         return xr_parse_throw_statement(parser);

@@ -1,4 +1,7 @@
 // DAP test fixture: exception breakpoint test
+
+enum DapErr { Test(string) }
+
 let x = 1
-throw new Exception("test error")
+throw DapErr.Test("test error")
 print("should not reach here")

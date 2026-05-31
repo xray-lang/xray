@@ -131,6 +131,15 @@ XR_FUNC XiValue *xi_lower_scope_block(XiLower *l, AstNode *node) {
         exit_v->flags |= XI_FLAG_SIDE_EFFECT;
         exit_v->line = (uint32_t) node->line;
     }
+
+    /* A linked scope re-raises the first child failure.  Value-channel
+     * (enum) failures land in pending_error at XI_SCOPE_EXIT; route them to
+     * the enclosing catch (inside try) or propagate them (fallible fn), the
+     * same way a fallible call does.  Panic-channel child failures unwind
+     * inside OP_SCOPE_EXIT and never reach here. */
+    if (sb->scope_mode == 1 /* XR_SCOPE_LINKED */)
+        xi_lower_insert_err_check(l, node);
+
     return exit_v;
 }
 
@@ -980,300 +989,265 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
 
 /* ========== Try-Catch ========== */
 
-/* try-finally (no catch): inline finally code on both normal and exception
- * paths.  A separate finally block cannot resolve SSA variables because the
- * exception path bypasses the normal CFG, leaving the block with zero
- * predecessors for Braun read.
- *
- * Normal path:    try body → [finally inline] → merge → OP_END_TRY
- * Exception path: OP_CATCH → [finally inline] → OP_THROW (re-throw) */
-static void lower_try_finally(XiLower *l, TryCatchNode *tc, AstNode *node) {
-    XiBlock *try_blk = xi_block_new(l->func);
-    XiBlock *exc_blk = xi_block_new(l->func);
-    XiBlock *merge = xi_block_new(l->func);
-
-    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
-    if (try_op) {
-        try_op->aux = (void *) exc_blk;
-        try_op->aux_int = -1; /* no separate finally block */
-        try_op->flags |= XI_FLAG_SIDE_EFFECT;
-        try_op->line = (uint32_t) node->line;
-    }
-
-    xi_block_set_jump(l->cur_block, try_blk);
-    xi_lower_braun_seal(l, try_blk);
-
-    /* Normal path: try body → inline finally → merge */
-    l->cur_block = try_blk;
-    l->dead_after_throw = false;
-    l->try_depth++;
-    xi_lower_stmt(l, tc->try_body);
-    l->try_depth--;
-    XiBlock *try_end_blk = l->cur_block; /* last block in try body */
-    bool try_body_threw = l->dead_after_throw;
-
-    /* Consistency check: flag must agree with block content. */
-    XR_DCHECK(!try_body_threw || (try_end_blk && try_end_blk->nvalues > 0 &&
-                                  try_end_blk->values[try_end_blk->nvalues - 1]->op == XI_THROW),
-              "dead_after_throw set but block has no XI_THROW");
-
-    if (l->cur_block && !try_body_threw) {
-        xi_lower_stmt(l, tc->finally_body);
-        if (l->cur_block)
-            xi_block_set_jump(l->cur_block, merge);
-    }
-
-    /* Exception path: catch → inline finally → re-throw.
-     * Use try body's exit block so the finally sees the latest
-     * variable definitions (VM preserves register state on throw). */
-    XiBlock *exc_pred = try_end_blk ? try_end_blk : try_blk;
-    xi_block_add_pred(exc_blk, exc_pred);
-    xi_lower_braun_seal(l, exc_blk);
-    l->cur_block = exc_blk;
-    l->dead_after_throw = false;
-
-    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
-    if (catch_op) {
-        catch_op->flags |= XI_FLAG_SIDE_EFFECT;
-        catch_op->line = (uint32_t) node->line;
-    }
-
-    /* Track value count before finally so we can mark new writes. */
-    uint32_t pre_finally_nvals = l->cur_block ? l->cur_block->nvalues : 0;
-
-    xi_lower_stmt(l, tc->finally_body);
-
-    /* Exception-path variable writes modify shared registers (var_reg
-     * coalescing) that the outer catch reads after re-throw.  Mark them
-     * side-effectful so DCE preserves them. */
-    if (l->cur_block) {
-        for (uint32_t i = pre_finally_nvals; i < l->cur_block->nvalues; i++) {
-            XiValue *fv = l->cur_block->values[i];
-            if (fv && fv->var_id != 0xFF)
-                fv->flags |= XI_FLAG_SIDE_EFFECT;
+/* Re-propagate an already-materialized error value (e.g. read by
+ * XI_ERR_CATCH) through the value channel, respecting the enclosing
+ * try scope:
+ *   - inside an outer error-catch (try_depth > 0): XI_ERR_SET + jump to
+ *     that catch block, so the error stays local to this function.
+ *   - otherwise: XI_ERR_RETURN, returning the error from the function.
+ * Consumes l->cur_block (sets it to the jump/return target state). */
+XR_FUNC void xi_lower_reprop_error(XiLower *l, XiValue *val, AstNode *node) {
+    if (!l->cur_block || !val)
+        return;
+    if (l->try_depth > 0) {
+        XiValue *set = xi_value_new(l->func, l->cur_block, XI_ERR_SET, l->type_unit, 1);
+        if (set) {
+            set->args[0] = val;
+            set->flags |= XI_FLAG_SIDE_EFFECT;
+            set->line = (uint32_t) node->line;
         }
-    }
-
-    if (l->cur_block && catch_op) {
-        XiValue *rethrow = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
-        if (rethrow) {
-            rethrow->args[0] = catch_op;
-            rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-            rethrow->line = (uint32_t) node->line;
-        }
-        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
-        l->cur_block->control = catch_op;
+        XiBlock *catch_blk = l->catch_targets[l->try_depth - 1];
+        xi_block_set_jump(l->cur_block, catch_blk);
         l->cur_block = NULL;
-    }
-
-    xi_lower_braun_seal(l, merge);
-    l->cur_block = (merge->npreds > 0) ? merge : NULL;
-    l->dead_after_throw = false;
-
-    if (l->cur_block) {
-        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
-        if (end_op) {
-            end_op->flags |= XI_FLAG_SIDE_EFFECT;
-            end_op->line = (uint32_t) node->line;
+    } else {
+        XiValue *reprop = xi_value_new(l->func, l->cur_block, XI_ERR_RETURN, l->type_unit, 1);
+        if (reprop) {
+            reprop->args[0] = val;
+            reprop->flags |= XI_FLAG_SIDE_EFFECT;
+            reprop->line = (uint32_t) node->line;
         }
+        l->cur_block->kind = XI_BLOCK_RETURN;
+        l->cur_block->control = reprop;
+        l->cur_block = NULL;
     }
 }
 
-/* try-catch or try-catch-finally: the catch block has proper CFG
- * predecessors, so Braun SSA variable resolution works normally.
- * For multi-catch, the first catch clause is the entry point; additional
- * typed clauses desugar to is-T checks with conditional branches.
- * For try-catch-finally, a separate finally block is used (reachable from
- * both try-body and catch-body normal exits). */
-static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
-    XiBlock *try_blk = xi_block_new(l->func);
-    XiBlock *catch_blk = xi_block_new(l->func);
-    XiBlock *merge = xi_block_new(l->func);
-    XiBlock *finally_blk = tc->finally_body ? xi_block_new(l->func) : NULL;
-    XiBlock *normal_target = finally_blk ? finally_blk : merge;
+/* Upper bound on catch clauses we partition on the stack.  Multi-catch
+ * with more than this is pathological; clauses beyond it are ignored. */
+#define XR_TRY_MAX_CATCH 32
 
-    XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
-    if (try_op) {
-        try_op->aux = (void *) catch_blk;
-        try_op->aux_int = finally_blk ? (int64_t) finally_blk->id : -1;
-        try_op->flags |= XI_FLAG_SIDE_EFFECT;
-        try_op->line = (uint32_t) node->line;
-    }
-
-    xi_block_set_jump(l->cur_block, try_blk);
-    xi_lower_braun_seal(l, try_blk);
-
-    l->cur_block = try_blk;
-    l->dead_after_throw = false;
-    l->try_depth++;
-    xi_lower_stmt(l, tc->try_body);
-    l->try_depth--;
-    XiBlock *try_exit_blk = l->cur_block; /* last block in try body */
-
-    /* Wire the normal-path edge unconditionally.  When the try body
-     * ends with XI_THROW the JMP is dead at runtime, but it keeps the
-     * CFG connected so dominator computation does not see orphan blocks
-     * (e.g. a finally_blk that only the dead JMP reaches). */
-    if (l->cur_block)
-        xi_block_set_jump(l->cur_block, normal_target);
-
-    /* Catch block: receives control from anywhere in the try body.
-     * Use the try body's exit block as predecessor so Braun SSA sees
-     * variable mutations that occurred before the exception. The VM
-     * preserves register state across throws, so the catch handler
-     * reads the most recently written register values. */
-    XiBlock *catch_pred = try_exit_blk ? try_exit_blk : try_blk;
-    xi_block_add_pred(catch_blk, catch_pred);
-    xi_lower_braun_seal(l, catch_blk);
-    l->cur_block = catch_blk;
-    l->dead_after_throw = false;
-
-    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
+/* Lower the error catch block: XI_ERR_CATCH binds the pending error,
+ * then the error catch clauses run (single or is-T chain).  All control
+ * flow is the value-return error channel — no handler stack. */
+static void lower_error_catch_clauses(XiLower *l, XrCatchClause **errc, int errn, AstNode *node,
+                                      XiBlock *normal_target) {
+    XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_ERR_CATCH, l->type_any, 0);
     if (catch_op) {
         catch_op->flags |= XI_FLAG_SIDE_EFFECT;
-        catch_op->line = (tc->catch_count > 0 && tc->catch_clauses[0]->var_line > 0)
-                             ? (uint32_t) tc->catch_clauses[0]->var_line
-                             : (uint32_t) node->line;
+        catch_op->line = (errn > 0 && errc[0]->var_line > 0) ? (uint32_t) errc[0]->var_line
+                                                             : (uint32_t) node->line;
     }
 
-    /* Single catch: simple lowering.  Multi-catch: chain of is-T tests.
-     * Runtime semantics: try each clause in order; first match wins.
-     * A clause without a type annotation is the catch-all (must be last). */
-    XR_DCHECK(tc->catch_count > 0, "lower_try_catch_impl: no catch clauses");
-
-    if (tc->catch_count == 1) {
-        /* Single clause — simple case, no type dispatch needed */
-        XrCatchClause *cc = tc->catch_clauses[0];
+    if (errn == 1) {
+        XrCatchClause *cc = errc[0];
         if (cc->var_name && catch_op) {
             int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
             xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
         }
         xi_lower_stmt(l, cc->body);
-    } else {
-        /* Multi-catch: emit if-else chain with is-T checks.
-         * Each typed clause: if (e is T) { body } else { next }
-         * Untyped (catch-all): just body. */
-        for (int ci = 0; ci < tc->catch_count; ci++) {
-            XrCatchClause *cc = tc->catch_clauses[ci];
-            if (!cc)
-                continue;
+        return;
+    }
 
-            bool is_last = (ci == tc->catch_count - 1);
-            bool has_type = (cc->type != NULL);
+    /* Multi-catch: if-else chain with is-T checks. */
+    for (int ci = 0; ci < errn; ci++) {
+        XrCatchClause *cc = errc[ci];
+        bool is_last = (ci == errn - 1);
+        bool has_type = (cc->type != NULL);
 
-            if (has_type && !is_last) {
-                /* Typed clause: branch on is-T test */
-                XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
-                XiBlock *match_blk = xi_block_new(l->func);
-                XiBlock *next_blk = xi_block_new(l->func);
+        if (has_type && !is_last) {
+            XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
+            XiBlock *match_blk = xi_block_new(l->func);
+            XiBlock *next_blk = xi_block_new(l->func);
 
-                xi_block_set_if(l->cur_block, is_val, match_blk, next_blk);
+            xi_block_set_if(l->cur_block, is_val, match_blk, next_blk);
 
-                /* Match body */
-                xi_lower_braun_seal(l, match_blk);
-                l->cur_block = match_blk;
-                if (cc->var_name && catch_op) {
-                    int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                    xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-                }
-                xi_lower_stmt(l, cc->body);
-                if (l->cur_block)
-                    xi_block_set_jump(l->cur_block, normal_target);
-
-                /* Continue to next clause */
-                xi_lower_braun_seal(l, next_blk);
-                l->cur_block = next_blk;
-            } else {
-                /* Last clause or untyped catch-all: unconditional */
-                if (has_type) {
-                    /* Last clause with type: still do the is-T check,
-                     * rethrow if not matched */
-                    XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
-                    XiBlock *match_blk = xi_block_new(l->func);
-                    XiBlock *rethrow_blk = xi_block_new(l->func);
-
-                    xi_block_set_if(l->cur_block, is_val, match_blk, rethrow_blk);
-
-                    /* Match body */
-                    xi_lower_braun_seal(l, match_blk);
-                    l->cur_block = match_blk;
-                    if (cc->var_name && catch_op) {
-                        int var_id =
-                            xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                        xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-                    }
-                    xi_lower_stmt(l, cc->body);
-                    if (l->cur_block)
-                        xi_block_set_jump(l->cur_block, normal_target);
-
-                    /* Rethrow path: no match for any clause */
-                    xi_lower_braun_seal(l, rethrow_blk);
-                    l->cur_block = rethrow_blk;
-                    XiValue *rethrow =
-                        xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
-                    if (rethrow) {
-                        rethrow->args[0] = catch_op;
-                        rethrow->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-                        rethrow->line = (uint32_t) node->line;
-                    }
-                    l->cur_block->kind = XI_BLOCK_UNREACHABLE;
-                    l->cur_block->control = catch_op;
-                    l->cur_block = NULL;
-                } else {
-                    /* Untyped catch-all: just assign and lower body */
-                    if (cc->var_name && catch_op) {
-                        int var_id =
-                            xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
-                        xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
-                    }
-                    xi_lower_stmt(l, cc->body);
-                }
+            xi_lower_braun_seal(l, match_blk);
+            l->cur_block = match_blk;
+            if (cc->var_name && catch_op) {
+                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
             }
-        }
-    }
+            xi_lower_stmt(l, cc->body);
+            if (l->cur_block)
+                xi_block_set_jump(l->cur_block, normal_target);
 
-    if (l->cur_block)
-        xi_block_set_jump(l->cur_block, normal_target);
+            xi_lower_braun_seal(l, next_blk);
+            l->cur_block = next_blk;
+        } else if (has_type) {
+            XiValue *is_val = xi_lower_is_test(l, catch_op, cc->type, cc->var_line);
+            XiBlock *match_blk = xi_block_new(l->func);
+            XiBlock *reprop_blk = xi_block_new(l->func);
 
-    /* Finally block (only for try-catch-finally) */
-    if (finally_blk) {
-        xi_lower_braun_seal(l, finally_blk);
-        l->cur_block = finally_blk;
-        l->dead_after_throw = false;
+            xi_block_set_if(l->cur_block, is_val, match_blk, reprop_blk);
 
-        XiValue *fin_op = xi_value_new(l->func, l->cur_block, XI_FINALLY, l->type_unit, 0);
-        if (fin_op) {
-            fin_op->flags |= XI_FLAG_SIDE_EFFECT;
-            fin_op->line = (uint32_t) node->line;
-        }
+            xi_lower_braun_seal(l, match_blk);
+            l->cur_block = match_blk;
+            if (cc->var_name && catch_op) {
+                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+            }
+            xi_lower_stmt(l, cc->body);
+            if (l->cur_block)
+                xi_block_set_jump(l->cur_block, normal_target);
 
-        xi_lower_stmt(l, tc->finally_body);
-    }
-
-    if (finally_blk && l->cur_block)
-        xi_block_set_jump(l->cur_block, merge);
-
-    xi_lower_braun_seal(l, merge);
-    l->cur_block = (merge->npreds > 0) ? merge : NULL;
-    l->dead_after_throw = false;
-
-    if (l->cur_block) {
-        XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
-        if (end_op) {
-            end_op->flags |= XI_FLAG_SIDE_EFFECT;
-            end_op->line = (uint32_t) node->line;
+            /* Unmatched: re-propagate to enclosing scope. */
+            xi_lower_braun_seal(l, reprop_blk);
+            l->cur_block = reprop_blk;
+            xi_lower_reprop_error(l, catch_op, node);
+        } else {
+            if (cc->var_name && catch_op) {
+                int var_id = xi_lower_var_create(l, cc->symbol_id, cc->var_name, l->type_any);
+                xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+            }
+            xi_lower_stmt(l, cc->body);
         }
     }
 }
 
-XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
-    TryCatchNode *tc = &node->as.try_catch;
-
-    if (tc->catch_count == 0 && tc->finally_body) {
-        lower_try_finally(l, tc, node);
-    } else {
-        lower_try_catch_impl(l, tc, node);
+/* try-catch (with optional finally).  error and panic are two strictly
+ * separate channels:
+ *
+ *   - `catch (e)` / `catch (e: T)`  → ERROR channel (user `throw <enum>`).
+ *     Pure value-return: pending_error + CFG branches.  No handler stack.
+ *
+ *   - `catch panic (p)`             → PANIC channel (div-zero, OOB, expr!,
+ *     assert, …).  Uses XI_TRY/OP_TRY handler stack + unwind.  Only this
+ *     clause observes runtime faults.
+ *
+ * XI_TRY is emitted iff a `catch panic` clause is present. */
+static void lower_try_catch_impl(XiLower *l, TryCatchNode *tc, AstNode *node) {
+    /* Partition catch clauses: error clauses vs. the (optional) panic clause. */
+    XrCatchClause *errc[XR_TRY_MAX_CATCH];
+    int errn = 0;
+    XrCatchClause *panic_clause = NULL;
+    for (int i = 0; i < tc->catch_count; i++) {
+        XrCatchClause *cc = tc->catch_clauses[i];
+        if (!cc)
+            continue;
+        if (cc->is_panic)
+            panic_clause = cc;
+        else if (errn < XR_TRY_MAX_CATCH)
+            errc[errn++] = cc;
     }
+    bool has_err = errn > 0;
+    bool has_panic = panic_clause != NULL;
+
+    XiBlock *try_blk = xi_block_new(l->func);
+    XiBlock *catch_blk = has_err ? xi_block_new(l->func) : NULL;
+    XiBlock *panic_blk = has_panic ? xi_block_new(l->func) : NULL;
+    XiBlock *merge = xi_block_new(l->func);
+    XiBlock *normal_target = merge;
+
+    /* Panic handler: register OP_TRY pointing at panic_blk.  This is the
+     * VM's mechanism for synchronous runtime faults (the only thing that
+     * uses the handler stack now). */
+    if (has_panic) {
+        XiValue *try_op = xi_value_new(l->func, l->cur_block, XI_TRY, l->type_unit, 0);
+        if (try_op) {
+            try_op->aux = (void *) panic_blk;
+            try_op->aux_int = -1;
+            try_op->flags |= XI_FLAG_SIDE_EFFECT;
+            try_op->line = (uint32_t) node->line;
+        }
+    }
+
+    xi_block_set_jump(l->cur_block, try_blk);
+    xi_lower_braun_seal(l, try_blk);
+
+    /* Error catch scope: a `throw <enum>` or fallible call inside the body
+     * branches to catch_blk via the value channel (see lower_throw /
+     * xi_lower_insert_err_check, which consult try_depth/catch_targets). */
+    if (has_err) {
+        l->catch_targets[l->try_depth] = catch_blk;
+        l->try_depth++;
+    }
+    l->cur_block = try_blk;
+    l->dead_after_throw = false;
+    xi_lower_stmt(l, tc->try_body);
+    if (has_err)
+        l->try_depth--;
+
+    XiBlock *try_exit_blk = l->cur_block;
+
+    /* Normal path: pop panic handler (if any) and go to merge. */
+    if (l->cur_block) {
+        if (has_panic) {
+            XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+            if (end_op) {
+                end_op->flags |= XI_FLAG_SIDE_EFFECT;
+                end_op->line = (uint32_t) node->line;
+            }
+        }
+        xi_block_set_jump(l->cur_block, normal_target);
+    }
+
+    /* ---- Error catch block (value channel) ---- */
+    if (has_err) {
+        /* The body reaches catch_blk via CFG edges (ERR_SET+jump or
+         * ERR_HAS+IF).  If none exist, add try exit as predecessor so
+         * Braun SSA still sees the try body's definitions. */
+        XiBlock *catch_pred = try_exit_blk ? try_exit_blk : try_blk;
+        if (catch_blk->npreds == 0)
+            xi_block_add_pred(catch_blk, catch_pred);
+        xi_lower_braun_seal(l, catch_blk);
+        l->cur_block = catch_blk;
+        l->dead_after_throw = false;
+
+        /* Leaving the try scope on the error path: pop the panic handler. */
+        if (has_panic) {
+            XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+            if (end_op) {
+                end_op->flags |= XI_FLAG_SIDE_EFFECT;
+                end_op->line = (uint32_t) node->line;
+            }
+        }
+
+        lower_error_catch_clauses(l, errc, errn, node, normal_target);
+
+        if (l->cur_block)
+            xi_block_set_jump(l->cur_block, merge);
+    }
+
+    /* ---- Panic catch block (unwind channel) ---- */
+    if (has_panic) {
+        /* panic_blk is reached only via the implicit unwind edge (OP_TRY
+         * handler), invisible to the SSA builder.  Add try entry as pred. */
+        if (panic_blk->npreds == 0)
+            xi_block_add_pred(panic_blk, try_blk);
+        xi_lower_braun_seal(l, panic_blk);
+        l->cur_block = panic_blk;
+        l->dead_after_throw = false;
+
+        XiValue *catch_op = xi_value_new(l->func, l->cur_block, XI_CATCH, l->type_any, 0);
+        if (catch_op) {
+            catch_op->flags |= XI_FLAG_SIDE_EFFECT;
+            catch_op->line = (uint32_t) panic_clause->var_line;
+        }
+        if (panic_clause->var_name && catch_op) {
+            int var_id = xi_lower_var_create(l, panic_clause->symbol_id, panic_clause->var_name,
+                                             l->type_any);
+            xi_lower_braun_write(l, var_id, l->cur_block, catch_op);
+        }
+        xi_lower_stmt(l, panic_clause->body);
+
+        /* Pop the handler now that the panic is handled. */
+        if (l->cur_block) {
+            XiValue *end_op = xi_value_new(l->func, l->cur_block, XI_END_TRY, l->type_unit, 0);
+            if (end_op) {
+                end_op->flags |= XI_FLAG_SIDE_EFFECT;
+                end_op->line = (uint32_t) node->line;
+            }
+            xi_block_set_jump(l->cur_block, merge);
+        }
+    }
+
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    l->dead_after_throw = false;
+}
+
+XR_FUNC void xi_lower_try_catch(XiLower *l, AstNode *node) {
+    lower_try_catch_impl(l, &node->as.try_catch, node);
 }
 
 /* ========== Defer / Yield (from xi_lower_expr.c) ========== */
@@ -1607,25 +1581,10 @@ static void lower_throw(XiLower *l, AstNode *node) {
     if (!val)
         return;
 
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_THROW, l->type_unit, 1);
-    if (!v)
-        return;
-    v->args[0] = val;
-    v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
-    v->line = (uint32_t) node->line;
-
-    if (l->try_depth > 0) {
-        /* Inside try: keep block alive for SSA predecessor edges.
-         * OP_THROW transfers control at runtime, so subsequent code
-         * in this block is dead.  Set the flag so enclosing handlers
-         * skip normal-path inlining of finally bodies. */
-        l->dead_after_throw = true;
-    } else {
-        /* Outside try: no handler, terminate block. */
-        l->cur_block->kind = XI_BLOCK_UNREACHABLE;
-        l->cur_block->control = val;
-        l->cur_block = NULL;
-    }
+    /* `throw <enum>` is the value-return error channel: write the error
+     * and either branch to the enclosing error-catch (try_depth > 0) or
+     * return it from the current function. */
+    xi_lower_reprop_error(l, val, node);
 }
 
 static void lower_return(XiLower *l, AstNode *node) {

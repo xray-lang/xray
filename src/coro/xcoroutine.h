@@ -314,6 +314,10 @@ typedef struct XrCoroutine {
     struct XrayIsolate *isolate;   // JIT runtime helpers use 22+ times
     XrValue result;
     XrValue error;
+    /* true: `error` came from the value-return channel (user `throw <enum>`);
+     * false: from the panic channel (div-zero, OOB, assert, …).  Drives how
+     * a linked scope re-raises a child failure into the parent. */
+    bool error_is_value;
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
@@ -536,11 +540,12 @@ typedef struct XrScopeContext {
     _Atomic int count;
     struct XrScopeContext *parent;
     struct XrCoroutine *owner;
-    uint8_t mode;                     // XrScopeMode
-    _Atomic bool cancel_requested;    // linked scope: set when first child fails
-    _Atomic bool child_lock;          // Spinlock — see lock contract above
-    XrValue first_error;              // linked scope: first child error (lock-protected)
-    struct XrArray *errors;           // supervisor scope: collected errors (eager-alloc)
+    uint8_t mode;                   // XrScopeMode
+    _Atomic bool cancel_requested;  // linked scope: set when first child fails
+    _Atomic bool child_lock;        // Spinlock — see lock contract above
+    XrValue first_error;            // linked scope: first child error (lock-protected)
+    bool first_error_is_value;      // linked scope: first_error came via value channel (enum throw)
+    struct XrArray *errors;         // supervisor scope: collected errors (eager-alloc)
     struct XrCoroutine *first_child;  // linked list of child coros in this scope
 } XrScopeContext;
 

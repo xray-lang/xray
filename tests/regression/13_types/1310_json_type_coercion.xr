@@ -60,7 +60,7 @@ fn test_json_type_mismatch_throws() {
         let port: int = data["name"]
         // Should not reach here — "xray" is string, not int
         assert(false)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
     }
     assert(caught)
@@ -73,7 +73,7 @@ fn test_json_type_mismatch_float_to_int() {
     try {
         let x: int = data["val"]
         assert(false)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
     }
     assert(caught)
@@ -115,7 +115,7 @@ fn test_json_array_mismatch_throws() {
     try {
         let arr: Array<int> = data["name"]
         assert(false)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
     }
     assert(caught)

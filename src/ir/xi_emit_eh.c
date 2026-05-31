@@ -10,6 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "../runtime/value/xtype.h"
 #include <stdio.h>
 
 /* ========== Exception Handling ========== */
@@ -61,6 +62,49 @@ XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) v;
     (void) dst;
     emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+}
+
+/* ========== Value-Return Error Channel ========== */
+
+XR_FUNC void xi_emit_err_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ERR_SET, src, 0, 0));
+}
+
+XR_FUNC void xi_emit_err_return(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ERR_RETURN, src, 0, 0));
+}
+
+XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    /* Two modes based on result type:
+     * - bool type: used as IF condition (try body) → OP_ERR_HAS into dst
+     * - unit type: unconditional propagation → OP_ERR_CHECK */
+    if (v->type && v->type->kind == XR_KIND_BOOL) {
+        emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, dst, 0, 0));
+    } else {
+        (void) dst;
+        emit_inst(ctx, CREATE_ABC(OP_ERR_CHECK, 0, 0, 0));
+    }
+}
+
+XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) v;
+    emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, dst, 0, 0));
 }
 
 /* Defer: args[0]=callee, args[1..n]=call arguments.
@@ -368,14 +412,26 @@ XR_FUNC void xi_emit_assert_ne(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_ASSERT_NE, actual, unexpected, (uint8_t) loc_k));
 }
 
-/* assert_throws(fn): emit inline try-catch sequence.
- *   OP_TRY catch_offset=+6, finally=0
- *   MOVE tmp, fn_reg          ; prepare call window
- *   CALL tmp, 0, 1            ; call fn() with 0 args
- *   LOADK err_reg, "assert fail: expected throw at ..."
- *   THROW err_reg             ; fn returned normally → assertion failed
- *   CATCH tmp                 ; exception thrown → pass
- *   END_TRY */
+/* assert_throws(fn): pass iff fn() faults — either via the value-return
+ * error channel (throw <enum>) OR via a panic (div-by-zero, expr!, …).
+ * An OP_TRY panic handler wraps the call so panics are caught too.
+ *
+ * Layout (relative to try_pc):
+ *   +0  TRY  Bx=Lpanic            ; panic handler (catch_offset patched)
+ *   +1  NOP                       ; finally placeholder (consumed by OP_TRY)
+ *   +2  MOVE call_reg, fn_reg
+ *   +3  CALL call_reg, 0, 1       ; call fn()
+ *   +4  END_TRY                   ; no panic → pop handler
+ *   +5  ERR_HAS check_reg         ; pending error?
+ *   +6  TEST  check_reg, 1        ; has error → exec next; no error → skip
+ *   +7  JMP  -> Lpass
+ *   +8  LOADK err_reg, msg        ; no fault at all → assertion fails
+ *   +9  ERR_RETURN err_reg
+ *  +10  Lpass: ERR_CATCH call_reg ; error-channel fault → clear, pass
+ *  +11  JMP  -> Lend
+ *  +12  Lpanic: CATCH call_reg    ; panic unwind lands here; clear panic
+ *  +13  END_TRY                   ; pop handler
+ *  +14  Lend: (continue) */
 XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) dst;
     if (v->nargs < 1) {
@@ -386,7 +442,6 @@ XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Build assertion failure message */
     const char *loc = v->aux ? (const char *) v->aux : "unknown";
     char msg[128];
     snprintf(msg, sizeof(msg), "assertion failed at %s: expected throw", loc);
@@ -394,40 +449,45 @@ XR_FUNC void xi_emit_assert_throws(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    /* Allocate temp registers for the call window and error value */
-    if (ctx->next_reg + 2 >= MAX_REGS) {
+    if (ctx->next_reg + 3 >= MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
     uint8_t call_reg = ctx->next_reg++;
     uint8_t err_reg = ctx->next_reg++;
+    uint8_t check_reg = ctx->next_reg++;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
 
-    /* OP_TRY Bx = absolute catch PC.
-     * Layout: TRY(+0), NOP(+1), MOVE(+2), CALL(+3), LOADK(+4), THROW(+5),
-     *         CATCH(+6), END_TRY(+7)
-     * catch_pc = try_pc + 6 */
     int try_pc = current_pc(ctx);
-    int catch_pc = try_pc + 6;
-    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, catch_pc));
-    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* finally = 0 (none) */
+    emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0)); /* +0 catch offset patched below */
+    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* +1 finally placeholder */
 
-    /* Call fn() */
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, call_reg, fn_reg, 0));
-    emit_inst(ctx, CREATE_ABC(OP_CALL, call_reg, 0, 1));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, call_reg, fn_reg, 0)); /* +2 */
+    emit_inst(ctx, CREATE_ABC(OP_CALL, call_reg, 0, 1));      /* +3 */
 
-    /* fn() returned normally → throw AssertError */
-    emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, msg_k));
-    emit_inst(ctx, CREATE_ABC(OP_THROW, err_reg, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));         /* +4 no panic → pop */
+    emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, check_reg, 0, 0)); /* +5 */
+    emit_inst(ctx, CREATE_ABC(OP_TEST, check_reg, 1, 0));    /* +6 */
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 2));                    /* +7 → Lpass(+10) */
 
-    /* Catch: exception was thrown → assertion passes */
-    emit_inst(ctx, CREATE_ABC(OP_CATCH, call_reg, 0, 0));
-    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));
+    emit_inst(ctx, CREATE_ABx(OP_LOADK, err_reg, msg_k));     /* +8 */
+    emit_inst(ctx, CREATE_ABC(OP_ERR_RETURN, err_reg, 0, 0)); /* +9 */
 
-    /* Free temp registers */
+    emit_inst(ctx, CREATE_ABC(OP_ERR_CATCH, call_reg, 0, 0)); /* +10 Lpass */
+    emit_inst(ctx, CREATE_sJ(OP_JMP, 2));                     /* +11 → Lend(+14) */
+
+    emit_inst(ctx, CREATE_ABC(OP_CATCH, call_reg, 0, 0)); /* +12 Lpanic */
+    emit_inst(ctx, CREATE_ABC(OP_END_TRY, 0, 0, 0));      /* +13 pop */
+    /* +14 Lend */
+
+    /* Patch OP_TRY catch_offset to the absolute pc of Lpanic (+12). */
+    XrInstruction *code = PROTO_CODE_BASE(ctx->proto);
+    code[try_pc] = CREATE_ABx(OP_TRY, 0, try_pc + 12);
+
     free_reg(ctx, call_reg);
     free_reg(ctx, err_reg);
+    free_reg(ctx, check_reg);
 }
 
 /* ========== Regex Literal ========== */

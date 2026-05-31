@@ -205,7 +205,6 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
                 if (cc)
                     visit_node(cc->body, v);
             }
-            visit_node(node->as.try_catch.finally_body, v);
             break;
 
         case AST_THROW_STMT:
@@ -231,10 +230,6 @@ static void visit_children(AstNode *node, XaAstVisitor *v) {
             for (int i = 0; i < node->as.match_expr.arm_count; i++) {
                 visit_node(node->as.match_expr.arms[i], v);
             }
-            break;
-
-        case AST_CATCH_EXPR:
-            visit_node(node->as.catch_expr.body, v);
             break;
 
         default:

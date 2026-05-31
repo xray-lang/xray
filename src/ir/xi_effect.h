@@ -152,13 +152,23 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_SLICE:
             return XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
 
-        /* --- Exception handling --- */
+        /* --- Exception handling (legacy, retained for panic) --- */
         case XI_THROW:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_TRY:
         case XI_CATCH:
         case XI_FINALLY:
         case XI_END_TRY:
+            return XI_FLAG_SIDE_EFFECT;
+
+        /* --- Value-return error channel --- */
+        case XI_ERR_SET:
+            return XI_FLAG_SIDE_EFFECT;
+        case XI_ERR_RETURN:
+            return XI_FLAG_SIDE_EFFECT;
+        case XI_ERR_CHECK:
+            return XI_FLAG_SIDE_EFFECT;
+        case XI_ERR_CATCH:
             return XI_FLAG_SIDE_EFFECT;
 
         /* --- Bounds check: traps on out-of-bounds --- */

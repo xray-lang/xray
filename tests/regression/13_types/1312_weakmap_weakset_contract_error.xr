@@ -18,19 +18,19 @@ fn test_weakmap_weakset_contract_error() {
     let wm = new WeakMap()
 
     let caught_int = false
-    try { wm.set(42, "value") } catch (e) { caught_int = true }
+    try { wm.set(42, "value") } catch panic (e) { caught_int = true }
     assert(caught_int, "WeakMap.set(int, ...) must throw")
 
     let caught_float = false
-    try { wm.set(3.14, "value") } catch (e) { caught_float = true }
+    try { wm.set(3.14, "value") } catch panic (e) { caught_float = true }
     assert(caught_float, "WeakMap.set(float, ...) must throw")
 
     let caught_bool = false
-    try { wm.set(true, "value") } catch (e) { caught_bool = true }
+    try { wm.set(true, "value") } catch panic (e) { caught_bool = true }
     assert(caught_bool, "WeakMap.set(bool, ...) must throw")
 
     let caught_null = false
-    try { wm.set(null, "value") } catch (e) { caught_null = true }
+    try { wm.set(null, "value") } catch panic (e) { caught_null = true }
     assert(caught_null, "WeakMap.set(null, ...) must throw")
 
     // Object key still succeeds.
@@ -42,15 +42,15 @@ fn test_weakmap_weakset_contract_error() {
     let ws = new WeakSet()
 
     let caught_set_int = false
-    try { ws.add(7) } catch (e) { caught_set_int = true }
+    try { ws.add(7) } catch panic (e) { caught_set_int = true }
     assert(caught_set_int, "WeakSet.add(int) must throw")
 
     let caught_set_bool = false
-    try { ws.add(true) } catch (e) { caught_set_bool = true }
+    try { ws.add(true) } catch panic (e) { caught_set_bool = true }
     assert(caught_set_bool, "WeakSet.add(true) must throw")
 
     let caught_set_null = false
-    try { ws.add(null) } catch (e) { caught_set_null = true }
+    try { ws.add(null) } catch panic (e) { caught_set_null = true }
     assert(caught_set_null, "WeakSet.add(null) must throw")
 
     // Object element still succeeds.

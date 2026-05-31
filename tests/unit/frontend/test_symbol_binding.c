@@ -130,7 +130,6 @@ static int count_unresolved_vars(AstNode *node) {
                 if (cc)
                     count += count_unresolved_vars(cc->body);
             }
-            count += count_unresolved_vars(node->as.try_catch.finally_body);
             break;
         case AST_FUNCTION_DECL:
         case AST_FUNCTION_EXPR:

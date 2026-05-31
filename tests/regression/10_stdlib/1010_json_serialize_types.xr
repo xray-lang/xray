@@ -45,7 +45,7 @@ fn test_stringify_non_serializable_throws() {
     let caught = false
     try {
         Json.stringify(obj)
-    } catch (e) {
+    } catch panic (e) {
         caught = true
         let msg = string(e)
         assert(msg.includes("cannot serialize"))

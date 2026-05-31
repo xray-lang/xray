@@ -97,7 +97,6 @@ static const KwExpect kKnownKeywords[] = {
     {"extends", TK_EXTENDS},
     {"false", TK_FALSE},
     {"final", TK_FINAL},
-    {"finally", TK_FINALLY},
     {"float", TK_FLOAT},
     {"float32", TK_FLOAT32},
     {"float64", TK_FLOAT64},

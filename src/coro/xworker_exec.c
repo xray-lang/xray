@@ -36,6 +36,7 @@
 #include "../runtime/object/xexception.h"
 #include "xyieldable.h"
 #include "../runtime/xexec_frame.h"
+#include "../runtime/value/xvalue_format.h"
 
 // ========== Forward Declarations ==========
 
@@ -637,6 +638,8 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
      * clean and the cont call sees a coherent state. */
     XrValue exc_value = coro_ctx->current_exception;
     coro_ctx->current_exception = xr_null();
+    coro_ctx->pending_error = xr_null();
+    coro_ctx->pending_error_tag = 0;
     frame->call_status &= ~XR_CALL_CLOSURE_PENDING;
 
     ctx->current_coro = coro;
@@ -717,9 +720,7 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
             atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
             XR_DBG_CORO("coro id=%d timer blocked, waiting for Timer Wheel callback", coro->id);
         }
-    } else if (result == XR_VM_OK) {
-        // Coroutine completed — save result but do NOT set FLG_DONE here.
-        // FLG_DONE is set in worker_handle_vm_result right before wake_waiter.
+    } else if (result == XR_VM_OK && coro_ctx->pending_error_tag == 0) {
         coro->result = coro_ctx->stack[0];
         XR_DBG_CORO("run_on_worker: coro id=%d completed, result tag=%u", coro->id,
                     coro_ctx->stack[0].tag);
@@ -734,14 +735,36 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         // a plain string instead of the Exception (F026).
         coro->result = xr_null();
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
-        XrValue exc = coro_ctx->current_exception;
-        if (xr_value_is_exception(isolate, exc)) {
+        /* Check both error channels: pending_error (new) and
+         * current_exception (legacy panic path, VM_RUNTIME_ERROR). */
+        XrValue exc = xr_null();
+        /* Remember which channel the failure came from so a linked scope
+         * re-raises it on the matching channel in the parent: value-channel
+         * enum errors surface via `catch (e)`, panics via `catch panic`. */
+        coro->error_is_value = (coro_ctx->pending_error_tag != 0);
+        if (coro_ctx->pending_error_tag != 0) {
+            exc = coro_ctx->pending_error;
+        } else if (!XR_IS_NULL(coro_ctx->current_exception)) {
+            exc = coro_ctx->current_exception;
+        }
+        if (!XR_IS_NULL(exc)) {
             coro->error = exc;
         } else {
             XrString *s = xr_string_intern(isolate, "coroutine error", 15, 0);
             coro->error = xr_string_value(s);
         }
+        /* Top-level uncaught value-return error: print a diagnostic.
+         * Panic-channel faults already print during unwind (see
+         * xr_vm_throw_exception's "no handler" tail); child-coro errors are
+         * isolated to coro->error and surfaced by the awaiting parent. */
+        if (coro->error_is_value && xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) &&
+            !(isolate && isolate->suppress_exception_print) && !XR_IS_NULL(coro->error)) {
+            XrString *msg = xr_value_to_string(isolate, coro->error);
+            fprintf(stderr, "\n[Uncaught Error] %s\n", msg && msg->data ? msg->data : "<error>");
+        }
         coro_ctx->current_exception = xr_null();
+        coro_ctx->pending_error = xr_null();
+        coro_ctx->pending_error_tag = 0;
     }
 
     ctx->current_coro = NULL;

@@ -303,8 +303,14 @@ typedef enum {
     XI_CHAN_TRY_RECV, /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
     XI_YIELD,         /* yield execution */
 
-    /* Exception handling */
+    /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
+
+    /* Value-return error channel */
+    XI_ERR_SET,    /* write args[0] to error channel (no return) */
+    XI_ERR_RETURN, /* write args[0] to error channel + return from function */
+    XI_ERR_CHECK,  /* after fallible call: check pending_error, propagate if set */
+    XI_ERR_CATCH,  /* read pending_error into result, clear error channel */
 
     /* Iteration (for-in protocol) */
     XI_ITER_NEW,   /* create iterator: args[0]=collection */
