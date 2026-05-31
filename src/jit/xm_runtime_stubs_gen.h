@@ -46,25 +46,15 @@ typedef struct {
 
 #if defined(XM_RUNTIME_STUBS_DEFINE)
 XR_DATADEF const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT] = {
-    {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2,
-     XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
-    {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd",
-     XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE,
-     0},
-    {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back",
-     XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE,
-     0},
+    {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd", XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back", XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
 };
 #elif defined(XM_RUNTIME_STUBS_IMPL)
 static const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT] = {
-    {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2,
-     XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
-    {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd",
-     XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE,
-     0},
-    {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back",
-     XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE,
-     0},
+    {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd", XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back", XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
 };
 #else
 XR_DATA const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT];
@@ -99,4 +89,4 @@ static inline uintptr_t xm_runtime_stub_entry(XmRuntimeStubId id, XmRuntimeStubA
 }
 #endif
 
-#endif /* XM_RUNTIME_STUBS_GEN_H */
+#endif  /* XM_RUNTIME_STUBS_GEN_H */

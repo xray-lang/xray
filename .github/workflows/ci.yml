@@ -390,7 +390,9 @@ jobs:
     - name: Check code format
       run: |
         find src include stdlib \
-          \( -name '*.c' -o -name '*.h' \) -type f | \
+          \( -name '*.c' -o -name '*.h' \) \
+          ! -name '*_gen.*' \
+          -type f | \
         xargs clang-format-19 --dry-run --Werror 2>&1 | tee format-check.txt
 
         if [ -s format-check.txt ]; then
