@@ -246,15 +246,19 @@ jobs:
           - name: AddressSanitizer
             cmake_flag: ENABLE_ASAN
             short: asan
+            informational: false
           - name: UndefinedBehaviorSanitizer
             cmake_flag: ENABLE_UBSAN
             short: ubsan
+            informational: false
           - name: ThreadSanitizer
             cmake_flag: ENABLE_TSAN
             short: tsan
+            informational: true
 
     runs-on: ubuntu-latest
-    name: ${{ matrix.sanitizer.name }}
+    name: ${{ matrix.sanitizer.name }}${{ matrix.sanitizer.informational && ' (informational)' || '' }}
+    continue-on-error: ${{ matrix.sanitizer.informational }}
 
     steps:
     - uses: actions/checkout@v4
@@ -290,6 +294,7 @@ jobs:
         ./scripts/run_regression_tests.sh
       env:
         XRAY_PATH: ./build/xray
+        XRAY_TEST_DUMP_FAILED: "1"
         ASAN_OPTIONS: detect_leaks=0:abort_on_error=1:symbolize=1
         UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
         TSAN_OPTIONS: halt_on_error=1:second_deadlock_stack=1

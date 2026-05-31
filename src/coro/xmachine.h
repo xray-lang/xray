@@ -123,7 +123,7 @@ typedef struct XrMachine {
     /* === Thread-local VM Context === */
     XrVMContext vm_ctx;
     XrMachineVMStorage vm_storage;
-    struct XrCoroutine *current_coro;
+    _Atomic(struct XrCoroutine *) current_coro;
 
     /* === State === */
     _Atomic int state;  // XrMachineState

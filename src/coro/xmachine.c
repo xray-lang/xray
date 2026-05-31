@@ -43,7 +43,7 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
     atomic_store(&m->state, M_PARKED);
     m->spinning = false;
     m->next_p = NULL;
-    m->current_coro = NULL;
+    atomic_store_explicit(&m->current_coro, (struct XrCoroutine *) NULL, memory_order_relaxed);
     m->all_link = NULL;
     m->idle_link = NULL;
     atomic_store(&m->in_idle_worker_list, false);

@@ -20,7 +20,6 @@
 
 /* Minimal XrType stubs */
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
-static XrType stub_str __attribute__((unused)) = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_any = {.kind = XR_KIND_UNKNOWN, .id = 10, .frozen = true};
 
 static int tests_passed = 0;
@@ -678,29 +677,6 @@ static uint16_t load_op_for_group(XiMemGroup g) {
             return XI_CHAN_RECV;
         default:
             return XI_GET_SHARED;
-    }
-}
-
-__attribute__((unused)) static uint16_t store_op_for_group(XiMemGroup g) {
-    switch (g) {
-        case XI_MEM_FIELD:
-            return XI_STORE_FIELD;
-        case XI_MEM_ARRAY:
-            return XI_INDEX_SET;
-        case XI_MEM_STRUCT:
-            return XI_STRUCT_SET;
-        case XI_MEM_JSON:
-            return XI_JSON_SET_F;
-        case XI_MEM_UPVAL:
-            return XI_STORE_UPVAL;
-        case XI_MEM_SHARED:
-            return XI_SET_SHARED;
-        case XI_MEM_GLOBAL:
-            return XI_SET_GLOBAL;
-        case XI_MEM_CHAN:
-            return XI_CHAN_SEND;
-        default:
-            return XI_SET_SHARED;
     }
 }
 

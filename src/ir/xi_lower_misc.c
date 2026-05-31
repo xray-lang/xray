@@ -218,7 +218,7 @@ XR_FUNC XiValue *xi_lower_enum_convert(XiLower *l, AstNode *node) {
     v->args[0] = val;
     /* tid=-1 (unknown) → emitter degenerates to move, which is correct
      * for enum conversions (runtime handles via enum type metadata). */
-    v->aux_int = (-1 << 1) | 0;
+    v->aux_int = ((int64_t) (uint32_t) -1 << 1) | 0;
     v->aux = (void *) arena_strdup(l->func, ec->enum_name);
     v->line = (uint32_t) node->line;
     return v;

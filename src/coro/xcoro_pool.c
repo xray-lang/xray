@@ -46,6 +46,7 @@ static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
         xr_free(block);
         return NULL;
     }
+    memset(block->slab, 0, capacity * block->slab_entry_size);
 
     block->capacity = capacity;
     block->base_idx = 0;

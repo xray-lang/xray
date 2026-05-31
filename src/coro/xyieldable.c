@@ -35,8 +35,11 @@
 static inline XrCoroutine *get_current_coro(XrayIsolate *X) {
     (void) X;
     XrWorker *worker = xr_current_worker();
-    if (worker && worker->m && worker->m->current_coro)
-        return worker->m->current_coro;
+    if (worker && worker->m) {
+        XrCoroutine *c = atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed);
+        if (c)
+            return c;
+    }
     return NULL;
 }
 

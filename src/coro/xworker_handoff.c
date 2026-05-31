@@ -206,7 +206,7 @@ handoff_restart:;
     xr_park_futex_wake(&p->handoff_sync);
     atomic_store(&p->status, P_IDLE);
     worker->m = NULL;
-    m->current_coro = NULL;
+    atomic_store_explicit(&m->current_coro, NULL, memory_order_relaxed);
     atomic_store(&m->state, M_PARKED);
     tls_current_worker = NULL;
     tls_current_machine = NULL;

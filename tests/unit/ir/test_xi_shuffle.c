@@ -26,6 +26,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+static inline int setenv(const char *name, const char *value, int overwrite) {
+    (void) overwrite;
+    return _putenv_s(name, value);
+}
+#endif
+
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 3, .frozen = true};

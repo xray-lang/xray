@@ -905,7 +905,8 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
         // Woken from timeout
         if (caller && xr_coro_resume_load(caller) == XR_RESUME_TIMEOUT) {
             xr_coro_resume_store(caller, XR_RESUME_OK);
-            task->waiter = NULL;
+            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
+                                  memory_order_relaxed);
             base[a] = xr_null();
             return XR_DISP_NEXT;
         }

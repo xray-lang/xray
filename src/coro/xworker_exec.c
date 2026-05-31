@@ -272,7 +272,7 @@ cont_exec:
     XR_DCHECK(coro != NULL, "cont_exec: NULL coroutine");
     XR_DCHECK(!xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "cont_exec: executing DONE coroutine");
     SCHED_TRACE_CORO(worker, coro, "exec");
-    m->current_coro = coro;
+    atomic_store_explicit(&m->current_coro, coro, memory_order_relaxed);
     p->local_active_coros++;
     // Update affinity so IO wakeups return to this worker
     atomic_store_explicit(&coro->affinity_p, p->id, memory_order_relaxed);
@@ -318,7 +318,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             }
         }
         coro = child;
-        m->current_coro = coro;
+        atomic_store_explicit(&m->current_coro, coro, memory_order_relaxed);
         goto exec_fast;
     }
 
@@ -352,7 +352,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
                   "fast_dispatch: LIFO slot contains DONE coroutine");
         atomic_store_explicit(&p->lifo_slot, NULL, memory_order_relaxed);
         p->local_runq_len--;
-        m->current_coro = next;
+        atomic_store_explicit(&m->current_coro, next, memory_order_relaxed);
         coro = next;
         goto exec_fast;  // Skip active_coros, reductions, full handle_vm_result
     }
@@ -362,7 +362,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         result = XR_VM_CANCELLED;
     }
 
-    m->current_coro = NULL;
+    atomic_store_explicit(&m->current_coro, NULL, memory_order_relaxed);
     p->stats.executed_count++;
 
     // Race guard: when VM returns BLOCKED after channel_recv/send, the coro
