@@ -254,7 +254,7 @@ jobs:
           - name: ThreadSanitizer
             cmake_flag: ENABLE_TSAN
             short: tsan
-            informational: true
+            informational: false
 
     runs-on: ubuntu-latest
     name: ${{ matrix.sanitizer.name }}${{ matrix.sanitizer.informational && ' (informational)' || '' }}

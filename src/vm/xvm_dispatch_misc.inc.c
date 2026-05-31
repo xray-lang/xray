@@ -205,9 +205,7 @@ vmcase(OP_SCOPE_EXIT) {
         if (atomic_load(&scope->count) > 0) {
             // Children still running — block and re-execute on resume
             frame->pc = pc - 1;
-            uint32_t old_flags = xr_coro_flags_load(current);
-            atomic_store(&current->flags, xr_coro_set_wait_reason_flags(
-                                              old_flags, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT));
+            xr_coro_set_wait_reason(current, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
             return XR_VM_BLOCKED;
         }
         atomic_store(&current->wait_count, 0);
@@ -373,10 +371,7 @@ vmcase(OP_SLEEP) {
             sleep_ext->yield_info.wait_events = 0;
         }
         // Set wait reason in flags
-        uint32_t old_flags = xr_coro_flags_load(coro);
-        uint32_t new_flags =
-            xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
-        atomic_store(&coro->flags, new_flags);
+        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
 
         // Add timer to current Worker's Timer Wheel (Per-Worker lock-free)
         XrWorker *worker = xr_current_worker();

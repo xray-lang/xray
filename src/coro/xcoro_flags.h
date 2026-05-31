@@ -282,6 +282,56 @@ static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr, _Atomic u
 #define xr_coro_transition_wake(coro)                                                              \
     xr_coro_flags_swap((coro), XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
 
+/* ========== Unified Wake Claim ==========
+ *
+ * The single authoritative wake primitive. Atomically transitions a
+ * coroutine BLOCKED -> READY via CAS and reports whether THIS caller won.
+ * Every wake path (channel send/recv, channel close, select, timer, I/O,
+ * task completion, scope) routes through it, and only the caller that wins
+ * the CAS may enqueue the coroutine. Concurrent wakers therefore cannot
+ * double-enqueue a coroutine: the race is eliminated by construction rather
+ * than patched downstream with "if still BLOCKED" guards.
+ *
+ * Returns false when the coro is no longer BLOCKED (already woken / running /
+ * done), in which case the caller must not touch the coroutine at all.
+ */
+static inline bool xr_coro_claim_wake_impl(_Atomic uint32_t *flags_ptr,
+                                           _Atomic uint8_t *state_ptr) {
+    uint32_t old = (atomic_load_explicit(flags_ptr, memory_order_acquire) &
+                    ~(uint32_t) XR_CORO_STATE_FLAG_MASK) |
+                   xr_state_to_flag(atomic_load_explicit(state_ptr, memory_order_acquire));
+    for (;;) {
+        if (!(old & XR_CORO_FLG_BLOCKED))
+            return false;
+        uint32_t neu =
+            (old & ~(uint32_t) (XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK)) | XR_CORO_FLG_READY;
+        if (xr_coro_flags_cas_impl(flags_ptr, state_ptr, &old, neu))
+            return true;
+    }
+}
+
+#define xr_coro_claim_wake(coro) xr_coro_claim_wake_impl(&(coro)->flags, &(coro)->coro_state)
+
+/* ========== Masked Field Update (race-free) ==========
+ *
+ * Atomically replace just the bits under `mask` with `value`, preserving
+ * every other bit. A CAS loop is required because a plain
+ * load -> set_field -> atomic_store sequence would clobber concurrent
+ * single-bit updates from other threads (e.g. sysmon raising
+ * CANCEL_REQUESTED, or a state shadow update). Used for the priority and
+ * wait-reason sub-fields, which a running coroutine rewrites while sysmon
+ * may be touching the same flags word.
+ */
+static inline void xr_coro_flags_update_field(_Atomic uint32_t *flags_ptr, uint32_t mask,
+                                              uint32_t value) {
+    uint32_t old = atomic_load_explicit(flags_ptr, memory_order_relaxed);
+    uint32_t neu;
+    do {
+        neu = (old & ~mask) | (value & mask);
+    } while (!atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_release,
+                                                    memory_order_relaxed));
+}
+
 /* ========== Priority Operations ========== */
 
 static inline int xr_coro_get_priority(uint32_t flags) {
@@ -292,6 +342,11 @@ static inline uint32_t xr_coro_set_priority_flags(uint32_t flags, int prio) {
     return (flags & ~XR_CORO_PRIO_MASK) | ((prio << XR_CORO_PRIO_SHIFT) & XR_CORO_PRIO_MASK);
 }
 
+/* Atomically set the priority sub-field (bits 0-1) only. */
+#define xr_coro_set_priority(coro, prio)                                                           \
+    xr_coro_flags_update_field(&(coro)->flags, XR_CORO_PRIO_MASK,                                  \
+                               ((uint32_t) (prio) << XR_CORO_PRIO_SHIFT))
+
 /* ========== Wait Reason Operations ========== */
 
 static inline int xr_coro_get_wait_reason(uint32_t flags) {
@@ -301,6 +356,12 @@ static inline int xr_coro_get_wait_reason(uint32_t flags) {
 static inline uint32_t xr_coro_set_wait_reason_flags(uint32_t flags, int reason) {
     return (flags & ~XR_CORO_WAIT_MASK) | (reason << XR_CORO_WAIT_SHIFT);
 }
+
+/* Atomically set the wait-reason sub-field (bits 4-7) only. `reason` is the
+ * unshifted index (e.g. XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT). */
+#define xr_coro_set_wait_reason(coro, reason)                                                      \
+    xr_coro_flags_update_field(&(coro)->flags, XR_CORO_WAIT_MASK,                                  \
+                               ((uint32_t) (reason) << XR_CORO_WAIT_SHIFT))
 
 /* ========== State Check Macros ========== */
 

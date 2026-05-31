@@ -115,7 +115,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             // Close wakeup: need to re-execute recv logic to check buffer
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             // Continue with recv logic below
         }
         // Set recv_slot to result register address
@@ -165,20 +165,20 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         // Check if woken from timeout
         if (current && xr_coro_resume_load(current) == XR_RESUME_TIMEOUT) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             base[a] = xr_bool(false);
             return XR_DISP_NEXT;
         }
         // Check if woken from channel close
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             base[a] = xr_bool(false);
             return XR_DISP_NEXT;
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             base[a] = xr_bool(true);
             return XR_DISP_NEXT;
         }
@@ -233,7 +233,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         // Check if woken from timeout
         if (current && xr_coro_resume_load(current) == XR_RESUME_TIMEOUT) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             VM_RECV_TUPLE_RESULT(xr_null(), false);
             return XR_DISP_NEXT;
         }
@@ -246,7 +246,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         }
         if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             VM_RECV_TUPLE_RESULT(xr_null(), false);
             return XR_DISP_NEXT;
         }
