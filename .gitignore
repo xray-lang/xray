@@ -43,7 +43,10 @@ luac.out
 .vscode/
 .idea/
 .crossnote/
-.cursor/
+.cursor/*
+!.cursor/cli.json
+!.cursor/rules/
+!.cursor/rules/**
 .windsurf/
 .github/copilot-instructions.md
 *.swp
