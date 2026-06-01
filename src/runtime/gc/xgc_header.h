@@ -5,18 +5,23 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_header.h - GC object header definition (16 bytes)
+ * xgc_header.h - GC object header definition
  *
  * KEY CONCEPT:
- *   - 16-byte compact header
- *   - Class info obtained via type registry, not stored in GC header
+ *   - Unified object header for VM and AOT.
+ *   - Class info obtained via type registry, not stored in header.
  *
- * MEMORY LAYOUT (16 bytes):
- *   [0-7]   gc_next (8B) - GC global list
- *   [8]     type (1B)    - Object type
- *   [9]     marked (1B)  - GC color + age
- *   [10-11] extra (2B)   - Type-specific data
- *   [12-15] objsize (4B) - Object allocation size
+ * MEMORY LAYOUT — TRANSITIONAL (24 bytes, while tracing GC coexists with RC):
+ *   [0-7]   gc_next  (8B) - tracing allgc list (removed when tracing is dropped)
+ *   [8]     type     (1B) - object type tag -> destructor dispatch
+ *   [9]     marked   (1B) - tracing tri-color + generation (removed with tracing)
+ *   [10-11] flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
+ *   [12-15] refcount (4B) - compile-time RC; ignored when REGION; atomic when ATOMIC
+ *   [16-19] objsize  (4B) - allocation size (region sweep / munmap)
+ *   [20-23] _rsv     (4B) - reserved (weak table slot / cycle-report id)
+ *
+ * Once tracing is removed, gc_next + marked disappear and the header
+ * shrinks to 16 bytes (see docs/design/705_memory_model_refactor_plan.md).
  */
 
 #ifndef XGC_HEADER_H
@@ -86,17 +91,29 @@ typedef enum {
     XR_TATOMIC,  // Atomic<T> shared primitive wrapper (lock-free, system heap)
 } XrObjType;
 
-/* ========== Unified GC Header (16 bytes) ========== */
+/* ========== Unified Object Header (24 bytes, transitional) ==========
+ *
+ * Transitional layout: tracing fields (gc_next, marked) coexist with the
+ * RC field (refcount) until tracing is removed, after which the header
+ * shrinks to 16 bytes. The `extra` field doubles as the RC `flags` word
+ * (storage/mmap bits today; REGION/ATOMIC/HAS_DTOR/WEAKABLE added for RC).
+ */
 
 typedef struct XrGCHeader {
-    struct XrGCHeader *gc_next;
-    uint8_t type;
-    uint8_t marked;
-    uint16_t extra;
-    uint32_t objsize;
+    struct XrGCHeader *gc_next; /* [0-7]  tracing allgc list (removed with tracing) */
+    uint8_t type;               /* [8]    object type tag */
+    uint8_t marked;             /* [9]    tracing tri-color + generation (removed) */
+    uint16_t extra;             /* [10-11] flags word: storage/mmap + XR_OBJ_* */
+    int32_t refcount;           /* [12-15] compile-time RC (0 = unmanaged / region) */
+    uint32_t objsize;           /* [16-19] allocation size */
+    uint32_t _rsv;              /* [20-23] reserved (weak slot / cycle-report id) */
 } XrGCHeader;
 
-_Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
+_Static_assert(sizeof(XrGCHeader) == 24, "XrGCHeader must be 24 bytes (transitional RC+tracing)");
+
+/* Unified alias: the RC memory model refers to the object header as
+ * XrObjHeader. During the transition it is the same struct as XrGCHeader. */
+typedef struct XrGCHeader XrObjHeader;
 
 /* ========== Access Macros ========== */
 
@@ -123,6 +140,72 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 #define XR_GC_FLAG_MMAP 0x2000
 #define XR_GC_IS_MMAP(gc) (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
 #define XR_GC_SET_MMAP(gc) ((gc)->extra |= XR_GC_FLAG_MMAP)
+
+/* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
+ *
+ * Bit 0 = storage(shared), bit 13 = mmap (above). Bits 1-4 carry the RC
+ * object-model flags. These are populated as the RC model takes over;
+ * during the tracing transition they default to 0 (no effect on tracing).
+ *
+ *   REGION   - object lives in a per-coroutine region: dup/drop are no-ops,
+ *              freed in bulk when the coroutine ends.
+ *   ATOMIC   - object is shared across coroutines: refcount is atomic.
+ *   HAS_DTOR - object's type has a destructor to run at refcount==0.
+ *   WEAKABLE - object may be the target of a weak reference.
+ */
+#define XR_OBJ_REGION 0x0002   /* extra bit 1 */
+#define XR_OBJ_ATOMIC 0x0004   /* extra bit 2 */
+#define XR_OBJ_HAS_DTOR 0x0008 /* extra bit 3 */
+#define XR_OBJ_WEAKABLE 0x0010 /* extra bit 4 */
+
+#define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
+#define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
+#define XR_OBJ_CLEAR_FLAG(o, f) ((o)->extra &= (uint16_t) ~(f))
+
+#define XR_OBJ_IS_REGION(o) XR_OBJ_GET_FLAG(o, XR_OBJ_REGION)
+#define XR_OBJ_IS_ATOMIC(o) XR_OBJ_GET_FLAG(o, XR_OBJ_ATOMIC)
+#define XR_OBJ_HAS_DESTRUCTOR(o) XR_OBJ_GET_FLAG(o, XR_OBJ_HAS_DTOR)
+
+/* ========== RC dup/drop Primitives ==========
+ *
+ * Header-only refcount arithmetic, following Nim's nimIncRef /
+ * nimDecRefIsLast contract (lib/system/arc.nim): the primitive only
+ * adjusts the count and reports whether the object died; the CALLER runs
+ * the destructor and frees, because freeing needs coroutine/region
+ * context that does not belong in this header.
+ *
+ *   - REGION objects: dup/drop are no-ops (freed in bulk at coro end).
+ *   - ATOMIC objects: refcount is adjusted atomically (cross-coroutine).
+ *   - others: plain non-atomic refcount (the common, fast case).
+ *
+ * refcount is 1-based here (1 == one owner). xr_obj_drop_is_last returns
+ * true exactly when the last owning reference is released.
+ */
+
+#include <stdatomic.h>
+
+/* Acquire a new owning reference. */
+static inline void xr_obj_dup(XrObjHeader *o) {
+    if (!o || (o->extra & XR_OBJ_REGION))
+        return;
+    if (o->extra & XR_OBJ_ATOMIC)
+        atomic_fetch_add_explicit((_Atomic(int32_t) *) &o->refcount, 1, memory_order_relaxed);
+    else
+        o->refcount++;
+}
+
+/* Release an owning reference. Returns true if this was the last reference
+ * (refcount reached 0) and the caller must destroy + free the object. */
+static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
+    if (!o || (o->extra & XR_OBJ_REGION))
+        return false; /* region: bulk-freed at coroutine end */
+    if (o->extra & XR_OBJ_ATOMIC) {
+        /* acq_rel so the destructor sees all prior writes (Rust Arc pattern). */
+        return atomic_fetch_sub_explicit((_Atomic(int32_t) *) &o->refcount, 1,
+                                         memory_order_acq_rel) == 1;
+    }
+    return --o->refcount == 0;
+}
 
 /* ========== Initialization Functions ========== */
 
