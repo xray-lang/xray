@@ -157,6 +157,10 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_ATOMIC 0x0004   /* extra bit 2 */
 #define XR_OBJ_HAS_DTOR 0x0008 /* extra bit 3 */
 #define XR_OBJ_WEAKABLE 0x0010 /* extra bit 4 */
+#define XR_OBJ_DEAD                                                                                \
+    0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
+            * destructor at coroutine teardown to avoid                                            \
+            * double finalization. Cleared on reuse. */
 
 #define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
 #define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))

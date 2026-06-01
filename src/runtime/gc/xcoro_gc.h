@@ -337,13 +337,7 @@ typedef struct XrCoroGC {
     XrGCHeader *large_objects;  // All large objects (single list)
     int64_t large_bytes;        // Total bytes in large_objects (for stats/tuning)
 
-    // === RC per-object freelist (RC reclaims small objects) ===
-    // Segregated free lists by 16-byte size class, lazily allocated.
-    // On drop-to-zero a small object's memory is pushed here; allocation
-    // pops a same-class block before falling back to Immix bump.
-    // NULL until the first free in this coroutine (idle coros pay nothing).
-    XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of intrusive list heads
-    int64_t GCmarked;          // Bytes marked in last GC
+    int64_t GCmarked;  // Bytes marked in last GC
 
     // GC tuning parameters
     int gc_pause;    // Pause multiplier (100 = collect when memory doubles)
@@ -382,6 +376,14 @@ typedef struct XrCoroGC {
     uint32_t objects_swept;      // Objects freed during sweep
     uint32_t objects_finalized;  // Objects with finalizers called
     uint32_t objects_promoted;   // Young blocks promoted to old (gen mode)
+
+    // === RC per-object freelist (RC reclaims small objects) ===
+    // Placed last so it does not shift any JIT-hardcoded field offset.
+    // Segregated free lists by 16-byte size class, lazily allocated; on
+    // drop-to-zero a small object's memory is pushed here and reused by a
+    // later same-class allocation before falling back to Immix bump.
+    // NULL until the first free in this coroutine (idle coros pay nothing).
+    XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
 } XrCoroGC;
 
 // Hot-path fields (immix + GCdebt + gc_requested) must be in first 2 cache lines
@@ -468,6 +470,10 @@ XR_FUNC XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size);
  * Called by drop-to-zero AFTER the destructor has run. The object's
  * `objsize` must still be valid. No-op for large/region/atomic objects. */
 XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj);
+
+/* drop-to-zero reclamation: run the type destructor (if any) then return
+ * the block to the freelist. Routes shared objects to xr_shared_destroy. */
+XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj);
 
 /* Release the freelist array itself (block memory is owned by Immix and
  * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
