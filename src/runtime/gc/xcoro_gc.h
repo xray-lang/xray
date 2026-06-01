@@ -257,6 +257,28 @@ static inline void xr_gclist_absorb(XrGCGrayList *dst, XrGCGrayList *src) {
 #define XR_LARGE_OBJECT_THRESHOLD (4 * 1024)  // >4KB → large object (xr_malloc)
 #define XR_MMAP_THRESHOLD (256 * 1024)        // ≥256KB → mmap (avoid libc heap fragmentation)
 
+/* ========== RC Per-Object Freelist ========== */
+/*
+ * Small RC-managed objects (≤ XR_LARGE_OBJECT_THRESHOLD) are returned to a
+ * per-coroutine segregated freelist when their refcount hits zero, then
+ * reused by subsequent allocations of the same size class. This gives RC a
+ * real single-object reclamation path on top of the Immix bump allocator,
+ * which itself never frees individual objects.
+ *
+ * Size classes: 16-byte granularity. Class index = (aligned_size / 16) - 1.
+ * Allocations are 16-byte aligned (implies the existing 8-byte alignment).
+ */
+#define XR_RC_FREE_GRANULARITY 16
+#define XR_RC_FREECLASSES (XR_LARGE_OBJECT_THRESHOLD / XR_RC_FREE_GRANULARITY)  // 256
+
+/* Map an aligned allocation size to its freelist class index, or -1 if the
+ * size is out of range (too small or > large-object threshold). */
+static inline int xr_rc_size_class(size_t aligned_size) {
+    if (aligned_size < XR_RC_FREE_GRANULARITY || aligned_size > XR_LARGE_OBJECT_THRESHOLD)
+        return -1;
+    return (int) (aligned_size / XR_RC_FREE_GRANULARITY) - 1;
+}
+
 /* ========== Per-Coroutine GC Root Callback ========== */
 
 struct XrCoroGC;
@@ -314,7 +336,14 @@ typedef struct XrCoroGC {
     XrGCGrayList weak;          // Weak tables
     XrGCHeader *large_objects;  // All large objects (single list)
     int64_t large_bytes;        // Total bytes in large_objects (for stats/tuning)
-    int64_t GCmarked;           // Bytes marked in last GC
+
+    // === RC per-object freelist (RC reclaims small objects) ===
+    // Segregated free lists by 16-byte size class, lazily allocated.
+    // On drop-to-zero a small object's memory is pushed here; allocation
+    // pops a same-class block before falling back to Immix bump.
+    // NULL until the first free in this coroutine (idle coros pay nothing).
+    XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of intrusive list heads
+    int64_t GCmarked;          // Bytes marked in last GC
 
     // GC tuning parameters
     int gc_pause;    // Pause multiplier (100 = collect when memory doubles)
@@ -432,6 +461,17 @@ XR_FUNC void xr_coro_gc_flush_pool(struct XrSystemHeap *heap, struct XrCoroGC **
  * 3. Update GCdebt, trigger incremental GC
  */
 XR_FUNC XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size);
+
+/* ========== RC Freelist API ========== */
+
+/* Push a small object's memory onto the RC freelist for its size class.
+ * Called by drop-to-zero AFTER the destructor has run. The object's
+ * `objsize` must still be valid. No-op for large/region/atomic objects. */
+XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj);
+
+/* Release the freelist array itself (block memory is owned by Immix and
+ * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
+XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 
 // Convenience macros
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \

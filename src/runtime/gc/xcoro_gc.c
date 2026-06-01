@@ -268,6 +268,7 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     gc_finalize_immix_objects(gc);
     xr_immix_destroy(&gc->immix);
     gc_free_large_objects(gc);
+    xr_coro_gc_rc_freelist_destroy(gc);
 
     xr_gclist_destroy(&gc->gray);
     xr_gclist_destroy(&gc->grayagain);
@@ -324,6 +325,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     gc_finalize_immix_objects(gc);
     xr_immix_reset(&gc->immix);
     gc_free_large_objects(gc);
+    xr_coro_gc_rc_freelist_destroy(gc);
 
     xr_gclist_reset(&gc->gray);
     xr_gclist_reset(&gc->grayagain);
@@ -382,6 +384,53 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 
 /* ========== Allocation ========== */
 
+/* ========== RC Per-Object Freelist (Option A) ========== */
+
+XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
+    if (!gc || !obj)
+        return;
+    /* Large objects are individually malloc'd/mmap'd: free directly. */
+    if (obj->objsize > XR_LARGE_OBJECT_THRESHOLD) {
+        /* Unlink from large_objects list. */
+        XrGCHeader **p = &gc->large_objects;
+        while (*p && *p != obj)
+            p = &(*p)->gc_next;
+        if (*p == obj)
+            *p = obj->gc_next;
+        gc->large_bytes -= (int64_t) obj->objsize;
+        gc->totalbytes -= (int64_t) obj->objsize;
+        if (XR_GC_IS_MMAP(obj))
+            xr_mem_unmap(obj, obj->objsize);
+        else
+            xr_free(obj);
+        return;
+    }
+
+    int cls = xr_rc_size_class(obj->objsize);
+    if (cls < 0)
+        return; /* unexpected size: leave to bulk free at coro end */
+
+    /* Lazily allocate the freelist array on first free. */
+    if (!gc->rc_freelist) {
+        gc->rc_freelist = (XrGCHeader **) xr_calloc(XR_RC_FREECLASSES, sizeof(XrGCHeader *));
+        if (!gc->rc_freelist)
+            return; /* OOM: drop the block on the floor (bulk-freed at coro end) */
+    }
+
+    /* Push onto the size-class list via the intrusive gc_next link. */
+    obj->gc_next = gc->rc_freelist[cls];
+    gc->rc_freelist[cls] = obj;
+}
+
+XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
+    if (!gc || !gc->rc_freelist)
+        return;
+    /* The blocks themselves live in Immix and are released in bulk when the
+     * coroutine's heap is torn down; only the index array is owned here. */
+    xr_free(gc->rc_freelist);
+    gc->rc_freelist = NULL;
+}
+
 XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (!gc)
         return NULL;
@@ -411,10 +460,19 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         gc->large_objects = obj;
         gc->large_bytes += (int64_t) total;
     } else {
-        obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
-        if (!obj)
-            return NULL;
-        gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
+        /* RC freelist fast path: reuse a same-size-class block freed by a
+         * previous drop-to-zero before falling back to Immix bump. */
+        int cls = xr_rc_size_class(total);
+        if (cls >= 0 && gc->rc_freelist && gc->rc_freelist[cls]) {
+            obj = gc->rc_freelist[cls];
+            gc->rc_freelist[cls] = obj->gc_next;
+            /* objsize is the class size (== total); type/refcount set below. */
+        } else {
+            obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
+            if (!obj)
+                return NULL;
+            gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
+        }
     }
 
     obj->type = type;
