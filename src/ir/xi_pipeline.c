@@ -137,6 +137,22 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         }
     }
 
+    /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
+     * Must run after escape analysis and before ARC insertion (STACK_ALLOC
+     * values don't need retain/release since they have frame lifetime). */
+    if (cfg->run_escape && cfg->run_backend_lower) {
+        xi_stack_alloc_rewrite(ir);
+    }
+
+    /* Precise dup/drop insertion (consumes ownership analysis).
+     * MUST run BEFORE backend lowering, while ops are still semantic
+     * (STORE_FIELD/ARRAY_NEW/...) — the owned/borrow split is keyed on
+     * those ops. See docs/design/705_memory_model_refactor_plan.md M3. */
+    if (cfg->run_escape && cfg->run_backend_lower) {
+        xi_arc_insert(ir);
+        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
+    }
+
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
     if (cfg->run_select_rep) {
@@ -166,22 +182,6 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
                       "post-backend_lower verify failed");
         }
 #endif
-    }
-
-    /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
-     * Must run after escape analysis and before ARC insertion (STACK_ALLOC
-     * values don't need retain/release since they have frame lifetime). */
-    if (cfg->run_escape && cfg->run_backend_lower) {
-        xi_stack_alloc_rewrite(ir);
-    }
-
-    /* ARC insertion: add retain/release based on escape analysis.
-     * Runs after backend lowering so ARC ops coexist with CALL_BUILTIN. */
-    if (cfg->run_escape && cfg->run_backend_lower) {
-        xi_arc_insert(ir);
-        /* Escape analysis + ARC insertion complete: advance to OWNED.
-         * Enables verify_owned checks (escape annotations on alloc ops). */
-        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 
     /* Optional: dump IR after optimization */

@@ -104,6 +104,12 @@ XR_FUNC void xi_own_free(XiOwnResult *out);
  * Scalars (int/float/bool/null/unit/never) are not. */
 XR_FUNC bool xi_own_type_is_rc(const struct XrType *type);
 
+/* Whether the using op consumes (takes ownership of) its argument at
+ * arg_idx, vs merely borrowing (reading) it. Shared with the xi_arc
+ * rewrite so dup/drop placement uses the same owned/borrow split as the
+ * ownership analysis. */
+XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx);
+
 /* Dump ownership annotations to stderr for debugging (see --expandArc in Nim).
  * Prints, per value: id, op, ownership, rc_managed, drop point. */
 XR_FUNC void xi_own_dump(const XiFunc *f, const XiOwnResult *out);

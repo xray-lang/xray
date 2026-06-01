@@ -74,6 +74,10 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
  * Call arguments are conservatively owned at M1 (refined by borrow
  * signature inference in a later pass). */
 static bool use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
+    return xi_own_use_is_consuming(user_op, arg_idx);
+}
+
+XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
     switch (user_op) {
         /* ---- Escape to heap / global / another coroutine: consume ---- */
         case XI_STORE_FIELD:
