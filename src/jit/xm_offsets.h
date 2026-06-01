@@ -81,11 +81,11 @@
 
 /* ========== XrClosure field offsets ========== */
 
-#define XM_CLOSURE_PROTO_OFFSET 16
+#define XM_CLOSURE_PROTO_OFFSET XM_GC_HEADER_SIZE  // offsetof(XrClosure, proto) = header
 
-/* ========== XrCell field offsets (32B lightweight cell) ========== */
+/* ========== XrCell field offsets (header + value) ========== */
 
-#define XM_CELL_VALUE_OFFSET 16  // offsetof(XrCell, value)
+#define XM_CELL_VALUE_OFFSET XM_GC_HEADER_SIZE  // offsetof(XrCell, value) = header
 
 /* ========== XrProto field offsets ========== */
 
@@ -102,7 +102,7 @@
 
 /* ========== Object layout constants ========== */
 
-#define XM_GC_HEADER_SIZE 16           // sizeof(XrGCHeader)
+#define XM_GC_HEADER_SIZE 24           // sizeof(XrGCHeader) — transitional RC+tracing
 #define XM_XRVALUE_SIZE 16             // sizeof(XrValue)
 #define XM_XRVALUE_TAG_OFFSET 0        // offsetof(XrValue, tag) — uint8_t at byte 0
 #define XM_XRVALUE_HEAP_TYPE_OFFSET 2  // offsetof(XrValue, heap_type) — uint16_t at byte 2
@@ -110,18 +110,20 @@
 #define XM_GC_TYPE_OFFSET 8            // offsetof(XrGCHeader, type) — uint8_t
 #define XM_GC_EXTRA_OFFSET 10          // offsetof(XrGCHeader, extra)
 
-// XrInstance: XrGCHeader(16) + klass*(8) + XrValue fields[]
-#define XM_INSTANCE_KLASS_OFFSET XM_GC_HEADER_SIZE         // 16
-#define XM_INSTANCE_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 24
-// XrJson: XrGCHeader(16) + overflow*(8) + XrValue fields[]
-#define XM_JSON_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 24
+// XrInstance: XrGCHeader(24) + klass*(8) + XrValue fields[]
+#define XM_INSTANCE_KLASS_OFFSET XM_GC_HEADER_SIZE         // 24
+#define XM_INSTANCE_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 32
+// XrJson: XrGCHeader(24) + overflow*(8) + XrValue fields[]
+#define XM_JSON_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 32
 
 /* ========== XrArray field offsets ========== */
 
-#define XM_ARRAY_DATA_OFFSET 16       // offsetof(XrArray, data)
-#define XM_ARRAY_LENGTH_OFFSET 24     // offsetof(XrArray, length)
-#define XM_ARRAY_ELEM_TYPE_OFFSET 40  // offsetof(XrArray, elem_type)
-#define XM_ARRAY_ELEM_SIZE_OFFSET 41  // offsetof(XrArray, elem_size)
+/* ========== XrArray field offsets (header + fields) ========== */
+
+#define XM_ARRAY_DATA_OFFSET XM_GC_HEADER_SIZE              // offsetof(XrArray, data)
+#define XM_ARRAY_LENGTH_OFFSET (XM_GC_HEADER_SIZE + 8)      // offsetof(XrArray, length)
+#define XM_ARRAY_ELEM_TYPE_OFFSET (XM_GC_HEADER_SIZE + 24)  // offsetof(XrArray, elem_type)
+#define XM_ARRAY_ELEM_SIZE_OFFSET (XM_GC_HEADER_SIZE + 25)  // offsetof(XrArray, elem_size)
 
 /* ========== GC / Allocation offsets ========== */
 
@@ -131,7 +133,8 @@
 #define XM_GC_HDR_TYPE_OFFSET 8        // offsetof(XrGCHeader, type)
 #define XM_GC_HDR_MARKED_OFFSET 9      // offsetof(XrGCHeader, marked)
 #define XM_GC_HDR_EXTRA_OFFSET 10      // offsetof(XrGCHeader, extra)
-#define XM_GC_HDR_OBJSIZE_OFFSET 12    // offsetof(XrGCHeader, objsize)
+#define XM_GC_HDR_REFCOUNT_OFFSET 12   // offsetof(XrGCHeader, refcount)
+#define XM_GC_HDR_OBJSIZE_OFFSET 16    // offsetof(XrGCHeader, objsize)
 
 /* ========== GC bookkeeping offsets (for inline alloc_post) ========== */
 
@@ -228,6 +231,8 @@ _Static_assert(offsetof(XrGCHeader, marked) == XM_GC_HDR_MARKED_OFFSET,
                "GCHeader.marked offset mismatch");
 _Static_assert(offsetof(XrGCHeader, extra) == XM_GC_HDR_EXTRA_OFFSET,
                "GCHeader.extra offset mismatch");
+_Static_assert(offsetof(XrGCHeader, refcount) == XM_GC_HDR_REFCOUNT_OFFSET,
+               "GCHeader.refcount offset mismatch");
 _Static_assert(offsetof(XrGCHeader, objsize) == XM_GC_HDR_OBJSIZE_OFFSET,
                "GCHeader.objsize offset mismatch");
 

@@ -38,6 +38,7 @@ add_xray_unit_test(test_arena util/test_arena.c)
 # ============================================================================
 
 add_xray_unit_test(test_immix_gc gc/test_immix_gc.c)
+add_xray_unit_test(test_obj_header gc/test_obj_header.c)
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)

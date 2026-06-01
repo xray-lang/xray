@@ -28,8 +28,8 @@
 
 /*
  * MEMORY LAYOUT:
- *   [XrGCHeader 16B][value 16B]
- *   Total = 32 bytes
+ *   [XrGCHeader 24B][value 16B]
+ *   Total = 40 bytes (transitional RC+tracing header)
  */
 typedef struct XrCell {
     XrGCHeader gc;  // GC header, type = XR_TCELL
@@ -38,7 +38,7 @@ typedef struct XrCell {
 
 #define XR_CELL_SIZE (sizeof(XrCell))
 
-_Static_assert(sizeof(XrCell) == 32, "XrCell must be 32 bytes");
+_Static_assert(sizeof(XrCell) == 40, "XrCell must be 40 bytes (24B header + 16B value)");
 
 struct XrCoroutine;
 struct XrayIsolate;

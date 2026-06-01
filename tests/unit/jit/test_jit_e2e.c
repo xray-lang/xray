@@ -2758,7 +2758,7 @@ static void test_alloc_inline(void) {
     assert(new_cursor == cursor + 48);
     fprintf(stderr, " cursor_advanced=%d", (int) (new_cursor - cursor));
 
-    // Verify GC header at result:
+    // Verify GC header at result (24B transitional layout):
     uint8_t *hdr = (uint8_t *) (intptr_t) result;
     // gc_next = 0 (8 bytes at offset 0)
     int64_t gc_next = 0;
@@ -2770,9 +2770,9 @@ static void test_alloc_inline(void) {
     assert(hdr[9] == 0x01);
     // extra = 0 at offset 10-11
     assert(hdr[10] == 0 && hdr[11] == 0);
-    // objsize = 48 at offset 12
+    // objsize = 48 at offset 16 (refcount occupies 12-15)
     uint32_t objsize = 0;
-    memcpy(&objsize, hdr + 12, 4);
+    memcpy(&objsize, hdr + 16, 4);
     assert(objsize == 48);
     fprintf(stderr, " header_ok");
 
