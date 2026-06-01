@@ -1,0 +1,52 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * xvm_dispatch_rc.inc.c — reference-counting opcode dispatch (dup/drop/move)
+ *
+ * NOT a standalone translation unit. Included from inside the dispatch
+ * switch in xvm.c; relies on locals (i, R, vmcase, vmbreak, ...) provided
+ * by the surrounding scope. CMake excludes *.inc.c from the VM_SRC glob.
+ *
+ * Owns: OP_DUP, OP_DROP — the compile-time RC primitives inserted by
+ * xi_arc (consuming xi_own ownership analysis). OP_MOVE (ownership
+ * transfer) reuses the pre-existing register-move opcode dispatched in
+ * xvm.c.
+ *
+ * TRANSITIONAL: while tracing GC still owns reclamation, OP_DROP only
+ * adjusts the refcount and does NOT free on reaching zero. This lets the
+ * VM execute precise dup/drop and lets the debug-only tracing oracle
+ * cross-check balance without any use-after-free risk. The freeing flip
+ * (drop-frees-at-zero + destructor) is enabled in a later step under ASan.
+ */
+
+vmcase(OP_DUP) {
+    /* dup(R[A]): acquire a new owning reference. No-op for scalars and
+     * region-allocated objects (handled inside xr_obj_dup). */
+    int a = GETARG_A(i);
+    XrValue v = R(a);
+    if (XR_IS_PTR(v)) {
+        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
+        xr_obj_dup(o);
+    }
+    vmbreak;
+}
+
+vmcase(OP_DROP) {
+    /* drop(R[A]): release an owning reference. TRANSITIONAL — refcount is
+     * decremented but the object is NOT freed here; tracing still reclaims.
+     * The last-reference return value is intentionally ignored for now. */
+    int a = GETARG_A(i);
+    XrValue v = R(a);
+    if (XR_IS_PTR(v)) {
+        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
+        (void) xr_obj_drop_is_last(o);
+    }
+    vmbreak;
+}
+
+/* OP_MOVE is dispatched in xvm.c (pre-existing register-move opcode);
+ * xi_emit_move reuses it for ownership transfer. No case needed here. */

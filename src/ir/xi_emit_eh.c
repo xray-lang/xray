@@ -28,6 +28,48 @@ XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_THROW, src, 0, 0));
 }
 
+/* ========== Reference Counting (dup / drop / move) ========== */
+
+/* dup(args[0]): emit OP_DUP on the value's register (no result). */
+XR_FUNC void xi_emit_retain(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_DUP, src, 0, 0));
+}
+
+/* drop(args[0]): emit OP_DROP on the value's register (no result). */
+XR_FUNC void xi_emit_release(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_DROP, src, 0, 0));
+}
+
+/* move(args[0]): ownership transfer. Result register = dst; if the source
+ * already lives in dst (coalesced), the move is a no-op. */
+XR_FUNC void xi_emit_move(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (src != dst)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
+}
+
 /* Try: emit OP_TRY + NOP (finally placeholder), register for patching.
  * aux = catch block (NULL for try-finally without catch).
  * aux_int = finally block ID (>=0) or -1 if no finally. */
