@@ -1149,7 +1149,9 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) alloc_size);
     rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_OBJSIZE_OFFSET));
 
-    /* === Inline alloc_post: GC bookkeeping === */
+    /* refcount = 1 (RC 1-based: fresh object has one owning reference) */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, 1);
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET));
 
     /* block = rd & ~0x3FFF (16KB block alignment) */
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, ~(uint64_t) XM_IMMIX_BLOCK_SIZE_MASK);
