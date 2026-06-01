@@ -40,6 +40,13 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_LIGHT;
     cfg.run_select_rep = false;
+    /* RC takeover: the VM runs escape analysis + precise dup/drop insertion
+     * (xi_arc) but NOT stack_alloc_rewrite (no XI_STACK_ALLOC handler in the
+     * VM emitter) and NOT backend_lower. dup/drop execute as OP_DUP/OP_DROP.
+     * TRANSITIONAL: OP_DROP only adjusts refcount, does not free yet —
+     * tracing still reclaims and acts as the debug-only correctness oracle. */
+    cfg.run_escape = true;
+    cfg.run_arc = true;
     cfg.run_emit = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -57,6 +64,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_select_rep = true;
     cfg.run_backend_lower = true;
     cfg.run_escape = true;
+    cfg.run_arc = true;
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -139,7 +147,9 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
 
     /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
      * Must run after escape analysis and before ARC insertion (STACK_ALLOC
-     * values don't need retain/release since they have frame lifetime). */
+     * values don't need retain/release since they have frame lifetime).
+     * Gated on run_backend_lower because only backend codegen (AOT/JIT)
+     * consumes XI_STACK_ALLOC; the VM emitter has no handler for it. */
     if (cfg->run_escape && cfg->run_backend_lower) {
         xi_stack_alloc_rewrite(ir);
     }
@@ -147,8 +157,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     /* Precise dup/drop insertion (consumes ownership analysis).
      * MUST run BEFORE backend lowering, while ops are still semantic
      * (STORE_FIELD/ARRAY_NEW/...) — the owned/borrow split is keyed on
-     * those ops. See docs/design/705_memory_model_refactor_plan.md M3. */
-    if (cfg->run_escape && cfg->run_backend_lower) {
+     * those ops. Gated on run_arc (independent of run_backend_lower) so the
+     * VM can get dup/drop without stack_alloc_rewrite.
+     * See docs/design/705_memory_model_refactor_plan.md M3. */
+    if (cfg->run_escape && cfg->run_arc) {
         xi_arc_insert(ir);
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
