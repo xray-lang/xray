@@ -69,6 +69,11 @@ typedef struct XiPipelineConfig {
                              * to STAGE_BACKEND (default: false for VM, true for AOT) */
     bool run_escape;        /* run escape analysis (populates XiValue.escape;
                              * default: false for VM, true for AOT) */
+    bool run_arc;           /* run precise dup/drop insertion (xi_arc) consuming
+                             * ownership analysis. Independent of run_backend_lower
+                             * so the VM can get dup/drop WITHOUT stack_alloc_rewrite
+                             * (the VM emitter has no XI_STACK_ALLOC handler).
+                             * default: false for VM (until RC takeover), true for AOT. */
     bool run_emit;          /* emit bytecode (default: true for VM, false for AOT) */
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
