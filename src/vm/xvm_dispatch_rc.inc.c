@@ -36,14 +36,18 @@ vmcase(OP_DUP) {
 }
 
 vmcase(OP_DROP) {
-    /* drop(R[A]): release an owning reference. TRANSITIONAL — refcount is
-     * decremented but the object is NOT freed here; tracing still reclaims.
-     * The last-reference return value is intentionally ignored for now. */
+    /* drop(R[A]): release an owning reference. On the last reference the
+     * object's destructor runs and its memory returns to the RC freelist
+     * (shared objects route to xr_shared_destroy). Region objects are a
+     * no-op (handled in xr_obj_drop_is_last). */
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {
         XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-        (void) xr_obj_drop_is_last(o);
+        if (xr_obj_drop_is_last(o)) {
+            XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
+            xr_coro_gc_rc_destroy(_co ? _co->coro_gc : NULL, o);
+        }
     }
     vmbreak;
 }

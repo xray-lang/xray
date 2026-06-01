@@ -214,6 +214,8 @@ static void gc_finalize_immix_objects(XrCoroGC *gc) {
             if (!b->has_finalizers)
                 continue;
             for (XrGCHeader *obj = b->local_allgc; obj; obj = obj->gc_next) {
+                if (obj->extra & XR_OBJ_DEAD)
+                    continue; /* already finalized + freed by RC drop */
                 if (xr_gc_needs_finalize_ext(gc, obj->type)) {
                     XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
                     if (destroy)
@@ -384,7 +386,7 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 
 /* ========== Allocation ========== */
 
-/* ========== RC Per-Object Freelist (Option A) ========== */
+/* ========== RC Per-Object Freelist ========== */
 
 XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
     if (!gc || !obj)
@@ -417,8 +419,15 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
             return; /* OOM: drop the block on the floor (bulk-freed at coro end) */
     }
 
-    /* Push onto the size-class list via the intrusive gc_next link. */
-    obj->gc_next = gc->rc_freelist[cls];
+    /* Mark DEAD so coroutine-teardown finalization skips it (its destructor
+     * already ran here). Cleared when the block is reused by newobj.
+     *
+     * The freelist is linked through the object's PAYLOAD (first word after
+     * the header), NOT gc_next: gc_next must stay intact so the block's
+     * local_allgc chain remains walkable at teardown. */
+    obj->extra |= XR_OBJ_DEAD;
+    void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
+    *link = gc->rc_freelist[cls];
     gc->rc_freelist[cls] = obj;
 }
 
@@ -429,6 +438,38 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
      * coroutine's heap is torn down; only the index array is owned here. */
     xr_free(gc->rc_freelist);
     gc->rc_freelist = NULL;
+}
+
+/* drop-to-zero reclamation: run the type destructor (if any), then return
+ * the block to the size-class freelist. Shared (cross-coroutine) objects
+ * use the atomic shared-destroy path instead of the per-coroutine freelist.
+ * Region objects never reach here (their drop is a no-op). */
+/* drop-to-zero reclamation: run the type destructor (if any), then return
+ * the block to the size-class freelist. Shared (cross-coroutine) objects
+ * use the atomic shared-destroy path instead of the per-coroutine freelist.
+ * Region objects never reach here (their drop is a no-op). */
+XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
+    if (!obj)
+        return;
+
+    /* Shared objects: atomic refcount + shared destroy (not coro-local). */
+    if (XR_GC_IS_SHARED(obj)) {
+        xr_shared_destroy(obj);
+        return;
+    }
+
+    /* Run the type destructor (closes files/sockets, frees side buffers). */
+    if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
+        XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
+        if (destroy) {
+            destroy(obj, gc);
+            gc->objects_finalized++;
+        }
+    }
+
+    /* Return memory to the freelist (or free large/mmap directly). */
+    if (gc)
+        xr_coro_gc_rc_free(gc, obj);
 }
 
 XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
@@ -465,8 +506,11 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         int cls = xr_rc_size_class(total);
         if (cls >= 0 && gc->rc_freelist && gc->rc_freelist[cls]) {
             obj = gc->rc_freelist[cls];
-            gc->rc_freelist[cls] = obj->gc_next;
-            /* objsize is the class size (== total); type/refcount set below. */
+            void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
+            gc->rc_freelist[cls] = (XrGCHeader *) *link;
+            /* Reused block: still linked in its block's local_allgc (gc_next
+             * intact) and its alloc line is still marked. type/refcount/extra
+             * are reset below; XR_OBJ_DEAD is cleared by extra = 0. */
         } else {
             obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
             if (!obj)
@@ -2014,6 +2058,13 @@ void xr_coro_gc_step(XrCoroGC *gc) {
     if (!gc || gc->in_gc || gc->gc_disabled > 0)
         return;
 
+    /* RC takeover: reference counting now owns reclamation (drop-to-zero
+     * frees via the per-coroutine freelist). Running the tracing collector
+     * in parallel would double-free RC-reclaimed objects, so GC stepping is
+     * disabled. Tracing's mark/sweep machinery is retired here and removed
+     * wholesale in a later step. */
+    return;
+
     gc->in_gc = 1;
     XR_DCHECK(gc->gcstate <= XGC_SWEEP, "gc_step entry: invalid GC state");
 
@@ -2105,7 +2156,9 @@ void xr_coro_gc_step(XrCoroGC *gc) {
 void xr_coro_gc_fullgc(XrCoroGC *gc) {
     if (!gc)
         return;
-    XR_DCHECK(!gc->in_gc, "fullgc: re-entry during GC");
+    /* RC takeover: reclamation is owned by reference counting; a tracing
+     * full collection would double-free RC-reclaimed objects. No-op. */
+    return;
 
     uint64_t t0 = xr_gc_time_ns();
     uint8_t saved_mode = gc->gc_mode;

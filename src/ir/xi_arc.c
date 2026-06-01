@@ -120,9 +120,47 @@ static bool op_produces_owned_value(uint16_t op) {
     }
 }
 
+/* Does this op produce a BORROWED reference — i.e. a value loaded from a
+ * location the current function does not own (shared/global/upvalue slot,
+ * or a field/element of some other object)? Such a value must get neither
+ * dup nor drop: the function only borrows it; the real owner is the slot or
+ * the container. Dropping it would free an object still owned elsewhere
+ * (use-after-free). Missing a dup at most leaks (safe), never UAFs. */
+static bool op_produces_borrow(uint16_t op) {
+    switch (op) {
+        case XI_GET_SHARED:  /* read module-level shared slot */
+        case XI_GET_GLOBAL:  /* read top-level global (REPL) */
+        case XI_LOAD_UPVAL:  /* read captured upvalue */
+        case XI_IMPORT_REF:  /* cross-module import reference */
+        case XI_GET_BUILTIN: /* builtin global */
+        case XI_LOAD_FIELD:  /* obj.field — owned by obj */
+        case XI_STRUCT_GET:
+        case XI_INDEX_GET: /* arr[i] / map[k] — owned by the container */
+        case XI_JSON_GET_F:
+        case XI_TUPLE_GET:
+            return true;
+        default:
+            return false;
+    }
+}
+
+/* Is this op a call whose result ownership we cannot determine without a
+ * per-callee return-ownership summary? */
+static bool op_is_call(uint16_t op) {
+    switch (op) {
+        case XI_CALL:
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+        case XI_TAIL_CALL:
+        case XI_CALL_BUILTIN:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
- * alloc, not a scalar, and produces an owning reference. Parameters and
- * heap allocs both qualify. */
+ * alloc, not a scalar, produces an owning reference (not a borrow). */
 static bool tracks_rc(const XiValue *v) {
     if (!v)
         return false;
@@ -130,6 +168,17 @@ static bool tracks_rc(const XiValue *v) {
         return false; /* frame lifetime, no RC */
     if (v->op != XI_PARAM && !op_produces_owned_value(v->op))
         return false; /* side-effect op: no owning result */
+    if (op_produces_borrow(v->op))
+        return false; /* borrowed from a slot/container: not owned here */
+    /* Call results: a callee may return either a fresh (+1) reference or an
+     * alias of one of its arguments (e.g. `arr.push(x)` returns `self`).
+     * Without per-callee return-ownership summaries we cannot tell them
+     * apart, so we conservatively treat call results as borrowed: never
+     * auto-drop them. This can leak a discarded fresh return (safe) but
+     * never frees an aliased borrow (which would be a use-after-free).
+     * Return-ownership summaries (Roc/Koka style) refine this later. */
+    if (op_is_call(v->op))
+        return false;
     if (v->escape == XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
         return false; /* will be (or is) stack-allocated */
     return xi_own_type_is_rc(v->type);

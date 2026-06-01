@@ -579,10 +579,16 @@ int main(void) {
     test_gc_create_destroy();
     test_newobj_marks_alloc();
     test_large_object();
-    test_fullgc_cycle();
-    test_incremental_gc_states();
-    test_alloc_during_incremental_gc();
-    test_rebuild_after_fullgc();
+    /* RC takeover: the tracing collector (fullgc / incremental step / sweep)
+     * is disabled — reference counting owns reclamation now, and the tracing
+     * machinery is removed wholesale in a later step. These four tests assert
+     * tracing-cycle behavior (gc_count increment, PROPAGATE state walk,
+     * sweep-driven totalbytes decrease) that no longer exists by design.
+     * Re-enable/replace with RC-reclamation tests when tracing is removed.
+     *   test_fullgc_cycle();
+     *   test_incremental_gc_states();
+     *   test_alloc_during_incremental_gc();
+     *   test_rebuild_after_fullgc(); */
 
     printf("\n--- Write Barrier ---\n");
     test_keepinvariant_guard();
