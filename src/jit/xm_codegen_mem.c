@@ -766,6 +766,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // MOV w16, #alloc_size; STR w16, [rd, #12]  — objsize
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, alloc_size & 0xFFFF, 0));
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, rd, XM_GC_HDR_OBJSIZE_OFFSET));
+            // MOV w17, #1; STR w17, [rd, #refcount]  — refcount = 1 (RC 1-based)
+            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, 1, 0));
+            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, rd, XM_GC_HDR_REFCOUNT_OFFSET));
 
             // --- Inline alloc_post: GC bookkeeping without CALL_C stub ---
             // alloc_marks are DEFERRED: xr_immix_flush_marks() at slow path

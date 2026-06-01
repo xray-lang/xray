@@ -596,6 +596,9 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     /* objsize = alloc_size (32-bit store) */
     x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) alloc_size);
     x64_mov_mr32(&ctx->buf, rd, (int32_t) XM_GC_HDR_OBJSIZE_OFFSET, X64_RCX);
+    /* refcount = 1 (RC 1-based: fresh object has one owning reference) */
+    x64_load_imm64(&ctx->buf, X64_RCX, 1);
+    x64_mov_mr32(&ctx->buf, rd, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET, X64_RCX);
 
     /* --- Inline alloc_post: GC bookkeeping --- */
     /* block = rd & ~0x3FFF (16KB alignment) */

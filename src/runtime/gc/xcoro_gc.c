@@ -420,6 +420,10 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     obj->type = type;
     obj->objsize = (uint32_t) total;
     obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
+    /* RC: a freshly allocated object has exactly one owning reference (its
+     * definition site). dup/drop are 1-based, so initialize to 1. Immix
+     * memory is reused/uninitialized, so this must be set explicitly. */
+    obj->refcount = 1;
     if (use_mmap)
         XR_GC_SET_MMAP(obj);
 
