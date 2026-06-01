@@ -724,6 +724,9 @@ startfunc:
 /* GETBUILTIN / GETSHARED / SETSHARED / CLOSURE / UPVAL / CELL_* —
  * see xvm_dispatch_closure.inc.c. */
 #include "xvm_dispatch_closure.inc.c"
+
+/* DUP / DROP / MOVE reference-counting ops — see xvm_dispatch_rc.inc.c. */
+#include "xvm_dispatch_rc.inc.c"
 /* PRINT / TYPEOF / TYPENAME / DUMP / TO* / COPY / CHR —
  * see xvm_dispatch_convert.inc.c. */
 #include "xvm_dispatch_convert.inc.c"
