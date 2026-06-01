@@ -1,0 +1,89 @@
+---
+description: Xray 项目全局强约束（语言、硬性禁令、命名、版本、测试纪律）
+alwaysApply: true
+---
+
+# Xray Project — 主规则
+
+## 语言
+- 对话、文档用**中文**；C 代码注释和 git commit 用**英文**
+
+## 测试纪律
+- **每次代码修改后**必须运行测试验证，通过后才能说"完成"
+- 快速验证：`ctest --output-on-failure --test-dir build`
+- 完整回归：`scripts/run_regression_tests.sh`
+- **Windows / PD VM 测试**：只走 `scripts/win_pd_test.sh`，禁止裸 SSH；细则见 windows-testing 规则
+
+## Bug 修复铁律（**零容忍**）
+- **发现 bug 必须立即处理**，绝不允许无视、跳过或绕过
+- 能修复的：当场定位 root cause → 修复 → 写回归测试 → 验证通过
+- 暂时无法修复的（依赖缺失、改动过大、阻塞其他任务）：
+  1. 必须**立即向用户汇报**，说明原因和影响范围
+  2. 记录到 `docs/known_bugs.md`（格式：日期 + 现象 + root cause + 影响 + 复现方法）
+- ❌ 禁止"先跳过这个错误继续做别的"
+- ❌ 禁止用 workaround 掩盖 bug（如 catch-and-ignore、exit code 伪装、跳过失败测试）
+- ✅ 修复顺序：root cause 优先，不做下游补丁
+
+## 不考虑向后兼容性
+- Xray 作为全新语言开发，**不保留旧接口、不做兼容层**
+- 每个设计节点优先选择逻辑一致、性能好、易维护和易扩展的方案
+- 代码量小且无外部用户时可大胆重写，避免技术债务
+
+## 硬性禁令
+- 禁止直接 `malloc/free/calloc/realloc` → 统一用 `xr_malloc/xr_free`
+- 禁止循环依赖（头文件 include 必须是 DAG）
+- 禁止无修饰符的非 static 函数（必须 `XRAY_API` / `XR_FUNC` / `static`）
+- 禁止文件作用域的可变全局变量
+- 禁止直接调用 `lldb`（用 `scripts/lldb_debug.sh`）
+
+## Git commit 铁律
+- 多段落 / 含反引号或特殊字符的 commit message，先写入临时文件再提交，避免 shell 引用损坏：
+  1. 把消息写入 `/tmp/xray_commit_msg.txt`
+  2. `git add <files> && git commit -F /tmp/xray_commit_msg.txt`
+  3. `rm -f /tmp/xray_commit_msg.txt`
+- 只在用户明确要求时才提交，不要擅自 commit。
+- ❌ 禁止在 commit message 或 PR 描述中添加 `Co-authored-by: Cursor`、`Made-with: Cursor` 或任何 Cursor 署名 trailer
+
+## 注释与 commit 铁律（**绝对禁止**）
+**源码注释和 git commit 消息中**：
+- ❌ 禁止引用任何 `.md` 文档路径（`docs/xxx.md`、`README.md`、`xx-plan.md` 等都不行）
+  - 文档会迁移、重命名、归档，引用必然失效；文档的"现状描述"不应进入永久代码历史
+- ❌ 禁止出现"阶段说辞"：`Phase A/B/C`、`Step 1/2`、`Phase 0`、`A.1`、`P0/P1`、`Round 2`、`now/then`、"本次重构"、"这一步" 等
+  - 阶段是实施过程的临时坐标，做完就过时；commit 历史和源码必须自包含、可独立理解
+- ✅ 正确做法：直接说**事实**和**原因**
+  - ❌ "Phase 0 of vm refactor: unified entry contract"
+  - ✅ "Unify VM entry contract: xr_vm_current_ctx is the single ctx resolver"
+  - ❌ "// See docs/tasks/001-vm-refactor.md"
+  - ✅ "// Single authoritative ctx resolver — see xr_vm_current_ctx() doc comment"
+- 任何要长期保留的设计意图，写到**对应函数/类型的 doc comment** 里，不要外链文档
+- **合法用法**（不属禁令）：真正的算法 phase（编译器多 pass、bound elimination 4 阶段等）、语言规范规则编号（P0-1 等稳定标识）
+
+## 版本号
+- **单一真相源**：`CMakeLists.txt` 的 `project(Xray VERSION x.y.z)`
+- CMake `configure_file` 自动生成 `include/xray_version.h`
+- `xray.h` / `xray_old.h` 通过 `#include "xray_version.h"` 获取版本
+- **改版本只需修改 CMakeLists.txt 的 VERSION 字段**，重新 cmake configure 即可
+
+## 架构层次（低层不依赖高层）
+```
+L0 base → L1 runtime/value → L2 runtime/gc, runtime/object
+→ L3 runtime/class, runtime/symbol, coro → L4 module, frontend/*
+→ L5 vm, jit → L6 aot → L7 api → L8 app/cli, app/lsp, app/dap
+```
+
+## 命名
+- `xray_xxx()` 公共 API · `xr_xxx()` 内部 · `XR_XXX` 宏 · `XrType` 类型
+- `src/` 下文件统一 `x` 前缀（`xlex.h`）；`include/` 下用 `xray_` 前缀
+
+## 细则按需查阅 `docs/rules/`
+| 文件 | 内容 |
+|------|------|
+| `c-coding-standards.md` | 文件/函数行数限制、可见性、注释规范、内存安全、错误处理 |
+| `architecture.md` | 完整依赖层次、检查清单、哈希函数规范 |
+| `gc-memory.md` | GC 架构、Mark-Sweep、Arena、写屏障、系统堆 |
+| `language-spec.md` | xray 完整语法规范（编写 .xr 代码时参考） |
+| `design-principles.md` | 类型系统决策、协程闭包捕获、并发安全模型 |
+| `dev-workflow.md` | 调试方法、测试流程、脚本打包、CI 规则 |
+
+## 常用命令（已做成 Cursor 命令）
+`/build` · `/build-release` · `/build-asan` · `/test` · `/win-test`
