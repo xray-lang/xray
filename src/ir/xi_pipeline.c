@@ -18,6 +18,7 @@
 #include "xi_emit.h"
 #include "xi_backend_lower.h"
 #include "xi_escape.h"
+#include "xi_own.h"
 #include "xi_arc.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
@@ -119,6 +120,21 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * so escape info is available when inserting BOX/UNBOX. */
     if (cfg->run_escape) {
         xi_escape_analyze(ir);
+    }
+
+    /* Backward ownership inference (analysis only — does not mutate IR).
+     * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
+     * decisions; the xi_arc rewrite consumes these annotations directly.
+     * See docs/design/705_memory_model_refactor_plan.md M1. */
+    {
+        const char *own_env = getenv("XRAY_XI_OWN_DUMP");
+        if (own_env && own_env[0] == '1') {
+            XiOwnResult own;
+            if (xi_own_analyze(ir, &own)) {
+                xi_own_dump(ir, &own);
+                xi_own_free(&own);
+            }
+        }
     }
 
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
