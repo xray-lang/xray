@@ -132,9 +132,6 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             VM_THROW(frame, pc, XR_ERR_TYPE_NO_PROPERTY,
                      "cannot add property to sealed Json object");
         }
-        XrCoroutine *_bc = vm_ctx->current_coro;
-        if (_bc && _bc->coro_gc)
-            xr_coro_gc_barrierback(_bc->coro_gc, XR_OBJ2GC(json));
         return XR_DISP_NEXT;
     }
 

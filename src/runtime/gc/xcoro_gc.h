@@ -514,81 +514,34 @@ XR_FUNC void xr_coro_gc_step(XrCoroGC *gc);
 // Full GC cycle
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
 
-/* ========== Mark API ========== */
+/* ========== Mark API (retired) ==========
+ *
+ * Tracing is retired; these are no-ops kept so the traverse helpers and a
+ * few callers still compile during the staged removal. They are deleted
+ * along with the traverse subsystem. */
 
 XR_FUNC void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj);
 
-// Inline fast-path: only pointer-tagged values need GC marking.
-// ~80% of values (int, float, bool, null) short-circuit here without
-// a function call. This replaces the cross-TU inlining that LTO provided.
 static inline void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
-    if (XR_VALUE_NEEDS_GC(value)) {
-        XrGCHeader *obj = XR_VALUE_GCPTR(value);
-        xr_coro_gc_markobject(gc, obj);
-    }
+    (void) gc;
+    (void) value;
 }
 
-/* ========== Write Barrier API ========== */
-
-// Only maintain invariant during mark phases (PROPAGATE/ATOMIC)
-#define xr_gc_keepinvariant(gc) ((gc)->gcstate >= XGC_PROPAGATE && (gc)->gcstate <= XGC_ATOMIC)
+/* ========== Write Barrier API (retired) ==========
+ *
+ * Tracing is retired: reference counting owns reclamation, so there is no
+ * tri-color invariant to maintain on stores. The write-barrier macros are
+ * kept as no-ops so the (numerous) container/instance store sites compile
+ * unchanged; ownership of stored values is handled by the compiler-inserted
+ * dup/drop (xi_arc) and by container-element drop at destruction. */
 
 // GCHeader from object pointer (GCHeader is first field in all xray objects)
 #define XR_OBJ2GC(obj) ((XrGCHeader *) (obj))
 
-/*
- * Forward Barrier: when black parent writes white child, mark the child.
- */
-static inline void xr_coro_gc_barrier(XrCoroGC *gc, XrGCHeader *parent, XrGCHeader *child) {
-    if (XR_GC_IS_SHARED(parent))
-        return;
-    if (xr_gc_keepinvariant(gc) && child && xr_gc_isblack(parent) && xr_gc_iswhite(child)) {
-        xr_coro_gc_markobject(gc, child);
-    }
-}
-
-/*
- * Back Barrier: revert black parent to gray (for container batch writes).
- * In gen mode (Sticky Immix), old-block objects that write young-block
- * children are added to grayagain as a remembered set.
- */
-static inline void xr_coro_gc_barrierback(XrCoroGC *gc, XrGCHeader *obj) {
-    if (XR_GC_IS_SHARED(obj))
-        return;
-    if (xr_gc_isblack(obj)) {
-        if (gc->gc_mode == XGC_MODE_GEN && obj->objsize <= XR_LARGE_OBJECT_THRESHOLD &&
-            !xr_immix_is_young_ptr(obj)) {
-            // Old-block Immix object modified: add to remembered set
-            xr_gc_black2gray(obj);
-            xr_gc_set_rem(obj, XGC_REM_1);  // reset countdown on each write
-            xr_gclist_push(&gc->grayagain, obj);
-        } else if (xr_gc_keepinvariant(gc)) {
-            xr_gc_black2gray(obj);
-            xr_gclist_push(&gc->grayagain, obj);
-        }
-    }
-}
-
-// Convenience macros (for C extensions)
-#define XR_GC_BARRIER(gc, parent, child)                                                           \
-    xr_coro_gc_barrier((gc), XR_OBJ2GC(parent), XR_OBJ2GC(child))
-
-#define XR_GC_BARRIER_BACK(gc, obj) xr_coro_gc_barrierback((gc), XR_OBJ2GC(obj))
-
-// Forward barrier for XrValue writes into a GC object
-#define XR_GC_BARRIER_VAL(gc, parent_obj, val)                                                     \
-    do {                                                                                           \
-        if ((gc) && XR_VALUE_NEEDS_GC(val)) {                                                      \
-            xr_coro_gc_barrier((gc), XR_OBJ2GC(parent_obj), XR_VALUE_GCPTR(val));                  \
-        }                                                                                          \
-    } while (0)
-
-// Back barrier for container mutations (gc can be NULL safely)
-#define XR_GC_BARRIER_BACK_SAFE(gc, container_obj)                                                 \
-    do {                                                                                           \
-        if (gc)                                                                                    \
-            xr_coro_gc_barrierback((gc), XR_OBJ2GC(container_obj));                                \
-    } while (0)
+#define XR_GC_BARRIER(gc, parent, child) ((void) 0)
+#define XR_GC_BARRIER_BACK(gc, obj) ((void) 0)
+#define XR_GC_BARRIER_VAL(gc, parent_obj, val) ((void) 0)
+#define XR_GC_BARRIER_BACK_SAFE(gc, container_obj) ((void) 0)
 
 /* ========== External Memory Accounting ========== */
 

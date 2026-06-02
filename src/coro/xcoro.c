@@ -74,18 +74,18 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     return 0;
 }
 
-// Forward write barrier for JIT: black parent writes white child → mark child
+// Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
+// invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
 void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {
-    if (!coro || !coro->coro_gc || !parent || !child)
-        return;
-    xr_coro_gc_barrier(coro->coro_gc, (XrGCHeader *) parent, (XrGCHeader *) child);
+    (void) coro;
+    (void) parent;
+    (void) child;
 }
 
-// Back write barrier for JIT: black container mutated → container becomes gray
+// Back write barrier for JIT: retired. Kept as a no-op (see xr_jit_barrier_fwd).
 void xr_jit_barrier_back(XrCoroutine *coro, void *container) {
-    if (!coro || !coro->coro_gc || !container)
-        return;
-    xr_coro_gc_barrierback(coro->coro_gc, (XrGCHeader *) container);
+    (void) coro;
+    (void) container;
 }
 
 // ========== Memory Sync Helper Functions ==========
