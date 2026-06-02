@@ -410,7 +410,10 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
 
     int cls = xr_rc_size_class(obj->objsize);
     if (cls < 0)
-        return; /* unexpected size: leave to bulk free at coro end */
+        return; /* too small for the free link (header-only) or oversized:
+                 * not freelisted — reclaimed in bulk at coroutine teardown.
+                 * XR_OBJ_DEAD was already set by xr_coro_gc_rc_destroy so the
+                 * teardown finalize walk will not re-run the destructor. */
 
     /* Lazily allocate the freelist array on first free. */
     if (!gc->rc_freelist) {
@@ -419,13 +422,11 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
             return; /* OOM: drop the block on the floor (bulk-freed at coro end) */
     }
 
-    /* Mark DEAD so coroutine-teardown finalization skips it (its destructor
-     * already ran here). Cleared when the block is reused by newobj.
-     *
-     * The freelist is linked through the object's PAYLOAD (first word after
-     * the header), NOT gc_next: gc_next must stay intact so the block's
-     * local_allgc chain remains walkable at teardown. */
-    obj->extra |= XR_OBJ_DEAD;
+    /* The freelist is linked through the object's first PAYLOAD word (the
+     * word at header+sizeof(header)), NOT gc_next: gc_next must stay intact
+     * so the block's local_allgc chain remains walkable at teardown. The
+     * size class guarantees objsize >= sizeof(XrGCHeader) + sizeof(void*),
+     * so this write stays inside the object's footprint. */
     void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
     *link = gc->rc_freelist[cls];
     gc->rc_freelist[cls] = obj;
@@ -466,6 +467,14 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
             gc->objects_finalized++;
         }
     }
+
+    /* Mark DEAD before reclamation so the coroutine-teardown finalize walk
+     * skips it — its destructor has already run here. This must be set
+     * regardless of whether the block lands on the freelist (small objects
+     * below the free-link minimum are not freelisted but still must not be
+     * finalized twice). Cleared by newobj (extra = 0) when the block is
+     * reused. */
+    obj->extra |= XR_OBJ_DEAD;
 
     /* Return memory to the freelist (or free large/mmap directly). */
     if (gc)
