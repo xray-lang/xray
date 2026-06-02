@@ -62,6 +62,12 @@ typedef struct {
 #define XRT_ARC_HDR(p) ((XrtArcHdr *) ((char *) (p) - sizeof(XrtArcHdr)))
 #define XRT_ARC_HAS_DEINIT (1u << 1)
 
+/* Type-specific destructor dispatch. Defined in xrt_class.h (which owns the
+ * type table), forward-declared here because xrt_release (L1) runs before
+ * the table type is visible (L5). Runs the object's destructor if its type
+ * registered one; no-op otherwise. */
+static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj);
+
 /* =========================================================================
  * Bump allocator
  *
@@ -173,7 +179,10 @@ static inline void xrt_release(XrValue v) {
     if (hdr->flags & XRT_ARC_BUMP)
         return;
     if (--hdr->refcount <= 0) {
-        /* TODO: call type-specific destructor if XRT_ARC_HAS_DEINIT */
+        /* Run the type's destructor (closes resources / frees side buffers)
+         * before releasing the block. No-op if the type has no destructor. */
+        if (hdr->flags & XRT_ARC_HAS_DEINIT)
+            xrt_dispatch_destructor(hdr->type, v.ptr);
         XRT_FREE(hdr);
     }
 }
