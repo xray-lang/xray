@@ -778,6 +778,13 @@ typedef struct XiFunc {
      * its freshly-allocated `this` and moves it out via the return. */
     bool receiver_borrowed;
 
+    /* True for operator-overload methods (operator+, operator==, operator[],
+     * ...). The VM operator dispatch passes ALL operands borrowed: the
+     * operands stay live in the caller's registers and the call site (a
+     * binary/index op like XI_ADD) does not dup them. So EVERY parameter of
+     * an operator method is borrowed, not just the receiver. */
+    bool operator_borrowed;
+
     /* Effect summary: bitwise OR of XI_FLAG_* across all values.
      * Computed by xi_func_compute_effects() after lowering completes.
      * Callers use this to answer queries like "does this function

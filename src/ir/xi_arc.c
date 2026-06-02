@@ -358,9 +358,21 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
 
     /* The borrowed method receiver (params[0] when receiver_borrowed) is
      * passed without a caller dup, so it must be processed under the
-     * borrowed convention: dup at consuming uses, never drop. */
+     * borrowed convention: dup at consuming uses, never drop. Operator
+     * methods receive ALL their params borrowed (the VM operator dispatch
+     * leaves operands live in the caller's registers). */
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
 
-    for (int i = 0; i < nt; i++)
-        process_value_ex(f, targets[i], targets[i] == borrowed_recv);
+    for (int i = 0; i < nt; i++) {
+        bool borrowed = (targets[i] == borrowed_recv);
+        if (!borrowed && f->operator_borrowed) {
+            for (uint16_t p = 0; p < f->nparams; p++) {
+                if (f->params[p] == targets[i]) {
+                    borrowed = true;
+                    break;
+                }
+            }
+        }
+        process_value_ex(f, targets[i], borrowed);
+    }
 }
