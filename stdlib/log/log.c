@@ -1101,7 +1101,6 @@ static XrNativeBodyDesc g_logger_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = logger_body_init,
     .destroy = logger_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

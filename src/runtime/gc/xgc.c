@@ -51,33 +51,37 @@
  * Adding a new compile-time GC type is a one-liner here. */
 
 const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
-    // Containers — full lifecycle: destroy + traverse + deep_copy + to_shared.
-    [XR_TARRAY] = {xr_gc_destroy_array, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
-                   xr_to_shared_array},
-    [XR_TMAP] = {xr_gc_destroy_map, xr_gc_traverse_map, xr_deep_copy_map_with_ctx,
-                 xr_to_shared_map},
-    [XR_TSET] = {xr_gc_destroy_set, xr_gc_traverse_set, xr_deep_copy_set_with_ctx,
-                 xr_to_shared_set},
-    [XR_TINSTANCE] = {xr_gc_destroy_instance, xr_gc_traverse_instance,
-                      xr_deep_copy_instance_with_ctx, xr_to_shared_instance},
-    [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
-                      xr_to_shared_closure},
+    // Containers — destroy + deep_copy + to_shared (cross-coroutine).
+    [XR_TARRAY] = {.destroy = xr_gc_destroy_array,
+                   .deep_copy = xr_deep_copy_array_with_ctx,
+                   .to_shared = xr_to_shared_array},
+    [XR_TMAP] = {.destroy = xr_gc_destroy_map,
+                 .deep_copy = xr_deep_copy_map_with_ctx,
+                 .to_shared = xr_to_shared_map},
+    [XR_TSET] = {.destroy = xr_gc_destroy_set,
+                 .deep_copy = xr_deep_copy_set_with_ctx,
+                 .to_shared = xr_to_shared_set},
+    [XR_TINSTANCE] = {.destroy = xr_gc_destroy_instance,
+                      .deep_copy = xr_deep_copy_instance_with_ctx,
+                      .to_shared = xr_to_shared_instance},
+    [XR_TFUNCTION] = {.deep_copy = xr_deep_copy_closure_with_ctx,
+                      .to_shared = xr_to_shared_closure},
 
     // Channels — already shared at construction; pass-through across coro.
-    [XR_TCHANNEL] = {xr_gc_destroy_channel, NULL, NULL, NULL},
+    [XR_TCHANNEL] = {.destroy = xr_gc_destroy_channel},
 
-    // Atomic — system-heap shared object (refcounted). No GC-traced children.
-    [XR_TATOMIC] = {NULL, NULL, NULL, NULL},
+    // Atomic — system-heap shared object (refcounted). No side resources.
+    [XR_TATOMIC] = {0},
 
-    // Other GC types: have destroy or traverse responsibilities, but
-    // are deliberately not transferable across coroutines (the
-    // dispatchers return the raw value, matching the pre-table default).
-    [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
-    [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
-    [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
-    [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
-    [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
-    [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
+    // Other GC types: have destroy responsibilities, but are deliberately
+    // not transferable across coroutines (the dispatchers return the raw
+    // value, matching the pre-table default).
+    [XR_TCOROUTINE] = {.destroy = xr_gc_destroy_coroutine},
+    [XR_TTASK] = {.destroy = xr_gc_destroy_task},
+    [XR_TCELL] = {0},
+    [XR_TBOUND_METHOD] = {0},
+    [XR_TMODULE] = {0},
+    [XR_TERROR] = {0},
 
     // NetConn / NetListener are now XR_TINSTANCE with native body
     // descriptors — destroy is handled by xr_gc_destroy_instance.
