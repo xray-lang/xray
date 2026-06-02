@@ -63,10 +63,6 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
         atomic_fetch_add_explicit(coro->jit_ctx->heartbeat_ptr, 1, memory_order_relaxed);
     }
 
-    if (coro->coro_gc && coro->coro_gc->gc_requested) {
-        xr_coro_gc_step(coro->coro_gc);
-    }
-
     // Cancel check: watchdog sets this via xr_runtime_force_stop
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         return 1;
@@ -963,8 +959,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     // timer fields live in ext; reset happens in coro_init_common dirty path
     // Mark as "clean" — coro_init_common can skip memset
     coro->gc_flags |= XR_CORO_GC_RECYCLED_CLEAN;
-    XR_DCHECK(coro->coro_gc == NULL || coro->coro_gc->gcstate == XGC_PAUSE,
-              "recycle_local: GC not in PAUSE state");
 
     // Add to Worker local free list (lock-free, only this Worker accesses)
     if (worker->p.local_free_count < XR_CORO_LOCAL_FREE_MAX) {

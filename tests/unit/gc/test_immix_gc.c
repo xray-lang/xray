@@ -172,9 +172,7 @@ static void test_gc_create_destroy(void) {
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
-    ASSERT(gc->gcstate == XGC_PAUSE, "initial state should be PAUSE");
     ASSERT(gc->totalbytes == 0, "initial bytes should be 0");
-    ASSERT(gc->totalbytes == 0, "initial totalbytes confirmed 0");
 
     xr_coro_gc_destroy(gc);
     PASS();

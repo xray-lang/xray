@@ -178,11 +178,8 @@ void xr_gc_header_print(XrGCHeader *obj) {
     printf("GC Header:\n");
     printf("  gc_next: %p\n", (void *) obj->gc_next);
     printf("  type: %d\n", obj->type);
-    printf("  marked: 0x%02x\n", obj->marked);
+    printf("  refcount: %d\n", obj->refcount);
     printf("  objsize: %u\n", obj->objsize);
-    printf("  white: %d\n", xr_gc_iswhite(obj) ? 1 : 0);
-    printf("  black: %d\n", xr_gc_isblack(obj) ? 1 : 0);
-    printf("  gray: %d\n", xr_gc_isgray(obj) ? 1 : 0);
 }
 
 /* ========== Unified Allocation Interface ========== */
