@@ -2766,8 +2766,9 @@ static void test_alloc_inline(void) {
     assert(gc_next == 0);
     // type = 5 at offset 8
     assert(hdr[8] == 5);
-    // marked = currentwhite (0x01) at offset 9
-    assert(hdr[9] == 0x01);
+    // byte 9 (formerly tracing `marked`) is no longer written — tracing is
+    // retired; RC owns reclamation. The inline alloc leaves it zero.
+    assert(hdr[9] == 0x00);
     // extra = 0 at offset 10-11
     assert(hdr[10] == 0 && hdr[11] == 0);
     // objsize = 48 at offset 16 (refcount occupies 12-15)

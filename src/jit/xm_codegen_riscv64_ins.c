@@ -1125,13 +1125,11 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_addi(rd, RV64_SCRATCH_REG2, -(int32_t) alloc_size));
 
     /* Init GC header inline */
-    /* gc_next = NULL (SD x0, [rd, 0]) */
+    /* gc_next = NULL (SD x0, [rd, 0]) — set first; local_allgc linkage below
+       overwrites it with the block head */
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, rd, 0));
 
-    /* marked = currentwhite (byte load from gc + offset) */
-    rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG2, RV64_SCRATCH_REG,
-                                      (int32_t) XM_GC_CURRENTWHITE_OFFSET));
-    rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_MARKED_OFFSET));
+    /* byte 9 (formerly tracing `marked`) left zero — tracing retired. */
 
     /* type = gc_type */
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) gc_type);
@@ -1181,7 +1179,7 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2,
                                      (int32_t) XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
 
-    /* GC stats: gc->totalbytes += size, gc->GCdebt += size */
+    /* GC stats: gc->totalbytes += size (RC has no GCdebt/collection trigger). */
     rv64_buf_emit(&ctx->buf,
                   rv64_ld(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_GC_OFFSET));
     rv64_buf_emit(&ctx->buf,
@@ -1189,11 +1187,6 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, (int32_t) alloc_size));
     rv64_buf_emit(&ctx->buf,
                   rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_TOTALBYTES_OFFSET));
-    rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_GCDEBT_OFFSET));
-    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, (int32_t) alloc_size));
-    rv64_buf_emit(&ctx->buf,
-                  rv64_sd(RV64_SCRATCH_REG, RV64_SCRATCH_REG2, (int32_t) XM_GC_GCDEBT_OFFSET));
 
     /* J alloc_done (skip slow path) */
     uint32_t j_done_idx = ctx->buf.count;

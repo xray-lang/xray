@@ -746,12 +746,10 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_sub_imm(rd, SCRATCH_REG2, alloc_size));
 
             // Init GC header inline:
-            // STR xzr, [rd, #0]  — gc_next = NULL
+            // STR xzr, [rd, #0]  — gc_next = NULL (set first; local_allgc
+            //                      linkage below overwrites with the block head)
             a64_buf_emit(&ctx->buf, a64_str(A64_XZR, rd, 0));
-            // LDRB w17, [x16, #101]  — currentwhite
-            a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XM_GC_CURRENTWHITE_OFFSET));
-            // STRB w17, [rd, #9]  — marked = currentwhite
-            a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, rd, XM_GC_HDR_MARKED_OFFSET));
+            // byte 9 (formerly tracing `marked`) left zero — tracing retired.
             // MOV w17, #gc_type
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, gc_type, 0));
             // STRB w17, [rd, #8]  — type
@@ -797,15 +795,13 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf,
                          a64_str(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
 
-            // 2. GC stats: totalbytes += size, GCdebt += size
+            // 2. GC stats: totalbytes += size (RC has no GCdebt/collection
+            //    trigger; only the bytes counter is kept for gc.info()).
             a64_buf_emit(&ctx->buf,
                          a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_GC_OFFSET));  // x17 = gc
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2, XM_GC_TOTALBYTES_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2, XM_GC_TOTALBYTES_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2, XM_GC_GCDEBT_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, SCRATCH_REG2, XM_GC_GCDEBT_OFFSET));
 
             // B alloc_done (skip slow path)
             uint32_t b_done_idx = ctx->buf.count;
