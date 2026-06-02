@@ -162,6 +162,9 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
+    // Runtime-managed: lifetime owned by the shared atomic-RC, not the
+    // compiler's per-coroutine RC. dup/drop become no-ops. See docs/design/706.
+    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // xr_sysheap_alloc_shared already memset(0) the entire allocation.
     // All fields default to 0/NULL/false which is correct for:
@@ -238,6 +241,8 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
+    // Runtime-managed: see xr_channel_new. dup/drop become no-ops.
+    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // Inline single-element buffer
     ch->buffer = (XrValue *) (ch + 1);
