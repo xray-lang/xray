@@ -402,20 +402,10 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
 #define checkGC(c) VM_GC_SAFEPOINT()
 
 /* ========== Write Barrier Macros ========== */
-// Forward barrier: mark child when black parent writes GC-referencing value
-#define VM_BARRIER_VAL(parent_obj, val)                                                            \
-    do {                                                                                           \
-        XrCoroutine *_bc = VM_CURRENT_CORO;                                                        \
-        if (_bc && _bc->coro_gc)                                                                   \
-            XR_GC_BARRIER_VAL(_bc->coro_gc, parent_obj, val);                                      \
-    } while (0)
-// Back barrier: revert black container to gray after mutation
-#define VM_BARRIER_BACK(container_obj)                                                             \
-    do {                                                                                           \
-        XrCoroutine *_bc = VM_CURRENT_CORO;                                                        \
-        if (_bc && _bc->coro_gc)                                                                   \
-            xr_coro_gc_barrierback(_bc->coro_gc, XR_OBJ2GC(container_obj));                        \
-    } while (0)
+// Forward barrier: retired (RC owns reclamation; no tri-color invariant).
+#define VM_BARRIER_VAL(parent_obj, val) ((void) 0)
+// Back barrier: retired.
+#define VM_BARRIER_BACK(container_obj) ((void) 0)
 
 /* ========== Debug Hook (Zero Overhead When No Debugger) ========== */
 /* All decision logic (breakpoints, stepping, pause, logpoints) lives in
