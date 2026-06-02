@@ -161,6 +161,13 @@ typedef struct XrGCHeader XrObjHeader;
     0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
             * destructor at coroutine teardown to avoid                                            \
             * double finalization. Cleared on reuse. */
+#define XR_OBJ_MANAGED                                                                             \
+    0x0040 /* extra bit 6: runtime-managed object (Channel / Coroutine /                           \
+            * Task / CoroPool / Atomic). Its lifetime is owned by the                              \
+            * runtime/scheduler (and the atomic shared-RC in xshared.h),                           \
+            * NOT by the compiler-inserted per-coroutine RC. dup/drop are                          \
+            * no-ops so a compiler-inserted drop can never free an object                          \
+            * the executor still holds. See docs/design/706. */
 
 #define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
 #define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
@@ -169,6 +176,16 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_IS_REGION(o) XR_OBJ_GET_FLAG(o, XR_OBJ_REGION)
 #define XR_OBJ_IS_ATOMIC(o) XR_OBJ_GET_FLAG(o, XR_OBJ_ATOMIC)
 #define XR_OBJ_HAS_DESTRUCTOR(o) XR_OBJ_GET_FLAG(o, XR_OBJ_HAS_DTOR)
+#define XR_OBJ_IS_MANAGED(o) XR_OBJ_GET_FLAG(o, XR_OBJ_MANAGED)
+
+/* Whether an object TYPE is runtime-managed: its lifetime belongs to the
+ * runtime/scheduler (cross-coroutine reachable, held by the executor or the
+ * atomic shared-RC), not the compiler's per-coroutine RC. The compiler must
+ * not insert dup/drop for such objects. See docs/design/706 §5. */
+static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
+    return t == XR_TCHANNEL || t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL ||
+           t == XR_TATOMIC;
+}
 
 /* ========== RC dup/drop Primitives ==========
  *
@@ -188,9 +205,14 @@ typedef struct XrGCHeader XrObjHeader;
 
 #include <stdatomic.h>
 
-/* Acquire a new owning reference. */
+/* Acquire a new owning reference.
+ *
+ * REGION and MANAGED objects are no-ops: region objects are bulk-freed at
+ * coroutine end, and MANAGED objects (Channel/Coroutine/Task/CoroPool/Atomic)
+ * are owned by the runtime/scheduler via the atomic shared-RC, never by the
+ * compiler-inserted per-coroutine RC. See docs/design/706 §5. */
 static inline void xr_obj_dup(XrObjHeader *o) {
-    if (!o || (o->extra & XR_OBJ_REGION))
+    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
         return;
     if (o->extra & XR_OBJ_ATOMIC)
         atomic_fetch_add_explicit((_Atomic(int32_t) *) &o->refcount, 1, memory_order_relaxed);
@@ -199,10 +221,14 @@ static inline void xr_obj_dup(XrObjHeader *o) {
 }
 
 /* Release an owning reference. Returns true if this was the last reference
- * (refcount reached 0) and the caller must destroy + free the object. */
+ * (refcount reached 0) and the caller must destroy + free the object.
+ *
+ * REGION and MANAGED objects always return false: a compiler-inserted drop
+ * must never free a region object (bulk-freed at coroutine end) nor a
+ * runtime-managed object the executor still holds. See docs/design/706 §5. */
 static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
-    if (!o || (o->extra & XR_OBJ_REGION))
-        return false; /* region: bulk-freed at coroutine end */
+    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
+        return false; /* region: bulk-freed at coro end; managed: runtime-owned */
     if (o->extra & XR_OBJ_ATOMIC) {
         /* acq_rel so the destructor sees all prior writes (Rust Arc pattern). */
         return atomic_fetch_sub_explicit((_Atomic(int32_t) *) &o->refcount, 1,

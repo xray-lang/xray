@@ -318,6 +318,12 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
 
     // Set non-zero fields (always needed)
     coro->reductions = XR_CORO_REDUCTIONS;
+
+    // Runtime-managed: a coroutine's lifetime is owned by the scheduler/pool,
+    // not the compiler's per-coroutine RC. Mark here (covers every alloc path:
+    // pool slab init resets the gc header, so set the flag centrally). dup/drop
+    // become no-ops for coroutine handles. See docs/design/706.
+    XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->isolate = X;
     coro->name = name;

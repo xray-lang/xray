@@ -63,6 +63,12 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     if (!task)
         return NULL;
 
+    /* Runtime-managed: the executor keeps the task alive via coro->task;
+     * the compiler's per-coroutine RC must not free it. dup/drop become
+     * no-ops so a compiler-inserted drop can never free a task the executor
+     * still holds. See docs/design/706. */
+    XR_OBJ_SET_FLAG(&task->gc, XR_OBJ_MANAGED);
+
     task->result = xr_null();
     task->error = xr_null();
     task->coro = executor;

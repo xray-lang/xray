@@ -45,6 +45,9 @@ XrAtomic *xr_atomic_new(XrayIsolate *X, XrAtomicKind kind, int64_t initial) {
         return NULL;
 
     xr_shared_set_refc(&a->gc, 1);
+    /* Runtime-managed: shared atomic primitive owned by the shared RC, not
+     * the compiler's per-coroutine RC. dup/drop become no-ops. See docs/design/706. */
+    XR_OBJ_SET_FLAG(&a->gc, XR_OBJ_MANAGED);
     a->kind = (uint8_t) kind;
     atomic_store(&a->value, initial);
 
