@@ -40,6 +40,12 @@
 XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     if (!type)
         return true; /* unknown: conservative (treat as RC) */
+    /* Runtime-managed objects (Channel / Atomic, and at runtime Task /
+     * Coroutine via the XR_OBJ_MANAGED backstop) are owned by the
+     * scheduler/runtime, not the compiler's per-coroutine RC. The compiler
+     * must not track them for dup/drop. See docs/design/706 §6. */
+    if (xr_type_is_runtime_managed(type))
+        return false;
     switch (type->kind) {
         case XR_KIND_INT:
         case XR_KIND_FLOAT:
