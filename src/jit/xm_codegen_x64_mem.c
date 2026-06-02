@@ -581,12 +581,10 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_mov_rr(&ctx->buf, rd, X64_RCX);
 
     /* Init GC header inline */
-    /* gc_next = NULL */
+    /* gc_next = NULL (set first; local_allgc linkage below overwrites it) */
     x64_xor_rr(&ctx->buf, X64_RCX, X64_RCX);
     x64_mov_mr(&ctx->buf, rd, 0, X64_RCX);
-    /* marked = currentwhite (byte load from gc + XM_GC_CURRENTWHITE_OFFSET) */
-    x64_movzx_rm8(&ctx->buf, X64_RCX, X64_SCRATCH_REG, (int32_t) XM_GC_CURRENTWHITE_OFFSET);
-    x64_mov_mr8(&ctx->buf, rd, (int32_t) XM_GC_HDR_MARKED_OFFSET, X64_RCX);
+    /* byte 9 (formerly tracing `marked`) left zero — tracing retired. */
     /* type = gc_type */
     x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) gc_type);
     x64_mov_mr8(&ctx->buf, rd, (int32_t) XM_GC_HDR_TYPE_OFFSET, X64_RCX);
@@ -621,15 +619,12 @@ XR_FUNC void x64_emit_alloc_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd, uint8
     x64_add_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) alloc_size);
     x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET, X64_SCRATCH_REG);
 
-    /* GC stats: gc->totalbytes += size, gc->GCdebt += size */
+    /* GC stats: gc->totalbytes += size (RC has no GCdebt/collection trigger). */
     x64_mov_rm(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_GC_OFFSET);
     CODEGEN_CHECK(ctx, alloc_size <= 0x7FFFFFFF, "alloc_size exceeds imm32 range");
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RCX, (int32_t) XM_GC_TOTALBYTES_OFFSET);
     x64_add_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) alloc_size);
     x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_GC_TOTALBYTES_OFFSET, X64_SCRATCH_REG);
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_RCX, (int32_t) XM_GC_GCDEBT_OFFSET);
-    x64_add_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) alloc_size);
-    x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_GC_GCDEBT_OFFSET, X64_SCRATCH_REG);
 
     /* JMP alloc_done (skip slow path) */
     x64_jmp_rel32(&ctx->buf, 0);
