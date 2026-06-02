@@ -119,6 +119,17 @@ static inline void xrt_type_set_generic(uint16_t type_id, uint16_t origin_id, co
     ti->mono_type_argc = argc;
 }
 
+/* Run the type-specific destructor for an object, if its type registered
+ * one. Called from xrt_release (xrt_arc.h) on the last reference, before the
+ * block is freed. Forward-declared in xrt_arc.h. */
+static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
+    if (type_id == 0 || type_id >= xrt_type_count)
+        return;
+    XrtDestructor dtor = xrt_type_table[type_id].destructor;
+    if (dtor)
+        dtor(obj);
+}
+
 /* =========================================================================
  * Object allocation — bump alloc + set type in XrtArcHdr
  *
