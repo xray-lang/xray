@@ -259,15 +259,26 @@ static void insert_drop_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue 
     drop->escape = target->escape;
 }
 
-/* Insert drops before the terminators of all RETURN blocks (used for a
- * value that is owned but never consumed and stays live to function end). */
+/* Insert drops before the terminators of all RETURN blocks where the drop is
+ * statically sound — used for a value that is owned but never consumed.
+ *
+ * The drop is emitted at a RETURN block only when the value's defining block
+ * DOMINATES that return block. Otherwise the value's register is not
+ * guaranteed live (the def is on a path that may not have executed), and the
+ * drop would release a stale/borrowed value — the 1130_linked_scope crash,
+ * where a dead ERR_CATCH value defined only in the catch block was dropped at
+ * the common return, freeing the borrowed closure on the no-catch path. */
 static void insert_drop_at_returns(XiFunc *f, XiValue *target) {
+    XiBlock *def_blk = target->block;
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->kind != XI_BLOCK_RETURN)
             continue;
         if (blk->control == target)
             continue; /* returned: caller takes ownership */
+        /* Soundness: only drop where the definition dominates the return. */
+        if (def_blk && !xi_dominates(def_blk, blk))
+            continue;
         XiValue *last = blk->nvalues > 0 ? blk->values[blk->nvalues - 1] : NULL;
         insert_drop_after(f, blk, last, target);
     }
@@ -352,8 +363,11 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
             xi_arc_insert(f->children[i]);
     }
 
-    /* RPO is needed to order consume sites across blocks. */
+    /* RPO + dominators are needed to order consume sites across blocks and to
+     * gate drop placement (a drop at a return block is only sound where the
+     * value's definition dominates it). */
     xi_ensure_rpo(f);
+    xi_ensure_dominators(f);
 
     /* Snapshot the set of tracked values first: we mutate blocks while
      * inserting, so collect targets up front. */
