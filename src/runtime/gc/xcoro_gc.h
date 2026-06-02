@@ -265,16 +265,36 @@ static inline void xr_gclist_absorb(XrGCGrayList *dst, XrGCGrayList *src) {
  * real single-object reclamation path on top of the Immix bump allocator,
  * which itself never frees individual objects.
  *
- * Size classes: 16-byte granularity. Class index = (aligned_size / 16) - 1.
- * Allocations are 16-byte aligned (implies the existing 8-byte alignment).
+ * Size classes use EXACT 8-byte granularity — the same alignment the
+ * allocator rounds every object up to (XGC_ALIGN_SIZE). Exact classes are
+ * mandatory: a freed slot's physical footprint is fixed at its first
+ * allocation, and newobj overwrites objsize with the new request on reuse.
+ * A coarser granularity would let a larger request pop a smaller freed slot
+ * and overflow it into the adjacent object. With 8-byte classes every member
+ * of a class has the identical aligned size, so reuse is byte-exact.
+ *
+ * Minimum freelisted size is sizeof(XrGCHeader) + one pointer: the free link
+ * is stored in the object's first payload word (header+sizeof(header)), so an
+ * object with no payload (header-only, 24 bytes) has nowhere to put it without
+ * clobbering the adjacent object. Such objects are not freelisted — they are
+ * reclaimed in bulk at coroutine teardown.
  */
-#define XR_RC_FREE_GRANULARITY 16
-#define XR_RC_FREECLASSES (XR_LARGE_OBJECT_THRESHOLD / XR_RC_FREE_GRANULARITY)  // 256
+#define XR_RC_FREE_GRANULARITY 8 /* must equal XGC_ALIGN_SIZE (allocator alignment) */
+#define XR_RC_FREE_MIN_SIZE (sizeof(XrGCHeader) + sizeof(void *)) /* room for the free link */
+#define XR_RC_FREECLASSES (XR_LARGE_OBJECT_THRESHOLD / XR_RC_FREE_GRANULARITY)  // 512
+
+/* The freelist size-class step must match the allocator's alignment exactly:
+ * every object in a class then has the identical aligned footprint, so a
+ * reused slot fits the new request byte-for-byte. If these diverge, a larger
+ * allocation could pop a smaller freed slot and overflow the neighbor. */
+_Static_assert(XR_RC_FREE_GRANULARITY == XGC_ALIGN_SIZE,
+               "RC freelist granularity must equal the GC allocator alignment");
 
 /* Map an aligned allocation size to its freelist class index, or -1 if the
- * size is out of range (too small or > large-object threshold). */
+ * size is out of range: too small to hold the free link, or larger than the
+ * large-object threshold (those are malloc/mmap-backed, freed individually). */
 static inline int xr_rc_size_class(size_t aligned_size) {
-    if (aligned_size < XR_RC_FREE_GRANULARITY || aligned_size > XR_LARGE_OBJECT_THRESHOLD)
+    if (aligned_size < XR_RC_FREE_MIN_SIZE || aligned_size > XR_LARGE_OBJECT_THRESHOLD)
         return -1;
     return (int) (aligned_size / XR_RC_FREE_GRANULARITY) - 1;
 }

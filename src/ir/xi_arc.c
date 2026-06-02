@@ -271,8 +271,15 @@ static void insert_drop_at_returns(XiFunc *f, XiValue *target) {
 }
 
 /* Process one tracked value: insert dup before every consuming use except
- * the last, and a drop if it is never consumed. */
-static void process_value(XiFunc *f, XiValue *target) {
+ * the last, and a drop if it is never consumed.
+ *
+ * `borrowed` flips the ownership convention for the value: a borrowed value
+ * (e.g. a method's `this` receiver, which the caller passes without dup)
+ * is NEVER dropped by this function, and EVERY consuming use — including the
+ * last — needs a dup first, because the function holds no owning reference
+ * to move out. This is the Perceus borrowed-parameter rule (Koka Parc.hs:
+ * borrowed bindings are dup'd at owned uses, never dropped). */
+static void process_value_ex(XiFunc *f, XiValue *target, bool borrowed) {
     enum {
         MAX_SITES = 256
     };
@@ -280,22 +287,39 @@ static void process_value(XiFunc *f, XiValue *target) {
     int n = collect_consume_sites(f, target, sites, MAX_SITES);
 
     if (n == 0) {
-        /* Never consumed. If it has any use at all it is a borrow; drop at
-         * function exit (conservative, correct). If totally dead, also drop
-         * at exit — a drop right after def is a later refinement. */
-        insert_drop_at_returns(f, target);
+        /* Never consumed. A borrowed value is owned by the caller — do not
+         * drop it here. An owned value with only borrowing uses (or none)
+         * must be dropped at function exit. */
+        if (!borrowed)
+            insert_drop_at_returns(f, target);
         return;
     }
 
     qsort(sites, (size_t) n, sizeof(ConsumeSite), cmp_site);
 
-    /* The last consuming use moves the value out (no dup). Every earlier
-     * consuming use needs a dup so the owner keeps a reference to pass on. */
+    if (borrowed) {
+        /* Borrowed: the function owns no reference, so every consuming use
+         * must dup first; nothing is moved out and nothing is dropped. */
+        for (int i = 0; i < n; i++) {
+            if (sites[i].user == NULL)
+                continue; /* return terminator: returning a borrow dups it */
+            insert_dup_before(f, sites[i].blk, sites[i].user, target);
+        }
+        return;
+    }
+
+    /* Owned: the last consuming use moves the value out (no dup). Every
+     * earlier consuming use needs a dup so the owner keeps a reference to
+     * pass on. */
     for (int i = 0; i < n - 1; i++) {
         if (sites[i].user == NULL)
             continue; /* return terminator can only be the single last site */
         insert_dup_before(f, sites[i].blk, sites[i].user, target);
     }
+}
+
+static void process_value(XiFunc *f, XiValue *target) {
+    process_value_ex(f, target, false);
 }
 
 XR_FUNC void xi_arc_insert(XiFunc *f) {
@@ -332,6 +356,11 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
         }
     }
 
+    /* The borrowed method receiver (params[0] when receiver_borrowed) is
+     * passed without a caller dup, so it must be processed under the
+     * borrowed convention: dup at consuming uses, never drop. */
+    XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
+
     for (int i = 0; i < nt; i++)
-        process_value(f, targets[i]);
+        process_value_ex(f, targets[i], targets[i] == borrowed_recv);
 }
