@@ -189,7 +189,6 @@ static XrNativeBodyDesc g_range_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
     .init = range_body_init,
     .destroy = NULL,
-    .traverse = NULL,
     .deep_copy = NULL, /* memcpy suffices (pure values, no pointers) */
     .to_shared = NULL, /* memcpy suffices */
 };

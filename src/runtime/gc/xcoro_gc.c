@@ -9,7 +9,7 @@
  */
 
 #include "xcoro_gc.h"
-#include "xcoro_gc_traverse.h"
+#include "xgc_internal.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../value/xvalue.h"

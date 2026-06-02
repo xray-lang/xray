@@ -180,7 +180,6 @@ static XrNativeBodyDesc sb_native_body_desc = {
     .body_align = _Alignof(XrStrBuf *),
     .copy_policy = XR_NATIVE_BODY_COPY_SHARED,
     .destroy = stringbuilder_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = stringbuilder_body_to_shared,
 };

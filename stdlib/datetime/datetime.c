@@ -1182,7 +1182,6 @@ static XrNativeBodyDesc g_datetime_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_DEEP,
     .init = datetime_body_init,
     .destroy = NULL,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };
