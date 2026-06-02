@@ -170,9 +170,26 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     frame->result_offset = 0;
     frame->u.l.pending_operator_check = false;
 
-    // Copy arguments to stack
+    // Copy arguments to stack. C callers of xr_vm_call_closure (container
+    // higher-order methods like map/filter/reduce/forEach, reflection,
+    // comparators) pass their arguments BORROWED: they read an element out
+    // of a container they do not give up. The closure body, however, was
+    // compiled under the owned-parameter ABI — it drops each RC parameter at
+    // return. To balance that drop we acquire one owning reference per RC
+    // pointer argument that lands in a fixed parameter slot; without it the
+    // closure would free a value the caller's container still references
+    // (use-after-free). Vararg "extra" args are collected into the rest array
+    // below (and dropped with it), so they are dup'd by that push path, not
+    // here — only the fixed parameter slots get the per-param drop.
+    int fixed_dup = nargs;
+    if (proto->is_vararg && fixed_dup > proto->numparams)
+        fixed_dup = proto->numparams;
     for (int i = 0; i < nargs; i++) {
         func_base[i] = args[i];
+        if (i < fixed_dup && XR_IS_PTR(args[i])) {
+            XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(args[i]);
+            xr_obj_dup(o);
+        }
     }
 
     if (proto->is_vararg) {
