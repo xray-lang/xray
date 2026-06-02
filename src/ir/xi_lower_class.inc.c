@@ -123,6 +123,12 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
      * move it out via the auto-return below, so they are NOT borrowed. */
     ml.func->receiver_borrowed = (is_inst && !is_ctor);
 
+    /* Operator-overload methods receive ALL operands borrowed: the VM
+     * operator dispatch (OP_ADD/OP_EQ/OP_INDEX/...) leaves the operands live
+     * in the caller's registers and the call site does not dup them, so the
+     * operator body must drop none of its params. */
+    ml.func->operator_borrowed = m->is_operator;
+
     if (is_ctor && is_inst && cd) {
         int this_var_init = xi_lower_var_create(&ml, 0, "this", ml.type_any);
         XiValue *this_val = xi_lower_braun_read(&ml, this_var_init, ml.cur_block);
