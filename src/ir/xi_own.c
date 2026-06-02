@@ -105,7 +105,10 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 
         /* ---- Closure captures consume the captured value ---- */
         case XI_CLOSURE_NEW:
-            return arg_idx >= 1; /* arg 0 = function ref, not a capture */
+            /* Every CLOSURE_NEW arg is a captured value (the function itself
+             * is carried in aux, not args). All captures are consumed: the
+             * closure stores an owning reference in its upvalue array. */
+            return true;
 
         /* ---- Throw moves the error value out ---- */
         case XI_THROW:

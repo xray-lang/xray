@@ -30,6 +30,20 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Debug helper: dump ownership analysis for a function and all its nested
+ * children (methods, closures). Gated by XRAY_XI_OWN_DUMP=1. */
+static void xi_own_dump_recursive(XiFunc *f) {
+    if (!f)
+        return;
+    XiOwnResult own;
+    if (xi_own_analyze(f, &own)) {
+        xi_own_dump(f, &own);
+        xi_own_free(&own);
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_own_dump_recursive(f->children[i]);
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
@@ -137,11 +151,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     {
         const char *own_env = getenv("XRAY_XI_OWN_DUMP");
         if (own_env && own_env[0] == '1') {
-            XiOwnResult own;
-            if (xi_own_analyze(ir, &own)) {
-                xi_own_dump(ir, &own);
-                xi_own_free(&own);
-            }
+            xi_own_dump_recursive(ir);
         }
     }
 

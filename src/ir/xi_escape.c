@@ -83,9 +83,10 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
 
         /* ---- HEAP_ESCAPE: closure captures ---- */
         case XI_CLOSURE_NEW:
-            /* arg_idx 0 is the function ref (not a real capture),
-             * all other args are captured values → HEAP_ESCAPE. */
-            return (arg_idx >= 1) ? XI_ESC_HEAP : XI_ESC_NONE;
+            /* Every CLOSURE_NEW arg is a captured value (the function itself
+             * is carried in aux, not args). All captures escape to the heap:
+             * they are stored in the closure's upvalue array. */
+            return XI_ESC_HEAP;
 
         /* ---- HEAP_ESCAPE: tuple stores every element ---- */
         case XI_TUPLE_NEW:
