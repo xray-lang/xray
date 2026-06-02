@@ -351,8 +351,20 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     }
 }
 
-static void process_value(XiFunc *f, XiValue *target) {
-    process_value_ex(f, target, OWN_OWNED);
+/* Does the borrow signature prove parameter `pv` is only borrowed (never
+ * stored/returned/forwarded)? Maps the param SSA value to its index via
+ * f->params[], then reads own->sig.param_own[idx]. The signature is computed
+ * by xi_own from real liveness + consume classification, fixed-pointed across
+ * (mutually) recursive functions. Returns false when out of range or unproven
+ * (conservative: treat as owned). */
+static bool param_is_borrowed(const XiFunc *f, const XiValue *pv, const XiOwnResult *own) {
+    if (!own || !own->sig.valid)
+        return false;
+    for (uint16_t p = 0; p < f->nparams && p < own->sig.nparams; p++) {
+        if (f->params[p] == pv)
+            return own->sig.param_own[p] == XI_OWN_BORROWED;
+    }
+    return false;
 }
 
 XR_FUNC void xi_arc_insert(XiFunc *f) {
@@ -368,6 +380,16 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * value's definition dominates it). */
     xi_ensure_rpo(f);
     xi_ensure_dominators(f);
+
+    /* Borrow signature: which parameters does this function only borrow (never
+     * store/return/forward)? A borrowed parameter must NOT be dropped by the
+     * callee — the caller retains ownership (Perceus borrowed-parameter rule).
+     * Without this, a function like `swap(arr, i, j)` that only indexes `arr`
+     * would drop it at exit, freeing an array the caller still uses after the
+     * call (1602_generic_container). This generalizes the ad-hoc
+     * receiver_borrowed / operator_borrowed flags to every parameter. */
+    XiOwnResult own;
+    bool have_own = xi_own_analyze(f, &own);
 
     /* Snapshot the set of tracked values first: we mutate blocks while
      * inserting, so collect targets up front. */
@@ -405,9 +427,17 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
             mode = OWN_BORROWED;
         } else if (f->operator_borrowed && targets[i]->op == XI_PARAM) {
             mode = OWN_BORROWED;
+        } else if (targets[i]->op == XI_PARAM && have_own &&
+                   param_is_borrowed(f, targets[i], &own)) {
+            /* The borrow signature proved this parameter is only borrowed:
+             * dup at consuming uses, never drop (caller keeps ownership). */
+            mode = OWN_BORROWED;
         } else if (op_is_call(targets[i]->op)) {
             mode = OWN_CALL_RESULT;
         }
         process_value_ex(f, targets[i], mode);
     }
+
+    if (have_own)
+        xi_own_free(&own);
 }
