@@ -173,12 +173,15 @@ static bool tracks_rc(const XiValue *v) {
     /* Call results: a callee may return either a fresh (+1) reference or an
      * alias of one of its arguments (e.g. `arr.push(x)` returns `self`).
      * Without per-callee return-ownership summaries we cannot tell them
-     * apart, so we conservatively treat call results as borrowed: never
-     * auto-drop them. This can leak a discarded fresh return (safe) but
-     * never frees an aliased borrow (which would be a use-after-free).
-     * Return-ownership summaries (Roc/Koka style) refine this later. */
+     * apart. We DO track them (so a result consumed by more than one use
+     * gets a dup before each non-last use, preventing a use-after-free when
+     * the first consumer moves/frees it), but process_value_ex uses the
+     * CALL_RESULT mode which never inserts an unconsumed drop — dropping an
+     * aliased borrow would be a use-after-free. Adding dups is always sound;
+     * the only cost is leaking a discarded fresh return until a per-callee
+     * return-ownership summary (Roc/Koka style) refines this. */
     if (op_is_call(v->op))
-        return false;
+        return xi_own_type_is_rc(v->type);
     if (v->escape == XI_ESC_NONE && xi_op_is_heap_alloc(v->op))
         return false; /* will be (or is) stack-allocated */
     return xi_own_type_is_rc(v->type);
@@ -273,13 +276,31 @@ static void insert_drop_at_returns(XiFunc *f, XiValue *target) {
 /* Process one tracked value: insert dup before every consuming use except
  * the last, and a drop if it is never consumed.
  *
- * `borrowed` flips the ownership convention for the value: a borrowed value
- * (e.g. a method's `this` receiver, which the caller passes without dup)
- * is NEVER dropped by this function, and EVERY consuming use — including the
- * last — needs a dup first, because the function holds no owning reference
- * to move out. This is the Perceus borrowed-parameter rule (Koka Parc.hs:
- * borrowed bindings are dup'd at owned uses, never dropped). */
-static void process_value_ex(XiFunc *f, XiValue *target, bool borrowed) {
+ * `mode` selects the ownership convention:
+ *   OWN_OWNED   — the function holds an owning reference (a fresh local
+ *                 allocation, or an owned parameter). The last consuming use
+ *                 moves it out (no dup); earlier consuming uses dup first; if
+ *                 never consumed it is dropped at function exit.
+ *   OWN_BORROWED — the value is owned by someone else (a method's `this`
+ *                 receiver, operator operands, a captured-by-value the caller
+ *                 keeps). EVERY consuming use dups first; never dropped.
+ *   OWN_CALL_RESULT — a call result whose ownership we cannot statically
+ *                 prove: it may be a fresh (+1) reference or an alias of an
+ *                 argument (e.g. arr.push(x) returns self). We dup before
+ *                 every consuming use EXCEPT the last (so a value consumed
+ *                 more than once is not freed out from under a later use) but
+ *                 we never insert an unconsumed drop (dropping an aliased
+ *                 borrow would be a use-after-free). Adding dups only raises
+ *                 the count, so this is sound for both fresh and aliased
+ *                 returns; it can leak a discarded fresh return (safe).
+ *                 A future per-callee return-ownership summary refines this. */
+typedef enum {
+    OWN_OWNED = 0,
+    OWN_BORROWED,
+    OWN_CALL_RESULT,
+} XiArcOwnMode;
+
+static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     enum {
         MAX_SITES = 256
     };
@@ -287,17 +308,17 @@ static void process_value_ex(XiFunc *f, XiValue *target, bool borrowed) {
     int n = collect_consume_sites(f, target, sites, MAX_SITES);
 
     if (n == 0) {
-        /* Never consumed. A borrowed value is owned by the caller — do not
-         * drop it here. An owned value with only borrowing uses (or none)
-         * must be dropped at function exit. */
-        if (!borrowed)
+        /* Never consumed. Only an OWNED value is dropped at exit. A borrowed
+         * value is owned by the caller; a call result may be an alias — in
+         * both cases we must not drop it here. */
+        if (mode == OWN_OWNED)
             insert_drop_at_returns(f, target);
         return;
     }
 
     qsort(sites, (size_t) n, sizeof(ConsumeSite), cmp_site);
 
-    if (borrowed) {
+    if (mode == OWN_BORROWED) {
         /* Borrowed: the function owns no reference, so every consuming use
          * must dup first; nothing is moved out and nothing is dropped. */
         for (int i = 0; i < n; i++) {
@@ -308,9 +329,10 @@ static void process_value_ex(XiFunc *f, XiValue *target, bool borrowed) {
         return;
     }
 
-    /* Owned: the last consuming use moves the value out (no dup). Every
-     * earlier consuming use needs a dup so the owner keeps a reference to
-     * pass on. */
+    /* OWNED and CALL_RESULT share the same dup placement: the last consuming
+     * use moves the value out (no dup), every earlier consuming use dups
+     * first so the owner keeps a reference to pass on. They differ only in
+     * the n==0 case above (CALL_RESULT never inserts an unconsumed drop). */
     for (int i = 0; i < n - 1; i++) {
         if (sites[i].user == NULL)
             continue; /* return terminator can only be the single last site */
@@ -319,7 +341,7 @@ static void process_value_ex(XiFunc *f, XiValue *target, bool borrowed) {
 }
 
 static void process_value(XiFunc *f, XiValue *target) {
-    process_value_ex(f, target, false);
+    process_value_ex(f, target, OWN_OWNED);
 }
 
 XR_FUNC void xi_arc_insert(XiFunc *f) {
@@ -364,15 +386,14 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
 
     for (int i = 0; i < nt; i++) {
-        bool borrowed = (targets[i] == borrowed_recv);
-        if (!borrowed && f->operator_borrowed) {
-            for (uint16_t p = 0; p < f->nparams; p++) {
-                if (f->params[p] == targets[i]) {
-                    borrowed = true;
-                    break;
-                }
-            }
+        XiArcOwnMode mode = OWN_OWNED;
+        if (targets[i] == borrowed_recv) {
+            mode = OWN_BORROWED;
+        } else if (f->operator_borrowed && targets[i]->op == XI_PARAM) {
+            mode = OWN_BORROWED;
+        } else if (op_is_call(targets[i]->op)) {
+            mode = OWN_CALL_RESULT;
         }
-        process_value_ex(f, targets[i], borrowed);
+        process_value_ex(f, targets[i], mode);
     }
 }
