@@ -96,162 +96,6 @@ typedef struct XrValue XrValue;
 struct XrCoroutine;
 struct XrGC;
 
-/* ========== GC State (4-State Machine) ========== */
-
-#define XGC_PAUSE 0      // Waiting for trigger
-#define XGC_PROPAGATE 1  // Incremental mark (interruptible)
-#define XGC_ATOMIC 2     // Atomic phase (non-interruptible)
-#define XGC_SWEEP 3      // Sweep (non-incremental, includes inline finalization)
-static inline const char *xr_gc_state_name(uint8_t state) {
-    switch (state) {
-        case XGC_PAUSE:
-            return "PAUSE";
-        case XGC_PROPAGATE:
-            return "PROPAGATE";
-        case XGC_ATOMIC:
-            return "ATOMIC";
-        case XGC_SWEEP:
-            return "SWEEP";
-        default:
-            return "UNKNOWN";
-    }
-}
-
-/* ========== Color Bit Definitions () ========== */
-
-#define XGC_WHITE0 (1 << 0)  // White color 0
-#define XGC_WHITE1 (1 << 1)  // White color 1
-#define XGC_BLACK (1 << 2)   // Black (marked, refs scanned)
-#define XGC_WHITEBITS (XGC_WHITE0 | XGC_WHITE1)
-#define XGC_COLORBITS (XGC_WHITEBITS | XGC_BLACK)
-
-// Color check macros
-#define xr_gc_iswhite(o) (((o)->marked) & XGC_WHITEBITS)
-#define xr_gc_isblack(o) (((o)->marked) & XGC_BLACK)
-#define xr_gc_isgray(o) (((o)->marked & XGC_COLORBITS) == 0)
-
-// Color set macros
-#define xr_gc_white2gray(o) ((o)->marked &= ~XGC_WHITEBITS)
-#define xr_gc_gray2black(o) ((o)->marked |= XGC_BLACK)
-#define xr_gc_black2gray(o) ((o)->marked &= ~XGC_BLACK)
-#define xr_gc_makewhite(gc, o)                                                                     \
-    ((o)->marked = ((o)->marked & ~XGC_COLORBITS) | ((gc)->currentwhite & XGC_WHITEBITS))
-#define xr_gc_set2black(o) ((o)->marked = ((o)->marked & ~XGC_WHITEBITS) | XGC_BLACK)
-
-/* ========== Sticky Immix: Block-Level Generational GC ========== */
-/*
- * Sticky Immix replaces per-object age with per-block age.
- * Objects in young blocks are young; objects in old blocks are old.
- *
- * Write barrier: when an old-block object writes a young-block child,
- * the parent is added to grayagain (remembered set).
- *
- * Remembered set tracking (bits 3-4 of marked, reusing old age bits):
- *   00 = not in remembered set
- *   01 = REMEMBERED1: first minor GC with this object in remembered set
- *   10 = REMEMBERED2: second (last) minor GC, will be removed after this
- *   barrierback sets to REMEMBERED1, each minor GC increments by 1.
- *   After 2 cycles without a new write, object exits remembered set.
- */
-#define XGC_REM_SHIFT 3
-#define XGC_REM_MASK (3 << XGC_REM_SHIFT)  // bits 3-4
-#define XGC_REM_NONE 0
-#define XGC_REM_1 1  // first cycle in remembered set
-#define XGC_REM_2 2  // second cycle, will be evicted next
-
-#define xr_gc_get_rem(o) ((((o)->marked) >> XGC_REM_SHIFT) & 3)
-#define xr_gc_set_rem(o, r)                                                                        \
-    ((o)->marked = (uint8_t) (((o)->marked & ~XGC_REM_MASK) | ((r) << XGC_REM_SHIFT)))
-
-// All GC bits (color + remembered)
-#define XGC_GCBITS (XGC_COLORBITS | XGC_REM_MASK)
-
-/* ========== GC Mode ========== */
-
-#define XGC_MODE_INC 0  // Incremental mark-sweep (used as major GC)
-#define XGC_MODE_GEN 1  // Generational (minor collections)
-
-/* ========== Gray List (separate from gc_next to avoid allgc chain corruption) ========== */
-
-#define XR_GRAYLIST_INIT_CAP 32
-
-typedef struct XrGCGrayList {
-    XrGCHeader **items;
-    int count;
-    int capacity;
-    int peak;  // High-water mark since last shrink check
-} XrGCGrayList;
-
-static inline void xr_gclist_init(XrGCGrayList *list) {
-    list->items = NULL;
-    list->count = 0;
-    list->capacity = 0;
-    list->peak = 0;
-}
-
-static inline void xr_gclist_destroy(XrGCGrayList *list) {
-    if (list->items) {
-        xr_free(list->items);
-        list->items = NULL;
-    }
-    list->count = 0;
-    list->capacity = 0;
-}
-
-static inline void xr_gclist_push(XrGCGrayList *list, XrGCHeader *obj) {
-    if (list->count >= list->capacity) {
-        int newcap = list->capacity ? list->capacity * 2 : XR_GRAYLIST_INIT_CAP;
-        XrGCHeader **newp = (XrGCHeader **) xr_realloc(list->items, newcap * sizeof(XrGCHeader *));
-        if (!newp) {
-            // OOM during GC: abort to avoid silent data loss
-            fprintf(stderr, "[GC] fatal: gray list realloc failed (OOM)\n");
-            abort();
-        }
-        list->items = newp;
-        list->capacity = newcap;
-    }
-    list->items[list->count++] = obj;
-    if (list->count > list->peak)
-        list->peak = list->count;
-}
-
-static inline XrGCHeader *xr_gclist_pop(XrGCGrayList *list) {
-    return list->count > 0 ? list->items[--list->count] : NULL;
-}
-
-static inline void xr_gclist_reset(XrGCGrayList *list) {
-    list->count = 0;
-}
-
-// Absorb all items from src into dst. Resets src.
-static inline void xr_gclist_absorb(XrGCGrayList *dst, XrGCGrayList *src) {
-    if (src->count == 0)
-        return;
-    if (dst->count == 0) {
-        // Fast path: just swap buffers
-        XrGCGrayList tmp = *dst;
-        *dst = *src;
-        *src = tmp;
-        src->count = 0;
-        return;
-    }
-    // Ensure capacity
-    int total = dst->count + src->count;
-    if (total > dst->capacity) {
-        int newcap = dst->capacity ? dst->capacity : XR_GRAYLIST_INIT_CAP;
-        while (newcap < total)
-            newcap *= 2;
-        XrGCHeader **newp = (XrGCHeader **) xr_realloc(dst->items, newcap * sizeof(XrGCHeader *));
-        if (!newp)
-            return;
-        dst->items = newp;
-        dst->capacity = newcap;
-    }
-    memcpy(dst->items + dst->count, src->items, src->count * sizeof(XrGCHeader *));
-    dst->count = total;
-    src->count = 0;
-}
-
 /* ========== Large Object Threshold ========== */
 
 #define XR_LARGE_OBJECT_THRESHOLD (4 * 1024)  // >4KB → large object (xr_malloc)
@@ -312,112 +156,64 @@ typedef struct XrCoroGCRootEntry {
 
 /* ========== Incremental Sweep Sub-State ========== */
 
-typedef enum {
-    XGC_SWEEP_FULL_BLOCKS = 0,     // Sweeping full_blocks list
-    XGC_SWEEP_RECYCLE_BLOCKS = 1,  // Sweeping recycle_blocks list
-    XGC_SWEEP_CURRENT_BLOCK = 2,   // Sweeping current_block (single)
-    XGC_SWEEP_LARGE_OBJECTS = 3,   // Sweeping large object list
-    XGC_SWEEP_RECLAIM = 4,         // Reclassify blocks (full/recycle/free)
-    XGC_SWEEP_DONE = 5             // Sweep complete
-} XrSweepPhase;
-
-/* ========== Coroutine GC Structure (Immix Mark-Region) ========== */
+/* ========== Coroutine GC Structure (Immix bump + RC reclamation) ========== */
 
 typedef struct XrCoroGC {
     // === Cache line 0: Immix allocator hot path ===
-    // cursor/limit/current_block are the first 3 fields of XrImmixHeap
+    // cursor/limit/current_block are the first 3 fields of XrImmixHeap.
+    // JIT inline allocation reads cursor/limit at fixed offsets.
     XrImmixHeap immix;
 
-    // === Allocation & GC trigger (follows immix in cache line 1) ===
-    int64_t GCdebt;           // Debt bytes (triggers GC when > 0)
-    int64_t totalbytes;       // Total allocated bytes
-    int32_t gc_requested;     // GC requested, trigger at next safe point (int32 for JIT)
-    uint8_t gcstate;          // GC phase: PAUSE/PROPAGATE/ATOMIC/SWEEP
-    uint8_t currentwhite;     // Current white bit (XGC_WHITE0 or XGC_WHITE1)
-    uint8_t in_gc;            // Re-entry guard
-    uint8_t gc_disabled;      // Disable counter
-    uint8_t gc_mode;          // XGC_MODE_INC or XGC_MODE_GEN
-    uint8_t _pad1;            // alignment
-    uint64_t alloc_since_gc;  // Bytes allocated since last GC
+    // === Allocation accounting ===
+    int64_t totalbytes;   // Total allocated bytes (gc.count / gc.info stats)
+    uint8_t in_gc;        // Re-entry guard (teardown / reset)
+    uint8_t gc_disabled;  // gc.disable/enable counter (gc.isrunning)
+    uint8_t _pad1[6];     // alignment
 
-    // === Mark/sweep working data ===
-    XrGCGrayList gray;       // Gray list (pending scan)
-    XrGCGrayList grayagain;  // Need re-scan (back barrier)
+    // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
+    XrGCHeader *large_objects;  // All large objects (single list via gc_next)
+    int64_t large_bytes;        // Total bytes in large_objects
 
-    // Block-level incremental sweep state (see XrSweepPhase)
-    int sweep_phase;            // XGC_SWEEP_FULL_BLOCKS .. XGC_SWEEP_DONE
-    XrImmixBlock *sweep_block;  // Next block to sweep in current phase
-
-    // === Generational GC state (Sticky Immix) ===
-    int64_t GCest;           // Estimate of live bytes after last major GC
-    int64_t young_promoted;  // Bytes in blocks promoted young→old this cycle
-
-    // === Less frequent data ===
-    XrGCGrayList weak;          // Weak tables
-    XrGCHeader *large_objects;  // All large objects (single list)
-    int64_t large_bytes;        // Total bytes in large_objects (for stats/tuning)
-
-    int64_t GCmarked;  // Bytes marked in last GC
-
-    // GC tuning parameters
-    int gc_pause;    // Pause multiplier (100 = collect when memory doubles)
-    int gc_stepmul;  // Step multiplier (controls GC speed vs mutator)
+    // GC tuning parameters (gc.setpause / gc.setstepmul — kept for API surface)
+    int gc_pause;
+    int gc_stepmul;
 
     // Ownership
     struct XrCoroutine *owner;
 
-    // External root callbacks (for C extensions holding GC objects)
+    // External root callbacks (legacy C-extension hook; never invoked now that
+    // tracing is gone, but the register/unregister API is retained).
     XrCoroGCRootEntry *root_callbacks;
 
-    // Shared object refcount tracking (Erlang ProcBin equivalent)
-    // During mark phase, shared objects encountered are recorded in shared_refs.
-    // After sweep, objects in prev_shared_refs but not in shared_refs get decref'd.
+    // Shared-object teardown decref list. Tracing used to populate this each
+    // cycle; it is now unused at runtime (shared objects live on the atomic
+    // shared-RC) but the teardown decref is retained as a safety net.
     XrGCHeader **shared_refs;
     int shared_refs_count;
     int shared_refs_capacity;
     XrGCHeader **prev_shared_refs;
     int prev_shared_refs_count;
 
-    // Statistics (cold)
-    uint32_t gc_count;
-    uint32_t object_count;       // Total live GC objects (incremental counter)
-    uint64_t gc_time_ns;         // Cumulative GC time across all cycles
-    uint64_t last_gc_time_ns;    // Duration of last completed GC cycle
-    uint64_t gc_cycle_start_ns;  // Start time of current incremental cycle
-    uint32_t finalizer_count;    // Total finalizers called
-
-    // Per-phase timing (reset each cycle)
-    uint64_t mark_time_ns;   // Time spent in PROPAGATE + ATOMIC
-    uint64_t sweep_time_ns;  // Time spent in SWEEP
-    uint64_t mark_start_ns;  // Timestamp when mark phase began (internal)
-
-    // Per-cycle counters (reset each cycle)
-    uint32_t objects_marked;     // Objects traversed during mark
-    uint32_t objects_swept;      // Objects freed during sweep
-    uint32_t objects_finalized;  // Objects with finalizers called
-    uint32_t objects_promoted;   // Young blocks promoted to old (gen mode)
+    // Statistics (cold; surfaced by the gc.* builtins)
+    uint32_t gc_count;         // Number of explicit gc.collect() calls (no-op cycles)
+    uint32_t object_count;     // Live GC object count (incremental counter)
+    uint64_t gc_time_ns;       // Cumulative GC time (0 under RC)
+    uint64_t last_gc_time_ns;  // Duration of last cycle (0 under RC)
+    uint32_t finalizer_count;  // Total finalizers called
 
     // === RC per-object freelist (RC reclaims small objects) ===
-    // Placed last so it does not shift any JIT-hardcoded field offset.
-    // Segregated free lists by 16-byte size class, lazily allocated; on
-    // drop-to-zero a small object's memory is pushed here and reused by a
-    // later same-class allocation before falling back to Immix bump.
-    // NULL until the first free in this coroutine (idle coros pay nothing).
+    // Segregated free lists by size class, lazily allocated; on drop-to-zero a
+    // small object's memory is pushed here and reused by a later same-class
+    // allocation before falling back to Immix bump. NULL until the first free.
     XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
 } XrCoroGC;
 
-// Hot-path fields (immix + GCdebt + gc_requested) must be in first 2 cache lines
-_Static_assert(offsetof(XrCoroGC, gc_requested) < 128,
-               "gc_requested must be within first 2 cache lines for JIT fast path");
-_Static_assert(offsetof(XrCoroGC, GCdebt) < 128, "GCdebt must be within first 2 cache lines");
-
 /* ========== JIT Struct Offsets (compile-time constants) ========== */
+/* Only the Immix bump fields and totalbytes are read by JIT inline alloc now;
+ * the tracing offsets (gcstate / currentwhite / GCdebt / gc_requested) were
+ * removed along with the fields. */
 
 #define XR_COROGC_OFFSET_IMMIX offsetof(XrCoroGC, immix)
-#define XR_COROGC_OFFSET_GCSTATE offsetof(XrCoroGC, gcstate)
-#define XR_COROGC_OFFSET_CURRENTWHITE offsetof(XrCoroGC, currentwhite)
-#define XR_COROGC_OFFSET_GC_REQUESTED offsetof(XrCoroGC, gc_requested)
-#define XR_COROGC_OFFSET_GCDEBT offsetof(XrCoroGC, GCdebt)
 #define XR_COROGC_OFFSET_TOTALBYTES offsetof(XrCoroGC, totalbytes)
 
 #define XR_IMMIX_OFFSET_CURSOR offsetof(XrImmixHeap, cursor)
@@ -554,18 +350,12 @@ static inline void xr_gc_add_external(XrCoroGC *gc, int64_t bytes) {
     if (!gc)
         return;
     gc->totalbytes += bytes;
-    if (gc->gc_disabled == 0) {
-        gc->GCdebt += bytes;
-        if (gc->GCdebt > 0 && !gc->in_gc)
-            gc->gc_requested = 1;
-    }
 }
 
 static inline void xr_gc_sub_external(XrCoroGC *gc, int64_t bytes) {
     if (!gc)
         return;
     gc->totalbytes -= bytes;
-    gc->GCdebt -= bytes;
 }
 
 /* ========== Query API ========== */

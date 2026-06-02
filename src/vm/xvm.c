@@ -380,24 +380,10 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
         }                                                                                          \
     } while (0)
 
-/* Per-coroutine GC safepoint: check if GC is requested and trigger
-** at a safe point where the VM stack is in a consistent state.
-** This is called at loop back-edges, function boundaries,
-** and after object allocation (via checkGC). */
-#define XR_GC_STEP_REDS 50
-#define VM_GC_SAFEPOINT()                                                                          \
-    do {                                                                                           \
-        XrCoroutine *_gc_coro = VM_CURRENT_CORO;                                                   \
-        if (_gc_coro && _gc_coro->coro_gc && _gc_coro->coro_gc->gc_requested) {                    \
-            _gc_coro->coro_gc->gc_requested = 0;                                                   \
-            savepc();                                                                              \
-            if (frame->closure && frame->closure->proto) {                                         \
-                VM_SET_STACK_TOP(base + frame->closure->proto->maxstacksize);                      \
-            }                                                                                      \
-            xr_coro_gc_step(_gc_coro->coro_gc);                                                    \
-            _gc_coro->reductions -= XR_GC_STEP_REDS;                                               \
-        }                                                                                          \
-    } while (0)
+/* Per-coroutine GC safepoint: retired. Tracing's incremental GC step used to
+** run here when gc_requested was set; reference counting reclaims inline
+** (drop-to-zero) and at coroutine teardown, so there is no step to trigger. */
+#define VM_GC_SAFEPOINT() ((void) 0)
 
 #define checkGC(c) VM_GC_SAFEPOINT()
 

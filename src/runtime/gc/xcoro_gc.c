@@ -99,29 +99,18 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
 /*
  * Reset GC runtime state fields to initial values.
  * Shared by xr_coro_gc_create and xr_coro_gc_reset.
- * Does NOT touch: immix heap, gray list buffers, shared_refs buffers,
- * tuning params (gc_pause, gc_stepmul), or owner pointer.
+ * Does NOT touch: immix heap, shared_refs buffers, tuning params
+ * (gc_pause, gc_stepmul), or owner pointer.
  */
 static void gc_init_runtime_state(XrCoroGC *gc) {
-    gc->gcstate = XGC_PAUSE;
-    gc->currentwhite = XGC_WHITE0;
-    gc->gc_mode = XGC_MODE_GEN;
-    gc->GCmarked = 0;
-    gc->GCest = 0;
-    gc->young_promoted = 0;
     gc->totalbytes = 0;
     gc->large_bytes = 0;
-    gc->sweep_phase = XGC_SWEEP_DONE;
-    gc->sweep_block = NULL;
-    gc->alloc_since_gc = 0;
     gc->in_gc = 0;
     gc->gc_disabled = 0;
-    gc->gc_requested = 0;
     gc->gc_count = 0;
     gc->object_count = 0;
     gc->gc_time_ns = 0;
     gc->last_gc_time_ns = 0;
-    gc->gc_cycle_start_ns = 0;
     gc->finalizer_count = 0;
 }
 
@@ -154,17 +143,7 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     // Initialize Immix heap
     xr_immix_init(&gc->immix);
 
-    // Gray lists need explicit init (sets items=NULL which memset already did,
-    // but xr_gclist_init is the canonical initializer)
-    xr_gclist_init(&gc->gray);
-    xr_gclist_init(&gc->grayagain);
-    xr_gclist_init(&gc->weak);
-
     gc_init_runtime_state(gc);
-
-    int64_t threshold = (config && config->gc_threshold > 0) ? (int64_t) config->gc_threshold
-                                                             : (int64_t) XR_SPAWN_CORO_GC_THRESHOLD;
-    gc->GCdebt = -threshold;
 
     gc->gc_pause = config && config->gc_pause > 0 ? config->gc_pause : XR_SPAWN_CORO_GC_PAUSE;
     gc->gc_stepmul =
@@ -254,10 +233,6 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
 
-    xr_gclist_destroy(&gc->gray);
-    xr_gclist_destroy(&gc->grayagain);
-    xr_gclist_destroy(&gc->weak);
-
     gc_decref_all_shared(gc);
     if (gc->shared_refs)
         xr_free(gc->shared_refs);
@@ -311,17 +286,12 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
 
-    xr_gclist_reset(&gc->gray);
-    xr_gclist_reset(&gc->grayagain);
-    xr_gclist_reset(&gc->weak);
-
     gc_decref_all_shared(gc);
     gc->shared_refs_count = 0;
     gc->prev_shared_refs_count = 0;
 
     // Reset runtime state (keep tuning params and shared_refs buffers)
     gc_init_runtime_state(gc);
-    gc->GCdebt = -(int64_t) XR_SPAWN_CORO_GC_THRESHOLD;
     gc->owner = new_owner;
 }
 
@@ -351,19 +321,15 @@ static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t ty
 }
 
 /*
- * Update GC allocation statistics after object creation.
- * Shared by xr_coro_gc_newobj and xr_jit_alloc_post.
+ * Update allocation statistics after object creation.
+ * Shared by xr_coro_gc_newobj and xr_jit_alloc_post. Tracing's debt-driven
+ * collection trigger is gone (RC owns reclamation); only the byte and object
+ * counters are kept for the gc.* introspection builtins.
  */
 static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
     gc->totalbytes += (int64_t) total;
     gc->object_count++;
     XR_DCHECK(gc->totalbytes >= 0, "totalbytes underflow");
-    if (gc->gc_disabled == 0) {
-        gc->GCdebt += (int64_t) total;
-        gc->alloc_since_gc += total;
-        if (gc->GCdebt > 0 && !gc->in_gc)
-            gc->gc_requested = 1;
-    }
 }
 
 /* ========== Allocation ========== */
@@ -446,7 +412,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
         XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
         if (destroy) {
             destroy(obj, gc);
-            gc->objects_finalized++;
+            gc->finalizer_count++;
         }
     }
 
@@ -520,54 +486,10 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (use_mmap)
         XR_GC_SET_MMAP(obj);
 
-    // New objects born with currentwhite (in young blocks or large list)
-    // INVARIANT 3: new objects carry currentwhite
-    obj->marked = gc->currentwhite;
-    XR_DCHECK(xr_gc_iswhite(obj), "new object must be white");
+    // byte 9 (formerly tracing `marked`) left zero — tracing retired; RC owns
+    // reclamation. refcount is initialized to 1 by the caller (newobj).
 
     gc_update_alloc_stats(gc, (uint32_t) total);
-
-#if XR_GC_STRESS
-    // Stress mode: trigger a GC step on every allocation to expose
-    // write barrier bugs that only manifest under tight GC pressure.
-    if (gc->gc_disabled == 0 && !gc->in_gc) {
-        // Protect the just-allocated object from the GC step's sweep.
-        // Mark BLACK so sweep_block's slow path keeps it alive, and set
-        // has_black on the block so the fast-path (which bulk-frees all
-        // objects without checking colors) is bypassed.
-        obj->marked = XGC_BLACK;
-        if (total <= XR_LARGE_OBJECT_THRESHOLD) {
-            XR_IMMIX_BLOCK_FROM_PTR(obj)->has_black = 1;
-        }
-
-        // Invalidate top frame's PC to force conservative stack scanning.
-        // The precise stackmap path requires an accurate PC (set by the
-        // VM's savepc() at safepoints).  Allocations happen mid-instruction
-        // where savepc() has not been called, so frame->pc is stale.
-        // A stale PC can cause the stackmap to omit live registers,
-        // leading to premature collection of stack-referenced objects.
-        XrBcCallFrame *_top_frame = NULL;
-        XrInstruction *_saved_pc = NULL;
-        if (gc->owner) {
-            int fc = gc->owner->vm_ctx.frame_count;
-            if (fc > 0) {
-                _top_frame = &gc->owner->vm_ctx.frames[fc - 1];
-                _saved_pc = _top_frame->pc;
-                _top_frame->pc = NULL;
-            }
-        }
-
-        xr_coro_gc_step(gc);
-
-        if (_top_frame)
-            _top_frame->pc = _saved_pc;
-
-        // Restore to current alive white. The sweep slow path may have
-        // already done this for us; the explicit assignment covers the
-        // case where sweep hasn't reached this block yet.
-        obj->marked = gc->currentwhite;
-    }
-#endif
 
     return obj;
 }
@@ -643,15 +565,11 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
         return;
     }
 
-    printf("=== XrCoroGC (Incremental Immix) ===\n");
-    printf("GC state:     %s\n", xr_gc_state_name(gc->gcstate));
+    printf("=== XrCoroGC (Immix bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
-    printf("GC debt:      %lld\n", (long long) gc->GCdebt);
-    printf("GC marked:    %lld\n", (long long) gc->GCmarked);
     printf("GC count:     %u\n", gc->gc_count);
     printf("GC pause:     %d%%\n", gc->gc_pause);
     printf("GC stepmul:   %d\n", gc->gc_stepmul);
-    printf("Current white: %s\n", gc->currentwhite == XGC_WHITE0 ? "WHITE0" : "WHITE1");
 
     XrImmixStats istats;
     xr_immix_get_stats(&gc->immix, &istats);
@@ -678,16 +596,6 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
         large_count++;
     printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long) gc->large_bytes);
 
-    // Timing
-    printf("GC time total:  %llu us\n", (unsigned long long) (gc->gc_time_ns / 1000));
-    printf("Last cycle:     %llu us (mark=%llu sweep=%llu)\n",
-           (unsigned long long) (gc->last_gc_time_ns / 1000),
-           (unsigned long long) (gc->mark_time_ns / 1000),
-           (unsigned long long) (gc->sweep_time_ns / 1000));
-
-    // Per-cycle counters (from last completed cycle)
-    printf("Last cycle objects: marked=%u swept=%u finalized=%u promoted=%u\n", gc->objects_marked,
-           gc->objects_swept, gc->objects_finalized, gc->objects_promoted);
     printf("Finalizers total: %u\n", gc->finalizer_count);
 
     printf("=====================================\n");

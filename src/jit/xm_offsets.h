@@ -127,24 +127,19 @@
 
 /* ========== GC / Allocation offsets ========== */
 
-#define XM_IMMIX_CURSOR_OFFSET 0       // offsetof(XrImmixHeap, cursor)
-#define XM_IMMIX_LIMIT_OFFSET 8        // offsetof(XrImmixHeap, limit)
-#define XM_GC_CURRENTWHITE_OFFSET 109  // offsetof(XrCoroGC, currentwhite)
-#define XM_GC_HDR_TYPE_OFFSET 8        // offsetof(XrGCHeader, type)
-#define XM_GC_HDR_MARKED_OFFSET 9      // offsetof(XrGCHeader, marked)
-#define XM_GC_HDR_EXTRA_OFFSET 10      // offsetof(XrGCHeader, extra)
-#define XM_GC_HDR_REFCOUNT_OFFSET 12   // offsetof(XrGCHeader, refcount)
-#define XM_GC_HDR_OBJSIZE_OFFSET 16    // offsetof(XrGCHeader, objsize)
+#define XM_IMMIX_CURSOR_OFFSET 0      // offsetof(XrImmixHeap, cursor)
+#define XM_IMMIX_LIMIT_OFFSET 8       // offsetof(XrImmixHeap, limit)
+#define XM_GC_HDR_TYPE_OFFSET 8       // offsetof(XrGCHeader, type)
+#define XM_GC_HDR_EXTRA_OFFSET 10     // offsetof(XrGCHeader, extra)
+#define XM_GC_HDR_REFCOUNT_OFFSET 12  // offsetof(XrGCHeader, refcount)
+#define XM_GC_HDR_OBJSIZE_OFFSET 16   // offsetof(XrGCHeader, objsize)
 
 /* ========== GC bookkeeping offsets (for inline alloc_post) ========== */
+/* Tracing is retired: the inline allocator no longer touches the tracing
+ * fields (marked / currentwhite / GCdebt / gc_requested). It only bumps the
+ * Immix cursor, links the per-block local_allgc list, and adds to totalbytes. */
 
-#define XM_GC_GCDEBT_OFFSET 88                // offsetof(XrCoroGC, GCdebt)
-#define XM_GC_TOTALBYTES_OFFSET 96            // offsetof(XrCoroGC, totalbytes)
-#define XM_GC_GC_REQUESTED_OFFSET 104         // offsetof(XrCoroGC, gc_requested)
-#define XM_GC_IN_GC_OFFSET 110                // offsetof(XrCoroGC, in_gc)
-#define XM_GC_GC_DISABLED_OFFSET 111          // offsetof(XrCoroGC, gc_disabled)
-#define XM_GC_ALLOC_SINCE_GC_OFFSET 120       // offsetof(XrCoroGC, alloc_since_gc)
-#define XM_GC_OBJECT_COUNT_OFFSET 312         // offsetof(XrCoroGC, object_count)
+#define XM_GC_TOTALBYTES_OFFSET 88            // offsetof(XrCoroGC, totalbytes)
 #define XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET 24  // offsetof(XrImmixBlock, local_allgc)
 #define XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrImmixBlock, alloc_marks)
 #define XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET 40  // offsetof(XrImmixBlock, alloc_count)
@@ -199,20 +194,8 @@ _Static_assert(offsetof(XrProto, stack_map) == XM_PROTO_STACK_MAP_OFFSET,
 
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/ximmix.h"
-_Static_assert(offsetof(XrCoroGC, GCdebt) == XM_GC_GCDEBT_OFFSET, "GCdebt offset mismatch");
 _Static_assert(offsetof(XrCoroGC, totalbytes) == XM_GC_TOTALBYTES_OFFSET,
                "totalbytes offset mismatch");
-_Static_assert(offsetof(XrCoroGC, gc_requested) == XM_GC_GC_REQUESTED_OFFSET,
-               "gc_requested offset mismatch");
-_Static_assert(offsetof(XrCoroGC, in_gc) == XM_GC_IN_GC_OFFSET, "in_gc offset mismatch");
-_Static_assert(offsetof(XrCoroGC, gc_disabled) == XM_GC_GC_DISABLED_OFFSET,
-               "gc_disabled offset mismatch");
-_Static_assert(offsetof(XrCoroGC, alloc_since_gc) == XM_GC_ALLOC_SINCE_GC_OFFSET,
-               "alloc_since_gc offset mismatch");
-_Static_assert(offsetof(XrCoroGC, object_count) == XM_GC_OBJECT_COUNT_OFFSET,
-               "object_count offset mismatch");
-_Static_assert(offsetof(XrCoroGC, currentwhite) == XM_GC_CURRENTWHITE_OFFSET,
-               "currentwhite offset mismatch");
 _Static_assert(offsetof(XrImmixBlock, local_allgc) == XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET,
                "local_allgc offset mismatch");
 _Static_assert(offsetof(XrImmixBlock, alloc_marks) == XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET,
@@ -227,8 +210,6 @@ _Static_assert(offsetof(XrImmixHeap, limit) == XM_IMMIX_LIMIT_OFFSET,
                "ImmixHeap.limit offset mismatch");
 
 // XrGCHeader detailed field checks
-_Static_assert(offsetof(XrGCHeader, marked) == XM_GC_HDR_MARKED_OFFSET,
-               "GCHeader.marked offset mismatch");
 _Static_assert(offsetof(XrGCHeader, extra) == XM_GC_HDR_EXTRA_OFFSET,
                "GCHeader.extra offset mismatch");
 _Static_assert(offsetof(XrGCHeader, refcount) == XM_GC_HDR_REFCOUNT_OFFSET,
