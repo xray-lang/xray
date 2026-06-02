@@ -116,22 +116,27 @@ fn test_gc_info_keys() {
     assert(info["finalizerCount"] >= 0)
 }
 
-// @test gc.collect updates timing stats
+// @test gc.collect timing stat is exposed and non-negative
 @test
 fn test_gc_collect_updates_timing() {
+    // RC owns reclamation: gc.collect() is a no-op (reference counting
+    // reclaims incrementally, the tracing collector is retired). It does not
+    // run a timed cycle, so lastGcTimeUs stays 0 rather than going positive.
     gc.collect()
     let info = gc.info()
-    // After at least one collect, lastGcTimeUs should be > 0
-    assert(info["lastGcTimeUs"] > 0.0)
+    assert(info["lastGcTimeUs"] >= 0.0)
     assert(info["gcTimeMs"] >= 0.0)
 }
 
-// @test gc.collect returns cycle count
+// @test gc.collect returns a monotonic cycle count
 @test
 fn test_gc_collect_returns_count() {
+    // Under RC the cycle counter never decreases. The tracing collector that
+    // used to advance it on every collect() is retired, so two collects may
+    // report the same count — assert monotonicity, not strict growth.
     let count1 = gc.collect()
     let count2 = gc.collect()
-    assert(count2 > count1)
+    assert(count2 >= count1)
 }
 
 // @test gc.countb decreases after collect with dead objects
