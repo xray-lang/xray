@@ -120,13 +120,13 @@ run_layer 2 "XIR Passes (6 test binaries)" "run_l2"
 # L3: JIT Scenarios
 if [ -x "$XRAY_BIN" ]; then
     run_layer 3 "JIT Scenarios (tests/jit/*.xr)" \
-        "bash ${SCRIPT_DIR}/run_jit_tests.sh -b ${XRAY_BIN} 2>&1 | tail -15"
+        "python3 ${SCRIPT_DIR}/run_jit_tests.py -b ${XRAY_BIN} 2>&1 | tail -15"
 fi
 
 # L4: Diff tests (skip in quick mode)
 if [ "$QUICK" -eq 0 ] && [ -x "$XRAY_BIN" ]; then
     run_layer 4 "Differential (--jit-force vs --no-jit)" \
-        "bash ${SCRIPT_DIR}/run_jit_diff_tests.sh -b ${XRAY_BIN} 2>&1 | tail -20"
+        "python3 ${SCRIPT_DIR}/run_jit_diff_tests.py -b ${XRAY_BIN} 2>&1 | tail -20"
 elif [ "$QUICK" -eq 1 ]; then
     echo -e "  ${YELLOW}L4: Skipped (quick mode)${NC}"
 fi
