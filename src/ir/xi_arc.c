@@ -112,6 +112,7 @@ static bool op_produces_owned_value(uint16_t op) {
         case XI_DEFER:
         case XI_RETAIN:
         case XI_RELEASE:
+        case XI_DROP_REUSE:
         case XI_MOVE:
         case XI_BOUNDS_CHECK:
             return false;

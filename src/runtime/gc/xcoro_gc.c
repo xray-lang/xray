@@ -433,14 +433,63 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
     gc->rc_freelist = NULL;
 }
 
+/* Maximum recursive destroy depth before switching to deferred mode.
+ * Prevents stack overflow on deep data structures (linked lists 10K+
+ * nodes, deeply nested trees). When exceeded, child objects are pushed
+ * onto gc->deferred_drops and drained iteratively by the top-level call. */
+#define XR_DESTROY_DEPTH_LIMIT 64
+
+/* Core destroy logic (shared by top-level and deferred-drain paths). */
+static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
+    XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
+    obj->extra |= XR_OBJ_DEAD;
+
+    /* Run the type destructor (closes files/sockets, frees side buffers,
+     * drops child references — which may push more onto deferred_drops). */
+    if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
+        XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
+        if (destroy) {
+            destroy(obj, gc);
+            gc->finalizer_count++;
+        }
+        gc_unregister_finalizer(gc, obj);
+    }
+
+    if (gc && gc->object_count > 0)
+        gc->object_count--;
+
+    /* Return memory to the freelist (or free large/mmap directly). */
+    if (gc)
+        xr_coro_gc_rc_free(gc, obj);
+}
+
+/* Push an object onto the deferred-drop list for iterative draining.
+ * Uses the first pointer-sized region past the header as a next-link
+ * (safe because the object is already logically dead / RC == 0). */
+static void deferred_push(XrCoroGC *gc, XrGCHeader *obj) {
+    /* Encode the linked list via a cast to void** at header+1. */
+    void **link = (void **) (obj + 1);
+    *link = gc->deferred_drops;
+    gc->deferred_drops = obj;
+}
+
+static XrGCHeader *deferred_pop(XrCoroGC *gc) {
+    XrGCHeader *obj = gc->deferred_drops;
+    if (!obj)
+        return NULL;
+    void **link = (void **) (obj + 1);
+    gc->deferred_drops = (XrGCHeader *) *link;
+    return obj;
+}
+
 /* drop-to-zero reclamation: run the type destructor (if any), then return
  * the block to the size-class freelist. Shared (cross-coroutine) objects
  * use the atomic shared-destroy path instead of the per-coroutine freelist.
- * Region objects never reach here (their drop is a no-op). */
-/* drop-to-zero reclamation: run the type destructor (if any), then return
- * the block to the size-class freelist. Shared (cross-coroutine) objects
- * use the atomic shared-destroy path instead of the per-coroutine freelist.
- * Region objects never reach here (their drop is a no-op). */
+ * Region objects never reach here (their drop is a no-op).
+ *
+ * Implements depth-bounded recursion: when destroy_depth exceeds the limit,
+ * child objects are deferred and drained iteratively by the outermost call.
+ * This prevents stack overflow on pathological inputs (Koka-inspired). */
 XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
         return;
@@ -453,9 +502,54 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
         return;
     }
 
-    obj->extra |= XR_OBJ_DEAD;
+    /* Depth-limit guard: if we are already deep in a recursive destroy
+     * chain, defer this object for iterative processing later. */
+    if (gc && gc->destroy_depth >= XR_DESTROY_DEPTH_LIMIT) {
+        deferred_push(gc, obj);
+        return;
+    }
 
-    /* Run the type destructor (closes files/sockets, frees side buffers). */
+    /* Track recursion depth. */
+    if (gc)
+        gc->destroy_depth++;
+
+    rc_destroy_one(gc, obj);
+
+    /* If this is the outermost destroy call, drain any deferred objects
+     * that accumulated from deep recursion during child drops. */
+    if (gc) {
+        gc->destroy_depth--;
+        if (gc->destroy_depth == 0) {
+            while (gc->deferred_drops) {
+                XrGCHeader *deferred = deferred_pop(gc);
+                if (deferred && !(deferred->extra & XR_OBJ_DEAD))
+                    rc_destroy_one(gc, deferred);
+            }
+        }
+    }
+}
+
+/* ========== Drop-Reuse (Perceus-style in-place allocation) ========== */
+
+XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj) {
+    if (!obj)
+        return NULL;
+    /* Shared / region / managed objects cannot be reused locally. */
+    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED))
+        return NULL;
+    if (XR_GC_IS_SHARED(obj)) {
+        xr_shared_destroy(obj);
+        return NULL;
+    }
+
+    /* Attempt to take the last reference. If RC > 1, just decrement and
+     * return NULL — the object is still alive. */
+    if (!xr_obj_drop_is_last((XrObjHeader *) obj))
+        return NULL;
+
+    /* RC reached zero. Run the type destructor so fields are properly
+     * released (destructors drop child references). The memory stays. */
+    obj->extra |= XR_OBJ_DEAD;
     if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
         XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
         if (destroy) {
@@ -465,18 +559,48 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
         gc_unregister_finalizer(gc, obj);
     }
 
-    /* Mark DEAD before reclamation so the coroutine-teardown finalize walk
-     * skips it — its destructor has already run here. This must be set
-     * regardless of whether the block lands on the freelist (small objects
-     * below the free-link minimum are not freelisted but still must not be
-     * finalized twice). Cleared by newobj (extra = 0) when the block is
-     * reused. */
     if (gc && gc->object_count > 0)
         gc->object_count--;
 
-    /* Return memory to the freelist (or free large/mmap directly). */
+    /* Return the raw memory for immediate reuse. The caller will
+     * reinitialize the header via xr_rc_alloc_at. Do NOT push to
+     * the freelist — the whole point is to skip the freelist. */
+    return obj;
+}
+
+XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type, size_t size) {
+    XR_DCHECK(type < XGC_MAX_TYPES, "xr_rc_alloc_at: invalid type");
+    XR_DCHECK(size >= sizeof(XrGCHeader), "xr_rc_alloc_at: size too small");
+
+    size_t total = XGC_ALIGN(size);
+    XrGCHeader *obj;
+
+    if (token != NULL && token->objsize >= (uint32_t) total) {
+        /* Reuse: the reclaimed block is large enough. Reinitialize header. */
+        obj = token;
+    } else {
+        /* Fallback: token is NULL (object was shared / still alive) or the
+         * reclaimed block is too small. Free the token if it exists and
+         * allocate fresh. */
+        if (token && gc)
+            xr_coro_gc_rc_free(gc, token);
+        obj = xr_coro_gc_newobj(gc, type, total);
+        return obj; /* newobj already initializes the header */
+    }
+
+    /* Reinitialize the header for the new type/size. Clear all flags
+     * except storage bits that are inherited from the block's origin
+     * (shared/normal). Actually, for reused blocks the caller always
+     * owns them locally, so clear everything. */
+    memset(obj, 0, sizeof(XrGCHeader));
+    obj->type = type;
+    obj->refcount = 1;
+    obj->objsize = (uint32_t) total;
+
     if (gc)
-        xr_coro_gc_rc_free(gc, obj);
+        gc->object_count++;
+
+    return obj;
 }
 
 XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {

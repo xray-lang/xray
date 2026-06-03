@@ -133,6 +133,8 @@ XR_FUNC XrJitResult xr_jit_set_shared(struct XrCoroutine *coro, int64_t extra_ar
  * freelist on the last reference. No-op for non-pointer and region values. */
 XR_FUNC XrJitResult xr_jit_rc_dup(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_rc_drop(struct XrCoroutine *coro, int64_t unused);
+XR_FUNC XrJitResult xr_jit_rc_drop_reuse(struct XrCoroutine *coro, int64_t unused);
+XR_FUNC XrJitResult xr_jit_rc_alloc_at(struct XrCoroutine *coro, int64_t extra_arg);
 
 /* ========== Exception ========== */
 

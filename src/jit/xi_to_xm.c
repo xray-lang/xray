@@ -1440,6 +1440,23 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 return get_ref(ctx, v->args[0]);
             return xm_const_i64(ctx->xm_func, 0);
 
+        case XI_DROP_REUSE: {
+            XR_DCHECK(v->nargs >= 1, "drop_reuse: need value arg");
+            XmRef val = get_ref(ctx, v->args[0]);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef args[1] = {val};
+            return emit_helper_call(ctx, blk, XM_HELPER_rc_drop_reuse, extra, args, 1);
+        }
+        case XI_ALLOC_AT: {
+            XR_DCHECK(v->nargs >= 1, "alloc_at: need token arg");
+            XmRef token = get_ref(ctx, v->args[0]);
+            /* aux_int is pre-packed by the reuse pass as (gc_type << 16) | alloc_size.
+             * Pass it directly to the runtime helper via extra_arg. */
+            XmRef extra_ref = xm_const_i64(ctx->xm_func, v->aux_int);
+            XmRef args[1] = {token};
+            return emit_helper_call(ctx, blk, XM_HELPER_rc_alloc_at, extra_ref, args, 1);
+        }
+
         default:
             /* Truly unknown op — mark error, return dummy */
             ctx->error = true;

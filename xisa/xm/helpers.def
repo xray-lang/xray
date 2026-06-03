@@ -75,6 +75,12 @@ XM_HELPER(set_shared,          1, VOID,   GC|STACKMAP,                          
 # throw, no deopt — pure refcount arithmetic.
 XM_HELPER(rc_dup,              1, VOID,   NONE,                                     NONE, NONE)
 XM_HELPER(rc_drop,             1, VOID,   NONE,                                     NONE, NONE)
+# drop_reuse: drop the object; if RC reaches zero, return reclaimed pointer
+# (reuse token) instead of freeing. Returns 0 (NULL) if object still alive.
+XM_HELPER(rc_drop_reuse,       1, PTR,    GC|STACKMAP,                              GC,   NONE)
+# alloc_at: allocate using reuse token (arg[0]) if non-NULL, else fresh alloc.
+# extra_arg = (gc_type << 16) | alloc_size. Returns newly initialized object.
+XM_HELPER(rc_alloc_at,         1, PTR,    GC|STACKMAP,                              GC,   NONE)
 
 # ===== Exception =====
 XM_HELPER(throw,               1, VOID,   THROW|STACKMAP,                           NONE, THROW)

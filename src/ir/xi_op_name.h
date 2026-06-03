@@ -252,6 +252,10 @@ static inline const char *xi_op_name(uint16_t op) {
             return "RELEASE";
         case XI_MOVE:
             return "MOVE";
+        case XI_DROP_REUSE:
+            return "DROP_REUSE";
+        case XI_ALLOC_AT:
+            return "ALLOC_AT";
         case XI_STACK_ALLOC:
             return "STACK_ALLOC";
         case XI_CORO_OP:

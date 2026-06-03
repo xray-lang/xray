@@ -69,54 +69,56 @@ typedef enum {
     XM_HELPER_set_shared = 32,
     XM_HELPER_rc_dup = 33,
     XM_HELPER_rc_drop = 34,
-    XM_HELPER_throw = 35,
-    XM_HELPER_is_type = 36,
-    XM_HELPER_checktype = 37,
-    XM_HELPER_typename = 38,
-    XM_HELPER_typeof = 39,
-    XM_HELPER_deep_copy = 40,
-    XM_HELPER_chr = 41,
-    XM_HELPER_substring = 42,
-    XM_HELPER_str_repeat = 43,
-    XM_HELPER_tostring = 44,
-    XM_HELPER_strbuf_new = 45,
-    XM_HELPER_strbuf_append = 46,
-    XM_HELPER_strbuf_finish = 47,
-    XM_HELPER_new_struct = 48,
-    XM_HELPER_struct_get = 49,
-    XM_HELPER_struct_set = 50,
-    XM_HELPER_struct_copy = 51,
-    XM_HELPER_rt_array_new = 52,
-    XM_HELPER_rt_array_push = 53,
-    XM_HELPER_rt_array_len = 54,
-    XM_HELPER_rt_map_new = 55,
-    XM_HELPER_newrange = 56,
-    XM_HELPER_range_unpack = 57,
-    XM_HELPER_newset = 58,
-    XM_HELPER_slice = 59,
-    XM_HELPER_bytes_new = 60,
-    XM_HELPER_enum_access = 61,
-    XM_HELPER_enum_name = 62,
-    XM_HELPER_enum_convert = 63,
-    XM_HELPER_print = 64,
-    XM_HELPER_dump = 65,
-    XM_HELPER_assert = 66,
-    XM_HELPER_assert_eq = 67,
-    XM_HELPER_assert_ne = 68,
-    XM_HELPER_chan_new = 69,
-    XM_HELPER_chan_close = 70,
-    XM_HELPER_chan_is_closed = 71,
-    XM_HELPER_chan_try_send = 72,
-    XM_HELPER_chan_try_recv = 73,
-    XM_HELPER_chan_send = 74,
-    XM_HELPER_chan_send_block = 75,
-    XM_HELPER_chan_recv = 76,
-    XM_HELPER_chan_recv_block = 77,
-    XM_HELPER_scope_enter = 78,
-    XM_HELPER_scope_exit = 79,
-    XM_HELPER_go = 80,
-    XM_HELPER_await = 81,
-    XM_HELPER_await_block = 82,
+    XM_HELPER_rc_drop_reuse = 35,
+    XM_HELPER_rc_alloc_at = 36,
+    XM_HELPER_throw = 37,
+    XM_HELPER_is_type = 38,
+    XM_HELPER_checktype = 39,
+    XM_HELPER_typename = 40,
+    XM_HELPER_typeof = 41,
+    XM_HELPER_deep_copy = 42,
+    XM_HELPER_chr = 43,
+    XM_HELPER_substring = 44,
+    XM_HELPER_str_repeat = 45,
+    XM_HELPER_tostring = 46,
+    XM_HELPER_strbuf_new = 47,
+    XM_HELPER_strbuf_append = 48,
+    XM_HELPER_strbuf_finish = 49,
+    XM_HELPER_new_struct = 50,
+    XM_HELPER_struct_get = 51,
+    XM_HELPER_struct_set = 52,
+    XM_HELPER_struct_copy = 53,
+    XM_HELPER_rt_array_new = 54,
+    XM_HELPER_rt_array_push = 55,
+    XM_HELPER_rt_array_len = 56,
+    XM_HELPER_rt_map_new = 57,
+    XM_HELPER_newrange = 58,
+    XM_HELPER_range_unpack = 59,
+    XM_HELPER_newset = 60,
+    XM_HELPER_slice = 61,
+    XM_HELPER_bytes_new = 62,
+    XM_HELPER_enum_access = 63,
+    XM_HELPER_enum_name = 64,
+    XM_HELPER_enum_convert = 65,
+    XM_HELPER_print = 66,
+    XM_HELPER_dump = 67,
+    XM_HELPER_assert = 68,
+    XM_HELPER_assert_eq = 69,
+    XM_HELPER_assert_ne = 70,
+    XM_HELPER_chan_new = 71,
+    XM_HELPER_chan_close = 72,
+    XM_HELPER_chan_is_closed = 73,
+    XM_HELPER_chan_try_send = 74,
+    XM_HELPER_chan_try_recv = 75,
+    XM_HELPER_chan_send = 76,
+    XM_HELPER_chan_send_block = 77,
+    XM_HELPER_chan_recv = 78,
+    XM_HELPER_chan_recv_block = 79,
+    XM_HELPER_scope_enter = 80,
+    XM_HELPER_scope_exit = 81,
+    XM_HELPER_go = 82,
+    XM_HELPER_await = 83,
+    XM_HELPER_await_block = 84,
     XM_HELPER__COUNT
 } XmHelperId;
 
@@ -322,6 +324,16 @@ typedef struct {
 #define XM_HELPER_FLAGS_rc_drop 0
 #define XM_HELPER_POINTER_TRUST_rc_drop XM_HPT_NONE
 #define XM_HELPER_POST_CALL_rc_drop 0
+#define XM_HELPER_RET_REP_rc_drop_reuse XR_REP_PTR
+#define XM_HELPER_NARGS_rc_drop_reuse 1
+#define XM_HELPER_FLAGS_rc_drop_reuse (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rc_drop_reuse XM_HPT_GC
+#define XM_HELPER_POST_CALL_rc_drop_reuse 0
+#define XM_HELPER_RET_REP_rc_alloc_at XR_REP_PTR
+#define XM_HELPER_NARGS_rc_alloc_at 1
+#define XM_HELPER_FLAGS_rc_alloc_at (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_rc_alloc_at XM_HPT_GC
+#define XM_HELPER_POST_CALL_rc_alloc_at 0
 #define XM_HELPER_RET_REP_throw XR_REP_VOID
 #define XM_HELPER_NARGS_throw 1
 #define XM_HELPER_FLAGS_throw (XM_HF_THROW | XM_HF_STACKMAP)
@@ -625,6 +637,8 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     [XM_HELPER_set_shared] = {XR_REP_VOID, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
     [XM_HELPER_rc_dup] = {XR_REP_VOID, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_rc_drop] = {XR_REP_VOID, 1, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_rc_drop_reuse] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_rc_alloc_at] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_throw] = {XR_REP_VOID, 1, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE, XM_HPC_THROW},
     [XM_HELPER_is_type] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_checktype] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
@@ -726,6 +740,8 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(set_shared)                                                                                  \
     _(rc_dup)                                                                                      \
     _(rc_drop)                                                                                     \
+    _(rc_drop_reuse)                                                                               \
+    _(rc_alloc_at)                                                                                 \
     _(throw)                                                                                       \
     _(is_type)                                                                                     \
     _(checktype)                                                                                   \
