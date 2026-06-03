@@ -881,8 +881,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     }
 
     // Reset GC context: finalize objects, bulk free Immix blocks, reset state.
-    // Uses xr_coro_gc_reset which handles large objects, shared_refs, and
-    // finalizers correctly (the previous partial reset skipped those).
+    // Uses xr_coro_gc_reset which handles large objects and finalizers
+    // correctly (the previous partial reset skipped those).
     if (coro->coro_gc) {
         xr_coro_gc_reset(coro->coro_gc, coro);
     }

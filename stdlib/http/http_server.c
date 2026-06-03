@@ -31,9 +31,6 @@ extern XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), 
                                           const char *name);
 extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 
-// Per-Coroutine GC root registration
-#include "../../src/runtime/gc/xcoro_gc.h"
-
 #include "../../src/os/os_net.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -182,32 +179,6 @@ static bool check_keep_alive(const char *headers) {
     return true;
 }
 
-/* ========== GC Root Marking Callback ========== */
-
-/*
- * HTTP server GC root marking callback (Per-Coroutine GC)
- *
- * Marks all closures held by server to prevent GC collection.
- * Registered via xr_coro_gc_register_root(), called during coro GC mark phase.
- */
-static void http_server_mark_roots(XrCoroGC *gc, void *userdata) {
-    XrHttpServer *server = (XrHttpServer *) userdata;
-    if (!server)
-        return;
-
-    // Mark route closure array
-    for (int i = 0; i < server->route_closure_count; i++) {
-        if (server->route_closures[i]) {
-            xr_coro_gc_markobject(gc, (XrGCHeader *) server->route_closures[i]);
-        }
-    }
-
-    // Mark connection handler closure
-    if (server->conn_handler_closure) {
-        xr_coro_gc_markobject(gc, (XrGCHeader *) server->conn_handler_closure);
-    }
-}
-
 /* ========== Server API ========== */
 
 /*
@@ -225,14 +196,6 @@ XrHttpServer *xr_http_server_new(XrayIsolate *isolate) {
     // Create router
     server->router = xr_router_new();
 
-    // Register GC root with current coroutine's GC
-    // Route closures are allocated on the coroutine that calls http.route()
-    XrCoroutine *coro = xr_current_coro(isolate);
-    if (coro && coro->coro_gc) {
-        server->owner_gc = coro->coro_gc;
-        xr_coro_gc_register_root(coro->coro_gc, http_server_mark_roots, server);
-    }
-
     return server;
 }
 
@@ -242,11 +205,6 @@ XrHttpServer *xr_http_server_new(XrayIsolate *isolate) {
 void xr_http_server_free(XrHttpServer *server) {
     if (!server)
         return;
-
-    // Unregister from the coroutine GC we registered with
-    if (server->owner_gc) {
-        xr_coro_gc_unregister_root(server->owner_gc, http_server_mark_roots, server);
-    }
 
     if (server->listen_fd >= 0) {
         xr_closesocket(server->listen_fd);

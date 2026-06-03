@@ -5,74 +5,22 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_gc.h - Per-Coroutine Immix Mark-Region GC
+ * xcoro_gc.h - Per-Coroutine Memory Manager (Immix bump + RC reclamation)
  *
- * KEY CONCEPT:
- *   - Immix block-line allocator: bump-pointer speed + line-level reclamation
- *   - Objects don't move: C extensions are naturally safe
- *   - Per-coroutine independent GC: no global STW, million concurrency friendly
- *   - Bulk free: release all blocks when coroutine ends
- *   - Incremental GC: Lua GCdebt mechanism, avoid long pauses
+ * Reclamation model:
+ *   - Compile-time RC (xi_arc) owns object lifetime; drop-to-zero frees
+ *     through the per-coroutine RC freelist (same-size-class reuse).
+ *   - Shared objects (cross-coroutine) use atomic refcounting (xshared.h).
+ *   - Coroutine teardown bulk-frees all Immix blocks and large objects.
  *
- * MEMORY LAYOUT:
- *   1. Value stack (separate allocation, realloc grows)
- *   2. Object heap (Immix blocks, per-block object lists)
- *   3. Large objects (>4KB, separate malloc)
+ * Allocation:
+ *   - Small objects (≤4 KB): Immix bump-pointer inside 32 KB blocks;
+ *     objects never move, C extensions are naturally safe.
+ *   - Large objects (>4 KB): individual xr_malloc / os_mmap.
  *
- * GC INVARIANTS:
- *
- *   Objects have three colors: white, gray, and black.
- *   - White: unmarked (may be dead).
- *   - Gray:  marked but children not yet scanned; must be on a gray list.
- *   - Black: marked and all children scanned.
- *
- *   INVARIANT 1 (Tri-color): During PROPAGATE/ATOMIC phases, a black
- *   object must never point to a white object. The write barriers
- *   (forward barrier and back barrier) maintain this invariant.
- *   During SWEEP and PAUSE, this invariant does not hold.
- *
- *   INVARIANT 2 (Gray list): Every gray object must be in exactly one
- *   gray list (gray, grayagain, or weak). This ensures no gray object
- *   is forgotten during traversal.
- *
- *   INVARIANT 3 (White flip): Two white bits alternate between cycles.
- *   currentwhite tracks the "live" white. Dead objects carry the
- *   opposite white ("deadwhite"). New objects are born with currentwhite.
- *   The flip happens in atomic(), after which all unmarkd objects from
- *   the previous cycle become deadwhite and are swept.
- *
- *   INVARIANT 4 (Atomic re-mark): Objects created during PROPAGATE are
- *   born with old currentwhite. The atomic phase re-marks the stack to
- *   catch these objects before the white flip makes them deadwhite.
- *   Without this, live stack objects would be incorrectly swept.
- *
- *   INVARIANT 5 (Shared objects): Shared objects (cross-coroutine) are
- *   not tri-color marked. They use reference counting. The GC records
- *   shared refs each cycle and decrefs objects no longer reachable.
- *
- *   INVARIANT 6 (Immix line marks): alloc_marks tracks which lines in
- *   a block contain live objects. After sweep, alloc_marks reflects
- *   exactly the lines occupied by surviving objects. The allocator only
- *   uses unmarked lines for new allocations.
- *
- *   INVARIANT 7 (tofnz protection): Objects moved to the finalization
- *   list must have their Immix lines protected in alloc_marks. Otherwise,
- *   after swap_marks, the allocator may reuse their lines and overwrite
- *   the object before the finalizer runs.
- *
- * GC STATE MACHINE:
- *
- *   PAUSE ──► PROPAGATE ──► ATOMIC ──► SWEEP ──► PAUSE
- *     │                                              │
- *     └──────────────────────────────────────────────┘
- *
- *   PAUSE:     Idle. GCdebt triggers transition to PROPAGATE.
- *   PROPAGATE: Incremental mark. Pop gray objects, traverse children.
- *              Interruptible (returns to mutator after bounded work).
- *   ATOMIC:    Non-interruptible. Re-mark roots, drain grayagain,
- *              clear weak tables, flip white.
- *   SWEEP:     Non-incremental sweep. Process all blocks and large objects
- *              in one step. Call finalizers inline.
+ * Write barriers: retired (no tri-color invariant to maintain).
+ * The XR_GC_BARRIER* macros expand to no-ops; kept so container store
+ * sites compile unchanged.
  */
 
 #ifndef XCORO_GC_H
@@ -143,19 +91,6 @@ static inline int xr_rc_size_class(size_t aligned_size) {
     return (int) (aligned_size / XR_RC_FREE_GRANULARITY) - 1;
 }
 
-/* ========== Per-Coroutine GC Root Callback ========== */
-
-struct XrCoroGC;
-typedef void (*XrCoroGCRootCallback)(struct XrCoroGC *gc, void *userdata);
-
-typedef struct XrCoroGCRootEntry {
-    XrCoroGCRootCallback callback;
-    void *userdata;
-    struct XrCoroGCRootEntry *next;
-} XrCoroGCRootEntry;
-
-/* ========== Incremental Sweep Sub-State ========== */
-
 /* ========== Coroutine GC Structure (Immix bump + RC reclamation) ========== */
 
 typedef struct XrCoroGC {
@@ -181,21 +116,8 @@ typedef struct XrCoroGC {
     // Ownership
     struct XrCoroutine *owner;
 
-    // External root callbacks (legacy C-extension hook; never invoked now that
-    // tracing is gone, but the register/unregister API is retained).
-    XrCoroGCRootEntry *root_callbacks;
-
     // Objects that need teardown finalization if they outlive local RC.
     XrGCObjectNode *finalize_objects;
-
-    // Shared-object teardown decref list. Tracing used to populate this each
-    // cycle; it is now unused at runtime (shared objects live on the atomic
-    // shared-RC) but the teardown decref is retained as a safety net.
-    XrGCHeader **shared_refs;
-    int shared_refs_count;
-    int shared_refs_capacity;
-    XrGCHeader **prev_shared_refs;
-    int prev_shared_refs_count;
 
     // Statistics (cold; surfaced by the gc.* builtins)
     uint32_t gc_count;         // Number of explicit gc.collect() calls (no-op cycles)
@@ -240,26 +162,6 @@ typedef struct XrCoroGCConfig {
 #define XR_SPAWN_CORO_GC_PAUSE 100              // Collect at 100% (standard)
 #define XR_SPAWN_CORO_GC_STEPMUL 200            // Faster GC steps
 
-/* ========== GC Tuning Constants ========== */
-
-// Mark step: bytes of objects to scan per gc_step (debt-proportional)
-#define XGC_MARK_STEP_MIN 4096          // Floor: always scan at least 4KB
-#define XGC_MARK_STEP_MAX (256 * 1024)  // Cap: never scan > 256KB per step
-
-// Sweep step: blocks per gc_step (debt-proportional)
-#define XGC_SWEEP_UNITS_MIN 4    // Floor: at least 4 blocks
-#define XGC_SWEEP_UNITS_MAX 128  // Cap: never sweep > 128 blocks
-
-// Adaptive pause bounds (setpause)
-#define XGC_PAUSE_MIN 50   // Aggressive GC under memory pressure
-#define XGC_PAUSE_MAX 400  // Lazy GC when allocation is slow
-
-// Generational: minor→major promotion trigger (% of GCest)
-#define XGC_MAJOR_TRIGGER_PCT 150  // 150% of estimated live → trigger major
-
-// Generational: promotion threshold (live line %)
-#define XGC_PROMOTE_THRESHOLD_PCT 40  // ≥40% live lines → promote to old
-
 /* ========== Coroutine GC Lifecycle API ========== */
 
 XR_FUNC XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config);
@@ -302,30 +204,8 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \
     ((Type *) ((XrGCHeader *) xr_coro_gc_newobj((gc), (type), sizeof(Type)) + 1))
 
-/* ========== Incremental GC API ========== */
-
-/*
- * GC Step: called on each allocation, execute small GC work
- * Lua GCdebt mechanism, amortize GC overhead
- */
-XR_FUNC void xr_coro_gc_step(XrCoroGC *gc);
-
-// Full GC cycle
+// Full GC cycle (no-op under RC; retained for gc.collect() API surface)
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
-
-/* ========== Mark API (retired) ==========
- *
- * Tracing is retired; these are no-ops kept so the traverse helpers and a
- * few callers still compile during the staged removal. They are deleted
- * along with the traverse subsystem. */
-
-XR_FUNC void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj);
-
-static inline void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
-    if (!XR_IS_PTR(value) || !XR_VALUE_GCPTR(value))
-        return;
-    xr_coro_gc_markobject(gc, XR_VALUE_GCPTR(value));
-}
 
 /* ========== Write Barrier API (retired) ==========
  *
@@ -371,19 +251,6 @@ static inline size_t xr_coro_gc_totalbytes(XrCoroGC *gc) {
 static inline bool xr_coro_gc_in_gc(XrCoroGC *gc) {
     return gc && gc->in_gc;
 }
-
-/* ========== External Root Registration ========== */
-
-/*
- * Register a root callback for this coroutine's GC.
- * Called during mark phase to mark external GC roots (e.g. route closures).
- */
-XR_FUNC int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata);
-
-/*
- * Unregister a root callback.
- */
-XR_FUNC int xr_coro_gc_unregister_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata);
 
 /* ========== Debug API ========== */
 

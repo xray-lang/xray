@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_gc.c - Per-Coroutine Immix Mark-Region GC
+ * xcoro_gc.c - Per-Coroutine Memory Manager (Immix bump + RC reclamation)
  */
 
 #include "xcoro_gc.h"
@@ -99,8 +99,8 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
 /*
  * Reset GC runtime state fields to initial values.
  * Shared by xr_coro_gc_create and xr_coro_gc_reset.
- * Does NOT touch: immix heap, shared_refs buffers, tuning params
- * (gc_pause, gc_stepmul), or owner pointer.
+ * Does NOT touch: immix heap, tuning params (gc_pause, gc_stepmul),
+ * or owner pointer.
  */
 static void gc_init_runtime_state(XrCoroGC *gc) {
     gc->totalbytes = 0;
@@ -155,16 +155,6 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
 }
 
 /* ========== Common Helpers for Destroy/Reset ========== */
-
-static void gc_free_root_callbacks(XrCoroGC *gc) {
-    XrCoroGCRootEntry *entry = gc->root_callbacks;
-    while (entry) {
-        XrCoroGCRootEntry *next = entry->next;
-        xr_free(entry);
-        entry = next;
-    }
-    gc->root_callbacks = NULL;
-}
 
 static XrGCObjectNode *gc_object_node_new(XrGCHeader *obj) {
     XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
@@ -300,16 +290,6 @@ static void gc_unregister_large_object(XrCoroGC *gc, XrGCHeader *obj) {
         (void) gc_object_node_remove(&gc->large_objects, obj);
 }
 
-// Decref all shared objects tracked by this GC cycle
-static void gc_decref_all_shared(XrCoroGC *gc) {
-    for (int i = 0; i < gc->shared_refs_count; i++) {
-        XrGCHeader *obj = gc->shared_refs[i];
-        int new_refc = xr_shared_decref(obj);
-        if (new_refc == 0)
-            xr_shared_destroy(obj);
-    }
-}
-
 /* ========== Lifecycle ========== */
 
 void xr_coro_gc_destroy(XrCoroGC *gc) {
@@ -317,17 +297,10 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
         return;
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
 
-    gc_free_root_callbacks(gc);
     gc_finalize_registered_objects(gc);
     xr_immix_destroy(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
-
-    gc_decref_all_shared(gc);
-    if (gc->shared_refs)
-        xr_free(gc->shared_refs);
-    if (gc->prev_shared_refs)
-        xr_free(gc->prev_shared_refs);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
@@ -370,17 +343,11 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     XR_DCHECK(new_owner != NULL, "gc_reset: NULL new_owner");
     XR_DCHECK(!gc->in_gc, "gc_reset called during GC");
 
-    gc_free_root_callbacks(gc);
     gc_finalize_registered_objects(gc);
     xr_immix_reset(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
 
-    gc_decref_all_shared(gc);
-    gc->shared_refs_count = 0;
-    gc->prev_shared_refs_count = 0;
-
-    // Reset runtime state (keep tuning params and shared_refs buffers)
     gc_init_runtime_state(gc);
     gc->owner = new_owner;
 }
@@ -586,67 +553,9 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     return obj;
 }
 
-/* ========== Mark (retired) ==========
- *
- * Tracing is retired; reference counting owns reclamation. markobject was
- * the tri-color mark entry; it is now a no-op kept only so the (dead)
- * traverse helpers still link during staged removal. Deleted with the
- * traverse subsystem. Shared-object lifetime is the atomic shared-RC
- * (xshared.h); the per-cycle shared_refs tracking that tracing used is gone. */
-
-void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj) {
-    (void) gc;
-    (void) obj;
-}
-
-/* ========== GC Step / Full GC (retired) ==========
- *
- * Reference counting owns reclamation (drop-to-zero frees via the
- * per-coroutine RC freelist; coroutine teardown bulk-frees the rest). The
- * tracing collector is retired, so both entry points are no-ops. They remain
- * as the public API surface (gc.collect(), allocation step hook) until those
- * call sites are themselves removed. */
-
-void xr_coro_gc_step(XrCoroGC *gc) {
-    (void) gc;
-}
-
+/* Full GC cycle: no-op under RC. Retained for gc.collect() API surface. */
 void xr_coro_gc_fullgc(XrCoroGC *gc) {
     (void) gc;
-}
-
-/* ========== External Root Registration ========== */
-
-int xr_coro_gc_register_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
-    if (!gc || !callback)
-        return -1;
-
-    XrCoroGCRootEntry *entry = (XrCoroGCRootEntry *) xr_malloc(sizeof(XrCoroGCRootEntry));
-    if (!entry)
-        return -1;
-
-    entry->callback = callback;
-    entry->userdata = userdata;
-    entry->next = gc->root_callbacks;
-    gc->root_callbacks = entry;
-    return 0;
-}
-
-int xr_coro_gc_unregister_root(XrCoroGC *gc, XrCoroGCRootCallback callback, void *userdata) {
-    if (!gc || !callback)
-        return -1;
-
-    XrCoroGCRootEntry **pp = &gc->root_callbacks;
-    while (*pp) {
-        XrCoroGCRootEntry *entry = *pp;
-        if (entry->callback == callback && entry->userdata == userdata) {
-            *pp = entry->next;
-            xr_free(entry);
-            return 0;
-        }
-        pp = &entry->next;
-    }
-    return -1;
 }
 
 /* ========== Debug ========== */

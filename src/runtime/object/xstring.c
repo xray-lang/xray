@@ -446,7 +446,7 @@ XrString *xr_string_intern(XrayIsolate *iso, const char *chars, size_t length, u
 
     // Long string: not interned, allocate as shared on system heap.
     // Strings are immutable → safe for concurrent read by multiple coroutines.
-    // Refcount managed by per-coroutine GC shared_refs tracking.
+    // Lifetime managed by atomic shared-RC (xshared.h).
     if (length > XR_SHORT_STR_MAX) {
         XrString *str = NULL;
         if (xr_isolate_get_sys_heap(iso)) {
