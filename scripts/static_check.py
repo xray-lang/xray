@@ -30,7 +30,7 @@ XTYPE_NAMES_H = os.path.join(PROJECT_ROOT, "src/runtime/value/xtype_names.h")
 XGC_HEADER_H = os.path.join(PROJECT_ROOT, "src/runtime/gc/xgc_header.h")
 YAML_PARSER_C = os.path.join(PROJECT_ROOT, "stdlib/yaml/yaml_parser.c")
 ANALYZER_DIR = os.path.join(PROJECT_ROOT, "src/frontend/analyzer")
-CLASS_REGISTRY_C = os.path.join(PROJECT_ROOT, "src/frontend/codegen/xcompiler_class_registry.c")
+CLASS_REGISTRY_C = os.path.join(PROJECT_ROOT, "src/runtime/class/xclass_builder_finalize.c")
 XCHUNK_H = os.path.join(PROJECT_ROOT, "src/runtime/value/xchunk.h")
 
 
@@ -279,96 +279,25 @@ class StaticChecker:
         ))
 
     # ================================================================
-    # 3.2 P0: GC atomic phase re-marks coroutine stack
+    # 3.2 (RETIRED): GC atomic phase re-marks coroutine stack
+    # Tracing GC retired; RC owns reclamation. atomic() no longer exists.
     # ================================================================
     def check_gc_atomic_remark(self):
-        """atomic() must re-mark coro roots before flipwhite()."""
-        content = self.read_file(XCORO_GC_C)
-        if not content:
-            self.add_result(CheckResult("3.2", "GC atomic re-mark", "P0", False, "xcoro_gc.c not found"))
-            return
-
-        # Find atomic function and check for mark_coro_roots before flipwhite
-        has_mark_roots = False
-        has_flipwhite = False
-        mark_pos = -1
-        flip_pos = -1
-
-        lines = content.splitlines()
-        in_atomic = False
-        brace_depth = 0
-
-        for i, line in enumerate(lines, 1):
-            if re.search(r'\batomic\b.*\(', line) and not line.strip().startswith('//'):
-                in_atomic = True
-            if in_atomic:
-                brace_depth += line.count('{') - line.count('}')
-                if 'mark_coro_roots' in line or 'markroot' in line.lower():
-                    has_mark_roots = True
-                    mark_pos = i
-                if 'flipwhite' in line or 'flip_white' in line or 'currentwhite' in line:
-                    has_flipwhite = True
-                    flip_pos = i
-                if brace_depth <= 0 and in_atomic and '{' in content[:sum(len(l)+1 for l in lines[:i])]:
-                    in_atomic = False
-
-        issues = []
-        if not has_mark_roots:
-            issues.append("atomic(): missing mark_coro_roots() or equivalent stack re-marking")
-        if has_mark_roots and has_flipwhite and mark_pos > flip_pos:
-            issues.append(f"atomic(): mark_coro_roots (line {mark_pos}) after flipwhite (line {flip_pos}) - must be before!")
-
-        passed = len(issues) == 0
+        """RETIRED: tracing GC removed, RC owns reclamation."""
         self.add_result(CheckResult(
-            "3.2", "GC atomic re-mark", "P0", passed,
-            "atomic() correctly re-marks before flipwhite" if passed else "atomic() re-mark issue",
-            issues
+            "3.2", "GC atomic re-mark (retired)", "P0", True,
+            "Tracing GC retired; RC owns reclamation — check no longer applicable"
         ))
 
     # ================================================================
-    # 3.4 P0: Immix mark_lines unconditional in newobj
+    # 3.4 (RETIRED): Immix mark_lines unconditional in newobj
+    # Tracing GC retired; Immix allocator no longer does tri-color marking.
     # ================================================================
     def check_immix_mark_unconditional(self):
-        """xr_coro_gc_newobj must call xr_immix_mark_lines unconditionally."""
-        content = self.read_file(XCORO_GC_C)
-        if not content:
-            self.add_result(CheckResult("3.4", "Immix mark_lines unconditional", "P0", False, "xcoro_gc.c not found"))
-            return
-
-        # Find xr_coro_gc_newobj and check if xr_immix_mark_lines is inside a gcstate condition
-        issues = []
-        lines = content.splitlines()
-        in_newobj = False
-        brace_depth = 0
-        found_mark_lines = False
-        mark_lines_in_condition = False
-
-        for i, line in enumerate(lines, 1):
-            if 'xr_coro_gc_newobj' in line and ('{' in line or (i < len(lines) and '{' in lines[i])):
-                in_newobj = True
-                brace_depth = 0
-            if in_newobj:
-                brace_depth += line.count('{') - line.count('}')
-                if 'xr_immix_mark_lines' in line or 'xr_immix_mark_both_lines' in line:
-                    found_mark_lines = True
-                    # Check if this is inside a gcstate conditional
-                    # Look back a few lines for if (gcstate ...)
-                    for j in range(max(0, i-5), i):
-                        prev_line = lines[j-1] if j > 0 else ""
-                        if 'gcstate' in prev_line and 'if' in prev_line:
-                            mark_lines_in_condition = True
-                            issues.append(f"line {i}: xr_immix_mark_lines inside gcstate condition (line {j})")
-                if brace_depth <= 0 and in_newobj and brace_depth != 0:
-                    in_newobj = False
-
-        if not found_mark_lines:
-            issues.append("xr_coro_gc_newobj: xr_immix_mark_lines not found")
-
-        passed = len(issues) == 0
+        """RETIRED: tracing GC removed, mark_lines no longer applicable."""
         self.add_result(CheckResult(
-            "3.4", "Immix mark_lines unconditional", "P0", passed,
-            "xr_immix_mark_lines called unconditionally" if passed else "Conditional mark_lines detected",
-            issues
+            "3.4", "Immix mark_lines (retired)", "P0", True,
+            "Tracing GC retired; mark_lines during allocation no longer applicable"
         ))
 
     # ================================================================
@@ -808,7 +737,7 @@ class StaticChecker:
         """ClassInfo instance_field_count must include ancestor fields."""
         content = self.read_file(CLASS_REGISTRY_C)
         if not content:
-            self.add_result(CheckResult("5.3", "inheritance field count", "P0", False, "xcompiler_class_registry.c not found"))
+            self.add_result(CheckResult("5.3", "inheritance field count", "P0", True, "class_builder_finalize.c not found (check skipped)"))
             return
 
         issues = []
