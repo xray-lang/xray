@@ -273,6 +273,7 @@ struct XrClass {
 #define XR_CLASS_DYNAMIC_LAYOUT (1 << 10)   // Dynamic field layout (Json object / object literal)
 #define XR_CLASS_HAS_NATIVE_BODY (1 << 11)  // Has XrNativeBodyDesc (Array, Map, etc.)
 #define XR_CLASS_DYNAMIC_SEALED (1 << 12)   // Dynamic-layout class rejects new field transitions
+#define XR_CLASS_CYCLE_CANDIDATE (1 << 13)  // Type graph analysis determined this class may cycle
 
 /* ========== Operator Overload Flags ========== */
 

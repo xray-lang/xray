@@ -141,6 +141,14 @@ typedef struct XrCoroGC {
     uint16_t destroy_depth;      // current recursion depth of rc_destroy
     uint16_t _pad_drop[3];       // alignment
     XrGCHeader *deferred_drops;  // singly-linked list via GCHeader (reuse a field)
+
+    // === Cycle collector (Bacon-Rajan trial deletion) ===
+    // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
+    // whose RC was decremented but did not reach zero. The collector runs on
+    // gc.collect() and frees dead cycles that pure RC cannot reclaim.
+    XrGCHeader **cycle_roots;   // growable array of potential roots (NULL until first add)
+    uint32_t cycle_root_count;  // number of entries in cycle_roots
+    uint32_t cycle_root_cap;    // capacity of cycle_roots array
 } XrCoroGC;
 
 /* ========== JIT Struct Offsets (compile-time constants) ========== */
@@ -239,8 +247,26 @@ XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \
     ((Type *) ((XrGCHeader *) xr_coro_gc_newobj((gc), (type), sizeof(Type)) + 1))
 
-// Full GC cycle (no-op under RC; retained for gc.collect() API surface)
+// Full GC cycle: runs the Bacon-Rajan trial deletion cycle collector on
+// accumulated cycle_roots, then clears the roots list. Called by gc.collect().
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
+
+/* === Cycle collector API === */
+
+/* Add a cycle-candidate object to the cycle_roots set after its RC was
+ * decremented but stayed > 0. Uses _rsv as root_idx for O(1) removal.
+ * No-op if the object is already in the set or is not a cycle candidate. */
+XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj);
+
+/* Remove an object from cycle_roots (e.g. when it reaches RC==0 via normal
+ * drop before a collect cycle runs). O(1) via swap-with-last. */
+XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrGCHeader *obj);
+
+/* Free the cycle_roots array. Called at coroutine teardown. */
+XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
+
+/* Sentinel value for _rsv meaning "not in cycle_roots". */
+#define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
 
 /* ========== Write Barrier API (retired) ==========
  *

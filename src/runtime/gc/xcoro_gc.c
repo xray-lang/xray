@@ -301,6 +301,7 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     xr_immix_destroy(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
+    xr_cycle_roots_destroy(gc);
 
     // Recycle: try L1 (per-Worker), then L2 (per-isolate), then free
     XrWorker *w = xr_current_worker();
@@ -347,6 +348,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     xr_immix_reset(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
+    xr_cycle_roots_destroy(gc);
 
     gc_init_runtime_state(gc);
     gc->owner = new_owner;
@@ -675,11 +677,6 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     gc_update_alloc_stats(gc, (uint32_t) total);
 
     return obj;
-}
-
-/* Full GC cycle: no-op under RC. Retained for gc.collect() API surface. */
-void xr_coro_gc_fullgc(XrCoroGC *gc) {
-    (void) gc;
 }
 
 /* ========== Debug ========== */

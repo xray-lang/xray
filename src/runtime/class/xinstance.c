@@ -18,6 +18,7 @@
 #include "xmethod.h"
 #include "../../base/xmalloc.h"
 #include "../gc/xgc.h"
+#include "../gc/xcoro_gc.h"
 #include "../gc/xalloc_unified.h"
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
@@ -55,6 +56,12 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
 
     xr_gc_header_init_type(&inst->gc, XR_TINSTANCE);
     xr_instance_init_inplace(inst, cls);
+
+    // Mark cycle-candidate instances for the trial deletion collector
+    if (cls->flags & XR_CLASS_CYCLE_CANDIDATE) {
+        XR_OBJ_SET_FLAG(&inst->gc, XR_OBJ_CYCLE_CANDIDATE);
+        inst->gc._rsv = XR_CYCLE_NOT_IN_ROOTS;
+    }
 
     // Initialize native body if present
     XrNativeBodyDesc *desc = cls->native_body;

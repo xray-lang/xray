@@ -186,8 +186,15 @@ XR_FUNC void xr_gc_release_value(XrCoroGC *gc, XrValue value) {
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj || (obj->extra & XR_OBJ_DEAD))
         return;
-    if (xr_obj_drop_is_last(obj))
+    if (xr_obj_drop_is_last(obj)) {
+        /* Remove from cycle roots before destroying (if it was tracked). */
+        if (obj->extra & XR_OBJ_CYCLE_CANDIDATE)
+            xr_cycle_remove_root(gc, obj);
         xr_coro_gc_rc_destroy(gc, obj);
+    } else if (obj->extra & XR_OBJ_CYCLE_CANDIDATE) {
+        /* RC > 0 after decrement: potential cycle root. */
+        xr_cycle_add_root(gc, obj);
+    }
 }
 
 /* ========== Debug ========== */

@@ -267,6 +267,10 @@ XrClass *xr_class_from_descriptor(XrayIsolate *isolate, const XrClassDescriptor 
             cls->flags |= XR_CLASS_FLAT_COPYABLE;
     }
 
+    // Propagate cycle candidate flag from compile-time type graph analysis
+    if (desc->flags & XR_CLASS_CYCLE_CANDIDATE)
+        cls->flags |= XR_CLASS_CYCLE_CANDIDATE;
+
     // Not yet initialized by static constructor
     cls->flags &= ~XR_CLASS_INITIALIZED;
 

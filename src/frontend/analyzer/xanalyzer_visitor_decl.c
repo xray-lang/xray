@@ -1662,3 +1662,174 @@ void xa_link_class_inheritance(XaAnalyzer *analyzer) {
 
     xr_free(symbols);
 }
+
+/* ========== Cycle Candidate Detection ========== */
+
+/* DFS states for Tarjan-style cycle detection in the class reference graph.
+ * A class A references class B if any of A's instance fields has type B
+ * (or a union containing B, or an array of B, etc.). If a strongly connected
+ * component (SCC) of size > 1 exists, all its members are cycle candidates.
+ * Self-referencing classes (A has a field of type A|null) are also candidates. */
+
+#define CYC_UNVISITED 0
+#define CYC_ON_STACK 1
+#define CYC_DONE 2
+
+/* Check if field type refers to a class declared in this module. */
+static const char *extract_class_name_from_type(XrType *type) {
+    if (!type)
+        return NULL;
+    switch (type->kind) {
+        case XR_KIND_CLASS:
+        case XR_KIND_INSTANCE:
+            return type->instance.class_name;
+        case XR_KIND_UNION:
+            /* Check all union members. */
+            for (int i = 0; i < type->union_type.member_count; i++) {
+                const char *name = extract_class_name_from_type(type->union_type.members[i]);
+                if (name)
+                    return name;
+            }
+            return NULL;
+        case XR_KIND_ARRAY:
+            return extract_class_name_from_type(type->container.element_type);
+        default:
+            return NULL;
+    }
+}
+
+/* Recursive DFS marking. Returns true if any node in the subtree is on-stack
+ * (i.e., a cycle was found). */
+static bool cycle_dfs(XaAnalyzer *analyzer, XaSymbol **class_syms, uint8_t *state, int idx,
+                      int count, bool *is_candidate) {
+    state[idx] = CYC_ON_STACK;
+    bool found_cycle = false;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, class_syms[idx]);
+    if (!links || !links->class_info)
+        goto done;
+
+    XrClassInfo *info = links->class_info;
+
+    /* Iterate instance fields, find references to other classes. */
+    for (int f = 0; f < info->field_count; f++) {
+        XaSymbol *field_sym = info->fields[f];
+        if (!field_sym || field_sym->is_static)
+            continue;
+        XaSymbolLinks *fl = xa_analyzer_get_links(analyzer, field_sym);
+        if (!fl || !fl->type)
+            continue;
+
+        const char *ref_name = extract_class_name_from_type(fl->type);
+        if (!ref_name)
+            continue;
+
+        /* Self-reference: A has field of type A → cycle candidate. */
+        if (info->name && strcmp(ref_name, info->name) == 0) {
+            is_candidate[idx] = true;
+            found_cycle = true;
+            continue;
+        }
+
+        /* Find the referenced class in the symbol list. */
+        for (int j = 0; j < count; j++) {
+            if (j == idx)
+                continue;
+            if (!class_syms[j] || !class_syms[j]->name)
+                continue;
+            if (strcmp(class_syms[j]->name, ref_name) != 0)
+                continue;
+
+            if (state[j] == CYC_ON_STACK) {
+                /* Back edge: cycle found. Mark both. */
+                is_candidate[idx] = true;
+                is_candidate[j] = true;
+                found_cycle = true;
+            } else if (state[j] == CYC_UNVISITED) {
+                if (cycle_dfs(analyzer, class_syms, state, j, count, is_candidate)) {
+                    is_candidate[idx] = true;
+                    found_cycle = true;
+                }
+            } else if (is_candidate[j]) {
+                /* j already processed and is a cycle candidate — if we
+                 * reference it, we are also part of a potential cycle. */
+                is_candidate[idx] = true;
+                found_cycle = true;
+            }
+            break;
+        }
+    }
+
+done:
+    state[idx] = CYC_DONE;
+    return found_cycle;
+}
+
+void xa_mark_cycle_candidates(XaAnalyzer *analyzer) {
+    if (!analyzer || !analyzer->global_scope)
+        return;
+
+    int sym_count = 0;
+    XaSymbol **all_syms = xa_scope_get_all_symbols(analyzer->global_scope, &sym_count);
+    if (!all_syms || sym_count == 0)
+        return;
+
+    /* Collect only class symbols (skip structs — value types are copied). */
+    int class_count = 0;
+    XaSymbol **class_syms = xr_malloc(sizeof(XaSymbol *) * sym_count);
+    if (!class_syms) {
+        xr_free(all_syms);
+        return;
+    }
+
+    for (int i = 0; i < sym_count; i++) {
+        XaSymbol *sym = all_syms[i];
+        if (!sym || sym->kind != XA_SYM_CLASS)
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, sym);
+        if (!links || !links->class_info)
+            continue;
+        if (links->type && links->type->is_value_type)
+            continue; /* Skip structs. */
+        class_syms[class_count++] = sym;
+    }
+
+    if (class_count == 0) {
+        xr_free(class_syms);
+        xr_free(all_syms);
+        return;
+    }
+
+    uint8_t *state = xr_calloc(class_count, sizeof(uint8_t));
+    bool *is_candidate = xr_calloc(class_count, sizeof(bool));
+    if (!state || !is_candidate) {
+        xr_free(state);
+        xr_free(is_candidate);
+        xr_free(class_syms);
+        xr_free(all_syms);
+        return;
+    }
+
+    /* Run DFS from each unvisited class. */
+    for (int i = 0; i < class_count; i++) {
+        if (state[i] == CYC_UNVISITED)
+            cycle_dfs(analyzer, class_syms, state, i, class_count, is_candidate);
+    }
+
+    /* Mark XrType for cycle candidates. The lowerer propagates this to
+     * XiClassData, then the emitter sets XR_CLASS_CYCLE_CANDIDATE in the
+     * class descriptor flags, which the runtime class builder propagates
+     * to XrClass.flags — enabling the RC cycle collector at instance alloc. */
+    for (int i = 0; i < class_count; i++) {
+        if (!is_candidate[i])
+            continue;
+        XaSymbolLinks *links = xa_analyzer_get_links(analyzer, class_syms[i]);
+        if (links && links->type)
+            links->type->is_cycle_candidate = true;
+    }
+
+    xr_free(state);
+    xr_free(is_candidate);
+    xr_free(class_syms);
+    xr_free(all_syms);
+}

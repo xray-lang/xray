@@ -1015,6 +1015,8 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
         desc->flags |= XR_CLASS_FINAL;
     if (cdata->is_monomorphized)
         desc->flags |= XR_CLASS_MONOMORPHIZED;
+    if (cdata->is_cycle_candidate)
+        desc->flags |= XR_CLASS_CYCLE_CANDIDATE;
 
     if (!emit_class_collect_fields_impl(ctx, cd, desc)) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

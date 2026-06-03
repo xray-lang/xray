@@ -153,6 +153,12 @@ typedef struct XrGCHeader XrObjHeader;
             * no-ops so a compiler-inserted drop can never free an object                          \
             * the executor still holds. */
 
+#define XR_OBJ_CYCLE_CANDIDATE                                                                     \
+    0x0080 /* extra bit 7: type may participate in reference cycles.                               \
+            * Set at allocation for instances whose class forms a cycle in                         \
+            * the compile-time reference graph. On RC decrement to > 0 the                         \
+            * object is added to per-coroutine cycle_roots for trial deletion. */
+
 #define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
 #define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
 #define XR_OBJ_CLEAR_FLAG(o, f) ((o)->extra &= (uint16_t) ~(f))
