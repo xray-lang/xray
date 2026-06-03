@@ -44,6 +44,20 @@
 XrMapNode xr_map_dummynode = {
     .value = {0}, .key = {0}, .next = 0, .key_tt = XR_MAP_NODE_NIL_KEY, ._pad = {0}};
 
+static void xr_map_release_entry_values(XrMapNode *node, XrCoroGC *gc) {
+    XR_DCHECK(node != NULL, "map_release_entry: NULL node");
+    xr_gc_release_value(gc, node->key);
+    xr_gc_release_value(gc, node->value);
+    node->key = xr_null();
+    node->value = xr_null();
+}
+
+static void xr_map_retain_entry_values(XrMapNode *node) {
+    XR_DCHECK(node != NULL, "map_retain_entry: NULL node");
+    xr_gc_retain_value(node->key);
+    xr_gc_retain_value(node->value);
+}
+
 /* ========== Memory Profiling (optional) ========== */
 #include "../../base/xmem_profiler.h"
 
@@ -422,6 +436,8 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     if (n != NULL) {
         // Update existing value
+        xr_gc_release_value(xr_current_coro_gc(), key);
+        xr_gc_release_value(xr_current_coro_gc(), n->value);
         n->value = value;
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), map);
         return;
@@ -474,6 +490,8 @@ bool xr_map_delete(XrMap *map, XrValue key) {
     // Traverse chain
     for (;;) {
         if (keyequal(n, key, key_tt)) {
+            XrValue old_key = n->key;
+            XrValue old_value = n->value;
             // Found, delete
             if (prev == NULL) {
                 // Is chain head
@@ -486,9 +504,13 @@ bool xr_map_delete(XrMap *map, XrValue key) {
                         n->next += next_offset;  // Fix offset
                     }
                     next_node->key_tt = XR_MAP_NODE_NIL_KEY;
+                    next_node->key = xr_null();
+                    next_node->value = xr_null();
                 } else {
                     // No successor, clear directly
                     n->key_tt = XR_MAP_NODE_NIL_KEY;
+                    n->key = xr_null();
+                    n->value = xr_null();
                 }
             } else {
                 // Not chain head, modify prev's next
@@ -498,7 +520,11 @@ bool xr_map_delete(XrMap *map, XrValue key) {
                     prev->next = 0;
                 }
                 n->key_tt = XR_MAP_NODE_NIL_KEY;
+                n->key = xr_null();
+                n->value = xr_null();
             }
+            xr_gc_release_value(xr_current_coro_gc(), old_key);
+            xr_gc_release_value(xr_current_coro_gc(), old_value);
             map->count--;
             XR_DCHECK(map->count <= xr_map_sizenode(map), "map_delete: count > capacity");
             return true;
@@ -519,6 +545,8 @@ void xr_map_clear(XrMap *map) {
     // Clear all nodes
     uint32_t size = xr_map_sizenode(map);
     for (uint32_t i = 0; i < size; i++) {
+        if (!XR_MAP_NODE_EMPTY(&map->node[i]))
+            xr_map_release_entry_values(&map->node[i], xr_current_coro_gc());
         map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
         map->node[i].next = 0;
     }
@@ -548,6 +576,7 @@ XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *n = &map->node[i];
             if (!XR_MAP_NODE_EMPTY(n)) {
+                xr_gc_retain_value(n->key);
                 xr_array_push(arr, n->key);
             }
         }
@@ -565,6 +594,7 @@ XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *n = &map->node[i];
             if (!XR_MAP_NODE_EMPTY(n)) {
+                xr_gc_retain_value(n->value);
                 xr_array_push(arr, n->value);
             }
         }
@@ -589,6 +619,7 @@ XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
                  * placeholder leaked the wrong type signature. */
                 XrTuple *pair = xr_tuple_new(coro, 2);
                 if (pair) {
+                    xr_map_retain_entry_values(n);
                     xr_tuple_set(pair, 0, n->key);
                     xr_tuple_set(pair, 1, n->value);
                 }
@@ -662,6 +693,12 @@ void xr_map_debug_print(XrMap *map) {
 void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrMap *map = (XrMap *) obj;
     if (!xr_map_isdummy(map) && map->node) {
+        uint32_t count = xr_map_sizenode(map);
+        for (uint32_t i = 0; i < count; i++) {
+            XrMapNode *node = &map->node[i];
+            if (!XR_MAP_NODE_EMPTY(node))
+                xr_map_release_entry_values(node, owning_gc);
+        }
         size_t bytes = sizeof(XrMapNode) * xr_map_sizenode(map);
         XR_MAP_PROFILE_FREE_NODES(bytes);
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {

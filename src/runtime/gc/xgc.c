@@ -51,33 +51,37 @@
  * Adding a new compile-time GC type is a one-liner here. */
 
 const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
-    // Containers — full lifecycle: destroy + traverse + deep_copy + to_shared.
-    [XR_TARRAY] = {xr_gc_destroy_array, xr_gc_traverse_array, xr_deep_copy_array_with_ctx,
-                   xr_to_shared_array},
-    [XR_TMAP] = {xr_gc_destroy_map, xr_gc_traverse_map, xr_deep_copy_map_with_ctx,
-                 xr_to_shared_map},
-    [XR_TSET] = {xr_gc_destroy_set, xr_gc_traverse_set, xr_deep_copy_set_with_ctx,
-                 xr_to_shared_set},
-    [XR_TINSTANCE] = {xr_gc_destroy_instance, xr_gc_traverse_instance,
-                      xr_deep_copy_instance_with_ctx, xr_to_shared_instance},
-    [XR_TFUNCTION] = {NULL, xr_gc_traverse_closure, xr_deep_copy_closure_with_ctx,
-                      xr_to_shared_closure},
+    // Containers — destroy + deep_copy + to_shared (cross-coroutine).
+    [XR_TARRAY] = {.destroy = xr_gc_destroy_array,
+                   .deep_copy = xr_deep_copy_array_with_ctx,
+                   .to_shared = xr_to_shared_array},
+    [XR_TMAP] = {.destroy = xr_gc_destroy_map,
+                 .deep_copy = xr_deep_copy_map_with_ctx,
+                 .to_shared = xr_to_shared_map},
+    [XR_TSET] = {.destroy = xr_gc_destroy_set,
+                 .deep_copy = xr_deep_copy_set_with_ctx,
+                 .to_shared = xr_to_shared_set},
+    [XR_TINSTANCE] = {.destroy = xr_gc_destroy_instance,
+                      .deep_copy = xr_deep_copy_instance_with_ctx,
+                      .to_shared = xr_to_shared_instance},
+    [XR_TFUNCTION] = {.deep_copy = xr_deep_copy_closure_with_ctx,
+                      .to_shared = xr_to_shared_closure},
 
     // Channels — already shared at construction; pass-through across coro.
-    [XR_TCHANNEL] = {xr_gc_destroy_channel, NULL, NULL, NULL},
+    [XR_TCHANNEL] = {.destroy = xr_gc_destroy_channel},
 
-    // Atomic — system-heap shared object (refcounted). No GC-traced children.
-    [XR_TATOMIC] = {NULL, NULL, NULL, NULL},
+    // Atomic — system-heap shared object (refcounted). No side resources.
+    [XR_TATOMIC] = {0},
 
-    // Other GC types: have destroy or traverse responsibilities, but
-    // are deliberately not transferable across coroutines (the
-    // dispatchers return the raw value, matching the pre-table default).
-    [XR_TCOROUTINE] = {xr_gc_destroy_coroutine, NULL, NULL, NULL},
-    [XR_TTASK] = {xr_gc_destroy_task, xr_gc_traverse_task, NULL, NULL},
-    [XR_TCELL] = {NULL, xr_gc_traverse_cell, NULL, NULL},
-    [XR_TBOUND_METHOD] = {NULL, xr_gc_traverse_bound_method, NULL, NULL},
-    [XR_TMODULE] = {NULL, xr_gc_traverse_module, NULL, NULL},
-    [XR_TERROR] = {NULL, xr_gc_traverse_error, NULL, NULL},
+    // Other GC types: have destroy responsibilities, but are deliberately
+    // not transferable across coroutines (the dispatchers return the raw
+    // value, matching the pre-table default).
+    [XR_TCOROUTINE] = {.destroy = xr_gc_destroy_coroutine},
+    [XR_TTASK] = {.destroy = xr_gc_destroy_task},
+    [XR_TCELL] = {0},
+    [XR_TBOUND_METHOD] = {0},
+    [XR_TMODULE] = {0},
+    [XR_TERROR] = {0},
 
     // NetConn / NetListener are now XR_TINSTANCE with native body
     // descriptors — destroy is handled by xr_gc_destroy_instance.
@@ -94,6 +98,10 @@ static XrGCDestroyFn get_destroy_func(uint8_t type) {
     return (type < XGC_MAX_TYPES) ? g_type_ops[type].destroy : NULL;
 }
 
+XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type) {
+    return type < XGC_MAX_TYPES && (g_type_ops[type].destroy != NULL || type > XR_TATOMIC);
+}
+
 /* ========== Init/Cleanup ========== */
 
 void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate) {
@@ -107,9 +115,10 @@ void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate) {
 void xr_gc_cleanup(XrGC *gc) {
     XR_DCHECK(gc != NULL, "gc_cleanup: NULL gc");
     // Free fixed GC objects
-    XrGCHeader *obj = gc->fixedgc;
-    while (obj != NULL) {
-        XrGCHeader *next = obj->gc_next;
+    XrGCObjectNode *node = gc->fixedgc;
+    while (node != NULL) {
+        XrGCObjectNode *next = node->next;
+        XrGCHeader *obj = node->obj;
         uint8_t type = xr_gc_gettype(obj);
         XrGCDestroyFn destroy = get_destroy_func(type);
         if (!destroy && gc->isolate) {
@@ -119,7 +128,8 @@ void xr_gc_cleanup(XrGC *gc) {
             destroy(obj, NULL);
         }
         xr_free(obj);
-        obj = next;
+        xr_free(node);
+        node = next;
     }
     gc->fixedgc = NULL;
 
@@ -135,17 +145,23 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     XR_DCHECK(type < XGC_MAX_TYPES, "gc_alloc: invalid GC type");
     // Global GC: Allocate fixed objects using malloc
     // Note: Runtime objects should use xr_alloc() or xr_coro_gc_alloc()
+    XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
+    if (!node)
+        return NULL;
     XrGCHeader *obj = (XrGCHeader *) xr_malloc(size);
     if (obj) {
         obj->type = type;
-        obj->marked = 0;
-        obj->extra = 0;
+        obj->extra = XR_OBJ_MANAGED;
+        obj->refcount = 0;
         obj->objsize = (uint32_t) size;
-        // Link into fixedgc list so xr_gc_cleanup can free all objects
-        obj->gc_next = gc->fixedgc;
-        gc->fixedgc = obj;
+        obj->_rsv = 0;
+        node->obj = obj;
+        node->next = gc->fixedgc;
+        gc->fixedgc = node;
         gc->totalbytes += (int64_t) size;
         gc->object_count++;
+    } else {
+        xr_free(node);
     }
     return obj;
 }
@@ -153,6 +169,25 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
 XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
     XR_DCHECK(gc != NULL, "gc_newobj: NULL gc");
     return (XrGCHeader *) xr_gc_alloc(gc, size, type);
+}
+
+XR_FUNC void xr_gc_retain_value(XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || (obj->extra & XR_OBJ_DEAD))
+        return;
+    xr_obj_dup(obj);
+}
+
+XR_FUNC void xr_gc_release_value(XrCoroGC *gc, XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || (obj->extra & XR_OBJ_DEAD))
+        return;
+    if (xr_obj_drop_is_last(obj))
+        xr_coro_gc_rc_destroy(gc, obj);
 }
 
 /* ========== Debug ========== */
@@ -172,13 +207,9 @@ void xr_gc_header_print(XrGCHeader *obj) {
         return;
     }
     printf("GC Header:\n");
-    printf("  gc_next: %p\n", (void *) obj->gc_next);
     printf("  type: %d\n", obj->type);
-    printf("  marked: 0x%02x\n", obj->marked);
+    printf("  refcount: %d\n", obj->refcount);
     printf("  objsize: %u\n", obj->objsize);
-    printf("  white: %d\n", xr_gc_iswhite(obj) ? 1 : 0);
-    printf("  black: %d\n", xr_gc_isblack(obj) ? 1 : 0);
-    printf("  gray: %d\n", xr_gc_isgray(obj) ? 1 : 0);
 }
 
 /* ========== Unified Allocation Interface ========== */

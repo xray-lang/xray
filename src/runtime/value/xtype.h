@@ -220,6 +220,26 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
     return t->instance.class_name && (strcmp(t->instance.class_name, name) == 0);
 }
 
+/* Whether a type denotes a runtime-managed object whose lifetime belongs to
+ * the runtime/scheduler (and the atomic shared-RC in xshared.h), NOT the
+ * compiler's per-coroutine RC. The compiler (xi_arc / xi_own) must not insert
+ * dup/drop for such values: they are reachable across coroutines and held by
+ * the executor, so an IR-local drop could free an object still in use.
+ *
+ * Statically identifiable in the type system: Channel (own kind) and the
+ * Atomic builtin class. Task / Coroutine have no distinct XrType.kind (they
+ * appear as instance/unknown); those are covered at runtime by the
+ * XR_OBJ_MANAGED object-header backstop (see docs/design/706 §5). */
+static inline bool xr_type_is_runtime_managed(const XrType *t) {
+    if (!t)
+        return false;
+    if (t->kind == XR_KIND_CHANNEL)
+        return true;
+    if (xr_type_is_named_class(t, "Atomic"))
+        return true;
+    return false;
+}
+
 // Type checking macros
 #define XR_TYPE_IS_INT(t) ((t)->kind == XR_KIND_INT)
 #define XR_TYPE_IS_FLOAT(t) ((t)->kind == XR_KIND_FLOAT)
@@ -331,7 +351,7 @@ XR_FUNC XrType *xr_type_new_unit(XrayIsolate *X);
 XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);    // XrNativeType value
 XR_FUNC XrType *xr_type_new_float_width(XrayIsolate *X, int width);  // XrNativeType value
 
-// API: Derive XrSlotType from XrType (P0 unified type pipeline)
+// API: Derive XrSlotType from XrType for the unified type pipeline.
 // Returns the storage slot type — used by GC scanning, JIT guards, and AOT thunks.
 // native_width stores XrNativeType; widen all int variants to I64, float variants to F64.
 static inline uint8_t xr_type_to_slot_type(XrType *type) {

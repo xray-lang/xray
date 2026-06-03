@@ -1914,14 +1914,13 @@ static void test_guard_class(void) {
     assert(res.success);
     fprintf(stderr, " code=%u", res.code_size);
 
-    // Build fake GCHeader: extra (shape_id) at offset 10
-    // XrGCHeader: gc_next(8B) + type(1B) + marked(1B) + extra(2B) + objsize(4B) = 16B
+    // Build fake GCHeader: extra (shape_id) at offset 2
     uint8_t fake_obj[32];
     memset(fake_obj, 0, sizeof(fake_obj));
 
-    // Set shape_id = 42 at offset 10 (little-endian uint16)
+    // Set shape_id = 42 at offset 2 (little-endian uint16)
     uint16_t shape_id = 42;
-    memcpy(fake_obj + 10, &shape_id, 2);
+    memcpy(fake_obj + 2, &shape_id, 2);
 
     int64_t r1 = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
     fprintf(stderr, " match=%lld", (long long) r1);
@@ -1929,7 +1928,7 @@ static void test_guard_class(void) {
 
     // Change shape_id to 99 → should deopt
     shape_id = 99;
-    memcpy(fake_obj + 10, &shape_id, 2);
+    memcpy(fake_obj + 2, &shape_id, 2);
     int64_t r2 = jit_call1(res.code, (int64_t) (intptr_t) fake_obj);
     fprintf(stderr, " mismatch=0x%llx", (unsigned long long) r2);
     assert(r2 == (int64_t) 0xDEAD0001DEAD0001LL);
@@ -2706,8 +2705,7 @@ static void test_alloc_inline(void) {
     // We only need to attach a fake coro_gc + immix heap on top of it.
     static uint8_t fake_gc[512];
     // Oversized buffer to manually align to 16KB boundary.
-    // The inline alloc_post writes block->local_allgc (offset 24),
-    // alloc_count (40), alloc_bytes (48) — all must be within the block.
+    // The inline alloc_post writes alloc_count and alloc_bytes in the block header.
     static uint8_t heap_raw[16384 * 2];
     memset(fake_gc, 0, sizeof(fake_gc));
     memset(heap_raw, 0, sizeof(heap_raw));
@@ -2720,9 +2718,6 @@ static void test_alloc_inline(void) {
     // gc->immix.limit at offset 8
     char *limit = (char *) heap_buf + 16384;
     memcpy(fake_gc + 8, &limit, 8);
-    // gc->currentwhite = 0x01 at XM_GC_CURRENTWHITE_OFFSET (109)
-    fake_gc[109] = 0x01;
-
     jit_env_reset();
     g_jit_coro.coro_gc = (struct XrCoroGC *) fake_gc;
 
@@ -2760,20 +2755,23 @@ static void test_alloc_inline(void) {
 
     // Verify GC header at result:
     uint8_t *hdr = (uint8_t *) (intptr_t) result;
-    // gc_next = 0 (8 bytes at offset 0)
-    int64_t gc_next = 0;
-    memcpy(&gc_next, hdr, 8);
-    assert(gc_next == 0);
-    // type = 5 at offset 8
-    assert(hdr[8] == 5);
-    // marked = currentwhite (0x01) at offset 9
-    assert(hdr[9] == 0x01);
-    // extra = 0 at offset 10-11
-    assert(hdr[10] == 0 && hdr[11] == 0);
-    // objsize = 48 at offset 12
+    // type = 5 at offset 0
+    uint16_t type = 0;
+    memcpy(&type, hdr, 2);
+    assert(type == 5);
+    // extra = 0 at offset 2-3
+    assert(hdr[2] == 0 && hdr[3] == 0);
+    // refcount = 1 at offset 4
+    int32_t refcount = 0;
+    memcpy(&refcount, hdr + 4, 4);
+    assert(refcount == 1);
+    // objsize = 48 at offset 8
     uint32_t objsize = 0;
-    memcpy(&objsize, hdr + 12, 4);
+    memcpy(&objsize, hdr + 8, 4);
     assert(objsize == 48);
+    uint32_t rsv = 1;
+    memcpy(&rsv, hdr + 12, 4);
+    assert(rsv == 0);
     fprintf(stderr, " header_ok");
 
     xm_code_alloc_destroy(&code_alloc);

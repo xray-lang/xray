@@ -293,6 +293,8 @@
     _(SELECT_BLOCK, FMT_ABC, KOP_ABC_BIN_LIT,                                                      \
       "select block wait: A=ch_base, B=ch_count, C=case_count")                                    \
     _(GETSHARED, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = shared[Bx]")                                  \
+    _(DUP, FMT_A, KOP_A_USE, "dup(R[A]): refcount++ (no-op for scalars/region)")                   \
+    _(DROP, FMT_A, KOP_A_USE, "drop(R[A]): refcount--, destroy+free if zero")                      \
     _(SETSHARED, FMT_GLOBAL, KOP_GLOBAL_SET, "shared[Bx] = R[A]")                                  \
     _(GETGLOBAL, FMT_ABx, KOP_ABx_K, "R[A] = globals[K[Bx]:string]")                               \
     _(SETGLOBAL, FMT_ABx, KOP_ABx_K_IN, "globals[K[Bx]:string] = R[A]")                            \

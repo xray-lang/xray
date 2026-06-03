@@ -359,7 +359,6 @@ static XrNativeBodyDesc enum_value_body_desc = {
     .body_align = _Alignof(const char *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .destroy = enum_value_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };
@@ -387,7 +386,6 @@ static XrNativeBodyDesc enum_type_body_desc = {
     .body_align = _Alignof(const char *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .destroy = enum_type_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

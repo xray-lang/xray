@@ -267,7 +267,9 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 xr_map_set(info, VM_INTERN_KEY("result"), coro->result);
             }
             if (flags & XR_CORO_FLG_BLOCKED) {
-                const char *reason = coro->wait_channel ? "channel" : "await";
+                const char *reason = atomic_load_explicit(&coro->wait_channel, memory_order_acquire)
+                                         ? "channel"
+                                         : "await";
                 xr_map_set(info, VM_INTERN_KEY("blockedOn"),
                            xr_string_value(xr_string_intern(isolate, reason, strlen(reason), 0)));
             }
@@ -308,7 +310,9 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                     (strcmp(entries[i].state, "blocked") == 0) ? "BLOCKED" : "READY";
                 const char *block_reason = "-";
                 if (strcmp(entries[i].state, "blocked") == 0) {
-                    block_reason = coro->wait_channel ? "channel" : "await";
+                    block_reason = atomic_load_explicit(&coro->wait_channel, memory_order_acquire)
+                                       ? "channel"
+                                       : "await";
                 }
 
                 const char *name = coro->name ? coro->name : "(anonymous)";
@@ -650,9 +654,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     }
 
     if (coro_priority != 1) {
-        uint32_t flags = atomic_load(&coro->flags);
-        flags = xr_coro_set_priority_flags(flags, coro_priority);
-        atomic_store(&coro->flags, flags);
+        xr_coro_set_priority(coro, coro_priority);
     }
     XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime) {
@@ -813,20 +815,14 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
                                                         memory_order_acquire)) {
                 // Store task in await_task for post-check
                 atomic_store_explicit(&current->await_task, task, memory_order_release);
-                uint32_t old_flags = xr_coro_flags_load(current);
-                uint32_t new_flags = xr_coro_set_wait_reason_flags(
-                    old_flags, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-                atomic_store_explicit(&current->flags, new_flags, memory_order_release);
+                xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
                 frame->pc = pc - 1;
                 return XR_DISP_BLOCKED;
             }
 
             if (expected == XR_AWAIT_WAITING) {
                 atomic_store_explicit(&current->await_task, task, memory_order_release);
-                uint32_t old_flags2 = xr_coro_flags_load(current);
-                uint32_t new_flags2 = xr_coro_set_wait_reason_flags(
-                    old_flags2, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-                atomic_store_explicit(&current->flags, new_flags2, memory_order_release);
+                xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
                 frame->pc = pc - 1;
                 return XR_DISP_BLOCKED;
             }
@@ -941,10 +937,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
             if (worker && timeout_ms > 0)
                 xr_worker_add_sleep_timer(worker, current, timeout_ms);
 
-            uint32_t old_flags = xr_coro_flags_load(current);
-            uint32_t new_flags =
-                xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-            atomic_store(&current->flags, new_flags);
+            xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
 
             frame->pc = pc - 1;
             return XR_DISP_BLOCKED;
@@ -1056,9 +1049,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
             return XR_DISP_RESTART;
         }
 
-        uint32_t old_flags = xr_coro_flags_load(caller);
-        atomic_store(&caller->flags, xr_coro_set_wait_reason_flags(
-                                         old_flags, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT));
+        xr_coro_set_wait_reason(caller, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
         return XR_DISP_BLOCKED;
     }
 
@@ -1167,9 +1158,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
             return XR_DISP_RESTART;
         }
 
-        uint32_t old_flags = xr_coro_flags_load(current);
-        atomic_store(&current->flags, xr_coro_set_wait_reason_flags(
-                                          old_flags, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT));
+        xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
         return XR_DISP_BLOCKED;
     } else {
         // Main thread: poll wait

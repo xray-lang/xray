@@ -1409,6 +1409,37 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
         }
 
+        /* Reference counting (compile-time RC, inserted by xi_arc).
+         * Mirror the VM OP_DUP / OP_DROP / OP_MOVE dispatch:
+         *   RETAIN(x) -> CALL_C(xr_jit_rc_dup, x)  [acquire reference]
+         *   RELEASE(x) -> CALL_C(xr_jit_rc_drop, x) [release, free at zero]
+         *   MOVE(x)   -> passthrough (ownership transfer, no refcount change)
+         * The value is passed via the call_arg_pool so its runtime tag is
+         * propagated; the helper reconstructs the XrValue and adjusts the
+         * refcount only for heap pointers (no-op for scalars/region). */
+        case XI_RETAIN: {
+            XR_DCHECK(v->nargs >= 1, "retain: need value arg");
+            XmRef val = get_ref(ctx, v->args[0]);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef args[1] = {val};
+            emit_helper_call(ctx, blk, XM_HELPER_rc_dup, extra, args, 1);
+            return xm_const_i64(ctx->xm_func, 0);
+        }
+        case XI_RELEASE: {
+            XR_DCHECK(v->nargs >= 1, "release: need value arg");
+            XmRef val = get_ref(ctx, v->args[0]);
+            XmRef extra = xm_const_i64(ctx->xm_func, 0);
+            XmRef args[1] = {val};
+            emit_helper_call(ctx, blk, XM_HELPER_rc_drop, extra, args, 1);
+            return xm_const_i64(ctx->xm_func, 0);
+        }
+        case XI_MOVE:
+            /* Ownership transfer: no runtime refcount change, the SSA value
+             * simply flows to its consumer. Transparent passthrough. */
+            if (v->nargs >= 1)
+                return get_ref(ctx, v->args[0]);
+            return xm_const_i64(ctx->xm_func, 0);
+
         default:
             /* Truly unknown op — mark error, return dummy */
             ctx->error = true;

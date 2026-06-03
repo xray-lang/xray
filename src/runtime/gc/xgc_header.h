@@ -5,18 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xgc_header.h - GC object header definition (16 bytes)
+ * xgc_header.h - GC object header definition
  *
  * KEY CONCEPT:
- *   - 16-byte compact header
- *   - Class info obtained via type registry, not stored in GC header
+ *   - Unified object header for VM and AOT.
+ *   - Class info obtained via type registry, not stored in header.
  *
  * MEMORY LAYOUT (16 bytes):
- *   [0-7]   gc_next (8B) - GC global list
- *   [8]     type (1B)    - Object type
- *   [9]     marked (1B)  - GC color + age
- *   [10-11] extra (2B)   - Type-specific data
- *   [12-15] objsize (4B) - Object allocation size
+ *   [0-1]   type     (2B) - object type tag -> destructor dispatch
+ *   [2-3]   flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
+ *   [4-7]   refcount (4B) - compile-time RC; ignored when REGION; atomic when ATOMIC
+ *   [8-11]  objsize  (4B) - allocation size (region sweep / munmap)
+ *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
  */
 
 #ifndef XGC_HEADER_H
@@ -86,24 +86,26 @@ typedef enum {
     XR_TATOMIC,  // Atomic<T> shared primitive wrapper (lock-free, system heap)
 } XrObjType;
 
-/* ========== Unified GC Header (16 bytes) ========== */
+/* ========== Unified Object Header (16 bytes) ========== */
 
 typedef struct XrGCHeader {
-    struct XrGCHeader *gc_next;
-    uint8_t type;
-    uint8_t marked;
-    uint16_t extra;
-    uint32_t objsize;
+    uint16_t type;    /* [0-1] object type tag */
+    uint16_t extra;   /* [2-3] flags word: storage/mmap + XR_OBJ_* */
+    int32_t refcount; /* [4-7] compile-time RC (0 = unmanaged / region) */
+    uint32_t objsize; /* [8-11] allocation size */
+    uint32_t _rsv;    /* [12-15] reserved (weak slot / cycle-report id) */
 } XrGCHeader;
 
 _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 
+/* Unified alias: the RC memory model refers to the object header as
+ * XrObjHeader. */
+typedef struct XrGCHeader XrObjHeader;
+
 /* ========== Access Macros ========== */
 
 #define XR_GC_GET_TYPE(gc) ((XrObjType) ((gc)->type))
-#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint8_t) (t))
-#define XR_GC_GET_MARKED(gc) ((gc)->marked)
-#define XR_GC_SET_MARKED(gc, m) ((gc)->marked = (uint8_t) (m))
+#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint16_t) (t))
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
@@ -124,10 +126,105 @@ _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 #define XR_GC_IS_MMAP(gc) (((gc)->extra & XR_GC_FLAG_MMAP) != 0)
 #define XR_GC_SET_MMAP(gc) ((gc)->extra |= XR_GC_FLAG_MMAP)
 
+/* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
+ *
+ * Bit 0 = storage(shared), bit 13 = mmap (above). Bits 1-4 carry the RC
+ * object-model flags.
+ *
+ *   REGION   - object lives in a per-coroutine region: dup/drop are no-ops,
+ *              freed in bulk when the coroutine ends.
+ *   ATOMIC   - object is shared across coroutines: refcount is atomic.
+ *   HAS_DTOR - object's type has a destructor to run at refcount==0.
+ *   WEAKABLE - object may be the target of a weak reference.
+ */
+#define XR_OBJ_REGION 0x0002   /* extra bit 1 */
+#define XR_OBJ_ATOMIC 0x0004   /* extra bit 2 */
+#define XR_OBJ_HAS_DTOR 0x0008 /* extra bit 3 */
+#define XR_OBJ_WEAKABLE 0x0010 /* extra bit 4 */
+#define XR_OBJ_DEAD                                                                                \
+    0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
+            * destructor at coroutine teardown to avoid                                            \
+            * double finalization. Cleared on reuse. */
+#define XR_OBJ_MANAGED                                                                             \
+    0x0040 /* extra bit 6: runtime-managed object (Channel / Coroutine /                           \
+            * Task / CoroPool / Atomic). Its lifetime is owned by the                              \
+            * runtime/scheduler (and the atomic shared-RC in xshared.h),                           \
+            * NOT by the compiler-inserted per-coroutine RC. dup/drop are                          \
+            * no-ops so a compiler-inserted drop can never free an object                          \
+            * the executor still holds. */
+
+#define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
+#define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
+#define XR_OBJ_CLEAR_FLAG(o, f) ((o)->extra &= (uint16_t) ~(f))
+
+#define XR_OBJ_IS_REGION(o) XR_OBJ_GET_FLAG(o, XR_OBJ_REGION)
+#define XR_OBJ_IS_ATOMIC(o) XR_OBJ_GET_FLAG(o, XR_OBJ_ATOMIC)
+#define XR_OBJ_HAS_DESTRUCTOR(o) XR_OBJ_GET_FLAG(o, XR_OBJ_HAS_DTOR)
+#define XR_OBJ_IS_MANAGED(o) XR_OBJ_GET_FLAG(o, XR_OBJ_MANAGED)
+
+/* Whether an object TYPE is runtime-managed: its lifetime belongs to the
+ * runtime/scheduler (cross-coroutine reachable, held by the executor or the
+ * atomic shared-RC), not the compiler's per-coroutine RC. The compiler must
+ * not insert dup/drop for such objects. */
+static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
+    return t == XR_TCHANNEL || t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL ||
+           t == XR_TATOMIC;
+}
+
+/* ========== RC dup/drop Primitives ==========
+ *
+ * Header-only refcount arithmetic, following Nim's nimIncRef /
+ * nimDecRefIsLast contract (lib/system/arc.nim): the primitive only
+ * adjusts the count and reports whether the object died; the CALLER runs
+ * the destructor and frees, because freeing needs coroutine/region
+ * context that does not belong in this header.
+ *
+ *   - REGION objects: dup/drop are no-ops (freed in bulk at coro end).
+ *   - ATOMIC objects: refcount is adjusted atomically (cross-coroutine).
+ *   - others: plain non-atomic refcount (the common, fast case).
+ *
+ * refcount is 1-based here (1 == one owner). xr_obj_drop_is_last returns
+ * true exactly when the last owning reference is released.
+ */
+
+#include <stdatomic.h>
+
+/* Acquire a new owning reference.
+ *
+ * REGION and MANAGED objects are no-ops: region objects are bulk-freed at
+ * coroutine end, and MANAGED objects (Channel/Coroutine/Task/CoroPool/Atomic)
+ * are owned by the runtime/scheduler via the atomic shared-RC, never by the
+ * compiler-inserted per-coroutine RC. */
+static inline void xr_obj_dup(XrObjHeader *o) {
+    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
+        return;
+    if (o->extra & XR_OBJ_ATOMIC)
+        atomic_fetch_add_explicit((_Atomic(int32_t) *) &o->refcount, 1, memory_order_relaxed);
+    else
+        o->refcount++;
+}
+
+/* Release an owning reference. Returns true if this was the last reference
+ * (refcount reached 0) and the caller must destroy + free the object.
+ *
+ * REGION and MANAGED objects always return false: a compiler-inserted drop
+ * must never free a region object (bulk-freed at coroutine end) nor a
+ * runtime-managed object the executor still holds. */
+static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
+    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
+        return false; /* region: bulk-freed at coro end; managed: runtime-owned */
+    if (o->extra & XR_OBJ_ATOMIC) {
+        /* acq_rel so the destructor sees all prior writes (Rust Arc pattern). */
+        return atomic_fetch_sub_explicit((_Atomic(int32_t) *) &o->refcount, 1,
+                                         memory_order_acq_rel) == 1;
+    }
+    return --o->refcount == 0;
+}
+
 /* ========== Initialization Functions ========== */
 
 static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {
-    gc->type = (uint8_t) type;
+    gc->type = (uint16_t) type;
 }
 
 /* ========== Helper Functions ========== */

@@ -702,7 +702,6 @@ static XrNativeBodyDesc g_regex_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = NULL,
     .destroy = regex_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

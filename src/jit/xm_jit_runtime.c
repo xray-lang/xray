@@ -52,6 +52,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../vm/xvm.h"
 #include "../vm/xvm_internal.h"
+#include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../module/xmodule.h"
@@ -557,6 +558,35 @@ XrJitResult xr_jit_throw(XrCoroutine *coro, int64_t extra_arg) {
 
     // Store exception pointer for JIT catch handler
     coro->jit_ctx->exception = (void *) exception.ptr;
+    return XR_JIT_OK();
+}
+
+/* ========== Reference Counting (compile-time RC) ========== */
+
+// Called from JIT code (via CALL_C) for XI_RETAIN. Mirrors the VM OP_DUP
+// dispatch: acquire a new owning reference to the value in call_args[0].
+// No-op for non-pointer and region-allocated objects (handled in xr_obj_dup).
+XrJitResult xr_jit_rc_dup(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrValue v = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
+    if (XR_IS_PTR(v)) {
+        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
+        xr_obj_dup(o);
+    }
+    return XR_JIT_OK();
+}
+
+// Called from JIT code (via CALL_C) for XI_RELEASE. Mirrors the VM OP_DROP
+// dispatch: release an owning reference. On the last reference the object's
+// destructor runs and its memory returns to the coroutine RC freelist.
+XrJitResult xr_jit_rc_drop(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrValue v = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
+    if (XR_IS_PTR(v)) {
+        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
+        if (xr_obj_drop_is_last(o))
+            xr_coro_gc_rc_destroy(coro ? coro->coro_gc : NULL, o);
+    }
     return XR_JIT_OK();
 }
 

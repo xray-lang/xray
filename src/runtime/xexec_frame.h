@@ -132,7 +132,7 @@ typedef struct XrVMContext {
     int frame_capacity;
     int module_base_frame;  // module boundary for error trace
 
-    // Exception handling (legacy, retained for panic — M6 narrows)
+    // Exception handling retained for panic channel interop.
     XrExceptionHandler *handlers;  // handler stack
     int handler_count;
     int handler_capacity;

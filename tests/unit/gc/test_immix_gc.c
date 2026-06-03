@@ -24,11 +24,30 @@
 #include "../../../src/runtime/gc/ximmix.h"
 #include "../../../src/runtime/gc/xgc_header.h"
 #include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/coro/xcoroutine.h"
 #include "../test_win_compat.h"
 
 /* Dummy coroutine for GC tests (gc_create only stores gc->owner, no dereference) */
 static XrCoroutine dummy_coro;
+static XrayIsolate g_test_iso;
+
+#define XR_TEST_EXT_TYPE 63
+
+static int g_destroy_count = 0;
+
+static void test_ext_destroy(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    (void) obj;
+    (void) owning_gc;
+    g_destroy_count++;
+}
+
+static void setup_test_ext_finalizer(void) {
+    memset(&g_test_iso, 0, sizeof(g_test_iso));
+    g_test_iso.ext_finalize_bitmap = 1ULL << XR_TEST_EXT_TYPE;
+    g_test_iso.ext_destroy_funcs[XR_TEST_EXT_TYPE] = test_ext_destroy;
+    dummy_coro.isolate = &g_test_iso;
+}
 
 /* ========== Test Framework ========== */
 
@@ -172,9 +191,7 @@ static void test_gc_create_destroy(void) {
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
-    ASSERT(gc->gcstate == XGC_PAUSE, "initial state should be PAUSE");
     ASSERT(gc->totalbytes == 0, "initial bytes should be 0");
-    ASSERT(gc->totalbytes == 0, "initial totalbytes confirmed 0");
 
     xr_coro_gc_destroy(gc);
     PASS();
@@ -206,288 +223,66 @@ static void test_large_object(void) {
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_objects == large, "should be in large_objects list");
+    ASSERT(gc->large_objects != NULL, "should have large object node");
+    ASSERT(gc->large_objects->obj == large, "large object node should own object");
 
     xr_coro_gc_destroy(gc);
     PASS();
 }
 
-static void test_fullgc_cycle(void) {
-    TEST("fullgc: complete cycle, objects swept");
+static void test_teardown_finalizer_registry(void) {
+    TEST("finalizer registry: teardown finalizes live object");
+
+    setup_test_ext_finalizer();
+    g_destroy_count = 0;
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
 
-    gc->gc_disabled++;
-    for (int i = 0; i < 200; i++) {
-        xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    }
-    gc->gc_disabled--;
-
-    int64_t before = gc->totalbytes;
-    ASSERT(before > 0, "should have allocated bytes");
-
-    uint32_t gc_count = gc->gc_count;
-    xr_coro_gc_fullgc(gc);
-
-    ASSERT(gc->gc_count == gc_count + 1, "gc_count should increment");
-    ASSERT(gc->gcstate == XGC_PAUSE, "should return to PAUSE");
-    // All objects unreachable (no coroutine owner) -> totalbytes should decrease
-    ASSERT(gc->totalbytes < before, "totalbytes should decrease after sweep");
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
+    ASSERT(obj != NULL, "alloc failed");
+    ASSERT(XR_OBJ_HAS_DESTRUCTOR(obj), "object should carry destructor flag");
 
     xr_coro_gc_destroy(gc);
+    ASSERT(g_destroy_count == 1, "teardown should run finalizer once");
     PASS();
 }
 
-static void test_incremental_gc_states(void) {
-    TEST("incremental GC: walks through 4 states");
+static void test_rc_destroy_unregisters_finalizer(void) {
+    TEST("finalizer registry: RC destroy prevents teardown duplicate");
+
+    setup_test_ext_finalizer();
+    g_destroy_count = 0;
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
 
-    // Force incremental mode (default is gen mode which runs entergen)
-    gc->gc_mode = XGC_MODE_INC;
-
-    gc->gc_disabled++;
-    for (int i = 0; i < 100; i++) {
-        xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    }
-    gc->gc_disabled--;
-
-    ASSERT(gc->gcstate == XGC_PAUSE, "should start in PAUSE");
-
-    // Step: PAUSE -> PROPAGATE
-    gc->GCdebt = 1000;
-    xr_coro_gc_step(gc);
-    ASSERT(gc->gcstate == XGC_PROPAGATE, "should be PROPAGATE");
-
-    // Step through PROPAGATE until gray list empty -> ATOMIC
-    int steps = 0;
-    while (gc->gcstate == XGC_PROPAGATE && steps < 1000) {
-        xr_coro_gc_step(gc);
-        steps++;
-    }
-    ASSERT(gc->gcstate == XGC_ATOMIC, "should reach ATOMIC");
-
-    // Step: ATOMIC -> SWEEP
-    xr_coro_gc_step(gc);
-    ASSERT(gc->gcstate == XGC_SWEEP, "should be SWEEP");
-
-    // SWEEP does everything in one step -> PAUSE
-    xr_coro_gc_step(gc);
-    ASSERT(gc->gcstate == XGC_PAUSE, "should return to PAUSE");
-
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_alloc_during_incremental_gc(void) {
-    TEST("alloc during incremental GC: no corruption");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-
-    // Force incremental mode
-    gc->gc_mode = XGC_MODE_INC;
-
-    gc->gc_disabled++;
-    for (int i = 0; i < 50; i++) {
-        xr_coro_gc_newobj(gc, XR_TSTRING, 128);
-    }
-    gc->gc_disabled--;
-
-    gc->GCdebt = 1000;
-    xr_coro_gc_step(gc);
-    ASSERT(gc->gcstate == XGC_PROPAGATE, "should be PROPAGATE");
-
-    // Allocate NEW objects during PROPAGATE
-    gc->gc_disabled++;
-    XrGCHeader *new_objs[20];
-    for (int i = 0; i < 20; i++) {
-        new_objs[i] = xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-        ASSERT(new_objs[i] != NULL, "alloc during GC failed");
-
-        XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(new_objs[i]);
-        int line = XR_IMMIX_LINE_INDEX(new_objs[i]);
-        ASSERT(XR_IMMIX_LINE_GET(block->alloc_marks, line),
-               "alloc_marks not set for obj during GC");
-    }
-    gc->gc_disabled--;
-
-    xr_coro_gc_fullgc(gc);
-    ASSERT(gc->gcstate == XGC_PAUSE, "should finish at PAUSE");
-
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_rebuild_after_fullgc(void) {
-    TEST("fullgc: rebuild_alloc_marks reclaims blocks");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-
-    gc->gc_disabled++;
-    for (int i = 0; i < 100; i++) {
-        xr_coro_gc_newobj(gc, XR_TSTRING, 128);
-    }
-    gc->gc_disabled--;
-
-    int64_t before = gc->totalbytes;
-    ASSERT(before > 0, "should have bytes before GC");
-
-    xr_coro_gc_fullgc(gc);
-
-    ASSERT(gc->totalbytes < before, "totalbytes should decrease");
-    ASSERT(gc->immix.full_blocks == NULL, "full_blocks should be empty");
-
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-/* ========== 3. Write Barrier Tests ========== */
-
-static void test_keepinvariant_guard(void) {
-    TEST("barrier: keepinvariant only true in mark phases");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-
-    // PAUSE state: barrier should NOT be active
-    ASSERT(gc->gcstate == XGC_PAUSE, "initial state should be PAUSE");
-    ASSERT(!xr_gc_keepinvariant(gc), "PAUSE should not keepinvariant");
-
-    // Force into PROPAGATE
-    gc->gcstate = XGC_PROPAGATE;
-    ASSERT(xr_gc_keepinvariant(gc), "PROPAGATE should keepinvariant");
-
-    // ATOMIC
-    gc->gcstate = XGC_ATOMIC;
-    ASSERT(xr_gc_keepinvariant(gc), "ATOMIC should keepinvariant");
-
-    // SWEEP
-    gc->gcstate = XGC_SWEEP;
-    ASSERT(!xr_gc_keepinvariant(gc), "SWEEP should not keepinvariant");
-
-    gc->gcstate = XGC_PAUSE;
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_forward_barrier_marks_child(void) {
-    TEST("barrier: forward barrier marks white child");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-    gc->gc_disabled++;
-
-    // Create parent and child objects
-    XrGCHeader *parent = xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    XrGCHeader *child = xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    ASSERT(parent != NULL && child != NULL, "alloc failed");
-
-    // Both should be white initially
-    ASSERT(xr_gc_iswhite(parent), "parent should be white");
-    ASSERT(xr_gc_iswhite(child), "child should be white");
-
-    // Make parent black, set GC to PROPAGATE
-    xr_gc_white2gray(parent);
-    xr_gc_gray2black(parent);
-    gc->gcstate = XGC_PROPAGATE;
-
-    // Forward barrier should mark the white child
-    xr_coro_gc_barrier(gc, parent, child);
-
-    // Child should no longer be white (it was marked)
-    ASSERT(!xr_gc_iswhite(child), "child should be marked after barrier");
-
-    gc->gcstate = XGC_PAUSE;
-    gc->gc_disabled--;
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_back_barrier_reverts_to_gray(void) {
-    TEST("barrier: back barrier reverts black to gray");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-    gc->gc_disabled++;
-
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
     ASSERT(obj != NULL, "alloc failed");
 
-    // Make object black
-    xr_gc_white2gray(obj);
-    xr_gc_gray2black(obj);
-    ASSERT(xr_gc_isblack(obj), "should be black");
+    xr_coro_gc_rc_destroy(gc, obj);
+    ASSERT(g_destroy_count == 1, "RC destroy should run finalizer once");
+    ASSERT(gc->finalize_objects == NULL, "RC destroy should unregister finalizer");
 
-    gc->gcstate = XGC_PROPAGATE;
-
-    // Back barrier should revert to gray
-    xr_coro_gc_barrierback(gc, obj);
-    ASSERT(!xr_gc_isblack(obj), "should not be black after barrierback");
-
-    gc->gcstate = XGC_PAUSE;
-    gc->gc_disabled--;
     xr_coro_gc_destroy(gc);
+    ASSERT(g_destroy_count == 1, "teardown should not rerun finalizer");
     PASS();
 }
 
-static void test_barrier_noop_in_sweep(void) {
-    TEST("barrier: no-op outside mark phases");
+static void test_large_object_rc_free_unregisters_node(void) {
+    TEST("large object: RC free unregisters large object node");
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
-    gc->gc_disabled++;
 
-    XrGCHeader *parent = xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    XrGCHeader *child = xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    ASSERT(parent && child, "alloc failed");
+    XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
+    ASSERT(large != NULL, "large alloc failed");
+    ASSERT(gc->large_objects != NULL, "large node missing");
 
-    // Make parent black, child white
-    xr_gc_white2gray(parent);
-    xr_gc_gray2black(parent);
+    xr_coro_gc_rc_destroy(gc, large);
+    ASSERT(gc->large_objects == NULL, "large node should be removed");
+    ASSERT(gc->large_bytes == 0, "large bytes should be decremented");
 
-    // In SWEEP phase: barrier should be no-op
-    gc->gcstate = XGC_SWEEP;
-    xr_coro_gc_barrier(gc, parent, child);
-    ASSERT(xr_gc_iswhite(child), "child should remain white in SWEEP");
-
-    // In PAUSE phase: barrier should be no-op
-    gc->gcstate = XGC_PAUSE;
-    xr_coro_gc_barrier(gc, parent, child);
-    ASSERT(xr_gc_iswhite(child), "child should remain white in PAUSE");
-
-    gc->gc_disabled--;
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_barrier_val_macro(void) {
-    TEST("barrier: XR_GC_BARRIER_VAL with non-GC value is no-op");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-    gc->gc_disabled++;
-
-    XrGCHeader *parent = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
-    ASSERT(parent != NULL, "alloc failed");
-
-    xr_gc_white2gray(parent);
-    xr_gc_gray2black(parent);
-    gc->gcstate = XGC_PROPAGATE;
-
-    // Integer value: should not trigger barrier (not a GC pointer)
-    XrValue int_val = XR_FROM_INT(42);
-    XR_GC_BARRIER_VAL(gc, parent, int_val);  // should be no-op
-
-    // null value: should not trigger barrier
-    XrValue null_val = XR_NULL_VAL;
-    XR_GC_BARRIER_VAL(gc, parent, null_val);  // should be no-op
-
-    gc->gcstate = XGC_PAUSE;
-    gc->gc_disabled--;
     xr_coro_gc_destroy(gc);
     PASS();
 }
@@ -513,27 +308,6 @@ static void perf_allocation_throughput(void) {
 
     gc->gc_disabled--;
     printf("%.1fM/s (%.1fms) ", mps, ms);
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void perf_fullgc_time(void) {
-    TEST("perf: fullgc time");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    gc->gc_disabled++;
-
-    const int COUNT = 50000;
-    for (int i = 0; i < COUNT; i++) {
-        xr_coro_gc_newobj(gc, XR_TSTRING, 64);
-    }
-    gc->gc_disabled--;
-
-    uint64_t start = time_ns();
-    xr_coro_gc_fullgc(gc);
-    uint64_t elapsed = time_ns() - start;
-
-    printf("%.2fms (%d objs) ", elapsed / 1e6, COUNT);
     xr_coro_gc_destroy(gc);
     PASS();
 }
@@ -579,21 +353,18 @@ int main(void) {
     test_gc_create_destroy();
     test_newobj_marks_alloc();
     test_large_object();
-    test_fullgc_cycle();
-    test_incremental_gc_states();
-    test_alloc_during_incremental_gc();
-    test_rebuild_after_fullgc();
-
-    printf("\n--- Write Barrier ---\n");
-    test_keepinvariant_guard();
-    test_forward_barrier_marks_child();
-    test_back_barrier_reverts_to_gray();
-    test_barrier_noop_in_sweep();
-    test_barrier_val_macro();
+    test_teardown_finalizer_registry();
+    test_rc_destroy_unregisters_finalizer();
+    test_large_object_rc_free_unregisters_node();
+    /* Tracing collector (fullgc / incremental step / sweep / write barriers)
+     * has been removed: reference counting owns reclamation. The tests that
+     * asserted tracing-cycle behavior (gc_count increment, PROPAGATE state
+     * walk, sweep-driven totalbytes decrease, tri-color barriers) are gone
+     * with it. What remains here covers the Immix bump allocator + alloc-mark
+     * bookkeeping, which RC still relies on for region allocation. */
 
     printf("\n--- Performance ---\n");
     perf_allocation_throughput();
-    perf_fullgc_time();
     perf_bulk_destroy();
 
     printf("\n========================================\n");

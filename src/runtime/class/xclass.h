@@ -56,7 +56,6 @@ typedef struct XrNativeBodyDesc {
     XrNativeBodyCopyPolicy copy_policy;
     void (*init)(XrInstance *inst, void *body);
     void (*destroy)(void *body);
-    void (*traverse)(XrCoroGC *gc, void *body);
     bool (*deep_copy)(XrCopyContext *ctx, XrInstance *src, XrInstance *dst);
     bool (*to_shared)(XrayIsolate *X, XrInstance *src, XrInstance *dst);
 } XrNativeBodyDesc;

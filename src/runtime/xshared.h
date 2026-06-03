@@ -39,11 +39,8 @@
 
 /* ========== Shared Reference Count Operations ========== */
 
-// Refcount stored in gc_next pointer (shared objects are on system heap,
-// not in GC linked lists, so gc_next is unused).
-// This preserves objsize for correct munmap on mmap-allocated objects.
-static inline _Atomic(uintptr_t) *xr_shared_refc_ptr(XrGCHeader *gc) {
-    return (_Atomic(uintptr_t) *) &gc->gc_next;
+static inline _Atomic(int32_t) *xr_shared_refc_ptr(XrGCHeader *gc) {
+    return (_Atomic(int32_t) *) &gc->refcount;
 }
 
 static inline int xr_shared_get_refc(XrGCHeader *gc) {
@@ -51,7 +48,8 @@ static inline int xr_shared_get_refc(XrGCHeader *gc) {
 }
 
 static inline void xr_shared_set_refc(XrGCHeader *gc, int refc) {
-    atomic_store(xr_shared_refc_ptr(gc), (uintptr_t) refc);
+    XR_OBJ_SET_FLAG(gc, XR_OBJ_ATOMIC);
+    atomic_store(xr_shared_refc_ptr(gc), (int32_t) refc);
 }
 
 static inline int xr_shared_incref(XrGCHeader *gc) {
@@ -59,7 +57,7 @@ static inline int xr_shared_incref(XrGCHeader *gc) {
 }
 
 static inline int xr_shared_decref(XrGCHeader *gc) {
-    uintptr_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
+    int32_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
     return (old <= 1) ? 0 : (int) (old - 1);
 }
 

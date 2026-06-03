@@ -802,7 +802,7 @@ static void x64_h_field_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     if (is_ptr_val) {
         X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, val, (int32_t) XM_GC_TYPE_OFFSET);
+        x64_movzx_rm16(&ctx->buf, X64_SCRATCH_REG, val, (int32_t) XM_GC_TYPE_OFFSET);
         x64_shl_ri(&ctx->buf, X64_SCRATCH_REG, 16);
         x64_or_ri(&ctx->buf, X64_SCRATCH_REG, (int32_t) tag_val);
         x64_mov_mr32(&ctx->buf, obj, offset + XM_XRVALUE_TAG_OFFSET, X64_SCRATCH_REG);

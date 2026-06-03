@@ -768,6 +768,23 @@ typedef struct XiFunc {
     uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
     int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
 
+    /* True when params[0] is a BORROWED method receiver (`this`). The call
+     * ABI passes the receiver of an instance-method call borrowed: the
+     * caller keeps its owning reference and does NOT dup before the call
+     * (see xi_own_use_is_consuming: CALL_METHOD arg 0 is non-consuming).
+     * The callee must therefore NOT drop the receiver, and must dup it
+     * before any consuming use (Perceus borrowed-parameter rule). Set only
+     * for instance methods that are not constructors — a constructor owns
+     * its freshly-allocated `this` and moves it out via the return. */
+    bool receiver_borrowed;
+
+    /* True for operator-overload methods (operator+, operator==, operator[],
+     * ...). The VM operator dispatch passes ALL operands borrowed: the
+     * operands stay live in the caller's registers and the call site (a
+     * binary/index op like XI_ADD) does not dup them. So EVERY parameter of
+     * an operator method is borrowed, not just the receiver. */
+    bool operator_borrowed;
+
     /* Effect summary: bitwise OR of XI_FLAG_* across all values.
      * Computed by xi_func_compute_effects() after lowering completes.
      * Callers use this to answer queries like "does this function

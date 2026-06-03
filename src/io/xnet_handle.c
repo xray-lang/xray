@@ -186,7 +186,6 @@ static XrNativeBodyDesc g_netconn_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = NULL,
     .destroy = netconn_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };
@@ -197,7 +196,6 @@ static XrNativeBodyDesc g_netlistener_body_desc = {
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = NULL,
     .destroy = netlistener_body_destroy,
-    .traverse = NULL,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

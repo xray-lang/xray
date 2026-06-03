@@ -59,15 +59,12 @@ static XrValue gc_collect(XrayIsolate *isolate, XrValue *args, int argc) {
 
 /* ========== gc.step() ========== */
 
-// Execute one incremental GC step
+// Incremental GC step: retired (RC owns reclamation). No-op; returns true
+// to signal "collection cycle complete" (there is no pending cycle).
 static XrValue gc_step(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
-    if (gc) {
-        xr_coro_gc_step(gc);
-        return xr_bool(gc->gcstate == XGC_PAUSE);
-    }
+    (void) isolate;
     return xr_bool(true);
 }
 
@@ -192,26 +189,22 @@ static XrValue gc_objects(XrayIsolate *isolate, XrValue *args, int argc) {
 
 /* ========== gc.debt() ========== */
 
-// Return current GC debt
+// GC debt: retired concept (RC has no allocation-debt-driven collection).
 static XrValue gc_debt(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
-    return gc ? xr_int(gc->GCdebt) : xr_int(0);
+    (void) isolate;
+    return xr_int(0);
 }
 
 /* ========== gc.state() ========== */
 
-// Use xr_gc_state_name() from xcoro_gc.h
-#define state_name(s) xr_gc_state_name(s)
-
-// Return current GC state as string
+// Return current GC state. Under reference counting there is no mark/sweep
+// state machine; report a single steady state.
 static XrValue gc_state(XrayIsolate *isolate, XrValue *args, int argc) {
     (void) argc;
     (void) args;
-    XrCoroGC *gc = get_coro_gc(isolate);
-    const char *name = gc ? state_name(gc->gcstate) : "NONE";
-    return xrs_string_value_c(isolate, name);
+    return xrs_string_value_c(isolate, "rc");
 }
 
 /* ========== gc.timems() ========== */
@@ -266,11 +259,9 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
     // Memory stats
     MAP_SET(map, "totalBytes", xr_int(gc->totalbytes));
     MAP_SET(map, "totalKB", xr_float((double) gc->totalbytes / 1024.0));
-    MAP_SET(map, "marked", xr_int(gc->GCmarked));
-    MAP_SET(map, "debt", xr_int(gc->GCdebt));
 
-    // GC state
-    MAP_SET(map, "state", xrs_string_value_c(isolate, state_name(gc->gcstate)));
+    // GC state — reference counting: single steady state, no mark/sweep.
+    MAP_SET(map, "state", xrs_string_value_c(isolate, "rc"));
     MAP_SET(map, "running", xr_bool(gc->gc_disabled == 0));
     MAP_SET(map, "gcCount", xr_int(gc->gc_count));
 

@@ -332,6 +332,46 @@ XiValue *xi_value_new(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
     return v;
 }
 
+/* Create a value and splice it into blk immediately AFTER `anchor`.
+ * If `anchor` is NULL or not found, the value is appended at the end.
+ * Used by ownership/ARC insertion to place dup/drop at a precise point
+ * (e.g. a drop right after a value's last use). O(n) splice. */
+XiValue *xi_value_insert_after(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_t op,
+                               struct XrType *type, uint16_t nargs) {
+    XiValue *v = value_alloc(f, blk, op, type, nargs);
+    if (!v)
+        return NULL;
+
+    /* Ensure capacity (mirror block_append_value growth). */
+    if (blk->nvalues >= blk->values_cap) {
+        uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 16;
+        XiValue **new_values = (XiValue **) arena_alloc(blk->func, new_cap * sizeof(XiValue *));
+        if (!new_values)
+            return NULL;
+        memcpy(new_values, blk->values, blk->nvalues * sizeof(XiValue *));
+        blk->values = new_values;
+        blk->values_cap = new_cap;
+    }
+
+    /* Find anchor index; default to end (append) if absent. */
+    uint32_t pos = blk->nvalues; /* insert position = after anchor */
+    if (anchor) {
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] == anchor) {
+                pos = i + 1;
+                break;
+            }
+        }
+    }
+
+    /* Shift tail right by one, then place v at pos. */
+    for (uint32_t i = blk->nvalues; i > pos; i--)
+        blk->values[i] = blk->values[i - 1];
+    blk->values[pos] = v;
+    blk->nvalues++;
+    return v;
+}
+
 /* ========== Constant Constructors ========== */
 
 XiValue *xi_const_int(XiFunc *f, XiBlock *blk, int64_t val, struct XrType *int_type) {
