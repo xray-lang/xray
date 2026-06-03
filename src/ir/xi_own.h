@@ -20,7 +20,7 @@
  *   NOT insert dup/drop. The later xi_arc rewrite consumes these
  *   annotations to emit XI_RETAIN / XI_RELEASE / XI_MOVE.
  *
- * REFERENCES (see docs/design/705_memory_model_refactor_plan.md §6):
+ * RELATED IMPLEMENTATIONS:
  *   - Roc  crates/compiler/mono/src/inc_dec.rs (backward + owned/borrow env)
  *   - Koka src/Backend/C/Parc.hs (reverse traversal, owned/borrow multiset)
  *   - Nim  compiler/dfa.nim (CFG last-use reachability)

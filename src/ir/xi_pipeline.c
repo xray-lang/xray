@@ -146,8 +146,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
 
     /* Backward ownership inference (analysis only — does not mutate IR).
      * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
-     * decisions; the xi_arc rewrite consumes these annotations directly.
-     * See docs/design/705_memory_model_refactor_plan.md M1. */
+     * decisions; the xi_arc rewrite consumes these annotations directly. */
     {
         const char *own_env = getenv("XRAY_XI_OWN_DUMP");
         if (own_env && own_env[0] == '1') {
@@ -168,8 +167,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * MUST run BEFORE backend lowering, while ops are still semantic
      * (STORE_FIELD/ARRAY_NEW/...) — the owned/borrow split is keyed on
      * those ops. Gated on run_arc (independent of run_backend_lower) so the
-     * VM can get dup/drop without stack_alloc_rewrite.
-     * See docs/design/705_memory_model_refactor_plan.md M3. */
+     * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
         xi_arc_insert(ir);
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);

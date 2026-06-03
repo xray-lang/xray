@@ -1965,7 +1965,7 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
     if (await->expr) {
         XrType *expr_type = xa_visit_infer_expr(ctx, await->expr);
 
-        // P2-2: await all/any/anySuccess operates on Array<Task<T>> → Array<T> / T
+        // await all/any/anySuccess operates on Array<Task<T>> → Array<T> / T
         if (await->is_all || await->is_any || await->is_any_success) {
             // These forms take an array of tasks; extract element type
             if (expr_type && XR_TYPE_IS_ARRAY(expr_type)) {

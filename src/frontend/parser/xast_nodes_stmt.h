@@ -100,7 +100,7 @@ typedef struct XrCatchClause {
     XrTypeRef *type;  // Type filter annotation (NULL = catch-all)
     AstNode *body;
     uint32_t symbol_id;  // Analyzer-assigned unique ID; 0 = unresolved
-    bool is_panic;       // true = catch panic (p) clause (M6 connects to panic channel)
+    bool is_panic;       // true = catch panic (p) clause for panic channel handling
 } XrCatchClause;
 
 typedef struct TryCatchNode {
