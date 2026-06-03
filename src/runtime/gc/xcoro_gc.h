@@ -131,6 +131,16 @@ typedef struct XrCoroGC {
     // small object's memory is pushed here and reused by a later same-class
     // allocation before falling back to Immix bump. NULL until the first free.
     XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
+
+    // === Stackless recursive free ===
+    // Prevents stack overflow when destroying deep data structures (linked
+    // lists with 10K+ nodes, deeply nested trees). When destroy_depth exceeds
+    // the threshold, objects are pushed onto deferred_drops instead of being
+    // destroyed recursively. The top-level destroy call drains the queue
+    // iteratively before returning.
+    uint16_t destroy_depth;      // current recursion depth of rc_destroy
+    uint16_t _pad_drop[3];       // alignment
+    XrGCHeader *deferred_drops;  // singly-linked list via GCHeader (reuse a field)
 } XrCoroGC;
 
 /* ========== JIT Struct Offsets (compile-time constants) ========== */
@@ -199,6 +209,31 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj);
 /* Release the freelist array itself (block memory is owned by Immix and
  * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
 XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
+
+/* ========== Drop-Reuse API (Perceus-style in-place allocation) ==========
+ *
+ * When a unique (RC==1) object is dropped and the caller immediately needs
+ * a new allocation of the same size class, the memory can be reused in-place
+ * without going through the freelist. The compiler emits drop_reuse + alloc_at
+ * pairs at match/constructor sites where the pattern applies.
+ *
+ * Flow:
+ *   token = xr_rc_drop_reuse(gc, obj)
+ *   new_obj = xr_rc_alloc_at(gc, token, type, size)
+ *
+ * If obj was unique → token is the reclaimed pointer (zero-alloc fast path).
+ * If obj was shared  → token is NULL, normal alloc is used as fallback. */
+
+/* Drop an object and return its memory for immediate reuse if it was the last
+ * reference (RC drops to zero). Returns the object pointer (reuse token) on
+ * success, NULL if the object is still alive or is shared/region. The type
+ * destructor is run before returning the token (fields are dead). */
+XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj);
+
+/* Allocate using a reuse token if available, otherwise fall back to normal
+ * allocation. `token` is the result of xr_rc_drop_reuse (NULL = no reuse).
+ * The returned object has a fresh header initialized to (type, size, rc=1). */
+XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type, size_t size);
 
 // Convenience macros
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \

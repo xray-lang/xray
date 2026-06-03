@@ -20,6 +20,7 @@
 #include "xi_escape.h"
 #include "xi_own.h"
 #include "xi_arc.h"
+#include "xi_reuse.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
@@ -168,6 +169,11 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
         xi_arc_insert(ir);
+        /* Drop-Reuse: convert RELEASE+ALLOC pairs to DROP_REUSE+ALLOC_AT
+         * for in-place memory reuse. Only for JIT/AOT (the VM emitter
+         * does not handle these ops — it uses OP_DUP/OP_DROP directly). */
+        if (cfg->run_backend_lower)
+            xi_reuse_insert(ir);
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 

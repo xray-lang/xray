@@ -533,6 +533,8 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_REGEX_COMPILE] = 2,
     [XI_RETAIN] = 1,
     [XI_RELEASE] = 1,
+    [XI_DROP_REUSE] = 1,
+    [XI_ALLOC_AT] = 1,
     [XI_MOVE] = 1,
     [XI_STACK_ALLOC] = 0xFF, /* variadic: inherits args from original alloc op */
     [XI_CORO_OP] = 0xFF,     /* variadic: 0..2 args depending on Coro method */
@@ -1060,8 +1062,10 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 }
             }
 
-            /* XI_RETAIN / XI_RELEASE must reference a value */
-            if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && (v->nargs < 1 || !v->args[0])) {
+            /* RC ops must reference a value */
+            if ((v->op == XI_RETAIN || v->op == XI_RELEASE || v->op == XI_DROP_REUSE ||
+                 v->op == XI_ALLOC_AT) &&
+                (v->nargs < 1 || !v->args[0])) {
                 verr(ctx, "func '%s': v%u %s in b%u has no argument", f->name, v->id,
                      xi_op_name(v->op), blk->id);
                 return;

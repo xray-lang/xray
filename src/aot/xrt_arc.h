@@ -187,6 +187,40 @@ static inline void xrt_release(XrValue v) {
     }
 }
 
+/* Drop-Reuse: drop an object and return its memory for immediate reuse
+ * if it was the last reference. Returns raw pointer (reuse token) or NULL. */
+static inline void *xrt_drop_reuse(XrValue v) {
+    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 || v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
+        return NULL;
+    if (!v.ptr)
+        return NULL;
+    XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
+    if (hdr->flags & XRT_ARC_BUMP)
+        return NULL;
+    if (--hdr->refcount <= 0) {
+        if (hdr->flags & XRT_ARC_HAS_DEINIT)
+            xrt_dispatch_destructor(hdr->type, v.ptr);
+        /* Return the header for reuse instead of freeing. */
+        return (void *) hdr;
+    }
+    return NULL; /* still alive */
+}
+
+/* Allocate using a reuse token if non-NULL, else fall back to fresh alloc.
+ * gc_type and size are compile-time constants from the reuse pass. */
+static inline void *xrt_alloc_at(void *token, unsigned gc_type, unsigned size) {
+    (void) gc_type;
+    if (token) {
+        /* Reinitialize the header for the new object. */
+        XrtArcHdr *hdr = (XrtArcHdr *) token;
+        hdr->refcount = 1;
+        hdr->flags = 0;
+        hdr->type = (uint16_t) gc_type;
+        return (void *) (hdr + 1);
+    }
+    return xrt_arc_alloc(size);
+}
+
 static inline void xrt_arc_init(void) {
     if (xrt_bump_enabled)
         xrt_bump_new_block(0);
