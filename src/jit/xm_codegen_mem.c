@@ -16,6 +16,7 @@
 #include "xm_runtime_stubs_gen.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+#include "../runtime/gc/xgc_internal.h"
 
 static bool isnull_uses_runtime_tag(CodegenCtx *ctx, XmRef ref, uint32_t *out_vi) {
     if (!xm_ref_is_vreg(ref))
@@ -512,8 +513,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
                 if (is_ptr_val) {
                     // PTR: read gc_type, build tag|(gc_type<<16), single str_w
-                    // SCRATCH_REG2 = gc_type (uint8 from GC header)
-                    a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, val, XM_GC_HDR_TYPE_OFFSET));
+                    // SCRATCH_REG2 = gc_type (uint16 from GC header)
+                    a64_buf_emit(&ctx->buf, a64_ldrh(SCRATCH_REG2, val, XM_GC_HDR_TYPE_OFFSET));
                     // SCRATCH_REG = tag_val (bits [0..15])
                     a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, (uint16_t) tag_val, 0));
                     // MOVK scratch, gc_type, LSL#16 → gc_type in bits [16..31]
@@ -700,7 +701,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         //   1. Load gc = coro->coro_gc
         //   2. Bump check: cursor + size <= limit
         //   3. Commit: gc->cursor = new_cursor
-        //   4. Init GC header inline (gc_next, type, marked, extra, objsize)
+        //   4. Init GC header inline (type, extra, refcount, objsize)
         //   5. Skip slow path
         // Slow path (~7 instructions):
         //   CALL_C to xr_jit_alloc(coro, type<<32|size)
@@ -721,6 +722,12 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
                 alloc_size = (uint32_t) ctx->func->consts[ci].val.i64;
             }
             alloc_size = (alloc_size + 7) & ~7u;
+            bool force_slow_path = xr_gc_type_may_need_finalize(gc_type);
+            uint32_t force_slow_idx = 0;
+            if (force_slow_path) {
+                force_slow_idx = ctx->buf.count;
+                a64_buf_emit(&ctx->buf, a64_nop());  // patched below
+            }
 
             // --- Fast path: inline bump-pointer ---
             // LDR x16, [x19, #XM_CORO_GC_OFFSET]  — gc = coro->coro_gc
@@ -746,44 +753,32 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_sub_imm(rd, SCRATCH_REG2, alloc_size));
 
             // Init GC header inline:
-            // STR xzr, [rd, #0]  — gc_next = NULL (set first; local_allgc
-            //                      linkage below overwrites with the block head)
-            a64_buf_emit(&ctx->buf, a64_str(A64_XZR, rd, 0));
-            // byte 9 (formerly tracing `marked`) left zero — tracing retired.
             // MOV w17, #gc_type
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, gc_type, 0));
-            // STRB w17, [rd, #8]  — type
-            a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, rd, XM_GC_HDR_TYPE_OFFSET));
-            // STRH extra, [rd, #10]  — extra (contains shape_id for Json objects)
+            // STRH w17, [rd, #type]  — type
+            a64_buf_emit(&ctx->buf, a64_strh(SCRATCH_REG2, rd, XM_GC_HDR_TYPE_OFFSET));
+            // STRH extra, [rd, #extra]  — extra (contains shape_id for Json objects)
             if (gc_extra != 0) {
                 a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, gc_extra, 0));
                 a64_buf_emit(&ctx->buf, a64_strh(SCRATCH_REG, rd, XM_GC_HDR_EXTRA_OFFSET));
             } else {
                 a64_buf_emit(&ctx->buf, a64_strh(A64_XZR, rd, XM_GC_HDR_EXTRA_OFFSET));
             }
-            // MOV w16, #alloc_size; STR w16, [rd, #12]  — objsize
-            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, alloc_size & 0xFFFF, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, rd, XM_GC_HDR_OBJSIZE_OFFSET));
             // MOV w17, #1; STR w17, [rd, #refcount]  — refcount = 1 (RC 1-based)
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, 1, 0));
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, rd, XM_GC_HDR_REFCOUNT_OFFSET));
+            // MOV w16, #alloc_size; STR w16, [rd, #objsize]  — objsize
+            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, alloc_size & 0xFFFF, 0));
+            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, rd, XM_GC_HDR_OBJSIZE_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, rd, XM_GC_HDR_RSV_OFFSET));
 
             // --- Inline alloc_post: GC bookkeeping without CALL_C stub ---
             // alloc_marks are DEFERRED: xr_immix_flush_marks() at slow path
             // entry marks all lines from mark_cursor to cursor in one batch.
 
-            // 1. local_allgc linked list: block->local_allgc → obj → old_head
-            //    block = rd & ~0x3FFF (16KB alignment)
+            // 1. Block allocation accounting.
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t) XM_IMMIX_BLOCK_SIZE_MASK);
             a64_buf_emit(&ctx->buf, a64_and(SCRATCH_REG2, rd, SCRATCH_REG2));  // x17 = block
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, SCRATCH_REG2,
-                                            XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // x16 = old_head
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, rd, 0));  // obj->gc_next = old_head
-            a64_buf_emit(&ctx->buf,
-                         a64_str(rd, SCRATCH_REG2,
-                                 XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET));  // block->local_allgc = obj
-
-            // 1b. block->alloc_count++, block->alloc_bytes += alloc_size
             a64_buf_emit(&ctx->buf,
                          a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, 1));
@@ -811,6 +806,11 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t slow_path_idx = ctx->buf.count;
 
             // Patch CBZ and B.HI to point here
+            if (force_slow_path) {
+                int32_t force_off =
+                    a64_patch_offset(ctx, force_slow_idx, slow_path_idx, false, "alloc force slow");
+                ctx->buf.code[force_slow_idx] = a64_b(force_off);
+            }
             int32_t cbz_off = a64_patch_offset(ctx, cbz_idx, slow_path_idx, true, "alloc CBZ");
             ctx->buf.code[cbz_idx] = a64_cbz(SCRATCH_REG, cbz_off);
             int32_t bhi_off = a64_patch_offset(ctx, bhi_idx, slow_path_idx, true, "alloc B.HI");

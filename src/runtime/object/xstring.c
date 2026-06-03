@@ -166,7 +166,6 @@ static XrString *global_pool_insert_unlocked(XrGlobalStringPool *pool, const cha
             // Initialize GC header
             memset(&str->gc, 0, sizeof(XrGCHeader));
             str->gc.type = XR_TSTRING;
-            str->gc.marked = 1;  // Mark as alive, not collected by coroutine GC
             str->gc.objsize = (uint32_t) total_size;
 
             str->length = (uint32_t) len;

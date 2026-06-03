@@ -54,11 +54,9 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_LIGHT;
     cfg.run_select_rep = false;
-    /* RC takeover: the VM runs escape analysis + precise dup/drop insertion
-     * (xi_arc) but NOT stack_alloc_rewrite (no XI_STACK_ALLOC handler in the
-     * VM emitter) and NOT backend_lower. dup/drop execute as OP_DUP/OP_DROP.
-     * TRANSITIONAL: OP_DROP only adjusts refcount, does not free yet —
-     * tracing still reclaims and acts as the debug-only correctness oracle. */
+    /* The VM runs escape analysis + precise dup/drop insertion (xi_arc) but
+     * NOT stack_alloc_rewrite (no XI_STACK_ALLOC handler in the VM emitter)
+     * and NOT backend_lower. dup/drop execute as OP_DUP/OP_DROP. */
     cfg.run_escape = true;
     cfg.run_arc = true;
     cfg.run_emit = true;

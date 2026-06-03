@@ -11,17 +11,12 @@
  *   - Unified object header for VM and AOT.
  *   - Class info obtained via type registry, not stored in header.
  *
- * MEMORY LAYOUT — TRANSITIONAL (24 bytes, while tracing GC coexists with RC):
- *   [0-7]   gc_next  (8B) - tracing allgc list (removed when tracing is dropped)
- *   [8]     type     (1B) - object type tag -> destructor dispatch
- *   [9]     marked   (1B) - tracing tri-color + generation (removed with tracing)
- *   [10-11] flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
- *   [12-15] refcount (4B) - compile-time RC; ignored when REGION; atomic when ATOMIC
- *   [16-19] objsize  (4B) - allocation size (region sweep / munmap)
- *   [20-23] _rsv     (4B) - reserved (weak table slot / cycle-report id)
- *
- * The final RC layout removes gc_next and marked, shrinking the header to
- * 16 bytes.
+ * MEMORY LAYOUT (16 bytes):
+ *   [0-1]   type     (2B) - object type tag -> destructor dispatch
+ *   [2-3]   flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
+ *   [4-7]   refcount (4B) - compile-time RC; ignored when REGION; atomic when ATOMIC
+ *   [8-11]  objsize  (4B) - allocation size (region sweep / munmap)
+ *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
  */
 
 #ifndef XGC_HEADER_H
@@ -91,36 +86,26 @@ typedef enum {
     XR_TATOMIC,  // Atomic<T> shared primitive wrapper (lock-free, system heap)
 } XrObjType;
 
-/* ========== Unified Object Header (24 bytes, transitional) ==========
- *
- * Transitional layout: tracing fields (gc_next, marked) coexist with the
- * RC field (refcount) until tracing is removed, after which the header
- * shrinks to 16 bytes. The `extra` field doubles as the RC `flags` word
- * (storage/mmap bits today; REGION/ATOMIC/HAS_DTOR/WEAKABLE added for RC).
- */
+/* ========== Unified Object Header (16 bytes) ========== */
 
 typedef struct XrGCHeader {
-    struct XrGCHeader *gc_next; /* [0-7]  tracing allgc list (removed with tracing) */
-    uint8_t type;               /* [8]    object type tag */
-    uint8_t marked;             /* [9]    tracing tri-color + generation (removed) */
-    uint16_t extra;             /* [10-11] flags word: storage/mmap + XR_OBJ_* */
-    int32_t refcount;           /* [12-15] compile-time RC (0 = unmanaged / region) */
-    uint32_t objsize;           /* [16-19] allocation size */
-    uint32_t _rsv;              /* [20-23] reserved (weak slot / cycle-report id) */
+    uint16_t type;    /* [0-1] object type tag */
+    uint16_t extra;   /* [2-3] flags word: storage/mmap + XR_OBJ_* */
+    int32_t refcount; /* [4-7] compile-time RC (0 = unmanaged / region) */
+    uint32_t objsize; /* [8-11] allocation size */
+    uint32_t _rsv;    /* [12-15] reserved (weak slot / cycle-report id) */
 } XrGCHeader;
 
-_Static_assert(sizeof(XrGCHeader) == 24, "XrGCHeader must be 24 bytes (transitional RC+tracing)");
+_Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
 
 /* Unified alias: the RC memory model refers to the object header as
- * XrObjHeader. During the transition it is the same struct as XrGCHeader. */
+ * XrObjHeader. */
 typedef struct XrGCHeader XrObjHeader;
 
 /* ========== Access Macros ========== */
 
 #define XR_GC_GET_TYPE(gc) ((XrObjType) ((gc)->type))
-#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint8_t) (t))
-#define XR_GC_GET_MARKED(gc) ((gc)->marked)
-#define XR_GC_SET_MARKED(gc, m) ((gc)->marked = (uint8_t) (m))
+#define XR_GC_SET_TYPE(gc, t) ((gc)->type = (uint16_t) (t))
 
 /* ========== Shared Storage Mode (uses extra field bit 0) ========== */
 
@@ -144,8 +129,7 @@ typedef struct XrGCHeader XrObjHeader;
 /* ========== RC Memory-Model Flags (extra field bits 1-4) ==========
  *
  * Bit 0 = storage(shared), bit 13 = mmap (above). Bits 1-4 carry the RC
- * object-model flags. These are populated as the RC model takes over;
- * during the tracing transition they default to 0 (no effect on tracing).
+ * object-model flags.
  *
  *   REGION   - object lives in a per-coroutine region: dup/drop are no-ops,
  *              freed in bulk when the coroutine ends.
@@ -167,7 +151,7 @@ typedef struct XrGCHeader XrObjHeader;
             * runtime/scheduler (and the atomic shared-RC in xshared.h),                           \
             * NOT by the compiler-inserted per-coroutine RC. dup/drop are                          \
             * no-ops so a compiler-inserted drop can never free an object                          \
-            * the executor still holds. See docs/design/706. */
+            * the executor still holds. */
 
 #define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
 #define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
@@ -181,7 +165,7 @@ typedef struct XrGCHeader XrObjHeader;
 /* Whether an object TYPE is runtime-managed: its lifetime belongs to the
  * runtime/scheduler (cross-coroutine reachable, held by the executor or the
  * atomic shared-RC), not the compiler's per-coroutine RC. The compiler must
- * not insert dup/drop for such objects. See docs/design/706 §5. */
+ * not insert dup/drop for such objects. */
 static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
     return t == XR_TCHANNEL || t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL ||
            t == XR_TATOMIC;
@@ -210,7 +194,7 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
  * REGION and MANAGED objects are no-ops: region objects are bulk-freed at
  * coroutine end, and MANAGED objects (Channel/Coroutine/Task/CoroPool/Atomic)
  * are owned by the runtime/scheduler via the atomic shared-RC, never by the
- * compiler-inserted per-coroutine RC. See docs/design/706 §5. */
+ * compiler-inserted per-coroutine RC. */
 static inline void xr_obj_dup(XrObjHeader *o) {
     if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
         return;
@@ -225,7 +209,7 @@ static inline void xr_obj_dup(XrObjHeader *o) {
  *
  * REGION and MANAGED objects always return false: a compiler-inserted drop
  * must never free a region object (bulk-freed at coroutine end) nor a
- * runtime-managed object the executor still holds. See docs/design/706 §5. */
+ * runtime-managed object the executor still holds. */
 static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
     if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
         return false; /* region: bulk-freed at coro end; managed: runtime-owned */
@@ -240,7 +224,7 @@ static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
 /* ========== Initialization Functions ========== */
 
 static inline void xr_gc_header_init_type(XrGCHeader *gc, XrObjType type) {
-    gc->type = (uint8_t) type;
+    gc->type = (uint16_t) type;
 }
 
 /* ========== Helper Functions ========== */

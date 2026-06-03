@@ -16,11 +16,8 @@
  * transfer) reuses the pre-existing register-move opcode dispatched in
  * xvm.c.
  *
- * TRANSITIONAL: while tracing GC still owns reclamation, OP_DROP only
- * adjusts the refcount and does NOT free on reaching zero. This lets the
- * VM execute precise dup/drop and lets the debug-only tracing oracle
- * cross-check balance without any use-after-free risk. The freeing flip
- * (drop-frees-at-zero + destructor) is enabled in a later step under ASan.
+ * OP_DROP releases an owning reference and frees the object on the last
+ * reference.
  */
 
 vmcase(OP_DUP) {

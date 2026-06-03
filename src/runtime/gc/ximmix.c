@@ -502,7 +502,6 @@ void xr_immix_reclaim_young(XrImmixHeap *heap) {
         if (live == 0) {                                                                           \
             if (is_young_mode) {                                                                   \
                 (blk)->is_young = 1;                                                               \
-                (blk)->local_allgc = NULL;                                                         \
             }                                                                                      \
             (blk)->next = new_free;                                                                \
             new_free = (blk);                                                                      \
