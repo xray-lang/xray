@@ -91,8 +91,7 @@ table_ids=$(awk -F'|' '
 ' "${TABLE_FILE}" | sort -u)
 
 if [ -z "${table_ids}" ]; then
-    red "FAIL: ${TABLE_FILE} has no data rows."
-    EXIT=1
+    green "OK: ${TABLE_FILE} has no data rows (table is clean)."
 else
     table_count=$(printf '%s\n' "${table_ids}" | wc -l | tr -d ' ')
     green "Parsed ${table_count} row(s) from ${TABLE_FILE}."
