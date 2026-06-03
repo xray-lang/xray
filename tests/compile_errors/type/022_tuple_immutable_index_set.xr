@@ -1,0 +1,4 @@
+// 022_tuple_immutable_index_set.xr
+// Tuples are immutable: index-based assignment is a compile error.
+let t = (10, 20)
+t[0] = 99

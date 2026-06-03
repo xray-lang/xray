@@ -1440,8 +1440,21 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             if (ca->value)
                 xa_visit_infer_expr(ctx, ca->value);
             // Visit object expression for member compound assign (obj.field += ...)
+            XrType *ca_obj_type = NULL;
             if (ca->object)
-                xa_visit_infer_expr(ctx, ca->object);
+                ca_obj_type = xa_visit_infer_expr(ctx, ca->object);
+            // Tuples are immutable: reject compound assignment on tuple fields
+            if (ca_obj_type && XR_TYPE_IS_TUPLE(ca_obj_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg),
+                         "Cannot assign to tuple field '.%s': tuples are immutable",
+                         ca->name ? ca->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TUPLE_IMMUTABLE, msg, &loc);
+                break;
+            }
             // Check const/in-param immutability
             XaSymbol *ca_sym = xa_scope_lookup(ctx->analyzer->current_scope, ca->name);
             if (ca_sym)
@@ -1460,6 +1473,20 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             // Infer types for member set expression
             MemberSetNode *ms = &node->as.member_set;
             XrType *obj_type = xa_visit_infer_expr(ctx, ms->object);
+
+            // Tuples are immutable: reject any field assignment
+            if (obj_type && XR_TYPE_IS_TUPLE(obj_type)) {
+                xa_visit_infer_expr(ctx, ms->value);
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg),
+                         "Cannot assign to tuple field '.%s': tuples are immutable",
+                         ms->member ? ms->member : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TUPLE_IMMUTABLE, msg, &loc);
+                break;
+            }
 
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
@@ -2154,6 +2181,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 index_type = xa_visit_infer_expr(ctx, is->index);
             if (is->value)
                 xa_visit_infer_expr(ctx, is->value);
+            // Tuples are immutable: reject index-based assignment
+            if (array_type && XR_TYPE_IS_TUPLE(array_type)) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                xa_analyzer_add_diagnostic(
+                    ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TUPLE_IMMUTABLE,
+                    "Cannot assign to tuple element: tuples are immutable", &loc);
+                break;
+            }
             if (array_type && XR_TYPE_IS_JSON(array_type) && array_type->object.field_count > 0 &&
                 is->index && is->index->type == AST_LITERAL_STRING) {
                 const char *key = is->index->as.literal.raw_value.string_val;

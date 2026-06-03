@@ -1,0 +1,4 @@
+// 023_tuple_immutable_compound.xr
+// Tuples are immutable: compound assignment on tuple fields is a compile error.
+let t = (1, 2, 3)
+t.0 += 10
