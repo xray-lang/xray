@@ -357,11 +357,10 @@ typedef enum {
     XI_SCOPE_ENTER, /* enter scope: aux_int=scope_mode (0=WAIT,1=LINKED,2=SUPERVISOR) */
     XI_SCOPE_EXIT,  /* exit scope: aux_int=scope_mode, dst=result (supervisor) */
 
-    /* Exception handling */
-    XI_TRY,     /* begin try: marks start of protected region */
-    XI_CATCH,   /* catch: receive exception into dst register */
-    XI_FINALLY, /* begin finally block */
-    XI_END_TRY, /* end try-catch-finally region */
+    /* Exception handling (panic channel only) */
+    XI_TRY,     /* begin try: marks start of panic-protected region */
+    XI_CATCH,   /* catch panic: receive exception into dst register */
+    XI_END_TRY, /* end try-catch region */
 
     /* Builtin calls: compile-time recognized functions */
     XI_ASSERT,        /* args[0]=cond; aux=loc_string; aux_int: 0=true,1=false */

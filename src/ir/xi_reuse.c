@@ -127,6 +127,7 @@ static uint32_t find_alloc_candidate(XiBlock *blk, uint32_t start_idx, uint8_t g
 
 /* Process one basic block: scan for RELEASE+ALLOC pairs and convert. */
 static void reuse_scan_block(XiFunc *f, XiBlock *blk) {
+    (void) f;
     if (!blk || blk->nvalues == 0)
         return;
 

@@ -455,3 +455,157 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     if (have_own)
         xi_own_free(&own);
 }
+
+/* ========== Dup/Drop Elimination (copy→move optimization) ========== */
+
+/* Remove value at index 'idx' from block, shifting subsequent values down. */
+static void arc_remove_value(XiBlock *blk, uint32_t idx) {
+    XR_DCHECK(blk != NULL, "arc_remove_value: NULL block");
+    XR_DCHECK(idx < blk->nvalues, "arc_remove_value: index out of bounds");
+    for (uint32_t j = idx; j + 1 < blk->nvalues; j++)
+        blk->values[j] = blk->values[j + 1];
+    blk->nvalues--;
+}
+
+/* Count how many times value `v` is used as an arg across the entire function,
+ * excluding uses in XI_RETAIN and XI_RELEASE ops (those are the RC machinery
+ * we are trying to eliminate). */
+static int count_real_uses(const XiFunc *f, const XiValue *v) {
+    int count = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *user = blk->values[i];
+            if (!user)
+                continue;
+            if (user->op == XI_RETAIN || user->op == XI_RELEASE)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] == v)
+                    count++;
+            }
+        }
+        /* Return terminator */
+        if (blk->control == v)
+            count++;
+    }
+    return count;
+}
+
+/* Single-block dup/drop pair elimination.
+ *
+ * Pattern 1 — "Redundant bracket":
+ *   XI_RETAIN(v) at position i
+ *   XI_RELEASE(v) at position j  (j > i)
+ *   v is NOT used by any instruction between i and j (exclusive)
+ *   → The pair is dead: the retain increments RC only for the release to
+ *     decrement it back. Remove both.
+ *
+ * Pattern 2 — "Single-consumer forward":
+ *   XI_RETAIN(v) at position i
+ *   A single consuming use of v at position k (i < k)
+ *   XI_RELEASE(v) does NOT exist elsewhere (no double-drop)
+ *   The value v has exactly 1 real (non-RC) use in the function
+ *   → The retain is redundant because there is only one consumer: it already
+ *     receives ownership via the last-use move rule. Remove the retain.
+ *
+ * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
+static int elim_block(XiBlock *blk, const XiFunc *f) {
+    int eliminated = 0;
+    bool changed = true;
+
+    while (changed) {
+        changed = false;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *dup = blk->values[i];
+            if (!dup || dup->op != XI_RETAIN)
+                continue;
+            XR_DCHECK(dup->nargs >= 1 && dup->args[0] != NULL, "arc_elim: malformed RETAIN");
+            XiValue *target = dup->args[0];
+
+            /* Pattern 1: look for a matching XI_RELEASE(target) in the same
+             * block with no intervening use of target. */
+            for (uint32_t j = i + 1; j < blk->nvalues; j++) {
+                XiValue *drop = blk->values[j];
+                if (!drop)
+                    continue;
+                /* If target is used between i and j, the retain is needed. */
+                if (drop->op != XI_RELEASE) {
+                    /* Check if this instruction uses target. */
+                    bool uses_target = false;
+                    for (uint16_t a = 0; a < drop->nargs; a++) {
+                        if (drop->args[a] == target) {
+                            uses_target = true;
+                            break;
+                        }
+                    }
+                    if (uses_target)
+                        break; /* target is consumed between dup/drop — keep */
+                    continue;
+                }
+                /* Found a RELEASE. Check if it drops the same target. */
+                if (drop->nargs < 1 || drop->args[0] != target)
+                    continue;
+                /* Match! Remove both the RETAIN (at i) and RELEASE (at j).
+                 * Remove j first (higher index) to keep i valid. */
+                arc_remove_value(blk, j);
+                arc_remove_value(blk, i);
+                eliminated++;
+                changed = true;
+                break;
+            }
+            if (changed)
+                break; /* restart scan from the beginning */
+        }
+    }
+
+    /* Pattern 2: single-consumer retain elimination.
+     * After removing redundant bracket pairs, check remaining RETAINs:
+     * if the target value has exactly 1 real use (excluding RC ops) in the
+     * function, the retain is unnecessary — ownership flows directly. */
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        XiValue *dup = blk->values[i];
+        if (!dup || dup->op != XI_RETAIN)
+            continue;
+        XiValue *target = dup->args[0];
+        if (!target)
+            continue;
+
+        int real_uses = count_real_uses(f, target);
+        if (real_uses <= 1) {
+            /* The value flows to at most one real consumer; the retain is
+             * dead weight because xi_arc already handles single-consumer
+             * ownership transfer via the last-use move rule. */
+            arc_remove_value(blk, i);
+            eliminated++;
+            i--; /* re-examine the slot */
+        }
+    }
+
+    return eliminated;
+}
+
+XR_FUNC int xi_arc_elim(XiFunc *f) {
+    if (!f)
+        return 0;
+
+    int total = 0;
+
+    /* Process children first (bottom-up). */
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (f->children[i])
+            total += xi_arc_elim(f->children[i]);
+    }
+
+    /* Eliminate within each block. */
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk || blk->nvalues == 0)
+            continue;
+        total += elim_block(blk, f);
+    }
+
+    return total;
+}

@@ -133,7 +133,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_THROW:
         case XI_TRY:
         case XI_CATCH:
-        case XI_FINALLY:
         case XI_END_TRY:
 
         /* Control flow / SSA structural */

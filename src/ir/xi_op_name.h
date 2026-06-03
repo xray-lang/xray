@@ -224,8 +224,6 @@ static inline const char *xi_op_name(uint16_t op) {
             return "TRY";
         case XI_CATCH:
             return "CATCH";
-        case XI_FINALLY:
-            return "FINALLY";
         case XI_END_TRY:
             return "END_TRY";
         case XI_ASSERT:
