@@ -258,8 +258,8 @@ static void es_walk_stmt(ErrorSetCtx *ctx, AstNode *node) {
             /* Walk try body — errors from here are candidates for catch */
             es_walk_block(ctx, tc->try_body);
 
-            /* For now, catch-all (no typed catch) removes all errors.
-             * Typed/pattern catch will be handled in M2. */
+            /* Catch-all removes all errors; typed/pattern catch support must
+             * filter only matching error variants. */
             if (tc->catch_count > 0) {
                 for (int i = 0; i < tc->catch_count; i++) {
                     XrCatchClause *cc = tc->catch_clauses[i];

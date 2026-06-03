@@ -20,8 +20,8 @@
  *   [16-19] objsize  (4B) - allocation size (region sweep / munmap)
  *   [20-23] _rsv     (4B) - reserved (weak table slot / cycle-report id)
  *
- * Once tracing is removed, gc_next + marked disappear and the header
- * shrinks to 16 bytes (see docs/design/705_memory_model_refactor_plan.md).
+ * The final RC layout removes gc_next and marked, shrinking the header to
+ * 16 bytes.
  */
 
 #ifndef XGC_HEADER_H

@@ -199,7 +199,7 @@
 
 #endif
 
-// ========== API Boundary Defense (P2) ==========
+// ========== API Boundary Defense ==========
 //
 // Validates embedder-provided arguments at public API entry points.
 // Debug: assertion fires for immediate diagnosis.

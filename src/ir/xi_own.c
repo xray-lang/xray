@@ -7,7 +7,7 @@
  *
  * xi_own.c - Backward ownership / borrow inference for Xi IR
  *
- * ALGORITHM (see docs/design/705_memory_model_refactor_plan.md §6):
+ * ALGORITHM:
  *   1. Classify every SSA value as RC-managed (heap) or not (scalar).
  *   2. Build def-use chains (xi_defuse) and block-level liveness
  *      (xi_compute_liveness).
@@ -21,7 +21,7 @@
  *   5. Infer a per-function borrow signature for parameters.
  *
  * This is a PURE ANALYSIS: it never mutates the IR. The xi_arc rewrite
- * (M3) consumes these annotations to insert XI_RETAIN/XI_RELEASE/XI_MOVE.
+ * consumes these annotations to insert XI_RETAIN/XI_RELEASE/XI_MOVE.
  */
 
 #include "xi_own.h"
@@ -77,8 +77,8 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
  *   - field/index read, length, print, assertions
  *
  * Mirrors the owned/borrowed split in Koka Parc.hs and Roc inc_dec.rs.
- * Call arguments are conservatively owned at M1 (refined by borrow
- * signature inference in a later pass). */
+ * Call arguments are conservatively owned until borrow signature inference
+ * refines the contract. */
 static bool use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
     return xi_own_use_is_consuming(user_op, arg_idx);
 }
@@ -289,10 +289,9 @@ static void compute_last_use(XiFunc *f, const XiDefUse *du, const XiLiveness *li
 
 /* ========== Borrow Signature Inference (intraprocedural seed) ========== */
 
-/* M1 seed: a parameter is OWNED if any consuming use of it exists, else
- * BORROWED. The cross-function fixpoint (mutually recursive functions) is
- * layered on top of this in a later step; this intraprocedural result is
- * already sound and is the fixpoint's initial state. */
+/* A parameter is OWNED if any consuming use of it exists, else BORROWED.
+ * The cross-function fixpoint for mutually recursive functions can use this
+ * intraprocedural result as its initial state. */
 static void infer_borrow_sig(XiFunc *f, const XiOwnResult *r, XiBorrowSig *sig) {
     memset(sig, 0, sizeof(*sig));
     uint16_t n = f->nparams;
