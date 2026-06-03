@@ -337,12 +337,15 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     /* Propagate struct_layout from analyzer for VALUE_TYPE classes.
      * The layout is owned by XrClassInfo and outlives the IR arena. */
     data->struct_layout = NULL;
+    data->is_cycle_candidate = false;
     if (cd->name && l->analyzer) {
         XaSymbol *cls_sym = xa_analyzer_lookup(l->analyzer, cd->name);
         if (cls_sym) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
             if (links && links->class_info && links->class_info->struct_layout)
                 data->struct_layout = links->class_info->struct_layout;
+            if (links && links->type && links->type->is_cycle_candidate)
+                data->is_cycle_candidate = true;
         }
     }
 

@@ -481,6 +481,7 @@ typedef struct XiClassData {
     uint16_t nstat;           /* static method count */
     int clinit_child_idx;     /* children index for static constructor (-1 if none) */
     bool is_monomorphized;    /* true for mono-generated classes */
+    bool is_cycle_candidate;  /* type graph forms a reference cycle (enables RC cycle collector) */
     const char **mono_type_arg_names;     /* concrete type display names (e.g. ["int","string"]) */
     int mono_type_arg_count;              /* element count */
     struct XrStructLayout *struct_layout; /* non-NULL for VALUE_TYPE (struct) classes */

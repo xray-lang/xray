@@ -32,6 +32,9 @@ XR_FUNC void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node);
 // Pass 1.5: Link class inheritance chains (after all classes collected)
 XR_FUNC void xa_link_class_inheritance(XaAnalyzer *analyzer);
 
+// Pass 1.6: Mark cycle candidates (classes whose type graph contains a cycle)
+XR_FUNC void xa_mark_cycle_candidates(XaAnalyzer *analyzer);
+
 // Pass 2: Type inference
 XR_FUNC XrType *xa_visit_infer(XaInferContext *ctx, AstNode *node);
 XR_FUNC XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node);

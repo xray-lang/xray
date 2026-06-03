@@ -2341,6 +2341,9 @@ void xa_analyze_ast(XaAnalyzer *analyzer, AstNode *ast) {
     // Pass 1.5: Link class inheritance chains
     xa_link_class_inheritance(analyzer);
 
+    // Pass 1.6: Detect classes that form reference cycles (cycle collector)
+    xa_mark_cycle_candidates(analyzer);
+
     // Pass 2: Infer types
     xa_visit_infer(ctx, ast);
 
