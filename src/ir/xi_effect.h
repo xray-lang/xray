@@ -157,7 +157,6 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_TRY:
         case XI_CATCH:
-        case XI_FINALLY:
         case XI_END_TRY:
             return XI_FLAG_SIDE_EFFECT;
 

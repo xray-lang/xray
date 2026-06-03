@@ -39,4 +39,11 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f);
  * Modifies the IR in place. */
 XR_FUNC void xi_arc_insert(XiFunc *f);
 
+/* Eliminate redundant retain/release pairs (copy→move optimization).
+ * Must run AFTER xi_arc_insert. Removes RETAIN(v)+RELEASE(v) pairs where
+ * the retain merely extends lifetime to a single forwarding consumer and
+ * the release immediately follows (the pair is semantically a no-op move).
+ * Returns the number of pairs eliminated. */
+XR_FUNC int xi_arc_elim(XiFunc *f);
+
 #endif  // XI_ARC_H

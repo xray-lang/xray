@@ -216,7 +216,6 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         /* ---- Exception handling ---- */
         case XI_TRY:
         case XI_CATCH:
-        case XI_FINALLY:
         case XI_END_TRY:
             return XI_ESC_NONE;
 

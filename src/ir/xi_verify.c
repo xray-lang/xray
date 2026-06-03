@@ -521,7 +521,6 @@ static const uint8_t expected_narg[XI_OP_COUNT] = {
     [XI_SCOPE_EXIT] = 0,
     [XI_TRY] = 0,
     [XI_CATCH] = 0,
-    [XI_FINALLY] = 0,
     [XI_END_TRY] = 0,
     [XI_ASSERT] = 1,
     [XI_ASSERT_EQ] = 2,

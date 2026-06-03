@@ -145,9 +145,8 @@ typedef struct XrVMState {
     int handler_count;
     XrValue current_exception;  // active exception
 
-    // Value-return error channel (new error system)
-    XrValue pending_error;       // error enum value (NULL_VAL = no error)
-    uint16_t pending_error_tag;  // global error tag (0 = no error)
+    // Value-return error channel (null = no error)
+    XrValue pending_error;
 
     // Closure support
     void *strings_map;  // interned strings table

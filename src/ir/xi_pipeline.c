@@ -169,6 +169,10 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
         xi_arc_insert(ir);
+        /* Dup/drop elimination: remove redundant RETAIN+RELEASE pairs where
+         * the value is merely forwarded (copy→move optimization). Runs on
+         * all backends including VM (fewer RC ops = faster interpretation). */
+        xi_arc_elim(ir);
         /* Drop-Reuse: convert RELEASE+ALLOC pairs to DROP_REUSE+ALLOC_AT
          * for in-place memory reuse. Only for JIT/AOT (the VM emitter
          * does not handle these ops — it uses OP_DUP/OP_DROP directly). */

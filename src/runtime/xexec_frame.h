@@ -64,16 +64,13 @@ typedef struct XrBcCallFrame {
 
 /* ========== Exception Handler ========== */
 
-// try-catch-finally block state
+// Panic handler state (catch panic only; the language has no finally)
 typedef struct XrExceptionHandler {
-    uint32_t catch_offset;    // jump offset to catch block
-    uint32_t finally_offset;  // jump offset to finally block
-    int stack_size;           // stack size when entering try
-    int frame_count;          // frame count when entering try
-    XrValue exception;        // caught exception value
-    bool caught;              // exception was caught
-    bool in_finally;          // currently executing finally block
-    XrInstruction *try_pc;    // PC at try block start
+    uint32_t catch_offset;  // absolute PC of the catch block
+    int stack_size;         // stack size when entering try
+    int frame_count;        // frame count when entering try
+    XrValue exception;      // caught exception value
+    bool caught;            // exception was caught
 } XrExceptionHandler;
 
 /* ========== C Function Types ========== */
@@ -138,9 +135,8 @@ typedef struct XrVMContext {
     int handler_capacity;
     XrValue current_exception;  // active exception being handled
 
-    // Value-return error channel (new error system)
-    XrValue pending_error;       // error enum value (NULL_VAL = no error)
-    uint16_t pending_error_tag;  // global error tag (0 = no error)
+    // Value-return error channel (null = no error)
+    XrValue pending_error;
 
     // Closure support
     void *current_coro;  // owning coroutine (XrCoroutine*)
