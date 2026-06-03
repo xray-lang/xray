@@ -67,11 +67,10 @@ osr_debug.log
 bin/
 
 # ============================================================================
-# Internal design
+# Internal design docs (migrated to separate xray-docs repo)
 # ============================================================================
-# Note: docs/ is intentionally NOT ignored at the repo level so IDE / Cascade
-# tooling can read and edit it. If a user wants docs/ untracked in their local
-# checkout, add `docs/` to .git/info/exclude (already set up in this repo).
+# docs/ is a symlink to ../xray-docs (separate git repo for dev documents).
+docs
 
 # ============================================================================
 # Temporary test files
