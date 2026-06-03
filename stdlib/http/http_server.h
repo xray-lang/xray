@@ -83,9 +83,6 @@ typedef struct XrHttpServer {
     int route_closure_count;
     int route_closure_capacity;
 
-    // GC that owns route closures (the coroutine that called http.route)
-    struct XrCoroGC *owner_gc;
-
     // WebSocket handler
     XrWsConnectionHandler ws_handler;
     void *ws_user_data;
