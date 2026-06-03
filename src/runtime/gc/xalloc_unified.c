@@ -48,17 +48,16 @@ XrCoroGC *xr_current_coro_gc(void) {
 }
 
 void xr_coro_write_barrier(struct XrCoroutine *coro, XrGCHeader *parent, XrGCHeader *child) {
-    XR_DCHECK(parent != NULL, "write_barrier: NULL parent");
-    if (coro && coro->coro_gc && child) {
-        xr_coro_gc_barrier(coro->coro_gc, parent, child);
-    }
+    /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
+    (void) coro;
+    (void) parent;
+    (void) child;
 }
 
 void xr_coro_write_barrier_back(struct XrCoroutine *coro, XrGCHeader *obj) {
-    XR_DCHECK(obj != NULL, "write_barrier_back: NULL obj");
-    if (coro && coro->coro_gc) {
-        xr_coro_gc_barrierback(coro->coro_gc, obj);
-    }
+    /* Retired: RC owns reclamation, no tri-color invariant to maintain. */
+    (void) coro;
+    (void) obj;
 }
 
 XrayIsolate *xr_coro_get_isolate(struct XrCoroutine *coro) {

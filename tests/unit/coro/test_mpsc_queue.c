@@ -19,15 +19,18 @@
 
 /*
  * Mock XrCoroutine with matching layout for sched_link field.
- * Real layout: XrGCHeader(16) + flags(4) + reductions(4) + sched_link(8)
- * We only need sched_link at offset 24.
+ * Real layout: XrGCHeader(16) + flags(4) + reductions(4) +
+ *              sched_link(8)  → sched_link at offset 24.
+ * The mock header must mirror the real XrGCHeader exactly so the
+ * sched_link offset matches what xray_core (compiled with the real struct)
+ * reads and writes.
  */
 struct XrGCHeader {
-    struct XrGCHeader *gc_next;
-    uint8_t type;
-    uint8_t marked;
+    uint16_t type;
     uint16_t extra;
+    int32_t refcount;
     uint32_t objsize;
+    uint32_t _rsv;
 };
 
 struct XrCoroutine {

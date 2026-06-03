@@ -364,11 +364,12 @@ static void worker_sleep_timeout_callback(void *arg) {
         xr_worker_unblock_select(worker, coro);
     } else {
         // Check if waiting on channel (sendTimeout/recvTimeout)
-        if (coro->wait_channel) {
+        XrChannel *ch =
+            (XrChannel *) atomic_load_explicit(&coro->wait_channel, memory_order_acquire);
+        if (ch) {
             // Remove from channel wait queue
-            XrChannel *ch = (XrChannel *) coro->wait_channel;
             xr_channel_remove_waiter(ch, coro);
-            coro->wait_channel = NULL;
+            atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         }
         // Remove from blocked queue (unified via xr_worker_unblock)
         xr_worker_unblock(worker, coro);

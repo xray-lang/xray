@@ -67,6 +67,15 @@ XM_HELPER(map_increment,       2, VOID,   GC|STACKMAP,                          
 XM_HELPER(get_shared,          0, TAGGED, GC|STACKMAP,                              GC,   NONE)
 XM_HELPER(set_shared,          1, VOID,   GC|STACKMAP,                              NONE, NONE)
 
+# ===== Reference Counting (compile-time RC: dup / drop) =====
+# Mirror the VM OP_DUP / OP_DROP dispatch. The value (with its tag) is passed
+# in call_args[0]; the helper reconstructs the XrValue and, when it is a heap
+# pointer, adjusts the refcount. drop runs the destructor and returns the
+# block to the per-coroutine RC freelist on the last reference. No GC, no
+# throw, no deopt — pure refcount arithmetic.
+XM_HELPER(rc_dup,              1, VOID,   NONE,                                     NONE, NONE)
+XM_HELPER(rc_drop,             1, VOID,   NONE,                                     NONE, NONE)
+
 # ===== Exception =====
 XM_HELPER(throw,               1, VOID,   THROW|STACKMAP,                           NONE, THROW)
 

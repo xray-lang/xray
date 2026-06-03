@@ -27,6 +27,7 @@
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../gc/xalloc_unified.h"
+#include "../gc/xgc.h"
 #include "../gc/xcoro_gc.h"
 #include "../xisolate_api.h"
 #include "../../coro/xcoroutine.h"
@@ -209,6 +210,9 @@ static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
             memcpy(result->data, (XrValue *) arr->data + start, (size_t) count * sizeof(XrValue));
             result->length = count;
             result->has_gc_ptrs = arr->has_gc_ptrs;
+            XrValue *data = (XrValue *) result->data;
+            for (int i = 0; i < count; i++)
+                xr_gc_retain_value(data[i]);
         }
     }
     return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
@@ -223,21 +227,18 @@ static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
     XrArray *result = xr_array_with_capacity(xr_current_coro(iso), total);
     if (!result)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
-    if (arr->length > 0) {
-        memcpy(result->data, arr->data, (size_t) arr->length * arr->elem_size);
-        result->length = arr->length;
-        result->has_gc_ptrs = arr->has_gc_ptrs;
+    for (int32_t j = 0; j < arr->length; j++) {
+        XrValue elem = xr_array_get_element(arr, j);
+        xr_gc_retain_value(elem);
+        xr_array_push(result, elem);
     }
     for (int i = 0; i < argc; i++) {
         if (XR_IS_ARRAY(args[i])) {
             XrArray *other = XR_TO_ARRAY(args[i]);
-            if (other->length > 0) {
-                xr_array_ensure_capacity(result, result->length + other->length);
-                memcpy((XrValue *) result->data + result->length, other->data,
-                       (size_t) other->length * sizeof(XrValue));
-                result->length += other->length;
-                if (other->has_gc_ptrs)
-                    result->has_gc_ptrs = 1;
+            for (int32_t j = 0; j < other->length; j++) {
+                XrValue elem = xr_array_get_element(other, j);
+                xr_gc_retain_value(elem);
+                xr_array_push(result, elem);
             }
         } else {
             xr_array_push(result, args[i]);
@@ -393,7 +394,9 @@ static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc
         if (!pair)
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) i));
-        xr_tuple_set(pair, 1, xr_array_get_element(arr, i));
+        XrValue elem = xr_array_get_element(arr, i);
+        xr_gc_retain_value(elem);
+        xr_tuple_set(pair, 1, elem);
         xr_array_set(out, i, xr_value_from_tuple(pair));
     }
     out->length = n;

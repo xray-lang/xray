@@ -63,10 +63,6 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
         atomic_fetch_add_explicit(coro->jit_ctx->heartbeat_ptr, 1, memory_order_relaxed);
     }
 
-    if (coro->coro_gc && coro->coro_gc->gc_requested) {
-        xr_coro_gc_step(coro->coro_gc);
-    }
-
     // Cancel check: watchdog sets this via xr_runtime_force_stop
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         return 1;
@@ -74,18 +70,18 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     return 0;
 }
 
-// Forward write barrier for JIT: black parent writes white child → mark child
+// Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
+// invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
 void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {
-    if (!coro || !coro->coro_gc || !parent || !child)
-        return;
-    xr_coro_gc_barrier(coro->coro_gc, (XrGCHeader *) parent, (XrGCHeader *) child);
+    (void) coro;
+    (void) parent;
+    (void) child;
 }
 
-// Back write barrier for JIT: black container mutated → container becomes gray
+// Back write barrier for JIT: retired. Kept as a no-op (see xr_jit_barrier_fwd).
 void xr_jit_barrier_back(XrCoroutine *coro, void *container) {
-    if (!coro || !coro->coro_gc || !container)
-        return;
-    xr_coro_gc_barrierback(coro->coro_gc, (XrGCHeader *) container);
+    (void) coro;
+    (void) container;
 }
 
 // ========== Memory Sync Helper Functions ==========
@@ -318,6 +314,12 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
 
     // Set non-zero fields (always needed)
     coro->reductions = XR_CORO_REDUCTIONS;
+
+    // Runtime-managed: a coroutine's lifetime is owned by the scheduler/pool,
+    // not the compiler's per-coroutine RC. Mark here (covers every alloc path:
+    // pool slab init resets the gc header, so set the flag centrally). dup/drop
+    // become no-ops for coroutine handles. See docs/design/706.
+    XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->isolate = X;
     coro->name = name;
@@ -903,7 +905,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->result = xr_null();
     coro->error = xr_null();
     coro->task = NULL;
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->await_results = NULL;
     coro->current_scope = NULL;
     coro->vm_ctx.stack_top = coro->vm_ctx.stack;
@@ -957,8 +959,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     // timer fields live in ext; reset happens in coro_init_common dirty path
     // Mark as "clean" — coro_init_common can skip memset
     coro->gc_flags |= XR_CORO_GC_RECYCLED_CLEAN;
-    XR_DCHECK(coro->coro_gc == NULL || coro->coro_gc->gcstate == XGC_PAUSE,
-              "recycle_local: GC not in PAUSE state");
 
     // Add to Worker local free list (lock-free, only this Worker accesses)
     if (worker->p.local_free_count < XR_CORO_LOCAL_FREE_MAX) {
@@ -1273,7 +1273,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
-    coro->wait_channel = NULL;
+    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->result = xr_null();
 }
 
@@ -1379,18 +1379,10 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X || !gp)
         return;
 
-    // CAS loop: atomically BLOCKED -> READY (prevents double-wake)
-    uint32_t old_flags = xr_coro_flags_load(gp);
-    for (;;) {
-        if (!(old_flags & XR_CORO_FLG_BLOCKED)) {
-            return;  // Already woken by another thread
-        }
-        uint32_t new_flags =
-            (old_flags & ~(XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK)) | XR_CORO_FLG_READY;
-        if (xr_coro_flags_cas(gp, &old_flags, new_flags)) {
-            break;  // CAS succeeded, we own the wake
-        }
-        // CAS failed, old_flags updated, retry
+    // Atomically claim the BLOCKED -> READY transition; only the winner
+    // enqueues. Prevents double-wake when multiple paths race on this coro.
+    if (!xr_coro_claim_wake(gp)) {
+        return;  // Already woken by another thread
     }
 
     XrRuntime *runtime = (XrRuntime *) X->vm.runtime;

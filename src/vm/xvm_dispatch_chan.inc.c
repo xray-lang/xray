@@ -157,14 +157,14 @@ vmcase(OP_CHAN_RECV) {
         int _rs = xr_coro_resume_load(current);
         if (_rs == XR_RESUME_CHANNEL) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
             R(a) = vm_chan_copy_recv(isolate, R(a), vm_ctx);
             R(a + 1) = xr_bool(true);
             vmbreak;
         }
         if (_rs == XR_RESUME_CHANNEL_CLOSED) {
             xr_coro_resume_store(current, XR_RESUME_OK);
-            current->wait_channel = NULL;
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
         }
     }
 

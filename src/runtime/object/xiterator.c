@@ -245,6 +245,8 @@ XrValue xr_iterator_next(XrIterator *iter) {
                 XrTuple *pair = xr_tuple_new(iter->coro, 2);
                 if (!pair)
                     return xr_null();
+                xr_gc_retain_value(node->key);
+                xr_gc_retain_value(node->value);
                 xr_tuple_set(pair, 0, node->key);
                 xr_tuple_set(pair, 1, node->value);
                 return xr_value_from_tuple(pair);
@@ -303,6 +305,8 @@ XrValue xr_iterator_next(XrIterator *iter) {
             XrTuple *pair = xr_tuple_new(iter->coro, 2);
             if (!pair)
                 return xr_null();
+            xr_gc_retain_value(key_str);
+            xr_gc_retain_value(value);
             xr_tuple_set(pair, 0, key_str);
             xr_tuple_set(pair, 1, value);
             return xr_value_from_tuple(pair);
@@ -322,6 +326,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrTuple *pair = xr_tuple_new(iter->coro, 2);
         if (!pair)
             return xr_null();
+        xr_gc_retain_value(elem);
         xr_tuple_set(pair, 0, xr_int((int64_t) idx));
         xr_tuple_set(pair, 1, elem);
         return xr_value_from_tuple(pair);
@@ -370,44 +375,12 @@ XrIterator *xr_value_to_iterator(XrValue value) {
 
 #include "../gc/xcoro_gc.h"
 
-/* Native body traverse: marks the source container so it survives GC
- * for the lifetime of the iterator. coro / context are non-GC. */
-static void iterator_body_traverse(struct XrCoroGC *gc, void *body) {
-    /* body points to the iterator's `type` field; we recover the enclosing
-     * XrIterator by subtracting the offset that xinstance.c uses. The body
-     * layout starts right after `klass`, so casting back is safe. */
-    XrIterator *iter = (XrIterator *) ((char *) body - offsetof(XrIterator, type));
-    switch (iter->type) {
-        case XR_ITERATOR_MAP:
-            if (iter->source.map)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.map);
-            break;
-        case XR_ITERATOR_SET:
-            if (iter->source.set)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.set);
-            break;
-        case XR_ITERATOR_JSON:
-            if (iter->source.json)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.json);
-            break;
-        case XR_ITERATOR_ARRAY:
-            if (iter->source.array)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.array);
-            break;
-        case XR_ITERATOR_STRING:
-            if (iter->source.string)
-                xr_coro_gc_markobject(gc, (XrGCHeader *) iter->source.string);
-            break;
-    }
-}
-
 static XrNativeBodyDesc g_iterator_body_desc = {
     .body_size = sizeof(XrIterator) - offsetof(XrIterator, type),
     .body_align = _Alignof(void *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = NULL,
     .destroy = NULL,
-    .traverse = iterator_body_traverse,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

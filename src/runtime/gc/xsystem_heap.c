@@ -186,7 +186,7 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
         obj->objsize = (uint32_t) size;
         // Mark as shared and mmap-allocated (in extra bit 13)
         obj->extra = XR_GC_STORAGE_SHARED | XR_GC_FLAG_MMAP;
-        obj->marked = 0;
+        obj->_rsv = 0;
         atomic_fetch_add(&heap->stats.shared_mmap_count, 1);
     } else {
         // Small objects use regular malloc

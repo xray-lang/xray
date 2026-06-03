@@ -38,7 +38,7 @@ typedef struct XrCell {
 
 #define XR_CELL_SIZE (sizeof(XrCell))
 
-_Static_assert(sizeof(XrCell) == 32, "XrCell must be 32 bytes");
+_Static_assert(sizeof(XrCell) == 32, "XrCell must be 32 bytes (16B header + 16B value)");
 
 struct XrCoroutine;
 struct XrayIsolate;

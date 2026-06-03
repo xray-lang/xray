@@ -216,13 +216,11 @@ vmcase(OP_SET_PRIORITY) {
         XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
         if (sched) {
             xr_sched_remove(sched, coro);
-            uint32_t old_flags = xr_coro_flags_load(coro);
-            atomic_store(&coro->flags, xr_coro_set_priority_flags(old_flags, new_prio));
+            xr_coro_set_priority(coro, new_prio);
             xr_sched_enqueue(sched, coro);
         }
     } else {
-        uint32_t old_flags = xr_coro_flags_load(coro);
-        atomic_store(&coro->flags, xr_coro_set_priority_flags(old_flags, new_prio));
+        xr_coro_set_priority(coro, new_prio);
     }
     vmbreak;
 }

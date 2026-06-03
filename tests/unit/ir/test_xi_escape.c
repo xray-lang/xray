@@ -282,10 +282,11 @@ static void test_arc_no_escape_skipped(void) {
     xi_func_free(f);
 }
 
-/* ========== Test: ARC insertion — retain for returned array ========== */
+/* ========== Test: ARC insertion — returned value is a move (no dup) ========== */
 
 static void test_arc_return_gets_retain(void) {
-    /* Returned array (ARG_ESCAPE) should get 1 RETAIN, 0 RELEASE */
+    /* Returned array: the return is the single (last) consuming use, so it
+     * is a MOVE — caller takes ownership. No dup, no drop (Perceus). */
     XiFunc *f = make_func("arc_return", &t_array);
     XiBlock *b0 = f->entry;
 
@@ -295,15 +296,18 @@ static void test_arc_return_gets_retain(void) {
     xi_escape_analyze(f);
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "ARG_ESCAPE array should have 1 retain");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "ARG_ESCAPE array returned: 0 release (caller owns)");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "returned array is moved: 0 dup");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "returned array is moved: 0 drop (caller owns)");
     xi_func_free(f);
 }
 
-/* ========== Test: ARC insertion — retain+release for heap escape ========== */
+/* ========== Test: ARC insertion — move into field + borrowed receiver ====== */
 
 static void test_arc_heap_gets_retain_release(void) {
-    /* Array stored to field (HEAP_ESCAPE): 1 retain + 1 release at exit */
+    /* Array stored to a field: the store is the single consuming use, so
+     * the array is MOVED into the object — 0 dup, 0 drop for it.
+     * The receiver `obj` (param, arg 0 of STORE_FIELD) is only borrowed and
+     * never consumed, so it is dropped once at function exit. */
     XiFunc *f = make_func("arc_heap", &t_any);
     XiBlock *b0 = f->entry;
 
@@ -320,8 +324,11 @@ static void test_arc_heap_gets_retain_release(void) {
     xi_escape_analyze(f);
     xi_arc_insert(f);
 
-    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "HEAP_ESCAPE array should have 1 retain");
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 1, "HEAP_ESCAPE array should have 1 release at exit");
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "array moved into field: 0 dup");
+    /* Exactly one drop: the borrowed receiver `obj` at function exit.
+     * obj is discovered as a tracked RC value via the block scan (it is an
+     * XI_PARAM value in the entry block); the array was moved, so no drop. */
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 1, "borrowed receiver dropped once at exit");
     xi_func_free(f);
 }
 

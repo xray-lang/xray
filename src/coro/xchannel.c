@@ -162,6 +162,9 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
+    // Runtime-managed: lifetime owned by the shared atomic-RC, not the
+    // compiler's per-coroutine RC. dup/drop become no-ops. See docs/design/706.
+    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // xr_sysheap_alloc_shared already memset(0) the entire allocation.
     // All fields default to 0/NULL/false which is correct for:
@@ -238,6 +241,8 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
+    // Runtime-managed: see xr_channel_new. dup/drop become no-ops.
+    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // Inline single-element buffer
     ch->buffer = (XrValue *) (ch + 1);
@@ -549,21 +554,22 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
 // is_close: whether this is a close wake (needs to recheck buffer)
 static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     XR_DCHECK(coro != NULL, "channel_wake_coro_ex: NULL coro");
-    // Check if coroutine is done (avoid waking completed coroutine)
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
+
+    // Atomically claim the wake. Only the caller that transitions the coro
+    // BLOCKED -> READY proceeds; a racing waker (concurrent send/recv, close,
+    // or timer fire) observes the coro is no longer BLOCKED and bails out.
+    // This makes the resume-reason write and the enqueue below single-owner.
+    if (!xr_coro_claim_wake(coro)) {
         return;
     }
 
     xr_coro_resume_store(coro, is_close ? XR_RESUME_CHANNEL_CLOSED : XR_RESUME_CHANNEL);
-    coro->wait_channel = NULL;  // Clear blocked state
+    atomic_store_explicit((_Atomic(void *) *) &coro->wait_channel, NULL, memory_order_release);
 
     // Cancel timer (sendTimeout/recvTimeout case)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
     }
-
-    // Combine clear BLOCKED + set READY in one CAS (hot path optimization)
-    xr_coro_transition_wake(coro);
 
     XrWorker *current = xr_current_worker();
     if (!current || !current->p.runtime)
@@ -745,7 +751,7 @@ send_locked:
     }
 
     // Set blocked state and join sendq
-    coro->wait_channel = ch;
+    atomic_store_explicit(&coro->wait_channel, ch, memory_order_release);
     coro->wait_send = true;
     coro->send_value = value;  // Save value to send
     // caller pre-saved frame state before this call,
@@ -823,7 +829,7 @@ recv_locked:
     }
 
     // Set blocked state and join recvq
-    coro->wait_channel = ch;
+    atomic_store_explicit(&coro->wait_channel, ch, memory_order_release);
     coro->wait_send = false;
     // recv_slot already set by VM to stack register address
     // see send path comment for rationale.

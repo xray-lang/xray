@@ -38,6 +38,7 @@ add_xray_unit_test(test_arena util/test_arena.c)
 # ============================================================================
 
 add_xray_unit_test(test_immix_gc gc/test_immix_gc.c)
+add_xray_unit_test(test_obj_header gc/test_obj_header.c)
 
 # ============================================================================
 # object/ — Runtime objects (string, array, utf8)
@@ -51,6 +52,7 @@ add_xray_unit_test(test_xstring object/test_xstring.c)
 add_xray_unit_test(test_xmap object/test_xmap.c)
 add_xray_unit_test(test_xset object/test_xset.c)
 add_xray_unit_test(test_xtuple object/test_xtuple.c)
+add_xray_unit_test(test_rc_container_release object/test_rc_container_release.c)
 
 # ============================================================================
 # frontend/ — Lexer, parser, diagnostics
@@ -168,6 +170,7 @@ add_xray_unit_test(test_xi_stage ir/test_xi_stage.c)
 add_xray_unit_test(test_xi_intrinsic ir/test_xi_intrinsic.c)
 add_xray_unit_test(test_xi_effect ir/test_xi_effect.c)
 add_xray_unit_test(test_xi_escape ir/test_xi_escape.c)
+add_xray_unit_test(test_xi_own ir/test_xi_own.c)
 add_xray_unit_test(test_xi_tbaa ir/test_xi_tbaa.c)
 add_xray_unit_test(test_xi_range ir/test_xi_range.c)
 add_xray_unit_test(test_xi_bce ir/test_xi_bce.c)

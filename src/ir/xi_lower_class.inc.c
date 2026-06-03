@@ -116,6 +116,19 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
      * field_default_values on the class descriptor; complex expressions
      * (array, map, json, new-expr, etc.) must be lowered as IR. */
     bool is_ctor = m->is_constructor || (m->name && strcmp(m->name, "constructor") == 0);
+
+    /* Non-constructor instance methods receive `this` BORROWED: the caller
+     * retains ownership and does not dup before the call, so xi_arc must not
+     * drop param 0 here. Constructors own their freshly-allocated `this` and
+     * move it out via the auto-return below, so they are NOT borrowed. */
+    ml.func->receiver_borrowed = (is_inst && !is_ctor);
+
+    /* Operator-overload methods receive ALL operands borrowed: the VM
+     * operator dispatch (OP_ADD/OP_EQ/OP_INDEX/...) leaves the operands live
+     * in the caller's registers and the call site does not dup them, so the
+     * operator body must drop none of its params. */
+    ml.func->operator_borrowed = m->is_operator;
+
     if (is_ctor && is_inst && cd) {
         int this_var_init = xi_lower_var_create(&ml, 0, "this", ml.type_any);
         XiValue *this_val = xi_lower_braun_read(&ml, this_var_init, ml.cur_block);

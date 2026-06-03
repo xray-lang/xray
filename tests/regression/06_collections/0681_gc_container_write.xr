@@ -67,3 +67,23 @@ fn test_nested_array_push() {
     assert_eq(outer[0][0], 0)
     assert_eq(outer[19][9], 199)
 }
+
+fn first_json(xs: Array<Json>) -> Json {
+    return xs[0]
+}
+
+@test
+fn test_array_self_assignment_keeps_element_alive() {
+    let arr: Array<Json> = [{ id: 1 }]
+    arr[0] = arr[0]
+    assert_eq(arr[0]["id"], 1)
+}
+
+@test
+fn test_returned_array_element_survives_replacement() {
+    let arr: Array<Json> = [{ id: 7 }]
+    let saved = first_json(arr)
+    arr[0] = { id: 9 }
+    assert_eq(saved["id"], 7)
+    assert_eq(arr[0]["id"], 9)
+}

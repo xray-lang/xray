@@ -380,42 +380,18 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
         }                                                                                          \
     } while (0)
 
-/* Per-coroutine GC safepoint: check if GC is requested and trigger
-** at a safe point where the VM stack is in a consistent state.
-** This is called at loop back-edges, function boundaries,
-** and after object allocation (via checkGC). */
-#define XR_GC_STEP_REDS 50
-#define VM_GC_SAFEPOINT()                                                                          \
-    do {                                                                                           \
-        XrCoroutine *_gc_coro = VM_CURRENT_CORO;                                                   \
-        if (_gc_coro && _gc_coro->coro_gc && _gc_coro->coro_gc->gc_requested) {                    \
-            _gc_coro->coro_gc->gc_requested = 0;                                                   \
-            savepc();                                                                              \
-            if (frame->closure && frame->closure->proto) {                                         \
-                VM_SET_STACK_TOP(base + frame->closure->proto->maxstacksize);                      \
-            }                                                                                      \
-            xr_coro_gc_step(_gc_coro->coro_gc);                                                    \
-            _gc_coro->reductions -= XR_GC_STEP_REDS;                                               \
-        }                                                                                          \
-    } while (0)
+/* Per-coroutine GC safepoint: retired. Tracing's incremental GC step used to
+** run here when gc_requested was set; reference counting reclaims inline
+** (drop-to-zero) and at coroutine teardown, so there is no step to trigger. */
+#define VM_GC_SAFEPOINT() ((void) 0)
 
 #define checkGC(c) VM_GC_SAFEPOINT()
 
 /* ========== Write Barrier Macros ========== */
-// Forward barrier: mark child when black parent writes GC-referencing value
-#define VM_BARRIER_VAL(parent_obj, val)                                                            \
-    do {                                                                                           \
-        XrCoroutine *_bc = VM_CURRENT_CORO;                                                        \
-        if (_bc && _bc->coro_gc)                                                                   \
-            XR_GC_BARRIER_VAL(_bc->coro_gc, parent_obj, val);                                      \
-    } while (0)
-// Back barrier: revert black container to gray after mutation
-#define VM_BARRIER_BACK(container_obj)                                                             \
-    do {                                                                                           \
-        XrCoroutine *_bc = VM_CURRENT_CORO;                                                        \
-        if (_bc && _bc->coro_gc)                                                                   \
-            xr_coro_gc_barrierback(_bc->coro_gc, XR_OBJ2GC(container_obj));                        \
-    } while (0)
+// Forward barrier: retired (RC owns reclamation; no tri-color invariant).
+#define VM_BARRIER_VAL(parent_obj, val) ((void) 0)
+// Back barrier: retired.
+#define VM_BARRIER_BACK(container_obj) ((void) 0)
 
 /* ========== Debug Hook (Zero Overhead When No Debugger) ========== */
 /* All decision logic (breakpoints, stepping, pause, logpoints) lives in
@@ -724,6 +700,9 @@ startfunc:
 /* GETBUILTIN / GETSHARED / SETSHARED / CLOSURE / UPVAL / CELL_* —
  * see xvm_dispatch_closure.inc.c. */
 #include "xvm_dispatch_closure.inc.c"
+
+/* DUP / DROP / MOVE reference-counting ops — see xvm_dispatch_rc.inc.c. */
+#include "xvm_dispatch_rc.inc.c"
 /* PRINT / TYPEOF / TYPENAME / DUMP / TO* / COPY / CHR —
  * see xvm_dispatch_convert.inc.c. */
 #include "xvm_dispatch_convert.inc.c"

@@ -863,7 +863,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                                       node->as.block.count);
             break;
 
-        // P1-1: Recurse into control flow statements to collect nested declarations
+        // Recurse into control flow statements to collect nested declarations
         case AST_FOR_STMT: {
             ForStmtNode *fs = &node->as.for_stmt;
             xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK, node);
@@ -986,7 +986,7 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             // Recurse into expression statements (may contain function expressions etc.)
             break;
 
-        // P1-2: Collect destructuring and multi-var declarations
+        // Collect destructuring and multi-var declarations
         case AST_DESTRUCTURE_DECL: {
             DestructureDeclNode *dd = &node->as.destructure_decl;
             if (dd->pattern) {
@@ -1802,8 +1802,8 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
         case AST_THROW_STMT:
             if (node->as.throw_stmt.expression) {
                 XrType *thrown = xa_visit_infer_expr(ctx, node->as.throw_stmt.expression);
-                /* Allow throw of: (1) enum value (new error model), or
-                 * (2) Exception / subclass (legacy, removed in M7).
+                /* Allow throw of: (1) enum value (typed error model), or
+                 * (2) Exception / subclass while legacy exceptions remain.
                  * Skip the check when the inferred type is unknown. */
                 if (thrown && !XR_TYPE_IS_UNKNOWN(thrown)) {
                     bool ok = XR_TYPE_IS_ENUM(thrown);

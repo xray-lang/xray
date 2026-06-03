@@ -125,6 +125,15 @@ XR_FUNC XrJitResult xr_jit_map_increment(struct XrCoroutine *coro, int64_t extra
 XR_FUNC XrJitResult xr_jit_get_shared(struct XrCoroutine *coro, int64_t shared_index);
 XR_FUNC XrJitResult xr_jit_set_shared(struct XrCoroutine *coro, int64_t extra_arg);
 
+/* ========== Reference Counting (compile-time RC) ========== */
+
+/* dup/drop mirror the VM OP_DUP / OP_DROP dispatch. The value to retain or
+ * release is passed (with its tag) through jit_call_args[0]/call_arg_tags[0].
+ * drop runs the type destructor and returns the block to the coroutine RC
+ * freelist on the last reference. No-op for non-pointer and region values. */
+XR_FUNC XrJitResult xr_jit_rc_dup(struct XrCoroutine *coro, int64_t unused);
+XR_FUNC XrJitResult xr_jit_rc_drop(struct XrCoroutine *coro, int64_t unused);
+
 /* ========== Exception ========== */
 
 XR_FUNC XrJitResult xr_jit_throw(struct XrCoroutine *coro, int64_t exception_raw);

@@ -22,6 +22,7 @@
 #include "xstring.h"
 #include "../gc/xgc_header.h"
 #include "../gc/xgc_internal.h"
+#include "../gc/xalloc_unified.h"
 #include "xarray.h"
 #include <stdint.h>
 #include <stdbool.h>
@@ -111,6 +112,7 @@ static inline XrMapNode *xr_map_find_string_fast(XrMap *map, XrString *key_str) 
     do {                                                                                           \
         XrMapNode *_n = xr_map_find_string_fast(map, key_str);                                     \
         if (_n) {                                                                                  \
+            xr_gc_release_value(xr_current_coro_gc(), _n->value);                                  \
             _n->value = (_val);                                                                    \
         } else {                                                                                   \
             xr_map_set(map, key_val, _val);                                                        \

@@ -11,7 +11,7 @@
  *   - Immutable strings with automatic interning
  *   - Hash value cached at creation time
  *   - UTF-8 byte-level operations
- *   - Compact 24-byte header + flexible array
+ *   - Compact header + flexible array
  */
 
 #ifndef XSTRING_H
@@ -31,8 +31,8 @@ struct XrArray;
 /* ========== String Object ========== */
 
 /*
- * Memory layout (24-byte header + data):
- *   [0-15]  GC header (16 bytes)
+ * Memory layout (header + data):
+ *   [0-15]  GC header
  *   [16-19] length (4 bytes, max 4GB)
  *   [20-23] hash (4 bytes, FNV-1a)
  *   [24+]   data[] (flexible array)
@@ -47,8 +47,8 @@ typedef struct XrString {
 // Get string data pointer
 #define XR_STRING_CHARS(s) ((s)->data)
 
-// Static assert: ensure header size
-_Static_assert(sizeof(XrString) == 24, "XrString header must be 24 bytes");
+// Static assert: header(16) + length(4) + hash(4) = 24
+_Static_assert(sizeof(XrString) == 24, "XrString must be 24 bytes (16B header + length + hash)");
 
 /* ========== Short/Long String Separation ========== */
 

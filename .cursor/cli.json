@@ -1,0 +1,8 @@
+{
+  "commitAttribution": false,
+  "prAttribution": false,
+  "attribution": {
+    "attributeCommitsToAgent": false,
+    "attributePRsToAgent": false
+  }
+}

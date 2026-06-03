@@ -18,6 +18,7 @@
 #include "xi_emit.h"
 #include "xi_backend_lower.h"
 #include "xi_escape.h"
+#include "xi_own.h"
 #include "xi_arc.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
@@ -29,6 +30,20 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Debug helper: dump ownership analysis for a function and all its nested
+ * children (methods, closures). Gated by XRAY_XI_OWN_DUMP=1. */
+static void xi_own_dump_recursive(XiFunc *f) {
+    if (!f)
+        return;
+    XiOwnResult own;
+    if (xi_own_analyze(f, &own)) {
+        xi_own_dump(f, &own);
+        xi_own_free(&own);
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_own_dump_recursive(f->children[i]);
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
@@ -39,6 +54,11 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_optimize = true;
     cfg.opt_level = XI_OPT_LIGHT;
     cfg.run_select_rep = false;
+    /* The VM runs escape analysis + precise dup/drop insertion (xi_arc) but
+     * NOT stack_alloc_rewrite (no XI_STACK_ALLOC handler in the VM emitter)
+     * and NOT backend_lower. dup/drop execute as OP_DUP/OP_DROP. */
+    cfg.run_escape = true;
+    cfg.run_arc = true;
     cfg.run_emit = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -56,6 +76,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_select_rep = true;
     cfg.run_backend_lower = true;
     cfg.run_escape = true;
+    cfg.run_arc = true;
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
@@ -121,6 +142,35 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
         xi_escape_analyze(ir);
     }
 
+    /* Backward ownership inference (analysis only — does not mutate IR).
+     * Gated behind XRAY_XI_OWN_DUMP=1 for manual verification of dup/drop
+     * decisions; the xi_arc rewrite consumes these annotations directly. */
+    {
+        const char *own_env = getenv("XRAY_XI_OWN_DUMP");
+        if (own_env && own_env[0] == '1') {
+            xi_own_dump_recursive(ir);
+        }
+    }
+
+    /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
+     * Must run after escape analysis and before ARC insertion (STACK_ALLOC
+     * values don't need retain/release since they have frame lifetime).
+     * Gated on run_backend_lower because only backend codegen (AOT/JIT)
+     * consumes XI_STACK_ALLOC; the VM emitter has no handler for it. */
+    if (cfg->run_escape && cfg->run_backend_lower) {
+        xi_stack_alloc_rewrite(ir);
+    }
+
+    /* Precise dup/drop insertion (consumes ownership analysis).
+     * MUST run BEFORE backend lowering, while ops are still semantic
+     * (STORE_FIELD/ARRAY_NEW/...) — the owned/borrow split is keyed on
+     * those ops. Gated on run_arc (independent of run_backend_lower) so the
+     * VM can get dup/drop without stack_alloc_rewrite. */
+    if (cfg->run_escape && cfg->run_arc) {
+        xi_arc_insert(ir);
+        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
+    }
+
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
     if (cfg->run_select_rep) {
@@ -150,22 +200,6 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
                       "post-backend_lower verify failed");
         }
 #endif
-    }
-
-    /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
-     * Must run after escape analysis and before ARC insertion (STACK_ALLOC
-     * values don't need retain/release since they have frame lifetime). */
-    if (cfg->run_escape && cfg->run_backend_lower) {
-        xi_stack_alloc_rewrite(ir);
-    }
-
-    /* ARC insertion: add retain/release based on escape analysis.
-     * Runs after backend lowering so ARC ops coexist with CALL_BUILTIN. */
-    if (cfg->run_escape && cfg->run_backend_lower) {
-        xi_arc_insert(ir);
-        /* Escape analysis + ARC insertion complete: advance to OWNED.
-         * Enables verify_owned checks (escape annotations on alloc ops). */
-        xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 
     /* Optional: dump IR after optimization */

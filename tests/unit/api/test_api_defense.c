@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_api_defense.c - Unit tests for P2 API boundary defense
+ * test_api_defense.c - Unit tests for API boundary defense
  *
  * KEY CONCEPT:
  *   Verifies that all public API functions (xray_isolate_*, xray_alloc, etc.)
