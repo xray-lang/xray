@@ -226,14 +226,6 @@ static const char *xr_builtin_symbol_names[] = {
     "isBool",
     "isArray",
     "isObject",
-    // Result ADT methods
-    "isOk",
-    "isErr",
-    "ok",
-    "err",
-    "unwrapOr",
-    "unwrap",
-    "mapErr",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \

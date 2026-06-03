@@ -1534,43 +1534,6 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
              * re-sync ids so the invariant holds, then bump cfg_version
              * so any cached RPO / dom / loop info recomputes. */
             if (shuffle_blocks && f->nblocks > 2) {
-                /* XI_TRY values carry the finally block id in aux_int, so
-                 * the permutation below would leave them dangling — the
-                 * stored id refers to whatever block now occupies that
-                 * slot, not the original finally target.  Capture the
-                 * (try_value, finally_block) pointer pairs first, swap
-                 * the array, resync ids, then rewrite aux_int with each
-                 * finally block's new id. */
-                struct {
-                    XiValue *try_v;
-                    XiBlock *finally_blk;
-                } *try_finally_map = NULL;
-                uint32_t try_finally_count = 0;
-                uint32_t try_finally_cap = 0;
-                for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-                    XiBlock *blk = f->blocks[bi];
-                    for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-                        XiValue *v = blk->values[vi];
-                        if (v->op != XI_TRY || v->aux_int < 0)
-                            continue;
-                        if ((uint64_t) v->aux_int >= f->nblocks)
-                            continue;
-                        if (try_finally_count == try_finally_cap) {
-                            uint32_t new_cap = try_finally_cap ? try_finally_cap * 2 : 8;
-                            void *tmp =
-                                xr_realloc(try_finally_map, new_cap * sizeof(*try_finally_map));
-                            if (!tmp)
-                                break;
-                            try_finally_map = tmp;
-                            try_finally_cap = new_cap;
-                        }
-                        try_finally_map[try_finally_count].try_v = v;
-                        try_finally_map[try_finally_count].finally_blk =
-                            f->blocks[(uint32_t) v->aux_int];
-                        try_finally_count++;
-                    }
-                }
-
                 for (uint32_t si = f->nblocks - 1; si > 1; si--) {
                     uint32_t sj = 1 + (uint32_t) (rand() % si);
                     XiBlock *tmp = f->blocks[si];
@@ -1580,12 +1543,6 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
                 for (uint32_t bi = 0; bi < f->nblocks; bi++) {
                     f->blocks[bi]->id = bi;
                 }
-                /* Rewrite XI_TRY.aux_int with each finally block's new id. */
-                for (uint32_t i = 0; i < try_finally_count; i++) {
-                    try_finally_map[i].try_v->aux_int =
-                        (int64_t) try_finally_map[i].finally_blk->id;
-                }
-                xr_free(try_finally_map);
 
                 xi_cfg_invalidate(f);
                 /* Shuffle values within each block (randomized topo sort

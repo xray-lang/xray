@@ -231,63 +231,6 @@ TEST(shuffle_preserves_var_coalesce_chain_in_loop_body) {
     xi_func_free(f);
 }
 
-static XiFunc *build_try_finally_func(XiValue **out_try, XiBlock **out_finally) {
-    *out_try = NULL;
-    *out_finally = NULL;
-    XiFunc *f = xi_func_new("try_finally_remap", &stub_unit);
-    XiBlock *pre = xi_block_new(f);
-    XiBlock *hdr = xi_block_new(f);
-    XiBlock *body = xi_block_new(f);
-    XiBlock *fin = xi_block_new(f);
-    XiBlock *ex = xi_block_new(f);
-    pre->sealed = hdr->sealed = body->sealed = fin->sealed = ex->sealed = true;
-
-    XiValue *arg = xi_param(f, pre, 0, &stub_int);
-    XiValue *limit = xi_const_int(f, pre, 10, &stub_int);
-    xi_block_set_jump(pre, hdr);
-
-    XiValue *cond = xi_binary(f, hdr, XI_LT, &stub_bool, arg, limit);
-    if (!cond)
-        return f;
-    xi_block_set_if(hdr, cond, body, ex);
-
-    XiValue *try_v = xi_value_new(f, body, XI_TRY, &stub_unit, 0);
-    if (!try_v)
-        return f;
-    try_v->aux = NULL;
-    try_v->aux_int = (int64_t) fin->id;
-    try_v->flags |= XI_FLAG_SIDE_EFFECT;
-    xi_block_set_jump(body, fin);
-
-    XiValue *finally_v = xi_value_new(f, fin, XI_FINALLY, &stub_unit, 0);
-    if (!finally_v)
-        return f;
-    finally_v->flags |= XI_FLAG_SIDE_EFFECT;
-    xi_block_set_jump(fin, hdr);
-    xi_block_set_return(ex, xi_const_int(f, ex, 0, &stub_int));
-
-    *out_try = try_v;
-    *out_finally = fin;
-    return f;
-}
-
-TEST(shuffle_remaps_try_finally_block_id) {
-    XiValue *try_v = NULL;
-    XiBlock *fin = NULL;
-    XiFunc *f = build_try_finally_func(&try_v, &fin);
-    ASSERT(f != NULL);
-    ASSERT(try_v != NULL);
-    ASSERT(fin != NULL);
-
-    xi_opt_run_pipeline(f, XI_OPT_LIGHT);
-
-    ASSERT(try_v->aux_int >= 0);
-    ASSERT((uint32_t) try_v->aux_int < f->nblocks);
-    ASSERT((uint32_t) try_v->aux_int == fin->id);
-    ASSERT(f->blocks[(uint32_t) try_v->aux_int] == fin);
-    xi_func_free(f);
-}
-
 TEST(heap_equality_reads_memory) {
     XiFunc *f = xi_func_new("heap_equality_reads_memory", &stub_bool);
     XiBlock *entry = xi_block_new(f);
@@ -324,7 +267,6 @@ int main(void) {
     run_shuffle_pipeline_keeps_block_id_invariant();
     run_shuffle_pipeline_recomputes_dom_after_permutation();
     run_shuffle_preserves_var_coalesce_chain_in_loop_body();
-    run_shuffle_remaps_try_finally_block_id();
     run_heap_equality_reads_memory();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

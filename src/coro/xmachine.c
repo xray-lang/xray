@@ -60,9 +60,9 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
     ctx->frames = m->vm_storage.frames;
     ctx->frame_count = 0;
     ctx->frame_capacity = XR_MACHINE_FRAME_SIZE;
-    ctx->handlers = m->vm_storage.handlers;
+    ctx->handlers = ctx->handler_inline;
     ctx->handler_count = 0;
-    ctx->handler_capacity = XMACHINE_HANDLER_SIZE;
+    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
     ctx->module_base_frame = 0;
     ctx->current_coro = NULL;
     ctx->trace_execution = false;

@@ -27,12 +27,12 @@ SYMBOL_NAME_RE = re.compile(r"\.name = \"([^\"]+)\"")
 
 SPEC_QUALITY_BASELINES = {
     "LANGUAGE_SPEC_CN.md": {
-        "nonblank_lines": 4156,
-        "headings": 349,
+        "nonblank_lines": 4080,
+        "headings": 340,
         "h2": 26,
-        "xray_fences": 165,
-        "ebnf_fences": 63,
-        "tables": 106,
+        "xray_fences": 155,
+        "ebnf_fences": 60,
+        "tables": 100,
     },
     "LANGUAGE_SPEC.md": {
         "nonblank_lines": 1098,
@@ -336,7 +336,7 @@ def check_key_syntax(root: Path) -> list[str]:
         "class": ["override speak() -> string"],
         "control_flow": ["match (x)", "try { throw"],
         "modules": ["export fn helper()", "export class MyClass"],
-        "result": ["`Result<T, E>` is a prelude ADT enum", "`try! result` early-returns `Err`"],
+        "result": ["zero-overhead value-return error channel", "`throw expr` writes an enum variant"],
         "types": ["### Tuple types", "let p: (int, string) = (7, \"ok\")"],
     }
     errors: list[str] = []

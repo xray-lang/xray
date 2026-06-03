@@ -2543,7 +2543,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "enum",
         .title = "Enum",
-        .aliases_csv = "enums,enumeration,adt,payload,variant,Result,Ok,Err",
+        .aliases_csv = "enums,enumeration,adt,payload,variant,Option,Some,None",
         .body =
             "[Language reference](#56-enum-\xe5\xa3\xb0\xe6\x98\x8e)\n"
             "\n"
@@ -2592,9 +2592,9 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
             "### ADT-style payload enum\n"
             "```xray\n"
             "// positional payload\n"
-            "enum Result<T, E> {\n"
-            "    Ok(T),\n"
-            "    Err(E),\n"
+            "enum Option<T> {\n"
+            "    Some(T),\n"
+            "    None,\n"
             "}\n"
             "\n"
             "// named-field payload (recommended for readability)\n"
@@ -2954,59 +2954,29 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     },
     {
         .id = "result",
-        .title = "Result<T, E>",
-        .aliases_csv = "Result,Ok,Err,try!,try?,error_handling,parse_error,adt",
+        .title = "Error Handling (throw / catch)",
+        .aliases_csv = "error_handling,throw,catch,try,error,value_return_error",
         .body =
-            "[Language reference](#84-resultt-e)\n"
+            "[Language reference](#8-\xe9\x94\x99\xe8\xaf\xaf\xe5\xa4\x84\xe7\x90\x86-error-handling)\n"
             "\n"
-            "## Result<T, E>\n"
+            "## Error Handling (throw / catch)\n"
             "\n"
-            "Result<T, E> is the explicit error-return track: an ADT enum with Ok(T) and Err(E).\n"
+            "Xray uses a zero-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it.\n"
             "\n"
-            "### ADT shape\n"
-            "`Result<T, E>` is a prelude ADT enum: `Ok(T)` carries success, `Err(E)` carries failure. Prefer an ADT enum for `E` when the failure causes are enumerable, so `match` can check exhaustiveness.\n"
+            "### throw\n"
+            "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs.\n"
             "\n"
-            "### Payload enum form\n"
-            "```xray\n"
-            "// positional payload\n"
-            "enum Result<T, E> {\n"
-            "    Ok(T),\n"
-            "    Err(E),\n"
-            "}\n"
+            "### try / catch\n"
+            "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error.\n"
             "\n"
-            "// named-field payload (recommended for readability)\n"
-            "enum NetEvent {\n"
-            "    Connected,\n"
-            "    Disconnected(reason: string),\n"
-            "    DataReceived(bytes: Bytes),\n"
-            "    Error(code: int, message: string),\n"
-            "}\n"
+            "### Error propagation\n"
+            "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation.\n"
             "\n"
-            "// state machine\n"
-            "enum ConnState {\n"
-            "    Idle,\n"
-            "    Connecting(retry: int),\n"
-            "    Connected(peer: string, since: int),\n"
-            "    Failed(reason: string),\n"
-            "}\n"
-            "\n"
-            "// AST nodes\n"
-            "enum Expr {\n"
-            "    Number(int),\n"
-            "    Binary(op: string, left: Expr, right: Expr),\n"
-            "    Call(name: string, args: Array<Expr>),\n"
-            "}\n"
-            "```\n"
-            "\n"
-            "### Common methods\n"
-            "- `isOk()` / `isErr()` inspect the variant\n"
-            "- `ok()` returns `T?`; `err()` returns `E?`\n"
-            "- `unwrapOr(default)` and `unwrapOrElse(handler)` provide fallback values\n"
-            "- `map(fn)` transforms `Ok`; `mapErr(fn)` transforms `Err`; `andThen(fn)` chains Results\n"
-            "\n"
-            "### Bridge keywords\n"
-            "- `try! result` early-returns `Err` inside a Result-returning function, or propagates via value-return channel otherwise\n"
-            "- `try? result` converts `Err` to `null` and discards the cause\n"
+            "### Design principles\n"
+            "- Errors are values (enum variants), not exceptions\n"
+            "- Zero overhead on the happy path (single conditional branch)\n"
+            "- No `throws` in function signatures \xe2\x80\x94 errors are implicit\n"
+            "- Use ADT enums for structured error causes with exhaustive `match`\n"
             "",
     },
     {
@@ -3138,7 +3108,7 @@ XR_DATADEF const XmcpGeneratedTopic xmcp_generated_topics[] = {
     {
         .id = "types",
         .title = "Types",
-        .aliases_csv = "int,float,string,bool,nullable,type,tuple,unit,union,Result",
+        .aliases_csv = "int,float,string,bool,nullable,type,tuple,unit,union,Option",
         .body =
             "[Language reference](#2-\xe7\xb1\xbb\xe5\x9e\x8b\xe7\xb3\xbb\xe7\xbb\x9f-type-system)\n"
             "\n"

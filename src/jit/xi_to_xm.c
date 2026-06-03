@@ -1387,10 +1387,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return exc;
         }
 
-        case XI_FINALLY:
-            /* Marker only — no Xm instruction needed */
-            return xm_const_i64(ctx->xm_func, 0);
-
         case XI_END_TRY: {
             if (ctx->try_depth > 0)
                 ctx->try_depth--;

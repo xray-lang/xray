@@ -75,11 +75,10 @@ typedef struct {
     uint32_t npatch;
     uint32_t patch_cap;
 
-    /* OP_TRY patches: absolute target PC patching (catch + finally) */
+    /* OP_TRY patches: absolute target PC patching (catch block) */
     struct {
-        int pc;               /* OP_TRY instruction PC */
-        uint32_t target_bid;  /* catch block ID */
-        uint32_t finally_bid; /* finally block ID (0 if none) */
+        int pc;              /* OP_TRY instruction PC */
+        uint32_t target_bid; /* catch block ID */
     } *try_patches;
     uint32_t ntry_patch;
     uint32_t try_patch_cap;
@@ -133,7 +132,7 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
-XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid, uint32_t finally_bid);
+XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
 
 /* ========== Functions from xi_emit_reg.c ========== */
 XR_FUNC void compute_last_use(EmitCtx *ctx);
@@ -231,7 +230,6 @@ XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, uint8_t dst);
-XR_FUNC void xi_emit_finally(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_end_try(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_defer(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst);

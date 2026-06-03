@@ -102,12 +102,10 @@ typedef enum {
 
 #define XR_MACHINE_STACK_SIZE 1024
 #define XR_MACHINE_FRAME_SIZE 64
-#define XMACHINE_HANDLER_SIZE 16
 
 typedef struct XrMachineVMStorage {
     XrValue stack[XR_MACHINE_STACK_SIZE];
     XrBcCallFrame frames[XR_MACHINE_FRAME_SIZE];
-    XrExceptionHandler handlers[XMACHINE_HANDLER_SIZE];
 } XrMachineVMStorage;
 
 /* ========== XrMachine (M) — OS thread, dynamic count ========== */

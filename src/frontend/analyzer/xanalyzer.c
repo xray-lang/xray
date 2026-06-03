@@ -206,14 +206,10 @@ static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const 
     }
 }
 
-// Register prelude ADT enums (Result) and simple enums (Ordering) so they are
-// available without a per-module declaration.  The runtime binds the matching
-// canonical XrEnumType into XR_GLOBAL_VAR_RESULT / XR_GLOBAL_VAR_ORDERING.
+// Register prelude enums (Ordering) so they are available without a
+// per-module declaration.  The runtime binds the matching canonical
+// XrEnumType into XR_GLOBAL_VAR_ORDERING.
 static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
-    static const char *result_members[] = {"Ok", "Err"};
-    static const int result_payloads[] = {1, 1};
-    register_prelude_enum(analyzer, "Result", result_members, 2, result_payloads, true);
-
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
                                              "SeqCst"};
     register_prelude_enum(analyzer, "Ordering", ordering_members, 5, NULL, false);
@@ -263,8 +259,8 @@ XaAnalyzer *xa_analyzer_new(XrayIsolate *X) {
     // Register Codegen builtin functions/constructors
     xa_register_codegen_builtins(analyzer);
 
-    // Register prelude ADT/simple enums (Result, Ordering) with single
-    // canonical identity, visible in every compilation unit.
+    // Register prelude enums (Ordering) with single canonical identity,
+    // visible in every compilation unit.
     xa_register_prelude_enums(analyzer);
 
     // Default options

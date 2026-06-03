@@ -346,10 +346,9 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (xr_coro_flags_has(main_coro, XR_CORO_FLG_CANCELLED) || !XR_IS_NULL(main_coro->error)) {
         return -1;
     }
-    /* Check value-return error channel: uncaught throw propagates
-     * through pending_error and exits normally from the VM's perspective,
-     * but the program had an unhandled error. */
-    if (X->vm.pending_error_tag != 0) {
+    /* Value-return error channel: uncaught throw propagates via
+     * pending_error and exits OK from the VM's perspective. */
+    if (!XR_IS_NULL(X->vm.pending_error)) {
         return -1;
     }
     return 0;

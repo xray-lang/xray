@@ -223,7 +223,6 @@ vmcase(OP_SCOPE_EXIT) {
                  * XI_ERR_CHECK right after the scope block to route this to
                  * the catch (inside try) or propagate it (fallible fn). */
                 vm_ctx->pending_error = err;
-                vm_ctx->pending_error_tag = 1;
                 vmbreak;
             }
             /* Child failed via the panic channel — re-raise as a panic so the
@@ -270,7 +269,6 @@ vmcase(OP_SCOPE_EXIT) {
             xr_free(scope);
             if (err_is_value) {
                 vm_ctx->pending_error = err;
-                vm_ctx->pending_error_tag = 1;
                 vmbreak;
             }
             XrValue exc = err;

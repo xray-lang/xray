@@ -1,0 +1,147 @@
+// Value-return error channel: throw enum + catch
+
+enum MathErr { DivByZero, Overflow }
+enum AppErr { NotFound(string), Timeout }
+enum IoErr { Closed, Timeout }
+enum ParseErr { Invalid }
+
+fn safe_div(a: int, b: int) -> int {
+    if (b == 0) {
+        throw MathErr.DivByZero
+    }
+    return a / b
+}
+
+@test fn basic_throw_catch() {
+    let result = 0
+    try {
+        result = safe_div(10, 2)
+    } catch (e) {
+        result = -1
+    }
+    assert_eq(result, 5)
+}
+
+@test fn catch_on_error() {
+    let result = 0
+    try {
+        result = safe_div(10, 0)
+    } catch (e) {
+        result = -1
+    }
+    assert_eq(result, -1)
+}
+
+@test fn typed_catch() {
+    let msg = "ok"
+    try {
+        safe_div(1, 0)
+    } catch (e: MathErr) {
+        msg = "math error"
+    }
+    assert_eq(msg, "math error")
+}
+
+@test fn auto_propagation() {
+    fn wrapper() -> int {
+        let x = safe_div(10, 0)
+        return x + 1
+    }
+    let result = 0
+    try {
+        result = wrapper()
+    } catch (e) {
+        result = -99
+    }
+    assert_eq(result, -99)
+}
+
+@test fn nested_try_catch() {
+    let inner_val = 0
+    try {
+        inner_val = safe_div(1, 0)
+    } catch (e) {
+        inner_val = 42
+    }
+    let outer = 0
+    try {
+        outer = inner_val + safe_div(10, 5)
+    } catch (e) {
+        outer = -1
+    }
+    assert_eq(outer, 44)
+}
+
+@test fn catch_preserves_error_value() {
+    fn lookup(key: string) -> string {
+        if (key == "") {
+            throw AppErr.NotFound("empty key")
+        }
+        return "value_${key}"
+    }
+    let msg = ""
+    try {
+        msg = lookup("")
+    } catch (e: AppErr) {
+        msg = match (e) {
+            AppErr.NotFound(s) -> "not found: ${s}",
+            AppErr.Timeout -> "timeout",
+        }
+    }
+    assert_eq(msg, "not found: empty key")
+}
+
+@test fn defer_runs_on_throw() {
+    let cleaned = false
+    let caught = false
+    fn work() -> int {
+        defer { cleaned = true }
+        throw MathErr.Overflow
+        return 0
+    }
+    try {
+        work()
+    } catch (e) {
+        caught = true
+    }
+    assert_eq(caught, true)
+    assert_eq(cleaned, true)
+}
+
+@test fn multi_catch_typed() {
+    fn process(input: string) -> int {
+        if (input == "closed") { throw IoErr.Closed }
+        if (input == "bad") { throw ParseErr.Invalid }
+        return input.length
+    }
+
+    let r1 = 0
+    try {
+        r1 = process("closed")
+    } catch (e: IoErr) {
+        r1 = -1
+    } catch (e: ParseErr) {
+        r1 = -2
+    }
+    assert_eq(r1, -1)
+
+    let r2 = 0
+    try {
+        r2 = process("bad")
+    } catch (e: IoErr) {
+        r2 = -1
+    } catch (e: ParseErr) {
+        r2 = -2
+    }
+    assert_eq(r2, -2)
+
+    let r3 = 0
+    try {
+        r3 = process("hello")
+    } catch (e: IoErr) {
+        r3 = -1
+    } catch (e: ParseErr) {
+        r3 = -2
+    }
+    assert_eq(r3, 5)
+}

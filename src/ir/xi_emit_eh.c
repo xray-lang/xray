@@ -70,33 +70,22 @@ XR_FUNC void xi_emit_move(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
 }
 
-/* Try: emit OP_TRY + NOP (finally placeholder), register for patching.
- * aux = catch block (NULL for try-finally without catch).
- * aux_int = finally block ID (>=0) or -1 if no finally. */
+/* Try: emit OP_TRY, register for patching.
+ * aux = catch block (panic target). */
 XR_FUNC void xi_emit_try(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) dst;
-    XiBlock *catch_blk = (XiBlock *) v->aux; /* NULL when no catch clause */
+    XiBlock *catch_blk = (XiBlock *) v->aux;
     int try_pc = current_pc(ctx);
     emit_inst(ctx, CREATE_ABx(OP_TRY, 0, 0)); /* patched later */
-    emit_inst(ctx, CREATE_ABx(OP_NOP, 0, 0)); /* finally placeholder */
 
-    /* aux_int = finally block ID (>=0) or -1 if no finally */
-    uint32_t fin_bid = (v->aux_int >= 0) ? (uint32_t) v->aux_int : 0;
     uint32_t catch_bid = catch_blk ? catch_blk->id : 0;
-    add_try_patch(ctx, try_pc, catch_bid, fin_bid);
+    add_try_patch(ctx, try_pc, catch_bid);
 }
 
 /* Catch */
 XR_FUNC void xi_emit_catch(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) v;
     emit_inst(ctx, CREATE_ABC(OP_CATCH, dst, 0, 0));
-}
-
-/* Finally */
-XR_FUNC void xi_emit_finally(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    (void) v;
-    (void) dst;
-    emit_inst(ctx, CREATE_ABC(OP_FINALLY, 0, 0, 0));
 }
 
 /* End try */

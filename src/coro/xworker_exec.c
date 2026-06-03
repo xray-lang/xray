@@ -639,7 +639,6 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
     XrValue exc_value = coro_ctx->current_exception;
     coro_ctx->current_exception = xr_null();
     coro_ctx->pending_error = xr_null();
-    coro_ctx->pending_error_tag = 0;
     frame->call_status &= ~XR_CALL_CLOSURE_PENDING;
 
     ctx->current_coro = coro;
@@ -720,29 +719,20 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
             atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
             XR_DBG_CORO("coro id=%d timer blocked, waiting for Timer Wheel callback", coro->id);
         }
-    } else if (result == XR_VM_OK && coro_ctx->pending_error_tag == 0) {
+    } else if (result == XR_VM_OK && XR_IS_NULL(coro_ctx->pending_error)) {
         coro->result = coro_ctx->stack[0];
         XR_DBG_CORO("run_on_worker: coro id=%d completed, result tag=%u", coro->id,
                     coro_ctx->stack[0].tag);
     } else {
-        // Error: capture actual exception value from vm_ctx so the
-        // original Exception object survives the hand-off into
-        // task->error / scope->first_error. Earlier code reduced this
-        // to a bare message string, but linked-scope rethrow then
-        // re-wrapped the string via xr_exception_from_value, putting
-        // the original string into Exception.data — and OP_CATCH
-        // unwraps data back into the catch register, so user code saw
-        // a plain string instead of the Exception (F026).
+        /* Error: capture the original Exception object so linked-scope
+         * rethrow preserves it (avoids wrapping into Exception.data). */
         coro->result = xr_null();
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
-        /* Check both error channels: pending_error (new) and
-         * current_exception (legacy panic path, VM_RUNTIME_ERROR). */
         XrValue exc = xr_null();
-        /* Remember which channel the failure came from so a linked scope
-         * re-raises it on the matching channel in the parent: value-channel
-         * enum errors surface via `catch (e)`, panics via `catch panic`. */
-        coro->error_is_value = (coro_ctx->pending_error_tag != 0);
-        if (coro_ctx->pending_error_tag != 0) {
+        /* Determine which channel the failure came from so linked scopes
+         * can re-raise on the matching channel in the parent. */
+        coro->error_is_value = !XR_IS_NULL(coro_ctx->pending_error);
+        if (!XR_IS_NULL(coro_ctx->pending_error)) {
             exc = coro_ctx->pending_error;
         } else if (!XR_IS_NULL(coro_ctx->current_exception)) {
             exc = coro_ctx->current_exception;
@@ -753,10 +743,9 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
             XrString *s = xr_string_intern(isolate, "coroutine error", 15, 0);
             coro->error = xr_string_value(s);
         }
-        /* Top-level uncaught value-return error: print a diagnostic.
-         * Panic-channel faults already print during unwind (see
-         * xr_vm_throw_exception's "no handler" tail); child-coro errors are
-         * isolated to coro->error and surfaced by the awaiting parent. */
+        /* Top-level uncaught value-return error: print diagnostic.
+         * Panic faults print during unwind; child-coro errors are
+         * isolated and surfaced by the awaiting parent. */
         if (coro->error_is_value && xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) &&
             !(isolate && isolate->suppress_exception_print) && !XR_IS_NULL(coro->error)) {
             XrString *msg = xr_value_to_string(isolate, coro->error);
@@ -764,7 +753,6 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         }
         coro_ctx->current_exception = xr_null();
         coro_ctx->pending_error = xr_null();
-        coro_ctx->pending_error_tag = 0;
     }
 
     ctx->current_coro = NULL;

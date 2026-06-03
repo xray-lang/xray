@@ -172,7 +172,7 @@ int xr_execute(XrayIsolate *isolate, XrProto *proto) {
     XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime) {
         XrVMResult result = xr_vm_interpret_proto_isolate(isolate, proto);
-        if (result == XR_VM_OK && isolate->vm.pending_error_tag != 0) {
+        if (result == XR_VM_OK && !XR_IS_NULL(isolate->vm.pending_error)) {
             return -1;
         }
         return (result == XR_VM_OK) ? 0 : -1;
@@ -298,7 +298,6 @@ int xr_vm_init(XrayIsolate *isolate) {
     isolate->vm.handler_count = 0;
     isolate->vm.current_exception = xr_null();
     isolate->vm.pending_error = xr_null();
-    isolate->vm.pending_error_tag = 0;
 
     // Initialize string intern table
     isolate->vm.strings_map = xr_hashmap_new();

@@ -129,8 +129,8 @@ XR_FUNC void xr_coro_pool_print_stats(XrCoroStructPool *pool);
 #include "xexec_frame.h"
 static inline void xr_coro_init_from_slab(struct XrCoroutine *coro, XrCoroPoolBlock *block,
                                           uint32_t local_idx) {
-    coro->vm_ctx.handlers = NULL;
-    coro->vm_ctx.handler_capacity = 0;
+    coro->vm_ctx.handlers = coro->vm_ctx.handler_inline;
+    coro->vm_ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
     coro->coro_gc = NULL;
     coro->ext = NULL;
     coro->jit_suspend = NULL;

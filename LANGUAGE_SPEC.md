@@ -61,7 +61,7 @@ Xray is a **lightweight statically typed scripting language with native concurre
 | **Types** | Static typing + type inference; declarations rarely require explicit type annotations, but the type system is fully visible at compile time |
 | **Concurrency** | Built-in M:N coroutines (go / await / Channel / scope / select); concurrency safety is enforced at compile time by the "explicit sharing" rules |
 | **Execution** | VM interpreter / JIT / AOT — all transparent to the developer; semantics are strictly identical across modes |
-| **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + `Result<T,E>` + nullable types (T?) + `defer`-based resource management |
+| **Error handling** | Value-return error channel (throw / try / catch + enum errors) + panic boundary (catch panic) + nullable types (T?) + `defer`-based resource management |
 | **Metaprogramming** | Attributes (`@test` / `@native` / `@deprecated`) + runtime reflection (Reflect) + reified generics |
 | **Interop** | C ABI is built-in; stdlib modules can be authored in C and exposed via `XR_DEFINE_BUILTIN` |
 
@@ -218,7 +218,6 @@ Xray has **63 reserved keywords** in total; the authoritative source-of-truth ta
 
 > **Note**: the following names are **not** lexer keywords; they are built-in type symbols automatically introduced by the prelude:
 > `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`.
-> `Result<T, E>` is the built-in ADT enum used by current error-handling paths and `catch!`; it is also directly available.
 > They may be locally shadowed by user types of the same name, but typically need no import.
 
 #### 1.5.7 Literal Keywords
@@ -495,7 +494,7 @@ Xray is statically typed; every expression has a determined type at compile time
 | Sized floats | `float32`, `float64` |
 | Containers | `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Bytes` (equivalent to `Array<uint8>`) |
 | Special | `Json`, `BigInt`, `Range`, `DateTime`, `Regex`, `StringBuilder`, `Logger`, `NetConn`, `NetListener` |
-| Error-handling prelude | `Exception`, `Result<T, E>` (see §8) |
+| Error-handling prelude | `Exception` (see §8) |
 | Weak containers | `WeakMap`, `WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -935,8 +934,6 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
-            | 'try?' UnaryExpr
-            | 'try!' UnaryExpr
             | PostfixExpr
 ```
 
@@ -1080,7 +1077,7 @@ let item = arr?[0]              // optional index
 - Result type: the original type plus `?` (already-nullable types remain unchanged).
 - Optional function call `func?.()` is not part of the current grammar.
 
-### 3.7 Force Unwrap `!` / `try?` / `try!` / `catch!`
+### 3.7 Force Unwrap `!`
 
 > Full error-handling semantics are in §8. This section only lists the expression syntax and brief semantics.
 
@@ -1091,72 +1088,6 @@ let v: int = nullable_int!      // throws NullThrowError (E0410) at runtime when
 ```
 
 Legal only when `expr` is known to be a nullable type (`T?`) at compile time; using `!` on a non-null `T` is a compile error.
-
-#### `try?` expression — collapse failure to null
-
-```ebnf
-TryOptional ::= 'try?' Expression
-```
-
-`try? e` collapses any failure to `null`, discarding the cause:
-
-| Static type of `e` | Type of `try? e` | Behavior |
-|--|--|--|
-| `Result<T, E>` | `T?` | `Err` → `null`; `Ok(v)` → `v` |
-| `T` (ordinary type, call may throw) | `T?` | thrown → `null`; otherwise → `v` |
-| `T?` | `T?` | passes through |
-
-```xray
-let n: int? = try? parseInt(input)         // Result.Err → null
-let v: Json? = try? http.get(url).json()   // thrown → null
-```
-
-#### `try!` expression — early return or cross-track promotion
-
-```ebnf
-TryForce ::= 'try!' Expression
-```
-
-The static type of the expression following `try!` **must** be `Result<T, E>` or `T?` (other types are a compile error `E0821`). Behavior is double-dispatched by expression type + the current function's return type:
-
-| `e` type | Current function return | Failure behavior | Success value |
-|--|--|--|--|
-| `Result<T, E>` | `Result<_, E>` | early return `return Result.Err(e)` | `v` |
-| `Result<T, E>` | other | `throw e` (requires `E` to be `Exception`-derived) | `v` |
-| `T?` | `_?` | early return `return null` | `v` |
-| `T?` | other | `throw new NullThrowError(...)` | `v` |
-
-```xray
-fn pipeline(s: string) -> Result<int, ParseError> {
-    let n = try! parseInt(s)      // Err early-returns Err
-    return Result.Ok(n + 1)
-}
-```
-
-Full details in §8.3.1. **`try!` is not a mandatory ceremony for exception-throwing calls** — xray does not require `try!` before every call that might throw.
-
-#### `catch!` block expression — condense an exception block into a Result
-
-```ebnf
-CatchBlock ::= 'catch!' Block
-```
-
-`catch! { ... }` wraps any exceptions that might escape the block into a `Result<T, Exception>`:
-
-```xray
-let r: Result<int, Exception> = catch! {
-    let x = riskyOp()
-    let y = another(x)
-    return y + 1                   // a return inside is a "return from the catch! block"
-}
-```
-
-- A `return v` inside the block returns from the `catch!` block (does not affect the outer function).
-- The block's last expression is taken as the `Ok(v)` payload.
-- **Any exception** escaping the block is wrapped as `Err(e)`; `e` is statically typed `Exception`.
-- Type filtering is not supported — when needed, use a handwritten `try/catch`.
-
-Full details in §8.3.3.
 
 ### 3.8 `as` / `is`
 
@@ -2338,9 +2269,9 @@ A variant name may be followed by parentheses declaring payload fields (position
 
 ```xray
 // positional payload
-enum Result<T, E> {
-    Ok(T),
-    Err(E),
+enum Option<T> {
+    Some(T),
+    None,
 }
 
 // named-field payload (recommended for readability)
@@ -2374,7 +2305,7 @@ enum Expr {
 | Carries data | ❌ | ✅ Each variant has its own field set |
 | `.value` / `.ordinal` | ✅ | Available only on payload-free variants |
 | Backing value (`= 200`) | ✅ | ❌ Cannot coexist with payloads |
-| Generics | ❌ | ✅ `enum Result<T, E> { ... }` |
+| Generics | ❌ | ✅ `enum Option<T> { ... }` |
 | `match` destructuring | By value only | By variant + payload destructuring |
 | `for-in` iteration | ✅ In declaration order | ❌ Meaningless when payloads are present |
 | Memory layout | Integer/string value | tag + payload |
@@ -2387,7 +2318,7 @@ Construction:
 
 ```xray
 let c = Color.Red                                   // simple
-let r1 = Result.Ok(42)                              // positional payload
+let r1 = Option.Some(42)                            // positional payload
 let e1 = NetEvent.DataReceived(bytes: b)            // named payload, field name allowed
 let e2 = NetEvent.Error(404, "not found")           // field name omitted, positional
 let e3 = NetEvent.Connected                         // payload-free variant: no parentheses
@@ -2426,7 +2357,7 @@ Color.memberCount     // 3              count of simple variants (int)
 Color.getMember(0)    // Color.Red      lookup by ordinal
 ```
 
-ADT variants with payloads do **not** support `.value` / `.ordinal` / `getMember`, but `.name` and `toString()` are still available (the latter includes a payload summary, e.g. `Result.Ok(42)`).
+ADT variants with payloads do **not** support `.value` / `.ordinal` / `getMember`, but `.name` and `toString()` are still available (the latter includes a payload summary, e.g. `Option.Some(42)`).
 
 #### 5.6.5 Iteration
 
@@ -2436,7 +2367,7 @@ Simple enums can be iterated with `for-in` in declaration order:
 for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
 ```
 
-ADT enums with payloads do **not** support direct `for-in`—iterating "all possible values" is meaningless (`Result<int, string>` has infinitely many).
+ADT enums with payloads do **not** support direct `for-in`—iterating "all possible values" is meaningless (`Option<int>` has infinitely many).
 
 #### 5.6.6 Reverse lookup (value to member)
 
@@ -2481,7 +2412,7 @@ print(s.isRound())       // true
 **Rules**:
 
 - Method syntax matches `class` methods: `fn name(params) -> ReturnType { body }`.
-- Inside a method, the static type of `this` is the enum itself (e.g. `Result<T, E>`); use `match (this)` to extract a variant's payload.
+- Inside a method, the static type of `this` is the enum itself (e.g. `Option<T>`); use `match (this)` to extract a variant's payload.
 - `constructor` is **not** supported (variant syntax already serves as the constructor).
 - Inheritance is **not** supported (`enum E extends ...` is illegal); for shared behaviour use interface implementation (`enum E implements Iface`) or top-level functions.
 - Simple (payload-free) enums may also define methods; inside such methods `this` is the enum value and can be compared directly with `==`:
@@ -2504,7 +2435,7 @@ TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
 ```
 
 ```xray
-type Outcome = int | string                          // union alias (do not collide with the prelude's Result)
+type Outcome = int | string                          // union alias
 type Mapper = fn(int) -> int                         // function-type alias
 type Point = { x: float, y: float }                  // structural object alias (sealed)
 ```
@@ -2613,10 +2544,10 @@ match (event) {
     NetEvent.Error(code, msg)     -> log.error(code, msg),
 }
 
-// Result patterns (positional)
-match (result) {
-    Result.Ok(v)  -> print("got:", v),
-    Result.Err(e) -> print("failed:", e),
+// Option patterns (positional)
+match (opt) {
+    Option.Some(v) -> print("got:", v),
+    Option.None    -> print("nothing"),
 }
 
 // Wildcards skip payload fields you don't care about
@@ -2627,8 +2558,8 @@ match (event) {
 
 // Nested destructuring
 match (msg) {
-    Result.Ok(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Result.Err(e)                            -> log.error(e),
+    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
+    Option.None                               -> skip(),
     _                                         -> skip(),
 }
 ```
@@ -2925,7 +2856,7 @@ Design principles:
 
 - **Errors are values**: `throw <enum>` writes an enum value into the return channel — no stack unwinding, no Exception allocation.
 - **Panics are not errors**: a panic signals a program bug or runtime invariant violation, not business logic.
-- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Use `Result<T, E>` return values when explicit failure visibility is needed.
+- **No `throws` in function signatures**: xray does not adopt Java/Swift-style checked exceptions. Errors are handled via the throw/catch value-return channel.
 - **`defer` replaces `finally`**: xray has no `finally` keyword; resource cleanup uses function-scoped `defer` (Go model).
 
 ### 8.1 Value-return error channel
@@ -3169,143 +3100,15 @@ fn fetch(url: string) -> string {
 - `defer` executes on `throw`, `return`, and panic
 - `defer` blocks should not throw errors (behaviour is undefined)
 
-### 8.4 `Result<T, E>`
-
-#### 8.4.1 Type and construction
-
-`Result<T, E>` is the prelude's built-in ADT enum:
-
-```xray
-@native
-enum Result<T, E> {
-    Ok(T),
-    Err(E),
-}
-```
-
-Construction and destructuring:
-
-```xray
-let r1: Result<int, string> = Result.Ok(42)
-let r2: Result<int, string> = Result.Err("parse failed")
-
-match (r1) {
-    Result.Ok(v)  -> print("got:", v),
-    Result.Err(e) -> print("failed:", e),
-}
-```
-
-#### 8.4.2 Choosing the error type `E`
-
-`E` may be any type; recommended styles:
-
-| Failure shape | E type | Example |
-|--|--|--|
-| Multiple enumerable failure causes | User-defined ADT enum | `enum ParseErr { Empty, NotNumber(string), Overflow }` |
-| Single string reason | `string` | `Result<int, string>` |
-
-**Strongly prefer ADT enums** — they let `match` check exhaustiveness at compile time.
-
-#### 8.4.3 Methods on `Result`
-
-```xray
-@native
-enum Result<T, E> {
-    Ok(T),
-    Err(E)
-
-    fn isOk() -> bool
-    fn isErr() -> bool
-
-    fn ok() -> T?                                          // Ok(v) -> v; Err -> null
-    fn err() -> E?                                         // Err(e) -> e; Ok -> null
-
-    fn unwrapOr(default: T) -> T                           // return default on Err
-    fn unwrapOrElse(handler: (E) -> T) -> T                // compute via handler on Err
-
-    fn map<U>(transform: (T) -> U) -> Result<U, E>         // transform the Ok value
-    fn mapErr<F>(transform: (E) -> F) -> Result<T, F>      // transform the Err value
-    fn andThen<U>(transform: (T) -> Result<U, E>) -> Result<U, E>  // chain (flatMap)
-}
-```
-
-`map` / `mapErr` are the "transform the inner without breaking the outer" shortcut:
-
-```xray
-// Without map: 5 lines
-let r2: Result<float, string>
-match (parseInt(s)) {
-    Result.Ok(n)  -> r2 = Result.Ok(n.toFloat()),
-    Result.Err(e) -> r2 = Result.Err(e),
-}
-
-// With map: 1 line
-let r2 = parseInt(s).map(n -> n.toFloat())
-```
-
-#### 8.4.4 Error type conversion: explicit `mapErr` is mandatory
-
-When composing `Result`s across layers, the `Err` type is **not** converted automatically. The caller must call `.mapErr(...)` explicitly:
-
-```xray
-fn loadConfig(text: string) -> Result<Config, ConfigErr> {
-    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
-    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port"))
-    return Result.Ok(Config(port: port))
-}
-```
-
-### 8.5 Bridges: `try!` / `try?`
-
-#### 8.5.1 `try! e` — early exit
-
-The static type of the expression after `try!` **must** be `Result<T, E>` or `T?`.
-
-| Type of `e` | Enclosing return type | Behaviour |
-|--|--|--|
-| `Result<T, E>` | `Result<_, E>` | `Err(e)` → `return Result.Err(e)`; `Ok(v)` → `v` |
-| `Result<T, E>` | other | `Err(e)` → `throw e` (propagates Err value through value-return channel); `Ok(v)` → `v` |
-| `T?` | `_?` | `null` → `return null`; `v` → `v` |
-| `T?` | other | `null` → panic; `v` → `v` |
-
-Example:
-
-```xray
-// Same-track early exit
-fn parsePair(s: string) -> Result<(int, int), ParseErr> {
-    let parts = s.split(",")
-    if (parts.length != 2) { return Result.Err(ParseErr.Empty) }
-    let a = try! parseInt(parts[0])
-    let b = try! parseInt(parts[1])
-    return Result.Ok((a, b))
-}
-```
-
-#### 8.5.2 `try? e` — failure becomes null
-
-`try?` collapses any failure into `null`, discarding the cause.
-
-| Type of `e` | Type of `try? e` | Behaviour |
-|--|--|--|
-| `Result<T, E>` | `T?` | `Err` → `null`; `Ok(v)` → `v` |
-| Fallible call returning `T` | `T?` | Error → `null`; success → `v` |
-| `T?` | `T?` | Pass-through |
-
-```xray
-let n: int? = try? parseInt(s)
-let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
-```
-
-### 8.6 Optional and error handling
+### 8.4 Optional and error handling
 
 `T?` is sugar for `T | null` and fits the binary "value or absent" case. See §2.5. Relation to error handling:
 
-- **Failure with no cause**: `T?` is more concise than `Result<T, ()>`.
-- Cooperates with `try!` / `try?` (see §8.5.1 / §8.5.2).
+- **Failure with no cause**: `T?` (e.g. map lookup returns `null` for "key not found").
 - Pairs with `??` (default value) / `?.` (optional chain) / `e!` (force unwrap).
-- Do not use `T?` as a generic error return — if a cause is needed, return `Result<T, E>`.
+- Do not use `T?` as a generic error return — if a cause is needed, use `throw <enum>` + `catch`.
 
-### 8.7 Decision tree: which mechanism to choose
+### 8.5 Decision tree: which mechanism to choose
 
 Choose by "**how the caller has to handle the failure**":
 
@@ -3319,11 +3122,10 @@ Does the caller need to handle the failure?
 ├─ Yes, with structured causes
 │   ↓
 │   throw <enum>, catch to handle (zero-overhead value-return channel)
-│   or Result<T, E> return value (compile-time visible)
 │
 ├─ Yes, but the failure simply means "no value"
 │   ↓
-│   T? + ?? / ?. / try?
+│   T? + ?? / ?.
 │
 ├─ Yes, and the function has ≥3 normal states
 │   ↓
@@ -3339,13 +3141,12 @@ Reference table:
 | Case | Recommended | Example |
 |--|--|--|
 | Business errors, recoverable failures | `throw <enum>` + `catch` | `throw ParseErr.Empty` |
-| Parsing, decoding, state transitions | `Result<T, E>` | `parseInt(s) -> Result<int, ParseErr>` |
 | Map lookup, optional fields | `T?` | `map.get(k) -> Value?` |
 | Runtime fault fallback | `catch panic` | Array OOB, division by zero |
 | Multi-branch result | enum | `nextEvent() -> NetEvent` |
 | Primary result + metadata | tuple | `parse(s) -> (Ast, int)` |
 
-### 8.8 Common patterns
+### 8.6 Common patterns
 
 #### Pattern 1: enum errors + defer for resource cleanup
 
@@ -3376,37 +3177,38 @@ fn main() {
 main()
 ```
 
-#### Pattern 2: Result for library APIs
+#### Pattern 2: throw + catch for library APIs
 
 ```xray
 enum ConfigErr { BadJson(string), BadField(string) }
 
-fn parseConfig(text: string) -> Result<Config, ConfigErr> {
-    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
-    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port"))
-    return Result.Ok(Config(port: port))
+fn parseConfig(text: string) -> Config {
+    let json = parseJson(text)
+    let port = json["port"].toInt()
+    if (port == null) { throw ConfigErr.BadField("port") }
+    return Config(port: port!)
 }
 
 fn main() {
-    match (parseConfig(configText)) {
-        Result.Ok(cfg) -> startServer(cfg),
-        Result.Err(e) -> {
-            match (e) {
-                ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-                ConfigErr.BadField(f) -> print("bad field:", f),
-            }
-        },
+    try {
+        let cfg = parseConfig(configText)
+        startServer(cfg)
+    } catch (e: ConfigErr) {
+        match (e) {
+            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
+            ConfigErr.BadField(f) -> print("bad field:", f),
+        }
     }
 }
 
 main()
 ```
 
-#### Pattern 3: `try?` + `??` for default values
+#### Pattern 3: `??` for default values
 
 ```xray
-let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
-let user = (try? db.findUser(id)) ?? guestUser
+let port = config?.port ?? 8080
+let user = db.findUser(id) ?? guestUser
 ```
 
 #### Pattern 4: catch panic for runtime fault fallback
@@ -4583,7 +4385,7 @@ The `ord?` parameter accepts an `Ordering` enum; defaults to `Ordering.SeqCst`. 
 >
 > `base64`, `cluster`, `compress`, `crypto`, `csv`, `datetime`, `encoding`, `gc`, `http`, `io`, `log`, `math`, `net`, `os`, `path`, `regex`, `time`, `toml`, `url`, `ws`, `xml`, `yaml`.
 >
-> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.); `Result<T, E>` is the built-in ADT enum used on error-handling paths. See §1.5.6 / §2.2.
+> Built-in types that need no import are registered by the prelude (`Array`, `Map`, `Set`, `Json`, `Channel`, `Bytes`, `BigInt`, `StringBuilder`, `Exception`, `Regex`, `Logger`, `NetConn`, `NetListener`, etc.). See §1.5.6 / §2.2.
 
 ### 15.1 File I/O and System
 
@@ -4787,11 +4589,9 @@ The operand of a `throw` expression must have a static type that is `Exception` 
 
 Stack unwinding (panic channel only): the VM's `xvm_unwind_stack()` walks the try-table to find `catch panic` handlers, releasing locals frame by frame and running `defer` along the way before jumping to the handler. Recoverable errors use the value-return channel and never unwind the stack. See §8 for details.
 
-### 16.7 Result Runtime
+### 16.7 Value-return Error Channel Runtime
 
-`Result<T, E>` is a prelude ADT enum (see §8.2 / §5.6.2). Runtime representation: tag (1 byte) + payload. `Result.Ok(v)` and `Result.Err(e)` are value objects, and `match` destructuring is lowered at the IR level into tag-test + payload-extract.
-
-Because `Result` has zero overhead on the no-exception path (no throwing, no stack unwinding), code paths using `Result` perform the same as a tagged union.
+`throw <enum>` writes the enum value into the frame's `pending_error` slot, sets the error flag, and returns. The caller detects the flag via `OP_ERR_CHECK` and either enters a `catch` handler or continues returning upward. The happy path has zero overhead (only a single conditional branch); no stack unwinding or object allocation occurs.
 
 ---
 
@@ -5024,15 +4824,15 @@ Analyzer enum codes (`XrErrorCode`, defined in the 350+ section of `xerror.h`):
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m` (bare KV) | `for (k, v in m)` |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` or omit the return type |
 
-### 18.7 Error Handling and Result (E082x)
+### 18.7 Error Handling (E082x)
 
 | Code | Name | Description |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | merged into `E0370` (see §8.1.1); the code is preserved in the table only to avoid reuse |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | `try!` operand is neither `Result<T,E>` nor `T?` |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | `try!` cross-track promotion where `E` is not an `Exception` subclass |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); the code is preserved only to avoid reuse |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | `Result<T, E>.unwrap()` where `E` is not an `Exception` subclass |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | merged into `E0370` (see §8.1.1); code preserved to avoid reuse |
+| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | deprecated (`try!` removed); code preserved to avoid reuse |
+| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | deprecated (`try!` removed); code preserved to avoid reuse |
+| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | merged into `E0371` (see §6.3.3); code preserved to avoid reuse |
+| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | deprecated (`Result` removed); code preserved to avoid reuse |
 
 ### 18.8 Error-Object Layout
 
@@ -5064,7 +4864,7 @@ class HttpError extends Exception {
 }
 ```
 
-Alternatively, use an ADT enum + `Result<T, E>` to express enumerable failure modes (see §8.2).
+Alternatively, use an ADT enum + `throw` / `catch` to express enumerable failure modes (see §8.1).
 
 ---
 
@@ -5153,8 +4953,6 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
-           |  'try?' UnaryExpr
-           |  'try!' UnaryExpr
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -5175,8 +4973,6 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
          |  MatchExpr
-         |  TryExpr
-         |  CatchBlock
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
 
@@ -5196,10 +4992,7 @@ ArrowParam  ::= Identifier ':' Type
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-TryExpr     ::= 'try?' Expression | 'try!' Expression
-CatchBlock  ::= 'catch!' Block
-
-ThrowExpr   ::= 'throw' Expression                // operand's static type must be Exception-derived (E0370)
+ThrowExpr   ::= 'throw' Expression                // operand's static type must be an enum variant
 
 ArgList ::= Expression (',' Expression)* ','?
 ```
@@ -5495,7 +5288,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Dimension | Go | xray |
 |--|--|--|
 | Type system | simple + implicit interfaces | richer + explicit `implements` |
-| Error handling | multiple return values + `err != nil` | exceptions + `Result<T,E>` + `try?`/`try!` |
+| Error handling | multiple return values + `err != nil` | value-return error channel (`throw` / `catch`) + `T?` |
 | Coroutines | `go func() {}` (statement) | `go expr` (expression returning `Task<T>`) |
 | Awaiting | no direct equivalent (channels/WaitGroup) | `await t`, `await all [...]`, `await any [...]` |
 | Channels | built-in `chan T`, `<-` operator | `Channel<T>` class with `send`/`recv`/`trySend`/`tryRecv` methods |
@@ -5509,7 +5302,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 | Dimension | Rust | xray |
 |--|--|--|
 | Memory safety | full borrow checker | only `move` across coroutines; otherwise GC |
-| Errors | `Result<T, E>` | exceptions + `Result<T,E>` |
+| Errors | `Result<T, E>` | value-return error channel (`throw` / `catch`) |
 | Type inference | strong Hindley-Milner | bidirectional inference |
 | Traits | full | similar to `interface`, fewer features |
 | Performance | near C | VM/JIT, hot paths near native |
@@ -5532,7 +5325,7 @@ Xray draws inspiration from many existing languages but has notable differences 
 |--|--|--|
 | Optional `?` | yes | yes |
 | `!` unwrap | yes | yes |
-| `try?` / `try!` semantics | `try?` collapses to nil; `try!` aborts on failure | `try?` collapses to null; `try!` **rethrows the original exception** (does not abort) |
+| Error handling | `try?` collapses to nil; `try!` aborts | `throw` / `catch` value-return channel; `T?` + `??` |
 | struct vs class | value/reference | value/reference |
 | Protocols | strong | `interface`, weaker |
 | Concurrency | actors + async/await | coroutines + channels + `go`/`await all`/`scope` |

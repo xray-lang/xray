@@ -172,8 +172,8 @@ XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid) {
     ctx->npatch++;
 }
 
-/* Add a pending OP_TRY patch (catch + finally absolute PC targets). */
-XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid, uint32_t finally_bid) {
+/* Add a pending OP_TRY patch (catch absolute PC target). */
+XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid) {
     if (ctx->ntry_patch >= ctx->try_patch_cap) {
         uint32_t new_cap = ctx->try_patch_cap ? ctx->try_patch_cap * 2 : 4;
         void *tmp = xr_realloc(ctx->try_patches, new_cap * sizeof(ctx->try_patches[0]));
@@ -186,7 +186,6 @@ XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid, uint32_t fi
     }
     ctx->try_patches[ctx->ntry_patch].pc = pc;
     ctx->try_patches[ctx->ntry_patch].target_bid = catch_bid;
-    ctx->try_patches[ctx->ntry_patch].finally_bid = finally_bid;
     ctx->ntry_patch++;
 }
 
@@ -509,7 +508,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_SCOPE_EXIT] = xi_emit_scope_exit,
     [XI_TRY] = xi_emit_try,
     [XI_CATCH] = xi_emit_catch,
-    [XI_FINALLY] = xi_emit_finally,
     [XI_END_TRY] = xi_emit_end_try,
     [XI_ASSERT] = xi_emit_assert,
     [XI_ASSERT_EQ] = xi_emit_assert_eq,

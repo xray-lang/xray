@@ -1475,10 +1475,9 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         /* ============ Exception Handling ============ */
 
-        /* TRY/END_TRY/FINALLY: handled structurally in emit_value_stmt */
+        /* TRY/END_TRY: handled structurally in emit_value_stmt */
         case XI_TRY:
         case XI_END_TRY:
-        case XI_FINALLY:
             fprintf(out, "XR_NULL_VAL");
             break;
 
@@ -1763,9 +1762,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    /* XI_END_TRY / XI_FINALLY: pop the exception frame.
+    /* XI_END_TRY: pop the exception frame.
      * Finds the matching XI_TRY by scanning earlier blocks. */
-    if (v->op == XI_END_TRY || v->op == XI_FINALLY) {
+    if (v->op == XI_END_TRY) {
         /* Find the TRY value ID for the matching _efN variable */
         uint32_t try_id = 0;
         for (uint32_t bi = 0; bi < f->nblocks; bi++) {
@@ -1967,8 +1966,7 @@ static void emit_declarations(FILE *out, const XiFunc *f) {
                 if (!v)
                     continue;
                 /* Skip void-like ops, exception ops, and inlined structs */
-                if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY ||
-                    v->op == XI_FINALLY)
+                if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
                     continue;
                 if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
                     continue;
