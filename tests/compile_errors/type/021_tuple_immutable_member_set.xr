@@ -1,0 +1,4 @@
+// 021_tuple_immutable_member_set.xr
+// Tuples are immutable: direct field assignment is a compile error.
+let t = (1, "hello", true)
+t.0 = 99
