@@ -88,7 +88,7 @@ TEST(runtime_error_records_trace) {
     /* The panic value lives in the panic channel (current_exception),
      * and the value-return error channel stays clean. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
-    ASSERT_EQ_INT(ctx->pending_error_tag, 0);
+    ASSERT(XR_IS_NULL(ctx->pending_error));
     ASSERT(xr_value_is_exception(iso, ctx->current_exception));
 
     xray_isolate_delete(iso);
@@ -117,7 +117,7 @@ TEST(catch_clears_pending_exception_state) {
     ASSERT_EQ_INT(rc, 0);
     /* No error left dangling. */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
-    ASSERT_EQ_INT(ctx->pending_error_tag, 0);
+    ASSERT(XR_IS_NULL(ctx->pending_error));
 
     xray_isolate_delete(iso);
 }
@@ -153,7 +153,7 @@ TEST(caught_exception_trace_survives_catch) {
 
     /* Error propagated to top level via pending_error */
     XrVMContext *ctx = xr_vm_current_ctx(iso);
-    ASSERT_EQ_INT(ctx->pending_error_tag != 0, 1);
+    ASSERT(!XR_IS_NULL(ctx->pending_error));
 
     xray_isolate_delete(iso);
 }

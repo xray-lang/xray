@@ -567,15 +567,11 @@ XR_FUNC void patch_jumps(EmitCtx *ctx) {
         *inst = CREATE_sJ(OP_JMP, offset);
     }
 
-    /* Patch OP_TRY instructions: Bx = absolute catch PC (0 = no catch);
-     * Patch the following NOP with finally PC (Bx). */
+    /* Patch OP_TRY instructions: Bx = absolute catch PC. */
     for (uint32_t i = 0; i < ctx->ntry_patch; i++) {
         int pc = ctx->try_patches[i].pc;
         uint32_t bid = ctx->try_patches[i].target_bid;
-        uint32_t fbid = ctx->try_patches[i].finally_bid;
 
-        /* catch_offset: 0 means "no catch clause" — the VM will skip to
-         * the finally handler on exception instead of running OP_CATCH. */
         int target_pc = 0;
         if (bid > 0) {
             XR_DCHECK(bid < ctx->block_pc_size, "try_patch: bad catch block id");
@@ -585,15 +581,5 @@ XR_FUNC void patch_jumps(EmitCtx *ctx) {
         }
         XrInstruction *inst = PROTO_CODE_PTR(ctx->proto, pc);
         *inst = CREATE_ABx(OP_TRY, 0, target_pc);
-
-        /* Patch NOP at pc+1 with finally absolute PC */
-        int fin_pc = -1;
-        if (fbid > 0 && fbid < ctx->block_pc_size) {
-            fin_pc = ctx->block_pc[fbid];
-            if (fin_pc >= 0) {
-                XrInstruction *fin_inst = PROTO_CODE_PTR(ctx->proto, pc + 1);
-                *fin_inst = CREATE_ABx(OP_NOP, 0, fin_pc);
-            }
-        }
     }
 }

@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_dispatch_exception.inc.c — try / catch / finally / throw dispatch
+ * xvm_dispatch_exception.inc.c — panic handler + value-return error dispatch
  *
  * NOT a standalone translation unit. Included from inside the
  * dispatch switch in xvm.c; relies on locals (i, isolate, vm_ctx,
@@ -16,33 +16,37 @@
  * provided by the surrounding scope. CMake excludes *.inc.c
  * from the VM_SRC glob.
  *
- * Owns: OP_TRY, OP_CATCH, OP_FINALLY, OP_END_TRY, OP_THROW.
- * The companion OP_SPILL / OP_RELOAD pair lives next to these
- * in the source order but is not exception-related; it stays
- * in xvm.c with the rest of the register-window machinery.
+ * Owns: OP_TRY, OP_CATCH, OP_END_TRY, OP_THROW (panic channel),
+ *       OP_ERR_SET, OP_ERR_RETURN, OP_ERR_CHECK, OP_ERR_HAS,
+ *       OP_ERR_CATCH (value-return error channel).
  */
 
 vmcase(OP_TRY) {
-    // Set exception handler
+    /* Push a panic handler. Bx = absolute PC of the catch block. */
     TRACE_EXECUTION();
     int catch_offset = GETARG_Bx(i);
 
-    // Read next instruction to get finally offset
-    XrInstruction next_i = *pc++;
-    int finally_offset = GETARG_Bx(next_i);
-
-    // Lazy allocate / grow exception handler array
+    /* Grow handler array if needed (inline→heap on first overflow) */
     if (VM_HANDLER_COUNT >= vm_ctx->handler_capacity) {
-        int new_cap = vm_ctx->handler_capacity == 0 ? 8 : vm_ctx->handler_capacity * 2;
+        int new_cap = vm_ctx->handler_capacity * 2;
         if (new_cap > XR_EXCEPTION_HANDLERS_MAX)
             new_cap = XR_EXCEPTION_HANDLERS_MAX;
         if (VM_HANDLER_COUNT >= new_cap) {
             VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "exception handler nesting too deep");
         }
-        XrExceptionHandler *new_h = (XrExceptionHandler *) xr_realloc(
-            vm_ctx->handlers, sizeof(XrExceptionHandler) * new_cap);
-        if (!new_h) {
-            VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "failed to allocate exception handlers");
+        XrExceptionHandler *new_h;
+        if (vm_ctx->handlers == vm_ctx->handler_inline) {
+            new_h = (XrExceptionHandler *) xr_malloc(sizeof(XrExceptionHandler) * new_cap);
+            if (!new_h) {
+                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "failed to allocate exception handlers");
+            }
+            memcpy(new_h, vm_ctx->handler_inline, sizeof(XrExceptionHandler) * VM_HANDLER_COUNT);
+        } else {
+            new_h = (XrExceptionHandler *) xr_realloc(vm_ctx->handlers,
+                                                      sizeof(XrExceptionHandler) * new_cap);
+            if (!new_h) {
+                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "failed to allocate exception handlers");
+            }
         }
         vm_ctx->handlers = new_h;
         vm_ctx->handler_capacity = new_cap;
@@ -51,53 +55,31 @@ vmcase(OP_TRY) {
     int _hidx = VM_HANDLER_COUNT;
     VM_INC_HANDLER_COUNT;
     XrExceptionHandler *handler = &VM_HANDLERS[_hidx];
-    handler->catch_offset = catch_offset;
-    handler->finally_offset = finally_offset;
+    handler->catch_offset = (uint32_t) catch_offset;
     handler->stack_size = (int) (VM_STACK_TOP - VM_STACK);
     handler->frame_count = VM_FRAME_COUNT;
     handler->exception = xr_null();
     handler->caught = false;
-    handler->in_finally = false;
-    handler->try_pc = pc - 2;  // Save try instruction position
 
     vmbreak;
 }
 
 vmcase(OP_CATCH) {
-    // Catch exception: R[A] = originally thrown value (or exception object)
+    /* Bind the caught panic Exception into R[A].
+     * Always delivers the full Exception object (user accesses
+     * .message, .code, .stackTrace, .data as needed). */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
 
-    // Get current handler
     if (VM_HANDLER_COUNT > 0) {
         XrExceptionHandler *handler = &VM_HANDLERS[VM_HANDLER_COUNT - 1];
 
-        // Store exception value in specified register
         if (!XR_IS_NULL(handler->exception)) {
-            XrValue exc = handler->exception;
-
-            // If wrapped exception, return original value (data field)
-            if (xr_value_is_exception(isolate, exc)) {
-                XrValue data = xr_exception_get_data(isolate, exc);
-                if (!XR_IS_NULL(data)) {
-                    R(a) = data;
-                } else {
-                    R(a) = exc;
-                }
-            } else {
-                R(a) = exc;
-            }
+            R(a) = handler->exception;
             handler->caught = true;
-            // Clear consumed exception; if catch rethrows,
-            // xr_vm_throw_exception will set a new one.
             handler->exception = xr_null();
-            // Also clear the ctx-wide pending-exception
-            // slot. Subsequent dispatch hot paths (notably
-            // OP_INVOKE) treat a non-null current_exception
-            // as "the most recently called builtin threw";
-            // leaving the
-            // caught value in place would cause the next
-            // builtin call to spuriously unwind.
+            /* Clear ctx-wide slot so OP_INVOKE doesn't spuriously
+             * treat it as "builtin just panicked". */
             VM_SET_EXCEPTION(xr_null());
         }
     }
@@ -105,32 +87,19 @@ vmcase(OP_CATCH) {
     vmbreak;
 }
 
-vmcase(OP_FINALLY) {
-    // finally block start - mark handler so re-throw propagates outward
-    TRACE_EXECUTION();
-    if (VM_HANDLER_COUNT > 0) {
-        VM_HANDLERS[VM_HANDLER_COUNT - 1].in_finally = true;
-    }
-    vmbreak;
-}
-
 vmcase(OP_END_TRY) {
-    /* End of a panic-handler (catch panic) scope.  OP_TRY/OP_END_TRY
-     * and the handler stack belong exclusively to the panic channel;
-     * the value-return error channel never uses them. */
+    /* Pop the panic handler. If an uncaught panic is pending (thrown
+     * inside the catch block itself), propagate it outward. */
     TRACE_EXECUTION();
 
     if (VM_HANDLER_COUNT > 0) {
         XrExceptionHandler *handler = &VM_HANDLERS[VM_HANDLER_COUNT - 1];
 
-        // Pending panic that must keep unwinding:
-        //   1. uncaught panic in try-finally (no catch panic)
-        //   2. panic raised inside the panic handler, finally just ran
-        bool has_pending =
-            !XR_IS_NULL(handler->exception) && (!handler->caught || handler->in_finally);
+        /* Uncaught: exception still pending and not consumed by OP_CATCH */
+        bool has_pending = !XR_IS_NULL(handler->exception) && !handler->caught;
         if (has_pending) {
             XrValue exc = handler->exception;
-            VM_DEC_HANDLER_COUNT;  // Pop handler
+            VM_DEC_HANDLER_COUNT;
             xr_vm_throw_exception(isolate, exc);
 
             if (!xr_vm_is_catch_reachable(isolate)) {
@@ -146,25 +115,21 @@ vmcase(OP_END_TRY) {
 }
 
 vmcase(OP_THROW) {
-    // Throw exception: throw R[A]
+    /* Throw exception: throw R[A] */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     XrValue exception = R(a);
 
-    /* Strict throw is enforced by the analyzer
-     * (XR_ERR_ANALYZE_THROW_NON_EXCEPTION) so source-level `throw <e>`
-     * always produces an Exception. The defensive wrap below only
-     * fires when bytecode loads bypass the analyzer (e.g. cached
-     * bytecode emitted before the policy or embedding API hooks). */
+    /* Strict throw is enforced by the analyzer so source-level
+     * `throw <e>` always produces an Exception. Defensive wrap
+     * only fires for bytecode that bypassed the analyzer. */
     if (!xr_value_is_exception(isolate, exception)) {
         exception = xr_exception_from_value(isolate, exception);
     }
 
-    // Record full call chain into the exception trace
-    // and rewind to the matching handler in one step.
     savepc();
 
-    // Debug hook: check exception breakpoint before unwinding
+    /* Debug hook: exception breakpoint */
     {
         XrDebugHooks *_eh = (XrDebugHooks *) isolate->debug_hooks;
         if (_eh && _eh->on_exception) {
@@ -180,54 +145,42 @@ vmcase(OP_THROW) {
         }
     }
 
-    // Throw exception (records full call-chain trace
-    // before unwinding to the matching handler).
+    /* Record stack trace and unwind to nearest handler. */
     xr_vm_unwind_with_trace(isolate, exception);
 
-    // Check if the unwind landed on a handler reachable in this scope.
-    // Outer VM handlers (below module_base_frame when called re-entrantly
-    // via xr_vm_call_closure) are intentionally NOT reachable here — the
-    // exception propagates out so the caller can observe it.
     if (!xr_vm_is_catch_reachable(isolate)) {
-        // Uncaught in this scope, return error
         return XR_VM_RUNTIME_ERROR;
     }
 
-    // Jump to catch or finally, continue execution
     goto startfunc;
 }
 
-/* ========== Value-Return Error Channel (new error system) ========== */
+/* ========== Value-Return Error Channel ========== */
 
 vmcase(OP_ERR_SET) {
-    /* Write R[A] into the error channel without returning.
-     * Used for throw inside try body: sets pending_error, then
-     * control jumps to catch via normal CFG (JMP). */
+    /* Set pending_error without returning. Used for throw inside
+     * try body: CFG jumps to the catch block next. */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     vm_ctx->pending_error = R(a);
-    vm_ctx->pending_error_tag = 1;
     vmbreak;
 }
 
 vmcase(OP_ERR_RETURN) {
-    /* Write R[A] into the error channel and return from the function.
-     * Pure value-return: no handler stack, no unwind.  The caller
-     * observes pending_error_tag via OP_ERR_CHECK / OP_ERR_HAS. */
+    /* Set pending_error and return from the function.
+     * Pure value-return: no handler stack, no unwind. */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     vm_ctx->pending_error = R(a);
-    vm_ctx->pending_error_tag = 1;
     vm_ctx->last_nret = 0;
     goto return_with_defer;
 }
 
 vmcase(OP_ERR_CHECK) {
-    /* Inserted after a fallible call when not inside a local catch.
-     * If the callee set pending_error, propagate by returning from
-     * the current function (pure value-return, no unwind). */
+    /* After a fallible call outside a local catch: if pending_error
+     * is set, propagate by returning (pure value-return). */
     TRACE_EXECUTION();
-    if (vm_ctx->pending_error_tag != 0) {
+    if (!XR_IS_NULL(vm_ctx->pending_error)) {
         vm_ctx->last_nret = 0;
         goto return_with_defer;
     }
@@ -235,21 +188,19 @@ vmcase(OP_ERR_CHECK) {
 }
 
 vmcase(OP_ERR_HAS) {
-    /* R[A] = (pending_error_tag != 0).
-     * Used in try body: the result feeds an IF branch to catch. */
+    /* R[A] = !IS_NULL(pending_error).
+     * Used inside try body to branch into the catch block. */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
-    R(a) = xr_bool(vm_ctx->pending_error_tag != 0);
+    R(a) = xr_bool(!XR_IS_NULL(vm_ctx->pending_error));
     vmbreak;
 }
 
 vmcase(OP_ERR_CATCH) {
-    /* Bind the pending error into R[A] and clear the channel.
-     * Used at the start of a catch block. */
+    /* Bind pending_error into R[A] and clear the error channel. */
     TRACE_EXECUTION();
     int a = GETARG_A(i);
     R(a) = vm_ctx->pending_error;
     vm_ctx->pending_error = xr_null();
-    vm_ctx->pending_error_tag = 0;
     vmbreak;
 }

@@ -229,11 +229,10 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     XrValue return_value = xr_null();
     if (exec_result == XR_VM_OK) {
         return_value = result_slot[0];
-    } else if (ctx->pending_error_tag == 0) {
-        /* A pending_error means the closure propagated a recoverable error
-         * through the value-return channel; the C caller inspects
-         * pending_error and decides what to do, so this is not a failure
-         * worth logging.  Only warn for genuine panics / runtime faults. */
+    } else if (XR_IS_NULL(ctx->pending_error)) {
+        /* A non-null pending_error means the closure propagated a
+         * recoverable error through the value-return channel; the C caller
+         * inspects pending_error. Only warn for genuine panics. */
         if (!isolate->suppress_exception_print) {
             xr_log_warning("vm", "xr_vm_call_closure: execution failed with error %d", exec_result);
         }
@@ -466,85 +465,49 @@ void xr_vm_throw_exception(XrayIsolate *isolate, XrValue exception) {
     XR_DCHECK(isolate != NULL, "vm_throw_exception: NULL isolate");
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Iterative exception propagation loop.
-    //
-    // Stop at module_base_frame: handlers whose frame_count is at or below
-    // that boundary were installed by a caller VM invocation that entered us
-    // re-entrantly via xr_vm_call_closure. Running an outer handler inside
-    // the inner VM would execute its catch block here, then let the outer
-    // VM resume and re-run the same post-catch code.
-    //
-    // Uncaught within this scope → fall through to the "no handler" tail;
-    // callers detect that condition via xr_vm_is_catch_reachable().
+    /* Iterative exception propagation.
+     *
+     * Stop at module_base_frame: handlers at or below that boundary
+     * belong to an outer re-entrant VM invocation. Uncaught within
+     * this scope → callers detect via xr_vm_is_catch_reachable(). */
     int floor = ctx->module_base_frame > 0 ? ctx->module_base_frame : 0;
     while (ctx->handler_count > 0 && ctx->handlers[ctx->handler_count - 1].frame_count > floor) {
         XrExceptionHandler *handler = &ctx->handlers[ctx->handler_count - 1];
 
-        // Case 1: Already in finally block — pop and propagate outward
-        if (handler->in_finally) {
-            ctx->handler_count--;
-            continue;
-        }
-
-        // Case 2: Caught (re-throw in catch block) — run finally if available
+        /* Re-throw from inside a catch block: the handler is already
+         * consumed. Pop it and propagate to the next outer handler. */
         if (handler->caught) {
-            if (handler->finally_offset > 0) {
-                // Store new exception, jump to finally block
-                handler->exception = exception;
-                handler->in_finally = true;
-                ctx->current_exception = exception;
-                ctx->stack_top = ctx->stack + handler->stack_size;
-                ctx->frame_count = handler->frame_count;
-                if (ctx->frame_count > 0) {
-                    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
-                    frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->finally_offset;
-                    return;
-                }
-            }
-            // No finally — pop and continue outward
             ctx->handler_count--;
             continue;
         }
 
-        // Case 3: Fresh handler — save exception and jump to catch or finally
+        /* Fresh handler — save exception, unwind stack, jump to catch. */
         handler->exception = exception;
         ctx->current_exception = exception;
 
-        // Stack unwinding: restore stack top
         ctx->stack_top = ctx->stack + handler->stack_size;
 
-        // Run defers for every frame above the handler in LIFO order,
-        // then restore the frame count. Defers belonging to the handler's
-        // own frame stay registered: they'll fire when that frame returns
-        // normally after the catch/finally completes.
+        /* Run defers for frames above the handler (LIFO). Defers on the
+         * handler's own frame stay: they fire when that frame returns
+         * after the catch block completes. */
         for (int fi = ctx->frame_count - 1; fi >= handler->frame_count; fi--) {
             run_defers_for_frame(isolate, ctx, fi);
         }
 
-        // Restore frame count
         ctx->frame_count = handler->frame_count;
 
-        // Get restored frame and jump to handler
-        if (ctx->frame_count > 0) {
+        if (ctx->frame_count > 0 && handler->catch_offset > 0) {
             XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
-
-            if (handler->catch_offset > 0) {
-                frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->catch_offset;
-                return;
-            } else if (handler->finally_offset > 0) {
-                frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->finally_offset;
-                return;
-            }
+            frame->pc = PROTO_CODE_BASE(frame->closure->proto) + handler->catch_offset;
+            return;
         }
 
         ctx->handler_count--;
     }
 
-    // No handler found - uncaught exception
+    /* No handler — uncaught exception. */
     ctx->current_exception = exception;
 
-    /* Child coroutine: error isolated to coro->error, suppress print.
-    ** Main coroutine or non-coroutine: print (fatal, program terminates). */
     bool is_child_coro = false;
     if (ctx->current_coro) {
         XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;

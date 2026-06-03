@@ -129,8 +129,10 @@ typedef struct XrVMContext {
     int frame_capacity;
     int module_base_frame;  // module boundary for error trace
 
-    // Exception handling retained for panic channel interop.
-    XrExceptionHandler *handlers;  // handler stack
+    // Panic handler stack (inline for the common case, heap on overflow)
+#define XR_HANDLER_INLINE_CAP 4
+    XrExceptionHandler handler_inline[XR_HANDLER_INLINE_CAP];
+    XrExceptionHandler *handlers;  // points to handler_inline or heap
     int handler_count;
     int handler_capacity;
     XrValue current_exception;  // active exception being handled

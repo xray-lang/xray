@@ -891,12 +891,6 @@ AstNode *xr_parse_force_unwrap(Parser *parser, AstNode *operand) {
     return xr_ast_unary(parser->X, AST_FORCE_UNWRAP, operand, line);
 }
 
-// Parse try-modified expression: try? expr or try! expr.
-//
-// try? expr  — folds any thrown exception into null; result type is T?
-//              (where T is the operand type, deduplicated against null).
-// try! expr  — panics at runtime if expr throws; result type is unchanged.
-//
 // Parse as cast: expr as Type / expr as Type?
 // Bare container types allowed: 'x as Array' for runtime type casts.
 AstNode *xr_parse_as_cast(Parser *parser, AstNode *left) {

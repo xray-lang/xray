@@ -151,15 +151,6 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
     if (!X)
         return;
 
-    /* Result<T, E> { Ok(T), Err(E) } — ADT enum with one payload per variant */
-    static const char *result_members[] = {"Ok", "Err"};
-    static const int result_values[] = {0, 1};
-    static const int result_payloads[] = {1, 1};
-    XrEnumType *result_et =
-        make_prelude_enum(X, "Result", result_members, result_values, 2, result_payloads, true);
-    if (result_et)
-        X->vm.builtins[XR_GLOBAL_VAR_RESULT] = XR_FROM_PTR(result_et);
-
     /* Ordering { Relaxed, Acquire, Release, AcquireRelease, SeqCst } — values
      * must match XrAtomicOrdering. */
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
@@ -217,7 +208,7 @@ XrModule *xr_load_module_prelude(XrayIsolate *isolate) {
      * linking those four stdlib modules into the binary. */
     xr_prelude_register_all_native_types(isolate);
 
-    /* Bind canonical Result / Ordering enum types into VM builtin slots so
+    /* Bind canonical Ordering enum type into VM builtin slot so
      * every module shares one identity (replaces per-module AST injection). */
     xr_prelude_register_builtin_enums(isolate);
 

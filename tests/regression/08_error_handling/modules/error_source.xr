@@ -1,0 +1,21 @@
+// Helper module for cross-module error propagation tests.
+
+enum MathErr { DivByZero }
+enum ValidationErr { Empty, TooLong(int) }
+
+export fn safe_div(a: int, b: int) -> int {
+    if (b == 0) {
+        throw MathErr.DivByZero
+    }
+    return a / b
+}
+
+export fn validate(s: string) -> string {
+    if (s == "") {
+        throw ValidationErr.Empty
+    }
+    if (s.length > 100) {
+        throw ValidationErr.TooLong(s.length)
+    }
+    return s
+}

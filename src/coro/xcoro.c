@@ -96,10 +96,11 @@ void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
     ctx->stack_top = ctx->stack;
     ctx->frame_count = 0;
     ctx->module_base_frame = 0;
+    ctx->handlers = ctx->handler_inline;
     ctx->handler_count = 0;
+    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
     ctx->current_exception = xr_null();
     ctx->pending_error = xr_null();
-    ctx->pending_error_tag = 0;
     ctx->current_coro = coro;
     ctx->instruction_count = 0;
     ctx->preempt_pending = false;
@@ -674,13 +675,13 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         }
         coro->args = NULL;
         coro->arg_count = 0;
-        // Free optional resources
-        if (coro->vm_ctx.handlers) {
+        // Free heap-allocated handlers (inline storage is part of struct)
+        if (coro->vm_ctx.handlers && coro->vm_ctx.handlers != coro->vm_ctx.handler_inline) {
             xr_free(coro->vm_ctx.handlers);
-            coro->vm_ctx.handlers = NULL;
-            coro->vm_ctx.handler_count = 0;
-            coro->vm_ctx.handler_capacity = 0;
         }
+        coro->vm_ctx.handlers = coro->vm_ctx.handler_inline;
+        coro->vm_ctx.handler_count = 0;
+        coro->vm_ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
         // Per-frame struct storage: free individual areas, keep arrays for reuse
         if (coro->vm_ctx.struct_areas) {
             for (int i = 0; i < coro->vm_ctx.struct_areas_cap; i++) {
@@ -740,11 +741,9 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         xr_free(coro->vm_ctx.frames);
         coro->vm_ctx.frames = NULL;
     }
-    if (coro->vm_ctx.handlers) {
+    if (coro->vm_ctx.handlers && coro->vm_ctx.handlers != coro->vm_ctx.handler_inline) {
         xr_free(coro->vm_ctx.handlers);
         coro->vm_ctx.handlers = NULL;
-        coro->vm_ctx.handler_count = 0;
-        coro->vm_ctx.handler_capacity = 0;
     }
     // Per-frame struct storage
     if (coro->vm_ctx.struct_areas) {
@@ -810,8 +809,8 @@ void xr_coro_free(XrCoroutine *coro) {
         xr_free(coro->vm_ctx.frames);
         coro->vm_ctx.frames = NULL;
     }
-    // Exception handlers (lazily allocated)
-    if (coro->vm_ctx.handlers) {
+    // Exception handlers (only free if promoted to heap)
+    if (coro->vm_ctx.handlers && coro->vm_ctx.handlers != coro->vm_ctx.handler_inline) {
         xr_free(coro->vm_ctx.handlers);
         coro->vm_ctx.handlers = NULL;
     }

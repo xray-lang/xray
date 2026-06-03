@@ -62,7 +62,7 @@ Xray 是一个**轻量级静态类型脚本语言，原生支持并发**。设�
 | **类型** | 静态类型 + 类型推断；变量声明几乎不需要写类型标注，但类型系统在编译期完全可见 |
 | **并发** | 内置 M:N 协程（go / await / Channel / scope / select），并发安全在编译期由"显式共享"规则保证 |
 | **运行模式** | VM 解释 / JIT / AOT 三档，对开发者透明；语义在三种模式下严格一致 |
-| **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ `Result<T,E>` + 可空类型（T?）+ defer 资源管理 |
+| **错误处理** | 值返回错误通道（throw / try / catch + enum 错误）+ panic 边界（catch panic）+ 可空类型（T?）+ defer 资源管理 |
 | **元编程** | 注解（`@test` / `@native` / `@deprecated`）+ 运行时反射（Reflect）+ 泛型 reified |
 | **互操作** | C ABI 内置；stdlib 模块可由 C 编写并通过 `XR_DEFINE_BUILTIN` 暴露 |
 
@@ -219,7 +219,6 @@ xray 共 **63 个保留关键字**，源码真值表见 `src/frontend/lexer/xkey
 
 > **注意**：以下名字**不是**词法关键字，而是 `prelude` 自动引入的内置类型符号：
 > `Array` · `BigInt` · `Bytes` · `Channel` · `DateTime` · `Exception` · `Json` · `Logger` · `Map` · `NetConn` · `NetListener` · `Range` · `Regex` · `Set` · `StringBuilder`。
-> `Result<T, E>` 是当前错误处理与 `catch!` 路径使用的内置 ADT enum，也可直接使用。
 > 它们可被用户类同名覆盖（局部 shadow），但通常无须 import 即可使用。
 
 #### 1.5.7 字面量关键字
@@ -496,7 +495,7 @@ Xray 是静态类型语言；每个表达式在编译期有确定类型。类型
 | 精确浮点 | `float32`、`float64` |
 | 容器 | `Array<T>`、`Map<K,V>`、`Set<T>`、`Channel<T>`、`Bytes`（即 `Array<uint8>`） |
 | 特殊 | `Json`、`BigInt`、`Range`、`DateTime`、`Regex`、`StringBuilder`、`Logger`、`NetConn`、`NetListener` |
-| 错误处理 prelude | `Exception`、`Result<T, E>`（见 §8） |
+| 错误处理 prelude | `Exception`（见 §8） |
 | 弱引用容器 | `WeakMap`、`WeakSet` |
 | Nullable | `T?` |
 | Union | `A \| B \| ...` |
@@ -936,8 +935,6 @@ UnaryExpr ::= ('-' | '+' | '!' | '~') UnaryExpr
             | 'move' UnaryExpr
             | 'await' ('all' | 'any')? UnaryExpr
             | 'go' (Block | PostfixExpr)
-            | 'try?' UnaryExpr
-            | 'try!' UnaryExpr
             | PostfixExpr
 ```
 
@@ -1081,7 +1078,7 @@ let item = arr?[0]              // 可选索引
 - 结果类型：原类型加 `?`（若已经 `?` 则保持）。
 - 函数可选调用 `func?.()` 不属于当前语法。
 
-### 3.7 强制解包 `!` / `try?` / `try!` / `catch!`
+### 3.7 强制解包 `!`
 
 > 完整错误处理语义见 §8。本节只列表达式语法与简要语义。
 
@@ -1092,72 +1089,6 @@ let v: int = nullable_int!      // null 时运行时抛 NullThrowError (E0410)
 ```
 
 仅当编译期可确定 `expr` 是可空类型 (`T?`) 时合法；对非空类型 `T` 使用 `!` 是编译错误。
-
-#### `try?` 表达式 —— 失败转 null
-
-```ebnf
-TryOptional ::= 'try?' Expression
-```
-
-`try? e` 把任何失败折叠为 `null`，丢弃错因：
-
-| `e` 的静态类型 | `try? e` 的类型 | 行为 |
-|--|--|--|
-| `Result<T, E>` | `T?` | `Err` → `null`；`Ok(v)` → `v` |
-| `T`（普通类型，调用可能抛异常） | `T?` | 抛异常 → `null`；正常 → `v` |
-| `T?` | `T?` | 透传 |
-
-```xray
-let n: int? = try? parseInt(input)         // Result.Err → null
-let v: Json? = try? http.get(url).json()   // 抛异常 → null
-```
-
-#### `try!` 表达式 —— 早退或跨轨升级
-
-```ebnf
-TryForce ::= 'try!' Expression
-```
-
-`try!` 后面的表达式静态类型**必须**是 `Result<T, E>` 或 `T?`（其它类型编译报错 `E0821`）。行为按表达式类型 + 当前函数返回类型双重 dispatch：
-
-| `e` 类型 | 当前函数返回 | 失败行为 | 成功值 |
-|--|--|--|--|
-| `Result<T, E>` | `Result<_, E>` | 早退 `return Result.Err(e)` | `v` |
-| `Result<T, E>` | 其它 | `throw e`（要求 `E` 是 `Exception` 派生） | `v` |
-| `T?` | `_?` | 早退 `return null` | `v` |
-| `T?` | 其它 | `throw new NullThrowError(...)` | `v` |
-
-```xray
-fn pipeline(s: string) -> Result<int, ParseError> {
-    let n = try! parseInt(s)      // Err 早退 Err
-    return Result.Ok(n + 1)
-}
-```
-
-完整说明见 §8.3.1。**`try!` 不是异常调用的强制仪式**——xray 不要求会抛异常的调用前必须写 `try!`。
-
-#### `catch!` 块表达式 —— 异常块凝结成 Result
-
-```ebnf
-CatchBlock ::= 'catch!' Block
-```
-
-`catch! { ... }` 把代码块中可能抛出的任何异常包装为 `Result<T, Exception>`：
-
-```xray
-let r: Result<int, Exception> = catch! {
-    let x = riskyOp()
-    let y = another(x)
-    return y + 1                   // 块内的 return 是"从 catch! 块返回"
-}
-```
-
-- 块内 `return v` 是从 `catch!` 块返回（不影响外层函数）
-- 块的最后一个表达式作为 `Ok(v)` 的值
-- 块内**逃出的任何异常**包装为 `Err(e)`，`e` 静态类型恒为 `Exception`
-- 不支持类型过滤——需要时用手写 `try/catch`
-
-完整说明见 §8.3.3。
 
 ### 3.8 `as` / `is`
 
@@ -2337,9 +2268,9 @@ enum Pi        { Approximate = 3.14, Better = 3.14159 }
 
 ```xray
 // 位置 payload
-enum Result<T, E> {
-    Ok(T),
-    Err(E),
+enum Option<T> {
+    Some(T),
+    None,
 }
 
 // 具名字段 payload（推荐：可读性更好）
@@ -2373,7 +2304,7 @@ enum Expr {
 | 携带数据 | ❌ | ✅ 每变体独立的字段集 |
 | `.value` / `.ordinal` | ✅ | 仅对无 payload 的变体可用 |
 | backing value (`= 200`) | ✅ | ❌ 不能与 payload 混用 |
-| 泛型 | ❌ | ✅ `enum Result<T, E> { ... }` |
+| 泛型 | ❌ | ✅ `enum Option<T> { ... }` |
 | match 解构 | 仅按值 | 按变体 + 解构 payload |
 | `for-in` 遍历 | ✅ 按声明顺序 | ❌ 含 payload 时无意义 |
 | 内存表示 | 整数/字符串值 | tag + payload |
@@ -2386,7 +2317,7 @@ enum Expr {
 
 ```xray
 let c = Color.Red                                   // 简单
-let r1 = Result.Ok(42)                              // 位置 payload
+let r1 = Option.Some(42)                            // 位置 payload
 let e1 = NetEvent.DataReceived(bytes: b)            // 具名 payload，可写字段名
 let e2 = NetEvent.Error(404, "not found")           // 也可省略字段名按位置传
 let e3 = NetEvent.Connected                         // 无 payload 变体不写括号
@@ -2425,7 +2356,7 @@ Color.memberCount     // 3              简单变体总数 (int)
 Color.getMember(0)    // Color.Red      按 ordinal 取
 ```
 
-含 payload 的 ADT 变体**不**支持 `.value` / `.ordinal` / `getMember`，但仍可调用 `.name` 与 `toString()`（后者会带 payload 摘要，如 `Result.Ok(42)`）。
+含 payload 的 ADT 变体**不**支持 `.value` / `.ordinal` / `getMember`，但仍可调用 `.name` 与 `toString()`（后者会带 payload 摘要，如 `Option.Some(42)`）。
 
 #### 5.6.5 遍历
 
@@ -2435,7 +2366,7 @@ Color.getMember(0)    // Color.Red      按 ordinal 取
 for (c in Color) { print(c.name) }        // "Red" "Green" "Blue"
 ```
 
-含 payload 的 ADT enum **不**支持直接 `for-in`——遍历"所有可能值"无意义（`Result<int, string>` 有无穷多个）。
+含 payload 的 ADT enum **不**支持直接 `for-in`——遍历"所有可能值"无意义（`Option<int>` 有无穷多个）。
 
 #### 5.6.6 反查（从值到成员）
 
@@ -2480,7 +2411,7 @@ print(s.isRound())       // true
 **规则**：
 
 - 方法语法与 `class` 内方法一致：`fn name(params) -> ReturnType { body }`
-- 方法体内 `this` 的静态类型是 enum 自身（如 `Result<T, E>`），需要 `match (this)` 才能取出变体 payload
+- 方法体内 `this` 的静态类型是 enum 自身（如 `Option<T>`），需要 `match (this)` 才能取出变体 payload
 - **不**支持 `constructor`（变体语法本身就是构造器）
 - **不**支持继承（`enum E extends ...` 是非法）；如需共享行为，用接口实现（`enum E implements Iface`）或顶层函数
 - 简单枚举（无 payload）也可定义方法，但方法体内 `this` 是该 enum 的值，可用 `==` 直接比较：
@@ -2503,7 +2434,7 @@ TypeAliasDecl ::= 'type' Identifier TypeParams? '=' Type
 ```
 
 ```xray
-type Outcome = int | string                          // union 别名（不要与 prelude 的 Result 重名）
+type Outcome = int | string                          // union 别名
 type Mapper = fn(int) -> int                            // 函数类型别名
 type Point = { x: float, y: float }                  // 结构化对象别名（sealed）
 ```
@@ -2612,10 +2543,10 @@ match (event) {
     NetEvent.Error(code, msg)     -> log.error(code, msg),
 }
 
-// Result 模式（位置）
-match (result) {
-    Result.Ok(v)  -> print("got:", v),
-    Result.Err(e) -> print("failed:", e),
+// Option 模式（位置）
+match (opt) {
+    Option.Some(v) -> print("got:", v),
+    Option.None    -> print("nothing"),
 }
 
 // 通配符跳过 payload 中不关心的字段
@@ -2626,8 +2557,8 @@ match (event) {
 
 // 嵌套解构
 match (msg) {
-    Result.Ok(NetEvent.DataReceived(bytes)) -> process(bytes),
-    Result.Err(e)                            -> log.error(e),
+    Option.Some(NetEvent.DataReceived(bytes)) -> process(bytes),
+    Option.None                               -> skip(),
     _                                         -> skip(),
 }
 ```
@@ -2924,7 +2855,7 @@ Xray 的错误处理分为两个严格分离的通道：
 
 - **错误是值**：`throw <enum>` 把枚举值写入返回通道，不展开栈、不分配 Exception 对象。
 - **panic 不是错误**：panic 表示程序 bug 或运行时不变量违背，不应用于业务逻辑。
-- **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。需要显式失败可见时用 `Result<T, E>` 返回值。
+- **函数签名不标 `throws`**：xray 不引入 Java/Swift 的受检异常语义。错误通过 throw/catch 值返回通道处理。
 - **`defer` 替代 `finally`**：xray 没有 `finally` 关键字，资源清理统一用函数作用域的 `defer`（Go 模型）。
 
 ### 8.1 值返回错误通道
@@ -3168,143 +3099,15 @@ fn fetch(url: string) -> string {
 - `defer` 在 `throw`、`return`、panic 时均执行
 - `defer` 块内不应抛出错误（行为未定义）
 
-### 8.4 `Result<T, E>`
-
-#### 8.4.1 类型与构造
-
-`Result<T, E>` 是 prelude 的内置 ADT enum：
-
-```xray
-@native
-enum Result<T, E> {
-    Ok(T),
-    Err(E),
-}
-```
-
-构造与解构：
-
-```xray
-let r1: Result<int, string> = Result.Ok(42)
-let r2: Result<int, string> = Result.Err("parse failed")
-
-match (r1) {
-    Result.Ok(v)  -> print("got:", v),
-    Result.Err(e) -> print("failed:", e),
-}
-```
-
-#### 8.4.2 错误类型 `E` 的选择
-
-`E` 可以是任意类型；推荐风格：
-
-| 错误形态 | E 类型 | 例子 |
-|--|--|--|
-| 多种可枚举的失败原因 | 用户定义的 ADT enum | `enum ParseErr { Empty, NotNumber(string), Overflow }` |
-| 单一字符串错因 | `string` | `Result<int, string>` |
-
-**强烈推荐用 ADT enum**——可让 `match` 在编译期检查错因穷举性。
-
-#### 8.4.3 `Result` 上的方法
-
-```xray
-@native
-enum Result<T, E> {
-    Ok(T),
-    Err(E)
-
-    fn isOk() -> bool
-    fn isErr() -> bool
-
-    fn ok() -> T?                                          // Ok(v) -> v；Err -> null
-    fn err() -> E?                                         // Err(e) -> e；Ok -> null
-
-    fn unwrapOr(default: T) -> T                           // Err 时返回 default
-    fn unwrapOrElse(handler: (E) -> T) -> T                // Err 时由 handler 计算
-
-    fn map<U>(transform: (T) -> U) -> Result<U, E>         // 转换 Ok 内的值
-    fn mapErr<F>(transform: (E) -> F) -> Result<T, F>      // 转换 Err 内的值
-    fn andThen<U>(transform: (T) -> Result<U, E>) -> Result<U, E>  // 链式（flatMap）
-}
-```
-
-`map` / `mapErr` 是"不破壳换内里"的快捷方式：
-
-```xray
-// 不用 map：5 行
-let r2: Result<float, string>
-match (parseInt(s)) {
-    Result.Ok(n)  -> r2 = Result.Ok(n.toFloat()),
-    Result.Err(e) -> r2 = Result.Err(e),
-}
-
-// 用 map：1 行
-let r2 = parseInt(s).map(n -> n.toFloat())
-```
-
-#### 8.4.4 错误类型转换：必须显式 `mapErr`
-
-跨层 `Result` 组合时，**不**自动转换 Err 类型。调用方必须显式 `.mapErr(...)`：
-
-```xray
-fn loadConfig(text: string) -> Result<Config, ConfigErr> {
-    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
-    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port", e))
-    return Result.Ok(Config(port: port))
-}
-```
-
-### 8.5 桥接：`try!` / `try?`
-
-#### 8.5.1 `try! e` — 早退
-
-`try!` 后面的表达式静态类型**必须**是 `Result<T, E>` 或 `T?`。
-
-| `e` 类型 | 当前函数返回 | 行为 |
-|--|--|--|
-| `Result<T, E>` | `Result<_, E>` | `Err(e)` → `return Result.Err(e)`；`Ok(v)` → `v` |
-| `Result<T, E>` | 其它 | `Err(e)` → `throw e`（将 Err 值通过值返回通道传播）；`Ok(v)` → `v` |
-| `T?` | `_?` | `null` → `return null`；`v` → `v` |
-| `T?` | 其它 | `null` → panic；`v` → `v` |
-
-例子：
-
-```xray
-// 同轨道早退
-fn parsePair(s: string) -> Result<(int, int), ParseErr> {
-    let parts = s.split(",")
-    if (parts.length != 2) { return Result.Err(ParseErr.Empty) }
-    let a = try! parseInt(parts[0])
-    let b = try! parseInt(parts[1])
-    return Result.Ok((a, b))
-}
-```
-
-#### 8.5.2 `try? e` — 失败转 null
-
-`try?` 把任何失败统一转为 `null`，丢弃错因。
-
-| `e` 类型 | `try? e` 类型 | 行为 |
-|--|--|--|
-| `Result<T, E>` | `T?` | `Err` → `null`；`Ok(v)` → `v` |
-| 可失败调用，类型 `T` | `T?` | 错误 → `null`；正常 → `v` |
-| `T?` | `T?` | 透传 |
-
-```xray
-let n: int? = try? parseInt(s)
-let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
-```
-
-### 8.6 Optional 与错误处理
+### 8.4 Optional 与错误处理
 
 `T?` 是 `T | null` 的语法糖，用于"二态：有值/无值"场景。详见 §2.5。与错误处理的关系：
 
-- **不带错因的失败**：用 `T?` 比 `Result<T, ()>` 更简洁
-- 与 `try!` / `try?` 协同（见 §8.5.1 / §8.5.2）
+- **不带错因的失败**：用 `T?`（如字典查找返回 `null` 表示"无此键"）
 - 与 `??`（默认值）/ `?.`（可选链）/ `e!`（强制解包）配合
-- 不要把 `T?` 当通用错误返回——需要错因时用 `Result<T, E>`
+- 不要把 `T?` 当通用错误返回——需要错因时用 `throw <enum>` + `catch`
 
-### 8.7 决策树：选择哪种机制
+### 8.5 决策树：选择哪种机制
 
 按"**调用方对失败的处理需求**"选择：
 
@@ -3318,11 +3121,10 @@ let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
 ├─ 需要，且失败有结构化错因
 │   ↓
 │   throw <enum>，catch 处理（零开销值返回通道）
-│   或 Result<T, E> 返回值（编译期可见）
 │
 ├─ 需要，但失败只表示"没值"，无错因意义
 │   ↓
-│   T? + ?? / ?. / try?
+│   T? + ?? / ?.
 │
 ├─ 需要，且函数有 ≥3 种正常状态
 │   ↓
@@ -3338,13 +3140,12 @@ let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
 | 场景 | 推荐 | 例 |
 |--|--|--|
 | 业务错误、可恢复失败 | `throw <enum>` + `catch` | `throw ParseErr.Empty` |
-| 解析、解码、状态转换 | `Result<T, E>` | `parseInt(s) -> Result<int, ParseErr>` |
 | 字典查找、可选字段 | `T?` | `map.get(k) -> Value?` |
 | 运行时故障兜底 | `catch panic` | 数组越界、除零 |
 | 多分支结果 | enum | `nextEvent() -> NetEvent` |
 | 主结果 + 元数据 | tuple | `parse(s) -> (Ast, int)` |
 
-### 8.8 常用模式
+### 8.6 常用模式
 
 #### 模式 1：enum 错误 + defer 资源清理
 
@@ -3375,37 +3176,38 @@ fn main() {
 main()
 ```
 
-#### 模式 2：Result 用于库 API
+#### 模式 2：throw + catch 用于库 API
 
 ```xray
 enum ConfigErr { BadJson(string), BadField(string) }
 
-fn parseConfig(text: string) -> Result<Config, ConfigErr> {
-    let json = try! parseJson(text).mapErr(e -> ConfigErr.BadJson(e))
-    let port = try! json["port"].toInt().mapErr(e -> ConfigErr.BadField("port"))
-    return Result.Ok(Config(port: port))
+fn parseConfig(text: string) -> Config {
+    let json = parseJson(text)
+    let port = json["port"].toInt()
+    if (port == null) { throw ConfigErr.BadField("port") }
+    return Config(port: port!)
 }
 
 fn main() {
-    match (parseConfig(configText)) {
-        Result.Ok(cfg) -> startServer(cfg),
-        Result.Err(e) -> {
-            match (e) {
-                ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
-                ConfigErr.BadField(f) -> print("bad field:", f),
-            }
-        },
+    try {
+        let cfg = parseConfig(configText)
+        startServer(cfg)
+    } catch (e: ConfigErr) {
+        match (e) {
+            ConfigErr.BadJson(msg) -> print("invalid JSON:", msg),
+            ConfigErr.BadField(f) -> print("bad field:", f),
+        }
     }
 }
 
 main()
 ```
 
-#### 模式 3：`try?` + `??` 提供默认值
+#### 模式 3：`??` 提供默认值
 
 ```xray
-let port = (try? parseConfig(text).map(c -> c.port)) ?? 8080
-let user = (try? db.findUser(id)) ?? guestUser
+let port = config?.port ?? 8080
+let user = db.findUser(id) ?? guestUser
 ```
 
 #### 模式 4：catch panic 兜底运行时故障
@@ -4582,7 +4384,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 >
 > `base64`、`cluster`、`compress`、`crypto`、`csv`、`datetime`、`encoding`、`gc`、`http`、`io`、`log`、`math`、`net`、`os`、`path`、`regex`、`time`、`toml`、`url`、`ws`、`xml`、`yaml`。
 >
-> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）；`Result<T, E>` 是错误处理路径使用的内置 ADT enum。详见 §1.5.6 / §2.2。
+> 不需要 import 的内置类型由 prelude 注册（`Array` `Map` `Set` `Json` `Channel` `Bytes` `BigInt` `StringBuilder` `Exception` `Regex` `Logger` `NetConn` `NetListener` 等）。详见 §1.5.6 / §2.2。
 
 ### 15.1 文件 IO 与系统
 
@@ -4786,11 +4588,9 @@ class Exception {
 
 栈展开（仅 panic 通道）：VM `xvm_unwind_stack()` 按 try-table 查找 `catch panic` handler，逐帧释放局部、执行 defer，到达 handler 后跳转。可恢复错误走值返回通道，不展开栈。详见 §8。
 
-### 16.7 Result 运行时
+### 16.7 值返回错误通道运行时
 
-`Result<T, E>` 是 prelude 的 ADT enum（见 §8.2 / §5.6.2）。运行时表示：tag (1 字节) + payload。`Result.Ok(v)` 与 `Result.Err(e)` 是值对象，`match` 解构在 IR 层 lower 为 tag-test + payload-extract。
-
-由于 `Result` 在异常零路径上无成本（不抛、不展开栈），使用 Result 的代码路径性能等同于 tagged-union。
+`throw <enum>` 将枚举值写入帧的 `pending_error` 槽位，设置错误标志位并返回。调用方通过 `OP_ERR_CHECK` 检测标志位，决定进入 `catch` handler 或继续向上返回。正常路径零开销（仅一次条件跳转），不展开栈、不分配对象。
 
 ---
 
@@ -5023,15 +4823,15 @@ Bytecode  →  AOT (machine code)
 | `E0803` | `XR_ERR_SYN_FOR_FLAT_REMOVED` | `for k, v in m`（裸 KV） | `for (k, v in m)` |
 | `E0804` | `XR_ERR_SYN_VOID_REMOVED` | `-> void` | `-> ()` 或省略返回类型 |
 
-### 18.7 错误处理与 Result (E082x)
+### 18.7 错误处理 (E082x)
 
 | 码 | 名称 | 描述 |
 |--|--|--|
-| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 已合并到 `E0370`（见 §8.1.1）；代码仅保留在错误码表中以免重复分配 |
-| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | `try!` 操作数不是 `Result<T,E>` 或 `T?` |
-| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | `try!` 跨轨升级时 `E` 不是 `Exception` 派生 |
-| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留在错误码表中以免重复分配 |
-| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | `Result<T, E>.unwrap()` 中 `E` 不是 `Exception` 派生 |
+| `E0820` | `XR_ERR_THROW_NOT_EXCEPTION` | 已合并到 `E0370`（见 §8.1.1）；代码仅保留以免重复分配 |
+| `E0821` | `XR_ERR_TRY_BANG_BAD_OPERAND` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
+| `E0822` | `XR_ERR_TRY_BANG_NON_EXCEPTION_ERR` | 已废弃（`try!` 已移除）；代码仅保留以免重复分配 |
+| `E0823` | `XR_ERR_MATCH_NOT_EXHAUSTIVE` | 已合并到 `E0371`（见 §6.3.3）；代码仅保留以免重复分配 |
+| `E0824` | `XR_ERR_UNWRAP_NON_EXCEPTION_ERR` | 已废弃（`Result` 已移除）；代码仅保留以免重复分配 |
 
 ### 18.8 错误对象结构
 
@@ -5063,7 +4863,7 @@ class HttpError extends Exception {
 }
 ```
 
-或使用 ADT enum + `Result<T, E>` 表达可枚举的失败模式（见 §8.2）。
+或使用 ADT enum + `throw` / `catch` 表达可枚举的失败模式（见 §8.1）。
 
 ---
 
@@ -5152,8 +4952,6 @@ UnaryExpr ::= ('-' | '+' | '!' | '~' | '++' | '--') UnaryExpr
            |  'move' UnaryExpr
            |  'await' ('all' | 'any' | 'anySuccess')? UnaryExpr
            |  'go' (Block | PostfixExpr)
-           |  'try?' UnaryExpr
-           |  'try!' UnaryExpr
            |  PostfixExpr
 
 PostfixExpr ::= Primary PostfixOp*
@@ -5174,8 +4972,6 @@ Primary ::= IntLiteral | FloatLiteral | BigIntLiteral
          |  ArrayLit | MapLit | SetLit | ObjectLit
          |  ArrowFunction
          |  MatchExpr
-         |  TryExpr
-         |  CatchBlock
          |  '(' Expression ')'
          |  '(' Expression (',' Expression)+ ')'  // tuple
 
@@ -5195,10 +4991,7 @@ ArrowParam  ::= Identifier ':' Type
 MatchExpr ::= 'match' '(' Expression ')' '{' MatchArm (','? MatchArm)* ','? '}'
 MatchArm  ::= Pattern ('if' '(' Expression ')')? '->' (Expression | Block)
 
-TryExpr     ::= 'try?' Expression | 'try!' Expression
-CatchBlock  ::= 'catch!' Block
-
-ThrowExpr   ::= 'throw' Expression                // operand 静态类型必须是 Exception 派生（E0370）
+ThrowExpr   ::= 'throw' Expression                // operand 静态类型必须是 enum 变体
 
 ArgList ::= Expression (',' Expression)* ','?
 ```
@@ -5494,7 +5287,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 维度 | Go | xray |
 |--|--|--|
 | 类型系统 | 简单 + interface 隐式 | 较丰富 + 显式 `implements` |
-| 错误处理 | 多返回值 + `err != nil` | 异常 + `Result<T,E>` + `try?`/`try!` |
+| 错误处理 | 多返回值 + `err != nil` | 值返回错误通道（`throw` / `catch`）+ `T?` |
 | 协程 | `go func() {}`（语句） | `go expr`（表达式，返回 `Task<T>`） |
 | 等待结果 | 无直接等价（通过 channel/WaitGroup） | `await t`、`await all [...]`、`await any [...]` |
 | Channel | 内置 `chan T`，`<-` 操作符 | `Channel<T>` 类，方法 `send`/`recv`/`trySend`/`tryRecv` |
@@ -5508,7 +5301,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 | 维度 | Rust | xray |
 |--|--|--|
 | 内存安全 | borrow checker 全面 | 仅跨协程用 `move`；其他用 GC |
-| 错误 | `Result<T, E>` | 异常 + `Result<T,E>` |
+| 错误 | `Result<T, E>` | 值返回错误通道（`throw` / `catch`）|
 | 类型推断 | Hindley-Milner 强 | 双向推断 |
 | trait | 完整 | 类似 `interface`，少功能 |
 | 性能 | 接近 C | VM/JIT，热路径接近 native |
@@ -5531,7 +5324,7 @@ xray 在开发过程中借鉴了现有语言的许多优秀设计，但还是有
 |--|--|--|
 | 可空 `?` | 有 | 有 |
 | `!` 解包 | 有 | 有 |
-| `try?` / `try!` 语义 | `try?` 折叠为 nil；`try!` 失败 abort | `try?` 折叠为 null；`try!` **重抛原异常**（不 abort） |
+| 错误处理 | `try?` 折叠为 nil；`try!` abort | `throw` / `catch` 值返回通道；`T?` + `??` |
 | struct vs class | 值/引用 | 值/引用 |
 | 协议 | 有强 | `interface` 较弱 |
 | 并发 | actor + async/await | 协程 + Channel + `go`/`await all`/`scope` |

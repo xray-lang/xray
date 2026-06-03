@@ -63,7 +63,6 @@ XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
         switch (GET_OPCODE(code[i])) {
             case OP_TRY:
             case OP_CATCH:
-            case OP_FINALLY:
             case OP_END_TRY:
             case OP_THROW:
                 return true;
