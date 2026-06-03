@@ -37,9 +37,8 @@ static int g_failed = 0;
         }                                                                                          \
     } while (0)
 
-/* Header is 24 bytes during the tracing transition. */
 static void test_header_size(void) {
-    ASSERT_EQ(sizeof(XrObjHeader), 24, "XrObjHeader is 24 bytes (transitional)");
+    ASSERT_EQ(sizeof(XrObjHeader), 16, "XrObjHeader is 16 bytes");
     ASSERT_EQ(sizeof(XrGCHeader), sizeof(XrObjHeader), "XrGCHeader aliases XrObjHeader");
 }
 

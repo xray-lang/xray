@@ -81,18 +81,14 @@
 struct XrGCHeader;
 
 typedef struct XrImmixBlock {
-    struct XrImmixBlock *next;       // 8B
-    uint64_t alloc_marks[2];         // 16B - line occupancy (alloc + live)
-    struct XrGCHeader *local_allgc;  // 8B  - per-block object list (cache-friendly sweep)
-    uint8_t next_scan_line;          // 1B  - resume position for hole scanning
-    uint8_t is_young;                // 1B  - Sticky Immix: 1=young block, 0=old block
-    uint8_t has_marked;              // 1B  - set during mark if any object in block is marked
-    uint8_t has_finalizers;          // 1B  - set if any object with finalizer allocated here
-    uint8_t has_black;     // 1B  - set when any object in block is set2black (GEN survivors)
-    uint8_t _pad2[3];      // 3B  - padding
-    uint32_t alloc_count;  // 4B  - number of objects in local_allgc
-    int64_t alloc_bytes;   // 8B  - total bytes of objects in local_allgc
-    // Total: 56B (with alignment padding), fits in Line 0 (128B)
+    struct XrImmixBlock *next;  // 8B
+    uint64_t alloc_marks[2];    // 16B - line occupancy
+    uint8_t next_scan_line;     // 1B  - resume position for hole scanning
+    uint8_t is_young;           // 1B  - Sticky Immix: 1=young block, 0=old block
+    uint8_t _pad2[2];           // 2B  - padding
+    uint32_t alloc_count;       // 4B  - number of allocated objects in the block
+    int64_t alloc_bytes;        // 8B  - total allocated bytes in the block
+    // Total: 40B (with alignment padding), fits in Line 0 (128B)
 } XrImmixBlock;
 
 _Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE, "XrImmixBlock must fit in Line 0");

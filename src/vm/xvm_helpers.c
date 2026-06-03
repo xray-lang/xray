@@ -155,13 +155,8 @@ XrCFunction *xr_vm_cfunction_new(XrayIsolate *isolate, XrCFunctionPtr func, cons
         return NULL;
     }
 
-    // Fully initialize GC header. xr_malloc returns uninitialized memory
-    // and xr_gc_header_init_type only sets the type byte, so without this
-    // memset the gc_next / marked / extra / objsize fields stay uninit.
-    // GC traversal (xr_coro_gc_markobject's shape guards on objsize and
-    // alignment) reads those fields when a module export table holds this
-    // cfunction value, surfacing as MSan use-of-uninitialized-value in
-    // xr_coro_gc_markobject.
+    // Fully initialize GC header. xr_malloc returns uninitialized memory,
+    // so the fields not set below must be cleared explicitly.
     memset(&cfunc->gc, 0, sizeof(XrGCHeader));
     cfunc->gc.type = XR_TCFUNCTION;
     cfunc->gc.objsize = (uint32_t) sizeof(XrCFunction);

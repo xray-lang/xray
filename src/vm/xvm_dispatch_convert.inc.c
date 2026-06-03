@@ -299,8 +299,10 @@ vmcase(OP_COPY) {
             (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) {
             uint32_t _fc = xr_class_instance_field_count(_cls);
             size_t _sz = sizeof(XrInstance) + sizeof(XrValue) * _fc;
+            XrCoroutine *_coro = (XrCoroutine *) vm_ctx->current_coro;
             XrInstance *_new =
-                (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(isolate), _sz, XR_TINSTANCE);
+                _coro ? (XrInstance *) xr_alloc(_coro, _sz, XR_TINSTANCE)
+                      : (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(isolate), _sz, XR_TINSTANCE);
             if (_new) {
                 memcpy(_new->fields, _inst->fields, sizeof(XrValue) * _fc);
                 _new->klass = _cls;

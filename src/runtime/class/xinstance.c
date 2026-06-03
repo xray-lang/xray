@@ -32,7 +32,6 @@
 XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     XR_DCHECK(cls != NULL, "Class must not be NULL");
 
-    uint32_t field_count = xr_class_instance_field_count(cls);
     const char *class_name = cls->name ? cls->name : "<unnamed>";
 
     size_t size = xr_instance_size(cls);
@@ -55,17 +54,7 @@ XrInstance *xr_instance_new(XrayIsolate *X, XrClass *cls) {
     }
 
     xr_gc_header_init_type(&inst->gc, XR_TINSTANCE);
-    inst->klass = cls;
-
-    if (cls->field_default_values) {
-        for (uint32_t i = 0; i < field_count; i++) {
-            inst->fields[i] = cls->field_default_values[i];
-        }
-    } else {
-        for (uint32_t i = 0; i < field_count; i++) {
-            inst->fields[i] = xr_null();
-        }
-    }
+    xr_instance_init_inplace(inst, cls);
 
     // Initialize native body if present
     XrNativeBodyDesc *desc = cls->native_body;
@@ -131,7 +120,6 @@ void xr_instance_free(XrInstance *inst) {
 }
 
 void xr_gc_destroy_instance(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
-    (void) owning_gc;
     if (!obj)
         return;
     XrInstance *inst = (XrInstance *) obj;
@@ -142,13 +130,26 @@ void xr_gc_destroy_instance(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     // Free overflow buffer for dynamic-layout instances
     if (klass->flags & XR_CLASS_DYNAMIC_LAYOUT) {
         uint16_t cap = klass->in_object_capacity;
-        if (cap > 0 && xr_class_instance_field_count(klass) > cap - 1) {
-            XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
-            if (overflow) {
-                int64_t *raw = ((int64_t *) overflow) - 1;
-                xr_free(raw);
+        if (cap > 0) {
+            uint32_t field_count = xr_class_instance_field_count(klass);
+            uint32_t in_object_count = field_count < cap - 1 ? field_count : cap - 1;
+            for (uint32_t i = 0; i < in_object_count; i++)
+                xr_gc_release_value(owning_gc, inst->fields[i]);
+            if (field_count > cap - 1) {
+                XrValue *overflow = (XrValue *) inst->fields[cap - 1].ptr;
+                if (overflow) {
+                    uint32_t overflow_count = field_count - (cap - 1);
+                    for (uint32_t i = 0; i < overflow_count; i++)
+                        xr_gc_release_value(owning_gc, overflow[i]);
+                    int64_t *raw = ((int64_t *) overflow) - 1;
+                    xr_free(raw);
+                }
             }
         }
+    } else {
+        uint32_t field_count = xr_class_instance_field_count(klass);
+        for (uint32_t i = 0; i < field_count; i++)
+            xr_gc_release_value(owning_gc, inst->fields[i]);
     }
 
     // Call native body destructor
@@ -180,8 +181,33 @@ XrInstance *xr_instance_clone(XrayIsolate *X, XrInstance *src) {
         return NULL;
 
     xr_gc_header_init_type(&dst->gc, XR_TINSTANCE);
-    dst->klass = cls;
-    memcpy(dst->fields, src->fields, sizeof(XrValue) * field_count);
+    xr_instance_init_inplace(dst, cls);
+    if (cls->flags & XR_CLASS_DYNAMIC_LAYOUT) {
+        uint16_t cap = cls->in_object_capacity;
+        if (cap > 0) {
+            uint32_t in_object_count = field_count < cap - 1 ? field_count : cap - 1;
+            for (uint32_t i = 0; i < in_object_count; i++) {
+                dst->fields[i] = src->fields[i];
+                xr_gc_retain_value(dst->fields[i]);
+            }
+            if (field_count > cap - 1) {
+                XrValue *src_overflow = (XrValue *) src->fields[cap - 1].ptr;
+                if (src_overflow) {
+                    uint32_t overflow_count = field_count - (cap - 1);
+                    xr_instance_set_dynamic_field(X, dst, cap - 1, xr_null());
+                    for (uint32_t i = 0; i < overflow_count; i++) {
+                        XrValue value = src_overflow[i];
+                        xr_gc_retain_value(value);
+                        xr_instance_set_dynamic_field(X, dst, (uint16_t) ((cap - 1) + i), value);
+                    }
+                }
+            }
+        }
+    } else {
+        memcpy(dst->fields, src->fields, sizeof(XrValue) * field_count);
+        for (uint32_t i = 0; i < field_count; i++)
+            xr_gc_retain_value(dst->fields[i]);
+    }
 
     // Shallow-copy native body bytes (caller is responsible for deep semantics)
     XrNativeBodyDesc *desc = cls->native_body;
@@ -241,6 +267,7 @@ void xr_instance_set_field(XrayIsolate *X, XrInstance *inst, const char *name, X
         return;
     }
 
+    xr_gc_release_value(xr_current_coro_gc(), inst->fields[index]);
     inst->fields[index] = value;
     XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), inst);
 }
@@ -258,6 +285,7 @@ void xr_instance_set_field_by_index(XrInstance *inst, int index, XrValue value) 
     XrClass *klass = xr_instance_get_class(inst);
     XR_DCHECK_BOUNDS(index, klass->field_count, "field index out of bounds");
     (void) klass;
+    xr_gc_release_value(xr_current_coro_gc(), inst->fields[index]);
     inst->fields[index] = value;
     XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), inst);
 }
@@ -409,6 +437,7 @@ bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t in
     XR_DCHECK(cap > 0, "set_dynamic_field: zero capacity");
 
     if (index < cap - 1) {
+        xr_gc_release_value(xr_current_coro_gc(), inst->fields[index]);
         inst->fields[index] = value;
         return true;
     }
@@ -451,6 +480,7 @@ bool xr_instance_set_dynamic_field(XrayIsolate *X, XrInstance *inst, uint16_t in
         inst->fields[cap - 1].ptr = (void *) overflow;
     }
 
+    xr_gc_release_value(xr_current_coro_gc(), overflow[overflow_idx]);
     overflow[overflow_idx] = value;
     return true;
 }

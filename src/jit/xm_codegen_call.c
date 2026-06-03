@@ -507,7 +507,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // GC type guard: only XR_TFUNCTION (closures) use fast path.
             // Classes (XR_TCLASS) have different layout and must go to slow path
             // where xr_jit_call_func handles instance allocation + constructor.
-            a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, SCRATCH_REG, XM_GC_TYPE_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldrh(SCRATCH_REG2, SCRATCH_REG, XM_GC_TYPE_OFFSET));
             a64_buf_emit(&ctx->buf, a64_subs_imm_w(A64_XZR, SCRATCH_REG2, 5));
             uint32_t bne_type_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_nop());  // patched to B.NE slow_path

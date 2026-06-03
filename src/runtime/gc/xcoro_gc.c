@@ -166,48 +166,138 @@ static void gc_free_root_callbacks(XrCoroGC *gc) {
     gc->root_callbacks = NULL;
 }
 
-// Call finalizers on all Immix objects across all block lists
-static void gc_finalize_immix_objects(XrCoroGC *gc) {
-    XrImmixBlock *blists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
-                              gc->immix.current_block, gc->immix.old_blocks};
-    for (int i = 0; i < 4; i++) {
-        for (XrImmixBlock *b = blists[i]; b; b = b->next) {
-            if (!b->has_finalizers)
-                continue;
-            for (XrGCHeader *obj = b->local_allgc; obj; obj = obj->gc_next) {
-                if (obj->extra & XR_OBJ_DEAD)
-                    continue; /* already finalized + freed by RC drop */
-                if (xr_gc_needs_finalize_ext(gc, obj->type)) {
-                    XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
-                    if (destroy)
-                        destroy(obj, gc);
-                }
-            }
-            if (i == 2)
-                break;  // current_block is single, not a list
+static XrGCObjectNode *gc_object_node_new(XrGCHeader *obj) {
+    XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
+    if (!node)
+        return NULL;
+    node->obj = obj;
+    node->next = NULL;
+    return node;
+}
+
+static void gc_object_node_push(XrGCObjectNode **head, XrGCObjectNode *node, XrGCHeader *obj) {
+    XR_DCHECK(head != NULL, "node_push: NULL head");
+    XR_DCHECK(node != NULL, "node_push: NULL node");
+    node->obj = obj;
+    node->next = *head;
+    *head = node;
+}
+
+static bool gc_object_node_remove(XrGCObjectNode **head, XrGCHeader *obj) {
+    XR_DCHECK(head != NULL, "node_remove: NULL head");
+    bool removed = false;
+    XrGCObjectNode **p = head;
+    while (*p) {
+        XrGCObjectNode *node = *p;
+        if (node->obj == obj) {
+            *p = node->next;
+            xr_free(node);
+            removed = true;
+            continue;
         }
+        p = &node->next;
+    }
+    return removed;
+}
+
+static void gc_finalize_registered_objects(XrCoroGC *gc) {
+    while (gc->finalize_objects) {
+        XrGCObjectNode *node = gc->finalize_objects;
+        gc->finalize_objects = node->next;
+        XrGCHeader *obj = node->obj;
+        if (obj && !(obj->extra & XR_OBJ_DEAD)) {
+            obj->extra |= XR_OBJ_DEAD;
+            XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
+            if (destroy) {
+                destroy(obj, gc);
+                gc->finalizer_count++;
+            }
+        }
+        xr_free(node);
     }
 }
 
 // Finalize and free all large objects
 static void gc_free_large_objects(XrCoroGC *gc) {
-    XrGCHeader *lo = gc->large_objects;
-    while (lo) {
-        XrGCHeader *next = lo->gc_next;
-        if (xr_gc_needs_finalize_ext(gc, lo->type)) {
-            XrGCDestroyFn destroy = get_destroy_func_ext(gc, lo->type);
-            if (destroy)
-                destroy(lo, gc);
+    XrGCObjectNode *node = gc->large_objects;
+    while (node) {
+        XrGCObjectNode *next = node->next;
+        XrGCHeader *lo = node->obj;
+        if (lo) {
+            gc->large_bytes -= lo->objsize;
+            if (XR_GC_IS_MMAP(lo)) {
+                xr_mem_unmap(lo, lo->objsize);
+            } else {
+                xr_free(lo);
+            }
         }
-        gc->large_bytes -= lo->objsize;
-        if (XR_GC_IS_MMAP(lo)) {
-            xr_mem_unmap(lo, lo->objsize);
-        } else {
-            xr_free(lo);
-        }
-        lo = next;
+        xr_free(node);
+        node = next;
     }
     gc->large_objects = NULL;
+    gc->large_bytes = 0;
+}
+
+static bool gc_prepare_nodes(XrCoroGC *gc, uint8_t type, size_t total,
+                             XrGCObjectNode **finalize_node, XrGCObjectNode **large_node) {
+    *finalize_node = NULL;
+    *large_node = NULL;
+    if (xr_gc_needs_finalize_ext(gc, type)) {
+        *finalize_node = gc_object_node_new(NULL);
+        if (!*finalize_node)
+            return false;
+    }
+    if (total > XR_LARGE_OBJECT_THRESHOLD) {
+        *large_node = gc_object_node_new(NULL);
+        if (!*large_node) {
+            if (*finalize_node) {
+                xr_free(*finalize_node);
+                *finalize_node = NULL;
+            }
+            return false;
+        }
+    }
+    return true;
+}
+
+static void gc_discard_nodes(XrGCObjectNode *finalize_node, XrGCObjectNode *large_node) {
+    if (finalize_node)
+        xr_free(finalize_node);
+    if (large_node)
+        xr_free(large_node);
+}
+
+static void gc_register_prepared_nodes(XrCoroGC *gc, XrGCHeader *obj, XrGCObjectNode *finalize_node,
+                                       XrGCObjectNode *large_node) {
+    if (large_node) {
+        gc_object_node_push(&gc->large_objects, large_node, obj);
+        gc->large_bytes += (int64_t) obj->objsize;
+    }
+    if (finalize_node) {
+        gc_object_node_push(&gc->finalize_objects, finalize_node, obj);
+    }
+}
+
+static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrGCHeader *obj) {
+    if (!xr_gc_needs_finalize_ext(gc, obj->type))
+        return true;
+    XrGCObjectNode *node = gc_object_node_new(obj);
+    if (!node) {
+        return false;
+    }
+    gc_object_node_push(&gc->finalize_objects, node, obj);
+    XR_OBJ_SET_FLAG(obj, XR_OBJ_HAS_DTOR);
+    return true;
+}
+
+static void gc_unregister_finalizer(XrCoroGC *gc, XrGCHeader *obj) {
+    if (gc)
+        (void) gc_object_node_remove(&gc->finalize_objects, obj);
+}
+
+static void gc_unregister_large_object(XrCoroGC *gc, XrGCHeader *obj) {
+    if (gc)
+        (void) gc_object_node_remove(&gc->large_objects, obj);
 }
 
 // Decref all shared objects tracked by this GC cycle
@@ -228,7 +318,7 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
 
     gc_free_root_callbacks(gc);
-    gc_finalize_immix_objects(gc);
+    gc_finalize_registered_objects(gc);
     xr_immix_destroy(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
@@ -281,7 +371,7 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     XR_DCHECK(!gc->in_gc, "gc_reset called during GC");
 
     gc_free_root_callbacks(gc);
-    gc_finalize_immix_objects(gc);
+    gc_finalize_registered_objects(gc);
     xr_immix_reset(&gc->immix);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
@@ -297,19 +387,13 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
 
 /* ========== Allocation Helpers ========== */
 
-/*
- * Link Immix object to block's local_allgc list and mark allocation lines.
- * Shared by xr_coro_gc_newobj (interpreter) and xr_jit_alloc_post (JIT).
- */
 static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t type,
                                        uint32_t total) {
+    (void) gc;
+    (void) type;
     XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
-    obj->gc_next = block->local_allgc;
-    block->local_allgc = obj;
     block->alloc_count++;
     block->alloc_bytes += (int64_t) total;
-    if (xr_gc_needs_finalize_ext(gc, type))
-        block->has_finalizers = 1;
 
     // Mark alloc_marks so allocator knows these lines are occupied.
     // NOTE: Do NOT advance mark_cursor here. JIT inline allocs bump
@@ -341,12 +425,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
         return;
     /* Large objects are individually malloc'd/mmap'd: free directly. */
     if (obj->objsize > XR_LARGE_OBJECT_THRESHOLD) {
-        /* Unlink from large_objects list. */
-        XrGCHeader **p = &gc->large_objects;
-        while (*p && *p != obj)
-            p = &(*p)->gc_next;
-        if (*p == obj)
-            *p = obj->gc_next;
+        gc_unregister_large_object(gc, obj);
         gc->large_bytes -= (int64_t) obj->objsize;
         gc->totalbytes -= (int64_t) obj->objsize;
         if (XR_GC_IS_MMAP(obj))
@@ -370,9 +449,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
             return; /* OOM: drop the block on the floor (bulk-freed at coro end) */
     }
 
-    /* The freelist is linked through the object's first PAYLOAD word (the
-     * word at header+sizeof(header)), NOT gc_next: gc_next must stay intact
-     * so the block's local_allgc chain remains walkable at teardown. The
+    /* The freelist is linked through the object's first PAYLOAD word. The
      * size class guarantees objsize >= sizeof(XrGCHeader) + sizeof(void*),
      * so this write stays inside the object's footprint. */
     void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
@@ -400,12 +477,16 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
 XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
         return;
+    if (obj->extra & XR_OBJ_DEAD)
+        return;
 
     /* Shared objects: atomic refcount + shared destroy (not coro-local). */
     if (XR_GC_IS_SHARED(obj)) {
         xr_shared_destroy(obj);
         return;
     }
+
+    obj->extra |= XR_OBJ_DEAD;
 
     /* Run the type destructor (closes files/sockets, frees side buffers). */
     if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
@@ -414,6 +495,7 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
             destroy(obj, gc);
             gc->finalizer_count++;
         }
+        gc_unregister_finalizer(gc, obj);
     }
 
     /* Mark DEAD before reclamation so the coroutine-teardown finalize walk
@@ -422,7 +504,8 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
      * below the free-link minimum are not freelisted but still must not be
      * finalized twice). Cleared by newobj (extra = 0) when the block is
      * reused. */
-    obj->extra |= XR_OBJ_DEAD;
+    if (gc && gc->object_count > 0)
+        gc->object_count--;
 
     /* Return memory to the freelist (or free large/mmap directly). */
     if (gc)
@@ -438,6 +521,11 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 
     size_t total = XGC_ALIGN(size);
     XrGCHeader *obj;
+    XrGCObjectNode *finalize_node = NULL;
+    XrGCObjectNode *large_node = NULL;
+
+    if (!gc_prepare_nodes(gc, type, total, &finalize_node, &large_node))
+        return NULL;
 
     bool use_mmap = false;
     if (total > XR_LARGE_OBJECT_THRESHOLD) {
@@ -445,18 +533,19 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
             // Tier 2: very large — use anonymous mmap (xr_mem_map)
             // to avoid libc heap fragmentation.
             obj = (XrGCHeader *) xr_mem_map(total, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
-            if (!obj)
+            if (!obj) {
+                gc_discard_nodes(finalize_node, large_node);
                 return NULL;
+            }
             use_mmap = true;
         } else {
             // Tier 1: medium large — use xr_malloc
             obj = (XrGCHeader *) xr_malloc(total);
-            if (!obj)
+            if (!obj) {
+                gc_discard_nodes(finalize_node, large_node);
                 return NULL;
+            }
         }
-        obj->gc_next = gc->large_objects;
-        gc->large_objects = obj;
-        gc->large_bytes += (int64_t) total;
     } else {
         /* RC freelist fast path: reuse a same-size-class block freed by a
          * previous drop-to-zero before falling back to Immix bump. */
@@ -465,13 +554,14 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
             obj = gc->rc_freelist[cls];
             void **link = (void **) ((char *) obj + sizeof(XrGCHeader));
             gc->rc_freelist[cls] = (XrGCHeader *) *link;
-            /* Reused block: still linked in its block's local_allgc (gc_next
-             * intact) and its alloc line is still marked. type/refcount/extra
+            /* Reused block: its allocation line is still occupied. type/refcount/extra
              * are reset below; XR_OBJ_DEAD is cleared by extra = 0. */
         } else {
             obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
-            if (!obj)
+            if (!obj) {
+                gc_discard_nodes(finalize_node, large_node);
                 return NULL;
+            }
             gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
         }
     }
@@ -479,15 +569,17 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     obj->type = type;
     obj->objsize = (uint32_t) total;
     obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
+    obj->_rsv = 0;
     /* RC: a freshly allocated object has exactly one owning reference (its
      * definition site). dup/drop are 1-based, so initialize to 1. Immix
      * memory is reused/uninitialized, so this must be set explicitly. */
     obj->refcount = 1;
     if (use_mmap)
         XR_GC_SET_MMAP(obj);
+    if (finalize_node)
+        XR_OBJ_SET_FLAG(obj, XR_OBJ_HAS_DTOR);
 
-    // byte 9 (formerly tracing `marked`) left zero — tracing retired; RC owns
-    // reclamation. refcount is initialized to 1 by the caller (newobj).
+    gc_register_prepared_nodes(gc, obj, finalize_node, large_node);
 
     gc_update_alloc_stats(gc, (uint32_t) total);
 
@@ -578,21 +670,10 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     printf("Immix memory:   %zu bytes\n", istats.total_bytes);
     printf("Immix lines:    live=%zu free=%zu\n", istats.live_lines, istats.free_lines);
 
-    size_t obj_count = 0;
-    XrImmixBlock *plists[] = {gc->immix.full_blocks, gc->immix.recycle_blocks,
-                              gc->immix.current_block};
-    for (int i = 0; i < 3; i++) {
-        for (XrImmixBlock *b = plists[i]; b; b = b->next) {
-            for (XrGCHeader *o = b->local_allgc; o; o = o->gc_next)
-                obj_count++;
-        }
-        if (i == 2)
-            break;
-    }
-    printf("Object count:   %zu\n", obj_count);
+    printf("Object count:   %u\n", gc->object_count);
 
     size_t large_count = 0;
-    for (XrGCHeader *obj = gc->large_objects; obj; obj = obj->gc_next)
+    for (XrGCObjectNode *node = gc->large_objects; node; node = node->next)
         large_count++;
     printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long) gc->large_bytes);
 
@@ -624,7 +705,7 @@ XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
 
 // Lightweight alloc_marks setter for JIT inline alloc fast path.
 // CALL_C convention: (coro, obj_ptr_as_uint64)
-// Only sets line occupancy bits; local_allgc and stats handled inline by JIT.
+// Only sets line occupancy bits; stats are handled inline by JIT.
 void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
     (void) coro;
     void *p = (void *) (uintptr_t) obj_ptr;
@@ -637,8 +718,8 @@ void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
 // Fast path post-alloc: GC bookkeeping after inline bump succeeds
 // GC header already initialized by JIT code. This handles:
 //   1. alloc_marks (line occupancy bitmap)
-//   2. allgc link (per-block object list for sweep)
-//   3. stats update (totalbytes, object_count, GCdebt)
+//   2. finalizer registration for objects that need teardown hooks
+//   3. stats update (totalbytes, object_count)
 // CALL_C convention: (coro, obj_ptr)
 void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     if (!coro || !coro->coro_gc || !obj_ptr)
@@ -650,5 +731,7 @@ void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Immix");
 
     gc_post_immix_alloc(gc, obj, obj->type, total);
+    XR_CHECK(gc_register_finalizer_after_inline_alloc(gc, obj),
+             "jit_alloc_post: finalizer registration failed");
     gc_update_alloc_stats(gc, total);
 }

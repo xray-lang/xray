@@ -102,19 +102,19 @@
 
 /* ========== Object layout constants ========== */
 
-#define XM_GC_HEADER_SIZE 24           // sizeof(XrGCHeader) — transitional RC+tracing
+#define XM_GC_HEADER_SIZE 16           // sizeof(XrGCHeader)
 #define XM_XRVALUE_SIZE 16             // sizeof(XrValue)
 #define XM_XRVALUE_TAG_OFFSET 0        // offsetof(XrValue, tag) — uint8_t at byte 0
 #define XM_XRVALUE_HEAP_TYPE_OFFSET 2  // offsetof(XrValue, heap_type) — uint16_t at byte 2
 #define XM_XRVALUE_PAYLOAD_OFFSET 8    // offsetof(XrValue, i/f/ptr) — at byte 8
-#define XM_GC_TYPE_OFFSET 8            // offsetof(XrGCHeader, type) — uint8_t
-#define XM_GC_EXTRA_OFFSET 10          // offsetof(XrGCHeader, extra)
+#define XM_GC_TYPE_OFFSET 0            // offsetof(XrGCHeader, type) — uint16_t
+#define XM_GC_EXTRA_OFFSET 2           // offsetof(XrGCHeader, extra)
 
-// XrInstance: XrGCHeader(24) + klass*(8) + XrValue fields[]
-#define XM_INSTANCE_KLASS_OFFSET XM_GC_HEADER_SIZE         // 24
-#define XM_INSTANCE_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 32
-// XrJson: XrGCHeader(24) + overflow*(8) + XrValue fields[]
-#define XM_JSON_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)  // 32
+// XrInstance: XrGCHeader(16) + klass*(8) + XrValue fields[]
+#define XM_INSTANCE_KLASS_OFFSET XM_GC_HEADER_SIZE
+#define XM_INSTANCE_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)
+// XrJson: XrGCHeader(16) + overflow*(8) + XrValue fields[]
+#define XM_JSON_FIELDS_OFFSET (XM_GC_HEADER_SIZE + 8)
 
 /* ========== XrArray field offsets ========== */
 
@@ -127,23 +127,22 @@
 
 /* ========== GC / Allocation offsets ========== */
 
-#define XM_IMMIX_CURSOR_OFFSET 0      // offsetof(XrImmixHeap, cursor)
-#define XM_IMMIX_LIMIT_OFFSET 8       // offsetof(XrImmixHeap, limit)
-#define XM_GC_HDR_TYPE_OFFSET 8       // offsetof(XrGCHeader, type)
-#define XM_GC_HDR_EXTRA_OFFSET 10     // offsetof(XrGCHeader, extra)
-#define XM_GC_HDR_REFCOUNT_OFFSET 12  // offsetof(XrGCHeader, refcount)
-#define XM_GC_HDR_OBJSIZE_OFFSET 16   // offsetof(XrGCHeader, objsize)
+#define XM_IMMIX_CURSOR_OFFSET 0     // offsetof(XrImmixHeap, cursor)
+#define XM_IMMIX_LIMIT_OFFSET 8      // offsetof(XrImmixHeap, limit)
+#define XM_GC_HDR_TYPE_OFFSET 0      // offsetof(XrGCHeader, type)
+#define XM_GC_HDR_EXTRA_OFFSET 2     // offsetof(XrGCHeader, extra)
+#define XM_GC_HDR_REFCOUNT_OFFSET 4  // offsetof(XrGCHeader, refcount)
+#define XM_GC_HDR_OBJSIZE_OFFSET 8   // offsetof(XrGCHeader, objsize)
+#define XM_GC_HDR_RSV_OFFSET 12      // offsetof(XrGCHeader, _rsv)
 
 /* ========== GC bookkeeping offsets (for inline alloc_post) ========== */
-/* Tracing is retired: the inline allocator no longer touches the tracing
- * fields (marked / currentwhite / GCdebt / gc_requested). It only bumps the
- * Immix cursor, links the per-block local_allgc list, and adds to totalbytes. */
+/* Inline allocation bumps the Immix cursor, updates block accounting, and
+ * adds to totalbytes. */
 
 #define XM_GC_TOTALBYTES_OFFSET 88            // offsetof(XrCoroGC, totalbytes)
-#define XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET 24  // offsetof(XrImmixBlock, local_allgc)
 #define XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrImmixBlock, alloc_marks)
-#define XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET 40  // offsetof(XrImmixBlock, alloc_count)
-#define XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET 48  // offsetof(XrImmixBlock, alloc_bytes)
+#define XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET 28  // offsetof(XrImmixBlock, alloc_count)
+#define XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET 32  // offsetof(XrImmixBlock, alloc_bytes)
 #define XM_IMMIX_BLOCK_SIZE_MASK 0x3FFF       // XR_IMMIX_BLOCK_SIZE - 1
 #define XM_IMMIX_LINE_SIZE_SHIFT 7            // log2(128) = 7
 
@@ -196,8 +195,6 @@ _Static_assert(offsetof(XrProto, stack_map) == XM_PROTO_STACK_MAP_OFFSET,
 #include "../runtime/gc/ximmix.h"
 _Static_assert(offsetof(XrCoroGC, totalbytes) == XM_GC_TOTALBYTES_OFFSET,
                "totalbytes offset mismatch");
-_Static_assert(offsetof(XrImmixBlock, local_allgc) == XM_IMMIX_BLOCK_LOCAL_ALLGC_OFFSET,
-               "local_allgc offset mismatch");
 _Static_assert(offsetof(XrImmixBlock, alloc_marks) == XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET,
                "alloc_marks offset mismatch");
 _Static_assert(offsetof(XrImmixBlock, alloc_count) == XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET,
@@ -216,6 +213,7 @@ _Static_assert(offsetof(XrGCHeader, refcount) == XM_GC_HDR_REFCOUNT_OFFSET,
                "GCHeader.refcount offset mismatch");
 _Static_assert(offsetof(XrGCHeader, objsize) == XM_GC_HDR_OBJSIZE_OFFSET,
                "GCHeader.objsize offset mismatch");
+_Static_assert(offsetof(XrGCHeader, _rsv) == XM_GC_HDR_RSV_OFFSET, "GCHeader._rsv offset mismatch");
 
 // XrValue detailed field checks
 _Static_assert(offsetof(XrValue, heap_type) == XM_XRVALUE_HEAP_TYPE_OFFSET,

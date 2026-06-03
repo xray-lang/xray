@@ -34,6 +34,30 @@
 
 /* ====== Creation and Destruction ====== */
 
+static void xr_array_retain_elements(XrArray *arr) {
+    if (!arr || arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
+        return;
+    XrValue *data = (XrValue *) arr->data;
+    for (int32_t i = 0; i < arr->length; i++)
+        xr_gc_retain_value(data[i]);
+}
+
+static void xr_array_release_elements(XrArray *arr, XrCoroGC *gc) {
+    if (!arr)
+        return;
+    if (xr_array_is_slice(arr)) {
+        xr_gc_release_value(gc, XR_FROM_PTR(arr->source));
+        return;
+    }
+    if (arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
+        return;
+    XrValue *data = (XrValue *) arr->data;
+    for (int32_t i = 0; i < arr->length; i++) {
+        xr_gc_release_value(gc, data[i]);
+        data[i] = xr_null();
+    }
+}
+
 XrArray *xr_array_new(struct XrCoroutine *coro) {
     return xr_array_with_capacity(coro, 0);
 }
@@ -151,8 +175,14 @@ XrValue xr_array_get(XrArray *arr, int index) {
 void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
     XR_DCHECK(arr != NULL, "array_set_direct: NULL array");
     XR_DCHECK(index >= 0 && index < arr->capacity, "array_set_direct: index out of capacity");
+    XrValue old = xr_null();
+    bool replacing = arr->elem_type == XR_ELEM_ANY && index < arr->length;
+    if (replacing)
+        old = xr_array_get_element(arr, index);
     // Caller must ensure valid index and pre-allocated capacity
     xr_array_set_element(arr, index, value);
+    if (replacing)
+        xr_gc_release_value(xr_current_coro_gc(), old);
     if (XR_ARRAY_IS_GC_TRACED(arr))
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
 }
@@ -160,6 +190,7 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
 void xr_array_set(XrArray *arr, int index, XrValue value) {
     XR_DCHECK(arr != NULL, "array_set: NULL array");
     XR_DCHECK(XR_GC_GET_TYPE(&arr->gc) == XR_TARRAY, "array_set: object is not an array");
+    int old_length = arr->length;
     // Negative index check
     if (index < 0) {
         return;
@@ -189,7 +220,13 @@ void xr_array_set(XrArray *arr, int index, XrValue value) {
         arr->length = index + 1;
     }
 
+    XrValue old = xr_null();
+    bool replacing = arr->elem_type == XR_ELEM_ANY && index < old_length;
+    if (replacing)
+        old = xr_array_get_element(arr, index);
     xr_array_set_element(arr, index, value);
+    if (replacing)
+        xr_gc_release_value(xr_current_coro_gc(), old);
     if (XR_ARRAY_IS_GC_TRACED(arr))
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
 }
@@ -278,6 +315,7 @@ XrValue xr_array_shift(XrArray *arr) {
 
 void xr_array_clear(XrArray *arr) {
     XR_DCHECK(arr != NULL, "array_clear: NULL array");
+    xr_array_release_elements(arr, xr_current_coro_gc());
     arr->length = 0;
 }
 
@@ -347,6 +385,7 @@ XrArray *xr_array_filter(XrayIsolate *iso, XrArray *arr, struct XrClosure *callb
         XrValue test_result = xr_vm_call_closure(iso, callback, args, 1);
 
         if (xr_vm_is_truthy(test_result)) {
+            xr_gc_retain_value(elem);
             xr_array_push(result, elem);
         }
     }
@@ -821,7 +860,9 @@ XrArray *xr_array_copy(struct XrCoroutine *coro, XrArray *arr) {
     if (!arr)
         return xr_array_new(coro);
     if (arr->elem_type == XR_ELEM_ANY) {
-        return xr_array_from_values(coro, (XrValue *) arr->data, arr->length);
+        XrArray *new_arr = xr_array_from_values(coro, (XrValue *) arr->data, arr->length);
+        xr_array_retain_elements(new_arr);
+        return new_arr;
     }
     // Typed array: allocate same type and memcpy
     XrArray *new_arr =
@@ -833,6 +874,7 @@ XrArray *xr_array_copy(struct XrCoroutine *coro, XrArray *arr) {
         memcpy(new_arr->data, arr->data, (size_t) arr->length * arr->elem_size);
     }
     new_arr->length = arr->length;
+    xr_array_retain_elements(new_arr);
     return new_arr;
 }
 
@@ -988,6 +1030,7 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
 
     // Track source for GC (chase to original if source is also a slice)
     slice->source = arr->source ? arr->source : arr;
+    xr_gc_retain_value(XR_FROM_PTR(slice->source));
 
     // Inherit elem_type, elem_tid, and has_gc_ptrs from source
     slice->elem_type = arr->elem_type;
@@ -1021,6 +1064,7 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
         memcpy(arr->data, slice->data, (size_t) slice->length * slice->elem_size);
     }
     arr->length = slice->length;
+    xr_array_retain_elements(arr);
 
     return arr;
 }
@@ -1029,6 +1073,7 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 
 void xr_gc_destroy_array(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrArray *arr = (XrArray *) obj;
+    xr_array_release_elements(arr, owning_gc);
     // Only free data if this is not a slice (capacity > 0 means owns data)
     if (arr->data && arr->capacity > 0) {
         if (arr->data_on_gc_heap) {

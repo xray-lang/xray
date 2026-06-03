@@ -45,9 +45,9 @@ luac.out
 .crossnote/
 .cursor/*
 !.cursor/cli.json
-!.cursor/rules/
-!.cursor/rules/**
 .windsurf/
+.devin/
+.kiro/
 .github/copilot-instructions.md
 *.swp
 *.swo

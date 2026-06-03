@@ -16,6 +16,7 @@
 #include "../value/xvalue.h"
 #include "../value/xvalue_hash.h"
 #include "../gc/xgc.h"
+#include "../gc/xalloc_unified.h"
 #include "../gc/xcoro_gc.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
@@ -113,8 +114,11 @@ XrTuple *xr_tuple_from_values(struct XrCoroutine *coro, const XrValue *values, u
     XrTuple *t = xr_tuple_new(coro, count);
     if (!t)
         return NULL;
-    if (count > 0)
+    if (count > 0) {
         memcpy(t->elements, values, (size_t) count * sizeof(XrValue));
+        for (uint16_t i = 0; i < count; i++)
+            xr_gc_retain_value(t->elements[i]);
+    }
     return t;
 }
 
@@ -134,6 +138,7 @@ void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
     XR_DCHECK(index < arity, "xr_tuple_set: index out of range");
     if (!t || index >= arity)
         return;
+    xr_gc_release_value(xr_current_coro_gc(), t->elements[index]);
     t->elements[index] = value;
 }
 

@@ -24,11 +24,30 @@
 #include "../../../src/runtime/gc/ximmix.h"
 #include "../../../src/runtime/gc/xgc_header.h"
 #include "../../../src/runtime/value/xvalue.h"
+#include "../../../src/runtime/xisolate_internal.h"
 #include "../../../src/coro/xcoroutine.h"
 #include "../test_win_compat.h"
 
 /* Dummy coroutine for GC tests (gc_create only stores gc->owner, no dereference) */
 static XrCoroutine dummy_coro;
+static XrayIsolate g_test_iso;
+
+#define XR_TEST_EXT_TYPE 63
+
+static int g_destroy_count = 0;
+
+static void test_ext_destroy(XrGCHeader *obj, XrCoroGC *owning_gc) {
+    (void) obj;
+    (void) owning_gc;
+    g_destroy_count++;
+}
+
+static void setup_test_ext_finalizer(void) {
+    memset(&g_test_iso, 0, sizeof(g_test_iso));
+    g_test_iso.ext_finalize_bitmap = 1ULL << XR_TEST_EXT_TYPE;
+    g_test_iso.ext_destroy_funcs[XR_TEST_EXT_TYPE] = test_ext_destroy;
+    dummy_coro.isolate = &g_test_iso;
+}
 
 /* ========== Test Framework ========== */
 
@@ -204,7 +223,65 @@ static void test_large_object(void) {
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_objects == large, "should be in large_objects list");
+    ASSERT(gc->large_objects != NULL, "should have large object node");
+    ASSERT(gc->large_objects->obj == large, "large object node should own object");
+
+    xr_coro_gc_destroy(gc);
+    PASS();
+}
+
+static void test_teardown_finalizer_registry(void) {
+    TEST("finalizer registry: teardown finalizes live object");
+
+    setup_test_ext_finalizer();
+    g_destroy_count = 0;
+
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    ASSERT(gc != NULL, "create failed");
+
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
+    ASSERT(obj != NULL, "alloc failed");
+    ASSERT(XR_OBJ_HAS_DESTRUCTOR(obj), "object should carry destructor flag");
+
+    xr_coro_gc_destroy(gc);
+    ASSERT(g_destroy_count == 1, "teardown should run finalizer once");
+    PASS();
+}
+
+static void test_rc_destroy_unregisters_finalizer(void) {
+    TEST("finalizer registry: RC destroy prevents teardown duplicate");
+
+    setup_test_ext_finalizer();
+    g_destroy_count = 0;
+
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    ASSERT(gc != NULL, "create failed");
+
+    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
+    ASSERT(obj != NULL, "alloc failed");
+
+    xr_coro_gc_rc_destroy(gc, obj);
+    ASSERT(g_destroy_count == 1, "RC destroy should run finalizer once");
+    ASSERT(gc->finalize_objects == NULL, "RC destroy should unregister finalizer");
+
+    xr_coro_gc_destroy(gc);
+    ASSERT(g_destroy_count == 1, "teardown should not rerun finalizer");
+    PASS();
+}
+
+static void test_large_object_rc_free_unregisters_node(void) {
+    TEST("large object: RC free unregisters large object node");
+
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    ASSERT(gc != NULL, "create failed");
+
+    XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
+    ASSERT(large != NULL, "large alloc failed");
+    ASSERT(gc->large_objects != NULL, "large node missing");
+
+    xr_coro_gc_rc_destroy(gc, large);
+    ASSERT(gc->large_objects == NULL, "large node should be removed");
+    ASSERT(gc->large_bytes == 0, "large bytes should be decremented");
 
     xr_coro_gc_destroy(gc);
     PASS();
@@ -276,6 +353,9 @@ int main(void) {
     test_gc_create_destroy();
     test_newobj_marks_alloc();
     test_large_object();
+    test_teardown_finalizer_registry();
+    test_rc_destroy_unregisters_finalizer();
+    test_large_object_rc_free_unregisters_node();
     /* Tracing collector (fullgc / incremental step / sweep / write barriers)
      * has been removed: reference counting owns reclamation. The tests that
      * asserted tracing-cycle behavior (gc_count increment, PROPAGATE state

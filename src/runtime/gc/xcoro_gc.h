@@ -171,8 +171,8 @@ typedef struct XrCoroGC {
     uint8_t _pad1[6];     // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
-    XrGCHeader *large_objects;  // All large objects (single list via gc_next)
-    int64_t large_bytes;        // Total bytes in large_objects
+    XrGCObjectNode *large_objects;  // All large objects
+    int64_t large_bytes;            // Total bytes in large_objects
 
     // GC tuning parameters (gc.setpause / gc.setstepmul — kept for API surface)
     int gc_pause;
@@ -184,6 +184,9 @@ typedef struct XrCoroGC {
     // External root callbacks (legacy C-extension hook; never invoked now that
     // tracing is gone, but the register/unregister API is retained).
     XrCoroGCRootEntry *root_callbacks;
+
+    // Objects that need teardown finalization if they outlive local RC.
+    XrGCObjectNode *finalize_objects;
 
     // Shared-object teardown decref list. Tracing used to populate this each
     // cycle; it is now unused at runtime (shared objects live on the atomic
@@ -319,8 +322,9 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
 XR_FUNC void xr_coro_gc_markobject(XrCoroGC *gc, XrGCHeader *obj);
 
 static inline void xr_coro_gc_markvalue(XrCoroGC *gc, XrValue value) {
-    (void) gc;
-    (void) value;
+    if (!XR_IS_PTR(value) || !XR_VALUE_GCPTR(value))
+        return;
+    xr_coro_gc_markobject(gc, XR_VALUE_GCPTR(value));
 }
 
 /* ========== Write Barrier API (retired) ==========

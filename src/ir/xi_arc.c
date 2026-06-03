@@ -168,8 +168,6 @@ static bool tracks_rc(const XiValue *v) {
         return false; /* frame lifetime, no RC */
     if (v->op != XI_PARAM && !op_produces_owned_value(v->op))
         return false; /* side-effect op: no owning result */
-    if (op_produces_borrow(v->op))
-        return false; /* borrowed from a slot/container: not owned here */
     /* Call results: a callee may return either a fresh (+1) reference or an
      * alias of one of its arguments (e.g. `arr.push(x)` returns `self`).
      * Without per-callee return-ownership summaries we cannot tell them
@@ -243,6 +241,14 @@ static void insert_dup_before(XiFunc *f, XiBlock *blk, XiValue *user, XiValue *t
             break;
         }
     }
+    XiValue *dup = xi_value_insert_after(f, blk, anchor, XI_RETAIN, target->type, 1);
+    XR_DCHECK(dup != NULL, "xi_arc: failed to create RETAIN");
+    dup->args[0] = target;
+    dup->flags = XI_FLAG_SIDE_EFFECT;
+    dup->escape = target->escape;
+}
+
+static void insert_dup_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue *target) {
     XiValue *dup = xi_value_insert_after(f, blk, anchor, XI_RETAIN, target->type, 1);
     XR_DCHECK(dup != NULL, "xi_arc: failed to create RETAIN");
     dup->args[0] = target;
@@ -333,8 +339,13 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         /* Borrowed: the function owns no reference, so every consuming use
          * must dup first; nothing is moved out and nothing is dropped. */
         for (int i = 0; i < n; i++) {
-            if (sites[i].user == NULL)
-                continue; /* return terminator: returning a borrow dups it */
+            if (sites[i].user == NULL) {
+                XiValue *last = sites[i].blk->nvalues > 0
+                                    ? sites[i].blk->values[sites[i].blk->nvalues - 1]
+                                    : NULL;
+                insert_dup_after(f, sites[i].blk, last, target);
+                continue;
+            }
             insert_dup_before(f, sites[i].blk, sites[i].user, target);
         }
         return;
@@ -431,6 +442,8 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
                    param_is_borrowed(f, targets[i], &own)) {
             /* The borrow signature proved this parameter is only borrowed:
              * dup at consuming uses, never drop (caller keeps ownership). */
+            mode = OWN_BORROWED;
+        } else if (op_produces_borrow(targets[i]->op)) {
             mode = OWN_BORROWED;
         } else if (op_is_call(targets[i]->op)) {
             mode = OWN_CALL_RESULT;

@@ -32,11 +32,6 @@ typedef struct XrValue XrValue;
 
 #define XGC_IDLE 0
 
-/* ========== Marked Field Access ========== */
-
-#define xr_gc_getmarked(o) ((o)->marked)
-#define xr_gc_setmarked(o, m) ((o)->marked = (uint8_t) (m))
-
 /*
  * Color bit definitions are ONLY in xcoro_gc.h (dual-white).
  * Global GC manages fixedgc objects that live forever and never
@@ -62,6 +57,11 @@ typedef void (*XrGCDestroyFn)(XrGCHeader *obj, XrCoroGC *owning_gc);
 typedef XrValue (*XrGCDeepCopyFn)(struct XrCopyContext *ctx, XrGCHeader *obj);
 typedef XrValue (*XrGCToSharedFn)(struct XrayIsolate *X, XrGCHeader *obj);
 typedef struct XrGCHeader **(*XrGCGetGCListFn)(XrGCHeader *obj);
+
+typedef struct XrGCObjectNode {
+    XrGCHeader *obj;
+    struct XrGCObjectNode *next;
+} XrGCObjectNode;
 
 /* ========== Per-Type Operations Table ==========
  *
@@ -93,7 +93,7 @@ typedef struct XrGC {
     uint8_t _pad[7];
     struct XrayIsolate *isolate;
     int64_t totalbytes;
-    XrGCHeader *fixedgc;  // Fixed objects (compile-time)
+    XrGCObjectNode *fixedgc;  // Fixed objects (compile-time)
     size_t object_count;
 } XrGC;
 
@@ -103,6 +103,9 @@ XR_FUNC void xr_gc_init(XrGC *gc, struct XrayIsolate *isolate);
 XR_FUNC void xr_gc_cleanup(XrGC *gc);
 XR_FUNC void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
 XR_FUNC XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
+XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
+XR_FUNC void xr_gc_retain_value(XrValue value);
+XR_FUNC void xr_gc_release_value(XrCoroGC *gc, XrValue value);
 
 /* ========== Compile-Time Type Function Tables ========== */
 
