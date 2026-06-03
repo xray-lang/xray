@@ -334,6 +334,8 @@ XmRef xm_emit(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef a, Xm
     ins->flags = 0;
     if (xm_op_has_side_effect(op))
         ins->flags |= XM_FLAG_SIDE_EFFECT;
+    if (op == XM_DIV || op == XM_MOD)
+        ins->flags |= XM_FLAG_MAY_THROW; /* div/mod by zero is observable */
     if (xm_op_is_commutative(op))
         ins->flags |= XM_FLAG_COMMUTATIVE;
     // ctype starts UNKNOWN: rep is for register allocation only.
@@ -372,6 +374,8 @@ void xm_emit_void(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, XmRef b) {
     ins->flags = 0;
     if (xm_op_has_side_effect(op))
         ins->flags |= XM_FLAG_SIDE_EFFECT;
+    if (op == XM_DIV || op == XM_MOD)
+        ins->flags |= XM_FLAG_MAY_THROW; /* div/mod by zero is observable */
     if (xm_op_is_commutative(op))
         ins->flags |= XM_FLAG_COMMUTATIVE;
     ins->ctype = XM_TYPE_UNKNOWN;
@@ -394,6 +398,8 @@ void xm_emit_raw(XmFunc *func, XmBlock *blk, uint16_t op, uint8_t type, XmRef ds
     ins->flags = 0;
     if (xm_op_has_side_effect(op))
         ins->flags |= XM_FLAG_SIDE_EFFECT;
+    if (op == XM_DIV || op == XM_MOD)
+        ins->flags |= XM_FLAG_MAY_THROW; /* div/mod by zero is observable */
     if (xm_op_is_commutative(op))
         ins->flags |= XM_FLAG_COMMUTATIVE;
     ins->ctype = XM_TYPE_UNKNOWN;
