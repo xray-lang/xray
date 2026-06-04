@@ -49,6 +49,29 @@ def print_table(headers, rows, col_widths=None):
         print(fmt_row(row))
 
 
+def has_test(results, name):
+    return any(name in r.get("results", {}) for r in results)
+
+
+def compare_numeric_test(results, test_name, title, metrics):
+    print(f"\n╔{'═' * (len(title) + 4)}╗")
+    print(f"║  {title}  ║")
+    print(f"╚{'═' * (len(title) + 4)}╝\n")
+
+    headers = ["Metric"] + [r["server"] for r in results]
+    rows = []
+    for label, key in metrics:
+        row = [label]
+        for r in results:
+            val = r.get("results", {}).get(test_name, {}).get(key)
+            if isinstance(val, bool):
+                row.append("Yes" if val else "No")
+            else:
+                row.append(fmt_num(val))
+        rows.append(row)
+    print_table(headers, rows)
+
+
 def compare_latency(results):
     """Compare latency test results."""
     print("\n╔══════════════════════════════════════════╗")
@@ -279,13 +302,105 @@ def main():
     print(f"\nComparing {len(results)} servers: {', '.join(r['server'] for r in results)}")
     print(f"Files: {', '.join(os.path.basename(p) for p in paths)}")
 
-    compare_latency(results)
-    compare_throughput(results)
-    compare_concurrency(results)
-    compare_conn_rate(results)
-    compare_large_message(results)
-    compare_msg_sweep(results)
-    print_summary(results)
+    if has_test(results, "latency"):
+        compare_latency(results)
+    if has_test(results, "throughput"):
+        compare_throughput(results)
+    if has_test(results, "concurrency"):
+        compare_concurrency(results)
+    if has_test(results, "conn_rate"):
+        compare_conn_rate(results)
+    if has_test(results, "large_message"):
+        compare_large_message(results)
+    if has_test(results, "msg_sweep"):
+        compare_msg_sweep(results)
+    if has_test(results, "message_latency"):
+        compare_numeric_test(results, "message_latency", "Message Path Latency (read/write echo)", [
+            ("Avg (µs)", "avg"),
+            ("Median (µs)", "median"),
+            ("P95 (µs)", "p95"),
+            ("P99 (µs)", "p99"),
+            ("Stdev (µs)", "stdev"),
+        ])
+    if has_test(results, "message_throughput"):
+        compare_numeric_test(results, "message_throughput", "Message Path Throughput (read/write echo)", [
+            ("Msg/sec", "msg_per_sec"),
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+        ])
+    if has_test(results, "upload"):
+        compare_numeric_test(results, "upload", "Upload One-Way (client -> server)", [
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "download"):
+        compare_numeric_test(results, "download", "Download One-Way (server -> client)", [
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "proxy_throughput"):
+        compare_numeric_test(results, "proxy_throughput", "Proxy Throughput (client -> proxy -> upstream)", [
+            ("Msg/sec", "msg_per_sec"),
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+        ])
+    if has_test(results, "slow_download"):
+        compare_numeric_test(results, "slow_download", "Slow Download Backpressure (slow client reads)", [
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Read Calls", "read_calls"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "slow_upload"):
+        compare_numeric_test(results, "slow_upload", "Slow Upload Backpressure (slow server reads)", [
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "idle_connections"):
+        compare_numeric_test(results, "idle_connections", "Idle Connections (idle then ping)", [
+            ("Opened", "opened"),
+            ("Ping Success", "ping_success"),
+            ("Open Elapsed (s)", "open_elapsed_sec"),
+            ("Avg Ping (µs)", "avg_ping_us"),
+            ("P99 Ping (µs)", "p99_ping_us"),
+            ("Errors", "errors"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "tls_handshake_rate"):
+        compare_numeric_test(results, "tls_handshake_rate", "TLS Handshake Rate", [
+            ("Handshakes", "handshakes"),
+            ("Handshake/sec", "handshakes_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "tls_latency"):
+        compare_numeric_test(results, "tls_latency", "TLS Echo Latency", [
+            ("Avg (µs)", "avg"),
+            ("Median (µs)", "median"),
+            ("P95 (µs)", "p95"),
+            ("P99 (µs)", "p99"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "tls_throughput"):
+        compare_numeric_test(results, "tls_throughput", "TLS Echo Throughput", [
+            ("Msg/sec", "msg_per_sec"),
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if has_test(results, "tls_large"):
+        compare_numeric_test(results, "tls_large", "TLS Large Stream", [
+            ("Size MB", "size_mb"),
+            ("MB/sec", "mb_per_sec"),
+            ("Elapsed (s)", "elapsed_sec"),
+            ("Complete", "complete"),
+        ])
+    if any(has_test(results, name) for name in ["latency", "throughput", "concurrency",
+                                                "conn_rate", "large_message"]):
+        print_summary(results)
     print()
 
 

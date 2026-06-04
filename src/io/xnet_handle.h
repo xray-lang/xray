@@ -47,6 +47,18 @@ typedef enum {
     XR_NETCONN_TLS = 2, /* TLS over TCP (tls_state set) */
 } XrNetConnKind;
 
+typedef enum {
+    XR_NETERR_NONE = 0,
+    XR_NETERR_TIMEOUT = 1,
+    XR_NETERR_CLOSED = 2,
+    XR_NETERR_RESET = 3,
+    XR_NETERR_REFUSED = 4,
+    XR_NETERR_DNS = 5,
+    XR_NETERR_TLS = 6,
+    XR_NETERR_IO = 7,
+    XR_NETERR_INVALID = 8,
+} XrNetErrorKind;
+
 /* ========== Connection handle ========== */
 
 typedef struct XrNetConn {
@@ -57,6 +69,10 @@ typedef struct XrNetConn {
     bool closed;                 /* idempotency guard for close                     */
     void *tls_state;             /* XrTlsConn* when kind == TLS, NULL otherwise     */
     struct XrayIsolate *isolate; /* owning isolate (for netpoll cleanup) */
+    int64_t read_deadline_ms;    /* absolute time.monotonic() ms, 0 = no deadline   */
+    int64_t write_deadline_ms;   /* absolute time.monotonic() ms, 0 = no deadline   */
+    int last_errno;              /* errno captured for the last failed operation    */
+    uint8_t last_error;          /* XrNetErrorKind                                  */
 } XrNetConn;
 
 /* ========== Listener handle ========== */
@@ -68,6 +84,9 @@ typedef struct XrNetListener {
     int port;              /* listening port                                  */
     bool closed;
     struct XrayIsolate *isolate;
+    int64_t accept_deadline_ms; /* absolute time.monotonic() ms, 0 = no deadline */
+    int last_errno;
+    uint8_t last_error;
 } XrNetListener;
 
 /* ========== Constructors ========== */

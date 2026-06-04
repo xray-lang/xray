@@ -127,6 +127,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
         if (runtime) {
             XrPollDesc *pd = xr_netpoll_open(&runtime->netpoll, fd);
             if (pd) {
+                xr_netpoll_bind_worker(pd);
                 pd->user_data = coro;
                 _Atomic uintptr_t *gpp = (events & XR_WAIT_READ) ? &pd->rg : &pd->wg;
 

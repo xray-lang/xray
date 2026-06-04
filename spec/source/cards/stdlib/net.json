@@ -1,5 +1,35 @@
 {
   "module": "net",
-  "summary": "TCP/UDP/TLS networking",
-  "lead": "TCP/UDP/TLS networking."
+  "summary": "TCP/UDP/TLS networking with native stream pumps",
+  "lead": "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Bytes`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.",
+  "usage": "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.",
+  "sections": [
+    {
+      "heading": "TCP data paths",
+      "markdown": "`net.read(conn)` and `net.write(conn, data)` are for message-oriented code that needs to inspect or transform data in Xray. `net.readInto(conn, bytes, maxlen?)` and `net.writeBytes(conn, bytes)` are the reusable-buffer binary path. `net.copy(src, dst)` and `net.copyBidirectional(a, b)` are raw TCP/TLS stream pumps; payload stays in reusable native buffers. Echo is just the self-copy case: `net.copy(conn, conn)`."
+    },
+    {
+      "heading": "Deadlines and errors",
+      "markdown": "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`."
+    },
+    {
+      "heading": "Lifecycle",
+      "markdown": "`shutdownRead`, `shutdownWrite`, and `shutdown` expose TCP half-close semantics. `copyBidirectional(a, b)` runs two stream pumps and half-closes the opposite write side on EOF, which is the preferred primitive for generic TCP proxy and relay code."
+    },
+    {
+      "heading": "Echo server",
+      "code": [
+        "import net\n\nfn serve(conn: NetConn) {\n    defer net.close(conn)\n    net.copy(conn, conn)\n}\n\nlet listener = net.listen(9001, 1024)!\nwhile (true) {\n    let conn = net.accept(listener)\n    if (conn != null) {\n        go serve(conn!)\n    }\n}"
+      ]
+    },
+    {
+      "heading": "Design rule",
+      "bullets": [
+        "Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.",
+        "Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.",
+        "Use `Bytes` buffers for binary protocol hot paths that must inspect payload.",
+        "Use string reads only when the program actually needs to parse or mutate text."
+      ]
+    }
+  ]
 }

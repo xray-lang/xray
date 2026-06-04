@@ -1083,13 +1083,20 @@ int xr_netpoll_bind_worker(XrPollDesc *pd) {
     if (!pd)
         return -1;
 
-    // Already bound, return directly
+    XrWorker *worker = xr_current_worker();
+
+    // Keep I/O delivery local to the worker that is about to block.
+    // Connection coroutines can migrate before their next read/write; when
+    // that happens, move the fd registration with them instead of letting the
+    // shared netpoll wake the wrong worker first.
     if (pd->owner_worker_id >= 0) {
+        if (worker && worker->p.id != pd->owner_worker_id) {
+            netpoll_rebind_worker(pd, worker);
+        }
         return pd->owner_worker_id;
     }
 
     // Bind to current Worker
-    XrWorker *worker = xr_current_worker();
     if (worker) {
         pd->owner_worker_id = worker->p.id;
         // Register fd with worker's local poll for zero-contention IO delivery
