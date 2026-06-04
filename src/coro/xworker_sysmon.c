@@ -290,7 +290,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     // Ensure vm_ctx.isolate is set correctly
     worker->m->vm_ctx.isolate = X;
 
-    // put main coroutine into Worker 0's local queue (no global queue)
+    // Put the main coroutine into Worker 0's local queue.
     // Clear stale execution state from previous run (DONE, RUNNING, BLOCKED, etc.)
     // xr_coro_flags_set is atomic OR — without clearing first, old DONE flag persists
     // and worker_loop skips the coroutine (line 1263: "prevent re-executing completed coroutine").

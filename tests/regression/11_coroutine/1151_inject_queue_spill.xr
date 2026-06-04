@@ -1,0 +1,21 @@
+// Regression: a deep go/await chain must survive local run-queue overflow.
+
+fn spill_chain(depth: int) -> int {
+    if (depth <= 0) {
+        return 0
+    }
+    let child = go spill_child(depth - 1)
+    let value = await child
+    return value + 1
+}
+
+fn spill_child(depth: int) -> int {
+    return spill_chain(depth)
+}
+
+@test
+fn test_inject_queue_spill_chain() {
+    let depth = 2048
+    let result = await go spill_child(depth)
+    assert_eq(result, depth)
+}
