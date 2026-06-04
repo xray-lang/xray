@@ -391,6 +391,12 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         xi_cgen_ctx_free(cg_ctx);
         goto fail_free_ir;
     }
+    if (xi_cgen_has_error(cg_ctx)) {
+        fprintf(stderr, "Error: AOT C code generation failed\n");
+        xi_cgen_ctx_free(cg_ctx);
+        xr_free(buf);
+        goto fail_free_ir;
+    }
     xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */

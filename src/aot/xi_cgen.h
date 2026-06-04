@@ -17,6 +17,7 @@
 
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
+#include <stdbool.h>
 #include <stdio.h>
 
 /* Opaque codegen context — holds all mutable state for one C-generation
@@ -27,6 +28,7 @@ typedef struct XiCgenCtx XiCgenCtx;
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
+XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()
