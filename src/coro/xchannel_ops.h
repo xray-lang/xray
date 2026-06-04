@@ -76,20 +76,8 @@ static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, 
     bool ok;
     XrValue value = xr_channel_try_recv(ch, &ok);
 
-    /* Unbuffered rendezvous: if buffer was empty, try to wake a blocked
-     * sender from the runtime queue and take its value directly. */
-    if (!ok) {
-        XrCoroutine *sender = xr_runtime_wake_channel(isolate, ch, true);
-        if (sender) {
-            value = sender->send_value;
-            ok = true;
-        }
-    }
-
     if (ok) {
         *out_value = xr_chan_copy_recv(isolate, value, recv_coro);
-        /* Wake additional blocked senders now that a slot freed up */
-        xr_runtime_wake_channel(isolate, ch, true);
         return true;
     }
 
@@ -105,11 +93,7 @@ static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, 
     XR_DCHECK(ch != NULL, "xr_chan_try_send: NULL channel");
 
     value = xr_chan_prepare_send(isolate, value);
-    bool success = xr_channel_try_send(ch, value);
-    if (success) {
-        xr_runtime_wake_channel(isolate, ch, false);
-    }
-    return success;
+    return xr_channel_try_send(ch, value);
 }
 
 #endif  // XCHANNEL_OPS_H

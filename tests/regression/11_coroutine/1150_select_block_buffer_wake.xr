@@ -1,0 +1,30 @@
+// Regression: a receive-only blocking select must wake when a producer
+// refills a buffered channel after the select coroutine has gone to sleep.
+
+fn produce(ch: Channel<int>, count: int) {
+    for (let i = 0; i < count; i++) {
+        ch.send(i)
+    }
+    ch.close()
+}
+
+@test
+fn test_select_wakes_after_buffer_refill() {
+    shared const ch = new Channel(10)
+    let task = go produce(ch, 50)
+
+    let received = 0
+    let sum = 0
+    while (received < 50) {
+        select {
+            msg from ch -> {
+                received++
+                sum = sum + msg
+            }
+        }
+    }
+
+    await task
+    assert_eq(received, 50)
+    assert_eq(sum, 1225)
+}

@@ -402,20 +402,21 @@ int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
 
 // xr_worker_block_select - Add coroutine to multiple Channel wait queues in select mode
 //
-// Each XrSelectCase embeds a bucket_next pointer, so the
+// Each XrSelectCase embeds per-bucket prev/next pointers, so the
 // case is linked into the corresponding bucket's select queue directly.
 // wake_select then traverses only the target bucket — O(waiters_on_channel).
 void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels, int count) {
-    if (!worker || !coro || !channels || count <= 0)
+    if (!worker || !coro || count <= 0)
         return;
 
     XrSelectWait *sw = coro->select_wait;
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
+    int limit = count < sw->case_count ? count : sw->case_count;
 
     // Link each case into its channel's bucket select queue.
     // Also set waiter_worker_mask on each channel for wake routing.
-    for (int i = 0; i < count; i++) {
-        void *channel = channels[i];
+    for (int i = 0; i < limit; i++) {
+        void *channel = channels ? channels[i] : sw->cases[i].channel;
         if (!channel)
             continue;
 
@@ -425,9 +426,12 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
 
         XR_DCHECK(i < sw->case_count, "block_select: case index out of bounds");
         XrSelectCase *sc = &sw->cases[i];
-        sc->bucket_next = NULL;
+        sc->channel = channel;
+        sc->bucket = bucket;
+        sc->prev = bucket->select_tail;
+        sc->next = NULL;
         if (bucket->select_tail) {
-            bucket->select_tail->bucket_next = sc;
+            bucket->select_tail->next = sc;
         } else {
             bucket->select_head = sc;
         }
@@ -471,6 +475,7 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
     // Walk the bucket's select case chain
     XrSelectCase *sc = bucket->select_head;
     while (sc) {
+        XrSelectCase *next = sc->next;
         XrCoroutine *coro = sc->owner;
         XR_DCHECK(coro != NULL, "wake_select: NULL owner on select case");
         XrSelectWait *sw = coro->select_wait;
@@ -497,7 +502,7 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
                 return coro;
             }
         }
-        sc = sc->bucket_next;
+        sc = next;
     }
 
     return NULL;
@@ -508,28 +513,29 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
     if (!target->channel)
         return;
 
-    XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, target->channel);
+    XrBlockedBucket *bucket = target->bucket;
+    if (!bucket) {
+        bucket = worker_blocked_bucket_find(worker, target->channel);
+    }
     if (!bucket)
         return;
 
-    XrSelectCase *prev = NULL;
-    XrSelectCase *curr = bucket->select_head;
-    while (curr) {
-        if (curr == target) {
-            if (prev) {
-                prev->bucket_next = curr->bucket_next;
-            } else {
-                bucket->select_head = curr->bucket_next;
-            }
-            if (bucket->select_tail == curr) {
-                bucket->select_tail = prev;
-            }
-            curr->bucket_next = NULL;
-            return;
-        }
-        prev = curr;
-        curr = curr->bucket_next;
+    if (target->prev) {
+        target->prev->next = target->next;
+    } else if (bucket->select_head == target) {
+        bucket->select_head = target->next;
     }
+
+    if (target->next) {
+        target->next->prev = target->prev;
+    } else if (bucket->select_tail == target) {
+        bucket->select_tail = target->prev;
+    }
+
+    target->prev = NULL;
+    target->next = NULL;
+    target->bucket = NULL;
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 }
 
 // xr_worker_unblock_select - Remove select coroutine from ALL Channel wait queues
@@ -561,9 +567,12 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
     }
 
     // Remove from Worker's linear blocked queue
-    worker_blocked_list_remove(worker, coro);
-    worker->p.blocked_count--;
-    worker->p.select_waiter_count--;
+    if (worker_blocked_list_remove(worker, coro)) {
+        worker->p.blocked_count--;
+        if (worker->p.select_waiter_count > 0) {
+            worker->p.select_waiter_count--;
+        }
+    }
 
     // Cleanup list pointers
     coro->next = NULL;

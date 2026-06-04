@@ -35,6 +35,7 @@ XR_FUNC bool xi_is_memory_load(uint16_t op) {
         case XI_GET_GLOBAL:
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_RECV:
+        case XI_SELECT_BLOCK:
         case XI_GET_BUILTIN:
             return true;
         default:
@@ -117,6 +118,7 @@ static XiMemGroup classify_op(uint16_t op) {
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_TRY_RECV:
+        case XI_SELECT_BLOCK:
             return XI_MEM_CHAN;
 
         /* Builtins may access any memory — conservative. */

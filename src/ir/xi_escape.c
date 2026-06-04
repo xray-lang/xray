@@ -195,6 +195,7 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         /* ---- Channel receive / scope / defer ---- */
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_RECV:
+        case XI_SELECT_BLOCK:
         case XI_CHAN_NEW:
         case XI_SCOPE_ENTER:
         case XI_SCOPE_EXIT:

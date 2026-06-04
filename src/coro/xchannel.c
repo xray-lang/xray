@@ -71,6 +71,16 @@ void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro) {
     q->last = coro;
 }
 
+static void waitq_enqueue_front(XrWaitQueue *q, XrCoroutine *coro) {
+    XR_DCHECK(q != NULL, "waitq_enqueue_front: NULL queue");
+    XR_DCHECK(coro != NULL, "waitq_enqueue_front: NULL coro");
+    coro->wait_link = q->first;
+    q->first = coro;
+    if (!q->last) {
+        q->last = coro;
+    }
+}
+
 XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q) {
     XR_DCHECK(q != NULL, "waitq_dequeue: NULL queue");
     XrCoroutine *coro = q->first;
@@ -329,26 +339,6 @@ void xr_channel_destroy(XrChannel *ch) {
     }
 }
 
-// ========== Fast Path Checks (Lock-free) ==========
-
-// Check if channel is full (only checks buffer)
-static inline bool channel_full(XrChannel *ch) {
-    if (ch->buf_size == 0) {
-        // Unbuffered: always "full", VM handles sync
-        return true;
-    }
-    return ch->buf_count == ch->buf_size;
-}
-
-// Check if channel is empty (only checks buffer)
-static inline bool channel_empty(XrChannel *ch) {
-    if (ch->buf_size == 0) {
-        // Unbuffered: always "empty", VM handles sync
-        return true;
-    }
-    return ch->buf_count == 0;
-}
-
 // ========== Channel Send/Recv Primitives ==========
 //
 // These helpers factor the direct-transfer and buffer push/pop patterns
@@ -365,6 +355,12 @@ static inline bool channel_empty(XrChannel *ch) {
 // Forward declarations
 static void channel_wake_coro(XrCoroutine *coro);
 static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close);
+
+static void channel_wake_select_waiter(XrChannel *ch) {
+    if (!ch || !ch->isolate)
+        return;
+    xr_runtime_wake_channel(ch->isolate, ch, false);
+}
 
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
@@ -392,6 +388,10 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
     if (ch->buf_size == 0) {
         direct_val = sender->send_value;
     } else {
+        if (ch->buf_count == 0) {
+            waitq_enqueue_front(&ch->sendq, sender);
+            return false;
+        }
         direct_val = ch->buffer[ch->recv_idx];
         ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
         ch->buffer[ch->send_idx] = sender->send_value;
@@ -450,6 +450,7 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
         return true;
     if (chan_buffer_push(ch, value)) {
         xr_amutex_unlock(&ch->lock);
+        channel_wake_select_waiter(ch);
         return true;
     }
 
@@ -468,11 +469,6 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
         return hooks->try_send(ch, value);
     }
 
-    // Fast path: lock-free check
-    if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && channel_full(ch)) {
-        return false;
-    }
-
     xr_amutex_lock(&ch->lock);
 
     // Check if closed
@@ -487,6 +483,7 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
         return true;
     if (chan_buffer_push(ch, value)) {
         xr_amutex_unlock(&ch->lock);
+        channel_wake_select_waiter(ch);
         return true;
     }
 
@@ -507,12 +504,6 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
     XrChannelDistHooks *hooks = ch->isolate ? ch->isolate->channel_dist_hooks : NULL;
     if (ch->dist && hooks && hooks->try_recv) {
         return hooks->try_recv(ch, ok);
-    }
-
-    // Fast path: lock-free check
-    if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && channel_empty(ch)) {
-        *ok = false;
-        return xr_null();
     }
 
     xr_amutex_lock(&ch->lock);
@@ -721,6 +712,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
             ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
             ch->buf_count++;
             xr_amutex_unlock(&ch->lock);
+            channel_wake_select_waiter(ch);
             return XR_CHAN_OK;
         }
         // Conditions not met under trylock: fall through with lock held
@@ -741,6 +733,7 @@ send_locked:
         return XR_CHAN_OK;
     if (chan_buffer_push(ch, value)) {
         xr_amutex_unlock(&ch->lock);
+        channel_wake_select_waiter(ch);
         return XR_CHAN_OK;
     }
 

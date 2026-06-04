@@ -83,7 +83,7 @@ static inline bool bucket_is_empty(const XrBlockedBucket *b) {
 // Prior to this helper the hash chain grew monotonically for every distinct
 // channel ever blocked on — a slow leak that could also lengthen lookup time
 // after many short-lived channels had been garbage-collected.
-static void bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *bucket) {
+void worker_blocked_bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *bucket) {
     if (!bucket || !bucket_is_empty(bucket))
         return;
 
@@ -263,7 +263,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     }
 
     // Reclaim the bucket if this was the last waiter on the channel.
-    bucket_reclaim_if_empty(worker, bucket);
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 
     return coro;
 }
@@ -309,7 +309,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
     // Reclaim the bucket if this was the last waiter on the channel.
-    bucket_reclaim_if_empty(worker, bucket);
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 
     return coro;
 }
@@ -366,5 +366,5 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     bucket->recv_head = bucket->recv_tail = NULL;
 
     // Reclaim the bucket if select_head is also empty.
-    bucket_reclaim_if_empty(worker, bucket);
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 }
