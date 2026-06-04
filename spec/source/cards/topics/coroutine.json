@@ -1,0 +1,63 @@
+{
+  "id": "coroutine",
+  "title": "Coroutines & Concurrency",
+  "spec_anchor": "#10-并发与协程-concurrency",
+  "aliases": [
+    "go",
+    "goroutine",
+    "goroutines",
+    "await",
+    "task",
+    "async",
+    "concurrency",
+    "scope",
+    "select",
+    "defer"
+  ],
+  "sections": [
+    {
+      "heading": "go — spawn a coroutine",
+      "fences": [
+        "coro-go-forms"
+      ]
+    },
+    {
+      "heading": "await",
+      "fences": [
+        "coro-await-forms"
+      ]
+    },
+    {
+      "heading": "Task handle",
+      "fences": [
+        "coro-task-handle"
+      ]
+    },
+    {
+      "heading": "scope — structured concurrency",
+      "fences": [
+        "coro-scope",
+        "coro-linked-supervisor-scope"
+      ]
+    },
+    {
+      "heading": "select — multiplex channels",
+      "fences": [
+        "coro-select"
+      ]
+    },
+    {
+      "heading": "yield — cooperative safepoint",
+      "fences": [
+        "coro-yield-loop",
+        "expr-yield"
+      ]
+    },
+    {
+      "heading": "defer — LIFO cleanup",
+      "fences": [
+        "stmt-defer"
+      ]
+    }
+  ]
+}

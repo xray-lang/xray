@@ -1,0 +1,42 @@
+{
+  "id": "generics",
+  "title": "Generics",
+  "spec_anchor": "#9-泛型-generics",
+  "aliases": [
+    "generic",
+    "type_parameter",
+    "template"
+  ],
+  "sections": [
+    {
+      "heading": "Generic declarations",
+      "fences": [
+        "generics-basic"
+      ]
+    },
+    {
+      "heading": "Constraints",
+      "fences": [
+        "generics-constraints"
+      ]
+    },
+    {
+      "heading": "Type inference",
+      "fences": [
+        "generics-inference"
+      ]
+    },
+    {
+      "heading": "Explicit instantiation",
+      "fences": [
+        "generics-explicit-instantiation"
+      ]
+    },
+    {
+      "heading": "Runtime reflection",
+      "fences": [
+        "generics-reflection"
+      ]
+    }
+  ]
+}

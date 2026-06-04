@@ -1,0 +1,5 @@
+{
+  "module": "os",
+  "summary": "Operating system interface (env, exec, signals)",
+  "lead": "Operating system interface (env, exec, signals)."
+}

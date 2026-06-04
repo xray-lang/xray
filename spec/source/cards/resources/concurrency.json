@@ -1,0 +1,55 @@
+{
+  "id": "concurrency",
+  "title": "Xray Concurrency Model",
+  "sections": [
+    {
+      "heading_level": 2,
+      "heading": "Golden rule",
+      "markdown": "If it compiles, it is concurrency-safe."
+    },
+    {
+      "heading_level": 2,
+      "heading": "Channels: communication",
+      "fences": [
+        "channel-decl-variants",
+        "channel-basic-ops"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Immutable sharing",
+      "fences": [
+        "decl-shared-const"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Deep-copy and explicit move",
+      "fences": [
+        "coro-go-forms",
+        "coro-move-argument",
+        "coro-move-transfer"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Structured concurrency",
+      "fences": [
+        "coro-scope",
+        "coro-linked-supervisor-scope"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Select",
+      "fences": [
+        "coro-select"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Atomic — lock-free shared state",
+      "markdown": "`Atomic<T>` wraps `int`, `float`, or `bool` with C11 atomic operations. Must be declared `shared const`; `move` prohibited.\n\nMethods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`, `toString`.\n\nAll methods accept optional `Ordering` enum (default `SeqCst`): `Relaxed`, `Acquire`, `Release`, `AcquireRelease`, `SeqCst`.\n\n```xray\nshared const counter = Atomic(0)\ncounter.add(1)\nlet (old, ok) = counter.compareExchange(1, 42)\nprint(counter.load())  // 42\n```"
+    }
+  ]
+}

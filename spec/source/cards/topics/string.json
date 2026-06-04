@@ -1,0 +1,30 @@
+{
+  "id": "string",
+  "title": "String",
+  "spec_anchor": "#315-字符串插值",
+  "aliases": [
+    "strings",
+    "string_methods",
+    "interpolation",
+    "template"
+  ],
+  "sections": [
+    {
+      "heading": "String interpolation",
+      "fences": [
+        "expr-string-interpolation"
+      ],
+      "after_text": "Note: avoid unescaped quotes inside `${...}`; use a variable or escape the inner string."
+    },
+    {
+      "heading": "Slicing",
+      "fences": [
+        "expr-slice"
+      ]
+    },
+    {
+      "heading": "Common methods",
+      "markdown": "- `s.length`\n- `s.toLowerCase()` / `s.toUpperCase()`\n- `s.startsWith(prefix)` / `s.endsWith(suffix)`\n- `s.indexOf(sub)` / `s.includes(sub)`\n- `s.trim()` / `s.split(sep)` / `s.replace(old, new)`"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "id": "modules",
+  "title": "Modules & Imports",
+  "spec_anchor": "#11-模块系统-modules",
+  "aliases": [
+    "import",
+    "export",
+    "module",
+    "require",
+    "package",
+    "re-export",
+    "circular dependency",
+    "module graph"
+  ],
+  "lead": "Each .xr file is a module. import/export must be top-level. The compiler builds a dependency DAG, topologically sorts it, and resolves selective imports to O(1) slot access at runtime.",
+  "sections": [
+    {
+      "heading": "Imports",
+      "body": "import declarations must appear at module top level. Bare identifiers resolve to stdlib; quoted paths resolve relative to the current file or project root. Dynamic import is not supported.",
+      "fences": [
+        "modules-import"
+      ]
+    },
+    {
+      "heading": "Use module symbols",
+      "fences": [
+        "modules-use"
+      ]
+    },
+    {
+      "heading": "Exports",
+      "body": "export declarations must appear at module top level. export let is not supported — use export const. Re-exports (named and wildcard) aggregate submodule APIs.",
+      "fences": [
+        "modules-export"
+      ]
+    },
+    {
+      "heading": "Module graph & circular dependencies",
+      "body": "The compiler builds a module dependency DAG from all import declarations. Circular dependencies are a compile error. Modules initialize in topological order. Selective imports resolve to fixed module index + export slot at compile time."
+    }
+  ]
+}

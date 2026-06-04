@@ -1,0 +1,5 @@
+{
+  "module": "base64",
+  "summary": "Base64 encoding/decoding",
+  "lead": "Base64 encoding/decoding."
+}

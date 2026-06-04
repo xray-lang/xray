@@ -378,7 +378,7 @@ def generate_knowledge(
 
 
 def generate(root: Path, check: bool, parity: str = "warn") -> list[str]:
-    source = root / "docs" / "spec" / "source"
+    source = root / "spec" / "source"
     if not source.is_dir():
         raise ValueError(f"{source}: missing spec source directory")
     units, fence_registry = load_spec_units(source)

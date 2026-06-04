@@ -1,0 +1,5 @@
+{
+  "module": "net",
+  "summary": "TCP/UDP/TLS networking",
+  "lead": "TCP/UDP/TLS networking."
+}

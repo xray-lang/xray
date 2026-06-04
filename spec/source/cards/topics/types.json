@@ -1,0 +1,81 @@
+{
+  "id": "types",
+  "title": "Types",
+  "spec_anchor": "#2-类型系统-type-system",
+  "aliases": [
+    "int",
+    "float",
+    "string",
+    "bool",
+    "nullable",
+    "type",
+    "tuple",
+    "unit",
+    "union",
+    "Option"
+  ],
+  "sections": [
+    {
+      "heading": "Primitive and built-in categories",
+      "markdown": "- `int` — default signed integer\n- `float` — default floating-point number\n- `string` — UTF-8 string\n- `bool` — `true` / `false`\n- `()` — Unit, no return value\n- `Array<T>`, `Map<K,V>`, `Set<T>`, `Channel<T>`, `Json`, `Bytes`, `BigInt`"
+    },
+    {
+      "heading": "Truthy / falsy",
+      "fences": [
+        "types-truthy-falsy"
+      ]
+    },
+    {
+      "heading": "Nullable",
+      "fences": [
+        "types-nullable"
+      ]
+    },
+    {
+      "heading": "Collections",
+      "fences": [
+        "types-array",
+        "types-map",
+        "types-set",
+        "types-channel"
+      ]
+    },
+    {
+      "heading": "Union types",
+      "fences": [
+        "types-union-basic"
+      ]
+    },
+    {
+      "heading": "Tuple types",
+      "fences": [
+        "types-tuple"
+      ]
+    },
+    {
+      "heading": "Type aliases",
+      "fences": [
+        "types-alias"
+      ]
+    },
+    {
+      "heading": "Type inference",
+      "fences": [
+        "types-inference"
+      ]
+    },
+    {
+      "heading": "Explicit casts",
+      "fences": [
+        "types-cast"
+      ]
+    },
+    {
+      "heading": "Construction expressions",
+      "fences": [
+        "expr-new",
+        "expr-literal-constructor-relation"
+      ]
+    }
+  ]
+}

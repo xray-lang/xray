@@ -1,0 +1,5 @@
+{
+  "module": "http",
+  "summary": "HTTP client and server (REST API, routing, middleware)",
+  "lead": "HTTP client and server (REST API, routing, middleware)."
+}

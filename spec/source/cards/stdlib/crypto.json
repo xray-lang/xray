@@ -1,0 +1,5 @@
+{
+  "module": "crypto",
+  "summary": "Cryptographic hashing and encryption",
+  "lead": "Cryptographic hashing and encryption."
+}

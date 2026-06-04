@@ -1,0 +1,44 @@
+{
+  "id": "variables",
+  "title": "Variables",
+  "spec_anchor": "#51-let-const-shared",
+  "aliases": [
+    "let",
+    "const",
+    "var",
+    "shared",
+    "declaration"
+  ],
+  "sections": [
+    {
+      "heading": "let",
+      "fences": [
+        "decl-let"
+      ]
+    },
+    {
+      "heading": "const",
+      "fences": [
+        "decl-const"
+      ]
+    },
+    {
+      "heading": "shared const",
+      "fences": [
+        "decl-shared-const"
+      ]
+    },
+    {
+      "heading": "shared let",
+      "fences": [
+        "decl-shared-let"
+      ]
+    },
+    {
+      "heading": "Destructuring",
+      "fences": [
+        "decl-destructuring"
+      ]
+    }
+  ]
+}

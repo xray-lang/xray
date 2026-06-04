@@ -1,0 +1,23 @@
+{
+  "id": "interface",
+  "title": "Interface",
+  "spec_anchor": "#55-interface-与-implements",
+  "aliases": [
+    "interfaces",
+    "implements"
+  ],
+  "sections": [
+    {
+      "heading": "Interface declarations and implementations",
+      "fences": [
+        "decl-interface-shape"
+      ]
+    },
+    {
+      "heading": "Nominal typing",
+      "fences": [
+        "generics-nominal-interface"
+      ]
+    }
+  ]
+}

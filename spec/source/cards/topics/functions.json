@@ -1,0 +1,49 @@
+{
+  "id": "functions",
+  "title": "Functions",
+  "spec_anchor": "#52-fn-函数声明",
+  "aliases": [
+    "fn",
+    "function",
+    "arrow",
+    "closure",
+    "lambda",
+    "params"
+  ],
+  "sections": [
+    {
+      "heading": "Named functions",
+      "fences": [
+        "decl-fn-basic"
+      ]
+    },
+    {
+      "heading": "Default parameters",
+      "fences": [
+        "decl-fn-default"
+      ]
+    },
+    {
+      "heading": "Multiple return values",
+      "fences": [
+        "decl-fn-multi-return"
+      ]
+    },
+    {
+      "heading": "Rest parameters",
+      "fences": [
+        "decl-fn-rest"
+      ]
+    },
+    {
+      "heading": "Lambda forms",
+      "fences": [
+        "expr-lambda-forms"
+      ]
+    },
+    {
+      "heading": "Higher-order functions",
+      "markdown": "- Function types use `fn(T1, T2) -> R` in type position\n- Function values can be passed to callbacks such as `map`, `filter`, and `reduce`\n- Closure capture rules are described in the scoping and concurrency sections"
+    }
+  ]
+}
