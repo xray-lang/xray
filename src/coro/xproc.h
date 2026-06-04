@@ -220,7 +220,7 @@ typedef struct XrProc {
     int id_cache_end;  // End of cached ID range (exclusive)
 
     /* === Per-P Run Queue Length (avoids global atomic counter bounce) === */
-    int local_runq_len;  // Total coroutines in this P's queues + lifo_slot
+    _Atomic int local_runq_len;  // Approximate coroutines in this P's queues + lifo_slot
 
     /* === Blocked Queue === */
     XrBlockedBucket *blocked_buckets[XR_BLOCKED_BUCKET_SIZE];
@@ -281,6 +281,31 @@ typedef struct XrProc {
     /* === Idle P linkage === */
     struct XrProc *idle_link;  // Idle P list link
 } XrProc;
+
+static inline int xr_proc_local_runq_len(XrProc *p) {
+    if (!p)
+        return 0;
+    return atomic_load_explicit(&p->local_runq_len, memory_order_relaxed);
+}
+
+static inline void xr_proc_local_runq_inc(XrProc *p, int count) {
+    if (!p || count <= 0)
+        return;
+    atomic_fetch_add_explicit(&p->local_runq_len, count, memory_order_relaxed);
+}
+
+static inline void xr_proc_local_runq_dec(XrProc *p, int count) {
+    if (!p || count <= 0)
+        return;
+    int cur = atomic_load_explicit(&p->local_runq_len, memory_order_relaxed);
+    while (cur > 0) {
+        int next = cur > count ? cur - count : 0;
+        if (atomic_compare_exchange_weak_explicit(&p->local_runq_len, &cur, next,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+            return;
+        }
+    }
+}
 
 /* ========== P Lifecycle API ========== */
 

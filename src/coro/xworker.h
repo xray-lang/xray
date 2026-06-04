@@ -128,6 +128,12 @@ typedef struct XrRuntime {
     XrInjectQueue injectq[XR_CORO_PRIORITY_COUNT];
     _Atomic uint32_t nonempty_inject_mask;
 
+    /* === Scheduler Hint Bitsets === */
+    _Atomic uint64_t nonempty_p_mask[XR_CORO_PRIORITY_COUNT];
+    _Atomic uint64_t timer_p_mask;
+    _Atomic uint64_t idle_p_mask;
+    _Atomic int searching_count;
+
     /* === I/O & Async === */
     XrNetpoll netpoll;
     xr_thread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
@@ -149,6 +155,42 @@ typedef struct XrRuntime {
         bool warned;
     } sysmon_state[XR_MAX_WORKERS];
 } XrRuntime;
+
+static inline uint64_t xr_runtime_worker_bit(int worker_id) {
+    if (worker_id < 0 || worker_id >= 64)
+        return 0;
+    return (uint64_t) 1ull << worker_id;
+}
+
+static inline void xr_runtime_set_mask_bit(_Atomic uint64_t *mask, int worker_id, bool enabled) {
+    uint64_t bit = xr_runtime_worker_bit(worker_id);
+    if (bit == 0)
+        return;
+    if (enabled) {
+        atomic_fetch_or_explicit(mask, bit, memory_order_release);
+    } else {
+        atomic_fetch_and_explicit(mask, ~bit, memory_order_release);
+    }
+}
+
+static inline void xr_runtime_set_runq_nonempty(XrRuntime *runtime, int worker_id, int priority,
+                                                bool nonempty) {
+    if (!runtime || priority < 0 || priority >= XR_CORO_PRIORITY_COUNT)
+        return;
+    xr_runtime_set_mask_bit(&runtime->nonempty_p_mask[priority], worker_id, nonempty);
+}
+
+static inline void xr_runtime_set_timer_pending(XrRuntime *runtime, int worker_id, bool pending) {
+    if (!runtime)
+        return;
+    xr_runtime_set_mask_bit(&runtime->timer_p_mask, worker_id, pending);
+}
+
+static inline void xr_runtime_set_idle_worker_bit(XrRuntime *runtime, int worker_id, bool idle) {
+    if (!runtime)
+        return;
+    xr_runtime_set_mask_bit(&runtime->idle_p_mask, worker_id, idle);
+}
 
 static inline bool xr_sched_stats_enabled(XrRuntime *runtime) {
     return runtime && runtime->sched_stats_enabled;
@@ -186,6 +228,7 @@ XR_FUNC void xr_worker_destroy(XrWorker *worker);
 XR_FUNC XrCoroutine *xr_worker_pop(XrWorker *worker);
 XR_FUNC void xr_worker_push(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro);
+XR_FUNC void xr_worker_refresh_runq_masks(XrWorker *worker);
 XR_FUNC XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC XrVMResult xr_worker_run_simple(XrWorker *worker);
 

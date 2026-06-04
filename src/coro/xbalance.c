@@ -202,6 +202,9 @@ int xr_try_emigrate(struct XrWorker *worker) {
         if (stolen > 0) {
             mp->prio[p].target_worker = -1;  // Clear after migration
             migrated += stolen;
+            xr_proc_local_runq_inc(&target->p, stolen);
+            xr_worker_refresh_runq_masks(worker);
+            xr_worker_refresh_runq_masks(target);
         }
     }
     return migrated;

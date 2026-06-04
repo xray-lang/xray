@@ -108,6 +108,23 @@ static bool priority_budget_has_credit(XrPriorityBudget *budget) {
     return false;
 }
 
+void xr_worker_refresh_runq_masks(XrWorker *worker) {
+    if (!worker || !worker->p.runtime)
+        return;
+    XrRuntime *runtime = worker->p.runtime;
+    XrCoroutine *lifo = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
+    int lifo_priority =
+        lifo ? normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo))) : -1;
+    bool has_cont = xr_steal_queue_size(&worker->p.cont_deque) > 0;
+    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
+        bool nonempty = xr_runq_len(&worker->p.runq[priority]) > 0 || lifo_priority == priority;
+        if (priority == CORO_PRIORITY_NORMAL && has_cont) {
+            nonempty = true;
+        }
+        xr_runtime_set_runq_nonempty(runtime, worker->p.id, priority, nonempty);
+    }
+}
+
 static int worker_select_actual_priority(XrWorker *worker, int effective_priority, int64_t now,
                                          bool *oldest_first) {
     for (int actual = CORO_PRIORITY_HIGH; actual >= CORO_PRIORITY_LOW; actual--) {
@@ -155,7 +172,7 @@ static bool worker_lifo_gate_allows(XrWorker *worker, XrCoroutine *lifo, bool co
         uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
         if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
              high_bit) == 0 &&
-            worker->p.local_runq_len <= 1) {
+            xr_proc_local_runq_len(&worker->p) <= 1) {
             return true;
         }
     }
@@ -173,16 +190,18 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
         if (consume_poll_budget)
             worker->p.lifo_polls++;
-        worker->p.local_runq_len--;
+        xr_proc_local_runq_dec(&worker->p, 1);
         worker->p.stats.lifo_hit_count++;
+        xr_worker_refresh_runq_masks(worker);
         return lifo;
     }
 
     atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
     if (!worker_enqueue_runq_or_inject(worker, lifo, priority, true)) {
-        worker->p.local_runq_len--;
+        xr_proc_local_runq_dec(&worker->p, 1);
     }
     worker->p.stats.lifo_flush_count++;
+    xr_worker_refresh_runq_masks(worker);
     return NULL;
 }
 
@@ -206,8 +225,9 @@ static XrCoroutine *worker_pop_weighted(XrWorker *worker) {
             if (!coro)
                 continue;
             budget->credit[effective]--;
-            worker->p.local_runq_len--;
+            xr_proc_local_runq_dec(&worker->p, 1);
             budget->cursor = effective;
+            xr_worker_refresh_runq_masks(worker);
             return coro;
         }
 
@@ -225,12 +245,14 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, i
 
     int runq_idx = runq_index_for_priority(priority);
     if (xr_steal_queue_push(&worker->p.runq[runq_idx].deque, coro)) {
+        xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, runq_idx, true);
         return true;
     }
 
     XrRuntime *runtime = worker->p.runtime;
     if (!runtime) {
         xr_runq_enqueue(&worker->p.runq[runq_idx], coro);
+        xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, runq_idx, true);
         return true;
     }
     if (count_spill) {
@@ -395,8 +417,11 @@ int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int
         XrCoroutine *next = cur->sched_link;
         cur->sched_link = NULL;
         xr_runq_enqueue(&worker->p.runq[runq_index_for_priority(priority)], cur);
-        worker->p.local_runq_len++;
+        xr_proc_local_runq_inc(&worker->p, 1);
         cur = next;
+    }
+    if (count > 0) {
+        xr_worker_refresh_runq_masks(worker);
     }
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_pop_count, (uint64_t) count);
     return count;
@@ -492,13 +517,14 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
         int prev_prio =
             prev ? xr_coro_get_priority(xr_coro_flags_load(prev)) : worker->p.lifo_slot_prio;
         worker->p.lifo_slot_prio = new_prio;
-        worker->p.local_runq_len++;
+        xr_proc_local_runq_inc(&worker->p, 1);
         if (prev) {
             // Evict previous occupant while preserving local count semantics.
             if (!worker_enqueue_runq_or_inject(worker, prev, prev_prio, true)) {
-                worker->p.local_runq_len--;
+                xr_proc_local_runq_dec(&worker->p, 1);
             }
         }
+        xr_worker_refresh_runq_masks(worker);
         return;
     }
     // Cross-worker: fall back to normal push
@@ -521,7 +547,8 @@ void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
     bool queued_locally = worker_enqueue_runq_or_inject(worker, coro, priority, true);
     if (queued_locally) {
-        worker->p.local_runq_len++;
+        xr_proc_local_runq_inc(&worker->p, 1);
+        xr_worker_refresh_runq_masks(worker);
     }
     XrRuntime *rt = worker->p.runtime;
 

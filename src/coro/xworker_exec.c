@@ -317,6 +317,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {
+            xr_worker_refresh_runq_masks(worker);
             // Wake an idle worker so it can steal the continuation.
             // Without this, JIT-compiled children that never yield
             // monopolize the current worker, and parked workers
@@ -412,6 +413,7 @@ pop_continuation:
     {
         XrCoroutine *parent = xr_steal_queue_pop(&p->cont_deque);
         if (parent) {
+            xr_worker_refresh_runq_masks(worker);
             coro = parent;
             goto cont_exec;
         }
