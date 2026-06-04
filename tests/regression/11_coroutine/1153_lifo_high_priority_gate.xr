@@ -1,0 +1,23 @@
+// Regression: LIFO locality must not let low-priority work bypass queued high-priority work.
+
+fn report_priority(label: string, ch: Channel<string>) -> string {
+    ch.send(label)
+    return label
+}
+
+@test
+fn test_lifo_does_not_bypass_high_priority() {
+    const ch = new Channel<string>(2)
+
+    let high = go(priority: Coro.HIGH) report_priority("H", ch)
+    let low = go(priority: Coro.LOW) report_priority("L", ch)
+
+    let first = ch.recv()
+    let second = ch.recv()
+    await high
+    await low
+    ch.close()
+
+    assert_eq(first, "H")
+    assert_eq(second, "L")
+}

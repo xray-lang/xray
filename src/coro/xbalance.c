@@ -24,9 +24,12 @@
 
 // ========== Helper Functions ==========
 
-// Map coroutine priority to runq index: LOW/NORMAL -> 0, HIGH -> 1
 static inline int prio_to_runq(int prio) {
-    return (prio == CORO_PRIORITY_HIGH) ? 1 : 0;
+    if (prio < 0)
+        return 0;
+    if (prio >= XR_CORO_PRIORITY_COUNT)
+        return XR_CORO_PRIORITY_COUNT - 1;
+    return prio;
 }
 
 // ========== API Implementation ==========
@@ -78,7 +81,7 @@ void xr_balance_init(struct XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count && i < XR_MAX_WORKERS; i++) {
         XrMigrationPath *mp = &runtime->migration_paths[i];
         mp->flags = 0;
-        for (int p = 0; p < 3; p++) {
+        for (int p = 0; p < XR_CORO_PRIORITY_COUNT; p++) {
             mp->prio[p].limit_here = XR_MIGRATION_LIMIT_DEFAULT;
             mp->prio[p].limit_other = 0;
             mp->prio[p].target_worker = -1;

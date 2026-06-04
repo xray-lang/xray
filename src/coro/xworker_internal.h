@@ -74,6 +74,9 @@ XR_FUNC void worker_drain_inbox(XrWorker *worker);
 // Returns a fast-path IO coroutine (affinity match, skip queue) or NULL.
 XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
+// LIFO gate shared by the scheduler and fast dispatch.
+XR_FUNC XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget);
+
 // Global injection queue (xworker_runq.c)
 XR_FUNC void xr_injectq_init(XrRuntime *runtime);
 XR_FUNC void xr_injectq_destroy(XrRuntime *runtime);

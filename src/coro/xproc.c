@@ -36,6 +36,7 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     for (int i = 0; i < XR_RUNQ_COUNT; i++) {
         xr_runq_init(&p->runq[i]);
     }
+    xr_priority_budget_init(&p->prio_budget);
 
     // MPSC inbox
     xr_mpsc_init(&p->inbox);
@@ -150,40 +151,22 @@ XrCoroutine *xr_proc_pop(XrProc *p) {
     if (!p)
         return NULL;
 
-    // 1. HIGH queue first
-    XrCoroutine *c = xr_steal_queue_pop(&p->runq[1].deque);
-    if (c) {
-        return c;
+    for (int priority = CORO_PRIORITY_HIGH; priority >= CORO_PRIORITY_LOW; priority--) {
+        XrRunQueue *rq = &p->runq[priority];
+        XrCoroutine *coro = xr_steal_queue_pop(&rq->deque);
+        if (coro)
+            return coro;
+        coro = rq->overflow_first;
+        if (!coro)
+            continue;
+        rq->overflow_first = coro->sched_link;
+        if (!rq->overflow_first)
+            rq->overflow_last = NULL;
+        rq->overflow_len--;
+        coro->sched_link = NULL;
+        return coro;
     }
-
-    // 2. NORMAL overflow (delayed LOW coroutines ready to run)
-    XrRunQueue *nq = &p->runq[0];
-    if (nq->overflow_first && --nq->overflow_first->schedule_count <= 0) {
-        c = nq->overflow_first;
-        nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first)
-            nq->overflow_last = NULL;
-        nq->overflow_len--;
-        c->sched_link = NULL;
-        return c;
-    }
-
-    // 3. NORMAL deque
-    c = xr_steal_queue_pop(&nq->deque);
-    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW &&
-        c->schedule_count > 1) {
-        // LOW coroutine with remaining delay: put to overflow
-        c->schedule_count--;
-        c->sched_link = NULL;
-        if (nq->overflow_last)
-            nq->overflow_last->sched_link = c;
-        else
-            nq->overflow_first = c;
-        nq->overflow_last = c;
-        nq->overflow_len++;
-        return xr_proc_pop(p);  // Retry
-    }
-    return c;
+    return NULL;
 }
 
 void xr_proc_push(XrProc *p, XrCoroutine *coro) {
@@ -196,19 +179,8 @@ void xr_proc_push(XrProc *p, XrCoroutine *coro) {
     if (priority >= XR_CORO_PRIORITY_COUNT)
         priority = XR_CORO_PRIORITY_COUNT - 1;
 
-    int runq_idx;
-    if (priority == CORO_PRIORITY_LOW) {
-        coro->schedule_count = XR_RESCHEDULE_LOW;
-        runq_idx = 0;
-    } else if (priority == CORO_PRIORITY_NORMAL) {
-        coro->schedule_count = 1;
-        runq_idx = 0;
-    } else {
-        coro->schedule_count = 1;
-        runq_idx = 1;
-    }
-
-    xr_runq_enqueue(&p->runq[runq_idx], coro);
+    coro->schedule_count = 1;
+    xr_runq_enqueue(&p->runq[priority], coro);
 }
 
 // ========== Idle P Management ==========

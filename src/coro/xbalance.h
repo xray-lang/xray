@@ -51,7 +51,7 @@ typedef struct {
 // Worker migration path
 typedef struct {
     uint32_t flags;
-    XrMigrationLimit prio[3];
+    XrMigrationLimit prio[XR_CORO_PRIORITY_COUNT];
 } XrMigrationPath;
 
 // Migration flags

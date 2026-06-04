@@ -52,7 +52,7 @@
 // Reduction quantum per scheduling round
 #define XR_CORO_REDUCTIONS 4000
 
-// LOW priority runs every N schedule rounds
+// Legacy low-priority delay counter retained for recycled coroutine state.
 #define XR_RESCHEDULE_LOW 8
 
 // Max coroutines system-wide
@@ -74,8 +74,18 @@
  * Kotlin uses 100us; we use 2ms with ms-resolution clock. */
 #define XR_STEAL_TIME_RESOLUTION_MS 2
 
-// Number of run queues (priority levels mapped to queues)
-#define XR_RUNQ_COUNT 2
+// Number of run queues (one queue per coroutine priority level)
+#define XR_CORO_PRIORITY_COUNT 3
+#define XR_RUNQ_COUNT 3
+
+// Soft priority weights for scheduler credits
+#define XR_PRIO_WEIGHT_LOW 1
+#define XR_PRIO_WEIGHT_NORMAL 4
+#define XR_PRIO_WEIGHT_HIGH 8
+
+// Waiting tasks receive temporary priority boosts without changing user flags.
+#define XR_PRIO_AGING_MS 10
+#define XR_PRIO_AGING_MAX_BOOST 2
 
 /* ========== Pool Constants ========== */
 

@@ -148,7 +148,7 @@ void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *cor
 static void try_immigrate(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
 
-    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
+    for (int p = XR_RUNQ_COUNT - 1; p >= 0; p--) {
         XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
         int source_id = mp->prio[p].target_worker;
         if (source_id < 0 || source_id >= runtime->worker_count)
@@ -732,7 +732,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
             XrWorker *victim = &runtime->workers[i];
 
             // Steal from all run queues (with freshness check).
-            for (int p = 0; p < XR_RUNQ_COUNT && !coro; p++) {
+            for (int p = XR_RUNQ_COUNT - 1; p >= 0 && !coro; p--) {
                 XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq[p].deque);
                 if (oldest) {
                     int64_t age = steal_now - oldest->submit_time;

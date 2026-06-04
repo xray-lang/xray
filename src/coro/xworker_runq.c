@@ -31,13 +31,189 @@ static int normalize_coro_priority(int priority) {
     return priority;
 }
 
+static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, int priority,
+                                          bool count_spill);
+
 static int runq_index_for_priority(int priority) {
-    return priority == CORO_PRIORITY_HIGH ? 1 : 0;
+    return normalize_coro_priority(priority);
 }
 
 static void prepare_scheduled_coro(XrCoroutine *coro, int priority) {
+    (void) priority;
     coro->submit_time = xr_monotonic_ticks();
-    coro->schedule_count = (priority == CORO_PRIORITY_LOW) ? XR_RESCHEDULE_LOW : 1;
+    coro->schedule_count = 1;
+}
+
+static XrCoroutine *runq_pop_overflow(XrRunQueue *rq) {
+    XrCoroutine *coro = rq->overflow_first;
+    if (!coro)
+        return NULL;
+    rq->overflow_first = coro->sched_link;
+    if (!rq->overflow_first)
+        rq->overflow_last = NULL;
+    rq->overflow_len--;
+    coro->sched_link = NULL;
+    return coro;
+}
+
+static XrCoroutine *runq_oldest_candidate(XrRunQueue *rq) {
+    XrCoroutine *deque_oldest = xr_steal_queue_peek_top(&rq->deque);
+    XrCoroutine *overflow_oldest = rq->overflow_first;
+    if (!deque_oldest)
+        return overflow_oldest;
+    if (!overflow_oldest)
+        return deque_oldest;
+    return overflow_oldest->submit_time <= deque_oldest->submit_time ? overflow_oldest
+                                                                     : deque_oldest;
+}
+
+static int effective_priority_for_coro(XrCoroutine *coro, int64_t now) {
+    if (!coro)
+        return -1;
+    int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
+    int64_t age = now - coro->submit_time;
+    if (age <= 0)
+        return priority;
+    int boost = (int) (age / XR_PRIO_AGING_MS);
+    if (boost > XR_PRIO_AGING_MAX_BOOST)
+        boost = XR_PRIO_AGING_MAX_BOOST;
+    priority += boost;
+    return normalize_coro_priority(priority);
+}
+
+static int runq_effective_priority(XrRunQueue *rq, int64_t now) {
+    return effective_priority_for_coro(runq_oldest_candidate(rq), now);
+}
+
+static XrCoroutine *runq_pop_selected(XrRunQueue *rq, bool oldest_first) {
+    XrCoroutine *coro = NULL;
+    if (oldest_first) {
+        coro = runq_pop_overflow(rq);
+        if (coro)
+            return coro;
+        return xr_steal_queue_steal(&rq->deque);
+    }
+
+    coro = xr_steal_queue_pop(&rq->deque);
+    if (coro)
+        return coro;
+    return runq_pop_overflow(rq);
+}
+
+static bool priority_budget_has_credit(XrPriorityBudget *budget) {
+    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
+        if (budget->credit[priority] > 0)
+            return true;
+    }
+    return false;
+}
+
+static int worker_select_actual_priority(XrWorker *worker, int effective_priority, int64_t now,
+                                         bool *oldest_first) {
+    for (int actual = CORO_PRIORITY_HIGH; actual >= CORO_PRIORITY_LOW; actual--) {
+        XrRunQueue *rq = &worker->p.runq[actual];
+        if (xr_runq_len(rq) <= 0)
+            continue;
+        int effective = runq_effective_priority(rq, now);
+        if (effective != effective_priority)
+            continue;
+        if (oldest_first)
+            *oldest_first = effective > actual;
+        return actual;
+    }
+    return -1;
+}
+
+static bool worker_has_effective_high_work(XrWorker *worker, int64_t now) {
+    for (int actual = CORO_PRIORITY_HIGH; actual >= CORO_PRIORITY_LOW; actual--) {
+        if (xr_runq_len(&worker->p.runq[actual]) <= 0)
+            continue;
+        if (runq_effective_priority(&worker->p.runq[actual], now) >= CORO_PRIORITY_HIGH)
+            return true;
+    }
+
+    XrRuntime *runtime = worker->p.runtime;
+    if (!runtime)
+        return false;
+    uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
+    return (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
+            high_bit) != 0;
+}
+
+static bool worker_lifo_gate_allows(XrWorker *worker, XrCoroutine *lifo, bool consume_poll_budget) {
+    if (consume_poll_budget && worker->p.lifo_polls >= XR_MAX_LIFO_POLLS)
+        return false;
+
+    int lifo_priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo)));
+    if (lifo_priority >= CORO_PRIORITY_HIGH)
+        return true;
+
+    XrRuntime *runtime = worker->p.runtime;
+    if (runtime && atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+        return false;
+    if (runtime) {
+        uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
+        if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
+             high_bit) == 0 &&
+            worker->p.local_runq_len <= 1) {
+            return true;
+        }
+    }
+
+    return !worker_has_effective_high_work(worker, xr_monotonic_ticks());
+}
+
+XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) {
+    XrCoroutine *lifo = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
+    if (!lifo)
+        return NULL;
+
+    int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo)));
+    if (worker_lifo_gate_allows(worker, lifo, consume_poll_budget)) {
+        atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
+        if (consume_poll_budget)
+            worker->p.lifo_polls++;
+        worker->p.local_runq_len--;
+        worker->p.stats.lifo_hit_count++;
+        return lifo;
+    }
+
+    atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
+    if (!worker_enqueue_runq_or_inject(worker, lifo, priority, true)) {
+        worker->p.local_runq_len--;
+    }
+    worker->p.stats.lifo_flush_count++;
+    return NULL;
+}
+
+static XrCoroutine *worker_pop_weighted(XrWorker *worker) {
+    XrPriorityBudget *budget = &worker->p.prio_budget;
+    int64_t now = xr_monotonic_ticks();
+
+    for (int refill = 0; refill < 2; refill++) {
+        if (!priority_budget_has_credit(budget)) {
+            xr_priority_budget_refill(budget);
+        }
+
+        for (int effective = CORO_PRIORITY_HIGH; effective >= CORO_PRIORITY_LOW; effective--) {
+            if (budget->credit[effective] <= 0)
+                continue;
+            bool oldest_first = false;
+            int actual = worker_select_actual_priority(worker, effective, now, &oldest_first);
+            if (actual < 0)
+                continue;
+            XrCoroutine *coro = runq_pop_selected(&worker->p.runq[actual], oldest_first);
+            if (!coro)
+                continue;
+            budget->credit[effective]--;
+            worker->p.local_runq_len--;
+            budget->cursor = effective;
+            return coro;
+        }
+
+        xr_priority_budget_refill(budget);
+    }
+    return NULL;
 }
 
 static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, int priority,
@@ -289,92 +465,17 @@ int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
 // Worker pop from local queue (Chase-Lev deque)
 //
 // Design:
-// - LIFO slot first (cache locality for message passing)
-// - Priority order: HIGH(1) > NORMAL(0)
-// - LOW coroutines popped from NORMAL deque are checked for schedule_count
-// - If schedule_count > 1, put to overflow list for delayed scheduling
+// - LIFO slot first only when the gate allows locality to win
+// - Priority order is weighted: HIGH(8) > NORMAL(4) > LOW(1)
+// - Aging can temporarily raise the effective priority of old waiters
 XrCoroutine *xr_worker_pop(XrWorker *worker) {
-    // 0. LIFO slot: prioritize last scheduled coroutine for cache locality
-    XrCoroutine *_lifo = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
-    if (_lifo) {
-        if (worker->p.lifo_polls < XR_MAX_LIFO_POLLS) {
-            XrCoroutine *c = _lifo;
-            atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
-            worker->p.lifo_polls++;
-            worker->p.local_runq_len--;
-            worker->p.stats.lifo_hit_count++;
-            return c;
-        }
-        // Starvation prevention: flush LIFO slot to a shared-ready path.
-        XrCoroutine *evicted = _lifo;
-        atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
-        if (!worker_enqueue_runq_or_inject(worker, evicted, worker->p.lifo_slot_prio, true)) {
-            worker->p.local_runq_len--;
-        }
-        worker->p.stats.lifo_flush_count++;
-    }
-    // Reset LIFO polls when falling through to normal queues
+    XrCoroutine *coro = xr_worker_try_pop_lifo(worker, true);
+    if (coro)
+        return coro;
+
+    // Reset LIFO polls when falling through to priority queues.
     worker->p.lifo_polls = 0;
-
-    // 1. HIGH queue first
-    XrCoroutine *c = xr_steal_queue_pop(&worker->p.runq[1].deque);
-    if (c) {
-        worker->p.local_runq_len--;
-        return c;
-    }
-
-    // 2. NORMAL overflow (delayed LOW coroutines ready to run)
-    XrRunQueue *nq = &worker->p.runq[0];
-    if (nq->overflow_first && --nq->overflow_first->schedule_count <= 0) {
-        c = nq->overflow_first;
-        nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first)
-            nq->overflow_last = NULL;
-        nq->overflow_len--;
-        c->sched_link = NULL;
-        worker->p.local_runq_len--;
-        return c;
-    }
-
-    // 3. NORMAL deque (with retry loop for LOW priority delay)
-retry:
-    c = xr_steal_queue_pop(&nq->deque);
-    if (c && xr_coro_get_priority(xr_coro_flags_load(c)) == CORO_PRIORITY_LOW &&
-        c->schedule_count > 1) {
-        // LOW coroutine with remaining delay: put to overflow
-        c->schedule_count--;
-        c->sched_link = NULL;
-        if (nq->overflow_last)
-            nq->overflow_last->sched_link = c;
-        else
-            nq->overflow_first = c;
-        nq->overflow_last = c;
-        nq->overflow_len++;
-        goto retry;
-    }
-
-    // 4. Drain overflow back into deque when deque has space
-    while (!c && nq->overflow_first) {
-        c = nq->overflow_first;
-        nq->overflow_first = c->sched_link;
-        if (!nq->overflow_first)
-            nq->overflow_last = NULL;
-        nq->overflow_len--;
-        c->sched_link = NULL;
-        // Try to push back into deque for future stealing
-        if (c->schedule_count > 0) {
-            if (xr_steal_queue_push(&nq->deque, c)) {
-                c = NULL;
-                continue;
-            }
-            // Deque still full, return this coroutine
-        }
-        break;
-    }
-
-    if (c)
-        worker->p.local_runq_len--;
-    return c;
+    return worker_pop_weighted(worker);
 }
 
 // Push to LIFO slot for cache locality.
@@ -388,7 +489,8 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
         XrCoroutine *prev = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
         int new_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
         atomic_store_explicit(&worker->p.lifo_slot, coro, memory_order_relaxed);
-        int prev_prio = worker->p.lifo_slot_prio;
+        int prev_prio =
+            prev ? xr_coro_get_priority(xr_coro_flags_load(prev)) : worker->p.lifo_slot_prio;
         worker->p.lifo_slot_prio = new_prio;
         worker->p.local_runq_len++;
         if (prev) {
@@ -406,8 +508,7 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
 // Worker push to local queue (Chase-Lev deque)
 //
 // Design:
-// - LOW coroutines go to NORMAL queue (index 0), schedule_count=8
-// - HIGH coroutines go to HIGH queue (index 1)
+// - LOW/NORMAL/HIGH coroutines each use their matching priority queue
 // - Local deque full spills new work to the global injection queue
 void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "worker_push: NULL worker");

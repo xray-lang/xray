@@ -334,8 +334,12 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // BLOCKED fast re-dispatch: skip full handle_vm_result/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by run_on_worker/run_cfunc_coro.
-    if (result == XR_VM_BLOCKED && atomic_load_explicit(&p->lifo_slot, memory_order_relaxed) &&
-        --fast_dispatch_budget > 0) {
+    if (result == XR_VM_BLOCKED && fast_dispatch_budget > 1) {
+        XrCoroutine *next = xr_worker_try_pop_lifo(worker, false);
+        if (!next) {
+            goto normal_result_path;
+        }
+        fast_dispatch_budget--;
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;
         worker_process_blocked(worker, coro);
@@ -354,20 +358,14 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         }
 
         p->stats.executed_count++;
-        XrCoroutine *next = atomic_load_explicit(&p->lifo_slot, memory_order_relaxed);
-        // Invariant: LIFO slot must not be NULL here (checked in condition above)
-        XR_DCHECK(next != NULL, "fast_dispatch: LIFO slot NULL after positive check");
-        // Invariant: next coro must not be DONE
         XR_DCHECK(!xr_coro_flags_has(next, XR_CORO_FLG_DONE),
                   "fast_dispatch: LIFO slot contains DONE coroutine");
-        atomic_store_explicit(&p->lifo_slot, NULL, memory_order_relaxed);
-        p->local_runq_len--;
-        p->stats.lifo_hit_count++;
         atomic_store_explicit(&m->current_coro, next, memory_order_relaxed);
         coro = next;
         goto exec_fast;  // Skip active_coros, reductions, full handle_vm_result
     }
 
+normal_result_path:
     // Check cancel flag (sysmon may have marked it)
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         result = XR_VM_CANCELLED;

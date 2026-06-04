@@ -3425,7 +3425,10 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 ### 10.2 `go` — 启动协程
 
 ```ebnf
-GoExpr ::= 'go' (Block | CallExpr | LambdaExpr CallArgs?)
+GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
+GoOptions ::= '(' GoOption (',' GoOption)* ')'
+GoOption ::= 'name' ':' StringLiteral
+           | 'priority' ':' (IntegerLiteral | 'Coro.LOW' | 'Coro.NORMAL' | 'Coro.HIGH')
 ```
 
 `go` 是**表达式**，返回 `Task<T>` 句柄。三种形式都合法：
@@ -3443,6 +3446,9 @@ let t2 = go fn(d: Json) -> int {
 let t3 = go {
     return compute()
 }
+
+// 创建期优先级提示：0=LOW, 1=NORMAL, 2=HIGH
+let urgent = go(priority: Coro.HIGH) worker(1, channel)
 ```
 
 **move 在参数位置**：跨协程转移所有权通过参数前缀 `move` 实现，**不是** `go` 的选项：
@@ -3457,6 +3463,7 @@ let task = go fn(d: Json) -> int {
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
 - 协程在闲置 worker 线程中调度（M:N）。
+- `go(priority: ...)` 在协程创建前设置调度提示；priority 是 soft hint，不是硬实时保证。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 普通局部变量（非 `shared`、非 `move`）传给 `go` 时**自动深拷贝**；`shared const` 零拷贝共享；`shared let` 必须 `move`。
 
@@ -4547,6 +4554,8 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 - M:N 调度（M OS 线程 × N 协程）。
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
+- **优先级**：LOW/NORMAL/HIGH 使用加权 soft scheduling；调度器可通过 aging 临时提升等待过久的协程，防止低优先级长期饥饿，但不会修改用户可见 priority。
+- `Coro.setPriority(task, n)` 是运行中的调度提示；协程可能已经开始执行，最精确的初始优先级应使用 `go(priority: ...)`。
 - **栈管理**：segmented stack 按需扩展。
 
 详见 `src/runtime/coro/`。
