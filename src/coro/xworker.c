@@ -79,6 +79,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
         xr_runq_init(&worker->p.runq[p]);
     }
     xr_priority_budget_init(&worker->p.prio_budget);
+    atomic_store_explicit(&worker->p.local_runq_len, 0, memory_order_relaxed);
 
     // Initialize LIFO slot
     atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
@@ -227,6 +228,12 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->spinning_count, 0);
     atomic_store(&runtime->wake_spinner, 0);
     atomic_store(&runtime->needspinning, 0);
+    for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
+        atomic_store(&runtime->nonempty_p_mask[pi], 0);
+    }
+    atomic_store(&runtime->timer_p_mask, 0);
+    atomic_store(&runtime->idle_p_mask, 0);
+    atomic_store(&runtime->searching_count, 0);
     xr_injectq_init(runtime);
 
     // active_coros/spawned now tracked per-Worker, no global init needed
@@ -651,5 +658,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) xr_sched_metric_load(&s->inject_spill_count), inject_len,
                 atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
     }
+    fprintf(stderr, "Masks: runq=[0x%llx,0x%llx,0x%llx] timer=0x%llx idle=0x%llx searching=%d\n",
+            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[0],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[1],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[2],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
+            atomic_load_explicit(&runtime->searching_count, memory_order_relaxed));
     fprintf(stderr, "===========================\n\n");
 }

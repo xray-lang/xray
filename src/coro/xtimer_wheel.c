@@ -120,6 +120,13 @@ static inline void scnt_later_wheel_next(int *slotp, int *leftp, int64_t *posp, 
                     XR_TW_LATER_WHEEL_END_SLOT, XR_TW_LATER_WHEEL_SLOT_SIZE);
 }
 
+static inline void timer_refresh_runtime_mask(XrTimerWheel *tw) {
+    if (!tw)
+        return;
+    xr_runtime_set_timer_pending(tw->runtime, tw->owner_worker_id,
+                                 tw->nto > 0 || tw->yield_slot != XR_TW_SLOT_INACTIVE);
+}
+
 // Calculate Soon Wheel slot
 static inline int soon_slot(int64_t soon_pos) {
     int64_t slot = soon_pos;
@@ -587,6 +594,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XrWorker *cur = xr_current_worker();
     XR_DCHECK(cur == NULL || cur->p.id == tw->owner_worker_id,
               "timer_process_canceled_queue: non-owner call");
+    (void) cur;
     XrTimerCancelQueue *cq = &tw->canceled_queue;
     XrCanceledTimerNode *head, *next;
     int count = 0;
@@ -764,6 +772,7 @@ bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
     XrWorker *cur_w = xr_current_worker();
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_set_timer: non-owner call");
+    (void) cur_w;
     int slot;
 
     // No mutex needed - owner worker exclusive access
@@ -816,6 +825,7 @@ bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
             tw->next_timeout_time = timeout_pos;
         }
     }
+    timer_refresh_runtime_mask(tw);
     return true;
 }
 
@@ -828,18 +838,21 @@ void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XrWorker *cur_w = xr_current_worker();
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_cancel_timer: non-owner call");
+    (void) cur_w;
     // No mutex needed - owner worker exclusive access
     if (p->owner_worker_id != tw->owner_worker_id)
         return;
     if (p->slot != XR_TW_SLOT_INACTIVE) {
         if (!timer_is_in_slot(tw, p, p->slot)) {
             atomic_store_explicit(&p->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
+            timer_refresh_runtime_mask(tw);
             return;
         }
         remove_timer(tw, p);
         tw->nto--;
         atomic_store_explicit(&p->state, XR_TIMER_STATE_ACTIVE, memory_order_release);
     }
+    timer_refresh_runtime_mask(tw);
 }
 
 // Advance timer wheel (owner worker only, no cross-thread access)
@@ -891,6 +904,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                 tw->later.pos = bump_to + XR_TW_SOON_WHEEL_SIZE;
                 tw->later.pos &= XR_TW_LATER_WHEEL_POS_MASK;
                 tw->yield_slot = XR_TW_SLOT_INACTIVE;
+                timer_refresh_runtime_mask(tw);
                 return;
             }
 
@@ -938,6 +952,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                         XR_TW_ASSERT(tw->nto > 0);
                         XR_TW_ASSERT(tw->at_once.nto > 0);
                         tw->yield_slot = XR_TW_SLOT_AT_ONCE;
+                        timer_refresh_runtime_mask(tw);
                         return;
                     }
 
@@ -1052,6 +1067,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                         if (yield_count <= 0) {
                             tw->yield_slot = slot;
                             tw->yield_slots_left = slots;
+                            timer_refresh_runtime_mask(tw);
                             return;
                         }
 
@@ -1066,6 +1082,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
             if (XR_TW_BUMP_LATER_WHEEL(tw)) {
             restart_yielded_later_slot:
                 if (bump_later_wheel(tw, &yield_count)) {
+                    timer_refresh_runtime_mask(tw);
                     return;
                 }
             }
@@ -1077,6 +1094,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
     XR_TW_ASSERT(tw->next_timeout_pos == bump_to);
 
     (void) find_next_timeout(tw);
+    timer_refresh_runtime_mask(tw);
 }
 
 // Check next timeout time (called by owner worker only - )
