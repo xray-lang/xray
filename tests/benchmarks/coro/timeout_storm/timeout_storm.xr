@@ -1,0 +1,76 @@
+import time
+
+let COUNT = 1000
+let TIMEOUT_MS = 10
+
+if (process.args.length > 0) {
+    COUNT = int(process.args[0]) ?? COUNT
+}
+if (process.args.length > 1) {
+    TIMEOUT_MS = int(process.args[1]) ?? TIMEOUT_MS
+}
+
+fn recv_timeout_worker(ch: Channel<int>, timeout_ms: int) -> bool {
+    let (value, ok) = ch.recvTimeout(timeout_ms)
+    return !ok
+}
+
+fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
+    return !ch.sendTimeout(value, timeout_ms)
+}
+
+fn run_recv_storm(count: int, timeout_ms: int) -> int {
+    shared const ch = new Channel(1)
+    let tasks: Array<Task> = []
+    for (let i = 0; i < count; i++) {
+        tasks.push(go recv_timeout_worker(ch, timeout_ms))
+    }
+
+    let timeouts = 0
+    for (task in tasks) {
+        if (await task) {
+            timeouts++
+        }
+    }
+    ch.close()
+    return timeouts
+}
+
+fn run_send_storm(count: int, timeout_ms: int) -> int {
+    shared const ch = new Channel(1)
+    ch.send(1)
+
+    let tasks: Array<Task> = []
+    for (let i = 0; i < count; i++) {
+        tasks.push(go send_timeout_worker(ch, timeout_ms, i + 2))
+    }
+
+    let timeouts = 0
+    for (task in tasks) {
+        if (await task) {
+            timeouts++
+        }
+    }
+    let _drain = ch.recv()
+    ch.close()
+    return timeouts
+}
+
+print("=== Timeout Storm Benchmark ===")
+print("coroutines:", COUNT)
+print("timeout:", TIMEOUT_MS, "ms")
+
+let start_recv = time.monotonic()
+let recv_timeouts = run_recv_storm(COUNT, TIMEOUT_MS)
+let recv_elapsed = time.monotonic() - start_recv
+
+let start_send = time.monotonic()
+let send_timeouts = run_send_storm(COUNT, TIMEOUT_MS)
+let send_elapsed = time.monotonic() - start_send
+
+print("recv completed:", COUNT)
+print("recv timeouts:", recv_timeouts)
+print("recv wall:", recv_elapsed, "ms")
+print("send completed:", COUNT)
+print("send timeouts:", send_timeouts)
+print("send wall:", send_elapsed, "ms")

@@ -43,6 +43,17 @@
 XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
 XR_THREAD_LOCAL XrMachine *tls_current_machine = NULL;
 
+static bool env_flag_enabled(const char *name) {
+    const char *value = getenv(name);
+    if (!value || value[0] == '\0' || value[0] == '0')
+        return false;
+    if (value[0] == 'f' || value[0] == 'F')
+        return false;
+    if (value[0] == 'n' || value[0] == 'N')
+        return false;
+    return true;
+}
+
 // Get current thread's Worker
 XrWorker *xr_current_worker(void) {
     return tls_current_worker;
@@ -57,9 +68,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     XR_DCHECK(id >= 0 && id < runtime->worker_count, "worker_init: invalid id");
     worker->p.id = id;
     worker->p.runtime = runtime;
-    worker->p.stats.executed_count = 0;
-    worker->p.stats.stolen_count = 0;
-    worker->p.stats.yielded_count = 0;
+    memset(&worker->p.stats, 0, sizeof(worker->p.stats));
 
     // Bind pre-allocated M (1:1 with Worker at startup)
     worker->m = &runtime->machines[id];
@@ -95,7 +104,6 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
 
     // Initialize continuation stealing deque
     xr_steal_queue_init(&worker->p.cont_deque, 64);
-    worker->p.stats.cont_steal_count = 0;
 
     // Initialize Per-Worker blocked queue (lock-free)
     memset(worker->p.blocked_buckets, 0, sizeof(worker->p.blocked_buckets));
@@ -222,6 +230,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
     // active_coros/spawned now tracked per-Worker, no global init needed
     atomic_store(&runtime->total_inbox_len, 0);
+    runtime->sched_stats_enabled = env_flag_enabled("XRAY_SCHED_STATS");
 
     // main thread enqueues via inbox, no dedicated P needed
 
@@ -327,6 +336,10 @@ void xr_runtime_destroy(XrRuntime *runtime) {
                                (unsigned long long) ch_created, (unsigned long long) ch_closed);
             }
         }
+    }
+
+    if (runtime->sched_stats_enabled) {
+        xr_runtime_print_stats(runtime);
     }
 
     // Drain all worker MPSC inboxes (coroutines pushed after running=false)
@@ -564,26 +577,68 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) _tc);
     }
     fprintf(stderr, "Active coros: %d\n", xr_runtime_active_coros(runtime));
-    fprintf(stderr, "\n%-8s %12s %12s %12s %12s %8s\n", "Worker", "Executed", "Stolen", "Yielded",
-            "ContSteal", "Blocked");
-    fprintf(stderr, "%-8s %12s %12s %12s %12s %8s\n", "------", "--------", "------", "-------",
-            "---------", "-------");
+    fprintf(stderr, "\n%-8s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n", "Worker",
+            "Executed", "Stolen", "StealTry", "Yielded", "ContSteal", "LifoHit", "LifoFlush",
+            "Inbox", "Park", "Unpark", "Timer", "Burst", "Blocked");
+    fprintf(stderr, "%-8s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n", "------",
+            "--------", "------", "--------", "-------", "---------", "-------", "---------",
+            "-----", "----", "------", "-----", "-----", "-------");
 
-    uint64_t total_exec = 0, total_steal = 0, total_yield = 0, total_cont = 0;
+    uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_yield = 0;
+    uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
+    uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
-        fprintf(stderr, "W%-7d %12llu %12llu %12llu %12llu %8d\n", i,
-                (unsigned long long) p->stats.executed_count,
+        fprintf(stderr,
+                "W%-7d %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
+                "%8llu %8llu %8d\n",
+                i, (unsigned long long) p->stats.executed_count,
                 (unsigned long long) p->stats.stolen_count,
+                (unsigned long long) p->stats.steal_attempt_count,
                 (unsigned long long) p->stats.yielded_count,
-                (unsigned long long) p->stats.cont_steal_count, p->blocked_count);
+                (unsigned long long) p->stats.cont_steal_count,
+                (unsigned long long) p->stats.lifo_hit_count,
+                (unsigned long long) p->stats.lifo_flush_count,
+                (unsigned long long) p->stats.inbox_drain_count,
+                (unsigned long long) p->stats.park_count,
+                (unsigned long long) p->stats.unpark_count,
+                (unsigned long long) p->stats.timer_bump_count,
+                (unsigned long long) p->stats.timer_burst_count, p->blocked_count);
         total_exec += p->stats.executed_count;
         total_steal += p->stats.stolen_count;
+        total_steal_try += p->stats.steal_attempt_count;
         total_yield += p->stats.yielded_count;
         total_cont += p->stats.cont_steal_count;
+        total_lifo_hit += p->stats.lifo_hit_count;
+        total_lifo_flush += p->stats.lifo_flush_count;
+        total_inbox += p->stats.inbox_drain_count;
+        total_park += p->stats.park_count;
+        total_unpark += p->stats.unpark_count;
+        total_timer += p->stats.timer_bump_count;
+        total_burst += p->stats.timer_burst_count;
     }
-    fprintf(stderr, "%-8s %12llu %12llu %12llu %12llu\n", "TOTAL", (unsigned long long) total_exec,
-            (unsigned long long) total_steal, (unsigned long long) total_yield,
-            (unsigned long long) total_cont);
+    fprintf(stderr,
+            "%-8s %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
+            "%8llu %8llu\n",
+            "TOTAL", (unsigned long long) total_exec, (unsigned long long) total_steal,
+            (unsigned long long) total_steal_try, (unsigned long long) total_yield,
+            (unsigned long long) total_cont, (unsigned long long) total_lifo_hit,
+            (unsigned long long) total_lifo_flush, (unsigned long long) total_inbox,
+            (unsigned long long) total_park, (unsigned long long) total_unpark,
+            (unsigned long long) total_timer, (unsigned long long) total_burst);
+
+    XrSchedGlobalStats *s = &runtime->sched_stats;
+    fprintf(stderr, "\nChannel wake commands: alloc=%llu free=%llu dispatch=%llu drain=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_alloc_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_free_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_dispatch_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_drain_count));
+    fprintf(stderr, "Select: block=%llu heap_alloc=%llu inline_alloc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->select_block_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_heap_alloc_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_inline_alloc_count));
+    fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
+            (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
     fprintf(stderr, "===========================\n\n");
 }

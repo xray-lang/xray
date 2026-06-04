@@ -74,10 +74,7 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     p->yield_streak = 0;
 
     // Statistics
-    p->stats.executed_count = 0;
-    p->stats.stolen_count = 0;
-    p->stats.yielded_count = 0;
-    p->stats.cont_steal_count = 0;
+    memset(&p->stats, 0, sizeof(p->stats));
     // RNG seed set later when runtime is fully initialized
 
     p->idle_link = NULL;

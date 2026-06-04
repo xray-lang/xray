@@ -44,6 +44,20 @@ typedef struct XrWorker {
     XrMachine *m;
 } XrWorker;
 
+/* ========== Scheduler Diagnostics ========== */
+
+typedef struct XrSchedGlobalStats {
+    _Atomic uint64_t chan_wake_cmd_alloc_count;
+    _Atomic uint64_t chan_wake_cmd_free_count;
+    _Atomic uint64_t chan_wake_cmd_dispatch_count;
+    _Atomic uint64_t chan_wake_cmd_drain_count;
+    _Atomic uint64_t select_block_count;
+    _Atomic uint64_t select_heap_alloc_count;
+    _Atomic uint64_t select_inline_alloc_count;
+    _Atomic uint64_t timeout_yield_retry_count;
+    _Atomic uint64_t timeout_event_block_count;
+} XrSchedGlobalStats;
+
 /* ========== Runtime Structure ========== */
 
 typedef struct XrRuntime {
@@ -95,6 +109,8 @@ typedef struct XrRuntime {
     /* === Statistics === */
     _Atomic int64_t total_inbox_len;  // Global atomic counter for inbox items
     _Atomic int next_coro_id;
+    bool sched_stats_enabled;
+    XrSchedGlobalStats sched_stats;
 
     /* === I/O & Async === */
     XrNetpoll netpoll;
@@ -117,6 +133,27 @@ typedef struct XrRuntime {
         bool warned;
     } sysmon_state[XR_MAX_WORKERS];
 } XrRuntime;
+
+static inline bool xr_sched_stats_enabled(XrRuntime *runtime) {
+    return runtime && runtime->sched_stats_enabled;
+}
+
+static inline void xr_sched_metric_inc(XrRuntime *runtime, _Atomic uint64_t *counter) {
+    if (xr_sched_stats_enabled(runtime)) {
+        atomic_fetch_add_explicit(counter, 1, memory_order_relaxed);
+    }
+}
+
+static inline void xr_sched_metric_add(XrRuntime *runtime, _Atomic uint64_t *counter,
+                                       uint64_t value) {
+    if (xr_sched_stats_enabled(runtime) && value > 0) {
+        atomic_fetch_add_explicit(counter, value, memory_order_relaxed);
+    }
+}
+
+static inline uint64_t xr_sched_metric_load(_Atomic uint64_t *counter) {
+    return atomic_load_explicit(counter, memory_order_relaxed);
+}
 
 /* ========== API ========== */
 

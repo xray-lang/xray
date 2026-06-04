@@ -238,8 +238,9 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
         return NULL;
 
     // Remove from linear queue
-    worker_blocked_list_remove(worker, coro);
-    worker->p.blocked_count--;
+    if (worker_blocked_list_remove(worker, coro)) {
+        worker->p.blocked_count--;
+    }
 
     // Clear blocked info
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
@@ -298,8 +299,9 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
         return NULL;
 
     // Remove from linear queue
-    worker_blocked_list_remove(worker, coro);
-    worker->p.blocked_count--;
+    if (worker_blocked_list_remove(worker, coro)) {
+        worker->p.blocked_count--;
+    }
 
     // Clear blocked info, but don't enqueue (caller responsible)
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
@@ -328,8 +330,9 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     XrCoroutine *coro = bucket->send_head;
     while (coro) {
         XrCoroutine *next = coro->wait_link;
-        worker_blocked_list_remove(worker, coro);
-        worker->p.blocked_count--;
+        if (worker_blocked_list_remove(worker, coro)) {
+            worker->p.blocked_count--;
+        }
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         coro->wait_link = NULL;
@@ -348,8 +351,9 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     coro = bucket->recv_head;
     while (coro) {
         XrCoroutine *next = coro->wait_link;
-        worker_blocked_list_remove(worker, coro);
-        worker->p.blocked_count--;
+        if (worker_blocked_list_remove(worker, coro)) {
+            worker->p.blocked_count--;
+        }
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         coro->wait_link = NULL;

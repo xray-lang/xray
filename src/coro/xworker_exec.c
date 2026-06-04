@@ -339,6 +339,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             int64_t _now = xr_monotonic_ticks();
             if (p->timer_wheel && _now > p->last_timer_tick) {
                 xr_bump_timers(p->timer_wheel, _now);
+                p->stats.timer_bump_count++;
                 p->last_timer_tick = _now;
             }
         }
@@ -352,6 +353,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
                   "fast_dispatch: LIFO slot contains DONE coroutine");
         atomic_store_explicit(&p->lifo_slot, NULL, memory_order_relaxed);
         p->local_runq_len--;
+        p->stats.lifo_hit_count++;
         atomic_store_explicit(&m->current_coro, next, memory_order_relaxed);
         coro = next;
         goto exec_fast;  // Skip active_coros, reductions, full handle_vm_result
