@@ -70,6 +70,8 @@
 struct XrCoroGC;
 struct XrCoroMonitor;
 struct XrCoroRegistry;
+typedef struct XrCoroutine XrCoroutine;
+typedef struct XrBlockedBucket XrBlockedBucket;
 
 /* ========== Coroutine Priority ========== */
 
@@ -216,6 +218,47 @@ typedef enum {
     XR_AWAIT_RESOLVED = 2,  // child completed, result in coro->result
 } XrAwaitState;
 
+/* ========== Select Support ========== */
+
+#define XR_SELECT_INLINE_CASES 4
+
+typedef struct XrSelectCase {
+    void *channel;
+    bool is_send;
+    XrValue send_value;
+    int result_reg;
+    XrCoroutine *owner;
+    struct XrSelectCase *prev;
+    struct XrSelectCase *next;
+    XrBlockedBucket *bucket;
+} XrSelectCase;
+
+typedef struct XrSelectWait {
+    XrSelectCase *cases;
+    int case_count;
+    void *timer_channel;
+    int timer_case_index;
+    _Atomic bool triggered;
+} XrSelectWait;
+
+typedef struct XrSelectStorage {
+    XrSelectWait wait;
+    XrSelectCase inline_cases[XR_SELECT_INLINE_CASES];
+    XrSelectCase *heap_cases;
+    int heap_capacity;
+} XrSelectStorage;
+
+struct XrBlockedBucket {
+    void *channel;
+    XrCoroutine *send_head;
+    XrCoroutine *send_tail;
+    XrCoroutine *recv_head;
+    XrCoroutine *recv_tail;
+    XrSelectCase *select_head;
+    XrSelectCase *select_tail;
+    struct XrBlockedBucket *next;
+};
+
 /* ========== XrCoroExt - Cold fields allocated on demand ========== */
 
 typedef struct XrCoroExt {
@@ -242,6 +285,9 @@ typedef struct XrCoroExt {
     _Atomic bool timer_active;
     int timer_wheel_owner;  // Worker ID that owns the timer (-1 = none)
     _Atomic uintptr_t timer_seq;
+
+    /* === Select storage (reused across blocking select operations) === */
+    XrSelectStorage select_storage;
 } XrCoroExt;
 
 /* ========== XrCoroutine - Coroutine Object ========== */
@@ -281,7 +327,7 @@ typedef struct XrJitSuspendState {
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 
-typedef struct XrCoroutine {
+struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
      * ================================================================ */
@@ -391,7 +437,7 @@ typedef struct XrCoroutine {
 
     /* === Cold Extension (io_buf, locals, watched_by — allocated on demand) === */
     XrCoroExt *ext;
-} XrCoroutine;
+};
 
 /* ========== XrCoroExt Accessor ========== */
 
@@ -452,35 +498,6 @@ XR_FUNC void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child);
 XR_FUNC void xr_jit_barrier_back(XrCoroutine *coro, void *container);
 
 /* ========== Helper Structures ========== */
-
-typedef struct XrSelectCase {
-    void *channel;
-    bool is_send;
-    XrValue send_value;
-    int result_reg;
-    // Per-bucket select queue linkage (avoids O(N) blocked scan).
-    struct XrSelectCase *bucket_next;  // next case node in same bucket's select queue
-    XrCoroutine *owner;                // back-pointer to owning coroutine
-} XrSelectCase;
-
-typedef struct XrSelectWait {
-    XrSelectCase *cases;
-    int case_count;
-    void *timer_channel;
-    int timer_case_index;
-    _Atomic bool triggered;
-} XrSelectWait;
-
-typedef struct XrBlockedBucket {
-    void *channel;
-    XrCoroutine *send_head;
-    XrCoroutine *send_tail;
-    XrCoroutine *recv_head;
-    XrCoroutine *recv_tail;
-    XrSelectCase *select_head;  // Per-channel select case chain.
-    XrSelectCase *select_tail;
-    struct XrBlockedBucket *next;
-} XrBlockedBucket;
 
 /* ========== Memory Sync Helpers ========== */
 

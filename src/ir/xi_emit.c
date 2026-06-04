@@ -477,6 +477,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_CHAN_RECV] = xi_emit_chan_recv,
     [XI_CHAN_TRY_SEND] = xi_emit_chan_try_send,
     [XI_CHAN_TRY_RECV] = xi_emit_chan_try_recv,
+    [XI_SELECT_BLOCK] = xi_emit_select_block,
     [XI_YIELD] = xi_emit_yield,
     [XI_THROW] = xi_emit_throw,
     [XI_RETAIN] = xi_emit_retain,
@@ -532,11 +533,12 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     /* Call-like ops place args at dst+1..dst+nargs.  A recycled low register
      * for dst could overlap with live source arg registers (clobber bug).
      * Force fresh allocation so dst > all previously allocated registers. */
-    /* OP_CHAN_TRY_RECV clobbers R[dst+1] with the ok flag — treat it as
-     * call-like so dst is beyond all live registers. */
-    bool call_like =
-        (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
-         v->op == XI_GO || v->op == XI_MULTI_RET || v->op == XI_CHAN_TRY_RECV);
+    /* OP_CHAN_TRY_RECV clobbers R[dst+1] with the ok flag, and
+     * OP_SELECT_BLOCK consumes a contiguous register window. Treat both
+     * as call-like so dst is beyond all live registers. */
+    bool call_like = (v->op == XI_CALL || v->op == XI_CALL_METHOD ||
+                      v->op == XI_CALL_METHOD_DIRECT || v->op == XI_GO || v->op == XI_MULTI_RET ||
+                      v->op == XI_CHAN_TRY_RECV || v->op == XI_SELECT_BLOCK);
     uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;

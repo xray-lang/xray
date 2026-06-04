@@ -238,6 +238,27 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
 //
 // Optimization: bulk memset instead of 47 individual field resets.
 // XR_TAG_NULL == 0, so memset(0) automatically produces xr_null() for XrValue fields.
+static void coro_select_storage_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    XrSelectCase *heap_cases = ext->select_storage.heap_cases;
+    int heap_capacity = ext->select_storage.heap_capacity;
+    memset(&ext->select_storage, 0, sizeof(ext->select_storage));
+    ext->select_storage.heap_cases = heap_cases;
+    ext->select_storage.heap_capacity = heap_capacity;
+    ext->select_storage.wait.timer_case_index = -1;
+}
+
+static void coro_select_storage_free(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    if (ext->select_storage.heap_cases) {
+        xr_free(ext->select_storage.heap_cases);
+    }
+    memset(&ext->select_storage, 0, sizeof(ext->select_storage));
+    ext->select_storage.wait.timer_case_index = -1;
+}
+
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
 
@@ -293,6 +314,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
             coro->ext->timer_wheel_owner = -1;
             atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
+            coro_select_storage_reset(coro->ext);
         }
     } else {
         // Clear the clean bit (consumed)
@@ -700,6 +722,9 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         // drop them here rather than handing back stale state.
         xr_vm_ctx_free_ic_tables(&coro->vm_ctx);
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
+        coro_select_storage_reset(coro->ext);
+        coro->select_wait = NULL;
+        coro->select_ready_case = 0;
         // Add to pool
         coro->next = worker->p.local_free_list;
         worker->p.local_free_list = coro;
@@ -851,6 +876,7 @@ void xr_coro_free(XrCoroutine *coro) {
     if (coro->ext) {
         if (coro->ext->io_buf)
             xr_free(coro->ext->io_buf);
+        coro_select_storage_free(coro->ext);
         xr_free(coro->ext);
         coro->ext = NULL;
     }
@@ -934,6 +960,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->channel_deadline = 0;
     coro->select_wait = NULL;
     coro->select_ready_case = 0;
+    coro_select_storage_reset(coro->ext);
     coro->pending_result_slot = -1;
     coro->pending_spawn = NULL;
     coro->parent_coro = NULL;

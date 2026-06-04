@@ -319,6 +319,37 @@ XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         ctx->max_reg = ctx->next_reg;
 }
 
+/* Blocking select wait. Channel operands are copied into a contiguous
+ * register window because OP_SELECT_BLOCK uses base/count encoding. */
+XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs == 0 || v->nargs > 255) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+
+    uint16_t count = v->nargs;
+    uint16_t top = (uint16_t) dst + count;
+    if (top > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    if (top > ctx->max_reg) {
+        ctx->max_reg = (uint8_t) top;
+    }
+
+    for (uint16_t a = 0; a < count; a++) {
+        uint8_t src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (dst + a);
+        if (src != target) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+        }
+    }
+
+    emit_inst(ctx, CREATE_ABC(OP_SELECT_BLOCK, dst, (uint8_t) count, (uint8_t) v->aux_int));
+}
+
 /* ========== Coro Built-in Module ========== */
 
 /* Coro.method() → dedicated opcodes or OP_CORO_CTRL.

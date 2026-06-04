@@ -37,6 +37,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include <string.h>
 
 XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
@@ -57,62 +58,72 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         xr_sched_metric_inc(runtime, &runtime->sched_stats.select_block_count);
     }
 
-    void **channels = xr_malloc(ch_count * sizeof(void *));
-    if (!channels) {
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
-    if (runtime) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
-    }
-    XrChannel *timer_ch = NULL;
-    int valid_count = 0;
-    (void) valid_count;
 
-    for (int ci = 0; ci < ch_count; ci++) {
+    int case_slots = case_count > ch_count ? case_count : ch_count;
+    if (case_slots <= 0) {
+        case_slots = ch_count;
+    }
+    XrSelectStorage *storage = &ext->select_storage;
+    XrSelectCase *cases = NULL;
+    if (case_slots <= XR_SELECT_INLINE_CASES) {
+        cases = storage->inline_cases;
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.select_inline_alloc_count);
+        }
+    } else {
+        if (storage->heap_capacity < case_slots) {
+            XrSelectCase *new_cases =
+                (XrSelectCase *) xr_malloc((size_t) case_slots * sizeof(XrSelectCase));
+            if (!new_cases) {
+                VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+            }
+            if (storage->heap_cases) {
+                xr_free(storage->heap_cases);
+            }
+            storage->heap_cases = new_cases;
+            storage->heap_capacity = case_slots;
+            if (runtime) {
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
+            }
+        }
+        cases = storage->heap_cases;
+    }
+
+    memset(cases, 0, (size_t) case_slots * sizeof(XrSelectCase));
+    memset(&storage->wait, 0, sizeof(storage->wait));
+
+    XrSelectWait *sw = &storage->wait;
+    sw->cases = cases;
+    sw->case_count = ch_count < case_count ? ch_count : case_count;
+    sw->timer_channel = NULL;
+    sw->timer_case_index = -1;
+    atomic_store(&sw->triggered, false);
+
+    XrChannel *timer_ch = NULL;
+
+    for (int ci = 0; ci < ch_count && ci < sw->case_count; ci++) {
         XrValue ch_val = base[base_reg + ci];
         if (!xr_value_is_channel(ch_val)) {
-            channels[ci] = NULL;
+            sw->cases[ci].channel = NULL;
             continue;
         }
         XrChannel *ch = xr_value_to_channel(ch_val);
-        channels[ci] = ch;
-        valid_count++;
+        sw->cases[ci].channel = ch;
+        sw->cases[ci].is_send = false;
+        sw->cases[ci].result_reg = base_reg + ci;
+        sw->cases[ci].owner = coro;
         if (atomic_load(&ch->is_timer))
             timer_ch = ch;
     }
 
-    XrSelectWait *sw = xr_malloc(sizeof(XrSelectWait));
-    if (!sw) {
-        xr_free(channels);
-        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
-    }
-    if (runtime) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
-    }
-    sw->cases = xr_malloc(case_count * sizeof(XrSelectCase));
-    if (!sw->cases) {
-        xr_free(sw);
-        xr_free(channels);
-        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
-    }
-    if (runtime) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
-    }
-
-    for (int ci = 0; ci < ch_count && ci < case_count; ci++) {
-        sw->cases[ci].channel = channels[ci];
-        sw->cases[ci].is_send = false;
-        sw->cases[ci].result_reg = base_reg + ci;
-        sw->cases[ci].bucket_next = NULL;
-        sw->cases[ci].owner = coro;
-    }
-    sw->case_count = ch_count < case_count ? ch_count : case_count;
     sw->timer_channel = timer_ch;
-    sw->timer_case_index = -1;
-    atomic_store(&sw->triggered, false);
 
-    for (int ci = 0; ci < ch_count; ci++) {
-        if (channels[ci] == timer_ch) {
+    for (int ci = 0; ci < sw->case_count; ci++) {
+        if (sw->cases[ci].channel == timer_ch) {
             sw->timer_case_index = ci;
             break;
         }
@@ -144,10 +155,10 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     // Notify dist channels about entering select (subscribe for push model)
     XrChannelDistHooks *dhooks = isolate ? isolate->channel_dist_hooks : NULL;
     if (dhooks && dhooks->on_select_enter) {
-        for (int ci = 0; ci < ch_count; ci++) {
-            if (!channels[ci])
+        for (int ci = 0; ci < sw->case_count; ci++) {
+            if (!sw->cases[ci].channel)
                 continue;
-            XrChannel *dch = (XrChannel *) channels[ci];
+            XrChannel *dch = (XrChannel *) sw->cases[ci].channel;
             if (dch->dist) {
                 dhooks->on_select_enter(dch);
             }
@@ -155,8 +166,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     }
 
     frame->pc = pc;
-    xr_worker_block_select(worker, coro, channels, ch_count);
-    xr_free(channels);
+    xr_worker_block_select(worker, coro, NULL, sw->case_count);
 
     return XR_DISP_BLOCKED;
 }
@@ -185,6 +195,32 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
     if (timeout_ms < 0)
         timeout_ms = 0;
 
+    XrCoroutine *current = vm_get_coro(vm_ctx);
+    if (current) {
+        int resume_status = xr_coro_resume_load(current);
+        if (resume_status == XR_RESUME_TIMEOUT) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a] = xr_bool(false);
+            return XR_DISP_NEXT;
+        }
+        if (resume_status == XR_RESUME_CHANNEL_CLOSED) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a] = xr_bool(false);
+            return XR_DISP_NEXT;
+        }
+        if (resume_status == XR_RESUME_CHANNEL) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a] = xr_bool(true);
+            return XR_DISP_NEXT;
+        }
+    }
+
     // Try immediate send
     if (xr_channel_try_send(ch, value)) {
         base[a] = xr_bool(true);
@@ -200,39 +236,32 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
         return XR_DISP_NEXT;
     }
 
-    XrCoroutine *current = vm_get_coro(vm_ctx);
     if (current) {
-        int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
-
-        if (current->channel_deadline == 0)
-            current->channel_deadline = now_us + timeout_ms * 1000LL;
-
-        if (now_us >= current->channel_deadline) {
-            current->channel_deadline = 0;
-            base[a] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        if (xr_channel_try_send(ch, value)) {
-            current->channel_deadline = 0;
+        XrChanResult result = xr_channel_send(ch, value, current);
+        if (result == XR_CHAN_OK) {
             base[a] = xr_bool(true);
-            xr_runtime_wake_channel(isolate, ch, false);
             return XR_DISP_NEXT;
         }
-        if (xr_channel_is_closed(ch)) {
-            current->channel_deadline = 0;
+        if (result == XR_CHAN_CLOSED || result == XR_CHAN_NO_CORO) {
             base[a] = xr_bool(false);
             return XR_DISP_NEXT;
         }
-
-        XrWorker *worker = xr_current_worker();
-        if (worker) {
-            XrRuntime *runtime = worker->p.runtime;
-            if (runtime) {
-                xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_yield_retry_count);
+        if (result == XR_CHAN_BLOCK) {
+            current->send_value = value;
+            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
+            XrWorker *worker = xr_current_worker();
+            if (worker) {
+                xr_worker_add_sleep_timer(worker, current, timeout_ms);
+                XrRuntime *runtime = worker->p.runtime;
+                if (runtime) {
+                    xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
+                }
             }
+            frame->pc = pc - 1;
+            return XR_DISP_BLOCKED;
         }
-        frame->pc = pc - 1;
-        return XR_DISP_YIELD;
+        base[a] = xr_bool(false);
+        return XR_DISP_NEXT;
     }
 
     // Main thread: synchronous polling
@@ -279,8 +308,36 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
     else if (XR_IS_FLOAT(timeout_val))
         timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
 
-    // Try immediate receive via unified helper
     XrCoroutine *current = vm_get_coro(vm_ctx);
+    if (current) {
+        int resume_status = xr_coro_resume_load(current);
+        if (resume_status == XR_RESUME_TIMEOUT) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
+            return XR_DISP_NEXT;
+        }
+        if (resume_status == XR_RESUME_CHANNEL_CLOSED) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a] = xr_null();
+            base[a + 1] = xr_bool(false);
+            return XR_DISP_NEXT;
+        }
+        if (resume_status == XR_RESUME_CHANNEL) {
+            xr_coro_resume_store(current, XR_RESUME_OK);
+            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+            current->channel_deadline = 0;
+            base[a + 1] = xr_bool(true);
+            return XR_DISP_NEXT;
+        }
+        current->recv_slot = &base[a];
+    }
+
+    // Try immediate receive via unified helper
     XrValue recv_val;
     if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
         base[a] = recv_val;
@@ -298,42 +355,34 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
         return XR_DISP_NEXT;
     }
 
-    if (!current)
-        current = vm_get_coro(vm_ctx);
     if (current) {
-        int64_t now_us = (int64_t) (xr_time_monotonic_ns() / 1000ULL);
-
-        if (current->channel_deadline == 0)
-            current->channel_deadline = now_us + timeout_ms * 1000LL;
-
-        if (now_us >= current->channel_deadline) {
-            current->channel_deadline = 0;
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
-            current->channel_deadline = 0;
+        XrChanResult result = xr_channel_recv(ch, &recv_val, current);
+        if (result == XR_CHAN_OK) {
             base[a] = recv_val;
             base[a + 1] = xr_bool(true);
             return XR_DISP_NEXT;
         }
-        if (xr_channel_is_closed(ch)) {
-            current->channel_deadline = 0;
+        if (result == XR_CHAN_CLOSED || result == XR_CHAN_NO_CORO) {
             base[a] = xr_null();
             base[a + 1] = xr_bool(false);
             return XR_DISP_NEXT;
         }
-
-        XrWorker *worker = xr_current_worker();
-        if (worker) {
-            XrRuntime *runtime = worker->p.runtime;
-            if (runtime) {
-                xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_yield_retry_count);
+        if (result == XR_CHAN_BLOCK) {
+            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
+            XrWorker *worker = xr_current_worker();
+            if (worker) {
+                xr_worker_add_sleep_timer(worker, current, timeout_ms);
+                XrRuntime *runtime = worker->p.runtime;
+                if (runtime) {
+                    xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
+                }
             }
+            frame->pc = pc - 1;
+            return XR_DISP_BLOCKED;
         }
-        frame->pc = pc - 1;
-        return XR_DISP_YIELD;
+        base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
+        return XR_DISP_NEXT;
     }
 
     // Main thread: synchronous polling

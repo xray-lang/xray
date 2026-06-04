@@ -36,6 +36,19 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
 
     XiBlock *merge = xi_block_new(l->func);
     int max_cases = n > 32 ? 32 : n;
+    bool has_fallback_case = false;
+    bool has_send_case = false;
+    XiValue *block_channels[32];
+    int block_channel_count = 0;
+    for (int i = 0; i < max_cases; i++) {
+        SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+        if (sc->is_default || sc->is_timeout) {
+            has_fallback_case = true;
+        }
+        if (sc->is_send) {
+            has_send_case = true;
+        }
+    }
 
     for (int i = 0; i < max_cases; i++) {
         AstNode *case_node = sel->cases[i];
@@ -67,6 +80,9 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             } else {
                 XiValue *chan = xi_lower_expr(l, sc->channel);
                 if (chan) {
+                    if (block_channel_count < 32) {
+                        block_channels[block_channel_count++] = chan;
+                    }
                     struct XrType *val_type = l->type_any;
                     XiValue *recv =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_RECV, val_type, 1);
@@ -103,8 +119,28 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
         }
     }
 
-    if (l->cur_block && l->cur_block != merge)
+    if (l->cur_block && l->cur_block != merge) {
+        if (!has_fallback_case) {
+            if (!has_send_case && block_channel_count > 0) {
+                XiValue *block = xi_value_new(l->func, l->cur_block, XI_SELECT_BLOCK, l->type_unit,
+                                              (uint16_t) block_channel_count);
+                if (block) {
+                    block->aux_int = block_channel_count;
+                    block->line = (uint32_t) node->line;
+                    for (int i = 0; i < block_channel_count; i++) {
+                        block->args[i] = block_channels[i];
+                    }
+                }
+            } else {
+                XiValue *yield = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
+                if (yield) {
+                    yield->flags |= XI_FLAG_SIDE_EFFECT;
+                    yield->line = (uint32_t) node->line;
+                }
+            }
+        }
         xi_block_set_jump(l->cur_block, merge);
+    }
 
     xi_lower_braun_seal(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;

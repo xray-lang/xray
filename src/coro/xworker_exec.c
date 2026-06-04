@@ -55,6 +55,15 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx);
 
+static bool consume_select_channel_resume(XrCoroutine *coro) {
+    if (!coro || !coro->select_wait)
+        return false;
+    coro->select_wait = NULL;
+    coro->select_ready_case = 0;
+    xr_coro_resume_store(coro, XR_RESUME_OK);
+    return true;
+}
+
 /*
  * post-check after setting BLOCKED flag.
  * Handles race between VM setting wait state and wake_waiter seeing BLOCKED=false.
@@ -1020,10 +1029,11 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
         coro->next = NULL;
         coro->prev = NULL;
         xr_coro_transition_to_running(coro);
+        bool select_resume = consume_select_channel_resume(coro);
 
         // JIT channel resume: propagate recv_slot → jit_suspend.result,
         // then re-enter compiled code directly (no detour via run_resume_path).
-        if (XR_JIT_AVAILABLE() && coro->jit_resume_entry && coro->jit_ctx) {
+        if (!select_resume && XR_JIT_AVAILABLE() && coro->jit_resume_entry && coro->jit_ctx) {
             XrValue jit_result;
             int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
             if (jrc == XR_JIT_OK) {

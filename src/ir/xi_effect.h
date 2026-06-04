@@ -196,6 +196,8 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_CHAN_TRY_RECV:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM;
+        case XI_SELECT_BLOCK:
+            return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;
 
         /* --- Coro built-in module methods --- */
         case XI_CORO_OP:
