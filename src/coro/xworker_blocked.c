@@ -77,6 +77,16 @@ static inline bool bucket_is_empty(const XrBlockedBucket *b) {
     return b->send_head == NULL && b->recv_head == NULL && b->select_head == NULL;
 }
 
+void worker_clear_channel_waiter_mask(XrWorker *worker, void *channel) {
+    if (!worker || !channel)
+        return;
+    XrChannel *ch = (XrChannel *) channel;
+    uint64_t bit = xr_runtime_worker_bit(worker->p.id);
+    if (bit != 0) {
+        atomic_fetch_and_explicit(&ch->waiter_worker_mask, ~bit, memory_order_release);
+    }
+}
+
 // Reclaim an empty bucket: unlink it from the per-worker hash chain and
 // free the malloc'd memory. Owner-private, no lock needed.
 //
@@ -92,6 +102,7 @@ void worker_blocked_bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *b
     while (*pp) {
         if (*pp == bucket) {
             *pp = bucket->next;
+            worker_clear_channel_waiter_mask(worker, bucket->channel);
             xr_free(bucket);
             return;
         }

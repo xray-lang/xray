@@ -51,6 +51,8 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_wake_cmd_free_count;
     _Atomic uint64_t chan_wake_cmd_dispatch_count;
     _Atomic uint64_t chan_wake_cmd_drain_count;
+    _Atomic uint64_t chan_wake_cmd_coalesce_count;
+    _Atomic uint64_t chan_wake_cmd_stale_count;
     _Atomic uint64_t select_block_count;
     _Atomic uint64_t select_heap_alloc_count;
     _Atomic uint64_t select_inline_alloc_count;

@@ -29,6 +29,7 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include "../os/os_thread.h"
 #include "xsteal_queue.h"
 #include "xmpsc_queue.h"
 #include "xcoroutine.h"
@@ -58,13 +59,33 @@ typedef struct XrChanWakeCmd {
     void *channel;               // Channel pointer
     bool wake_sender;            // true = wake sender, false = wake receiver
     bool is_close;               // true = wake_all (channel close fan-out)
+    bool from_heap;              // true when allocated outside the per-worker pool
+    bool is_emergency;           // true for the queue's reserved OOM fallback command
     struct XrChanWakeCmd *next;  // Intrusive MPSC link
 } XrChanWakeCmd;
+
+#define XR_CHAN_WAKE_CMD_POOL_BATCH 64
+
+typedef struct XrChanWakeCmdBlock {
+    struct XrChanWakeCmdBlock *next;
+    XrChanWakeCmd cmds[XR_CHAN_WAKE_CMD_POOL_BATCH];
+} XrChanWakeCmdBlock;
+
+typedef struct XrChanWakeCmdPool {
+    xr_mutex_t lock;
+    XrChanWakeCmd *free_list;
+    XrChanWakeCmdBlock *blocks;
+    int free_count;
+    int block_count;
+} XrChanWakeCmdPool;
 
 typedef struct XrChanWakeCmdQueue {
     _Atomic(XrChanWakeCmd *) head;  // Consumer reads here
     _Atomic(XrChanWakeCmd *) tail;  // Producers push here
     XrChanWakeCmd stub;             // Vyukov stub sentinel
+    XrChanWakeCmdPool pool;
+    XrChanWakeCmd emergency_cmd;
+    _Atomic bool emergency_in_use;
 } XrChanWakeCmdQueue;
 
 /* ========== Per-P Statistics (cache-line aligned) ========== */

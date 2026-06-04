@@ -64,6 +64,7 @@ XR_FUNC void worker_blocked_list_add(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC XrBlockedBucket *worker_blocked_bucket_find_or_create(XrWorker *worker, void *channel);
 XR_FUNC XrBlockedBucket *worker_blocked_bucket_find(XrWorker *worker, void *channel);
 XR_FUNC void worker_blocked_bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *bucket);
+XR_FUNC void worker_clear_channel_waiter_mask(XrWorker *worker, void *channel);
 
 // Execution core (xworker_exec.c) — shared with sched/handoff
 XR_FUNC void worker_exec_with_cont_stealing(XrWorker *worker, XrCoroutine *coro);

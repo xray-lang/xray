@@ -635,11 +635,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_timer, (unsigned long long) total_burst);
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
-    fprintf(stderr, "\nChannel wake commands: alloc=%llu free=%llu dispatch=%llu drain=%llu\n",
+    fprintf(stderr,
+            "\nChannel wake commands: alloc=%llu free=%llu dispatch=%llu drain=%llu coalesce=%llu "
+            "stale=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_alloc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_free_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_dispatch_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_drain_count));
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_drain_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_coalesce_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_stale_count));
     fprintf(stderr, "Select: block=%llu heap_alloc=%llu inline_alloc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->select_block_count),
             (unsigned long long) xr_sched_metric_load(&s->select_heap_alloc_count),
