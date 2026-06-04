@@ -180,6 +180,7 @@ void worker_drain_inbox(XrWorker *worker) {
         count++;
     }
     if (count > 0 && worker->p.runtime) {
+        worker->p.stats.inbox_drain_count++;
         atomic_fetch_sub_explicit(&worker->p.runtime->total_inbox_len, count, memory_order_relaxed);
     }
 }
@@ -270,9 +271,15 @@ after_netpoll:
     if (p->timer_wheel && now > p->last_timer_tick) {
         int32_t inbox_before =
             atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed);
+        int timer_passes = 0;
         do {
             xr_bump_timers(p->timer_wheel, now);
+            timer_passes++;
         } while (p->timer_wheel->yield_slot != XR_TW_SLOT_INACTIVE);
+        p->stats.timer_bump_count += (uint64_t) timer_passes;
+        if (timer_passes > 1) {
+            p->stats.timer_burst_count++;
+        }
         p->last_timer_tick = now;
         // After timer batch: wake idle workers to help process burst.
         // Wake count = min(new_items, idle_workers) — no point waking
@@ -606,7 +613,9 @@ static void worker_park(XrWorker *worker) {
         // Futex-based sleep with timeout
         uint32_t timeout_us = (uint32_t) (timeout_ms * 1000);
         atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
+        worker->p.stats.park_count++;
         xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, timeout_us);
+        worker->p.stats.unpark_count++;
     }
 
     // Self-wake from futex timeout/signal: no explicit removal needed.
@@ -677,6 +686,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                                      bool *should_exit) {
     *out_delay_hint = 0;
     *should_exit = false;
+    worker->p.stats.steal_attempt_count++;
     atomic_store(&worker->m->state, M_STEALING);
     int64_t steal_now = xr_monotonic_ticks();
     XrCoroutine *coro = NULL;
@@ -761,6 +771,7 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         }
         if (worker->p.timer_wheel && cached_now > worker->p.last_timer_tick) {
             xr_bump_timers(worker->p.timer_wheel, cached_now);
+            worker->p.stats.timer_bump_count++;
             worker->p.last_timer_tick = cached_now;
         }
         coro = xr_worker_pop(worker);

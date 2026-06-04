@@ -80,6 +80,9 @@ void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *chann
     XrChanWakeCmd *cmd = (XrChanWakeCmd *) xr_malloc(sizeof(XrChanWakeCmd));
     if (!cmd)
         return;  // OOM: waiter stays blocked until timeout / next event
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_alloc_count);
+    }
 
     cmd->channel = channel;
     cmd->wake_sender = wake_sender;
@@ -87,6 +90,9 @@ void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *chann
 
     XrWorker *target = &runtime->workers[target_id];
     chan_wake_queue_push(&target->p.chan_wake_queue, cmd);
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_dispatch_count);
+    }
 
     // Dekker fence: ensure push is visible before reading target state.
     // Pairs with seq_cst store of M_PARKING in worker_park.
@@ -103,6 +109,7 @@ void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *chann
 void xr_worker_drain_chan_wake_queue(XrWorker *worker) {
     XR_DCHECK(worker != NULL, "drain_chan_wake_queue: NULL worker");
     XrChanWakeCmdQueue *q = &worker->p.chan_wake_queue;
+    XrRuntime *runtime = worker->p.runtime;
 
     // Vyukov MPSC consumer: advance head past stub/old nodes
     while (1) {
@@ -122,10 +129,16 @@ void xr_worker_drain_chan_wake_queue(XrWorker *worker) {
 
         // Advance head (dequeue)
         atomic_store_explicit(&q->head, next, memory_order_release);
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_drain_count);
+        }
 
         // Free old head (stub is embedded, don't free it)
         if (head != &q->stub) {
             xr_free(head);
+            if (runtime) {
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_free_count);
+            }
         }
 
         // Execute local wake on owner's own thread (safe: owner-private access)

@@ -48,6 +48,16 @@
 
 /* ========== Dispatch: OP_INVOKE Channel Methods ========== */
 
+static void vm_record_timeout_event_block(void) {
+    XrWorker *worker = xr_current_worker();
+    if (!worker)
+        return;
+    XrRuntime *runtime = worker->p.runtime;
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
+    }
+}
+
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
                                            XrBcCallFrame *frame, XrInstruction *pc) {
@@ -204,6 +214,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             if (worker) {
                 xr_worker_add_sleep_timer(worker, current, timeout_ms);
             }
+            vm_record_timeout_event_block();
             frame->pc = pc - 1;
             frame->call_status |= XR_CALL_YIELDED;
             return XR_DISP_BLOCKED;
@@ -277,6 +288,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             if (worker) {
                 xr_worker_add_sleep_timer(worker, current, timeout_ms);
             }
+            vm_record_timeout_event_block();
             frame->pc = pc - 1;
             frame->call_status |= XR_CALL_YIELDED;
             return XR_DISP_BLOCKED;

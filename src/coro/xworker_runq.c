@@ -109,6 +109,7 @@ XrCoroutine *xr_worker_pop(XrWorker *worker) {
             atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
             worker->p.lifo_polls++;
             worker->p.local_runq_len--;
+            worker->p.stats.lifo_hit_count++;
             return c;
         }
         // Starvation prevention: flush LIFO slot to run queue
@@ -116,6 +117,7 @@ XrCoroutine *xr_worker_pop(XrWorker *worker) {
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
         int evict_idx = (worker->p.lifo_slot_prio == CORO_PRIORITY_HIGH) ? 1 : 0;
         xr_runq_enqueue(&worker->p.runq[evict_idx], evicted);
+        worker->p.stats.lifo_flush_count++;
     }
     // Reset LIFO polls when falling through to normal queues
     worker->p.lifo_polls = 0;

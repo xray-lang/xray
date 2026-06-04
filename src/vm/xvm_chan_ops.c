@@ -52,8 +52,18 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     XrWorker *worker = xr_current_worker();
     if (!worker)
         return XR_DISP_NEXT;
+    XrRuntime *runtime = worker->p.runtime;
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_block_count);
+    }
 
     void **channels = xr_malloc(ch_count * sizeof(void *));
+    if (!channels) {
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+    }
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
+    }
     XrChannel *timer_ch = NULL;
     int valid_count = 0;
     (void) valid_count;
@@ -76,11 +86,17 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         xr_free(channels);
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
+    }
     sw->cases = xr_malloc(case_count * sizeof(XrSelectCase));
     if (!sw->cases) {
         xr_free(sw);
         xr_free(channels);
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+    }
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
     }
 
     for (int ci = 0; ci < ch_count && ci < case_count; ci++) {
@@ -208,6 +224,13 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
 
+        XrWorker *worker = xr_current_worker();
+        if (worker) {
+            XrRuntime *runtime = worker->p.runtime;
+            if (runtime) {
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_yield_retry_count);
+            }
+        }
         frame->pc = pc - 1;
         return XR_DISP_YIELD;
     }
@@ -302,6 +325,13 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
 
+        XrWorker *worker = xr_current_worker();
+        if (worker) {
+            XrRuntime *runtime = worker->p.runtime;
+            if (runtime) {
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_yield_retry_count);
+            }
+        }
         frame->pc = pc - 1;
         return XR_DISP_YIELD;
     }
