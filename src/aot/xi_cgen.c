@@ -21,6 +21,7 @@
 
 #include "xi_cgen.h"
 #include "../ir/xi_backend_lower.h"
+#include "../ir/xi_op_name.h"
 #include "../ir/xi_opt.h"
 #include "../base/xdefs.h"
 #include "../runtime/value/xstruct_layout.h"
@@ -80,6 +81,26 @@ static bool cg_is_void_like(const XiValue *v) {
     }
 }
 
+static bool cg_is_unsupported_coroutine_op(uint16_t op) {
+    switch (op) {
+        case XI_GO:
+        case XI_AWAIT:
+        case XI_CHAN_SEND:
+        case XI_CHAN_RECV:
+        case XI_CHAN_TRY_SEND:
+        case XI_CHAN_TRY_RECV:
+        case XI_SELECT_BLOCK:
+        case XI_YIELD:
+        case XI_CHAN_NEW:
+        case XI_SCOPE_ENTER:
+        case XI_SCOPE_EXIT:
+        case XI_CORO_OP:
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* ========== Codegen Context ========== */
 
 #define CG_MAX_SHARED 512
@@ -132,6 +153,10 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
 
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx);
+}
+
+XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {
+    return ctx && ctx->error;
 }
 
 /* Find the constructor child XiFunc from a XiClassData descriptor.
@@ -459,6 +484,17 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
 /* Emit the RHS expression for a single value. */
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
+    XR_DCHECK(ctx != NULL, "emit_value_rhs: NULL ctx");
+    XR_DCHECK(v != NULL, "emit_value_rhs: NULL value");
+
+    if (cg_is_unsupported_coroutine_op(v->op)) {
+        const char *op_name = xi_op_name(v->op);
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported coroutine Xi op %s\n", op_name);
+        fprintf(out, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op %s */", op_name);
+        ctx->error = true;
+        return;
+    }
+
     switch (v->op) {
         case XI_CONST:
             if (v->type->kind == XR_KIND_INT)
@@ -1692,15 +1728,18 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 } else {
                     fprintf(out, "NULL, 0");
                 }
-                fprintf(out, "); xr_int(_tid); })");
+                fprintf(out, "); XR_FROM_INT(_tid); })");
             } else {
-                fprintf(out, "xr_int(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))", name);
+                fprintf(out, "XR_FROM_INT(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))", name);
             }
             break;
         }
 
         default:
-            fprintf(out, "XR_NULL_VAL /* TODO: op %d */", v->op);
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported Xi op %s (%d)\n", xi_op_name(v->op),
+                    v->op);
+            fprintf(out, "XR_NULL_VAL /* ERROR: unsupported Xi op %s */", xi_op_name(v->op));
+            ctx->error = true;
             break;
     }
 }

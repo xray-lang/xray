@@ -72,6 +72,33 @@ run_test() {
     fi
 }
 
+run_negative_test() {
+    local xr_file="$1"
+    local test_name="$(basename "$xr_file" .xr)"
+    local c_out="$WORK/${test_name}.c"
+    local log_out="$WORK/${test_name}.log"
+
+    printf "  %-30s" "$test_name"
+
+    if "$XRAY" build --native -c "$xr_file" -o "$c_out" >"$log_out" 2>&1; then
+        echo "FAIL (unexpected AOT success)"
+        FAIL=$((FAIL + 1))
+        rm -f "$c_out" "$log_out"
+        return
+    fi
+
+    if grep -q "unsupported coroutine Xi op" "$log_out"; then
+        echo "PASS (rejected)"
+        PASS=$((PASS + 1))
+        rm -f "$c_out" "$log_out"
+    else
+        echo "FAIL (wrong rejection)"
+        echo "    $(head -5 "$log_out" | tr '\n' '|')"
+        FAIL=$((FAIL + 1))
+        rm -f "$c_out"
+    fi
+}
+
 # Run all .xr files in test directories
 for dir in "$SCRIPT_DIR"/basic "$SCRIPT_DIR"/modules; do
     if [ -d "$dir" ]; then
@@ -82,6 +109,14 @@ for dir in "$SCRIPT_DIR"/basic "$SCRIPT_DIR"/modules; do
         echo ""
     fi
 done
+
+if [ -d "$SCRIPT_DIR/negative" ]; then
+    echo "--- negative ---"
+    for f in "$SCRIPT_DIR"/negative/*.xr; do
+        [ -f "$f" ] && run_negative_test "$f"
+    done
+    echo ""
+fi
 
 echo "=== Results: $PASS passed, $FAIL failed, $SKIP skipped ==="
 rm -rf "$WORK"

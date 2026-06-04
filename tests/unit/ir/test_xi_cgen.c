@@ -100,7 +100,7 @@ static XiFunc *compile_to_ir(const char *source) {
 
 /* Generate C code for Xi IR into a malloc'd string.
  * Caller must free the returned string. */
-static char *generate_c(XiFunc *ir, const char *module_name) {
+static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error) {
     assert(ir != NULL);
 
     /* Run select_rep to insert BOX/UNBOX */
@@ -129,6 +129,8 @@ static char *generate_c(XiFunc *ir, const char *module_name) {
     xi_cgen_program(ctx, mem, mod);
     int rc = xr_close_memstream(mem, &buf, &bufsz);
     assert(rc == 0);
+    if (had_error)
+        *had_error = xi_cgen_has_error(ctx);
 
     xi_cgen_ctx_free(ctx);
     if (own_mod) {
@@ -137,6 +139,10 @@ static char *generate_c(XiFunc *ir, const char *module_name) {
     }
 
     return buf;
+}
+
+static char *generate_c(XiFunc *ir, const char *module_name) {
+    return generate_c_with_status(ir, module_name, NULL);
 }
 
 /* Check that `haystack` contains `needle`. */
@@ -365,6 +371,53 @@ TEST(cgen_for_loop) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coroutine_ops_fail_fast) {
+    static const struct {
+        XiOp op;
+        const char *name;
+    } cases[] = {
+        {XI_GO, "GO"},
+        {XI_AWAIT, "AWAIT"},
+        {XI_CHAN_SEND, "CHAN_SEND"},
+        {XI_CHAN_RECV, "CHAN_RECV"},
+        {XI_CHAN_TRY_SEND, "CHAN_TRY_SEND"},
+        {XI_CHAN_TRY_RECV, "CHAN_TRY_RECV"},
+        {XI_SELECT_BLOCK, "SELECT_BLOCK"},
+        {XI_YIELD, "YIELD"},
+        {XI_CHAN_NEW, "CHAN_NEW"},
+        {XI_SCOPE_ENTER, "SCOPE_ENTER"},
+        {XI_SCOPE_EXIT, "SCOPE_EXIT"},
+        {XI_CORO_OP, "CORO_OP"},
+    };
+    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 100, .frozen = true};
+    XiFunc *ir = xi_func_new("main", &stub_unit);
+    assert(ir != NULL);
+
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        XiValue *value = xi_value_new(ir, entry, cases[i].op, &stub_unit, 0);
+        assert(value != NULL);
+    }
+    xi_block_set_return(entry, NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+
+    assert(had_error && "AOT cgen must reject coroutine Xi ops");
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        char marker[96];
+        snprintf(marker, sizeof(marker), "unsupported coroutine Xi op %s", cases[i].name);
+        assert(contains(code, marker) && "diagnostic marker should name the unsupported op");
+    }
+
+    printf("  Generated rejected %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -381,6 +434,7 @@ int main(void) {
     run_cgen_function_call();
     run_cgen_recursive();
     run_cgen_for_loop();
+    run_cgen_coroutine_ops_fail_fast();
 
     teardown();
 
