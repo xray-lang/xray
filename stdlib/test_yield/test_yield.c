@@ -29,6 +29,7 @@
 #include "../../src/vm/xvm.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xcoroutine.h"
+#include "../../src/os/os_thread.h"
 #include "../../src/runtime/xexec_frame.h"
 #include "../../src/base/xmalloc.h"
 #include <stdio.h>
@@ -107,6 +108,17 @@ static XrValue test_yield_sync(XrayIsolate *X, XrValue *args, int argc) {
     (void) args;
     (void) argc;
     return xr_int(100);
+}
+
+static XrValue test_yield_blocking_sleep(XrayIsolate *X, XrValue *args, int argc) {
+    (void) X;
+    int64_t ms = (argc > 0 && XR_IS_INT(args[0])) ? XR_TO_INT(args[0]) : 10;
+    if (ms < 0)
+        ms = 0;
+    if (ms > 1000)
+        ms = 1000;
+    xr_thread_sleep_ms((unsigned int) ms);
+    return xr_int(ms);
 }
 
 /* ========================================================================== */
@@ -526,6 +538,7 @@ XR_FUNC XrModule *xr_load_module_test_yield(XrayIsolate *isolate) {
     XRS_EXPORT_YIELDABLE(mod, isolate, "simple", test_yield_simple);
     XRS_EXPORT_YIELDABLE(mod, isolate, "add", test_yield_add);
     XRS_EXPORT(mod, isolate, "sync", test_yield_sync);
+    XRS_EXPORT_SLOW(mod, isolate, "blocking_sleep", test_yield_blocking_sleep);
 
     // Complex scenarios
     XRS_EXPORT_YIELDABLE(mod, isolate, "multi_yield", test_yield_multi);

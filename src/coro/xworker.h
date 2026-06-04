@@ -61,6 +61,10 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t inject_push_count;
     _Atomic uint64_t inject_pop_count;
     _Atomic uint64_t inject_spill_count;
+    _Atomic uint64_t handoff_reuse_count;
+    _Atomic uint64_t handoff_create_count;
+    _Atomic uint64_t handoff_cap_hit_count;
+    _Atomic uint64_t handoff_create_fail_count;
 } XrSchedGlobalStats;
 
 /* ========== Global Injection Queue ========== */
@@ -105,6 +109,7 @@ typedef struct XrRuntime {
     _Atomic(XrMachine *) idle_m_head;  // Idle M Treiber stack (via m->idle_link)
     _Atomic int idle_m_count;          // Approximate, for heuristics
     _Atomic int m_count;               // Total M count (grows on demand)
+    int handoff_max_m;                 // Hard cap for P/M handoff threads
 
     /* === O(1) Idle Worker Stack (lock-free Treiber stack) === */
     _Atomic(XrMachine *) idle_worker_list;  // Head of parked-worker stack
@@ -324,6 +329,9 @@ XR_FUNC void xr_worker_exitsyscall(void);
 // Thread entry for handoff M. Runs P's scheduling loop until
 // original M returns (handoff_exit signal) or no work remains.
 XR_FUNC void *xr_handoff_thread_entry(void *arg);
+
+// Reserve a new M id within the runtime handoff budget.
+XR_FUNC int xr_runtime_reserve_handoff_m_id(XrRuntime *runtime);
 
 /* ========== Diagnostics ========== */
 

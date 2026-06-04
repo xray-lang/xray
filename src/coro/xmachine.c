@@ -18,6 +18,7 @@
 #include "xproc.h"
 #include "xworker.h"
 #include "../runtime/xstrbuf.h"
+#include "xcoro_tuning.h"
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -125,8 +126,9 @@ void xr_unpark_m(XrMachine *m) {
 
 // idle_m_head is a lock-free Treiber stack.
 //
-// ABA safety: XrMachine instances are never freed during runtime lifetime
-// (allocated in a grow-only array keyed by handoff count). idle_link is
+// ABA safety: XrMachine instances are never freed during runtime lifetime.
+// Startup machines live in the runtime array; handoff machines are
+// allocated on demand and bounded by the runtime cap. idle_link is
 // shared with idle_worker_list but the two are mutually exclusive — an M
 // is on idle_m_head only after handoff has unbound it from its Worker
 // (see xr_handoff_thread_entry).
@@ -164,6 +166,34 @@ void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
     atomic_fetch_add_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
 }
 
+int xr_runtime_reserve_handoff_m_id(struct XrRuntime *runtime) {
+    if (!runtime)
+        return -1;
+
+    int cur = atomic_load_explicit(&runtime->m_count, memory_order_acquire);
+    for (;;) {
+        if (cur >= runtime->handoff_max_m) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.handoff_cap_hit_count);
+            return -1;
+        }
+        if (atomic_compare_exchange_weak_explicit(&runtime->m_count, &cur, cur + 1,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return cur;
+        }
+    }
+}
+
+static bool start_handoff_thread(struct XrRuntime *runtime, XrMachine *m) {
+    xr_thread_t t;
+    if (!xr_thread_create_ex(&t, xr_handoff_thread_entry, m, XR_WORKER_STACK_BYTES)) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.handoff_create_fail_count);
+        return false;
+    }
+    m->thread = t;
+    xr_thread_detach(t);
+    return true;
+}
+
 // Start or wake an M to run P.
 // If an idle M exists, start a handoff thread for it.
 // Otherwise, allocate a new M and start its handoff thread.
@@ -177,6 +207,7 @@ void xr_startm(struct XrProc *p, bool spinning) {
     // Try to get an idle M
     XrMachine *m = xr_get_idle_m(runtime);
     if (m) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.handoff_reuse_count);
         m->spinning = spinning;
         atomic_store(&m->state, M_RUNNING);
 
@@ -190,16 +221,22 @@ void xr_startm(struct XrProc *p, bool spinning) {
             return;
         }
         // No live thread: fall through to create one
-        xr_thread_t t;
-        xr_thread_create(&t, xr_handoff_thread_entry, m);
-        xr_thread_detach(t);
+        if (!start_handoff_thread(runtime, m)) {
+            m->next_p = NULL;
+            xr_put_idle_m(runtime, m);
+        }
         return;
     }
 
     // No idle M: allocate a new one
-    int new_id = atomic_fetch_add(&runtime->m_count, 1);
+    int new_id = xr_runtime_reserve_handoff_m_id(runtime);
+    if (new_id < 0) {
+        xr_runtime_wake_idle_worker(runtime);
+        return;
+    }
     m = xr_machine_alloc(runtime, new_id);
     if (!m) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.handoff_create_fail_count);
         return;
     }
     m->next_p = p;
@@ -207,7 +244,10 @@ void xr_startm(struct XrProc *p, bool spinning) {
     atomic_store(&m->state, M_RUNNING);
 
     // Start new handoff thread
-    xr_thread_t t;
-    xr_thread_create(&t, xr_handoff_thread_entry, m);
-    xr_thread_detach(t);
+    if (start_handoff_thread(runtime, m)) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.handoff_create_count);
+    } else {
+        m->next_p = NULL;
+        xr_put_idle_m(runtime, m);
+    }
 }

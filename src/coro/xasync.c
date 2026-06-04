@@ -29,6 +29,14 @@ static XrAsyncJob *async_queue_pop(XrAsyncPool *pool);
 static void ready_queue_push(XrAsyncReadyQueue *q, XrAsyncJob *job);
 static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q);
 
+static void async_update_max_depth(XrAsyncPool *pool, int depth) {
+    int prev = atomic_load_explicit(&pool->max_queue_depth, memory_order_relaxed);
+    while (depth > prev &&
+           !atomic_compare_exchange_weak_explicit(&pool->max_queue_depth, &prev, depth,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+    }
+}
+
 // ========== Async Thread Main Loop ==========
 
 // Async thread main function
@@ -43,6 +51,7 @@ static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q);
 // propagation hole that motivated the _Atomic -> bool switch).
 static void *async_thread_main(void *arg) {
     XrAsyncPool *pool = (XrAsyncPool *) arg;
+    atomic_fetch_add_explicit(&pool->live_threads, 1, memory_order_relaxed);
 
     for (;;) {
         // Get task from queue
@@ -52,13 +61,16 @@ static void *async_thread_main(void *arg) {
         }
 
         // Execute task (blocking op here)
+        atomic_fetch_add_explicit(&pool->in_flight, 1, memory_order_relaxed);
         if (job->invoke) {
             job->invoke(job->data);
         }
+        atomic_fetch_sub_explicit(&pool->in_flight, 1, memory_order_relaxed);
 
         // Put in Worker's completion queue
         if (job->worker_id >= 0 && job->worker_id < XR_MAX_WORKERS) {
             ready_queue_push(&pool->ready_queues[job->worker_id], job);
+            atomic_fetch_add_explicit(&pool->complete_count, 1, memory_order_relaxed);
 
             // Wake Worker (if sleeping)
             if (pool->runtime && job->worker_id < pool->runtime->worker_count) {
@@ -72,6 +84,7 @@ static void *async_thread_main(void *arg) {
         }
     }
 
+    atomic_fetch_sub_explicit(&pool->live_threads, 1, memory_order_relaxed);
     return NULL;
 }
 
@@ -89,6 +102,8 @@ static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
         pool->queue_head = job;
     }
     pool->queue_tail = job;
+    int depth = atomic_fetch_add_explicit(&pool->queue_depth, 1, memory_order_relaxed) + 1;
+    async_update_max_depth(pool, depth);
 
     // Wake one waiting async thread
     xr_cond_signal(&pool->queue_cond);
@@ -115,6 +130,7 @@ static XrAsyncJob *async_queue_pop(XrAsyncPool *pool) {
             pool->queue_tail = NULL;
         }
         job->next = NULL;
+        atomic_fetch_sub_explicit(&pool->queue_depth, 1, memory_order_relaxed);
     }
 
     xr_mutex_unlock(&pool->queue_mutex);
@@ -179,6 +195,12 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
     // Initialize task queue
     pool->queue_head = NULL;
     pool->queue_tail = NULL;
+    atomic_store_explicit(&pool->queue_depth, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->max_queue_depth, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->in_flight, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->live_threads, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->submit_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->complete_count, 0, memory_order_relaxed);
     xr_mutex_init(&pool->queue_mutex);
     xr_cond_init(&pool->queue_cond);
 
@@ -228,7 +250,7 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
     // ordering (store outside, broadcast inside) opened a window where
     // a waiter that had just popped from cond_wait could re-check the
     // loop predicate at xasync.c:97 against a value MSan tracked as
-    // released by xr_runtime_destroy's free(pool), surfacing the
+    // released by xr_runtime_destroy's pool teardown, surfacing the
     // shutdown UAF reported on 1148_scope_race_stress.xr.
     xr_mutex_lock(&pool->queue_mutex);
     pool->running = false;
@@ -277,6 +299,7 @@ void xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
     }
 
     // Submit to task queue
+    atomic_fetch_add_explicit(&pool->submit_count, 1, memory_order_relaxed);
     async_queue_push(pool, job);
 }
 
