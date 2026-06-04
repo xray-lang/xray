@@ -28,8 +28,9 @@
  *
  *   INVARIANT 3 (Wait queue consistency): Under the channel lock,
  *   sendq and recvq each form a valid doubly-linked list via
- *   wait_link pointers. A coroutine is on at most one wait queue
- *   at a time. Enqueue/dequeue are always performed under the lock.
+ *   chan_wait_next / chan_wait_prev pointers. A coroutine is on at most
+ *   one channel wait queue at a time. Enqueue/dequeue are always performed
+ *   under the lock.
  *
  *   INVARIANT 4 (Close semantics): Once closed is set to true, no
  *   further sends are allowed (return XR_CHAN_CLOSED). Pending
@@ -74,10 +75,12 @@ typedef struct XrCoroState XrCoroState;
 
 /* ========== Wait Queue ========== */
 
-typedef struct XrWaitQueue {
+struct XrWaitQueue {
     XrCoroutine *first;
     XrCoroutine *last;
-} XrWaitQueue;
+};
+
+typedef struct XrWaitQueue XrWaitQueue;
 
 static inline void xr_waitq_init(XrWaitQueue *q) {
     q->first = NULL;
@@ -122,6 +125,14 @@ typedef struct XrChannelDistHooks {
 
 /* ========== Channel Structure ========== */
 
+typedef enum {
+    XR_CHAN_GENERIC,
+    XR_CHAN_SPSC,
+    XR_CHAN_MPSC,
+    XR_CHAN_MPMC,
+    XR_CHAN_RENDEZVOUS
+} XrChannelKind;
+
 typedef struct XrChannel {
     XrGCHeader gc_header;
 
@@ -131,6 +142,7 @@ typedef struct XrChannel {
     uint32_t buf_count;  // Current item count
     uint32_t send_idx;   // Next write position
     uint32_t recv_idx;   // Next read position
+    XrChannelKind kind;  // Runtime specialization hint, never part of user semantics
 
     /* === Wait Queues === */
     XrWaitQueue sendq;  // Blocked senders

@@ -188,6 +188,9 @@ void worker_drain_inbox(XrWorker *worker) {
     while (list) {
         XrCoroutine *next = list->sched_link;
         list->sched_link = NULL;
+        if (list->wait_bucket && list->wait_bucket_owner == worker->p.id) {
+            xr_worker_unblock(worker, list);
+        }
         xr_worker_push(worker, list);
         list = next;
         count++;

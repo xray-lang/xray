@@ -110,6 +110,76 @@ void worker_blocked_bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *b
     }
 }
 
+static void bucket_clear_coro_links(XrCoroutine *coro) {
+    coro->wait_link = NULL;
+    coro->wait_prev = NULL;
+    coro->wait_bucket = NULL;
+    coro->wait_bucket_owner = -1;
+}
+
+static void bucket_append_coro(XrWorker *worker, XrBlockedBucket *bucket, XrCoroutine *coro) {
+    XR_DCHECK(worker != NULL, "bucket_append_coro: NULL worker");
+    XR_DCHECK(bucket != NULL, "bucket_append_coro: NULL bucket");
+    XR_DCHECK(coro != NULL, "bucket_append_coro: NULL coro");
+    XR_DCHECK(coro->wait_bucket == NULL, "bucket_append_coro: coro already linked");
+
+    XrCoroutine **head = coro->wait_send ? &bucket->send_head : &bucket->recv_head;
+    XrCoroutine **tail = coro->wait_send ? &bucket->send_tail : &bucket->recv_tail;
+
+    coro->wait_link = NULL;
+    coro->wait_prev = *tail;
+    coro->wait_bucket = bucket;
+    coro->wait_bucket_owner = worker->p.id;
+    if (*tail) {
+        (*tail)->wait_link = coro;
+    } else {
+        *head = coro;
+    }
+    *tail = coro;
+}
+
+static void bucket_unlink_coro(XrBlockedBucket *bucket, XrCoroutine *coro) {
+    XR_DCHECK(bucket != NULL, "bucket_unlink_coro: NULL bucket");
+    XR_DCHECK(coro != NULL, "bucket_unlink_coro: NULL coro");
+
+    XrCoroutine **head = coro->wait_send ? &bucket->send_head : &bucket->recv_head;
+    XrCoroutine **tail = coro->wait_send ? &bucket->send_tail : &bucket->recv_tail;
+
+    if (coro->wait_prev) {
+        coro->wait_prev->wait_link = coro->wait_link;
+    } else if (*head == coro) {
+        *head = coro->wait_link;
+    }
+
+    if (coro->wait_link) {
+        coro->wait_link->wait_prev = coro->wait_prev;
+    } else if (*tail == coro) {
+        *tail = coro->wait_prev;
+    }
+
+    bucket_clear_coro_links(coro);
+}
+
+static XrCoroutine *bucket_pop_coro(XrBlockedBucket *bucket, bool wake_sender) {
+    XR_DCHECK(bucket != NULL, "bucket_pop_coro: NULL bucket");
+    XrCoroutine *coro = wake_sender ? bucket->send_head : bucket->recv_head;
+    if (coro) {
+        bucket_unlink_coro(bucket, coro);
+    }
+    return coro;
+}
+
+static bool worker_blocked_bucket_remove_coro(XrWorker *worker, XrCoroutine *coro) {
+    XrBlockedBucket *bucket = coro ? coro->wait_bucket : NULL;
+    if (!bucket)
+        return false;
+    if (coro->wait_bucket_owner != worker->p.id)
+        return false;
+    bucket_unlink_coro(bucket, coro);
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
+    return true;
+}
+
 // Per-Worker version: add coroutine to linear blocked queue (lock-free)
 void worker_blocked_list_add(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
@@ -178,28 +248,12 @@ void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
     }
     worker->p.blocked_tail = coro;
 
-    // If has Channel, add to hash table (use wait_link to avoid conflict with sched_link/MPSC)
+    // If has Channel, add to hash table using the worker-owned wait links.
     void *wch = atomic_load_explicit(&coro->wait_channel, memory_order_acquire);
     if (wch) {
         XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, wch);
         if (bucket) {
-            if (coro->wait_send) {
-                coro->wait_link = NULL;
-                if (bucket->send_tail) {
-                    bucket->send_tail->wait_link = coro;
-                } else {
-                    bucket->send_head = coro;
-                }
-                bucket->send_tail = coro;
-            } else {
-                coro->wait_link = NULL;
-                if (bucket->recv_tail) {
-                    bucket->recv_tail->wait_link = coro;
-                } else {
-                    bucket->recv_head = coro;
-                }
-                bucket->recv_tail = coro;
-            }
+            bucket_append_coro(worker, bucket, coro);
         }
     }
 
@@ -214,6 +268,7 @@ void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro) {
     if (worker_blocked_list_remove(worker, coro)) {
         worker->p.blocked_count--;
     }
+    (void) worker_blocked_bucket_remove_coro(worker, coro);
 }
 
 // xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker
@@ -228,22 +283,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     if (!bucket)
         return NULL;
 
-    XrCoroutine *coro = NULL;
-    if (wake_sender) {
-        coro = bucket->send_head;
-        if (coro) {
-            bucket->send_head = coro->wait_link;
-            if (!bucket->send_head)
-                bucket->send_tail = NULL;
-        }
-    } else {
-        coro = bucket->recv_head;
-        if (coro) {
-            bucket->recv_head = coro->wait_link;
-            if (!bucket->recv_head)
-                bucket->recv_tail = NULL;
-        }
-    }
+    XrCoroutine *coro = bucket_pop_coro(bucket, wake_sender);
 
     if (!coro)
         return NULL;
@@ -255,7 +295,6 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
 
     // Clear blocked info
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-    coro->wait_link = NULL;
 
     // Cancel timer (sendTimeout/recvTimeout scenario)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
@@ -289,22 +328,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     if (!bucket)
         return NULL;
 
-    XrCoroutine *coro = NULL;
-    if (wake_sender) {
-        coro = bucket->send_head;
-        if (coro) {
-            bucket->send_head = coro->wait_link;
-            if (!bucket->send_head)
-                bucket->send_tail = NULL;
-        }
-    } else {
-        coro = bucket->recv_head;
-        if (coro) {
-            bucket->recv_head = coro->wait_link;
-            if (!bucket->recv_head)
-                bucket->recv_tail = NULL;
-        }
-    }
+    XrCoroutine *coro = bucket_pop_coro(bucket, wake_sender);
 
     if (!coro)
         return NULL;
@@ -316,7 +340,6 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
 
     // Clear blocked info, but don't enqueue (caller responsible)
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-    coro->wait_link = NULL;
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
     // Reclaim the bucket if this was the last waiter on the channel.
@@ -346,7 +369,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         }
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-        coro->wait_link = NULL;
+        bucket_clear_coro_links(coro);
         // Claim the wake atomically: a racing waker (e.g. channel_wake_coro_ex
         // on the close path) may have already taken this coro BLOCKED->READY.
         // Only the claim winner enqueues, so the coro is never double-pushed.
@@ -367,7 +390,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         }
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-        coro->wait_link = NULL;
+        bucket_clear_coro_links(coro);
         if (xr_coro_claim_wake(coro)) {
             xr_worker_push(worker, coro);
         }
