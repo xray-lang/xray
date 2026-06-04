@@ -38,9 +38,11 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
+#include "../coro/xworker.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 #include "../runtime/object/xexception.h"
+#include <stdatomic.h>
 
 /* ========== Dispatch: OP_SETPROP Type Dispatch ========== */
 
@@ -948,6 +950,16 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
 
     if (xr_value_is_cfunction(fn_val)) {
         XrCFunction *cfunc = xr_value_to_cfunction(fn_val);
+        {
+            XrWorker *worker = xr_current_worker();
+            if (worker && worker->m)
+                worker->m->current_cfunc = cfunc;
+        }
+        bool is_slow =
+            (atomic_load_explicit(&cfunc->cfunc_class, memory_order_acquire) == XR_CFUNC_SLOW);
+        if (is_slow) {
+            xr_worker_entersyscall();
+        }
 
         if (cfunc->is_yieldable) {
             frame->u.c.result_slot = (int16_t) a;
@@ -955,6 +967,10 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
 
             XrValue result;
             XrCFuncResult status = cfunc->as.yieldable(isolate, &base[a + 2], nargs, &result);
+
+            if (is_slow) {
+                xr_worker_exitsyscall();
+            }
 
             switch (status) {
                 case XR_CFUNC_DONE:
@@ -974,6 +990,9 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
             }
         } else {
             XrValue result = cfunc->as.func(isolate, &base[a + 2], nargs);
+            if (is_slow) {
+                xr_worker_exitsyscall();
+            }
             base[a] = result;
             return XR_DISP_NEXT;
         }

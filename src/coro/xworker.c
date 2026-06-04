@@ -54,6 +54,29 @@ static bool env_flag_enabled(const char *name) {
     return true;
 }
 
+static int env_int_clamped(const char *name, int fallback, int min_value, int max_value) {
+    const char *value = getenv(name);
+    int parsed = fallback;
+    if (value && value[0] != '\0') {
+        parsed = atoi(value);
+    }
+    if (parsed < min_value)
+        parsed = min_value;
+    if (parsed > max_value)
+        parsed = max_value;
+    return parsed;
+}
+
+static int default_handoff_max_m(int workers) {
+    int extra = workers > 4 ? workers : 4;
+    int max_m = workers + extra;
+    if (max_m < workers)
+        max_m = workers;
+    if (max_m > 256)
+        max_m = 256;
+    return max_m;
+}
+
 // Get current thread's Worker
 XrWorker *xr_current_worker(void) {
     return tls_current_worker;
@@ -221,6 +244,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->idle_m_head, (XrMachine *) NULL);
     atomic_store(&runtime->idle_m_count, 0);
     atomic_store(&runtime->m_count, num_workers);
+    runtime->handoff_max_m =
+        env_int_clamped("XRAY_HANDOFF_MAX_M", default_handoff_max_m(num_workers), num_workers, 256);
     atomic_store(&runtime->idle_worker_list, (XrMachine *) NULL);
     atomic_store(&runtime->idle_worker_count, 0);
 
@@ -290,7 +315,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     // For blocking syscalls (file I/O, DNS, etc.)
     runtime->async_pool = (XrAsyncPool *) xr_calloc(1, sizeof(XrAsyncPool));
     if (runtime->async_pool) {
-        xr_async_pool_init(runtime->async_pool, runtime, XR_ASYNC_THREAD_COUNT);
+        int async_threads = env_int_clamped("XRAY_ASYNC_THREADS", XR_ASYNC_THREAD_COUNT, 1, 64);
+        xr_async_pool_init(runtime->async_pool, runtime, async_threads);
     }
 
     // initialize load balancing module
@@ -584,6 +610,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) _tc);
     }
     fprintf(stderr, "Active coros: %d\n", xr_runtime_active_coros(runtime));
+    fprintf(stderr, "Machines: total=%d cap=%d idle=%d\n",
+            atomic_load_explicit(&runtime->m_count, memory_order_relaxed), runtime->handoff_max_m,
+            atomic_load_explicit(&runtime->idle_m_count, memory_order_relaxed));
     fprintf(stderr, "\n%-8s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n", "Worker",
             "Executed", "Stolen", "StealTry", "Yielded", "ContSteal", "LifoHit", "LifoFlush",
             "Inbox", "Park", "Unpark", "Timer", "Burst", "Blocked");
@@ -651,6 +680,24 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
             (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
+    fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
+            (unsigned long long) xr_sched_metric_load(&s->handoff_create_count),
+            (unsigned long long) xr_sched_metric_load(&s->handoff_cap_hit_count),
+            (unsigned long long) xr_sched_metric_load(&s->handoff_create_fail_count));
+    if (runtime->async_pool) {
+        XrAsyncPool *pool = runtime->async_pool;
+        fprintf(
+            stderr,
+            "Async: threads=%d live=%d queue=%d max_queue=%d in_flight=%d submit=%llu "
+            "complete=%llu\n",
+            pool->thread_count, atomic_load_explicit(&pool->live_threads, memory_order_relaxed),
+            atomic_load_explicit(&pool->queue_depth, memory_order_relaxed),
+            atomic_load_explicit(&pool->max_queue_depth, memory_order_relaxed),
+            atomic_load_explicit(&pool->in_flight, memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&pool->submit_count, memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&pool->complete_count, memory_order_relaxed));
+    }
     {
         int inject_len = 0;
         for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {

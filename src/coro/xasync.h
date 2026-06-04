@@ -80,6 +80,12 @@ typedef struct XrAsyncPool {
     // Task queue
     XrAsyncJob *queue_head;
     XrAsyncJob *queue_tail;
+    _Atomic int queue_depth;
+    _Atomic int max_queue_depth;
+    _Atomic int in_flight;
+    _Atomic int live_threads;
+    _Atomic uint64_t submit_count;
+    _Atomic uint64_t complete_count;
     xr_mutex_t queue_mutex;
     xr_cond_t queue_cond;
 

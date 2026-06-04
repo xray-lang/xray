@@ -1,0 +1,53 @@
+// Blocking storm benchmark for handoff M budget diagnostics.
+// Requires XR_BUILD_TEST_MODULES=ON because it uses test_yield.blocking_sleep.
+
+import time
+import test_yield
+
+let TASKS = 32
+let BLOCK_MS = 25
+if (process.args.length > 0) {
+    TASKS = int(process.args[0]) ?? TASKS
+}
+if (process.args.length > 1) {
+    BLOCK_MS = int(process.args[1]) ?? BLOCK_MS
+}
+
+fn blocking_task(id: int) -> int {
+    let slept = test_yield.blocking_sleep(BLOCK_MS)
+    return id + slept
+}
+
+fn cpu_task(rounds: int) -> int {
+    let sum = 0
+    for (let i = 0; i < rounds; i++) {
+        sum = sum + (i % 17)
+        if (i % 256 == 0) {
+            yield
+        }
+    }
+    return sum
+}
+
+print("=== Blocking Storm Benchmark ===")
+print("tasks:", TASKS)
+print("block_ms:", BLOCK_MS)
+
+let start = time.monotonic()
+let tasks: Array<Task> = []
+for (let i = 0; i < TASKS; i++) {
+    tasks.push(go blocking_task(i))
+}
+
+let cpu = go cpu_task(TASKS * 1024)
+let cpu_result = await cpu
+
+let total = 0
+for (t in tasks) {
+    total = total + await t
+}
+
+let elapsed = time.monotonic() - start
+print("cpu_result:", cpu_result)
+print("total:", total)
+print("elapsed:", elapsed, "ms")
