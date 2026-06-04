@@ -25,6 +25,24 @@ fn serveEcho(c: NetConn) {
     net.close(c)
 }
 
+fn serveNativeCopyEcho(c: NetConn) {
+    net.copy(c, c)
+    net.close(c)
+}
+
+fn acceptNativeCopyEcho(lst: NetListener) {
+    let conn = net.accept(lst)!
+    go serveNativeCopyEcho(conn)
+}
+
+fn acceptRelay(lst: NetListener) {
+    let src = net.accept(lst)!
+    let dst = net.accept(lst)!
+    net.copy(src, dst)
+    net.close(src)
+    net.close(dst)
+}
+
 @test
 fn test_loopback_echo() {
     let lst = net.listen(0, 8)!
@@ -70,5 +88,43 @@ fn test_loopback_binary_high_bytes() {
     assert_eq(resp.byteAt(4).ord(), 172)
 
     net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_native_copy_self_loopback() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    go acceptNativeCopyEcho(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    net.write(c, "native")
+
+    let resp = net.read(c)!
+    assert_eq(resp, "native")
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_native_copy_loopback() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    go acceptRelay(lst)
+
+    let src = net.dial("127.0.0.1", port)!
+    let dst = net.dial("127.0.0.1", port)!
+
+    net.write(src, "relay")
+    let resp = net.read(dst)!
+    assert_eq(resp, "relay")
+
+    net.close(src)
+    net.close(dst)
     net.close(lst)
 }

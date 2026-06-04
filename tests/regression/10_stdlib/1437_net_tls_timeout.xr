@@ -1,0 +1,53 @@
+// 1437_net_tls_timeout.xr
+// 测试：TLS handshake timeout 必须尊重 dialTLS / upgradeTLS 的 timeout 参数
+
+import net
+import time
+
+fn acceptHold(lst: NetListener) {
+    let conn = net.accept(lst)
+    if (conn != null) {
+        time.sleep(200)
+        net.close(conn!)
+    }
+}
+
+@test
+fn test_dial_tls_handshake_timeout() {
+    if (!net.hasTLS()) {
+        return
+    }
+
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    go acceptHold(lst)
+
+    let start = time.monotonic()
+    let conn = net.dialTLS("localhost", port, 30)
+    let elapsed = time.monotonic() - start
+
+    assert_true(conn == null)
+    assert_true(elapsed < 1000)
+
+    net.close(lst)
+}
+
+@test
+fn test_upgrade_tls_handshake_timeout() {
+    if (!net.hasTLS()) {
+        return
+    }
+
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    go acceptHold(lst)
+
+    let conn = net.dial("127.0.0.1", port)!
+    let tls = net.upgradeTLS(conn, "localhost", 30)
+
+    assert_true(tls == null)
+    assert_eq(net.lastError(conn), "timeout")
+
+    net.close(conn)
+    net.close(lst)
+}

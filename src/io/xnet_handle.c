@@ -60,6 +60,10 @@ XrNetConn *xr_net_conn_new(struct XrayIsolate *X, int fd, XrNetConnKind kind) {
     c->closed = false;
     c->tls_state = NULL;
     c->isolate = X;
+    c->read_deadline_ms = 0;
+    c->write_deadline_ms = 0;
+    c->last_errno = 0;
+    c->last_error = XR_NETERR_NONE;
     return c;
 }
 
@@ -73,6 +77,9 @@ XrNetListener *xr_net_listener_new(struct XrayIsolate *X, int fd, int port) {
     l->port = port;
     l->closed = false;
     l->isolate = X;
+    l->accept_deadline_ms = 0;
+    l->last_errno = 0;
+    l->last_error = XR_NETERR_NONE;
     return l;
 }
 
@@ -151,6 +158,8 @@ void xr_net_conn_close(XrNetConn *c) {
     close_fd_with_netpoll(c->isolate, c->fd);
     c->fd = -1;
     c->closed = true;
+    c->last_error = XR_NETERR_CLOSED;
+    c->last_errno = 0;
 }
 
 void xr_net_listener_close(XrNetListener *l) {
@@ -159,6 +168,8 @@ void xr_net_listener_close(XrNetListener *l) {
     close_fd_with_netpoll(l->isolate, l->fd);
     l->fd = -1;
     l->closed = true;
+    l->last_error = XR_NETERR_CLOSED;
+    l->last_errno = 0;
 }
 
 /* ========== Native body destroy hooks ==========

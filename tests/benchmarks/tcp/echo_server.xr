@@ -1,19 +1,115 @@
-// TCP Echo Server for xray benchmark
-// Usage: xray echo_server.xr [-- port]
+// TCP benchmark server for xray
+// Usage: xray echo_server.xr [-- port mode extra]
 
 import net
+import time
 
-fn handleConn(conn) {
+fn serveStream(conn: NetConn) {
+    defer net.close(conn)
+    net.copy(conn, conn, 65536)
+}
+
+fn serveMessage(conn: NetConn) {
     defer net.close(conn)
     while (true) {
         let data = net.read(conn, 65536)
         if (data == null) {
             break
         }
-        let n = net.write(conn, data)
-        if (n < 0) {
+        let n = net.write(conn, data!)
+        if (n <= 0) {
             break
         }
+    }
+}
+
+fn serveBytes(conn: NetConn) {
+    defer net.close(conn)
+    let buf = new Bytes(65536)
+    while (true) {
+        let n = net.readInto(conn, buf)
+        if (n <= 0) {
+            break
+        }
+        let written = net.writeBytes(conn, buf)
+        if (written <= 0) {
+            break
+        }
+    }
+}
+
+fn serveDiscard(conn: NetConn) {
+    defer net.close(conn)
+    while (true) {
+        let data = net.read(conn, 65536)
+        if (data == null) {
+            break
+        }
+    }
+    net.write(conn, "OK")
+}
+
+fn serveSlowDiscard(conn: NetConn, delayMs: int) {
+    defer net.close(conn)
+    while (true) {
+        let data = net.read(conn, 4096)
+        if (data == null) {
+            break
+        }
+        if (delayMs > 0) {
+            time.sleep(delayMs)
+        }
+    }
+    net.write(conn, "OK")
+}
+
+fn serveSource(conn: NetConn, totalBytes: int) {
+    defer net.close(conn)
+    let chunk = "S".repeat(65536)
+    let remaining = totalBytes
+    while (remaining > 0) {
+        let data = chunk
+        if (remaining < 65536) {
+            data = "S".repeat(remaining)
+        }
+        let n = net.write(conn, data)
+        if (n <= 0) {
+            break
+        }
+        remaining = remaining - n
+    }
+}
+
+fn serveProxy(client: NetConn, upstreamPort: int) {
+    let upstreamMaybe = net.dial("127.0.0.1", upstreamPort)
+    if (upstreamMaybe == null) {
+        net.close(client)
+        return
+    }
+
+    let upstream = upstreamMaybe!
+    net.copyBidirectional(client, upstream)
+    net.close(client)
+    net.close(upstream)
+}
+
+fn handleConn(conn: NetConn, mode: string, extra: int) {
+    if (mode == "stream") {
+        serveStream(conn)
+    } else if (mode == "message" || mode == "idle") {
+        serveMessage(conn)
+    } else if (mode == "bytes") {
+        serveBytes(conn)
+    } else if (mode == "discard") {
+        serveDiscard(conn)
+    } else if (mode == "slow_discard") {
+        serveSlowDiscard(conn, extra)
+    } else if (mode == "source") {
+        serveSource(conn, extra)
+    } else if (mode == "proxy") {
+        serveProxy(conn, extra)
+    } else {
+        serveStream(conn)
     }
 }
 
@@ -22,17 +118,27 @@ if (process.args.length > 0) {
     port = int(process.args[0]) ?? 9001
 }
 
+let mode = "stream"
+if (process.args.length > 1) {
+    mode = process.args[1]
+}
+
+let extra = 67108864
+if (process.args.length > 2) {
+    extra = int(process.args[2]) ?? extra
+}
+
 let listener = net.listen(port, 1024)
 if (listener == null) {
     print("ERROR: Failed to listen on port " + string(port))
 } else {
-    print("xray TCP echo server listening on port " + string(port))
+    print("xray TCP benchmark server listening on port " + string(port) + " mode=" + mode)
 
     while (true) {
         let conn = net.accept(listener)
         if (conn == null) {
             continue
         }
-        go handleConn(conn)
+        go handleConn(conn, mode, extra)
     }
 }

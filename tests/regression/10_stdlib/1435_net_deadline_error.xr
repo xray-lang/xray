@@ -1,0 +1,68 @@
+// 1435_net_deadline_error.xr
+// 测试：TCP deadline 与 lastError / lastErrno 基础诊断
+
+import net
+import time
+
+fn acceptSlowWrite(lst: NetListener) {
+    let conn = net.accept(lst)
+    if (conn != null) {
+        time.sleep(100)
+        net.write(conn!, "late")
+        net.close(conn!)
+    }
+}
+
+fn acceptAndClose(lst: NetListener) {
+    let conn = net.accept(lst)
+    if (conn != null) {
+        net.close(conn!)
+    }
+}
+
+@test
+fn test_accept_deadline_timeout() {
+    let lst = net.listen(0, 8)!
+    let deadline = time.monotonic() + 20
+    assert_true(net.setAcceptDeadline(lst, deadline))
+
+    let conn = net.accept(lst)
+    assert_true(conn == null)
+    assert_eq(net.lastError(lst), "timeout")
+    assert_eq(net.lastErrno(lst), 0)
+
+    net.close(lst)
+}
+
+@test
+fn test_read_deadline_timeout() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    go acceptSlowWrite(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    assert_true(net.setReadDeadline(c, time.monotonic() + 20))
+
+    let data = net.read(c)
+    assert_true(data == null)
+    assert_eq(net.lastError(c), "timeout")
+    assert_eq(net.lastErrno(c), 0)
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_closed_handle_error() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    go acceptAndClose(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    net.close(c)
+
+    assert_eq(net.write(c, "x"), -1)
+    assert_eq(net.lastError(c), "closed")
+
+    net.close(lst)
+}

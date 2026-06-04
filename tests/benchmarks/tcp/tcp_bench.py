@@ -10,11 +10,20 @@ Tests:
   4. Connection Rate - Rapid connect -> echo -> close cycles
   5. Large Message  - Single connection, large payload transfer
   6. Message Sweep  - Various message sizes, measure scaling
+  7. Message Path   - read/write echo path, separate from native stream echo
+ 8. Upload         - Client -> server one-way transfer
+ 9. Download       - Server -> client one-way transfer
+10. Proxy          - Client -> proxy -> upstream echo
+11. Slow Upload    - Client write path under server-side slow reads
+12. Slow Download  - Server write path under client-side slow reads
+13. Idle Conns     - Many idle connections with a ping after the idle window
 """
 
 import argparse
+import copy
 import json
 import os
+import resource
 import socket
 import statistics
 import sys
@@ -41,6 +50,67 @@ def tcp_echo(sock, data):
             raise ConnectionError("Connection closed during echo")
         received += chunk
     return received
+
+
+def recv_count(sock, expected_bytes):
+    """Receive up to expected_bytes and return the number of bytes received."""
+    received = 0
+    while received < expected_bytes:
+        chunk = sock.recv(min(65536, expected_bytes - received))
+        if not chunk:
+            break
+        received += len(chunk)
+    return received
+
+
+def recv_count_slow(sock, expected_bytes, read_chunk=4096, read_delay_ms=1):
+    """Receive expected bytes with a delay after each small read."""
+    received = 0
+    reads = 0
+    delay = max(0, read_delay_ms) / 1000.0
+    while received < expected_bytes:
+        chunk = sock.recv(min(read_chunk, expected_bytes - received))
+        if not chunk:
+            break
+        received += len(chunk)
+        reads += 1
+        if delay > 0:
+            time.sleep(delay)
+    return received, reads
+
+
+def process_metrics():
+    """Return lightweight client-side process metrics for result metadata."""
+    usage = resource.getrusage(resource.RUSAGE_SELF)
+    return {
+        "cpu_user_sec": round(usage.ru_utime, 4),
+        "cpu_system_sec": round(usage.ru_stime, 4),
+        "max_rss_kb": usage.ru_maxrss,
+    }
+
+
+def renamed(result, name):
+    result = dict(result)
+    result["test"] = name
+    return result
+
+
+def median_result(samples):
+    """Aggregate repeated test runs by median for numeric top-level fields."""
+    if len(samples) == 1:
+        return samples[0]
+
+    result = copy.deepcopy(samples[0])
+    result["repeat"] = len(samples)
+    result["samples"] = samples
+    keys = set()
+    for sample in samples:
+        keys.update(sample.keys())
+    for key in keys:
+        vals = [sample.get(key) for sample in samples]
+        if vals and all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in vals):
+            result[key] = round(statistics.median(vals), 4)
+    return result
 
 
 # ========== Test 1: Latency ==========
@@ -296,6 +366,178 @@ def test_msg_sweep(host, port, iterations_per_size=2000):
     }
 
 
+# ========== Phase 0: Message path / one-way / proxy tests ==========
+
+def test_message_latency(host, port):
+    """Message API echo latency. Server should run in message mode."""
+    return renamed(test_latency(host, port, msg_size=64, iterations=1000), "message_latency")
+
+
+def test_message_throughput(host, port):
+    """Message API echo throughput. Server should run in message mode."""
+    return renamed(test_throughput(host, port, msg_size=1024, iterations=10000),
+                   "message_throughput")
+
+
+def test_upload(host, port, total_mb=64, chunk_size=65536):
+    """Client -> server one-way transfer. Server should run in discard mode."""
+    total_bytes = total_mb * 1024 * 1024
+    payload = b"U" * chunk_size
+    sock = tcp_connect(host, port, timeout=30.0)
+
+    sent = 0
+    t0 = time.perf_counter()
+    while sent < total_bytes:
+        n = min(chunk_size, total_bytes - sent)
+        sock.sendall(payload[:n])
+        sent += n
+    sock.shutdown(socket.SHUT_WR)
+    ack_bytes = recv_count(sock, 2)
+    t1 = time.perf_counter()
+    sock.close()
+
+    elapsed = t1 - t0
+    return {
+        "test": "upload",
+        "total_mb": total_mb,
+        "bytes_sent": sent,
+        "ack_bytes": ack_bytes,
+        "elapsed_sec": round(elapsed, 4),
+        "mb_per_sec": round((sent / elapsed) / (1024 * 1024), 2),
+        "complete": sent == total_bytes and ack_bytes == 2,
+    }
+
+
+def test_download(host, port, total_mb=64):
+    """Server -> client one-way transfer. Server should run in source mode."""
+    total_bytes = total_mb * 1024 * 1024
+    sock = tcp_connect(host, port, timeout=30.0)
+    t0 = time.perf_counter()
+    received = recv_count(sock, total_bytes)
+    t1 = time.perf_counter()
+    sock.close()
+
+    elapsed = t1 - t0
+    return {
+        "test": "download",
+        "total_mb": total_mb,
+        "bytes_received": received,
+        "elapsed_sec": round(elapsed, 4),
+        "mb_per_sec": round((received / elapsed) / (1024 * 1024), 2),
+        "complete": received == total_bytes,
+    }
+
+
+def test_slow_upload(host, port, total_mb=16, chunk_size=65536):
+    """Client -> server transfer where the server deliberately reads slowly."""
+    total_bytes = total_mb * 1024 * 1024
+    payload = b"B" * chunk_size
+    sock = tcp_connect(host, port, timeout=120.0)
+
+    sent = 0
+    t0 = time.perf_counter()
+    while sent < total_bytes:
+        n = min(chunk_size, total_bytes - sent)
+        sock.sendall(payload[:n])
+        sent += n
+    sock.shutdown(socket.SHUT_WR)
+    ack_bytes = recv_count(sock, 2)
+    t1 = time.perf_counter()
+    sock.close()
+
+    elapsed = t1 - t0
+    return {
+        "test": "slow_upload",
+        "total_mb": total_mb,
+        "bytes_sent": sent,
+        "ack_bytes": ack_bytes,
+        "elapsed_sec": round(elapsed, 4),
+        "mb_per_sec": round((sent / elapsed) / (1024 * 1024), 2),
+        "complete": sent == total_bytes and ack_bytes == 2,
+    }
+
+
+def test_slow_download(host, port, total_mb=16, read_chunk=4096, read_delay_ms=1):
+    """Server -> client transfer where the client deliberately reads slowly."""
+    total_bytes = total_mb * 1024 * 1024
+    sock = tcp_connect(host, port, timeout=120.0)
+    t0 = time.perf_counter()
+    received, reads = recv_count_slow(sock, total_bytes, read_chunk, read_delay_ms)
+    t1 = time.perf_counter()
+    sock.close()
+
+    elapsed = t1 - t0
+    return {
+        "test": "slow_download",
+        "total_mb": total_mb,
+        "read_chunk": read_chunk,
+        "read_delay_ms": read_delay_ms,
+        "read_calls": reads,
+        "bytes_received": received,
+        "elapsed_sec": round(elapsed, 4),
+        "mb_per_sec": round((received / elapsed) / (1024 * 1024), 2),
+        "complete": received == total_bytes,
+    }
+
+
+def test_idle_connections(host, port, connections=1000, idle_ms=1000, ping_size=16):
+    """Open many idle connections, then ping each one once."""
+    socks = []
+    errors = 0
+    open_start = time.perf_counter()
+    for _ in range(connections):
+        try:
+            socks.append(tcp_connect(host, port, timeout=10.0))
+        except Exception:
+            errors += 1
+    open_end = time.perf_counter()
+
+    time.sleep(max(0, idle_ms) / 1000.0)
+
+    payload = b"I" * ping_size
+    ping_latencies = []
+    for sock in socks:
+        try:
+            t0 = time.perf_counter()
+            tcp_echo(sock, payload)
+            t1 = time.perf_counter()
+            ping_latencies.append((t1 - t0) * 1_000_000)
+        except Exception:
+            errors += 1
+
+    for sock in socks:
+        try:
+            sock.close()
+        except Exception:
+            pass
+
+    ping_latencies.sort()
+    result = {
+        "test": "idle_connections",
+        "connections": connections,
+        "opened": len(socks),
+        "idle_ms": idle_ms,
+        "ping_size": ping_size,
+        "ping_success": len(ping_latencies),
+        "errors": errors,
+        "open_elapsed_sec": round(open_end - open_start, 4),
+        "complete": len(socks) == connections and len(ping_latencies) == len(socks) and errors == 0,
+    }
+    if ping_latencies:
+        result.update({
+            "avg_ping_us": round(statistics.mean(ping_latencies), 2),
+            "p95_ping_us": round(ping_latencies[int(len(ping_latencies) * 0.95)], 2),
+            "p99_ping_us": round(ping_latencies[int(len(ping_latencies) * 0.99)], 2),
+        })
+    return result
+
+
+def test_proxy_throughput(host, port, msg_size=1024, iterations=5000):
+    """End-to-end echo through a TCP proxy."""
+    return renamed(test_throughput(host, port, msg_size=msg_size, iterations=iterations),
+                   "proxy_throughput")
+
+
 # ========== Main ==========
 
 def wait_for_server(host, port, timeout=10):
@@ -315,26 +557,39 @@ def wait_for_server(host, port, timeout=10):
 
 def run_all_tests(host, port):
     """Run all benchmark tests and return results."""
+    return run_named_tests(host, port, DEFAULT_TESTS)
+
+
+TESTS = {
+    "latency": lambda host, port: test_latency(host, port),
+    "throughput": lambda host, port: test_throughput(host, port),
+    "concurrency": lambda host, port: test_concurrency(host, port),
+    "conn_rate": lambda host, port: test_conn_rate(host, port),
+    "large_message": lambda host, port: test_large_message(host, port),
+    "msg_sweep": lambda host, port: test_msg_sweep(host, port),
+    "message_latency": lambda host, port: test_message_latency(host, port),
+    "message_throughput": lambda host, port: test_message_throughput(host, port),
+    "upload": lambda host, port: test_upload(host, port),
+    "download": lambda host, port: test_download(host, port),
+    "proxy_throughput": lambda host, port: test_proxy_throughput(host, port),
+    "slow_upload": lambda host, port: test_slow_upload(host, port),
+    "slow_download": lambda host, port: test_slow_download(host, port),
+    "idle_connections": lambda host, port: test_idle_connections(host, port),
+}
+
+
+DEFAULT_TESTS = ["latency", "throughput", "concurrency", "conn_rate", "large_message", "msg_sweep"]
+
+
+def run_named_tests(host, port, names, repeat=1):
     results = {}
-
-    print("  [1/6] Latency test...", flush=True)
-    results["latency"] = test_latency(host, port)
-
-    print("  [2/6] Throughput test...", flush=True)
-    results["throughput"] = test_throughput(host, port)
-
-    print("  [3/6] Concurrency test...", flush=True)
-    results["concurrency"] = test_concurrency(host, port)
-
-    print("  [4/6] Connection rate test...", flush=True)
-    results["conn_rate"] = test_conn_rate(host, port)
-
-    print("  [5/6] Large message test...", flush=True)
-    results["large_message"] = test_large_message(host, port)
-
-    print("  [6/6] Message sweep test...", flush=True)
-    results["msg_sweep"] = test_msg_sweep(host, port)
-
+    for idx, name in enumerate(names, 1):
+        test_fn = TESTS.get(name)
+        if not test_fn:
+            raise ValueError(f"Unknown test: {name}")
+        print(f"  [{idx}/{len(names)}] {name}...", flush=True)
+        samples = [test_fn(host, port) for _ in range(repeat)]
+        results[name] = median_result(samples)
     return results
 
 
@@ -344,7 +599,12 @@ def main():
     parser.add_argument("--port", type=int, default=9001, help="Server port")
     parser.add_argument("--output", "-o", help="Output JSON file")
     parser.add_argument("--server", default="unknown", help="Server name for results")
-    parser.add_argument("--test", help="Run specific test (latency|throughput|concurrency|conn_rate|large_message|msg_sweep)")
+    parser.add_argument("--scenario", default="echo", help="Scenario label for result metadata")
+    parser.add_argument("--repeat", type=int, default=1, help="Repeat each selected test and report medians")
+    parser.add_argument(
+        "--test",
+        help="Run comma-separated tests (latency|throughput|concurrency|conn_rate|large_message|msg_sweep|message_latency|message_throughput|upload|download|proxy_throughput|slow_upload|slow_download|idle_connections)",
+    )
     parser.add_argument("--wait", action="store_true", help="Wait for server to be ready")
     args = parser.parse_args()
 
@@ -356,27 +616,25 @@ def main():
 
     print(f"Running TCP benchmark against {args.server} ({args.host}:{args.port})", flush=True)
 
+    repeat = max(1, args.repeat)
     if args.test:
-        test_fn = {
-            "latency": lambda: test_latency(args.host, args.port),
-            "throughput": lambda: test_throughput(args.host, args.port),
-            "concurrency": lambda: test_concurrency(args.host, args.port),
-            "conn_rate": lambda: test_conn_rate(args.host, args.port),
-            "large_message": lambda: test_large_message(args.host, args.port),
-            "msg_sweep": lambda: test_msg_sweep(args.host, args.port),
-        }.get(args.test)
-        if not test_fn:
-            print(f"Unknown test: {args.test}", file=sys.stderr)
+        names = [name.strip() for name in args.test.split(",") if name.strip()]
+        try:
+            results = run_named_tests(args.host, args.port, names, repeat)
+        except ValueError as e:
+            print(str(e), file=sys.stderr)
             sys.exit(1)
-        results = {args.test: test_fn()}
     else:
-        results = run_all_tests(args.host, args.port)
+        results = run_named_tests(args.host, args.port, DEFAULT_TESTS, repeat)
 
     output = {
         "server": args.server,
+        "scenario": args.scenario,
         "host": args.host,
         "port": args.port,
+        "repeat": repeat,
         "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "client_metrics": process_metrics(),
         "results": results,
     }
 

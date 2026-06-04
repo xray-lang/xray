@@ -4401,12 +4401,28 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 | 模块 | 主题 | 关键 API |
 |--|--|--|
-| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `lookup` `Socket` `Listener` `hasTLS` |
+| `net` | TCP / UDP / TLS socket + DNS | `listen` `dial` `accept` `read` `readInto` `write` `writeBytes` `copy` `copyBidirectional` `setDeadline` `lastError` `lookup` `dialTLS` `NetConn` `NetListener` |
 | `http` | HTTP / HTTPS 客户端 + 服务端 + HTTP/2 | `get` `post` `request` `Server` `urlEncode` `urlDecode` |
 | `ws` | WebSocket | 客户端/服务端连接 |
 | `url` | URL 解析与构造 | `parse` `format` `parseQuery` `buildQuery` `encode` `decode` |
 
 > DNS 查询通过 `net.lookup(host)` 完成；没有独立的 `dns` 模块。
+
+#### 15.2.1 TCP 数据路径
+
+`net` 的 TCP API 明确区分三类数据路径：
+
+- `read(conn)` / `write(conn, data)`：消息型路径，把 payload 暴露为 Xray `string`，适合协议解析、文本处理和需要检查内容的逻辑。
+- `readInto(conn, bytes, maxlen?)` / `writeBytes(conn, bytes)`：可复用 `Bytes` buffer 路径，适合二进制协议热路径，避免为每个包创建临时字符串。
+- `copy(src, dst)` / `copyBidirectional(a, b)`：流式 native 路径，payload 保持在可复用 C buffer 中，适合 proxy、relay、`copy(conn, conn)` echo 和其他不需要语言层查看每个字节的高吞吐场景。
+
+设计原则：raw stream 不应为了“经过语言层”而创建临时字符串；只有业务逻辑需要看数据时才使用字符串 API。
+
+TCP 等待操作使用协程友好的 netpoll 路径。`setReadDeadline(conn, deadline)`、`setWriteDeadline(conn, deadline)`、`setDeadline(conn, deadline)` 和 `setAcceptDeadline(listener, deadline)` 接受 `time.monotonic()` 毫秒 deadline；超时后操作按自身返回形态返回 `null` 或 `-1`，并通过 `lastError(handle)` / `lastErrno(handle)` 暴露诊断原因。
+
+`shutdownRead(conn)`、`shutdownWrite(conn)` 和 `shutdown(conn)` 暴露 TCP 半关闭语义。通用 proxy/relay 应优先使用 `copyBidirectional(a, b)`，它会在单向 EOF 后半关闭对端写侧，并返回两个方向的字节统计。
+
+TLS client 路径通过 `dialTLS(host, port, timeout?)` 和 `upgradeTLS(conn, hostname, timeout?)` 提供；TLS read/write/copy 与 plain TCP 共享同一套 deadline、错误诊断和 typed handle 生命周期语义。
 
 ### 15.3 数据格式
 

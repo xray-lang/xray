@@ -1262,6 +1262,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Close a connection or listener",
     },
     {
+        .name = "copy",
+        .signature = "(src: NetConn, dst: NetConn, bufferSize?: int): int",
+        .summary = "Copy a TCP/TLS stream using a reusable native buffer",
+    },
+    {
+        .name = "copyBidirectional",
+        .signature = "(a: NetConn, b: NetConn): Json",
+        .summary = "Copy two TCP/TLS streams in both directions",
+    },
+    {
         .name = "dial",
         .signature = "(host: string, port: int, timeout?: int): NetConn?",
         .summary = "Dial a TCP connection",
@@ -1282,6 +1292,16 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Check if TLS support is available",
     },
     {
+        .name = "lastErrno",
+        .signature = "(handle: NetConn | NetListener): int",
+        .summary = "Return the last system errno",
+    },
+    {
+        .name = "lastError",
+        .signature = "(handle: NetConn | NetListener): string?",
+        .summary = "Return the last network error name",
+    },
+    {
         .name = "listen",
         .signature = "(port: int, backlog?: int): NetListener?",
         .summary = "Start listening on a port",
@@ -1297,6 +1317,11 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Read data from connection",
     },
     {
+        .name = "readInto",
+        .signature = "(conn: NetConn, buffer: Bytes, maxlen?: int): int",
+        .summary = "Read data into a reusable Bytes buffer",
+    },
+    {
         .name = "recvFrom",
         .signature = "(handle: NetConn, maxlen?: int): UdpPacket?",
         .summary = "Receive UDP datagram (returns flat handle: data, host, port)",
@@ -1307,19 +1332,59 @@ static const XmcpGeneratedStdlibSymbol _symbols_net[] = {
         .summary = "Send UDP datagram",
     },
     {
+        .name = "setAcceptDeadline",
+        .signature = "(listener: NetListener, deadline: int): bool",
+        .summary = "Set accept deadline in monotonic ms",
+    },
+    {
+        .name = "setDeadline",
+        .signature = "(conn: NetConn, deadline: int): bool",
+        .summary = "Set read and write deadlines in monotonic ms",
+    },
+    {
+        .name = "setReadDeadline",
+        .signature = "(conn: NetConn, deadline: int): bool",
+        .summary = "Set read deadline in monotonic ms",
+    },
+    {
+        .name = "setWriteDeadline",
+        .signature = "(conn: NetConn, deadline: int): bool",
+        .summary = "Set write deadline in monotonic ms",
+    },
+    {
+        .name = "shutdown",
+        .signature = "(conn: NetConn): bool",
+        .summary = "Shut down both sides of a TCP connection",
+    },
+    {
+        .name = "shutdownRead",
+        .signature = "(conn: NetConn): bool",
+        .summary = "Shut down the read side of a TCP connection",
+    },
+    {
+        .name = "shutdownWrite",
+        .signature = "(conn: NetConn): bool",
+        .summary = "Shut down the write side of a TCP connection",
+    },
+    {
         .name = "udpBind",
         .signature = "(port: int, addr?: string): NetConn?",
         .summary = "Bind a UDP socket",
     },
     {
         .name = "upgradeTLS",
-        .signature = "(conn: NetConn, hostname: string): NetConn?",
+        .signature = "(conn: NetConn, hostname: string, timeout?: int): NetConn?",
         .summary = "Upgrade connection to TLS",
     },
     {
         .name = "write",
         .signature = "(conn: NetConn, data: string): int",
         .summary = "Write data to connection",
+    },
+    {
+        .name = "writeBytes",
+        .signature = "(conn: NetConn, data: Bytes): int",
+        .summary = "Write Bytes data to connection",
     },
 };
 
@@ -3772,13 +3837,46 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
     },
     {
         .module = "net",
-        .summary = "TCP/UDP/TLS networking",
+        .summary = "TCP/UDP/TLS networking with native stream pumps",
         .body =
             "# net module\n"
             "\n"
-            "TCP/UDP/TLS networking.\n"
+            "TCP/UDP/TLS networking. TCP has three explicit data paths: message APIs (`read` / `write`) expose bytes as strings, buffer APIs (`readInto` / `writeBytes`) reuse caller-owned `Bytes`, and stream APIs (`copy` / `copyBidirectional`) keep payload in native buffers for high-throughput relays.\n"
             "\n"
-            "Usage: `import net` then call `net.function()`.\n"
+            "Usage: `import net` and create typed `NetListener` / `NetConn` handles with `listen`, `accept`, and `dial`.\n"
+            "\n"
+            "### TCP data paths\n"
+            "`net.read(conn)` and `net.write(conn, data)` are for message-oriented code that needs to inspect or transform data in Xray. `net.readInto(conn, bytes, maxlen?)` and `net.writeBytes(conn, bytes)` are the reusable-buffer binary path. `net.copy(src, dst)` and `net.copyBidirectional(a, b)` are raw TCP/TLS stream pumps; payload stays in reusable native buffers. Echo is just the self-copy case: `net.copy(conn, conn)`.\n"
+            "\n"
+            "### Deadlines and errors\n"
+            "Use `setReadDeadline`, `setWriteDeadline`, `setDeadline`, and `setAcceptDeadline` with `time.monotonic()` deadlines. Operations return the normal null or `-1` failure shape, and `lastError(handle)` / `lastErrno(handle)` expose diagnostic causes such as `timeout`, `closed`, `reset`, `refused`, `dns`, `tls`, and `io`.\n"
+            "\n"
+            "### Lifecycle\n"
+            "`shutdownRead`, `shutdownWrite`, and `shutdown` expose TCP half-close semantics. `copyBidirectional(a, b)` runs two stream pumps and half-closes the opposite write side on EOF, which is the preferred primitive for generic TCP proxy and relay code.\n"
+            "\n"
+            "### Echo server\n"
+            "```xray\n"
+            "import net\n"
+            "\n"
+            "fn serve(conn: NetConn) {\n"
+            "    defer net.close(conn)\n"
+            "    net.copy(conn, conn)\n"
+            "}\n"
+            "\n"
+            "let listener = net.listen(9001, 1024)!\n"
+            "while (true) {\n"
+            "    let conn = net.accept(listener)\n"
+            "    if (conn != null) {\n"
+            "        go serve(conn!)\n"
+            "    }\n"
+            "}\n"
+            "```\n"
+            "\n"
+            "### Design rule\n"
+            "- Use typed handles (`NetConn`, `NetListener`) instead of ad-hoc JSON handles.\n"
+            "- Use stream pumps for proxy, relay, echo, and other byte-preserving workloads.\n"
+            "- Use `Bytes` buffers for binary protocol hot paths that must inspect payload.\n"
+            "- Use string reads only when the program actually needs to parse or mutate text.\n"
             "\n"
             "## API\n"
             "\n"
@@ -3790,18 +3888,31 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "| `UdpPacket.port` | `const int` | Handle field |\n"
             "| `net.accept` | `(listener: NetListener): NetConn?` | Accept a new connection |\n"
             "| `net.close` | `(handle: NetConn \\| NetListener): ()` | Close a connection or listener |\n"
+            "| `net.copy` | `(src: NetConn, dst: NetConn, bufferSize?: int): int` | Copy a TCP/TLS stream using a reusable native buffer |\n"
+            "| `net.copyBidirectional` | `(a: NetConn, b: NetConn): Json` | Copy two TCP/TLS streams in both directions |\n"
             "| `net.dial` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TCP connection |\n"
             "| `net.dialTLS` | `(host: string, port: int, timeout?: int): NetConn?` | Dial a TLS connection |\n"
             "| `net.fd` | `(handle: NetConn \\| NetListener): int` | Get fd from handle |\n"
             "| `net.hasTLS` | `(): bool` | Check if TLS support is available |\n"
+            "| `net.lastErrno` | `(handle: NetConn \\| NetListener): int` | Return the last system errno |\n"
+            "| `net.lastError` | `(handle: NetConn \\| NetListener): string?` | Return the last network error name |\n"
             "| `net.listen` | `(port: int, backlog?: int): NetListener?` | Start listening on a port |\n"
             "| `net.lookup` | `(hostname: string): string?` | DNS lookup |\n"
             "| `net.read` | `(conn: NetConn, maxlen?: int): string?` | Read data from connection |\n"
+            "| `net.readInto` | `(conn: NetConn, buffer: Bytes, maxlen?: int): int` | Read data into a reusable Bytes buffer |\n"
             "| `net.recvFrom` | `(handle: NetConn, maxlen?: int): UdpPacket?` | Receive UDP datagram (returns flat handle: data, host, port) |\n"
             "| `net.sendTo` | `(handle: NetConn, data: string, host: string, port: int): int` | Send UDP datagram |\n"
+            "| `net.setAcceptDeadline` | `(listener: NetListener, deadline: int): bool` | Set accept deadline in monotonic ms |\n"
+            "| `net.setDeadline` | `(conn: NetConn, deadline: int): bool` | Set read and write deadlines in monotonic ms |\n"
+            "| `net.setReadDeadline` | `(conn: NetConn, deadline: int): bool` | Set read deadline in monotonic ms |\n"
+            "| `net.setWriteDeadline` | `(conn: NetConn, deadline: int): bool` | Set write deadline in monotonic ms |\n"
+            "| `net.shutdown` | `(conn: NetConn): bool` | Shut down both sides of a TCP connection |\n"
+            "| `net.shutdownRead` | `(conn: NetConn): bool` | Shut down the read side of a TCP connection |\n"
+            "| `net.shutdownWrite` | `(conn: NetConn): bool` | Shut down the write side of a TCP connection |\n"
             "| `net.udpBind` | `(port: int, addr?: string): NetConn?` | Bind a UDP socket |\n"
-            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string): NetConn?` | Upgrade connection to TLS |\n"
+            "| `net.upgradeTLS` | `(conn: NetConn, hostname: string, timeout?: int): NetConn?` | Upgrade connection to TLS |\n"
             "| `net.write` | `(conn: NetConn, data: string): int` | Write data to connection |\n"
+            "| `net.writeBytes` | `(conn: NetConn, data: Bytes): int` | Write Bytes data to connection |\n"
             "",
         .symbols = _symbols_net,
         .symbol_count = (int)(sizeof(_symbols_net) / sizeof(_symbols_net[0])),

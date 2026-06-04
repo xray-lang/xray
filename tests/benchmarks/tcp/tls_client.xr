@@ -1,0 +1,186 @@
+// Xray TLS benchmark client.
+// Called by tls_bench.py; prints RESULT lines parsed by the Python harness.
+
+import net
+import time
+
+fn readFull(conn: NetConn, size: int) -> bool {
+    let received = 0
+    while (received < size) {
+        let chunk = net.read(conn, size - received)
+        if (chunk == null) {
+            return false
+        }
+        received = received + chunk!.length
+    }
+    return true
+}
+
+fn echoOnce(conn: NetConn, payload: string) -> bool {
+    let n = net.write(conn, payload)
+    if (n != payload.length) {
+        return false
+    }
+    return readFull(conn, payload.length)
+}
+
+fn printResult(name: string, fields: string) {
+    print("RESULT " + name + " " + fields)
+}
+
+fn benchHandshake(host: string, port: int, count: int) {
+    let ok = 0
+    let start = time.micros()
+    for (let i = 0; i < count; i++) {
+        let conn = net.dialTLS(host, port, 30000)
+        if (conn != null) {
+            ok++
+            net.close(conn!)
+        }
+    }
+    let elapsed_us = time.micros() - start
+    let elapsed_sec = float(elapsed_us) / 1000000.0
+    let rate = float(ok) / elapsed_sec
+    printResult("tls_handshake_rate",
+        "handshakes=" + string(ok)
+        + " elapsed_sec=" + string(elapsed_sec)
+        + " handshakes_per_sec=" + string(rate)
+        + " complete=" + string(ok == count))
+}
+
+fn benchLatency(host: string, port: int, iterations: int) {
+    let conn = net.dialTLS(host, port, 30000)
+    if (conn == null) {
+        printResult("tls_latency", "complete=false error=dial")
+        return
+    }
+
+    let payload = "L".repeat(64)
+    for (let i = 0; i < 20; i++) {
+        if (!echoOnce(conn!, payload)) {
+            printResult("tls_latency", "complete=false error=warmup")
+            net.close(conn!)
+            return
+        }
+    }
+
+    let latencies: Array<int> = []
+    let total = 0
+    for (let i = 0; i < iterations; i++) {
+        let start = time.micros()
+        if (!echoOnce(conn!, payload)) {
+            printResult("tls_latency", "complete=false error=echo")
+            net.close(conn!)
+            return
+        }
+        let elapsed = time.micros() - start
+        total = total + elapsed
+        latencies.push(elapsed)
+    }
+    latencies.sort()
+    net.close(conn!)
+
+    let p95_idx = (latencies.length * 95) / 100
+    let p99_idx = (latencies.length * 99) / 100
+    printResult("tls_latency",
+        "iterations=" + string(iterations)
+        + " avg=" + string(total / iterations)
+        + " median=" + string(latencies[latencies.length / 2])
+        + " p95=" + string(latencies[p95_idx])
+        + " p99=" + string(latencies[p99_idx])
+        + " complete=true")
+}
+
+fn benchThroughput(host: string, port: int, iterations: int, msgSize: int) {
+    let conn = net.dialTLS(host, port, 30000)
+    if (conn == null) {
+        printResult("tls_throughput", "complete=false error=dial")
+        return
+    }
+
+    let payload = "T".repeat(msgSize)
+    for (let i = 0; i < 50; i++) {
+        if (!echoOnce(conn!, payload)) {
+            printResult("tls_throughput", "complete=false error=warmup")
+            net.close(conn!)
+            return
+        }
+    }
+
+    let start = time.micros()
+    for (let i = 0; i < iterations; i++) {
+        if (!echoOnce(conn!, payload)) {
+            printResult("tls_throughput", "complete=false error=echo")
+            net.close(conn!)
+            return
+        }
+    }
+    let elapsed_us = time.micros() - start
+    net.close(conn!)
+
+    let elapsed_sec = float(elapsed_us) / 1000000.0
+    let msg_per_sec = float(iterations) / elapsed_sec
+    let mb_per_sec = (float(msgSize) * float(iterations) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
+    printResult("tls_throughput",
+        "msg_size=" + string(msgSize)
+        + " iterations=" + string(iterations)
+        + " elapsed_sec=" + string(elapsed_sec)
+        + " msg_per_sec=" + string(msg_per_sec)
+        + " mb_per_sec=" + string(mb_per_sec)
+        + " complete=true")
+}
+
+fn benchLarge(host: string, port: int, sizeMb: int) {
+    let conn = net.dialTLS(host, port, 30000)
+    if (conn == null) {
+        printResult("tls_large", "complete=false error=dial")
+        return
+    }
+
+    let size = sizeMb * 1024 * 1024
+    let payload = "G".repeat(size)
+    let start = time.micros()
+    let ok = echoOnce(conn!, payload)
+    let elapsed_us = time.micros() - start
+    net.close(conn!)
+
+    let elapsed_sec = float(elapsed_us) / 1000000.0
+    let mb_per_sec = (float(size) * 2.0 / elapsed_sec) / (1024.0 * 1024.0)
+    printResult("tls_large",
+        "size_mb=" + string(sizeMb)
+        + " elapsed_sec=" + string(elapsed_sec)
+        + " mb_per_sec=" + string(mb_per_sec)
+        + " complete=" + string(ok))
+}
+
+let host = "localhost"
+if (process.args.length > 0) {
+    host = process.args[0]
+}
+
+let port = 9443
+if (process.args.length > 1) {
+    port = int(process.args[1]) ?? 9443
+}
+
+let mode = "all"
+if (process.args.length > 2) {
+    mode = process.args[2]
+}
+
+if (!net.hasTLS()) {
+    printResult("tls_unavailable", "complete=false")
+} else if (mode == "handshake") {
+    benchHandshake(host, port, 50)
+} else if (mode == "latency") {
+    benchLatency(host, port, 300)
+} else if (mode == "throughput") {
+    benchThroughput(host, port, 1000, 1024)
+} else if (mode == "large") {
+    benchLarge(host, port, 1)
+} else {
+    benchHandshake(host, port, 50)
+    benchLatency(host, port, 300)
+    benchThroughput(host, port, 1000, 1024)
+    benchLarge(host, port, 1)
+}

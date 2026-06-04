@@ -1,0 +1,77 @@
+// 1434_net_bytes_loopback.xr
+// 测试：TCP Bytes path — net.readInto / net.writeBytes
+
+import net
+
+fn serveBytesEcho(c: NetConn) {
+    let buf = new Bytes(16)
+    let n = net.readInto(c, buf)
+    if (n > 0) {
+        net.writeBytes(c, buf)
+    }
+    net.close(c)
+}
+
+fn acceptBytesEcho(lst: NetListener) {
+    let conn = net.accept(lst)!
+    go serveBytesEcho(conn)
+}
+
+fn serveBytesMaxLen(c: NetConn) {
+    let buf = new Bytes(16)
+    let n = net.readInto(c, buf, 3)
+    if (n > 0) {
+        net.writeBytes(c, buf)
+    }
+    net.close(c)
+}
+
+fn acceptBytesMaxLen(lst: NetListener) {
+    let conn = net.accept(lst)!
+    go serveBytesMaxLen(conn)
+}
+
+@test
+fn test_bytes_echo_roundtrip() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    go acceptBytesEcho(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    let payload = new Bytes([65, 0, 255, 66])
+    assert_eq(net.writeBytes(c, payload), 4)
+
+    let resp = net.read(c)!
+    assert_eq(resp.byteLength, 4)
+    assert_eq(resp.byteAt(0).ord(), 65)
+    assert_eq(resp.byteAt(1).ord(), 0)
+    assert_eq(resp.byteAt(2).ord(), 255)
+    assert_eq(resp.byteAt(3).ord(), 66)
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_read_into_maxlen_controls_length() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    assert_true(port > 0)
+
+    go acceptBytesMaxLen(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    let payload = new Bytes([80, 81, 82, 83, 84])
+    assert_eq(net.writeBytes(c, payload), 5)
+
+    let resp = net.read(c)!
+    assert_eq(resp.byteLength, 3)
+    assert_eq(resp.byteAt(0).ord(), 80)
+    assert_eq(resp.byteAt(1).ord(), 81)
+    assert_eq(resp.byteAt(2).ord(), 82)
+
+    net.close(c)
+    net.close(lst)
+}

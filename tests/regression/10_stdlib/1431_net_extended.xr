@@ -9,10 +9,23 @@ fn test_net_core_apis() {
     assert(net.listen != null)
     assert(net.accept != null)
     assert(net.read != null)
+    assert(net.readInto != null)
     assert(net.write != null)
+    assert(net.writeBytes != null)
+    assert(net.copy != null)
+    assert(net.copyBidirectional != null)
+    assert(net.shutdownRead != null)
+    assert(net.shutdownWrite != null)
+    assert(net.shutdown != null)
     assert(net.close != null)
     assert(net.lookup != null)
     assert(net.fd != null)
+    assert(net.setReadDeadline != null)
+    assert(net.setWriteDeadline != null)
+    assert(net.setDeadline != null)
+    assert(net.setAcceptDeadline != null)
+    assert(net.lastError != null)
+    assert(net.lastErrno != null)
 }
 
 // @test TLS APIs exist

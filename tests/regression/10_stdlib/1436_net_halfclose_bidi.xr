@@ -1,0 +1,84 @@
+// 1436_net_halfclose_bidi.xr
+// 测试：TCP 半关闭与 copyBidirectional
+
+import net
+
+fn serveReadUntilEof(c: NetConn) {
+    let total = 0
+    while (true) {
+        let data = net.read(c)
+        if (data == null) {
+            break
+        }
+        total = total + data!.byteLength
+    }
+    if (total == 4) {
+        net.write(c, "done")
+    } else {
+        net.write(c, "bad")
+    }
+    net.close(c)
+}
+
+fn acceptReadUntilEof(lst: NetListener) {
+    let c = net.accept(lst)!
+    go serveReadUntilEof(c)
+}
+
+fn serveUpstreamEcho(lst: NetListener) {
+    let c = net.accept(lst)!
+    net.copy(c, c)
+    net.close(c)
+}
+
+fn serveProxyOnce(lst: NetListener, upstreamPort: int) {
+    let client = net.accept(lst)!
+    let upstream = net.dial("127.0.0.1", upstreamPort)!
+    let stats = net.copyBidirectional(client, upstream)
+    assert_true(stats != null)
+    assert_true(stats.ab >= 4)
+    assert_true(stats.ba >= 4)
+    assert_true(stats.ok)
+    net.close(client)
+    net.close(upstream)
+}
+
+@test
+fn test_shutdown_write_allows_response() {
+    let lst = net.listen(0, 8)!
+    let port = lst.port()
+    go acceptReadUntilEof(lst)
+
+    let c = net.dial("127.0.0.1", port)!
+    assert_eq(net.write(c, "body"), 4)
+    assert_true(net.shutdownWrite(c))
+
+    let resp = net.read(c)!
+    assert_eq(resp, "done")
+
+    net.close(c)
+    net.close(lst)
+}
+
+@test
+fn test_copy_bidirectional_proxy_echo() {
+    let upstreamLst = net.listen(0, 8)!
+    let upstreamPort = upstreamLst.port()
+    go serveUpstreamEcho(upstreamLst)
+
+    let proxyLst = net.listen(0, 8)!
+    let proxyPort = proxyLst.port()
+    go serveProxyOnce(proxyLst, upstreamPort)
+
+    let c = net.dial("127.0.0.1", proxyPort)!
+    assert_eq(net.write(c, "ping"), 4)
+    let resp = net.read(c)!
+    assert_eq(resp, "ping")
+    assert_true(net.shutdownWrite(c))
+    let eof = net.read(c)
+    assert_true(eof == null)
+
+    net.close(c)
+    net.close(proxyLst)
+    net.close(upstreamLst)
+}
