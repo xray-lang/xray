@@ -350,6 +350,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         // Fresh allocation: set sentinel values (-1 means "not set")
         coro->recv_slot_offset = -1;
         coro->pending_result_slot = -1;
+        coro->wait_bucket_owner = -1;
         // timer.slot/lock_count/locked_worker initialized lazily in ext when alloc'd
     }
     // Clean path: recycle_local already set these to their sentinel values
@@ -952,7 +953,13 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->next = NULL;
     coro->prev = NULL;
     coro->jit_ctx = NULL;
+    coro->chan_wait_next = NULL;
+    coro->chan_wait_prev = NULL;
+    coro->chan_wait_queue = NULL;
     coro->wait_link = NULL;
+    coro->wait_prev = NULL;
+    coro->wait_bucket = NULL;
+    coro->wait_bucket_owner = -1;
     coro->wait_send = false;
     coro->send_value = xr_null();
     coro->recv_slot = NULL;
@@ -1300,6 +1307,13 @@ void xr_coro_cancel(XrCoroutine *coro) {
 
     // Clear blocked info
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+    coro->chan_wait_next = NULL;
+    coro->chan_wait_prev = NULL;
+    coro->chan_wait_queue = NULL;
+    coro->wait_link = NULL;
+    coro->wait_prev = NULL;
+    coro->wait_bucket = NULL;
+    coro->wait_bucket_owner = -1;
     coro->result = xr_null();
 }
 

@@ -1,0 +1,123 @@
+// Sharded work queue benchmark.
+// This benchmark compares sharded task queues against a single shared Channel
+// used as a task queue.
+
+import time
+
+let WORKERS = 8
+let TASKS = 100000
+if (process.args.length > 0) {
+    WORKERS = int(process.args[0]) ?? WORKERS
+}
+if (process.args.length > 1) {
+    TASKS = int(process.args[1]) ?? TASKS
+}
+
+fn make_shards(count: int, capacity: int) -> Array<Channel<int>> {
+    let shards: Array<Channel<int>> = []
+    for (let i = 0; i < count; i++) {
+        shards.push(Channel(capacity))
+    }
+    return shards
+}
+
+shared const queue_shards = make_shards(WORKERS, 1024)
+
+fn queue_push(value: int, shard: int) {
+    let idx = shard % WORKERS
+    queue_shards[idx].send(value)
+}
+
+fn queue_pop(worker_id: int) -> int? {
+    for (let i = 0; i < WORKERS; i++) {
+        let idx = (worker_id + i) % WORKERS
+        let (value, ok) = queue_shards[idx].tryRecv()
+        if (ok) {
+            return value
+        }
+    }
+    let own = worker_id % WORKERS
+    return queue_shards[own].recv()
+}
+
+fn queue_close() {
+    for (ch in queue_shards) {
+        ch.close()
+    }
+}
+
+print("=== Work Queue Pool 测试 ===")
+print("Worker数:", WORKERS)
+print("任务总数:", TASKS)
+
+shared const result_ch = Channel(1000)
+
+fn fib(n: int) -> int {
+    if (n <= 1) { return n }
+    let a = 0
+    let b = 1
+    for (let i = 2; i <= n; i++) {
+        let t = a + b
+        a = b
+        b = t
+    }
+    return b
+}
+
+fn worker(id: int) -> int {
+    let processed = 0
+    while (true) {
+        let task = queue_pop(id)
+        if (task == null) { break }
+        result_ch.send(fib(task % 20))
+        processed++
+    }
+    return processed
+}
+
+fn submit_tasks(count: int) {
+    for (let i = 0; i < count; i++) {
+        queue_push(i, i)
+    }
+    queue_close()
+}
+
+let start = time.monotonic()
+
+let workers: Array<Task> = []
+for (let i = 0; i < WORKERS; i++) {
+    workers.push(go worker(i))
+}
+
+let submitter = go submit_tasks(TASKS)
+
+let total = 0
+for (let i = 0; i < TASKS; i++) {
+    total = total + result_ch.recv()
+}
+await submitter
+
+let worker_loads: Array<int> = []
+for (w in workers) {
+    let processed = await w
+    worker_loads.push(processed)
+}
+
+let elapsed = time.monotonic() - start
+result_ch.close()
+
+print("结果校验和:", total)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}
+
+let min_load = TASKS
+let max_load = 0
+for (load in worker_loads) {
+    if (load < min_load) { min_load = load }
+    if (load > max_load) { max_load = load }
+}
+print("负载均衡: min=", min_load, "max=", max_load, "ratio=", float(max_load) / float(min_load + 1))

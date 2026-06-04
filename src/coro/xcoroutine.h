@@ -71,6 +71,7 @@
 struct XrCoroGC;
 struct XrCoroMonitor;
 struct XrCoroRegistry;
+typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrBlockedBucket XrBlockedBucket;
 
@@ -376,7 +377,13 @@ struct XrCoroutine {
     struct XrCoroutine *scope_sibling;  // linked list within parent_scope
 
     /* === Channel Blocking === */
-    struct XrCoroutine *wait_link;  // channel waitq linkage (separate from sched_link)
+    struct XrCoroutine *chan_wait_next;
+    struct XrCoroutine *chan_wait_prev;
+    XrWaitQueue *chan_wait_queue;
+    struct XrCoroutine *wait_link;  // worker blocked-bucket next link
+    struct XrCoroutine *wait_prev;  // worker blocked-bucket prev link
+    XrBlockedBucket *wait_bucket;
+    int wait_bucket_owner;
     /* The channel this coro is blocked on. Written by the blocker (under the
      * channel lock) and cleared by whichever waker claims the wake, which may
      * run on a different worker; also read lock-free by GC root marking and
