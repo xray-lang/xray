@@ -15,6 +15,9 @@
 
 /* ========== Exception Handling ========== */
 
+#define XI_GO_AUX_LINK_MASK 0xff
+#define XI_GO_AUX_PRIORITY_SHIFT 8
+
 /* Throw */
 XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) dst;
@@ -210,8 +213,14 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* C field: bits[0:6] = nargs, bit 7 = fire-and-forget (0 for now) */
     emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, nargs));
 
+    /* NOP A=2: priority annotation (read by vm_go) */
+    int priority = (((int) v->aux_int >> XI_GO_AUX_PRIORITY_SHIFT) & 0xff) - 1;
+    if (priority >= 0) {
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 2, priority));
+    }
+
     /* NOP A=3: link_mode annotation (read by vm_go) */
-    int link_mode = (int) v->aux_int;
+    int link_mode = (int) v->aux_int & XI_GO_AUX_LINK_MASK;
     if (link_mode != 0) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 3, link_mode));
     }

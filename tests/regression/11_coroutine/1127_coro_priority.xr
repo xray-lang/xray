@@ -42,12 +42,10 @@ fn test_coro_priority() {
     const ch = new Channel<string>(20)
 
     for (let i = 0; i < 10; i++) {
-        let lo = go work_and_report("L", ch)
-        Coro.setPriority(lo, 0)
+        go(priority: Coro.LOW) work_and_report("L", ch)
     }
     for (let i = 0; i < 10; i++) {
-        let hi = go work_and_report("H", ch)
-        Coro.setPriority(hi, 2)
+        go(priority: Coro.HIGH) work_and_report("H", ch)
     }
 
     // Collect completion order (20 recvs = all tasks done)
@@ -62,6 +60,7 @@ fn test_coro_priority() {
 
     // With priority scheduling, majority of HIGH tasks complete in first half
     print("  priority effective:", high_early >= 6)
+    assert(high_early >= 6, "high priority tasks should complete earlier")
     print("done")
 }
 

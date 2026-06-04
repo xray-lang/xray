@@ -32,12 +32,49 @@
 #include "../runtime/object/xstring.h"
 #include "../frontend/analyzer/xtype_ref_resolve.h"
 #include "../base/xglobal_indices.h"
+#include "../base/xconstants.h"
 #include "../runtime/value/xstruct_layout.h"
 
 #include <string.h>
 #include <stdio.h>
 
 /* ========== Forward Declarations ========== */
+
+#define XI_GO_AUX_LINK_MASK 0xff
+#define XI_GO_AUX_PRIORITY_SHIFT 8
+
+static int pack_go_aux(int link_mode, int priority) {
+    int packed = link_mode & XI_GO_AUX_LINK_MASK;
+    if (priority >= 0) {
+        packed |= (priority + 1) << XI_GO_AUX_PRIORITY_SHIFT;
+    }
+    return packed;
+}
+
+static int lower_go_priority_value(AstNode *node) {
+    if (!node)
+        return -1;
+    if (node->type == AST_LITERAL_INT) {
+        int priority = (int) node->as.literal.raw_value.int_val;
+        return (priority >= 0 && priority < XR_CORO_PRIORITY_COUNT) ? priority : -1;
+    }
+    if (node->type != AST_MEMBER_ACCESS)
+        return -1;
+
+    MemberAccessNode *ma = &node->as.member_access;
+    if (!ma->object || ma->object->type != AST_VARIABLE)
+        return -1;
+    const char *object_name = ma->object->as.variable.name;
+    if (!object_name || strcmp(object_name, "Coro") != 0 || !ma->name)
+        return -1;
+    if (strcmp(ma->name, "LOW") == 0)
+        return 0;
+    if (strcmp(ma->name, "NORMAL") == 0)
+        return 1;
+    if (strcmp(ma->name, "HIGH") == 0)
+        return 2;
+    return -1;
+}
 
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
@@ -1767,6 +1804,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
     GoExprNode *go = &node->as.go_expr;
     AstNode *expr = go->expr;
     struct XrType *result_type = xi_lower_node_type(l, node);
+    int priority = lower_go_priority_value(go->priority);
 
     if (expr->type == AST_CALL_EXPR) {
         /* go fn(args): extract callee + args, don't execute the call.
@@ -1792,7 +1830,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         for (int i = 0; i < n; i++) {
             v->args[1 + i] = arg_vals[i];
         }
-        v->aux_int = (int64_t) go->link_mode;
+        v->aux_int = (int64_t) pack_go_aux((int) go->link_mode, priority);
         v->flags |= XI_FLAG_SIDE_EFFECT;
         v->line = (uint32_t) node->line;
         return v;
@@ -1806,7 +1844,7 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
     if (!v)
         return NULL;
     v->args[0] = callee;
-    v->aux_int = (int64_t) go->link_mode;
+    v->aux_int = (int64_t) pack_go_aux((int) go->link_mode, priority);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;

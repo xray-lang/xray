@@ -78,6 +78,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     for (int p = 0; p < XR_RUNQ_COUNT; p++) {
         xr_runq_init(&worker->p.runq[p]);
     }
+    xr_priority_budget_init(&worker->p.prio_budget);
 
     // Initialize LIFO slot
     atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);

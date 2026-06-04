@@ -24,7 +24,8 @@
  *   the Worker that dequeues it. No other Worker may touch its stack.
  *
  *   INVARIANT 3 (Queue membership): A READY coroutine is on exactly ONE
- *   queue: a Worker's local run queue, LIFO slot, or MPSC inbox.
+ *   queue: a Worker's local run queue, LIFO slot, MPSC inbox, or
+ *   runtime injection queue.
  *   A BLOCKED coroutine is on a channel wait queue or timer wheel.
  *   RUNNING and DONE coroutines are on no queue.
  *
@@ -80,8 +81,6 @@ typedef enum {
     CORO_PRIORITY_NORMAL = 1,
     CORO_PRIORITY_HIGH = 2
 } XrCoroPriority;
-
-#define XR_CORO_PRIORITY_COUNT 3
 
 #define XR_GC_FLG_NEED_GC 0x0001
 #define XR_GC_FLG_IN_GC 0x0002

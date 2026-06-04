@@ -116,6 +116,35 @@ static inline int xr_runq_len(XrRunQueue *rq) {
     return xr_steal_queue_size(&rq->deque) + rq->overflow_len;
 }
 
+/* ========== Priority Budget ========== */
+
+typedef struct XrPriorityBudget {
+    int credit[XR_CORO_PRIORITY_COUNT];
+    int weight[XR_CORO_PRIORITY_COUNT];
+    int cursor;
+} XrPriorityBudget;
+
+static inline void xr_priority_budget_init(XrPriorityBudget *budget) {
+    if (!budget)
+        return;
+    budget->weight[CORO_PRIORITY_LOW] = XR_PRIO_WEIGHT_LOW;
+    budget->weight[CORO_PRIORITY_NORMAL] = XR_PRIO_WEIGHT_NORMAL;
+    budget->weight[CORO_PRIORITY_HIGH] = XR_PRIO_WEIGHT_HIGH;
+    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
+        budget->credit[i] = budget->weight[i];
+    }
+    budget->cursor = CORO_PRIORITY_HIGH;
+}
+
+static inline void xr_priority_budget_refill(XrPriorityBudget *budget) {
+    if (!budget)
+        return;
+    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
+        budget->credit[i] = budget->weight[i];
+    }
+    budget->cursor = CORO_PRIORITY_HIGH;
+}
+
 /* ========== P Status ========== */
 
 typedef enum {
@@ -135,6 +164,7 @@ typedef struct XrProc {
 
     /* === Run Queues === */
     XrRunQueue runq[XR_RUNQ_COUNT];
+    XrPriorityBudget prio_budget;
 
     /* === LIFO Slot (locality optimization) === */
     _Atomic(XrCoroutine *) lifo_slot;
