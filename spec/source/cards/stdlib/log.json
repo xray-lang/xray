@@ -1,0 +1,5 @@
+{
+  "module": "log",
+  "summary": "Structured logging system",
+  "lead": "Structured logging system."
+}

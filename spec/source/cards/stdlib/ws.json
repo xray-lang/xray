@@ -1,0 +1,5 @@
+{
+  "module": "ws",
+  "summary": "WebSocket client and server",
+  "lead": "WebSocket client and server."
+}

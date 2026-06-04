@@ -1,0 +1,5 @@
+{
+  "module": "toml",
+  "summary": "TOML configuration file parsing",
+  "lead": "TOML configuration file parsing."
+}

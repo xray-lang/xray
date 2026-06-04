@@ -1,0 +1,26 @@
+{
+  "id": "operators",
+  "title": "Operators",
+  "spec_anchor": "#17-操作符与-token",
+  "aliases": [
+    "operator",
+    "arithmetic",
+    "comparison",
+    "logical",
+    "bitwise"
+  ],
+  "sections": [
+    {
+      "heading": "Operator groups",
+      "markdown": "### Arithmetic: `+`, `-`, `*`, `/`, `%`, `**` (power)\n### Comparison: `==`, `!=`, `<`, `>`, `<=`, `>=`\n### Logical: `&&`, `||`, `!`\n### Bitwise: `&`, `|`, `^`, `~`, `<<`, `>>`\n### Assignment: `=`, `+=`, `-=`, `*=`, `/=`, `%=`\n### Increment/Decrement: `i++`, `i--` (variables only, not fields)\n### Null coalescing: `x ?? default`\n### Optional chaining: `obj?.field`\n### Spread: `...arr`\n### Type: `typeof(x)`, `x is Type`"
+    },
+    {
+      "heading": "Range and null-safe operators",
+      "fences": [
+        "expr-range",
+        "expr-null-coalesce",
+        "expr-optional-chain"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "id": "struct",
+  "title": "Struct",
+  "spec_anchor": "#54-struct-声明",
+  "aliases": [
+    "structs",
+    "value_type"
+  ],
+  "lead": "Value types with no inheritance. Struct literals use `StructName{field: value}` syntax.",
+  "sections": [
+    {
+      "heading": "Struct declaration and literals",
+      "fences": [
+        "decl-struct-point"
+      ]
+    }
+  ]
+}

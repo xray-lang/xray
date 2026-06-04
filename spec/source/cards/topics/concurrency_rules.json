@@ -1,0 +1,41 @@
+{
+  "id": "concurrency_rules",
+  "title": "Concurrency Safety Rules",
+  "spec_anchor": "#1011-并发安全模型",
+  "aliases": [
+    "shared_rules",
+    "sharing",
+    "move",
+    "safety",
+    "concurrent",
+    "atomic"
+  ],
+  "sections": [
+    {
+      "heading": "Sharing model",
+      "markdown": "- `shared const` is immutable and can be shared across coroutines without copying\n- `shared let` represents exclusive mutable ownership and must be transferred with `move`\n- ordinary local variables cannot be captured by `go` closures; pass data explicitly"
+    },
+    {
+      "heading": "Move into coroutine",
+      "fences": [
+        "coro-move-argument"
+      ]
+    },
+    {
+      "heading": "Move ownership",
+      "fences": [
+        "coro-move-transfer"
+      ]
+    },
+    {
+      "heading": "Channels",
+      "fences": [
+        "channel-basic-ops"
+      ]
+    },
+    {
+      "heading": "Atomic",
+      "markdown": "`Atomic<T>` wraps `int`/`float`/`bool` with lock-free atomic operations. Must be `shared const`; `move` prohibited. Methods: `load`, `store`, `add`, `sub`, `fetchAdd`, `fetchSub`, `swap`, `compareExchange`, `toggle`. Optional `Ordering` enum parameter (default `SeqCst`)."
+    }
+  ]
+}

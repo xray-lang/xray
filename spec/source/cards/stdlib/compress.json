@@ -1,0 +1,5 @@
+{
+  "module": "compress",
+  "summary": "Compression/decompression (zlib)",
+  "lead": "Compression/decompression (zlib)."
+}

@@ -1,0 +1,35 @@
+{
+  "id": "testing",
+  "title": "Testing",
+  "spec_anchor": "#12-测试系统-testing",
+  "aliases": [
+    "test",
+    "assert",
+    "assert_eq",
+    "unit_test"
+  ],
+  "sections": [
+    {
+      "heading": "Basic test",
+      "fences": [
+        "testing-basic"
+      ]
+    },
+    {
+      "heading": "Async test",
+      "fences": [
+        "testing-async"
+      ]
+    },
+    {
+      "heading": "Attributes",
+      "fences": [
+        "testing-attributes"
+      ]
+    },
+    {
+      "heading": "Run tests",
+      "markdown": "Run with `xray test <file_or_dir>`."
+    }
+  ]
+}

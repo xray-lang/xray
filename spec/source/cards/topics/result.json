@@ -1,0 +1,37 @@
+{
+  "id": "result",
+  "title": "Error Handling (throw / catch)",
+  "spec_anchor": "#8-错误处理-error-handling",
+  "aliases": [
+    "error_handling",
+    "throw",
+    "catch",
+    "try",
+    "error",
+    "value_return_error"
+  ],
+  "lead": "Xray uses a zero-overhead value-return error channel: `throw <enum>` sets an error, `try/catch` handles it.",
+  "sections": [
+    {
+      "heading": "throw",
+      "markdown": "`throw expr` writes an enum variant into the error channel and returns. The operand must be an enum variant value. No stack unwinding occurs."
+    },
+    {
+      "heading": "try / catch",
+      "markdown": "`try { ... } catch (e: ErrType) { ... }` catches errors thrown within the try block. Typed catches filter by enum type; untyped `catch (e)` catches any error."
+    },
+    {
+      "heading": "Error propagation",
+      "markdown": "Uncaught errors propagate up the call stack through the value-return channel. Each caller's `OP_ERR_CHECK` decides whether to enter a catch handler or continue propagating. `defer` blocks execute during propagation."
+    },
+    {
+      "heading": "Design principles",
+      "bullets": [
+        "Errors are values (enum variants), not exceptions",
+        "Zero overhead on the happy path (single conditional branch)",
+        "No `throws` in function signatures — errors are implicit",
+        "Use ADT enums for structured error causes with exhaustive `match`"
+      ]
+    }
+  ]
+}

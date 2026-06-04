@@ -1,0 +1,47 @@
+{
+  "id": "enum",
+  "title": "Enum",
+  "spec_anchor": "#56-enum-声明",
+  "aliases": [
+    "enums",
+    "enumeration",
+    "adt",
+    "payload",
+    "variant",
+    "Option",
+    "Some",
+    "None"
+  ],
+  "sections": [
+    {
+      "heading": "Simple enum",
+      "fences": [
+        "decl-enum-simple"
+      ]
+    },
+    {
+      "heading": "Properties",
+      "fences": [
+        "decl-enum-properties"
+      ]
+    },
+    {
+      "heading": "Iteration",
+      "fences": [
+        "decl-enum-iteration"
+      ]
+    },
+    {
+      "heading": "Pattern matching",
+      "fences": [
+        "decl-enum-match"
+      ]
+    },
+    {
+      "heading": "ADT-style payload enum",
+      "fences": [
+        "decl-enum-payload"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "id": "stdlib_list",
+  "title": "Xray Standard Library Modules",
+  "sections": [
+    {
+      "markdown": "| Module | Description |\n|--------|-------------|\n| `base64` | Base64 encoding/decoding |\n| `cluster` | Distributed cluster communication |\n| `compress` | Compression/decompression (zlib) |\n| `crypto` | Cryptographic hashing and encryption |\n| `csv` | CSV parsing and generation |\n| `datetime` | Date and time manipulation |\n| `encoding` | Character encoding conversion |\n| `gc` | Garbage collector control interface |\n| `http` | HTTP client/server, REST API, routing |\n| `io` | File I/O operations |\n| `log` | Structured logging system |\n| `math` | Mathematical functions |\n| `net` | TCP/UDP/TLS networking |\n| `os` | Operating system interface |\n| `path` | File path manipulation |\n| `regex` | Regular expressions |\n| `time` | Time, timers, sleep |\n| `toml` | TOML configuration parsing |\n| `url` | URL parsing and construction |\n| `ws` | WebSocket client and server |\n| `xml` | XML parsing |\n| `yaml` | YAML parsing |\n\nUsage: `import <module>` then call `module.function()`.\n\nBuilt-in JSON helpers are exposed as `Json.parse()` / `Json.stringify()` without `import`."
+    }
+  ]
+}

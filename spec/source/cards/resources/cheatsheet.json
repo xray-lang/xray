@@ -1,0 +1,97 @@
+{
+  "id": "cheatsheet",
+  "title": "Xray Language Cheatsheet",
+  "sections": [
+    {
+      "heading_level": 2,
+      "heading": "Basics",
+      "fences": [
+        "decl-let",
+        "decl-const",
+        "decl-fn-basic",
+        "expr-lambda-forms"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Types",
+      "markdown": "`int`, `float`, `string`, `bool`, `()` | `Array<T>`, `Map<K,V>`, `Set<T>`\n\n`T?` for nullable values | `A | B` for unions | `Json`, `Bytes`, `BigInt`, `Channel<T>`, `Atomic<T>`"
+    },
+    {
+      "heading_level": 2,
+      "heading": "Control flow",
+      "fences": [
+        "stmt-if",
+        "stmt-for-in",
+        "stmt-match"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "OOP and data declarations",
+      "fences": [
+        "decl-class-inheritance",
+        "decl-struct-point",
+        "decl-interface-shape",
+        "decl-enum-simple"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Collections",
+      "fences": [
+        "types-array",
+        "types-map",
+        "types-set",
+        "types-json-object"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Concurrency",
+      "fences": [
+        "coro-go-forms",
+        "coro-await-forms",
+        "channel-basic-ops",
+        "coro-select"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Safety: compile pass = concurrency safe",
+      "bullets": [
+        "`shared const`: zero-copy read across coroutines",
+        "`Channel<T>`: communication with well-defined ownership semantics",
+        "`Atomic<T>`: lock-free atomic ops for `int`/`float`/`bool` (must be `shared const`)",
+        "`move`: explicit ownership transfer for `shared let`",
+        "ordinary `let` variables cannot be captured by `go` closures"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Modules",
+      "fences": [
+        "modules-import",
+        "modules-export"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Testing",
+      "fences": [
+        "testing-basic"
+      ]
+    },
+    {
+      "heading_level": 2,
+      "heading": "Important notes",
+      "bullets": [
+        "`print()` outputs with newline; there is no `println`",
+        "arrow function parameter types may be inferred only when the context is known",
+        "`new Channel<T>(n)` constructs a channel; `Channel<T>` is used in type position",
+        "field increment such as `this.x++` is not supported; assign explicitly",
+        "avoid unescaped quotes inside `${...}` interpolation"
+      ]
+    }
+  ]
+}

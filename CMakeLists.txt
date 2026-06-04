@@ -857,6 +857,41 @@ add_custom_target(regen-language-docs
     COMMENT "Regenerating language specs and MCP knowledge projection files"
 )
 
+# Auto-regenerate LANGUAGE_SPEC*.md + docs/knowledge/ at configure time
+# from spec/source/ (tracked in-repo). Keeps committed generated files
+# in sync with spec source without manual developer intervention.
+set(_spec_source "${CMAKE_CURRENT_SOURCE_DIR}/spec/source")
+if(IS_DIRECTORY "${_spec_source}/cards")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
+            ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
+            --root ${CMAKE_CURRENT_SOURCE_DIR}
+            --check
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        RESULT_VARIABLE _docs_check_result
+        OUTPUT_QUIET ERROR_QUIET
+    )
+    if(_docs_check_result EQUAL 1)
+        message(STATUS "Language docs stale — regenerating")
+        execute_process(
+            COMMAND ${CMAKE_COMMAND} -E env PYTHONUTF8=1 ${XRAY_PYTHON}
+                ${CMAKE_CURRENT_SOURCE_DIR}/scripts/gen_language_docs.py
+                --root ${CMAKE_CURRENT_SOURCE_DIR}
+            WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+            RESULT_VARIABLE _docs_regen_result
+        )
+        if(NOT _docs_regen_result EQUAL 0)
+            message(WARNING "Language docs regeneration failed (exit ${_docs_regen_result})")
+        endif()
+    elseif(_docs_check_result EQUAL 0)
+        message(STATUS "Language docs: up-to-date")
+    else()
+        message(WARNING "Language docs check failed (exit ${_docs_check_result})")
+    endif()
+else()
+    message(STATUS "Spec source not found — using committed generated files")
+endif()
+
 # MCP optional module
 if(XR_BUILD_MCP)
     file(GLOB MCP_SRC "src/app/mcp/*.c")

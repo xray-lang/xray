@@ -1,0 +1,30 @@
+{
+  "id": "builtin_functions",
+  "title": "Built-in Functions",
+  "spec_anchor": "#13-内置函数-built-in-functions",
+  "aliases": [
+    "builtin",
+    "print",
+    "dump",
+    "typeof",
+    "builtins"
+  ],
+  "sections": [
+    {
+      "heading": "Core built-ins",
+      "markdown": "- `print(value)` — print with newline\n- `dump(value)` — debug print with type info\n- `typeof(value)` — return the runtime type name\n- `x is T` — runtime type check with analyzer narrowing\n- `int(value)` / `float(value)` / `string(value)` / `bool(value)` — explicit conversions\n- `assert(condition)` and `assert_*` helpers — testing assertions"
+    },
+    {
+      "heading": "Printing and debugging",
+      "fences": [
+        "stmt-print-dump"
+      ]
+    },
+    {
+      "heading": "Type inspection",
+      "fences": [
+        "builtin-typeof-is"
+      ]
+    }
+  ]
+}

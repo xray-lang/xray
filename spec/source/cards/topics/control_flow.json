@@ -1,0 +1,66 @@
+{
+  "id": "control_flow",
+  "title": "Control Flow",
+  "spec_anchor": "#4-语句-statements",
+  "aliases": [
+    "if",
+    "else",
+    "while",
+    "for",
+    "loop",
+    "match",
+    "switch",
+    "try",
+    "catch",
+    "throw",
+    "error_handling"
+  ],
+  "sections": [
+    {
+      "heading": "if / else",
+      "fences": [
+        "stmt-if"
+      ]
+    },
+    {
+      "heading": "while",
+      "fences": [
+        "stmt-while"
+      ]
+    },
+    {
+      "heading": "for / for-in",
+      "fences": [
+        "stmt-for-c",
+        "stmt-for-in",
+        "stmt-for-pairs"
+      ]
+    },
+    {
+      "heading": "match",
+      "fences": [
+        "stmt-match",
+        "expr-match"
+      ]
+    },
+    {
+      "heading": "try / catch / throw",
+      "fences": [
+        "stmt-try"
+      ]
+    },
+    {
+      "heading": "defer",
+      "fences": [
+        "stmt-defer"
+      ]
+    },
+    {
+      "heading": "break / continue / return",
+      "fences": [
+        "stmt-break-continue",
+        "stmt-return"
+      ]
+    }
+  ]
+}

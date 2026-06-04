@@ -42,7 +42,7 @@ luac.out
 .vscode/
 .idea/
 .crossnote/
-.cursor/*
+.cursor/
 !.cursor/cli.json
 .windsurf/
 .devin/

@@ -1,0 +1,38 @@
+{
+  "id": "class",
+  "title": "Class",
+  "spec_anchor": "#53-class-声明",
+  "aliases": [
+    "classes",
+    "oop",
+    "inheritance",
+    "extends",
+    "override",
+    "constructor"
+  ],
+  "sections": [
+    {
+      "heading": "Basic class",
+      "fences": [
+        "decl-class-basic"
+      ]
+    },
+    {
+      "heading": "Inheritance",
+      "fences": [
+        "decl-class-inheritance"
+      ]
+    },
+    {
+      "heading": "Features",
+      "bullets": [
+        "`constructor()` is called through `new ClassName(...)`",
+        "`extends` enables single inheritance",
+        "`override` is optional but recommended when overriding methods",
+        "`static` declares class-level methods or fields",
+        "`private` restricts access to the declaring class",
+        "`this` is the current instance; `super` refers to the parent class"
+      ]
+    }
+  ]
+}

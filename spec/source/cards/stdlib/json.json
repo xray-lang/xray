@@ -1,0 +1,20 @@
+{
+  "module": "json",
+  "title": "Json built-in utility",
+  "summary": "Built-in Json utility class for parse/stringify and object helpers",
+  "lead": "Json is a built-in utility class; use Json.parse() and Json.stringify() directly without import.",
+  "usage": "Use it directly without `import`.",
+  "sections": [
+    {
+      "heading": "Common helpers",
+      "bullets": [
+        "`Json.parse(text)`",
+        "`Json.stringify(value, indent?)`",
+        "`Json.isValid(text)` / `Json.tryParse(text)`",
+        "`Json.keys(obj)` / `Json.values(obj)` / `Json.entries(obj)`",
+        "`Json.has(obj, key)` / `Json.get(obj, key, default?)`",
+        "`Json.size(obj)` / `Json.isEmpty(obj)`"
+      ]
+    }
+  ]
+}

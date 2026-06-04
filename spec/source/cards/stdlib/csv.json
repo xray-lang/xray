@@ -1,0 +1,5 @@
+{
+  "module": "csv",
+  "summary": "CSV parsing and generation",
+  "lead": "CSV parsing and generation."
+}

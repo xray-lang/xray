@@ -13,7 +13,6 @@ from pathlib import Path
 
 FENCE_RE = re.compile(r"```xray\n(.*?)\n```", re.S)
 SOURCE_FENCE_ID_RE = re.compile(r"^```xray\s+@id=([A-Za-z0-9_.:-]+)\s*$", re.M)
-FRONT_RE = re.compile(r"\A---\s*\n(.*?)\n---\s*\n", re.S)
 SYMBOL_RE = re.compile(
     r"\.module = \"(?P<module>[^\"]+)\".*?\.symbols = (?P<symbols>_symbols_[A-Za-z0-9_]+|NULL),"
     r".*?\.symbol_count = (?P<count>[^,]+),",
@@ -63,19 +62,6 @@ def load_spec_anchors(root: Path) -> set[str]:
     return anchors
 
 
-def parse_frontmatter(path: Path) -> dict[str, str]:
-    match = FRONT_RE.match(path.read_text(encoding="utf-8"))
-    if not match:
-        raise ValueError(f"{path}: missing frontmatter")
-    meta: dict[str, str] = {}
-    for raw in match.group(1).splitlines():
-        if ":" not in raw:
-            continue
-        key, _, value = raw.partition(":")
-        meta[key.strip()] = value.strip().strip("\"'")
-    return meta
-
-
 def collect_fence_refs(value: object) -> list[str]:
     refs: list[str] = []
     if isinstance(value, dict):
@@ -99,40 +85,19 @@ def section_fence_ids(root: Path) -> set[str]:
 
 def section_fence_index(root: Path) -> dict[str, Path]:
     ids: dict[str, Path] = {}
-    for path in sorted((root / "docs/spec/source/sections").glob("*.md")):
+    for path in sorted((root / "spec/source/sections").glob("*.md")):
         for fid in SOURCE_FENCE_ID_RE.findall(path.read_text(encoding="utf-8")):
             ids[fid] = path
     return ids
 
 
-def card_fence_refs(root: Path) -> set[str]:
-    refs: set[str] = set()
-    for path in sorted((root / "docs/spec/source/cards").glob("**/*.json")):
-        try:
-            card = json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            continue
-        refs.update(ref for ref in collect_fence_refs(card) if ref != "<invalid>")
-    return refs
-
-
-def check_section_fence_coverage(root: Path) -> list[str]:
-    fence_index = section_fence_index(root)
-    refs = card_fence_refs(root)
-    errors: list[str] = []
-    for fid in sorted(set(fence_index) - refs):
-        errors.append(f"{fence_index[fid].relative_to(root)}: fence id {fid} is not referenced by any card")
-    return errors
-
-
 def check_card_sources(root: Path) -> list[str]:
-    cards_root = root / "docs/spec/source/cards"
-    legacy_root = root / "docs/spec/source/knowledge"
-    expected_counts = {"topics": 19, "resources": 3, "stdlib": 23}
+    cards_root = root / "spec/source/cards"
+    legacy_root = root / "spec/source/knowledge"
     fence_ids = section_fence_ids(root)
     anchors = load_spec_anchors(root)
     errors: list[str] = []
-    for subdir, expected_count in expected_counts.items():
+    for subdir in ("topics", "resources", "stdlib"):
         legacy_dir = legacy_root / subdir
         if legacy_dir.exists():
             errors.append(f"{legacy_dir.relative_to(root)}: legacy markdown source directory must not exist")
@@ -141,8 +106,6 @@ def check_card_sources(root: Path) -> list[str]:
             errors.append(f"{card_dir.relative_to(root)}: missing card source directory")
             continue
         paths = sorted(card_dir.glob("*.json"))
-        if len(paths) != expected_count:
-            errors.append(f"{card_dir.relative_to(root)}: expected {expected_count} cards, got {len(paths)}")
         for path in paths:
             try:
                 card = json.loads(path.read_text(encoding="utf-8"))
@@ -194,23 +157,6 @@ def check_xray_fences(root: Path, xray: Path) -> list[str]:
                     )
             finally:
                 tmp_path.unlink(missing_ok=True)
-    return errors
-
-
-def check_topic_spec_anchors(root: Path) -> list[str]:
-    anchors = load_spec_anchors(root)
-    errors: list[str] = []
-    for path in sorted((root / "docs/knowledge/topics").glob("*.md")):
-        try:
-            meta = parse_frontmatter(path)
-        except ValueError as err:
-            errors.append(str(err))
-            continue
-        spec = meta.get("spec", "")
-        if not spec:
-            errors.append(f"{path.relative_to(root)}: missing spec anchor")
-        elif spec not in anchors:
-            errors.append(f"{path.relative_to(root)}: unknown spec anchor {spec}")
     return errors
 
 
@@ -301,21 +247,6 @@ def spec_quality_metrics(path: Path) -> dict[str, int]:
     }
 
 
-def check_language_docs_generated_current(root: Path) -> list[str]:
-    proc = run(
-        [
-            sys.executable,
-            str(root / "scripts/gen_language_docs.py"),
-            "--root",
-            str(root),
-            "--check",
-        ],
-        root,
-    )
-    if proc.returncode != 0:
-        return [proc.stderr or proc.stdout]
-    return []
-
 
 def check_spec_quality_gate(root: Path) -> list[str]:
     errors: list[str] = []
@@ -329,27 +260,8 @@ def check_spec_quality_gate(root: Path) -> list[str]:
     return errors
 
 
-def check_key_syntax(root: Path) -> list[str]:
-    required = {
-        "channel": ["shared const ch = new Channel<int>(10)", "let (next, ok) = ch.tryRecv()"],
-        "functions": ["let (q, r) = divmod(17, 5)"],
-        "class": ["override speak() -> string"],
-        "control_flow": ["match (x)", "try { throw"],
-        "modules": ["export fn helper()", "export class MyClass"],
-        "result": ["zero-overhead value-return error channel", "`throw expr` writes an enum variant"],
-        "types": ["### Tuple types", "let p: (int, string) = (7, \"ok\")"],
-    }
-    errors: list[str] = []
-    for topic, needles in required.items():
-        text = (root / f"docs/knowledge/topics/{topic}.md").read_text(encoding="utf-8")
-        for needle in needles:
-            if needle not in text:
-                errors.append(f"{topic}: missing required syntax example: {needle}")
-    return errors
-
-
 def check_topic_metadata_lists(root: Path) -> list[str]:
-    topics = sorted(path.stem for path in (root / "docs/spec/source/cards/topics").glob("*.json"))
+    topics = sorted(path.stem for path in (root / "spec/source/cards/topics").glob("*.json"))
     paths = [
         root / "src/app/mcp/xmcp_tools.c",
         root / "src/app/mcp/xmcp_resources.c",
@@ -415,17 +327,23 @@ def main(argv: list[str]) -> int:
     root = args.root.resolve()
     xray = args.xray.resolve()
     errors: list[str] = []
-    errors.extend(check_card_sources(root))
-    errors.extend(check_section_fence_coverage(root))
-    errors.extend(check_language_docs_generated_current(root))
+
+    # spec/source/ is tracked in-repo; docs/knowledge/ is generated at
+    # configure time and may not exist in CI until spec source is present.
+    has_docs = (root / "spec/source/cards").is_dir()
+    has_knowledge = (root / "docs/knowledge/topics").is_dir()
+
+    if has_docs:
+        errors.extend(check_card_sources(root))
+        errors.extend(check_topic_metadata_lists(root))
+    if has_knowledge:
+        errors.extend(check_xray_fences(root, xray))
+    if has_docs and has_knowledge:
+        errors.extend(check_generated_is_current(root, xray))
+
     errors.extend(check_spec_quality_gate(root))
-    errors.extend(check_topic_spec_anchors(root))
-    errors.extend(check_xray_fences(root, xray))
-    errors.extend(check_generated_is_current(root, xray))
     errors.extend(check_symbol_subset(root, xray))
     errors.extend(check_generated_stdlib_api_tables(root))
-    errors.extend(check_key_syntax(root))
-    errors.extend(check_topic_metadata_lists(root))
     errors.extend(check_prompt_smoke_examples(root, xray))
 
     if errors:

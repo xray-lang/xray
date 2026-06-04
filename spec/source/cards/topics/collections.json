@@ -1,0 +1,59 @@
+{
+  "id": "collections",
+  "title": "Collections",
+  "spec_anchor": "#24-复合类型",
+  "aliases": [
+    "array",
+    "map",
+    "set",
+    "list",
+    "dict",
+    "dictionary",
+    "json",
+    "bytes"
+  ],
+  "sections": [
+    {
+      "heading": "Array",
+      "fences": [
+        "types-array",
+        "expr-array-lit"
+      ]
+    },
+    {
+      "heading": "Map",
+      "fences": [
+        "types-map",
+        "expr-map-lit"
+      ]
+    },
+    {
+      "heading": "Set",
+      "fences": [
+        "types-set",
+        "expr-set-lit"
+      ]
+    },
+    {
+      "heading": "Json object",
+      "fences": [
+        "types-json-object",
+        "expr-object-lit"
+      ]
+    },
+    {
+      "heading": "Index access",
+      "fences": [
+        "expr-index-access"
+      ]
+    },
+    {
+      "heading": "Other collection-like types",
+      "bullets": [
+        "`Bytes` is a typed byte buffer backed by contiguous memory",
+        "`Channel<T>` is the coroutine communication container",
+        "`WeakMap` / `WeakSet` hold weak references to heap objects"
+      ]
+    }
+  ]
+}

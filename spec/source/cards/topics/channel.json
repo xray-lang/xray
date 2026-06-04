@@ -1,0 +1,30 @@
+{
+  "id": "channel",
+  "title": "Channel",
+  "spec_anchor": "#105-channel",
+  "aliases": ["channels", "chan", "Channel", "send", "recv", "buffered"],
+  "lead": "Channels are the primary inter-coroutine communication mechanism.",
+  "sections": [
+    {
+      "heading": "Declaration (MUST be const)",
+      "fences": ["channel-decl-variants"],
+      "after_text": "`let ch = new Channel<int>(10)` is a **compile error** for coroutine sharing."
+    },
+    {
+      "heading": "Operations",
+      "fences": ["channel-basic-ops"]
+    },
+    {
+      "heading": "Function parameter type",
+      "fences": ["channel-param-type"]
+    },
+    {
+      "heading": "Concurrency rules",
+      "bullets": [
+        "Channels can be captured by `go` closures (exception to shared rule)",
+        "Values sent through channel are deep-copied (pointer types)",
+        "Channel is reference-counted on system heap"
+      ]
+    }
+  ]
+}
