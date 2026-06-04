@@ -226,7 +226,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->spinning_count, 0);
     atomic_store(&runtime->wake_spinner, 0);
     atomic_store(&runtime->needspinning, 0);
-    // no global queue, use Worker local queue + MPSC inbox directly
+    xr_injectq_init(runtime);
 
     // active_coros/spawned now tracked per-Worker, no global init needed
     atomic_store(&runtime->total_inbox_len, 0);
@@ -363,6 +363,7 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count; i++) {
         xr_worker_destroy(&runtime->workers[i]);
     }
+    xr_injectq_destroy(runtime);
     xr_free_aligned(runtime->workers, XR_CACHE_LINE);
     xr_free(runtime->machines);
 
@@ -534,8 +535,8 @@ void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro) {
         return;
     }
 
-    // no global queue, always enqueue via inbox
-    // Select target Worker (lowest load), fallback to Worker 0 if none available
+    // External spawns enter the global injection queue so idle workers can
+    // claim the work directly instead of waiting on one target inbox.
     XrWorker *target = xr_choose_target_worker(runtime, -1);
     if (!target) {
         // All Workers unavailable, fallback to Worker 0
@@ -543,10 +544,8 @@ void xr_runtime_spawn(XrRuntime *runtime, XrCoroutine *coro) {
     }
 
     atomic_store_explicit(&coro->affinity_p, target->p.id, memory_order_relaxed);
-
-    // Enqueue via unified inbox path (MPSC push + Dekker fence + wake)
-    xr_worker_inbox_enqueue(runtime, target->p.id, coro);
-    XR_DBG_CORO("spawn: coro id=%d enqueued to Worker %d inbox", coro->id, target->p.id);
+    xr_injectq_push(runtime, coro);
+    XR_DBG_CORO("spawn: coro id=%d injected with affinity Worker %d", coro->id, target->p.id);
 }
 
 // Spawn coroutine into specified Worker's local queue
@@ -640,5 +639,16 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
             (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
+    {
+        int inject_len = 0;
+        for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
+            inject_len += atomic_load_explicit(&runtime->injectq[pi].len, memory_order_relaxed);
+        }
+        fprintf(stderr, "Inject: push=%llu pop=%llu spill=%llu len=%d mask=0x%x\n",
+                (unsigned long long) xr_sched_metric_load(&s->inject_push_count),
+                (unsigned long long) xr_sched_metric_load(&s->inject_pop_count),
+                (unsigned long long) xr_sched_metric_load(&s->inject_spill_count), inject_len,
+                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
+    }
     fprintf(stderr, "===========================\n\n");
 }

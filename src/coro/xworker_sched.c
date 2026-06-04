@@ -30,6 +30,8 @@
 #include "../os/os_thread.h"
 #include <time.h>
 
+#define XR_INJECT_POP_BATCH 32
+
 // ========== Lock-free Idle Worker Stack ==========
 //
 // Treiber stack of parked XrMachine*. Replaces the prior
@@ -185,6 +187,26 @@ void worker_drain_inbox(XrWorker *worker) {
     }
 }
 
+static int worker_pull_inject(XrWorker *worker, int max_per_priority) {
+    if (!worker || max_per_priority <= 0)
+        return 0;
+    XrRuntime *runtime = worker->p.runtime;
+    if (!runtime)
+        return 0;
+
+    uint32_t mask = atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
+    if (mask == 0)
+        return 0;
+
+    int total = 0;
+    for (int priority = XR_CORO_PRIORITY_COUNT - 1; priority >= 0; priority--) {
+        if ((mask & ((uint32_t) 1u << priority)) == 0)
+            continue;
+        total += xr_injectq_pop_batch(runtime, worker, priority, max_per_priority);
+    }
+    return total;
+}
+
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
 // Returns a fast-path IO coroutine (single wakeup with affinity to this
 // worker) that the caller should execute directly, bypassing the queue.
@@ -305,6 +327,7 @@ after_netpoll:
 
     // Drain MPSC inbox
     worker_drain_inbox(worker);
+    worker_pull_inject(worker, XR_INJECT_POP_BATCH);
 
     // Drain channel wake command queue (ownership-safe routing).
     // Commands arrive from remote workers that need us to wake our local
@@ -487,6 +510,8 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
 
 // Check for work by scanning actual deque sizes (accurate, used only before park)
 static bool runtime_has_work(XrRuntime *runtime) {
+    if (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0)
+        return true;
     for (int i = 0; i < runtime->worker_count; i++) {
         if (atomic_load_explicit(&runtime->workers[i].p.lifo_slot, memory_order_relaxed))
             return true;
@@ -647,6 +672,7 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_
         *io_fast_out = worker_poll_sources(worker);
     } else {
         worker_drain_inbox(worker);
+        worker_pull_inject(worker, XR_INJECT_POP_BATCH);
         (*poll_skip_io)--;
     }
 
@@ -766,6 +792,7 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
             return NULL;
         }
         worker_drain_inbox(worker);
+        worker_pull_inject(worker, XR_INJECT_POP_BATCH);
         if ((spin & 0x3) == 0) {
             cached_now = xr_monotonic_ticks();
         }

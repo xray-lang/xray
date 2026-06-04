@@ -56,7 +56,19 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t select_inline_alloc_count;
     _Atomic uint64_t timeout_yield_retry_count;
     _Atomic uint64_t timeout_event_block_count;
+    _Atomic uint64_t inject_push_count;
+    _Atomic uint64_t inject_pop_count;
+    _Atomic uint64_t inject_spill_count;
 } XrSchedGlobalStats;
+
+/* ========== Global Injection Queue ========== */
+
+typedef struct XrInjectQueue {
+    xr_mutex_t lock;
+    XrCoroutine *head;
+    XrCoroutine *tail;
+    _Atomic int len;
+} XrInjectQueue;
 
 /* ========== Runtime Structure ========== */
 
@@ -111,6 +123,10 @@ typedef struct XrRuntime {
     _Atomic int next_coro_id;
     bool sched_stats_enabled;
     XrSchedGlobalStats sched_stats;
+
+    /* === Global Injection Queue === */
+    XrInjectQueue injectq[XR_CORO_PRIORITY_COUNT];
+    _Atomic uint32_t nonempty_inject_mask;
 
     /* === I/O & Async === */
     XrNetpoll netpoll;

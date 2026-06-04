@@ -8,9 +8,10 @@
  * xworker_runq.c - Per-P run queue and worker push/pop operations
  *
  * KEY CONCEPT:
- *   Chase-Lev work-stealing deque per priority + linked-list overflow
- *   for unbounded capacity. Owner thread is lock-free on push/pop;
- *   thieves CAS the bottom pointer from remote threads.
+ *   Chase-Lev work-stealing deque per priority, with a runtime-wide
+ *   injection queue for owner-side bursts that outgrow the local deque.
+ *   Owner thread is lock-free on the common push/pop path; thieves CAS
+ *   the bottom pointer from remote threads.
  *
  * RELATED:
  *   - xproc.h: XrRunQueue / XrProc.runq[]
@@ -22,6 +23,47 @@
 
 // ========== Run Queue Implementation (Chase-Lev deque) ==========
 
+static int normalize_coro_priority(int priority) {
+    if (priority < 0)
+        return 0;
+    if (priority >= XR_CORO_PRIORITY_COUNT)
+        return XR_CORO_PRIORITY_COUNT - 1;
+    return priority;
+}
+
+static int runq_index_for_priority(int priority) {
+    return priority == CORO_PRIORITY_HIGH ? 1 : 0;
+}
+
+static void prepare_scheduled_coro(XrCoroutine *coro, int priority) {
+    coro->submit_time = xr_monotonic_ticks();
+    coro->schedule_count = (priority == CORO_PRIORITY_LOW) ? XR_RESCHEDULE_LOW : 1;
+}
+
+static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, int priority,
+                                          bool count_spill) {
+    XR_DCHECK(worker != NULL, "enqueue_runq_or_inject: NULL worker");
+    XR_DCHECK(coro != NULL, "enqueue_runq_or_inject: NULL coro");
+    priority = normalize_coro_priority(priority);
+    prepare_scheduled_coro(coro, priority);
+
+    int runq_idx = runq_index_for_priority(priority);
+    if (xr_steal_queue_push(&worker->p.runq[runq_idx].deque, coro)) {
+        return true;
+    }
+
+    XrRuntime *runtime = worker->p.runtime;
+    if (!runtime) {
+        xr_runq_enqueue(&worker->p.runq[runq_idx], coro);
+        return true;
+    }
+    if (count_spill) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_spill_count);
+    }
+    xr_injectq_push(runtime, coro);
+    return false;
+}
+
 void xr_runq_init(XrRunQueue *rq) {
     xr_steal_queue_init(&rq->deque, XR_LOCAL_QUEUE_SIZE);
     rq->overflow_first = NULL;
@@ -31,6 +73,157 @@ void xr_runq_init(XrRunQueue *rq) {
 
 void xr_runq_destroy(XrRunQueue *rq) {
     xr_steal_queue_destroy(&rq->deque);
+}
+
+// ========== Global Injection Queue ==========
+
+void xr_injectq_init(XrRuntime *runtime) {
+    if (!runtime)
+        return;
+    atomic_store_explicit(&runtime->nonempty_inject_mask, 0, memory_order_relaxed);
+    for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
+        XrInjectQueue *q = &runtime->injectq[pi];
+        xr_mutex_init(&q->lock);
+        q->head = NULL;
+        q->tail = NULL;
+        atomic_store_explicit(&q->len, 0, memory_order_relaxed);
+    }
+}
+
+void xr_injectq_destroy(XrRuntime *runtime) {
+    if (!runtime)
+        return;
+    for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
+        XrInjectQueue *q = &runtime->injectq[pi];
+        xr_mutex_lock(&q->lock);
+        q->head = NULL;
+        q->tail = NULL;
+        atomic_store_explicit(&q->len, 0, memory_order_relaxed);
+        xr_mutex_unlock(&q->lock);
+        xr_mutex_destroy(&q->lock);
+    }
+    atomic_store_explicit(&runtime->nonempty_inject_mask, 0, memory_order_relaxed);
+}
+
+void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last, int count,
+                           int priority) {
+    if (!runtime || !first)
+        return;
+
+    priority = normalize_coro_priority(priority);
+    XrCoroutine *cur = first;
+    XrCoroutine *actual_last = NULL;
+    int actual_count = 0;
+    while (cur && (count <= 0 || actual_count < count)) {
+        XrCoroutine *next = cur->sched_link;
+        prepare_scheduled_coro(cur, priority);
+        actual_last = cur;
+        actual_count++;
+        if (cur == last)
+            break;
+        cur = next;
+    }
+    if (!actual_last)
+        return;
+    actual_last->sched_link = NULL;
+
+    XrInjectQueue *q = &runtime->injectq[priority];
+    xr_mutex_lock(&q->lock);
+    if (q->tail) {
+        q->tail->sched_link = first;
+    } else {
+        q->head = first;
+    }
+    q->tail = actual_last;
+    atomic_fetch_add_explicit(&q->len, actual_count, memory_order_relaxed);
+    atomic_fetch_or_explicit(&runtime->nonempty_inject_mask, (uint32_t) 1u << priority,
+                             memory_order_release);
+    xr_mutex_unlock(&q->lock);
+
+    xr_sched_metric_add(runtime, &runtime->sched_stats.inject_push_count, (uint64_t) actual_count);
+    wake_idle_worker(runtime);
+}
+
+void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro) {
+    if (!runtime || !coro)
+        return;
+    int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
+    coro->sched_link = NULL;
+    xr_injectq_push_batch(runtime, coro, coro, 1, priority);
+}
+
+XrCoroutine *xr_injectq_pop_one(XrRuntime *runtime, int priority) {
+    if (!runtime)
+        return NULL;
+    priority = normalize_coro_priority(priority);
+    XrInjectQueue *q = &runtime->injectq[priority];
+
+    xr_mutex_lock(&q->lock);
+    XrCoroutine *coro = q->head;
+    if (coro) {
+        q->head = coro->sched_link;
+        if (!q->head) {
+            q->tail = NULL;
+            atomic_fetch_and_explicit(&runtime->nonempty_inject_mask, ~((uint32_t) 1u << priority),
+                                      memory_order_release);
+        }
+        atomic_fetch_sub_explicit(&q->len, 1, memory_order_relaxed);
+    } else {
+        atomic_fetch_and_explicit(&runtime->nonempty_inject_mask, ~((uint32_t) 1u << priority),
+                                  memory_order_release);
+    }
+    xr_mutex_unlock(&q->lock);
+
+    if (!coro)
+        return NULL;
+    coro->sched_link = NULL;
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_count);
+    return coro;
+}
+
+int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int max_count) {
+    if (!runtime || !worker || max_count <= 0)
+        return 0;
+    priority = normalize_coro_priority(priority);
+    XrInjectQueue *q = &runtime->injectq[priority];
+
+    XrCoroutine *first = NULL;
+    XrCoroutine *last = NULL;
+    int count = 0;
+    xr_mutex_lock(&q->lock);
+    while (q->head && count < max_count) {
+        XrCoroutine *coro = q->head;
+        q->head = coro->sched_link;
+        if (!q->head)
+            q->tail = NULL;
+        coro->sched_link = NULL;
+        if (last) {
+            last->sched_link = coro;
+        } else {
+            first = coro;
+        }
+        last = coro;
+        count++;
+    }
+    if (!q->head) {
+        atomic_fetch_and_explicit(&runtime->nonempty_inject_mask, ~((uint32_t) 1u << priority),
+                                  memory_order_release);
+    }
+    if (count > 0) {
+        atomic_fetch_sub_explicit(&q->len, count, memory_order_relaxed);
+    }
+    xr_mutex_unlock(&q->lock);
+
+    XrCoroutine *cur = first;
+    while (cur) {
+        XrCoroutine *next = cur->sched_link;
+        cur->sched_link = NULL;
+        xr_runq_enqueue(&worker->p.runq[runq_index_for_priority(priority)], cur);
+        worker->p.local_runq_len++;
+        cur = next;
+    }
+    xr_sched_metric_add(runtime, &runtime->sched_stats.inject_pop_count, (uint64_t) count);
+    return count;
 }
 
 // Enqueue: owner thread lock-free push, overflow to linked list if deque full
@@ -112,11 +305,12 @@ XrCoroutine *xr_worker_pop(XrWorker *worker) {
             worker->p.stats.lifo_hit_count++;
             return c;
         }
-        // Starvation prevention: flush LIFO slot to run queue
+        // Starvation prevention: flush LIFO slot to a shared-ready path.
         XrCoroutine *evicted = _lifo;
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
-        int evict_idx = (worker->p.lifo_slot_prio == CORO_PRIORITY_HIGH) ? 1 : 0;
-        xr_runq_enqueue(&worker->p.runq[evict_idx], evicted);
+        if (!worker_enqueue_runq_or_inject(worker, evicted, worker->p.lifo_slot_prio, true)) {
+            worker->p.local_runq_len--;
+        }
         worker->p.stats.lifo_flush_count++;
     }
     // Reset LIFO polls when falling through to normal queues
@@ -184,7 +378,7 @@ retry:
 }
 
 // Push to LIFO slot for cache locality.
-// If LIFO slot occupied, evict previous occupant to normal run queue.
+// If LIFO slot occupied, evict previous occupant to a shared-ready path.
 // Only effective when called from the owning worker thread.
 void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "worker_push_lifo: NULL worker");
@@ -198,9 +392,10 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
         worker->p.lifo_slot_prio = new_prio;
         worker->p.local_runq_len++;
         if (prev) {
-            // Evict previous occupant to normal run queue (already counted)
-            int runq_idx = (prev_prio == CORO_PRIORITY_HIGH) ? 1 : 0;
-            xr_runq_enqueue(&worker->p.runq[runq_idx], prev);
+            // Evict previous occupant while preserving local count semantics.
+            if (!worker_enqueue_runq_or_inject(worker, prev, prev_prio, true)) {
+                worker->p.local_runq_len--;
+            }
         }
         return;
     }
@@ -213,7 +408,7 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
 // Design:
 // - LOW coroutines go to NORMAL queue (index 0), schedule_count=8
 // - HIGH coroutines go to HIGH queue (index 1)
-// - Lock-free push via Chase-Lev deque
+// - Local deque full spills new work to the global injection queue
 void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "worker_push: NULL worker");
     XR_DCHECK(coro != NULL, "worker_push: NULL coro");
@@ -222,34 +417,17 @@ void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     // Skip check when TLS is not yet initialized (startup / single-thread).
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
               "worker_push: cross-worker push detected (use inbox)");
-    int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (priority < 0)
-        priority = 0;
-    if (priority >= XR_CORO_PRIORITY_COUNT)
-        priority = XR_CORO_PRIORITY_COUNT - 1;
-
-    // LOW goes to NORMAL queue, controlled by schedule_count
-    int runq_idx;
-    if (priority == CORO_PRIORITY_LOW) {
-        coro->schedule_count = XR_RESCHEDULE_LOW;  // 8 times delay
-        runq_idx = 0;                              // NORMAL queue
-    } else if (priority == CORO_PRIORITY_NORMAL) {
-        coro->schedule_count = 1;
-        runq_idx = 0;  // NORMAL queue
-    } else {
-        coro->schedule_count = 1;
-        runq_idx = 1;  // HIGH queue
+    int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
+    bool queued_locally = worker_enqueue_runq_or_inject(worker, coro, priority, true);
+    if (queued_locally) {
+        worker->p.local_runq_len++;
     }
-
-    // unbounded linked list, direct enqueue
-    xr_runq_enqueue(&worker->p.runq[runq_idx], coro);
-
-    worker->p.local_runq_len++;
     XrRuntime *rt = worker->p.runtime;
 
     // wake: if no spinner is scanning for work, wake a parked worker.
     // This ensures newly enqueued coros are discovered promptly.
-    if (rt && atomic_load_explicit(&rt->spinning_count, memory_order_relaxed) == 0) {
+    if (queued_locally && rt &&
+        atomic_load_explicit(&rt->spinning_count, memory_order_relaxed) == 0) {
         wake_idle_worker(rt);
     }
 }

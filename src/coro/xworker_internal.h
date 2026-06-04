@@ -74,6 +74,15 @@ XR_FUNC void worker_drain_inbox(XrWorker *worker);
 // Returns a fast-path IO coroutine (affinity match, skip queue) or NULL.
 XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
+// Global injection queue (xworker_runq.c)
+XR_FUNC void xr_injectq_init(XrRuntime *runtime);
+XR_FUNC void xr_injectq_destroy(XrRuntime *runtime);
+XR_FUNC void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro);
+XR_FUNC void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last,
+                                   int count, int priority);
+XR_FUNC XrCoroutine *xr_injectq_pop_one(XrRuntime *runtime, int priority);
+XR_FUNC int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int max_count);
+
 // Sysmon constants
 #define XR_SYSMON_WARN_US 100000
 #define XR_SYSMON_CANCEL_US 5000000
