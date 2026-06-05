@@ -20,6 +20,7 @@
  */
 
 #include "xi_cgen.h"
+#include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_opt.h"

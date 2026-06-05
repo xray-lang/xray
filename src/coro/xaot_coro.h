@@ -66,6 +66,8 @@ typedef struct XrAotRootVisitor {
 typedef struct XrAotCoroDesc {
     const char *name;
     size_t frame_size;
+    uint32_t root_count;
+    uint32_t release_count;
     XrAotResumeFn resume;
     XrAotFrameTraceFn trace_roots;
     XrAotFrameReleaseFn release_frame;

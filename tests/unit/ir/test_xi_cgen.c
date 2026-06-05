@@ -482,8 +482,14 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
            "AOT coroutine typed params must not be unboxed as tagged values");
     assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
            "scalar frame params must not be traced as XrValue roots");
+    assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->v5)") &&
+           "boxed scalar return after the final suspend must not be traced");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar go and await boundaries must not call the deep-copy helper");
+    assert(contains(code, ".root_count = 0,") &&
+           "scalar coroutine frame should report zero traced roots");
+    assert(contains(code, ".release_count = 0,") &&
+           "scalar coroutine frame should report zero ARC release slots");
 
     printf("  Generated typed coroutine param frame %zu bytes of C code\n", strlen(code));
     free(code);
@@ -523,6 +529,10 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
            "frame release must receive coroutine GC context");
     assert(contains(code, "xrt_release(f->v3)") &&
            "AOT ARC string value should be released from the frame");
+    assert(contains(code, ".root_count = 1,") &&
+           "AOT ARC string frame should report one traced root slot");
+    assert(contains(code, ".release_count = 1,") &&
+           "AOT ARC string frame should report one release slot");
     assert(contains(code, "xr_aot_frame_free(frame)") &&
            "AOT coroutine frame release should free the frame");
     assert(!contains(code, "xr_aot_release_frame_value(f->") &&
