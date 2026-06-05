@@ -65,6 +65,15 @@ static const char *aot_backend_debug_name(const XrCoroutine *coro) {
     return "aot";
 }
 
+static void aot_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot) {
+    if (!snapshot)
+        return;
+    snapshot->backend_name = "aot";
+    snapshot->function_name = aot_backend_debug_name(coro);
+    snapshot->frame_count = coro && coro->backend_state ? 1 : 0;
+    snapshot->in_c_frame = 0;
+}
+
 static void aot_backend_trace_roots(XrCoroutine *coro, void *visitor) {
     XrAotCoroState *state = aot_state_from_coro(coro);
     if (state && state->desc && state->desc->trace_roots)
@@ -137,6 +146,7 @@ static const XrCoroBackendVTable aot_backend_vtable = {
     .release = aot_release_state,
     .destroy = aot_release_state,
     .debug_name = aot_backend_debug_name,
+    .debug_snapshot = aot_backend_debug_snapshot,
 };
 
 void *xr_aot_frame_alloc(size_t size) {

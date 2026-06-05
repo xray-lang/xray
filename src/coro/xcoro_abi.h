@@ -80,6 +80,13 @@ typedef struct XrCoroRunContext {
     XrayIsolate *isolate;
 } XrCoroRunContext;
 
+typedef struct XrCoroDebugSnapshot {
+    const char *backend_name;
+    const char *function_name;
+    int frame_count;
+    int in_c_frame;
+} XrCoroDebugSnapshot;
+
 typedef XrCoroRunResult (*XrCoroResumeFn)(XrCoroutine *coro, const XrCoroEvent *event,
                                           const XrCoroRunContext *run_ctx);
 
@@ -90,6 +97,7 @@ typedef struct XrCoroBackendVTable {
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);
+    void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;
 
 static inline XrCoroRunResult xr_coro_run_result(XrCoroRunKind kind) {
