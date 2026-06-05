@@ -1,0 +1,27 @@
+fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) -> int {
+    ready.send(1)
+    select {
+        value from ch -> {
+        }
+    }
+    done.send(1)
+    return 1
+}
+
+let ch = new Channel<int>(0)
+let ready = new Channel<int>(0)
+let done = new Channel<int>(1)
+
+go wait_select_close(ch, ready, done)
+print(ready.recv())
+
+for (let i = 0; i < 16; i++) {
+    yield
+}
+
+ch.close()
+let (value, ok) = done.recvTimeout(2000)
+print(value)
+print(ok)
+ready.close()
+done.close()

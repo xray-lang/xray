@@ -1,0 +1,37 @@
+fn recv_timeout_until_close(ch: Channel<int>, ready: Channel<int>, done: Channel<bool>,
+                            timeout_ms: int) -> int {
+    ready.send(1)
+    let (value, ok) = ch.recvTimeout(timeout_ms)
+    done.send(ok)
+    return 1
+}
+
+const waiter_count = 16
+let ch = new Channel<int>(0)
+let ready = new Channel<int>(0)
+let done = new Channel<bool>(waiter_count)
+
+for (let i = 0; i < waiter_count; i++) {
+    go recv_timeout_until_close(ch, ready, done, 2000)
+}
+
+for (let i = 0; i < waiter_count; i++) {
+    ready.recv()
+}
+
+for (let i = 0; i < 16; i++) {
+    yield
+}
+
+ch.close()
+
+let closed_waiters = 0
+for (let i = 0; i < waiter_count; i++) {
+    if (done.recv() == false) {
+        closed_waiters++
+    }
+}
+
+print(closed_waiters)
+ready.close()
+done.close()
