@@ -125,6 +125,49 @@ static void emit_coro_boundary_value(FILE *out, const XiValue *v) {
     emit_boxed_vref(out, v);
 }
 
+static const XiValue *cg_coro_unboxed_scalar_value(const XiValue *v) {
+    if (!v)
+        return NULL;
+    if (v->op == XI_BOX && v->nargs >= 1) {
+        XrRep boxed_rep = cg_rep(v->args[0]);
+        if (boxed_rep == XR_REP_I64 || boxed_rep == XR_REP_F64)
+            return v->args[0];
+    }
+    XrRep rep = cg_rep(v);
+    if (rep == XR_REP_I64 || rep == XR_REP_F64)
+        return v;
+    return NULL;
+}
+
+static const char *cg_coro_typed_send_helper(const char *base, const XiValue *v,
+                                             const XiValue **send_arg) {
+    const XiValue *arg = cg_coro_unboxed_scalar_value(v);
+    if (!arg)
+        return base;
+    XrRep rep = cg_rep(arg);
+    if (rep == XR_REP_I64) {
+        if (send_arg)
+            *send_arg = arg;
+        return strcmp(base, "xr_aot_chan_send") == 0 ? "xr_aot_chan_send_i64"
+                                                      : "xr_aot_chan_try_send_i64";
+    }
+    if (rep == XR_REP_F64) {
+        if (send_arg)
+            *send_arg = arg;
+        return strcmp(base, "xr_aot_chan_send") == 0 ? "xr_aot_chan_send_f64"
+                                                      : "xr_aot_chan_try_send_f64";
+    }
+    return base;
+}
+
+static void emit_coro_send_value(FILE *out, const XiValue *send_value, const XiValue *send_arg) {
+    if (send_arg) {
+        emit_vref(out, send_arg);
+        return;
+    }
+    emit_coro_boundary_value(out, send_value);
+}
+
 static void emit_int64_arg(FILE *out, const XiValue *v) {
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_I64) {
@@ -823,10 +866,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_SEND missing operands\n");
             return;
         }
-        fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_send(ctx, ", v->id);
+        const XiValue *send_arg = NULL;
+        const char *helper = cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1],
+                                                       &send_arg);
+        fprintf(out, "    XrValue _chan_try_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        emit_coro_boundary_value(out, v->args[1]);
+        emit_coro_send_value(out, v->args[1], send_arg);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
@@ -895,11 +941,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         const XiValue *channel = v->args[0];
         const XiValue *send_value = v->args[1];
+        const XiValue *send_arg = NULL;
+        const char *helper = cg_coro_typed_send_helper("xr_aot_chan_send", send_value, &send_arg);
         int sid = ++(*state_id);
-        fprintf(out, "    XrAotResult _chan_send_%u = xr_aot_chan_send(ctx, ", v->id);
+        fprintf(out, "    XrAotResult _chan_send_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, channel);
         fprintf(out, ", ");
-        emit_coro_boundary_value(out, send_value);
+        emit_coro_send_value(out, send_value, send_arg);
         fprintf(out, ");\n");
         fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
@@ -954,10 +1002,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_CALL_METHOD && cg_value_type_is_channel(v->args[0])) {
         if (cg_is_channel_method_call(v, "trySend", 1)) {
-            fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_try_send(ctx, ", v->id);
+            const XiValue *send_arg = NULL;
+            const char *helper = cg_coro_typed_send_helper("xr_aot_chan_try_send", v->args[1],
+                                                           &send_arg);
+            fprintf(out, "    XrValue _chan_method_%u = %s(ctx, ", v->id, helper);
             emit_vref(out, v->args[0]);
             fprintf(out, ", ");
-            emit_coro_boundary_value(out, v->args[1]);
+            emit_coro_send_value(out, v->args[1], send_arg);
             fprintf(out, ");\n");
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
