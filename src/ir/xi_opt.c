@@ -645,7 +645,13 @@ static XrRep sr_def_rep(const XiValue *v) {
         case XI_NOT:
         case XI_ISNULL:
         case XI_IS:
+        case XI_CHAN_TRY_SEND:
+        case XI_CHAN_IS_CLOSED:
             return XR_REP_I64;
+        case XI_SELECT: {
+            XrRep r = xr_type_base_rep(v->type);
+            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+        }
         case XI_BOX:
             return XR_REP_TAGGED;
         case XI_UNBOX: {
@@ -721,7 +727,17 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
             }
             return XR_REP_TAGGED;
         case XI_NOT:
-            return XR_REP_I64;
+            if (arg_idx == 0 && user->args[0])
+                return sr_def_rep(user->args[0]);
+            return XR_REP_TAGGED;
+        case XI_SELECT:
+            if (arg_idx == 0 && user->args[0])
+                return sr_def_rep(user->args[0]);
+            if (arg_idx < 3) {
+                XrRep r = xr_type_base_rep(user->type);
+                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            }
+            return XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
                 XrRep r = xr_type_base_rep(user->args[0]->type);

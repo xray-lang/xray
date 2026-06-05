@@ -656,6 +656,18 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
     emit_vref(out, v->args[1]);
 }
 
+static void emit_condition_expr(FILE *out, const XiValue *v) {
+    if (cg_rep(v) == XR_REP_TAGGED) {
+        fprintf(out, "xr_truthy(");
+        emit_vref(out, v);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "(");
+        emit_vref(out, v);
+        fprintf(out, " != 0)");
+    }
+}
+
 static void emit_codegen_abort_expr(FILE *out) {
     fprintf(out, "(abort(), XR_NULL_VAL)");
 }
@@ -967,8 +979,20 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         /* Logical */
         case XI_NOT:
-            fprintf(out, "!");
-            emit_vref(out, v->args[0]);
+            fprintf(out, "!(");
+            emit_condition_expr(out, v->args[0]);
+            fprintf(out, ")");
+            break;
+
+        case XI_SELECT:
+            XR_DCHECK(v->nargs == 3, "XI_SELECT: need cond, true, false");
+            fprintf(out, "(");
+            emit_condition_expr(out, v->args[0]);
+            fprintf(out, " ? ");
+            emit_vref(out, v->args[1]);
+            fprintf(out, " : ");
+            emit_vref(out, v->args[2]);
+            fprintf(out, ")");
             break;
 
         case XI_ISNULL:
@@ -2185,7 +2209,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             XR_DCHECK(blk->succs[1] != NULL, "IF block missing else");
             /* Emit phi copies for both branches */
             fprintf(out, "    if (");
-            emit_vref(out, blk->control);
+            emit_condition_expr(out, blk->control);
             fprintf(out, ") {\n");
             emit_phi_copies(out, blk->succs[0], find_pred_idx(blk->succs[0], blk));
             fprintf(out, "        goto L%u;\n", blk->succs[0]->id);

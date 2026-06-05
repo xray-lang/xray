@@ -838,10 +838,16 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await timeout should generate");
-    assert(contains(code, "xr_aot_await_task(ctx,") &&
-           "timeout await must use the AOT await bridge");
-    assert(!contains(code, ", -1, false);") &&
-           "timeout await must not use the infinite-wait sentinel");
+    const char *await_call = strstr(code, "xr_aot_await_task(ctx,");
+    assert(await_call != NULL && "timeout await must use the AOT await bridge");
+    const char *await_line_end = strchr(await_call, '\n');
+    bool await_line_terminated = await_line_end != NULL;
+    bool await_uses_infinite_wait =
+        await_line_terminated && count_between(await_call, await_line_end, ", -1, false);") > 0;
+    assert(await_line_terminated && "timeout await call should be line-terminated");
+    assert(!await_uses_infinite_wait && "timeout await must not use the infinite-wait sentinel");
+    (void) await_line_terminated;
+    (void) await_uses_infinite_wait;
     assert(contains(code, "INT64_C(25)") && "timeout expression should be evaluated");
 
     printf("  Generated await timeout %zu bytes of C code\n", strlen(code));

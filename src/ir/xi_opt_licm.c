@@ -186,23 +186,8 @@ static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk, uint32_t
 
 /* Append a value to a block's values[] array. */
 static bool block_append_value(XiBlock *blk, XiValue *v) {
-    if (blk->nvalues >= blk->values_cap) {
-        uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 8;
-        XiValue **tmp = NULL;
-        if (blk->values) {
-            tmp = (XiValue **) xr_malloc(new_cap * sizeof(XiValue *));
-            if (!tmp)
-                return false;
-            memcpy(tmp, blk->values, blk->nvalues * sizeof(XiValue *));
-            /* old array is arena-allocated, no free needed */
-        } else {
-            tmp = (XiValue **) xr_calloc(new_cap, sizeof(XiValue *));
-            if (!tmp)
-                return false;
-        }
-        blk->values = tmp;
-        blk->values_cap = new_cap;
-    }
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
+        return false;
     blk->values[blk->nvalues++] = v;
     v->block = blk;
     return true;

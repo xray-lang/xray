@@ -20,7 +20,6 @@
 #include "xi.h"
 #include "xi_loop.h"
 #include "xi_analysis.h"
-#include "../base/xmalloc.h"
 
 /* Check if a value is defined inside the loop. */
 static bool is_loop_internal(const XiLoop *loop, const XiValue *v) {
@@ -41,14 +40,8 @@ static void hoist_guard(XiBlock *body_blk, uint32_t vi, XiBlock *preheader) {
 
     /* Append to preheader (before terminator, which is encoded in
      * block kind + control, not in the values array). */
-    if (preheader->nvalues >= preheader->values_cap) {
-        uint32_t new_cap = preheader->values_cap ? preheader->values_cap * 2 : 8;
-        XiValue **grown = (XiValue **) xr_realloc(preheader->values, new_cap * sizeof(XiValue *));
-        if (!grown)
-            return;
-        preheader->values = grown;
-        preheader->values_cap = new_cap;
-    }
+    if (!xi_block_ensure_value_capacity(preheader, preheader->nvalues + 1))
+        return;
     preheader->values[preheader->nvalues++] = guard;
     guard->block = preheader;
 }
