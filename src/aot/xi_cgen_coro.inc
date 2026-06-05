@@ -678,6 +678,110 @@ static const XiFunc *cg_resolve_go_target(XiCgenCtx *ctx, const XiFunc *current,
     return NULL;
 }
 
+static bool cg_func_can_emit_sync_go_wrapper(const XiFunc *f) {
+    return f && f->ncaptures == 0 && !cg_func_needs_aot_coro(f);
+}
+
+static void emit_sync_go_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                    const char *prefix) {
+    fprintf(out, "typedef struct ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " {\n");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, "    XrValue p%u;\n", i);
+    fprintf(out, "} ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, ";\n\n");
+}
+
+static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                       const char *prefix) {
+    fprintf(out, "static void *");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
+    fprintf(out, "(");
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        fprintf(out, "XrValue p%u", i);
+    }
+    fprintf(out, ") {\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)xr_aot_frame_alloc(sizeof(*f));\n");
+    fprintf(out, "    if (!f)\n        return NULL;\n");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, "    f->p%u = p%u;\n", i, i);
+    fprintf(out, "    return f;\n");
+    fprintf(out, "}\n\n");
+}
+
+static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+    emit_sync_go_frame_type(ctx, out, f, prefix);
+    emit_sync_go_frame_factory(ctx, out, f, prefix);
+
+    fprintf(out, "static XrAotResult ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+    fprintf(out, "(void *raw_frame, const XrAotContext *ctx) {\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)raw_frame;\n");
+    fprintf(out, "    (void)ctx;\n");
+    fprintf(out, "    if (!f)\n        return xr_aot_error(XR_NULL_VAL, false);\n");
+    fprintf(out, "    XrValue _result = ");
+    emit_fname(ctx, out, prefix, f);
+    fprintf(out, "(NULL");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, ", f->p%u", i);
+    fprintf(out, ");\n");
+    fprintf(out, "    return xr_aot_done(_result);\n");
+    fprintf(out, "}\n\n");
+
+    fprintf(out, "static void ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
+    fprintf(out, "(void *frame, void *visitor) {\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)frame;\n");
+    fprintf(out, "    if (!f)\n        return;\n");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, "    xr_aot_trace_frame_value(visitor, f->p%u);\n", i);
+    fprintf(out, "}\n\n");
+
+    fprintf(out, "static void ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
+    fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
+    fprintf(out, "    (void)gc;\n");
+    fprintf(out, "    if (!frame)\n        return;\n");
+    fprintf(out, "    xr_aot_frame_free(frame);\n");
+    fprintf(out, "}\n\n");
+
+    fprintf(out, "static const XrAotCoroDesc ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_desc");
+    fprintf(out, " = {\n");
+    fprintf(out, "    .name = \"%s\",\n", f->name ? f->name : "aot");
+    fprintf(out, "    .frame_size = sizeof(");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, "),\n");
+    fprintf(out, "    .root_count = %u,\n", (unsigned) f->nparams);
+    fprintf(out, "    .release_count = 0,\n");
+    fprintf(out, "    .resume = ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
+    fprintf(out, ",\n");
+    fprintf(out, "    .trace_roots = ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
+    fprintf(out, ",\n");
+    fprintf(out, "    .release_frame = ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
+    fprintf(out, ",\n");
+    fprintf(out, "};\n\n");
+}
+
 static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                  const XiLiveness *live, const char *prefix) {
     fprintf(out, "typedef struct ");
@@ -861,7 +965,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         const XiFunc *target = cg_resolve_go_target(ctx, f, v->args[0]);
-        if (!target || !cg_func_needs_aot_coro(target)) {
+        bool target_is_coro = target && cg_func_needs_aot_coro(target);
+        bool target_is_sync_go = target && cg_func_can_emit_sync_go_wrapper(target);
+        if (!target || (!target_is_coro && !target_is_sync_go)) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT go target\n");
             return;
