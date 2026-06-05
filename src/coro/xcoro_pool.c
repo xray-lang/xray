@@ -200,13 +200,16 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
             // Zero struct (next pointer may be dirty) while keeping cold JIT
             // state allocated for reuse.
-            XrVmCoroState *saved_vm_state = coro->vm_state;
+            XrVmCoroState *saved_vm_state = xr_coro_maybe_vm_state(coro);
             XrJitCoroState *saved_jit_state = coro->jit_state;
             uint16_t saved_gc_flags =
                 coro->gc_flags &
                 (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
             memset(coro, 0, sizeof(XrCoroutine));
-            coro->vm_state = saved_vm_state;
+            if (saved_vm_state) {
+                coro->backend = xr_coro_vm_backend_vtable();
+                coro->backend_state = saved_vm_state;
+            }
             coro->jit_state = saved_jit_state;
             xr_coro_reset_jit_state(coro);
             coro->gc_flags = saved_gc_flags;
@@ -281,9 +284,10 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
     } else {
         // From malloc: free directly
         xr_coro_free_jit_state(coro);
-        if ((coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) && coro->vm_state) {
-            xr_free(coro->vm_state);
-            coro->vm_state = NULL;
+        XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
+        if ((coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) && vm_state) {
+            xr_free(vm_state);
+            coro->backend_state = NULL;
         }
         xr_free(coro);
     }
