@@ -1,0 +1,12 @@
+export fn suspend_plus(x: int) -> int {
+    yield
+    return x + 1
+}
+
+export fn recv_once(ch: Channel<int>) -> int {
+    return ch.recv()
+}
+
+export fn sync_plus(x: int) -> int {
+    return x + 2
+}

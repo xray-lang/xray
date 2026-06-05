@@ -667,52 +667,26 @@ static void record_coro_frame_stats(XiCgenCtx *ctx, size_t frame_size, uint32_t 
         stats->max_releases = release_count;
 }
 
-static const XiFunc *cg_resolve_go_target(XiCgenCtx *ctx, const XiFunc *current,
-                                          const XiValue *callee) {
-    if (!callee)
-        return NULL;
-    if (callee->op == XI_CLOSURE_NEW && callee->aux)
-        return (const XiFunc *) callee->aux;
-    if (callee->op == XI_BOX && callee->nargs >= 1 && callee->args[0]->op == XI_CLOSURE_NEW &&
-        callee->args[0]->aux)
-        return (const XiFunc *) callee->args[0]->aux;
-    if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL &&
-        current->name)
-        return current;
-    if (callee->op == XI_GET_SHARED) {
-        int slot = (int) callee->aux_int;
-        if (slot >= 0 && slot < ctx->nshared)
-            return ctx->shared_funcs[slot];
-    }
-    if ((callee->op == XI_BOX || callee->op == XI_UNBOX) && callee->nargs >= 1 &&
-        callee->args[0]->op == XI_GET_SHARED) {
-        int slot = (int) callee->args[0]->aux_int;
-        if (slot >= 0 && slot < ctx->nshared)
-            return ctx->shared_funcs[slot];
-    }
-    return NULL;
-}
-
-static const XiFunc *cg_resolve_static_call_target(XiCgenCtx *ctx, const XiFunc *current,
-                                                  const XiValue *callee) {
-    const XiFunc *target = cg_resolve_go_target(ctx, current, callee);
-    if (target)
-        return target;
-    if (!callee)
-        return NULL;
-    if ((callee->op == XI_BOX || callee->op == XI_UNBOX) && callee->nargs >= 1)
-        return cg_resolve_static_call_target(ctx, current, callee->args[0]);
-    return NULL;
-}
-
 static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, int depth);
+
+static CgStaticFunctionCall cg_coro_direct_suspend_call_target_info(XiCgenCtx *ctx,
+                                                                    const XiFunc *current,
+                                                                    const XiValue *v);
 
 static const XiFunc *cg_coro_direct_suspend_call_target(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v) {
+    return cg_coro_direct_suspend_call_target_info(ctx, current, v).func;
+}
+
+static CgStaticFunctionCall cg_coro_direct_suspend_call_target_info(XiCgenCtx *ctx,
+                                                                    const XiFunc *current,
+                                                                    const XiValue *v) {
     if (!v || v->op != XI_CALL || v->nargs < 1)
-        return NULL;
-    const XiFunc *target = cg_resolve_static_call_target(ctx, current, v->args[0]);
-    return target && cg_func_needs_aot_coro_ctx_depth(ctx, target, 0) ? target : NULL;
+        return cg_no_static_function_call();
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, current, v->args[0]);
+    return call.func && cg_func_needs_aot_coro_ctx_depth(ctx, call.func, 0)
+               ? call
+               : cg_no_static_function_call();
 }
 
 static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, int depth) {
@@ -729,7 +703,7 @@ static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, in
             const XiValue *v = blk->values[vi];
             if (!v || v->op != XI_CALL || v->nargs < 1)
                 continue;
-            const XiFunc *target = cg_resolve_static_call_target(ctx, f, v->args[0]);
+            const XiFunc *target = cg_resolve_static_function_call(ctx, f, v->args[0]).func;
             if (!target || target == f)
                 continue;
             if (cg_func_needs_aot_coro_ctx_depth(ctx, target, depth + 1))
@@ -1158,7 +1132,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        const XiFunc *target = cg_resolve_go_target(ctx, f, v->args[0]);
+        CgStaticFunctionCall go_call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+        const XiFunc *target = go_call.func;
+        const char *go_prefix = go_call.prefix ? go_call.prefix : prefix;
         bool target_is_coro = target && cg_func_needs_aot_coro_ctx(ctx, target);
         bool target_is_sync_go = target && cg_func_can_emit_sync_go_wrapper_ctx(ctx, target);
         if (!target || (!target_is_coro && !target_is_sync_go)) {
@@ -1179,12 +1155,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         int link_mode = (int) v->aux_int & 0xff;
         int sid = ++(*state_id);
         fprintf(out, "    void *_child_frame_%u = ", v->id);
-        emit_fname_suffix(ctx, out, prefix, target, "_aot_frame_new");
+        emit_fname_suffix(ctx, out, go_prefix, target, "_aot_frame_new");
         fprintf(out, "(");
         emit_aot_frame_new_call_args(out, f, v->args[0], target, v->args, 1, v->nargs);
         fprintf(out, ");\n");
         fprintf(out, "    XrAotSpawnResult _spawn_%u = xr_aot_spawn(ctx, &", v->id);
-        emit_fname_suffix(ctx, out, prefix, target, "_aot_desc");
+        emit_fname_suffix(ctx, out, go_prefix, target, "_aot_desc");
         fprintf(out, ", _child_frame_%u, %d, %d, false, \"%s\");\n", v->id, priority, link_mode,
                 target->name ? target->name : "aot");
         fprintf(out, "    ");
@@ -1289,8 +1265,10 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    const XiFunc *direct_call_target = cg_coro_direct_suspend_call_target(ctx, f, v);
+    CgStaticFunctionCall direct_call = cg_coro_direct_suspend_call_target_info(ctx, f, v);
+    const XiFunc *direct_call_target = direct_call.func;
     if (direct_call_target) {
+        const char *direct_call_prefix = direct_call.prefix ? direct_call.prefix : prefix;
         if (!cg_aot_frame_new_can_supply_cl_arg(f, v->args[0], direct_call_target)) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported captured AOT suspend call target\n");
@@ -1302,7 +1280,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrValue _call_value_%u = XR_NULL_VAL;\n", v->id);
         fprintf(out, "    if (!f->call_frame_%u) {\n", v->id);
         fprintf(out, "        f->call_frame_%u = ", v->id);
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_frame_new");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_frame_new");
         fprintf(out, "(");
         emit_aot_frame_new_call_args(out, f, v->args[0], direct_call_target, v->args, 1,
                                      v->nargs);
@@ -1311,7 +1289,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "            return xr_aot_error(XR_NULL_VAL, false);\n");
         fprintf(out, "    }\n");
         fprintf(out, "    _call_%u = ", v->id);
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_resume");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_resume");
         fprintf(out, "(f->call_frame_%u, ctx);\n", v->id);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
@@ -1322,7 +1300,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                     "            xrt_retain(_call_value_%u);\n",
                     v->id, v->id, v->id);
         fprintf(out, "        ");
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_release");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         if (cg_coro_value_has_storage(f, v)) {
@@ -1336,7 +1314,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                      "_call_%u.kind == XR_AOT_RUN_CANCELLED) {\n",
                 v->id, v->id);
         fprintf(out, "        ");
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_release");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         fprintf(out, "        return _call_%u;\n", v->id);
@@ -1346,7 +1324,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    _call_%u = ", v->id);
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_resume");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_resume");
         fprintf(out, "(f->call_frame_%u, ctx);\n", v->id);
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_DONE) {\n", v->id);
         fprintf(out, "        _call_value_%u = _call_%u.value;\n", v->id, v->id);
@@ -1357,7 +1335,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                     "            xrt_retain(_call_value_%u);\n",
                     v->id, v->id, v->id);
         fprintf(out, "        ");
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_release");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         if (cg_coro_value_has_storage(f, v)) {
@@ -1371,7 +1349,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                      "_call_%u.kind == XR_AOT_RUN_CANCELLED) {\n",
                 v->id, v->id);
         fprintf(out, "        ");
-        emit_fname_suffix(ctx, out, prefix, direct_call_target, "_aot_release");
+        emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
         fprintf(out, "        return _call_%u;\n", v->id);
@@ -2029,11 +2007,12 @@ static void emit_coro_direct_call_frame_trace(XiCgenCtx *ctx, FILE *out, const X
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            const XiFunc *target = cg_coro_direct_suspend_call_target(ctx, f, v);
-            if (!target)
+            CgStaticFunctionCall call = cg_coro_direct_suspend_call_target_info(ctx, f, v);
+            if (!call.func)
                 continue;
+            const char *target_prefix = call.prefix ? call.prefix : prefix;
             fprintf(out, "    if (f->call_frame_%u)\n        ", v->id);
-            emit_fname_suffix(ctx, out, prefix, target, "_aot_trace");
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_trace");
             fprintf(out, "(f->call_frame_%u, visitor);\n", v->id);
         }
     }
@@ -2047,11 +2026,12 @@ static void emit_coro_direct_call_frame_release(XiCgenCtx *ctx, FILE *out, const
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            const XiFunc *target = cg_coro_direct_suspend_call_target(ctx, f, v);
-            if (!target)
+            CgStaticFunctionCall call = cg_coro_direct_suspend_call_target_info(ctx, f, v);
+            if (!call.func)
                 continue;
+            const char *target_prefix = call.prefix ? call.prefix : prefix;
             fprintf(out, "    if (f->call_frame_%u) {\n        ", v->id);
-            emit_fname_suffix(ctx, out, prefix, target, "_aot_release");
+            emit_fname_suffix(ctx, out, target_prefix, call.func, "_aot_release");
             fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
             fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
             fprintf(out, "    }\n");
