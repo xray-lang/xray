@@ -305,6 +305,36 @@ XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
+XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode) {
+    if (!ctx || !ctx->isolate || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroBlockResult block = xr_coro_scope_enter(ctx->isolate, ctx->coro, scope_mode);
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return xr_aot_done(XR_NULL_VAL);
+    return xr_aot_error(block.value, block.ok);
+}
+
+XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode, XrValue *out_value) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroBlockResult block = xr_coro_scope_exit(ctx->coro, scope_mode);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY) {
+        if (out_value)
+            *out_value = block.value;
+        return xr_aot_done(block.value);
+    }
+    if (block.kind == XR_CORO_BLOCK_NO_CORO) {
+        if (out_value)
+            *out_value = XR_NULL_VAL;
+        return xr_aot_done(XR_NULL_VAL);
+    }
+    return xr_aot_error(block.value, block.ok);
+}
+
 XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrValue *out_value,
                               bool discard_result) {
     if (!ctx || !ctx->coro || !xr_value_is_task(task_value))

@@ -151,7 +151,7 @@ static int count_coro_suspend_states(const XiFunc *f) {
                 continue;
             if (v->op == XI_YIELD || v->op == XI_GO || v->op == XI_AWAIT || v->op == XI_CHAN_SEND ||
                 v->op == XI_CHAN_RECV || cg_is_blocking_channel_method_call(v) ||
-                cg_is_time_sleep_call(f, v))
+                v->op == XI_SCOPE_EXIT || cg_is_time_sleep_call(f, v))
                 count++;
         }
     }
@@ -420,6 +420,71 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_SCOPE_ENTER) {
+        fprintf(out, "    XrAotResult _scope_enter_%u = xr_aot_scope_enter(ctx, %u);\n", v->id,
+                (unsigned) v->aux_int);
+        fprintf(out, "    if (_scope_enter_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "        return _scope_enter_%u;\n", v->id);
+        return;
+    }
+
+    if (v->op == XI_SCOPE_EXIT) {
+        int sid = ++(*state_id);
+        fprintf(out, "    XrValue _scope_exit_value_%u = XR_NULL_VAL;\n", v->id);
+        fprintf(out, "    XrAotResult _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ",
+                v->id, (unsigned) v->aux_int);
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "&");
+            emit_vref(out, v);
+        } else {
+            fprintf(out, "&_scope_exit_value_%u", v->id);
+        }
+        fprintf(out, ");\n");
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
+        fprintf(out, "        f->state = %d;\n", sid);
+        fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "    goto S%d_DONE;\n", sid);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ",
+                v->id, (unsigned) v->aux_int);
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "&");
+            emit_vref(out, v);
+        } else {
+            fprintf(out, "&_scope_exit_value_%u", v->id);
+        }
+        fprintf(out, ");\n");
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
+        fprintf(out, "        f->state = %d;\n", sid);
+        fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "S%d_DONE:;\n", sid);
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = xr_aot_bridge_value_to_xrt(");
+            emit_vref(out, v);
+            fprintf(out, ");\n");
+        } else if (cg_coro_value_has_storage(f, v)) {
+            fprintf(out,
+                    "    _scope_exit_value_%u = "
+                    "xr_aot_bridge_value_to_xrt(_scope_exit_value_%u);\n",
+                    v->id, v->id);
+        }
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) != XR_REP_TAGGED) {
+            char tmp[48];
+            snprintf(tmp, sizeof(tmp), "_scope_exit_value_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
     if (v->op == XI_CHAN_NEW) {
         fprintf(out, "    XrValue _chan_%u = xr_aot_channel_new(ctx, ", v->id);
         if (v->nargs >= 1)
@@ -623,8 +688,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_SEND ||
         v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_TIME_AFTER ||
-        v->op == XI_SELECT_BLOCK || v->op == XI_CHAN_NEW || v->op == XI_SCOPE_ENTER ||
-        v->op == XI_SCOPE_EXIT || v->op == XI_CORO_OP) {
+        v->op == XI_SELECT_BLOCK || v->op == XI_CHAN_NEW || v->op == XI_CORO_OP) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
         return;
