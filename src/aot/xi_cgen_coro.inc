@@ -13,6 +13,8 @@
 static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
+    if (v->op == XI_PARAM)
+        return false;
     if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
     if (cg_is_void_like(v))
@@ -284,6 +286,31 @@ static bool cg_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness 
     return false;
 }
 
+static bool cg_coro_value_needs_runtime_slot(const XiValue *v) {
+    return v && (v->op == XI_CHAN_RECV || cg_is_channel_method_call(v, "recv", 0));
+}
+
+static bool cg_coro_value_needs_frame(const XiFunc *f, const XiLiveness *live,
+                                      const XiValue *v) {
+    if (!cg_coro_value_has_storage(f, v))
+        return false;
+    if (cg_coro_value_needs_runtime_slot(v))
+        return true;
+    if (v->op == XI_GO)
+        return true;
+    return cg_coro_value_live_across_suspend(f, live, v);
+}
+
+static bool cg_coro_phi_needs_frame(const XiFunc *f, const XiLiveness *live,
+                                    const XiPhi *phi) {
+    return phi && cg_coro_value_live_across_suspend(f, live, &phi->value);
+}
+
+static bool cg_coro_value_may_hold_frame_root(const XiFunc *f, const XiLiveness *live,
+                                              const XiValue *v) {
+    return cg_coro_value_live_across_suspend(f, live, v) || cg_coro_value_needs_runtime_slot(v);
+}
+
 static const XiFunc *cg_resolve_go_target(XiCgenCtx *ctx, const XiFunc *current,
                                           const XiValue *callee) {
     if (!callee)
@@ -310,7 +337,8 @@ static const XiFunc *cg_resolve_go_target(XiCgenCtx *ctx, const XiFunc *current,
     return NULL;
 }
 
-static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                 const XiLiveness *live, const char *prefix) {
     fprintf(out, "typedef struct ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " {\n");
@@ -322,13 +350,15 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (!cg_coro_phi_needs_frame(f, live, phi))
+                continue;
             fprintf(out, "    %s ", ctype_str(cg_rep(&phi->value)));
             emit_phi_ref(out, phi);
             fprintf(out, ";\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_has_storage(f, v))
+            if (!cg_coro_value_needs_frame(f, live, v))
                 continue;
             fprintf(out, "    %s ", ctype_str(cg_rep(v)));
             emit_vref(out, v);
@@ -340,37 +370,76 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, ";\n\n");
 }
 
-static void emit_coro_macros(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+static void emit_coro_local_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiLiveness *live) {
     (void) ctx;
-    (void) prefix;
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "#define p%u (f->p%u)\n", i, i);
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
-            fprintf(out, "#define phi%u (f->phi%u)\n", phi->value.id, phi->value.id);
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_coro_phi_needs_frame(f, live, phi))
+                continue;
+            XrRep rep = cg_rep(&phi->value);
+            fprintf(out, "    %s ", ctype_str(rep));
+            emit_phi_ref(out, phi);
+            if (rep == XR_REP_TAGGED)
+                fprintf(out, " = XR_NULL_VAL;\n");
+            else
+                fprintf(out, " = 0;\n");
+        }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (cg_coro_value_has_storage(f, v))
-                fprintf(out, "#define v%u (f->v%u)\n", v->id, v->id);
+            if (!cg_coro_value_has_storage(f, v) || cg_coro_value_needs_frame(f, live, v))
+                continue;
+            XrRep rep = cg_rep(v);
+            fprintf(out, "    %s ", ctype_str(rep));
+            emit_vref(out, v);
+            if (rep == XR_REP_TAGGED)
+                fprintf(out, " = XR_NULL_VAL;\n");
+            else
+                fprintf(out, " = 0;\n");
         }
     }
 }
 
-static void emit_coro_undefs(FILE *out, const XiFunc *f) {
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "#undef p%u\n", i);
+static void emit_coro_macros(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiLiveness *live,
+                             const char *prefix) {
+    (void) ctx;
+    (void) prefix;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next)
-            fprintf(out, "#undef phi%u\n", phi->value.id);
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_coro_phi_needs_frame(f, live, phi))
+                fprintf(out, "#define phi%u (f->phi%u)\n", phi->value.id, phi->value.id);
+        }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (cg_coro_value_has_storage(f, v))
+            if (v && v->op == XI_PARAM && v->aux_int >= 0 && v->aux_int < f->nparams) {
+                fprintf(out, "#define v%u (f->p%u)\n", v->id, (unsigned) v->aux_int);
+            } else if (cg_coro_value_needs_frame(f, live, v)) {
+                fprintf(out, "#define v%u (f->v%u)\n", v->id, v->id);
+            }
+        }
+    }
+}
+
+static void emit_coro_undefs(FILE *out, const XiFunc *f, const XiLiveness *live) {
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_coro_phi_needs_frame(f, live, phi))
+                fprintf(out, "#undef phi%u\n", phi->value.id);
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && v->op == XI_PARAM && v->aux_int >= 0 && v->aux_int < f->nparams)
+                fprintf(out, "#undef v%u\n", v->id);
+            else if (cg_coro_value_needs_frame(f, live, v))
                 fprintf(out, "#undef v%u\n", v->id);
         }
     }
@@ -992,8 +1061,8 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_has_storage(f, v) || cg_rep(v) != XR_REP_TAGGED ||
-                !cg_coro_value_live_across_suspend(f, live, v))
+            if (!cg_coro_value_needs_frame(f, live, v) || cg_rep(v) != XR_REP_TAGGED ||
+                !cg_coro_value_may_hold_frame_root(f, live, v))
                 continue;
             fprintf(out, "    %s(", helper);
             if (with_visitor)
@@ -1021,8 +1090,8 @@ static uint32_t count_coro_frame_roots(const XiFunc *f, const XiLiveness *live) 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED &&
-                cg_coro_value_live_across_suspend(f, live, v))
+            if (cg_coro_value_needs_frame(f, live, v) && cg_rep(v) == XR_REP_TAGGED &&
+                cg_coro_value_may_hold_frame_root(f, live, v))
                 count++;
         }
     }
@@ -1050,7 +1119,7 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_has_storage(f, v) || !cg_coro_value_needs_arc_release(v) ||
+            if (!cg_coro_value_needs_frame(f, live, v) || !cg_coro_value_needs_arc_release(v) ||
                 !cg_coro_value_live_across_suspend(f, live, v))
                 continue;
             fprintf(out, "    xrt_release(f->v%u);\n", v->id);
@@ -1076,7 +1145,7 @@ static uint32_t count_coro_frame_releases(const XiFunc *f, const XiLiveness *liv
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (cg_coro_value_has_storage(f, v) && cg_coro_value_needs_arc_release(v) &&
+            if (cg_coro_value_needs_frame(f, live, v) && cg_coro_value_needs_arc_release(v) &&
                 cg_coro_value_live_across_suspend(f, live, v))
                 count++;
         }
@@ -1101,7 +1170,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
         return;
     }
 
-    emit_coro_frame_type(ctx, out, f, prefix);
+    emit_coro_frame_type(ctx, out, f, live, prefix);
     emit_coro_sync_wrapper(ctx, out, f, prefix);
     emit_coro_frame_factory(ctx, out, f, prefix);
 
@@ -1115,7 +1184,8 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, " *)raw_frame;\n");
     fprintf(out, "    if (!f)\n        return xr_aot_error(XR_NULL_VAL, false);\n");
 
-    emit_coro_macros(ctx, out, f, prefix);
+    emit_coro_local_declarations(ctx, out, f, live);
+    emit_coro_macros(ctx, out, f, live, prefix);
 
     int state_count = count_coro_suspend_states(f);
     if (state_count > 0) {
@@ -1134,7 +1204,7 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     }
     fprintf(out, "}\n");
 
-    emit_coro_undefs(out, f);
+    emit_coro_undefs(out, f, live);
     fprintf(out, "\n");
 
     fprintf(out, "static void ");

@@ -151,6 +151,23 @@ static bool contains(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
 
+static size_t count_between(const char *start, const char *end, const char *needle) {
+    size_t count = 0;
+    size_t needle_len = strlen(needle);
+    const char *p = start;
+    assert(start != NULL);
+    assert(end != NULL);
+    assert(needle != NULL && needle_len > 0);
+    while (p < end) {
+        const char *hit = strstr(p, needle);
+        if (!hit || hit >= end)
+            break;
+        count++;
+        p = hit + needle_len;
+    }
+    return count;
+}
+
 /* ========== Tests ========== */
 
 TEST(cgen_simple_arith) {
@@ -496,6 +513,43 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_frame_skips_dead_ssa_slots) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    let a = n + 1\n"
+                      "    let b = a + 2\n"
+                      "    yield\n"
+                      "    return n + 3\n"
+                      "}\n"
+                      "let task = go worker(41)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine with dead pre-yield values should generate");
+
+    const char *frame = strstr(code, "typedef struct test_worker_");
+    assert(frame != NULL && "worker coroutine frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_worker_");
+    assert(frame_end != NULL && "worker coroutine frame should have an end marker");
+    assert(count_between(frame, frame_end, "\n    int64_t v") == 0 &&
+           "dead scalar SSA values must stay out of the suspend frame");
+    assert(count_between(frame, frame_end, "\n    XrValue v") == 0 &&
+           "dead tagged SSA values must stay out of the suspend frame");
+    assert(contains(code, "#define v0 (f->p0)") &&
+           "parameter SSA references should alias the typed frame parameter");
+    assert(contains(code, "int64_t v") &&
+           "non-frame scalar SSA values should be resume-local variables");
+
+    printf("  Generated compact coroutine frame %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_managed_types_skip_arc) {
     XrType task_type = {.kind = XR_KIND_INSTANCE};
     XrType channel_type = {.kind = XR_KIND_CHANNEL};
@@ -664,6 +718,30 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
+    const char *src = "let ch = new Channel<string>(0)\n"
+                      "let value = ch.recv()\n"
+                      "print(value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT tagged channel recv should generate");
+    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "tagged channel recv must register a frame slot");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
+           "tagged channel recv slot must be scanned while ready or blocked");
+    assert(contains(code, ".root_count = 1,") &&
+           "tagged channel recv frame should report one traced root slot");
+
+    printf("  Generated traced channel recv slot %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -684,6 +762,7 @@ int main(void) {
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_sync_call_to_suspendable_aborts();
     run_cgen_coro_frame_params_use_typed_storage();
+    run_cgen_coro_frame_skips_dead_ssa_slots();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
@@ -691,6 +770,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
+    run_cgen_coro_recv_slot_is_traced_as_frame_root();
 
     teardown();
 
