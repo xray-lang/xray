@@ -176,8 +176,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             const XrCoroBackendVTable *saved_backend = coro->backend;
             void *saved_backend_state = coro->backend_state;
             uint16_t saved_gc_flags =
-                coro->gc_flags &
-                (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
+                coro->gc_flags & (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED);
             if (saved_backend && saved_backend->reset_reusable) {
                 saved_backend->reset_reusable(coro);
             }

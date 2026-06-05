@@ -85,10 +85,6 @@ typedef enum {
     CORO_PRIORITY_HIGH = 2
 } XrCoroPriority;
 
-#define XR_GC_FLG_NEED_GC 0x0001
-#define XR_GC_FLG_IN_GC 0x0002
-#define XR_GC_FLG_PROMOTED 0x0004
-
 /* ========== XrCoroExt - Cold fields allocated on demand ========== */
 
 typedef struct XrCoroExt {
@@ -165,7 +161,7 @@ struct XrCoroutine {
     _Atomic int affinity_p;          //  4 bytes: preferred worker for wake (relaxed ok, hint only)
     int8_t schedule_count;           //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
     _Atomic(uint8_t) coro_state;  //  1 byte: authoritative state (R4: replaces state bits in flags)
-    uint16_t gc_flags;            //  2 bytes: GC flags (bit 0: VM stack slab)
+    uint16_t gc_flags;            //  2 bytes: pool and backend lifetime flags
     // --- 64 bytes boundary ---
 
     /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
