@@ -188,15 +188,11 @@ typedef struct XrJitScratch {
      * vreg_runtime_tags[dst_vreg_idx]. */
     int64_t call_result_tag;
 
-    /* JIT yield: pre-push frame for yieldable suspend.
-     * When xr_jit_invoke_method detects WOULD_BLOCK (try-mode), it reads
-     * register values from saved areas (safepoint_saved_sp + jit_frame_sp),
-     * populates the VM stack, pre-pushes an interpreter frame, and calls
-     * the yieldable in normal mode. If BLOCKED/YIELD, these fields signal
-     * the VM to skip deopt recovery and return the appropriate result. */
+    /* JIT invoke recovery:
+     * yieldable C functions run in try-mode from JIT. If they would suspend,
+     * the helper requests deopt at invoke_deopt_id so the interpreter executes
+     * the ordinary blocking call path. */
     int32_t call_base_offset;  // callee base_offset (set by VM before xm_jit_call)
-    bool yield_frame_pushed;   // helper pre-pushed frame, yieldable blocked/yielded
-    uint8_t yield_vm_result;   // XR_VM_BLOCKED or XR_VM_YIELD
 
     /* Heartbeat pointer: set by run_on_worker to &machine->heartbeat.
      * Bumped by xr_coro_gc_safepoint so sysmon doesn't misdetect

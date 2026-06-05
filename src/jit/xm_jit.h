@@ -75,7 +75,7 @@ typedef struct XmJitState {
 
 // Sentinel return value from JIT code when AWAIT needs to block.
 // JIT saves live registers to xr_coro_jit_state(coro)->suspend and returns this.
-// xm_jit_call detects it and returns XR_VM_BLOCKED to the worker.
+// xm_jit_call detects it and returns XM_JIT_SUSPEND to its caller.
 // On resume, worker calls jit_resume_entry to re-enter JIT code.
 #define XM_SUSPEND_MARKER ((int64_t) 0xDEAD0002DEAD0002LL)
 

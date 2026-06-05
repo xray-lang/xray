@@ -794,7 +794,6 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
     xr_coro_jit_state(coro)->scratch->active_safepoint_id = UINT32_MAX;
     xr_coro_jit_state(coro)->scratch->invoke_deopt_id =
         UINT32_MAX;  // Safe default: no invoke recovery
-    xr_coro_jit_state(coro)->scratch->yield_frame_pushed = false;  // clear stale yield state
     // Derive return slot type from return_type_info for reconstruction
     uint8_t return_type = return_type_info ? xr_type_to_slot_type(return_type_info) : XR_SLOT_ANY;
 
@@ -990,7 +989,6 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
     xr_coro_jit_state(coro)->scratch->active_stack_map = proto->stack_map;
     xr_coro_jit_state(coro)->scratch->active_safepoint_id = UINT32_MAX;
     xr_coro_jit_state(coro)->scratch->invoke_deopt_id = UINT32_MAX;
-    xr_coro_jit_state(coro)->scratch->yield_frame_pushed = false;
 
     // The await result has already been written into
     // xr_coro_jit_state(coro)->suspend.result by the waker (xr_jit_await_block
