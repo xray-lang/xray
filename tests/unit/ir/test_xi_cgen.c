@@ -799,6 +799,53 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
+    const char *src = "fn recv_plus(ch: Channel<int>) -> int {\n"
+                      "    let v = ch.recv()\n"
+                      "    return v + 1\n"
+                      "}\n"
+                      "let ch = new Channel<int>(1)\n"
+                      "ch.send(9)\n"
+                      "let task = go recv_plus(ch)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scalar channel recv should generate");
+
+    const char *frame = strstr(code, "typedef struct test_recv_plus_");
+    assert(frame != NULL && "recv_plus coroutine frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_recv_plus_");
+    assert(frame_end != NULL && "recv_plus coroutine frame should close");
+    assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
+           "scalar recv should reserve an unboxed frame slot");
+    assert(count_between(frame, frame_end, "XrValue v") == 0 &&
+           "scalar-only recv should not reserve a tagged recv slot");
+
+    const char *slot_ref = strstr(code, "xr_slot_aot_frame_offset");
+    assert(slot_ref != NULL && "channel recv must create a backend-neutral slot ref");
+    assert(strstr(slot_ref, "), 0);\n    XrAotResult _chan_recv_") != NULL &&
+           "channel recv slot should use XR_REP_I64 for scalar-only consumers");
+
+    const char *recv_call = strstr(code, "xr_aot_chan_recv_slot(ctx,");
+    assert(recv_call != NULL && "channel recv must use the AOT recv slot bridge");
+
+    const char *resume = strstr(code, "static XrAotResult test_recv_plus_");
+    const char *trace = resume ? strstr(resume, "static void test_recv_plus_") : NULL;
+    assert(resume != NULL && trace != NULL && "recv_plus resume function should be emitted");
+    assert(count_between(resume, trace, "XR_TO_INT(v") == 0 &&
+           "typed recv should not unbox a tagged receive value after resume");
+
+    printf("  Generated scalar channel recv slot %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
     const char *src = "let ch = new Channel<string>(0)\n"
                       "let value = ch.recv()\n"
@@ -853,6 +900,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
+    run_cgen_coro_scalar_channel_recv_uses_typed_slot();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
 
     teardown();

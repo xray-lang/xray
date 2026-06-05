@@ -17,6 +17,61 @@ static const XiValue *cg_coro_box_scalar_source(const XiValue *v) {
     return (rep == XR_REP_I64 || rep == XR_REP_F64) ? v->args[0] : NULL;
 }
 
+static bool cg_coro_is_channel_recv_value(const XiValue *v) {
+    if (!v)
+        return false;
+    if (v->op == XI_CHAN_RECV)
+        return true;
+    if (v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
+        return false;
+    const char *method = (const char *) v->aux;
+    return method && strcmp(method, "recv") == 0;
+}
+
+static const XiValue *cg_coro_typed_recv_unbox_user(const XiFunc *f, const XiValue *recv) {
+    if (!f || !cg_coro_is_channel_recv_value(recv) || cg_rep(recv) != XR_REP_TAGGED)
+        return NULL;
+
+    const XiValue *typed_unbox = NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == recv)
+            return NULL;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == recv)
+                    return NULL;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != recv)
+                    continue;
+                if (user->op != XI_UNBOX || a != 0)
+                    return NULL;
+                XrRep rep = cg_rep(user);
+                if (rep != XR_REP_I64 && rep != XR_REP_F64)
+                    return NULL;
+                if (typed_unbox && typed_unbox != user)
+                    return NULL;
+                typed_unbox = user;
+            }
+        }
+    }
+    return typed_unbox;
+}
+
+static bool cg_coro_unbox_from_typed_recv(const XiFunc *f, const XiValue *v) {
+    if (!v || v->op != XI_UNBOX || v->nargs < 1)
+        return false;
+    return cg_coro_typed_recv_unbox_user(f, v->args[0]) == v;
+}
+
 static bool cg_coro_is_typed_send_use(const XiValue *user, const XiValue *target,
                                       uint16_t arg_idx) {
     if (!user || !target || !cg_coro_box_scalar_source(target) || arg_idx != 1)
@@ -65,6 +120,8 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_PARAM)
+        return false;
+    if (cg_coro_typed_recv_unbox_user(f, v))
         return false;
     if (cg_coro_box_only_feeds_typed_send(f, v))
         return false;
@@ -264,11 +321,13 @@ static void emit_assign_coro_param_from_xrvalue(FILE *out, const XiFunc *f, uint
 static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix,
                                const XiValue *v) {
     (void) ctx;
-    (void) f;
     (void) prefix;
+    const XiValue *slot_value = cg_coro_typed_recv_unbox_user(f, v);
+    if (!slot_value)
+        slot_value = v;
     fprintf(out, "xr_slot_aot_frame_offset(f, (uint32_t)((uint8_t *)&");
-    emit_vref(out, v);
-    fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(v));
+    emit_vref(out, slot_value);
+    fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(slot_value));
 }
 
 static bool cg_is_channel_method_call(const XiValue *v, const char *method, int nargs) {
@@ -388,6 +447,8 @@ static bool cg_coro_value_needs_frame(const XiFunc *f, const XiLiveness *live,
                                       const XiValue *v) {
     if (!cg_coro_value_has_storage(f, v))
         return false;
+    if (cg_coro_unbox_from_typed_recv(f, v))
+        return true;
     if (cg_coro_value_needs_runtime_slot(v))
         return true;
     if (v->op == XI_GO)
@@ -668,6 +729,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (cg_coro_box_only_feeds_typed_send(f, v))
+        return;
+
+    if (cg_coro_unbox_from_typed_recv(f, v))
         return;
 
     if (v->op == XI_GO) {
