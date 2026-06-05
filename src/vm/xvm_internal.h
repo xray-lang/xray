@@ -370,8 +370,6 @@ XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue 
                                     int arg_count, const char *name, const char *file, int line);
 
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
-XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
-XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);
 XR_FUNC void xr_sched_remove(XrCoroState *sched, XrCoroutine *target);

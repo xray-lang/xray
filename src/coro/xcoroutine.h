@@ -758,8 +758,6 @@ XR_FUNC XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(v
                                            const char *name);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_destroy(XrCoroutine *coro);
-XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
-XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(struct XrayIsolate *X, XrCoroutine *coro);
 XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);

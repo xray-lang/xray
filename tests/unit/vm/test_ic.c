@@ -316,9 +316,8 @@ TEST(free_ic_tables_resets_state_and_supports_reuse) {
     ASSERT(ctx.ic_field_tables == NULL);
     ASSERT(ctx.ic_method_tables == NULL);
 
-    /* The ctx must be fully reusable after teardown — coroutines
-     * recycle through xr_coro_release_resources and need a clean
-     * slate the next time they are dispatched. */
+    /* The ctx must be fully reusable after backend teardown because
+     * coroutine shells are recycled across unrelated closures. */
     XrICFieldTable *fresh = xr_vm_ctx_ensure_ic_fields(&ctx, a);
     ASSERT_NOT_NULL(fresh);
     ASSERT_EQ_INT(fresh->count, 2);
