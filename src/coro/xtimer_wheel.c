@@ -265,13 +265,16 @@ static bool timer_is_in_slot(XrTimerWheel *tw, XrTWheelTimer *p, int slot) {
 }
 
 // Trigger timer
-static inline void timeout_timer(XrTWheelTimer *p) {
+static inline void timeout_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XrTimeoutProc timeout;
     void *arg;
 
     p->slot = XR_TW_SLOT_INACTIVE;
     timeout = p->timeout;
     arg = p->arg;
+    if (tw && tw->runtime) {
+        xr_sched_metric_inc(tw->runtime, &tw->runtime->sched_stats.timer_fire_count);
+    }
     if (timeout) {
         (*timeout)(arg);
     }
@@ -510,7 +513,7 @@ static int bump_later_wheel(XrTimerWheel *tw, int *ycount_p) {
                         insert_timer_into_slot(tw, soon_slot(tpos), p);
                         ycount -= XR_TW_COST_SLOT_MOVE;
                     } else {
-                        timeout_timer(p);
+                        timeout_timer(tw, p);
                         tw->nto--;
                         ycount -= XR_TW_COST_TIMEOUT;
                     }
@@ -563,6 +566,10 @@ void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq) {
 void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoroutine *coro) {
     XR_DCHECK(target_tw != NULL, "timer_queue_cancel: NULL target_tw");
     XR_DCHECK(timer != NULL, "timer_queue_cancel: NULL timer");
+    if (target_tw->runtime) {
+        xr_sched_metric_inc(target_tw->runtime,
+                            &target_tw->runtime->sched_stats.timer_cancel_remote_count);
+    }
     // Step 1: Atomically mark as zombie (immediate cross-worker visibility)
     // This allows find_next_timeout to skip this timer immediately, even before
     // the owner worker processes the cancel queue
@@ -643,6 +650,10 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         }
     }
 
+    if (count > 0 && tw->runtime) {
+        xr_sched_metric_add(tw->runtime, &tw->runtime->sched_stats.timer_cancel_process_count,
+                            (uint64_t) count);
+    }
     return count;
 }
 
@@ -839,6 +850,9 @@ void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
     XR_DCHECK(cur_w == NULL || cur_w->p.id == tw->owner_worker_id,
               "twheel_cancel_timer: non-owner call");
     (void) cur_w;
+    if (tw->runtime) {
+        xr_sched_metric_inc(tw->runtime, &tw->runtime->sched_stats.timer_cancel_local_count);
+    }
     // No mutex needed - owner worker exclusive access
     if (p->owner_worker_id != tw->owner_worker_id)
         return;
@@ -934,7 +948,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                     // skip zombie timers (cancelled during bump)
                     if (atomic_load_explicit(&p->state, memory_order_acquire) !=
                         XR_TIMER_STATE_ZOMBIE) {
-                        timeout_timer(p);
+                        timeout_timer(tw, p);
                         yield_count -= XR_TW_COST_TIMEOUT;
                     }
                     // Reset state for timer reuse
@@ -1033,7 +1047,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
                             // skip zombie timers (cancelled during bump)
                             if (atomic_load_explicit(&p->state, memory_order_acquire) !=
                                 XR_TIMER_STATE_ZOMBIE) {
-                                timeout_timer(p);
+                                timeout_timer(tw, p);
                                 yield_count -= XR_TW_COST_TIMEOUT;
                             }
                             // Reset state for timer reuse

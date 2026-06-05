@@ -151,6 +151,7 @@ fi
 
 TMP_DIR="$(mktemp -d)"
 RESULTS_TSV="$TMP_DIR/results.tsv"
+RESULT_DELIM=$'\034'
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 now_ms() {
@@ -186,8 +187,16 @@ record_result() {
     local reported_time_ms=$7
     local throughput=$8
     local metrics=$9
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$test_name" "$runtime" "$workers" "$status" \
-        "$exit_code" "$wall_ms" "$reported_time_ms" "$throughput" "$metrics" >> "$RESULTS_TSV"
+    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
+        "$test_name" "$RESULT_DELIM" \
+        "$runtime" "$RESULT_DELIM" \
+        "$workers" "$RESULT_DELIM" \
+        "$status" "$RESULT_DELIM" \
+        "$exit_code" "$RESULT_DELIM" \
+        "$wall_ms" "$RESULT_DELIM" \
+        "$reported_time_ms" "$RESULT_DELIM" \
+        "$throughput" "$RESULT_DELIM" \
+        "$metrics" >> "$RESULTS_TSV"
 }
 
 extract_first_number() {
@@ -266,6 +275,10 @@ collect_sched_metrics() {
     metrics+=("$(metric_pair chan_recv_block "$(extract_kv_metric "Channel ops:" "recv_block" "$file")")")
     metrics+=("$(metric_pair timeout_yield_retry "$(extract_kv_metric "Timeout:" "yield_retry" "$file")")")
     metrics+=("$(metric_pair timeout_event_block "$(extract_kv_metric "Timeout:" "event_block" "$file")")")
+    metrics+=("$(metric_pair timer_fire "$(extract_kv_metric "Timer:" "fire" "$file")")")
+    metrics+=("$(metric_pair timer_cancel_local "$(extract_kv_metric "Timer:" "cancel_local" "$file")")")
+    metrics+=("$(metric_pair timer_cancel_remote "$(extract_kv_metric "Timer:" "cancel_remote" "$file")")")
+    metrics+=("$(metric_pair timer_cancel_process "$(extract_kv_metric "Timer:" "cancel_process" "$file")")")
     metrics+=("$(metric_pair handoff_reuse "$(extract_kv_metric "Handoff:" "reuse" "$file")")")
     metrics+=("$(metric_pair handoff_create "$(extract_kv_metric "Handoff:" "create" "$file")")")
     metrics+=("$(metric_pair handoff_cap_hit "$(extract_kv_metric "Handoff:" "cap_hit" "$file")")")
@@ -376,7 +389,7 @@ write_json_results() {
         printf ',\n'
         printf '  "results": [\n'
         local first=true
-        while IFS=$'\t' read -r test_name runtime workers status exit_code wall_ms reported_time_ms throughput metrics; do
+        while IFS="$RESULT_DELIM" read -r test_name runtime workers status exit_code wall_ms reported_time_ms throughput metrics; do
             if ! $first; then
                 printf ',\n'
             fi
