@@ -36,6 +36,27 @@
 // the timer_channel_fire_cb callback at the top can reference it.
 static void channel_wake_coro(XrCoroutine *coro);
 
+static XrRuntime *channel_stats_runtime(XrChannel *ch) {
+    if (!ch || !ch->isolate || !ch->isolate->vm.runtime)
+        return NULL;
+    XrRuntime *runtime = (XrRuntime *) ch->isolate->vm.runtime;
+    return XR_UNLIKELY(runtime->sched_stats_enabled) ? runtime : NULL;
+}
+
+#define CHANNEL_METRIC_INC(ch, field)                                                              \
+    do {                                                                                           \
+        XrRuntime *_rt = channel_stats_runtime((ch));                                              \
+        if (_rt)                                                                                   \
+            xr_sched_metric_inc(_rt, &_rt->sched_stats.field);                                     \
+    } while (0)
+
+#define CHANNEL_METRIC_ADD(ch, field, value)                                                       \
+    do {                                                                                           \
+        XrRuntime *_rt = channel_stats_runtime((ch));                                              \
+        if (_rt)                                                                                   \
+            xr_sched_metric_add(_rt, &_rt->sched_stats.field, (value));                            \
+    } while (0)
+
 // Ring buffer index advance: conditional increment is faster than modulo division
 // on ARM64 (~1-2 cycles vs ~10 cycles for SDIV+MSUB)
 static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
@@ -439,8 +460,7 @@ static void channel_wake_select_waiter_if_present(XrChannel *ch) {
     if (!ch)
         return;
     if (xr_channel_select_waiter_mask(ch) == 0) {
-        XrWorker *worker = xr_current_worker();
-        XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+        XrRuntime *runtime = channel_stats_runtime(ch);
         if (runtime) {
             xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_buffer_no_waiter_count);
         }
@@ -455,6 +475,8 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     XrCoroutine *receiver = xr_waitq_dequeue(&ch->recvq);
     if (!receiver)
         return false;
+    CHANNEL_METRIC_INC(ch, chan_send_direct_count);
+    CHANNEL_METRIC_INC(ch, chan_recvq_dequeue_count);
     channel_note_worker_locked(ch, true);
     (void) xr_coro_store_recv_value(receiver, v);
     xr_amutex_unlock(&ch->lock);
@@ -485,6 +507,8 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
         ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
         // buf_count unchanged: take one, put one.
     }
+    CHANNEL_METRIC_INC(ch, chan_recv_direct_count);
+    CHANNEL_METRIC_INC(ch, chan_sendq_dequeue_count);
     sender->ext->send_value = xr_null();
     xr_amutex_unlock(&ch->lock);
     *out = direct_val;
@@ -501,6 +525,7 @@ static inline bool chan_buffer_push(XrChannel *ch, XrValue v) {
     ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
     ch->buf_count++;
     XR_DCHECK(ch->buf_count <= ch->buf_size, "chan_buffer_push: overflow");
+    CHANNEL_METRIC_INC(ch, chan_send_buffer_count);
     return true;
 }
 
@@ -513,6 +538,7 @@ static inline bool chan_buffer_pop(XrChannel *ch, XrValue *out) {
     ch->buffer[ch->recv_idx] = xr_null();  // Help GC.
     ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
     ch->buf_count--;
+    CHANNEL_METRIC_INC(ch, chan_recv_buffer_count);
     return true;
 }
 
@@ -657,6 +683,8 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         return;
 
     XrRuntime *runtime = current->p.runtime;
+    xr_sched_metric_inc(runtime, is_close ? &runtime->sched_stats.chan_close_ready_wake_count
+                                          : &runtime->sched_stats.chan_ready_wake_count);
     int target_id = xr_coro_wake_target_id(coro);
 
     // Ensure target Worker ID is valid
@@ -762,10 +790,13 @@ void xr_channel_close(XrChannel *ch) {
     // Collect all waiting receivers
     // Note: don't set recv_slot here, let coroutine re-execute recv logic
     // This way if buffer still has data, coroutine can get it
+    uint64_t recv_waiters = 0;
+    uint64_t send_waiters = 0;
     XrCoroutine *coro;
     while ((coro = xr_waitq_dequeue(&ch->recvq)) != NULL) {
         coro->ext->chan_wait_next = recv_list;
         recv_list = coro;
+        recv_waiters++;
     }
 
     // Collect all waiting senders
@@ -773,9 +804,12 @@ void xr_channel_close(XrChannel *ch) {
         coro->ext->send_value = xr_null();
         coro->ext->chan_wait_next = send_list;
         send_list = coro;
+        send_waiters++;
     }
 
     xr_amutex_unlock(&ch->lock);
+    CHANNEL_METRIC_ADD(ch, chan_close_recv_waiter_count, recv_waiters);
+    CHANNEL_METRIC_ADD(ch, chan_close_send_waiter_count, send_waiters);
 
     XrWorker *current = xr_current_worker();
 
@@ -831,10 +865,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
     // Avoids spin contention under high concurrency (e.g. 20 coros on 1 channel).
     if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
         if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
-            ch->buf_count < ch->buf_size) {
-            ch->buffer[ch->send_idx] = value;
-            ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
-            ch->buf_count++;
+            chan_buffer_push(ch, value)) {
             channel_note_worker_locked(ch, true);
             xr_amutex_unlock(&ch->lock);
             channel_wake_select_waiter_if_present(ch);
@@ -888,6 +919,7 @@ send_locked:
         xr_channel_note_waiter(ch, w->p.id, true);
     }
     xr_waitq_enqueue(&ch->sendq, coro);
+    CHANNEL_METRIC_INC(ch, chan_send_block_count);
 
     xr_amutex_unlock(&ch->lock);
     return XR_CHAN_BLOCK;
@@ -914,11 +946,7 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
     // Trylock fast path: for buffered channels with data and no waiting senders.
     // Avoids spin contention under high concurrency.
     if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
-        if (!ch->sendq.first && ch->buf_count > 0) {
-            *out = ch->buffer[ch->recv_idx];
-            ch->buffer[ch->recv_idx] = xr_null();
-            ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
-            ch->buf_count--;
+        if (!ch->sendq.first && chan_buffer_pop(ch, out)) {
             channel_note_worker_locked(ch, false);
             xr_amutex_unlock(&ch->lock);
             return XR_CHAN_OK;
@@ -969,7 +997,11 @@ recv_locked:
         xr_channel_note_waiter(ch, w->p.id, false);
     }
     xr_waitq_enqueue(&ch->recvq, coro);
+    CHANNEL_METRIC_INC(ch, chan_recv_block_count);
 
     xr_amutex_unlock(&ch->lock);
     return XR_CHAN_BLOCK;
 }
+
+#undef CHANNEL_METRIC_ADD
+#undef CHANNEL_METRIC_INC
