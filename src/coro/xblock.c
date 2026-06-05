@@ -37,6 +37,8 @@ XrValue *xr_slot_value_address(XrSlotRef slot) {
             return (XrValue *) slot.base;
         case XR_SLOT_AOT_FRAME_OFFSET:
         case XR_SLOT_JIT_SUSPEND:
+            if (slot.type_id != XR_REP_TAGGED)
+                return NULL;
             if (!slot.base)
                 return NULL;
             return (XrValue *) ((uint8_t *) slot.base + slot.offset);
@@ -46,11 +48,66 @@ XrValue *xr_slot_value_address(XrSlotRef slot) {
 }
 
 bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
-    XrValue *addr = xr_slot_value_address(slot);
-    if (!addr)
-        return slot.kind == XR_SLOT_NONE;
-    *addr = value;
-    return true;
+    switch (slot.kind) {
+        case XR_SLOT_NONE:
+            return true;
+        case XR_SLOT_XVALUE_PTR:
+            if (!slot.base)
+                return false;
+            *(XrValue *) slot.base = value;
+            return true;
+        case XR_SLOT_AOT_FRAME_OFFSET:
+        case XR_SLOT_JIT_SUSPEND: {
+            if (!slot.base)
+                return false;
+            void *addr = (uint8_t *) slot.base + slot.offset;
+            if (slot.type_id == XR_REP_I64) {
+                *(int64_t *) addr = XR_TO_INT(value);
+                return true;
+            }
+            if (slot.type_id == XR_REP_F64) {
+                *(double *) addr = XR_TO_FLOAT(value);
+                return true;
+            }
+            *(XrValue *) addr = value;
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
+    if (!out_value)
+        return false;
+    switch (slot.kind) {
+        case XR_SLOT_NONE:
+            *out_value = xr_null();
+            return true;
+        case XR_SLOT_XVALUE_PTR:
+            if (!slot.base)
+                return false;
+            *out_value = *(XrValue *) slot.base;
+            return true;
+        case XR_SLOT_AOT_FRAME_OFFSET:
+        case XR_SLOT_JIT_SUSPEND: {
+            if (!slot.base)
+                return false;
+            void *addr = (uint8_t *) slot.base + slot.offset;
+            if (slot.type_id == XR_REP_I64) {
+                *out_value = xr_int(*(int64_t *) addr);
+                return true;
+            }
+            if (slot.type_id == XR_REP_F64) {
+                *out_value = xr_float(*(double *) addr);
+                return true;
+            }
+            *out_value = *(XrValue *) addr;
+            return true;
+        }
+        default:
+            return false;
+    }
 }
 
 static void coro_finish_resume(XrCoroutine *coro) {
@@ -107,8 +164,8 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrayIsolate *isolate, XrCoroutine *co
 
     int resume_status = xr_coro_resume_load(coro);
     if (resume_status == XR_RESUME_CHANNEL) {
-        XrValue *value_addr = xr_slot_value_address(value_slot);
-        XrValue value = value_addr ? *value_addr : xr_null();
+        XrValue value = xr_null();
+        (void) xr_slot_load_value(value_slot, &value);
         value = xr_chan_copy_recv(isolate, value, coro);
         coro_finish_resume(coro);
         xr_slot_store_value(value_slot, value);
@@ -180,6 +237,7 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
     XrValue *recv_addr = xr_slot_value_address(value_slot);
     if (coro) {
         coro->recv_slot = recv_addr;
+        coro->recv_slot_ref = value_slot;
     }
 
     if (timeout_ms == 0) {

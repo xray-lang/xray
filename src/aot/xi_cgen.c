@@ -2151,6 +2151,16 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
     fprintf(out, ";\n");
 }
 
+static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix,
+                               const XiValue *v) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "xr_slot_aot_frame_offset(f, (uint32_t)((uint8_t *)&");
+    emit_vref(out, v);
+    fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(v));
+}
+
 static bool cg_is_channel_method_call(const XiValue *v, const char *method, int nargs) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
         return false;
@@ -2531,17 +2541,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(stderr, "[xi_cgen] ERROR: channel recv missing channel\n");
             return;
         }
-        if (cg_rep(v) != XR_REP_TAGGED) {
-            ctx->error = true;
-            fprintf(stderr, "[xi_cgen] ERROR: typed AOT channel recv awaits R7 typed slots\n");
-            return;
-        }
         int sid = ++(*state_id);
-        fprintf(out, "    XrAotResult _chan_recv_%u = xr_aot_chan_recv(ctx, ", v->id);
+        fprintf(out, "    XrSlotRef _chan_recv_slot_%u = ", v->id);
+        emit_coro_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        fprintf(out, "    XrAotResult _chan_recv_%u = xr_aot_chan_recv_slot(ctx, ", v->id);
         emit_vref(out, v->args[0]);
-        fprintf(out, ", &");
-        emit_vref(out, v);
-        fprintf(out, ");\n");
+        fprintf(out, ", _chan_recv_slot_%u);\n", v->id);
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
@@ -2551,9 +2557,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    _chan_recv_%u = xr_aot_chan_recv_resume(ctx, &", v->id);
-        emit_vref(out, v);
-        fprintf(out, ");\n");
+        fprintf(out, "    _chan_recv_%u = xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_%u);\n",
+                v->id, v->id);
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);

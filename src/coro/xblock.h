@@ -16,24 +16,11 @@
 
 #include "../runtime/value/xvalue.h"
 #include "xchannel.h"
+#include "xslot_ref.h"
 
 struct XrayIsolate;
 struct XrCoroutine;
 struct XrTask;
-
-typedef enum {
-    XR_SLOT_NONE = 0,
-    XR_SLOT_XVALUE_PTR,
-    XR_SLOT_AOT_FRAME_OFFSET,
-    XR_SLOT_JIT_SUSPEND
-} XrSlotKind;
-
-typedef struct {
-    XrSlotKind kind;
-    void *base;
-    uint32_t offset;
-    uint16_t type_id;
-} XrSlotRef;
 
 typedef enum {
     XR_CORO_BLOCK_NOT_RESUMED = 0,
@@ -51,27 +38,8 @@ typedef struct {
     bool ok;
 } XrCoroBlockResult;
 
-static inline XrSlotRef xr_slot_none(void) {
-    XrSlotRef slot = {XR_SLOT_NONE, NULL, 0, 0};
-    return slot;
-}
-
-static inline XrSlotRef xr_slot_xvalue_ptr(XrValue *ptr) {
-    XrSlotRef slot = {XR_SLOT_XVALUE_PTR, ptr, 0, 0};
-    return slot;
-}
-
-static inline XrSlotRef xr_slot_aot_frame_offset(void *base, uint32_t offset, uint16_t type_id) {
-    XrSlotRef slot = {XR_SLOT_AOT_FRAME_OFFSET, base, offset, type_id};
-    return slot;
-}
-
-static inline XrSlotRef xr_slot_jit_suspend(void *base, uint32_t offset, uint16_t type_id) {
-    XrSlotRef slot = {XR_SLOT_JIT_SUSPEND, base, offset, type_id};
-    return slot;
-}
-
 XR_FUNC bool xr_slot_store_value(XrSlotRef slot, XrValue value);
+XR_FUNC bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value);
 XR_FUNC XrValue *xr_slot_value_address(XrSlotRef slot);
 
 XR_FUNC XrCoroBlockResult xr_coro_chan_send_resume(struct XrCoroutine *coro, XrSlotRef result_slot);
