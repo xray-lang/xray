@@ -240,7 +240,7 @@ static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
     fprintf(out, "    (void)_cl;\n");
     for (uint16_t i = 0; i < f->nparams; i++)
         fprintf(out, "    (void)p%u;\n", i);
-    fprintf(out, "    return XR_NULL_VAL;\n");
+    fprintf(out, "    return (abort(), XR_NULL_VAL);\n");
     fprintf(out, "}\n\n");
 }
 
@@ -755,4 +755,3 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, ",\n");
     fprintf(out, "};\n\n");
 }
-
