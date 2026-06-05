@@ -66,6 +66,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/value/xvalue.h"
 #include "xcoro_abi.h"
+#include "xcoro_backend_ops.h"
 #include "xcoro_flags.h"
 #include "xslot_ref.h"
 #include "xtimer_wheel.h"
@@ -197,6 +198,17 @@ struct XrCoroutine {
 
 static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
     return coro && coro->backend && coro->backend->kind == XR_CORO_BACKEND_VM;
+}
+
+static inline const XrCoroBackendOps *xr_coro_backend_ops(const XrCoroutine *coro) {
+    if (!coro || !coro->backend)
+        return NULL;
+    switch (coro->backend->kind) {
+        case XR_CORO_BACKEND_VM:
+            return xr_coro_vm_backend_ops();
+        default:
+            return NULL;
+    }
 }
 
 /* ========== XrCoroExt Accessor ========== */

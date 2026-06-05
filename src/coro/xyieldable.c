@@ -43,9 +43,10 @@ static int64_t get_time_us(void) {
 
 static inline bool yield_setup_continuation(XrayIsolate *X, XrCoroutine *coro, XrContinuation cont,
                                             void *user_data) {
-    if (!coro || !coro->backend || !coro->backend->setup_yield_continuation)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->setup_yield_continuation)
         return false;
-    return coro->backend->setup_yield_continuation(X, coro, (void *) cont, user_data);
+    return ops->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
 // ========== Public API ==========
@@ -200,10 +201,11 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
 
 // xr_coro_has_continuation - Check if coroutine has pending continuation
 bool xr_coro_has_continuation(XrCoroutine *coro) {
-    if (!coro || !coro->backend || !coro->backend->has_continuation) {
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->has_continuation) {
         return false;
     }
-    return coro->backend->has_continuation(coro);
+    return ops->has_continuation(coro);
 }
 
 // ========== Call Closure from C Layer ==========
@@ -229,8 +231,9 @@ XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
     if (!coro)
         return XR_CFUNC_ERROR;
 
-    if (!coro->backend || !coro->backend->call_closure)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->call_closure)
         return XR_CFUNC_ERROR;
-    return (XrCFuncResult) coro->backend->call_closure(X, coro, closure, args, nargs,
-                                                       (void *) on_complete, user_ctx, result);
+    return (XrCFuncResult) ops->call_closure(X, coro, closure, args, nargs, (void *) on_complete,
+                                             user_ctx, result);
 }

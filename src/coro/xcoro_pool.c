@@ -174,11 +174,12 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             // Zero struct (next pointer may be dirty) while keeping reusable
             // backend state allocated for reuse.
             const XrCoroBackendVTable *saved_backend = coro->backend;
+            const XrCoroBackendOps *saved_ops = xr_coro_backend_ops(coro);
             void *saved_backend_state = coro->backend_state;
             uint16_t saved_gc_flags =
                 coro->gc_flags & (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED);
-            if (saved_backend && saved_backend->reset_reusable) {
-                saved_backend->reset_reusable(coro);
+            if (saved_ops && saved_ops->reset_reusable) {
+                saved_ops->reset_reusable(coro);
             }
             memset(coro, 0, sizeof(XrCoroutine));
             if (saved_backend_state) {
@@ -245,8 +246,9 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
 
     // Check if from pool via gc_flags bit (O(1) instead of block list traversal)
     bool from_pool = (coro->gc_flags & XR_CORO_GC_FROM_POOL) != 0;
-    if (coro->backend && coro->backend->reset_reusable) {
-        coro->backend->reset_reusable(coro);
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (ops && ops->reset_reusable) {
+        ops->reset_reusable(coro);
     }
 
     if (from_pool) {
