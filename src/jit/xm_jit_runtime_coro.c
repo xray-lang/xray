@@ -1227,42 +1227,20 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
 
-    // CAS: NONE → WAITING (mirror vm_await logic in xvm_coro_ops.c:2439)
-    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
-
-    int expected = XR_AWAIT_NONE;
-    if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected, XR_AWAIT_WAITING,
-                                                memory_order_acq_rel, memory_order_acquire)) {
-        /* Successfully registered as waiter — coro will be woken by
-         * xr_task_wake_waiter when executor completes. */
-        atomic_store_explicit(&coro->await_task, task, memory_order_release);
-        uint32_t old_flags = xr_coro_flags_load(coro);
-        uint32_t new_flags =
-            xr_coro_set_wait_reason_flags(old_flags, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-        atomic_store_explicit(&coro->flags, new_flags, memory_order_release);
-        return (XrJitResult) {0, 0};  // blocked — JIT saves resume info and returns SUSPEND_MARKER
+    XrCoroBlockResult await_result = xr_coro_await_task(coro, task, -1);
+    if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
+        return (XrJitResult) {0, 0};  // blocked
     }
-
-    if (expected == XR_AWAIT_RESOLVED) {
-        /* Race: executor completed between our state check and CAS.
-         * Result already in task->result. */
-        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
+    if (await_result.kind == XR_CORO_BLOCK_READY) {
         XrValue res = xr_null();
         if (!discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
         }
         coro->jit_state.suspend->result = res.i;
         coro->jit_state.suspend->result_tag = res.tag;
-        atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
-
-    // XR_AWAIT_WAITING: concurrent await on same task (overwrite waiter)
-    atomic_store_explicit(&coro->await_task, task, memory_order_release);
-    uint32_t old_flags2 = xr_coro_flags_load(coro);
-    uint32_t new_flags2 =
-        xr_coro_set_wait_reason_flags(old_flags2, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-    atomic_store_explicit(&coro->flags, new_flags2, memory_order_release);
-    return (XrJitResult) {0, 0};  // blocked
+    coro->jit_state.suspend->result = xr_null().i;
+    coro->jit_state.suspend->result_tag = XR_TAG_NULL;
+    return (XrJitResult) {1, 0};
 }
