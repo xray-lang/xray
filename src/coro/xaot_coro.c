@@ -515,8 +515,8 @@ XrAotResult xr_aot_select_block(const XrAotContext *ctx, const XrValue *channel_
     if (!ctx || !ctx->isolate || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
 
-    XrCoroBlockResult block =
-        xr_coro_select_block(ctx->isolate, ctx->coro, channel_values, channel_count, case_count, 0);
+    XrCoroBlockResult block = xr_coro_select_block(ctx->isolate, ctx->coro, channel_values,
+                                                   channel_count, NULL, case_count);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_NO_CORO)

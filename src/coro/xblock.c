@@ -691,6 +691,8 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
         if (!atomic_compare_exchange_strong(&sw->triggered, &expected, true))
             return false;
 
+        atomic_store_explicit(&sw->selected_index, ci, memory_order_release);
+        atomic_store_explicit(&sw->selected_status, XR_RESUME_CHANNEL, memory_order_release);
         xr_worker_unblock_select(worker, coro);
         xr_coro_clear_select_wait(coro);
         xr_coro_resume_store(coro, XR_RESUME_OK);
@@ -703,8 +705,8 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
 }
 
 XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
-                                       const XrValue *channel_values, int ch_count, int case_count,
-                                       int result_reg_base) {
+                                       const XrValue *channel_values, int ch_count,
+                                       const XrSlotRef *result_slots, int case_count) {
     if (!coro) {
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
@@ -743,6 +745,8 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
     sw->timer_channel = NULL;
     atomic_store(&sw->active, true);
     atomic_store(&sw->triggered, false);
+    atomic_store(&sw->selected_index, -1);
+    atomic_store(&sw->selected_status, 0);
 
     XrChannel *timer_ch = NULL;
     for (int ci = 0; ci < ch_count && ci < sw->case_count; ci++) {
@@ -755,7 +759,7 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
         XrChannel *ch = xr_value_to_channel(ch_val);
         sw->cases[ci].channel = ch;
         sw->cases[ci].is_send = false;
-        sw->cases[ci].result_reg = result_reg_base + ci;
+        sw->cases[ci].result_slot = result_slots ? result_slots[ci] : xr_slot_none();
         sw->cases[ci].owner = coro;
         if (atomic_load(&ch->is_timer)) {
             timer_ch = ch;

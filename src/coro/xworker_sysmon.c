@@ -486,6 +486,9 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
             if (atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {
                 XR_DCHECK(sc >= sw->cases && sc < sw->cases + sw->case_count,
                           "wake_select: case index out of range");
+                int case_index = (int) (sc - sw->cases);
+                atomic_store_explicit(&sw->selected_index, case_index, memory_order_release);
+                atomic_store_explicit(&sw->selected_status, resume_status, memory_order_release);
                 // Remove from all bucket queues + blocked list
                 xr_worker_unblock_select(worker, coro);
 

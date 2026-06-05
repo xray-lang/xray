@@ -134,8 +134,14 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         return XR_DISP_NEXT;
     }
 
+    XrSlotRef result_slots[256];
+    int slot_count = ch_count < case_count ? ch_count : case_count;
+    for (int i = 0; i < slot_count; i++) {
+        result_slots[i] = xr_slot_xvalue_ptr(&base[base_reg + i]);
+    }
+
     XrCoroBlockResult result =
-        xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, case_count, base_reg);
+        xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, result_slots, case_count);
     if (result.kind == XR_CORO_BLOCK_ERROR) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
