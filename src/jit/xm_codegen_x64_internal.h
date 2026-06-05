@@ -20,6 +20,7 @@
 #include "xm_codegen_internal.h"
 #include "xm_verify_post_call.h"
 #include "xm_x64.h"
+#include "xjit_coro_state.h"
 #include "xm_jit.h"
 #include "xm_regalloc.h"
 #include "../base/xchecks.h"

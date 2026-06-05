@@ -30,9 +30,9 @@
 #include "xm_regalloc.h"
 #include "xm_target.h"
 #include "xm_looptree.h"
+#include "xjit_coro_state.h"  // XM_SUSPEND_SPILL_MAX (suspend-bridge capacity)
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
-#include "../coro/xcoroutine.h"  // XM_SUSPEND_SPILL_MAX (suspend-bridge capacity)
 #include <stdlib.h>
 #include <string.h>
 

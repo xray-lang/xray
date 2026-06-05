@@ -16,7 +16,7 @@
 #include "xm_codegen_riscv64_internal.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
-#include "../coro/xcoroutine.h" /* XM_SUSPEND_SPILL_MAX */
+#include "xjit_coro_state.h" /* XM_SUSPEND_SPILL_MAX */
 
 /* ========== OSR Entry Stubs ========== */
 
