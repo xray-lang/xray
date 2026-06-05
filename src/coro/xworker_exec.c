@@ -125,7 +125,7 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
 }
 
 /*
- * Unified BLOCKED post-processing (R5).
+ * Unified BLOCKED post-processing.
  *
  * Called after a backend returns XR_CORO_RUN_BLOCKED.
  * BLOCKED flag is already set by the active backend.
@@ -473,8 +473,7 @@ XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     run_ctx.isolate = (worker && worker->p.runtime) ? worker->p.runtime->isolate : NULL;
 
     XrCoroEvent event = worker_event_from_coro(coro);
-    const XrCoroBackendVTable *backend =
-        (coro && coro->backend) ? coro->backend : xr_coro_vm_backend_vtable();
-    XR_DCHECK(backend != NULL && backend->resume != NULL, "VM coroutine backend is missing");
-    return backend->resume(coro, &event, &run_ctx);
+    if (!coro || !coro->backend || !coro->backend->resume)
+        return xr_coro_run_error(XR_NULL_VAL, false);
+    return coro->backend->resume(coro, &event, &run_ctx);
 }
