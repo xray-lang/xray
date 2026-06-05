@@ -2,6 +2,7 @@
 // 公平调度测试 (Starvation Test)
 // 1 个 CPU 密集型 goroutine + N 个短任务
 // 测试 Go runtime 的抢占调度
+// DURATION_MS 是安全上限；短任务完成后会停止 CPU hog。
 
 package main
 
@@ -14,9 +15,9 @@ import (
 	"time"
 )
 
-func cpuHog(stop *atomic.Bool) {
+func cpuHog(stop *atomic.Bool, deadline time.Time) {
 	count := 0
-	for !stop.Load() {
+	for !stop.Load() && time.Now().Before(deadline) {
 		for i := 0; i < 1000000; i++ {
 			count++
 		}
@@ -49,15 +50,16 @@ func main() {
 
 	fmt.Println("=== Starvation 测试 ===")
 	fmt.Println("短任务数:", SHORT_TASKS)
-	fmt.Println("持续时间:", DURATION_MS, "ms")
+	fmt.Println("最长持续时间:", DURATION_MS, "ms")
 
 	results := make(chan float64, 1000)
 	var stop atomic.Bool
 
 	start := time.Now()
+	deadline := start.Add(time.Duration(DURATION_MS) * time.Millisecond)
 
 	// Start CPU hog
-	go cpuHog(&stop)
+	go cpuHog(&stop, deadline)
 	time.Sleep(10 * time.Millisecond)
 
 	// Launch short tasks in batches
@@ -86,7 +88,6 @@ func main() {
 	}
 
 	wg.Wait()
-	time.Sleep(time.Duration(DURATION_MS) * time.Millisecond)
 	stop.Store(true)
 
 	elapsed := time.Since(start)

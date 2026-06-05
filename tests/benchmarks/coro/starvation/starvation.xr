@@ -2,11 +2,11 @@
 // 公平调度测试 (Starvation Test)
 // 1 个 CPU 密集型协程（死循环计算）+ N 个短任务协程
 // 测试调度器能否公平调度，不让长任务饿死短任务
-// 直接验证 guard page safepoint + sysmon 抢占机制
+// DURATION_MS 是安全上限；短任务完成后会停止 CPU hog。
 import time
 
 let SHORT_TASKS = 100    // 短任务数量
-let DURATION_MS = 2000   // 测试持续时间(ms)
+let DURATION_MS = 2000   // 最长持续时间(ms)
 if (process.args.length > 0) {
     SHORT_TASKS = int(process.args[0]) ?? SHORT_TASKS
 }
@@ -16,9 +16,9 @@ if (process.args.length > 1) {
 
 print("=== Starvation 测试 ===")
 print("短任务数:", SHORT_TASKS)
-print("持续时间:", DURATION_MS, "ms")
+print("最长持续时间:", DURATION_MS, "ms")
 
-shared const result_ch = Channel(1000)
+shared const result_ch = Channel(SHORT_TASKS)
 
 // CPU 密集型长任务：持续计算直到被取消
 fn cpu_hog() -> int {
@@ -74,15 +74,21 @@ while (launched < SHORT_TASKS) {
     time.sleep(10)
 }
 
-// 等待所有短任务完成（设超时）
+// 等待所有短任务完成。完成数以 await 为准；result_ch 只用于延迟统计，
+// 对齐 Go 版 WaitGroup 再 drain results 的语义。
 let completed = 0
 let total_latency = 0
 let max_latency = 0
 
-for (let i = 0; i < SHORT_TASKS; i++) {
+for (task in short_tasks) {
+    let sum = await task
+    if ((int(sum) ?? -1) == 4950) {
+        completed++
+    }
+}
+
+for (let i = 0; i < completed; i++) {
     let latency = result_ch.recv()
-    if (latency == null) { break }
-    completed++
     let lat = int(latency) ?? 0
     total_latency = total_latency + lat
     if (lat > max_latency) {
