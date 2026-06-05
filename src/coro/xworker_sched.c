@@ -762,6 +762,14 @@ static uint64_t runtime_stealable_candidates(XrRuntime *runtime, uint64_t self_b
     return candidates;
 }
 
+static uint64_t worker_valid_mask(int worker_count) {
+    if (worker_count <= 0)
+        return 0;
+    if (worker_count >= 64)
+        return UINT64_MAX;
+    return ((uint64_t) 1ull << worker_count) - 1;
+}
+
 static bool worker_steal_backoff_active(XrWorker *worker, XrRuntime *runtime, uint64_t self_bit,
                                         int64_t now, int64_t *out_delay_hint) {
     if (worker->p.steal_backoff_until <= now)
@@ -816,41 +824,48 @@ static int worker_find_steal_victim(XrWorker *worker, XrRuntime *runtime, _Atomi
     int best_id = -1;
     int best_len = 0;
     uint32_t start = xr_xorshift32(&worker->p.rng_state) % runtime->worker_count;
+    uint64_t valid_candidates = candidates & worker_valid_mask(runtime->worker_count);
+    uint64_t scan_rounds[2];
+    scan_rounds[0] = valid_candidates & (~0ull << start);
+    scan_rounds[1] = valid_candidates & (((uint64_t) 1ull << start) - 1);
 
-    for (int j = 0; j < runtime->worker_count; j++) {
-        if (!atomic_load(running_ptr)) {
-            *should_exit = true;
-            return -1;
-        }
+    for (int round = 0; round < 2; round++) {
+        uint64_t scan = scan_rounds[round];
+        while (scan != 0) {
+            if (!atomic_load(running_ptr)) {
+                *should_exit = true;
+                return -1;
+            }
 
-        int i = (start + j) % runtime->worker_count;
-        uint64_t bit = xr_runtime_worker_bit(i);
-        if ((candidates & bit) == 0)
-            continue;
+            int i = __builtin_ctzll(scan);
+            scan &= scan - 1;
+            worker->p.stats.steal_candidate_scan_count++;
 
-        XrWorker *victim = &runtime->workers[i];
-        int victim_len = xr_steal_queue_size(&victim->p.runq[priority].deque);
-        if (victim_len <= 0) {
-            xr_worker_refresh_runq_masks(victim);
-            continue;
-        }
-
-        XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq[priority].deque);
-        int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len, priority);
-        if (oldest && freshness > 0) {
-            int64_t age = steal_now - oldest->submit_time;
-            if (age < freshness) {
-                int64_t delay = freshness - age;
-                if (*out_delay_hint == 0 || delay < *out_delay_hint) {
-                    *out_delay_hint = delay;
-                }
+            XrWorker *victim = &runtime->workers[i];
+            int victim_len = xr_steal_queue_size(&victim->p.runq[priority].deque);
+            if (victim_len <= 0) {
+                xr_worker_refresh_runq_masks(victim);
                 continue;
             }
-        }
 
-        if (victim_len > best_len) {
-            best_id = i;
-            best_len = victim_len;
+            XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq[priority].deque);
+            int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len, priority);
+            if (oldest && freshness > 0) {
+                int64_t age = steal_now - oldest->submit_time;
+                if (age < freshness) {
+                    int64_t delay = freshness - age;
+                    if (*out_delay_hint == 0 || delay < *out_delay_hint) {
+                        *out_delay_hint = delay;
+                    }
+                    worker->p.stats.steal_fresh_reject_count++;
+                    continue;
+                }
+            }
+
+            if (victim_len > best_len) {
+                best_id = i;
+                best_len = victim_len;
+            }
         }
     }
 
@@ -860,20 +875,27 @@ static int worker_find_steal_victim(XrWorker *worker, XrRuntime *runtime, _Atomi
 static XrCoroutine *worker_try_steal_continuation(XrWorker *worker, XrRuntime *runtime,
                                                   uint64_t candidates) {
     uint32_t start = xr_xorshift32(&worker->p.rng_state) % runtime->worker_count;
-    for (int j = 0; j < runtime->worker_count; j++) {
-        int i = (start + j) % runtime->worker_count;
-        uint64_t bit = xr_runtime_worker_bit(i);
-        if ((candidates & bit) == 0)
-            continue;
+    uint64_t valid_candidates = candidates & worker_valid_mask(runtime->worker_count);
+    uint64_t scan_rounds[2];
+    scan_rounds[0] = valid_candidates & (~0ull << start);
+    scan_rounds[1] = valid_candidates & (((uint64_t) 1ull << start) - 1);
 
-        XrWorker *victim = &runtime->workers[i];
-        XrCoroutine *cont = xr_steal_queue_steal(&victim->p.cont_deque);
-        if (!cont)
-            continue;
+    for (int round = 0; round < 2; round++) {
+        uint64_t scan = scan_rounds[round];
+        while (scan != 0) {
+            int i = __builtin_ctzll(scan);
+            scan &= scan - 1;
+            worker->p.stats.steal_candidate_scan_count++;
 
-        worker->p.stats.cont_steal_count++;
-        xr_worker_refresh_runq_masks(victim);
-        return cont;
+            XrWorker *victim = &runtime->workers[i];
+            XrCoroutine *cont = xr_steal_queue_steal(&victim->p.cont_deque);
+            if (!cont)
+                continue;
+
+            worker->p.stats.cont_steal_count++;
+            xr_worker_refresh_runq_masks(victim);
+            return cont;
+        }
     }
     return NULL;
 }
@@ -888,8 +910,10 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
     *should_exit = false;
     int64_t steal_now = xr_monotonic_ticks();
     uint64_t self_bit = xr_runtime_worker_bit(worker->p.id);
-    if (runtime_stealable_candidates(runtime, self_bit) == 0)
+    if (runtime_stealable_candidates(runtime, self_bit) == 0) {
+        worker->p.stats.steal_no_candidate_count++;
         return NULL;
+    }
     if (worker_steal_backoff_active(worker, runtime, self_bit, steal_now, out_delay_hint))
         return NULL;
     if (!worker_try_enter_search(runtime)) {

@@ -636,6 +636,8 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
 
     uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_steal_skip = 0;
     uint64_t total_steal_success = 0, total_steal_backoff = 0, total_local_pop = 0;
+    uint64_t total_steal_no_candidate = 0, total_steal_fresh_reject = 0;
+    uint64_t total_steal_candidate_scan = 0;
     uint64_t total_inject_pull = 0;
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
@@ -673,6 +675,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_steal_backoff += p->stats.steal_backoff_count;
         total_steal_try += p->stats.steal_attempt_count;
         total_steal_skip += p->stats.steal_skip_count;
+        total_steal_no_candidate += p->stats.steal_no_candidate_count;
+        total_steal_fresh_reject += p->stats.steal_fresh_reject_count;
+        total_steal_candidate_scan += p->stats.steal_candidate_scan_count;
         total_yield += p->stats.yielded_count;
         total_cont += p->stats.cont_steal_count;
         total_lifo_hit += p->stats.lifo_hit_count;
@@ -719,12 +724,17 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_cont);
     fprintf(stderr,
             "Steal: attempts=%llu success=%llu success_ratio=%.2f%% stolen_items=%llu "
-            "items_per_success=%.2f skipped=%llu backoff=%llu defer_ratio=%.2f%% "
-            "skip_ratio=%.2f%%\n",
+            "items_per_success=%.2f skipped=%llu backoff=%llu no_candidate=%llu "
+            "fresh_reject=%llu candidate_scans=%llu scans_per_attempt=%.2f "
+            "defer_ratio=%.2f%% skip_ratio=%.2f%%\n",
             (unsigned long long) total_steal_try, (unsigned long long) total_steal_success,
             stats_percent_u64(total_steal_success, total_steal_try),
             (unsigned long long) total_steal, stats_ratio_u64(total_steal, total_steal_success),
             (unsigned long long) total_steal_skip, (unsigned long long) total_steal_backoff,
+            (unsigned long long) total_steal_no_candidate,
+            (unsigned long long) total_steal_fresh_reject,
+            (unsigned long long) total_steal_candidate_scan,
+            stats_ratio_u64(total_steal_candidate_scan, total_steal_try),
             stats_percent_u64(total_steal_backoff, total_steal_try + total_steal_backoff),
             stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
     fprintf(stderr,

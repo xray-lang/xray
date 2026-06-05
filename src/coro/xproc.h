@@ -103,18 +103,21 @@ typedef struct XrProcStats {
     // trailing __attribute__((aligned)) on the typedef name;
     // MSVC's __declspec(align) cannot legally appear there.
     _Alignas(XR_CACHE_LINE) uint64_t executed_count;
-    uint64_t stolen_count;          // Coros the owner has stolen from peers
-    uint64_t steal_attempt_count;   // Steal scans started by this worker
-    uint64_t steal_success_count;   // Steal scans that moved at least one coro
-    uint64_t steal_backoff_count;   // Steal scans deferred by freshness backoff
-    uint64_t steal_skip_count;      // Steal scans skipped by the search gate
-    uint64_t yielded_count;         // Voluntary yields
-    uint64_t cont_steal_count;      // Continuations stolen (owner as stealer)
-    uint64_t completed_count;       // Coros that finished
-    uint64_t spawned_count;         // Coros spawned by this worker
-    uint64_t local_runq_pop_count;  // Coros consumed from priority queues
-    uint64_t lifo_hit_count;        // Coros consumed from the run-next slot
-    uint64_t lifo_flush_count;      // Run-next occupants forced back to queues
+    uint64_t stolen_count;                // Coros the owner has stolen from peers
+    uint64_t steal_attempt_count;         // Steal scans started by this worker
+    uint64_t steal_success_count;         // Steal scans that moved at least one coro
+    uint64_t steal_backoff_count;         // Steal scans deferred by freshness backoff
+    uint64_t steal_skip_count;            // Steal scans skipped by the search gate
+    uint64_t steal_no_candidate_count;    // Steal checks with no visible candidates
+    uint64_t steal_fresh_reject_count;    // Victims rejected by freshness delay
+    uint64_t steal_candidate_scan_count;  // Candidate victim deques inspected
+    uint64_t yielded_count;               // Voluntary yields
+    uint64_t cont_steal_count;            // Continuations stolen (owner as stealer)
+    uint64_t completed_count;             // Coros that finished
+    uint64_t spawned_count;               // Coros spawned by this worker
+    uint64_t local_runq_pop_count;        // Coros consumed from priority queues
+    uint64_t lifo_hit_count;              // Coros consumed from the run-next slot
+    uint64_t lifo_flush_count;            // Run-next occupants forced back to queues
     uint64_t lifo_gate_budget_count;
     uint64_t lifo_gate_backlog_count;
     uint64_t lifo_gate_priority_count;
