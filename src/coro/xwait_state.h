@@ -21,6 +21,7 @@
 #include <stdint.h>
 
 #include "../runtime/value/xvalue.h"
+#include "xslot_ref.h"
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrBlockedBucket XrBlockedBucket;
@@ -41,7 +42,7 @@ typedef struct XrSelectCase {
     void *channel;
     bool is_send;
     XrValue send_value;
-    int result_reg;
+    XrSlotRef result_slot;
     XrCoroutine *owner;
     struct XrSelectCase *prev;
     struct XrSelectCase *next;
@@ -54,6 +55,8 @@ typedef struct XrSelectWait {
     void *timer_channel;
     _Atomic bool active;
     _Atomic bool triggered;
+    _Atomic int selected_index;
+    _Atomic int selected_status;
 } XrSelectWait;
 
 typedef struct XrSelectStorage {
