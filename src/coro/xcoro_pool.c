@@ -36,12 +36,20 @@ static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
         return NULL;
     }
 
+    block->vm_states = xr_calloc(capacity, sizeof(XrVmCoroState));
+    if (!block->vm_states) {
+        xr_free(block->coros);
+        xr_free(block);
+        return NULL;
+    }
+
     // Allocate slab for embedded VM stack and bytecode frames (one entry per coroutine)
     size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
     size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_POOL_FRAME_SLOTS;
     block->slab_entry_size = stack_bytes + frames_bytes;
     block->slab = xr_malloc(capacity * block->slab_entry_size);
     if (!block->slab) {
+        xr_free(block->vm_states);
         xr_free(block->coros);
         xr_free(block);
         return NULL;
@@ -63,11 +71,14 @@ static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
     // Free lazily-allocated jit_suspend state for each coroutine
     if (block->coros) {
         for (size_t i = 0; i < block->capacity; i++) {
-            if (block->coros[i].jit_suspend) {
-                xr_free(block->coros[i].jit_suspend);
+            if (block->coros[i].jit_state.suspend) {
+                xr_free(block->coros[i].jit_state.suspend);
             }
         }
         xr_free(block->coros);
+    }
+    if (block->vm_states) {
+        xr_free(block->vm_states);
     }
     if (block->slab) {
         xr_free(block->slab);
@@ -190,7 +201,13 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             atomic_fetch_add_explicit(&pool->free_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
             // Zero struct (next pointer may be dirty).
+            XrVmCoroState *saved_vm_state = coro->vm_state;
+            uint16_t saved_gc_flags =
+                coro->gc_flags &
+                (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
             memset(coro, 0, sizeof(XrCoroutine));
+            coro->vm_state = saved_vm_state;
+            coro->gc_flags = saved_gc_flags;
             return coro;
         }
     }
@@ -261,6 +278,10 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
             &pool->free_list, &head, coro, memory_order_release, memory_order_relaxed));
     } else {
         // From malloc: free directly
+        if ((coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) && coro->vm_state) {
+            xr_free(coro->vm_state);
+            coro->vm_state = NULL;
+        }
         xr_free(coro);
     }
 

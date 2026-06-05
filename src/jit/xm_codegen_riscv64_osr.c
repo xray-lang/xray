@@ -252,7 +252,7 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
  * JIT-suspended (XM_SUSPEND returned SUSPEND_MARKER), the worker calls
  * this entry point to re-enter JIT code. The stub:
  *   - Builds a new stack frame (identical to normal entry)
- *   - Reloads saved registers from coro->jit_suspend
+ *   - Reloads saved registers from coro->jit_state.suspend
  *   - Restores spill slots
  *   - Dispatches to the correct continuation point by suspend_id */
 XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result) {

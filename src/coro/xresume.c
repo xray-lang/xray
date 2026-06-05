@@ -44,8 +44,9 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
 
     // ========== Unroll mechanism: process continuations in call stack layer by layer ==========
 
-    while (coro->vm_ctx.frame_count > 0) {
-        XrBcCallFrame *frame = &coro->vm_ctx.frames[coro->vm_ctx.frame_count - 1];
+    XrVMContext *coro_ctx = xr_coro_vm_ctx(coro);
+    while (coro_ctx->frame_count > 0) {
+        XrBcCallFrame *frame = &coro_ctx->frames[coro_ctx->frame_count - 1];
 
         // Check if frame has yielded
         if (!(frame->call_status & XR_CALL_YIELDED)) {
@@ -67,7 +68,7 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
             XrCFuncResult status = cont(X, resume_status, xr_null(), user_ctx, &cfunc_result);
 
             XR_DBG_CORO("unroll: continuation returned %d, frame_count=%d", status,
-                        coro->vm_ctx.frame_count);
+                        coro_ctx->frame_count);
 
             switch (status) {
                 case XR_CFUNC_DONE: {
@@ -75,12 +76,12 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
                     // This ensures return value is stored in correct frame context
                     XR_DBG_CORO("unroll DONE: result_slot=%d, base_offset=%d, frame_idx=%d",
                                 frame->u.c.result_slot, frame->base_offset,
-                                coro->vm_ctx.frame_count - 1);
+                                coro_ctx->frame_count - 1);
 
                     // If this is the coroutine's last frame (frame_count=1),
                     // store result in VM stack[0]; run_on_worker reads it from there.
-                    if (coro->vm_ctx.frame_count == 1 && coro->vm_ctx.stack != NULL) {
-                        coro->vm_ctx.stack[0] = cfunc_result;
+                    if (coro_ctx->frame_count == 1 && coro_ctx->stack != NULL) {
+                        coro_ctx->stack[0] = cfunc_result;
                         XR_DBG_CORO("unroll: coroutine last frame, sync VM stack[0] tag=%u",
                                     cfunc_result.tag);
                     }

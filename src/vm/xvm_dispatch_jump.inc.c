@@ -105,8 +105,8 @@ vmcase(OP_JMP) {
 
             if (_do_osr) {
                 uint32_t _target_pc = (uint32_t) (pc + offset - PROTO_CODE_BASE(_osr_proto));
-                coro->jit_ctx->call_closure = cl;
-                coro->jit_ctx->osr_deopt_pc = -1;
+                coro->jit_state.scratch->call_closure = cl;
+                coro->jit_state.scratch->osr_deopt_pc = -1;
                 XrValue _osr_result;
                 int _osr_rc = xm_jit_osr_trigger(
                     isolate->vm.jit, _osr_proto, coro, _target_pc, base, _osr_proto->maxstacksize,
@@ -136,9 +136,9 @@ vmcase(OP_JMP) {
                     savepc();
                     return XR_VM_BLOCKED;
                 }
-                if (coro->jit_ctx->osr_deopt_pc >= 0) {
-                    pc = PROTO_CODE_BASE(_osr_proto) + coro->jit_ctx->osr_deopt_pc;
-                    coro->jit_ctx->osr_deopt_pc = -1;
+                if (coro->jit_state.scratch->osr_deopt_pc >= 0) {
+                    pc = PROTO_CODE_BASE(_osr_proto) + coro->jit_state.scratch->osr_deopt_pc;
+                    coro->jit_state.scratch->osr_deopt_pc = -1;
                     offset = 0;
                 }
             }

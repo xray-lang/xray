@@ -27,15 +27,15 @@
 
 #define XM_CORO_REDUCTIONS_OFFSET offsetof(XrCoroutine, reductions)
 #define XM_CORO_GC_OFFSET offsetof(XrCoroutine, coro_gc)
-#define XM_CORO_JIT_CTX_OFFSET offsetof(XrCoroutine, jit_ctx)
+#define XM_CORO_JIT_CTX_OFFSET offsetof(XrCoroutine, jit_state.scratch)
 
 /* ========== XrCoroutine JIT suspend/resume fields ========== */
 
-#define XM_CORO_RESUME_ENTRY_OFFSET offsetof(XrCoroutine, jit_resume_entry)
-#define XM_CORO_RESUME_PROTO_OFFSET offsetof(XrCoroutine, jit_resume_proto)
-#define XM_CORO_SUSPEND_ID_OFFSET offsetof(XrCoroutine, jit_suspend_id)
-#define XM_CORO_SUSPEND_SMAP_OFFSET offsetof(XrCoroutine, jit_suspend_smap_id)
-#define XM_CORO_SUSPEND_PTR_OFFSET offsetof(XrCoroutine, jit_suspend)
+#define XM_CORO_RESUME_ENTRY_OFFSET offsetof(XrCoroutine, jit_state.resume_entry)
+#define XM_CORO_RESUME_PROTO_OFFSET offsetof(XrCoroutine, jit_state.resume_proto)
+#define XM_CORO_SUSPEND_ID_OFFSET offsetof(XrCoroutine, jit_state.suspend_id)
+#define XM_CORO_SUSPEND_SMAP_OFFSET offsetof(XrCoroutine, jit_state.suspend_smap_id)
+#define XM_CORO_SUSPEND_PTR_OFFSET offsetof(XrCoroutine, jit_state.suspend)
 // Sub-field offsets within XrJitSuspendState (for ARM64 codegen addressing)
 #define XM_SUSPEND_CALLER_SAVED_OFF offsetof(XrJitSuspendState, caller_saved)
 #define XM_SUSPEND_CALLEE_SAVED_OFF offsetof(XrJitSuspendState, callee_saved)

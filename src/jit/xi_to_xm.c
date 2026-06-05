@@ -1141,7 +1141,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Extract i-th result from a multi-return call.  aux_int is the
          * zero-based result index.  Index 0 aliases the call's primary
          * x0/x1 result.  Indices >= 1 require pulling from
-         * coro->jit_ctx->ret_vals[] — codegen does not emit those reads
+         * coro->jit_state.scratch->ret_vals[] — codegen does not emit those reads
          * yet, so bail out and let the VM run the function. */
         case XI_EXTRACT: {
             XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
@@ -1244,7 +1244,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
 
         /* Exception throw — delegates to xr_jit_throw runtime bridge.
-         * Codegen checks coro->jit_ctx->exception after the call and
+         * Codegen checks coro->jit_state.scratch->exception after the call and
          * branches to exception_handler if non-NULL. */
         case XI_THROW: {
             XR_DCHECK(v->nargs >= 1, "throw: need value arg");
@@ -1382,7 +1382,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         }
 
         case XI_CATCH: {
-            /* Load exception from coro->jit_ctx->exception, clear it */
+            /* Load exception from coro->jit_state.scratch->exception, clear it */
             XmRef exc = xm_emit_unary(ctx->xm_func, blk, XM_CATCH, XR_REP_I64, XM_NONE);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             return exc;

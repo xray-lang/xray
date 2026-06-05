@@ -668,7 +668,7 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
  * When a coroutine is JIT-suspended (XM_SUSPEND returned SUSPEND_MARKER),
  * the worker calls this entry point to re-enter JIT code. The stub:
  * 1. Sets up the same frame as the normal prologue
- * 2. Reloads ALL live registers from coro->jit_suspend (pointer)
+ * 2. Reloads ALL live registers from coro->jit_state.suspend (pointer)
  * 3. Loads the await result into the correct physical register
  * 4. Dispatches to the continuation point via suspend_id jump table
  *
@@ -729,7 +729,7 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     // LDR w16, [x19, #suspend_id_offset]
     a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_ID_OFFSET));
 
-    // === Reload ALL registers from coro->jit_suspend (pointer deref) ===
+    // === Reload ALL registers from coro->jit_state.suspend (pointer deref) ===
     // LDR x17, [x19, #jit_suspend_ptr_offset]
     a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
 
@@ -820,7 +820,7 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
         int32_t off = (int32_t) here - (int32_t) trampoline_patches[i];
         ctx->buf.code[trampoline_patches[i]] = a64_bcond(A64_CC_EQ, off);
 
-        // Reload x17 = coro->jit_suspend (pointer deref for result + result_tag)
+        // Reload x17 = coro->jit_state.suspend (pointer deref for result + result_tag)
         a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
 
         // Load result from suspend_state.result into the correct register

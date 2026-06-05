@@ -44,8 +44,8 @@ XrJsonValue *xdap_inspect_stack_frames(XdapController *ctrl, XrCoroutine *coro, 
 
     int frame_id = 0;
 
-    for (int i = coro->vm_ctx.frame_count - 1; i >= 0; i--) {
-        XrBcCallFrame *frame = &coro->vm_ctx.frames[i];
+    for (int i = xr_coro_vm_ctx(coro)->frame_count - 1; i >= 0; i--) {
+        XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[i];
 
         if (!frame->closure || !frame->closure->proto)
             continue;
@@ -90,11 +90,11 @@ bool xdap_inspect_get_frame_info(XdapController *ctrl, XrCoroutine *coro, int fr
     if (!ctrl || !coro)
         return false;
 
-    int actual_idx = coro->vm_ctx.frame_count - 1 - frame_idx;
-    if (actual_idx < 0 || actual_idx >= coro->vm_ctx.frame_count)
+    int actual_idx = xr_coro_vm_ctx(coro)->frame_count - 1 - frame_idx;
+    if (actual_idx < 0 || actual_idx >= xr_coro_vm_ctx(coro)->frame_count)
         return false;
 
-    XrBcCallFrame *frame = &coro->vm_ctx.frames[actual_idx];
+    XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[actual_idx];
     if (!frame->closure || !frame->closure->proto)
         return false;
 
@@ -131,16 +131,16 @@ XrJsonValue *xdap_inspect_locals(XdapController *ctrl, XrCoroutine *coro, int fr
     if (!ctrl || !coro)
         return variables;
 
-    int actual_idx = coro->vm_ctx.frame_count - 1 - frame_idx;
-    if (actual_idx < 0 || actual_idx >= coro->vm_ctx.frame_count)
+    int actual_idx = xr_coro_vm_ctx(coro)->frame_count - 1 - frame_idx;
+    if (actual_idx < 0 || actual_idx >= xr_coro_vm_ctx(coro)->frame_count)
         return variables;
 
-    XrBcCallFrame *frame = &coro->vm_ctx.frames[actual_idx];
+    XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[actual_idx];
     if (!frame->closure || !frame->closure->proto)
         return variables;
 
     XrProto *proto = frame->closure->proto;
-    XrValue *base = coro->vm_ctx.stack + frame->base_offset;
+    XrValue *base = xr_coro_vm_ctx(coro)->stack + frame->base_offset;
     int locvar_count = PROTO_LOCVAR_COUNT(proto);
 
     for (int i = 0; i < locvar_count; i++) {
@@ -188,11 +188,11 @@ XrJsonValue *xdap_inspect_upvalues(XdapController *ctrl, XrCoroutine *coro, int 
     if (!ctrl || !coro)
         return variables;
 
-    int actual_idx = coro->vm_ctx.frame_count - 1 - frame_idx;
-    if (actual_idx < 0 || actual_idx >= coro->vm_ctx.frame_count)
+    int actual_idx = xr_coro_vm_ctx(coro)->frame_count - 1 - frame_idx;
+    if (actual_idx < 0 || actual_idx >= xr_coro_vm_ctx(coro)->frame_count)
         return variables;
 
-    XrBcCallFrame *frame = &coro->vm_ctx.frames[actual_idx];
+    XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[actual_idx];
     if (!frame->closure)
         return variables;
 

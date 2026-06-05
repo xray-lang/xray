@@ -501,9 +501,10 @@ static char *debug_evaluate_internal(XrayIsolate *isolate, const char *expressio
     // Get frame and stack from coroutine or main VM
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     int frame_count =
-        coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
-    XrBcCallFrame *frames = coro ? coro->vm_ctx.frames : xr_isolate_get_vm_state(isolate)->frames;
-    XrValue *stack = coro ? coro->vm_ctx.stack : xr_isolate_get_vm_state(isolate)->stack;
+        coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
+    XrBcCallFrame *frames =
+        coro ? xr_coro_vm_ctx(coro)->frames : xr_isolate_get_vm_state(isolate)->frames;
+    XrValue *stack = coro ? xr_coro_vm_ctx(coro)->stack : xr_isolate_get_vm_state(isolate)->stack;
 
     if (frame_idx >= 0 && frame_idx < frame_count) {
         int actual_idx = frame_count - 1 - frame_idx;
