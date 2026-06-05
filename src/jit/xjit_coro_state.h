@@ -17,7 +17,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../coro/xcoroutine.h"
+#include "../coro/xjit_scratch.h"
 
 /*
  * Capacity of XrJitSuspendState::spill[].
@@ -54,8 +54,10 @@ typedef struct XrJitSuspendState {
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame -> suspend -> new frame)
 } XrJitSuspendState;
 
+typedef struct XrJitCoroState XrJitCoroState;
+
 struct XrJitCoroState {
-    struct XrJitScratch *scratch;
+    XrJitScratch *scratch;
     void *resume_entry;
     void *resume_proto;
     uint32_t suspend_id;
