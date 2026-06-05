@@ -205,11 +205,10 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
 
 // xr_coro_has_continuation - Check if coroutine has pending continuation
 bool xr_coro_has_continuation(XrCoroutine *coro) {
-    if (!coro || xr_coro_vm_ctx(coro)->frame_count == 0) {
+    if (!coro || !coro->backend || !coro->backend->has_continuation) {
         return false;
     }
-    XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[xr_coro_vm_ctx(coro)->frame_count - 1];
-    return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
+    return coro->backend->has_continuation(coro);
 }
 
 // ========== Call Closure from C Layer ==========
