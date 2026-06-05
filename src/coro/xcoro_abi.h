@@ -97,6 +97,7 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
+    bool (*ensure_state)(XrCoroutine *coro);
     bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                     bool need_storage, bool is_clean);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
