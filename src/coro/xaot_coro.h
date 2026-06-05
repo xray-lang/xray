@@ -137,8 +137,8 @@ XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds)
 XR_FUNC XrAotResult xr_aot_select_block(const XrAotContext *ctx, const XrValue *channel_values,
                                         int channel_count, int case_count);
 XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value,
-                                      XrValue *out_value, bool discard_result);
-XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue *out_value,
+                                      XrSlotRef out_slot, bool discard_result);
+XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                              bool discard_result);
 
 XR_FUNC XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size);

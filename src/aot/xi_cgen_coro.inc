@@ -72,6 +72,50 @@ static bool cg_coro_unbox_from_typed_recv(const XiFunc *f, const XiValue *v) {
     return cg_coro_typed_recv_unbox_user(f, v->args[0]) == v;
 }
 
+static const XiValue *cg_coro_typed_await_unbox_user(const XiFunc *f, const XiValue *await_value) {
+    if (!f || !await_value || await_value->op != XI_AWAIT || cg_rep(await_value) != XR_REP_TAGGED)
+        return NULL;
+
+    const XiValue *typed_unbox = NULL;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == await_value)
+            return NULL;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == await_value)
+                    return NULL;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != await_value)
+                    continue;
+                if (user->op != XI_UNBOX || a != 0)
+                    return NULL;
+                XrRep rep = cg_rep(user);
+                if (rep != XR_REP_I64 && rep != XR_REP_F64)
+                    return NULL;
+                if (typed_unbox && typed_unbox != user)
+                    return NULL;
+                typed_unbox = user;
+            }
+        }
+    }
+    return typed_unbox;
+}
+
+static bool cg_coro_unbox_from_typed_await(const XiFunc *f, const XiValue *v) {
+    if (!v || v->op != XI_UNBOX || v->nargs < 1)
+        return false;
+    return cg_coro_typed_await_unbox_user(f, v->args[0]) == v;
+}
+
 static bool cg_coro_is_typed_send_use(const XiValue *user, const XiValue *target,
                                       uint16_t arg_idx) {
     if (!user || !target || !cg_coro_box_scalar_source(target) || arg_idx != 1)
@@ -120,6 +164,8 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_PARAM)
+        return false;
+    if (cg_coro_typed_await_unbox_user(f, v))
         return false;
     if (cg_coro_typed_recv_unbox_user(f, v))
         return false;
@@ -447,6 +493,8 @@ static bool cg_coro_value_needs_frame(const XiFunc *f, const XiLiveness *live,
                                       const XiValue *v) {
     if (!cg_coro_value_has_storage(f, v))
         return false;
+    if (cg_coro_unbox_from_typed_await(f, v))
+        return true;
     if (cg_coro_unbox_from_typed_recv(f, v))
         return true;
     if (cg_coro_value_needs_runtime_slot(v))
@@ -734,6 +782,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (cg_coro_unbox_from_typed_recv(f, v))
         return;
 
+    if (cg_coro_unbox_from_typed_await(f, v))
+        return;
+
     if (v->op == XI_GO) {
         if (v->nargs < 1) {
             ctx->error = true;
@@ -783,10 +834,17 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         int sid = ++(*state_id);
+        const XiValue *await_slot_value = cg_coro_typed_await_unbox_user(f, v);
         fprintf(out, "    XrAotResult _await_%u = xr_aot_await_task(ctx, ", v->id);
         emit_vref(out, v->args[0]);
-        fprintf(out, ", &");
-        emit_vref(out, v);
+        fprintf(out, ", ");
+        if (await_slot_value) {
+            emit_coro_slot_ref(ctx, out, f, prefix, await_slot_value);
+        } else {
+            fprintf(out, "xr_slot_xvalue_ptr(&");
+            emit_vref(out, v);
+            fprintf(out, ")");
+        }
         fprintf(out, ", false);\n");
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
@@ -797,8 +855,14 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, &", v->id);
-        emit_vref(out, v);
+        fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, ", v->id);
+        if (await_slot_value) {
+            emit_coro_slot_ref(ctx, out, f, prefix, await_slot_value);
+        } else {
+            fprintf(out, "xr_slot_xvalue_ptr(&");
+            emit_vref(out, v);
+            fprintf(out, ")");
+        }
         fprintf(out, ", false);\n");
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
