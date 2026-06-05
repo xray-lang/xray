@@ -16,7 +16,7 @@
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
  * Owns: OP_DEFER, OP_BYTES_NEW, OP_SCOPE_ENTER, OP_SCOPE_EXIT,
- *       OP_TIME_AFTER, OP_SLEEP, OP_SELECT_BLOCK.
+ *       OP_TIME_AFTER, OP_SLEEP, OP_SELECT_BLOCK dispatch.
  */
 
 vmcase(OP_DEFER) {
@@ -252,83 +252,11 @@ vmcase(OP_SCOPE_EXIT) {
 /* === Time / sleep / select-block === */
 
 vmcase(OP_TIME_AFTER) {
-    /* R[A] = time.after(R[B]) - create Timer Channel
-     * A = target register
-     * B = timeout register (milliseconds)
-     */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue timeout_val = R(b);
-
-    int64_t timeout_ms = 0;
-    if (XR_IS_INT(timeout_val)) {
-        timeout_ms = XR_TO_INT(timeout_val);
-    } else if (XR_IS_FLOAT(timeout_val)) {
-        timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
-    }
-
-    if (timeout_ms < 0)
-        timeout_ms = 0;
-
-    // Create Timer Channel
-    XrChannel *timer_ch = xr_channel_new_timer(isolate, timeout_ms);
-    if (!timer_ch) {
-        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "time.after: out of memory");
-    }
-
-    // Arm on current worker's timer wheel (no polling).
-    {
-        XrWorker *_w = xr_current_worker();
-        if (_w && _w->p.timer_wheel) {
-            xr_channel_timer_arm(timer_ch, _w->p.timer_wheel);
-        }
-    }
-
-    R(a) = xr_value_from_channel(timer_ch);
-    vmbreak;
+    VM_DISPATCH(vm_time_dispatch(isolate, vm_ctx, i, base, frame, pc));
 }
 
 vmcase(OP_SLEEP) {
-    /* time.sleep(R[A]) - coroutine-friendly sleep
-     * A = sleep time (milliseconds, int)
-     *
-     * Coroutine mode: set wake time, yield CPU
-     * Non-coroutine mode: blocking sleep
-     */
-    int a = GETARG_A(i);
-    XrValue val = R(a);
-
-    int64_t milliseconds = 0;
-    if (XR_IS_INT(val)) {
-        milliseconds = XR_TO_INT(val);
-    } else if (XR_IS_FLOAT(val)) {
-        milliseconds = (int64_t) XR_TO_FLOAT(val);
-    }
-
-    if (milliseconds <= 0) {
-        vmbreak;
-    }
-
-    // Check if in coroutine
-    XrCoroutine *coro = (XrCoroutine *) VM_CURRENT_CORO;
-    if (coro) {
-        XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
-        if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc;
-            return XR_VM_BLOCKED;
-        }
-        if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "sleep: out of memory");
-        }
-        if (sleep_result.kind == XR_CORO_BLOCK_NO_CORO) {
-            xr_time_sleep_ms((uint64_t) milliseconds);
-            vmbreak;
-        }
-    }
-
-    // Non-coroutine mode: blocking sleep.
-    xr_time_sleep_ms((uint64_t) milliseconds);
-    vmbreak;
+    VM_DISPATCH(vm_time_dispatch(isolate, vm_ctx, i, base, frame, pc));
 }
 
 vmcase(OP_SELECT_BLOCK) {

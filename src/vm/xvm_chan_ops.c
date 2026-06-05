@@ -5,13 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xvm_chan_ops.c - Dispatch helpers for channel timeouts and select
+ * xvm_chan_ops.c - Dispatch helpers for channel, timer, and select operations
  *
- * Implements channel send/recv with timeout and the select-block
- * driver. Declarations live in xvm_dispatch_helpers.h.
+ * Implements channel send/recv, timer channel creation, sleep blocking,
+ * and the select-block driver. Declarations live in xvm_dispatch_helpers.h.
  *
  * Owns:
+ *   - vm_time_dispatch      (timer channel creation and sleep)
  *   - vm_select_block        (multiplex blocking select)
+ *   - vm_chan_send         (Channel send)
+ *   - vm_chan_recv         (Channel recv)
  *   - vm_chan_send_timeout   (Channel send with deadline)
  *   - vm_chan_recv_timeout   (Channel recv with deadline)
  */
@@ -38,6 +41,86 @@
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
 #include <string.h>
+
+static XrDispatchAction vm_time_after_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                           XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                           XrInstruction *pc) {
+    (void) vm_ctx;
+    int a = GETARG_A(instr);
+    int b = GETARG_B(instr);
+    XrValue timeout_val = base[b];
+
+    int64_t timeout_ms = 0;
+    if (XR_IS_INT(timeout_val)) {
+        timeout_ms = XR_TO_INT(timeout_val);
+    } else if (XR_IS_FLOAT(timeout_val)) {
+        timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
+    }
+    if (timeout_ms < 0) {
+        timeout_ms = 0;
+    }
+
+    XrChannel *timer_ch = xr_channel_new_timer(isolate, timeout_ms);
+    if (!timer_ch) {
+        VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "time.after: out of memory");
+    }
+
+    XrWorker *worker = xr_current_worker();
+    if (worker && worker->p.timer_wheel) {
+        xr_channel_timer_arm(timer_ch, worker->p.timer_wheel);
+    }
+
+    base[a] = xr_value_from_channel(timer_ch);
+    return XR_DISP_NEXT;
+}
+
+static XrDispatchAction vm_sleep_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                      XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                      XrInstruction *pc) {
+    int a = GETARG_A(instr);
+    XrValue val = base[a];
+
+    int64_t milliseconds = 0;
+    if (XR_IS_INT(val)) {
+        milliseconds = XR_TO_INT(val);
+    } else if (XR_IS_FLOAT(val)) {
+        milliseconds = (int64_t) XR_TO_FLOAT(val);
+    }
+    if (milliseconds <= 0) {
+        return XR_DISP_NEXT;
+    }
+
+    XrCoroutine *coro = vm_get_coro(vm_ctx);
+    if (coro) {
+        XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
+        if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
+            frame->pc = pc;
+            return XR_DISP_BLOCKED;
+        }
+        if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
+            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "sleep: out of memory");
+        }
+        if (sleep_result.kind != XR_CORO_BLOCK_NO_CORO) {
+            return XR_DISP_NEXT;
+        }
+    }
+
+    xr_time_sleep_ms((uint64_t) milliseconds);
+    return XR_DISP_NEXT;
+}
+
+XR_FUNC XrDispatchAction vm_time_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                          XrInstruction *pc) {
+    switch (GET_OPCODE(instr)) {
+        case OP_TIME_AFTER:
+            return vm_time_after_impl(isolate, vm_ctx, instr, base, frame, pc);
+        case OP_SLEEP:
+            return vm_sleep_impl(isolate, vm_ctx, instr, base, frame, pc);
+        default:
+            return XR_DISP_FATAL;
+    }
+}
 
 XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
