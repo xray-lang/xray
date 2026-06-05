@@ -22,6 +22,8 @@
  */
 
 #include "xi_opt_sccp.h"
+#include "xi_analysis.h"
+#include "xi_cfg_edit.h"
 #include "xi_pass.h"
 #include "xi_range.h"
 #include "../base/xchecks.h"
@@ -178,12 +180,29 @@ static bool ssa_pop(SsaWl *w, uint32_t *out) {
 typedef struct {
     XiFunc *func;
     SccpCell *cells; /* [next_value_id] */
-    bool *reachable; /* [nblocks] */
-    bool *exec_edge; /* [nblocks * 2]: [bi*2] = succs[0] edge, [bi*2+1] = succs[1] */
+    bool *reachable; /* [block_count] */
+    bool *exec_edge; /* [block_count * 2]: [bi*2] = succs[0] edge, [bi*2+1] = succs[1] */
     uint32_t max_id; /* = func->next_value_id */
+    uint32_t block_count;
     CfgWl cfg;
     SsaWl ssa;
 } SccpCtx;
+
+static bool block_index(const SccpCtx *ctx, const XiBlock *blk, uint32_t *out) {
+    if (!ctx || !blk || !out)
+        return false;
+    if (blk->id < ctx->block_count && ctx->func->blocks[blk->id] == blk) {
+        *out = blk->id;
+        return true;
+    }
+    for (uint32_t i = 0; i < ctx->block_count; i++) {
+        if (ctx->func->blocks[i] == blk) {
+            *out = i;
+            return true;
+        }
+    }
+    return false;
+}
 
 /* ========== Value → Cell ========== */
 
@@ -474,13 +493,15 @@ static SccpCell eval_phi(SccpCtx *ctx, const XiBlock *blk, const XiPhi *phi) {
         XiBlock *pred = blk->preds[i];
         if (!pred)
             continue;
-        XR_DCHECK(pred->id < ctx->func->nblocks, "phi pred ID out of range");
+        uint32_t pred_idx = 0;
+        if (!block_index(ctx, pred, &pred_idx))
+            continue;
 
         /* Check if the edge from pred to blk is executable */
         bool edge_exec = false;
-        if (pred->succs[0] == blk && ctx->exec_edge[pred->id * 2])
+        if (pred->succs[0] == blk && ctx->exec_edge[pred_idx * 2])
             edge_exec = true;
-        if (pred->succs[1] == blk && ctx->exec_edge[pred->id * 2 + 1])
+        if (pred->succs[1] == blk && ctx->exec_edge[pred_idx * 2 + 1])
             edge_exec = true;
         if (!edge_exec)
             continue;
@@ -495,6 +516,8 @@ static SccpCell eval_phi(SccpCtx *ctx, const XiBlock *blk, const XiPhi *phi) {
 /* ========== Edge Management ========== */
 
 static void mark_edge(SccpCtx *ctx, uint32_t from_bi, uint32_t to_bi, int slot) {
+    if (!ctx || from_bi >= ctx->block_count || to_bi >= ctx->block_count || slot < 0 || slot >= 2)
+        return;
     uint32_t eidx = from_bi * 2 + slot;
     if (ctx->exec_edge[eidx])
         return;
@@ -540,27 +563,33 @@ static void enqueue_uses(SccpCtx *ctx, uint32_t vid) {
 /* ========== Terminator Evaluation ========== */
 
 static void visit_terminator(SccpCtx *ctx, XiBlock *blk) {
-    uint32_t bi = blk->id;
+    uint32_t bi = 0;
+    if (!block_index(ctx, blk, &bi))
+        return;
 
     if (blk->kind == XI_BLOCK_PLAIN) {
-        if (blk->succs[0])
-            mark_edge(ctx, bi, blk->succs[0]->id, 0);
+        uint32_t succ_idx = 0;
+        if (blk->succs[0] && block_index(ctx, blk->succs[0], &succ_idx))
+            mark_edge(ctx, bi, succ_idx, 0);
     } else if (blk->kind == XI_BLOCK_IF) {
         SccpCell c = value_cell(ctx, blk->control);
         if (c.kind == SCCP_CONST_BOOL || c.kind == SCCP_CONST_INT) {
             if (c.ival != 0) {
-                if (blk->succs[0])
-                    mark_edge(ctx, bi, blk->succs[0]->id, 0);
+                uint32_t succ_idx = 0;
+                if (blk->succs[0] && block_index(ctx, blk->succs[0], &succ_idx))
+                    mark_edge(ctx, bi, succ_idx, 0);
             } else {
-                if (blk->succs[1])
-                    mark_edge(ctx, bi, blk->succs[1]->id, 1);
+                uint32_t succ_idx = 0;
+                if (blk->succs[1] && block_index(ctx, blk->succs[1], &succ_idx))
+                    mark_edge(ctx, bi, succ_idx, 1);
             }
         } else {
             /* Unknown: both edges may execute */
-            if (blk->succs[0])
-                mark_edge(ctx, bi, blk->succs[0]->id, 0);
-            if (blk->succs[1])
-                mark_edge(ctx, bi, blk->succs[1]->id, 1);
+            uint32_t succ_idx = 0;
+            if (blk->succs[0] && block_index(ctx, blk->succs[0], &succ_idx))
+                mark_edge(ctx, bi, succ_idx, 0);
+            if (blk->succs[1] && block_index(ctx, blk->succs[1], &succ_idx))
+                mark_edge(ctx, bi, succ_idx, 1);
         }
     }
     /* RETURN / UNREACHABLE: no outgoing edges */
@@ -600,7 +629,10 @@ static void revisit_value(SccpCtx *ctx, uint32_t vid) {
     ValLoc loc = find_value(ctx->func, vid);
     if (!loc.v)
         return;
-    if (!ctx->reachable[loc.blk->id])
+    uint32_t loc_bi = 0;
+    if (!block_index(ctx, loc.blk, &loc_bi))
+        return;
+    if (!ctx->reachable[loc_bi])
         return;
 
     SccpCell old = ctx->cells[vid];
@@ -690,6 +722,19 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     if (f->nblocks == 0)
         return xi_pass_no_change();
 
+    bool compacted_at_entry = false;
+    for (uint32_t i = 0; i < f->nblocks; i++) {
+        XiBlock *blk = f->blocks[i];
+        if (!blk)
+            continue;
+        if (blk->id != i || (blk->kind == XI_BLOCK_UNREACHABLE && blk != f->entry)) {
+            uint32_t removed = xi_cfg_compact_blocks(f);
+            xi_cfg_invalidate(f);
+            compacted_at_entry = removed > 0;
+            break;
+        }
+    }
+
     uint32_t n = f->nblocks;
     uint32_t max_id = f->next_value_id;
 
@@ -697,6 +742,7 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     memset(&ctx, 0, sizeof(ctx));
     ctx.func = f;
     ctx.max_id = max_id;
+    ctx.block_count = n;
     ctx.cells = (SccpCell *) xr_calloc(max_id > 0 ? max_id : 1, sizeof(SccpCell));
     ctx.reachable = (bool *) xr_calloc(n, sizeof(bool));
     ctx.exec_edge = (bool *) xr_calloc((size_t) n * 2, sizeof(bool));
@@ -793,7 +839,7 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     if (any_rewrite) {
         chg.values_changed = true;
     }
-    if (blocks_removed) {
+    if (blocks_removed || compacted_at_entry) {
         chg.cfg_changed = true;
     }
     return chg;
