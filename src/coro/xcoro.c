@@ -402,6 +402,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     coro->backend_state = coro->vm_state;
     if (!is_clean) {
         // Fresh allocation: set sentinel values (-1 means "not set")
+        coro->recv_slot_ref = xr_slot_none();
         coro->recv_slot_offset = -1;
         coro->pending_result_slot = -1;
         coro->wait_bucket_owner = -1;
@@ -1117,6 +1118,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->wait_send = false;
     coro->send_value = xr_null();
     coro->recv_slot = NULL;
+    coro->recv_slot_ref = xr_slot_none();
     coro->recv_slot_offset = -1;
     coro->channel_deadline = 0;
     coro->select_wait = NULL;

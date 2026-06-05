@@ -18,6 +18,7 @@
  */
 
 #include "xchannel.h"
+#include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "../runtime/xisolate_api.h"
@@ -43,6 +44,17 @@ static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
 
 static inline bool channel_single_worker(uint64_t mask) {
     return mask != 0 && (mask & (mask - 1)) == 0;
+}
+
+static inline void channel_store_recv_slot(XrCoroutine *receiver, XrValue value) {
+    if (!receiver)
+        return;
+    if (receiver->recv_slot_ref.kind != XR_SLOT_NONE) {
+        (void) xr_slot_store_value(receiver->recv_slot_ref, value);
+        return;
+    }
+    if (receiver->recv_slot)
+        *receiver->recv_slot = value;
 }
 
 static XrChannelKind channel_infer_kind(XrChannel *ch) {
@@ -288,9 +300,7 @@ static void timer_channel_fire_cb(void *arg) {
         receiver = xr_waitq_dequeue(&ch->recvq);
         if (receiver) {
             // Direct transfer to blocked receiver's slot
-            XrValue *slot = receiver->recv_slot;
-            if (slot)
-                *slot = xr_int(now);
+            channel_store_recv_slot(receiver, xr_int(now));
         } else {
             // No receiver waiting: leave value in buffer for later recv
             ch->buffer[0] = xr_int(now);
@@ -455,9 +465,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     if (!receiver)
         return false;
     channel_note_worker_locked(ch, true);
-    XrValue *slot = receiver->recv_slot;
-    if (slot)
-        *slot = v;
+    channel_store_recv_slot(receiver, v);
     xr_amutex_unlock(&ch->lock);
     channel_wake_coro(receiver);
     return true;
