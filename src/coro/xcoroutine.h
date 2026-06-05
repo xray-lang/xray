@@ -364,7 +364,6 @@ struct XrCoroutine {
     struct XrCoroutine *prev;        //  8 bytes: blocked/ready list linkage
     _Atomic int resume_status;       //  4 bytes: checked on every resume
     _Atomic int affinity_p;          //  4 bytes: preferred worker for wake (relaxed ok, hint only)
-    int id;                          //  4 bytes: coroutine ID
     int8_t schedule_count;           //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
     _Atomic(uint8_t) coro_state;  //  1 byte: authoritative state (R4: replaces state bits in flags)
     uint16_t gc_flags;            //  2 bytes: GC flags (bit 0: VM stack slab)
@@ -389,6 +388,7 @@ struct XrCoroutine {
      * false: from the panic channel (div-zero, OOB, assert, …).  Drives how
      * a linked scope re-raises a child failure into the parent. */
     bool error_is_value;
+    int id;  // coroutine ID for diagnostics/debug protocol
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
