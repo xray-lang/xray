@@ -293,6 +293,10 @@ typedef struct XrCoroExt {
 
     /* === Select storage (reused across blocking select operations) === */
     XrSelectStorage select_storage;
+
+    /* === Structured concurrency membership (cold; only scope children use it) === */
+    struct XrScopeContext *parent_scope;
+    struct XrCoroutine *scope_sibling;
 } XrCoroExt;
 
 /* ========== XrCoroutine - Coroutine Object ========== */
@@ -396,9 +400,6 @@ struct XrCoroutine {
     struct XrTask *_Atomic await_task;  // task being awaited (for post-check race detection)
     _Atomic int wait_count;
     _Atomic bool any_done;
-    struct XrScopeContext *parent_scope;
-    struct XrCoroutine *scope_sibling;  // linked list within parent_scope
-
     /* === Channel Blocking === */
     struct XrCoroutine *chan_wait_next;
     struct XrCoroutine *chan_wait_prev;
@@ -738,6 +739,10 @@ XR_FUNC void xr_coro_destroy(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(struct XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
+XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);
+XR_FUNC XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro);
+XR_FUNC bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling);
 
 // Scheduler
 XR_FUNC void xr_sched_init(XrCoroState *sched);

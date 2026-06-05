@@ -1135,8 +1135,10 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 
     // Create Task handle (mirrors vm_spawn)
     XrTask *task = xr_task_create(coro, child);
-    if (!task)
+    if (!task) {
+        xr_coro_destroy(child);
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    }
 
     if (fire_and_forget)
         child->gc_flags |= XR_CORO_GC_RECYCLABLE;
@@ -1144,7 +1146,10 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     // Setup scope tracking
     XrScopeContext *scope = coro->current_scope;
     if (scope) {
-        child->parent_scope = scope;
+        if (!xr_coro_set_parent_scope(child, scope)) {
+            xr_coro_destroy(child);
+            return (XrJitResult) {XM_DEOPT_MARKER, 0};
+        }
         atomic_fetch_add_explicit(&scope->count, 1, memory_order_relaxed);
     }
 
