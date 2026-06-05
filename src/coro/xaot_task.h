@@ -18,5 +18,7 @@ XR_FUNC XrValue xr_aot_task_done(const XrAotContext *ctx, XrValue task_value);
 XR_FUNC XrValue xr_aot_task_cancelled(const XrAotContext *ctx, XrValue task_value);
 XR_FUNC XrValue xr_aot_task_result(const XrAotContext *ctx, XrValue task_value);
 XR_FUNC XrValue xr_aot_task_error(const XrAotContext *ctx, XrValue task_value);
+XR_FUNC XrValue xr_aot_coro_set_priority(const XrAotContext *ctx, XrValue target_value,
+                                         XrValue priority_value);
 
 #endif  // XAOT_TASK_H

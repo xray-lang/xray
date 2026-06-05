@@ -70,6 +70,10 @@ static bool cg_is_void_like(const XiValue *v) {
         case XI_RETAIN:
         case XI_RELEASE:
             return true;
+        case XI_CORO_OP:
+            return v->aux_int == XI_CORO_SUB_SET_PRIORITY ||
+                   v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
+                   v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL;
         case XI_CALL_BUILTIN:
             if (v->aux) {
                 const char *n = (const char *) v->aux;
@@ -515,6 +519,31 @@ static void cg_register_imported_classes(XiCgenCtx *ctx) {
     }
 }
 
+static void sanitize_c_ident_part(char *buf, size_t cap, const char *raw) {
+    XR_DCHECK(buf != NULL, "sanitize_c_ident_part: NULL buffer");
+    XR_DCHECK(cap > 0, "sanitize_c_ident_part: zero capacity");
+
+    size_t j = 0;
+    if (!raw || !raw[0]) {
+        buf[j++] = '_';
+        buf[j] = '\0';
+        return;
+    }
+
+    char first = raw[0];
+    if (!((first >= 'a' && first <= 'z') || (first >= 'A' && first <= 'Z') || first == '_'))
+        buf[j++] = '_';
+
+    for (const char *p = raw; *p && j < cap - 1; p++) {
+        char c = *p;
+        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
+            buf[j++] = c;
+        else
+            buf[j++] = '_';
+    }
+    buf[j] = '\0';
+}
+
 /* Write the C name for a function (prefix_funcname_id).
  * Each XiFunc gets a unique numeric suffix to prevent name collisions
  * (e.g. multiple anonymous closures or same-named constructors).
@@ -523,27 +552,21 @@ static void emit_fname(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFu
     XR_DCHECK(f != NULL, "emit_fname: NULL func");
     const char *raw = f->name ? f->name : "anon";
 
-    /* Sanitize: replace non-alnum/underscore chars */
     char buf[128];
-    size_t j = 0;
-    for (const char *p = raw; *p && j < sizeof(buf) - 1; p++) {
-        char c = *p;
-        if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
-            buf[j++] = c;
-        else
-            buf[j++] = '_';
-    }
-    buf[j] = '\0';
+    sanitize_c_ident_part(buf, sizeof(buf), raw);
 
     /* Assign a stable unique ID on first use (cgen_id == 0 means unassigned) */
     XiFunc *mf = (XiFunc *) (uintptr_t) f; /* cast away const for cgen_id write */
     if (mf->cgen_id == 0)
         mf->cgen_id = ++ctx->fname_counter;
 
-    if (prefix && prefix[0])
-        fprintf(out, "%s_%s_%d", prefix, buf, f->cgen_id);
-    else
+    if (prefix && prefix[0]) {
+        char prefix_buf[128];
+        sanitize_c_ident_part(prefix_buf, sizeof(prefix_buf), prefix);
+        fprintf(out, "%s_%s_%d", prefix_buf, buf, f->cgen_id);
+    } else {
         fprintf(out, "fn_%s_%d", buf, f->cgen_id);
+    }
 }
 
 static void emit_fname_suffix(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiFunc *f,
