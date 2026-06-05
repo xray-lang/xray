@@ -41,6 +41,12 @@
 
 # 全部测试
 ./scripts/run_coro_benchmark.sh
+
+# 指定 worker 数并输出 JSON
+./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --json docs/bench/coro-latest.json
+
+# 只跑部分场景
+./scripts/run_coro_benchmark.sh --tests producer_consumer,select_multiplex,thundering_herd
 ```
 
 ### Go 测试
@@ -50,6 +56,9 @@ cd tests/coro_benchmark/spawn && go run spawn.go
 
 # 全部测试
 ./scripts/run_coro_benchmark.sh --go
+
+# 同时设置 Go 的 GOMAXPROCS 与 xray 的 XRAY_WORKERS
+./scripts/run_coro_benchmark.sh --all --workers 1,2,4,8 --json docs/bench/coro-xray-go.json
 ```
 
 ## 测试参数
