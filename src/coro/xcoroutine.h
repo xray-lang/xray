@@ -261,6 +261,13 @@ struct XrBlockedBucket {
 /* ========== XrCoroExt - Cold fields allocated on demand ========== */
 
 typedef struct XrCoroExt {
+    const char *name;
+    const char *source_file;
+    int source_line;
+    struct XrCoroutine *parent_coro;
+    int spawn_line;
+    const char *spawn_file;
+
     char *io_buf;  // I/O read buffer (reused across calls)
     size_t io_buf_cap;
     struct XrMap *locals;              // Per-coroutine dynamic locals (debug/inspect)
@@ -419,21 +426,11 @@ struct XrCoroutine {
     int16_t pending_result_slot;
     bool jit_try_mode;  // JIT try-mode: yieldable should return WOULD_BLOCK instead of blocking
 
-    /* === Identity (set once at creation, cold path) === */
-    const char *name;
-    const char *source_file;
-    int source_line;
-
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;
 
     /* === Per-Coroutine Scope Tracking === */
     struct XrScopeContext *current_scope;
-
-    /* === Async Stack Trace (lazy capture) === */
-    struct XrCoroutine *parent_coro;
-    int spawn_line;
-    const char *spawn_file;
 
     /* === Cold Extension (io_buf, locals, watched_by — allocated on demand) === */
     XrCoroExt *ext;
@@ -478,6 +475,95 @@ static inline XrCoroExt *xr_coro_ensure_ext(XrCoroutine *coro) {
         coro->ext = (XrCoroExt *) xr_calloc(1, sizeof(XrCoroExt));
     }
     return coro->ext;
+}
+
+static inline const char *xr_coro_name(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->name : NULL;
+}
+
+static inline const char *xr_coro_source_file(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->source_file : NULL;
+}
+
+static inline int xr_coro_source_line(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->source_line : 0;
+}
+
+static inline XrCoroutine *xr_coro_parent(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->parent_coro : NULL;
+}
+
+static inline const char *xr_coro_spawn_file(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->spawn_file : NULL;
+}
+
+static inline int xr_coro_spawn_line(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->spawn_line : 0;
+}
+
+static inline void xr_coro_clear_debug_identity(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return;
+    coro->ext->name = NULL;
+    coro->ext->source_file = NULL;
+    coro->ext->source_line = 0;
+    coro->ext->parent_coro = NULL;
+    coro->ext->spawn_file = NULL;
+    coro->ext->spawn_line = 0;
+}
+
+static inline bool xr_coro_set_name(XrCoroutine *coro, const char *name) {
+    if (!coro)
+        return false;
+    if (!name) {
+        if (coro->ext)
+            coro->ext->name = NULL;
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->name = name;
+    return true;
+}
+
+static inline bool xr_coro_set_source(XrCoroutine *coro, const char *file, int line) {
+    if (!coro)
+        return false;
+    if (!file && line == 0) {
+        if (coro->ext) {
+            coro->ext->source_file = NULL;
+            coro->ext->source_line = 0;
+        }
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->source_file = file;
+    ext->source_line = line;
+    return true;
+}
+
+static inline bool xr_coro_set_spawn_origin(XrCoroutine *coro, XrCoroutine *parent,
+                                            const char *file, int line) {
+    if (!coro)
+        return false;
+    if (!parent && !file && line == 0) {
+        if (coro->ext) {
+            coro->ext->parent_coro = NULL;
+            coro->ext->spawn_file = NULL;
+            coro->ext->spawn_line = 0;
+        }
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->parent_coro = parent;
+    ext->spawn_file = file;
+    ext->spawn_line = line;
+    return true;
 }
 
 /* ========== Thread-Lock Query Helpers ========== */

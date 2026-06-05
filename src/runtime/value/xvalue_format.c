@@ -371,8 +371,9 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
         case XR_TCOROUTINE: {
             XrCoroutine *coro = (XrCoroutine *) gc;
             xr_strbuf_append_cstr(sb, "Coroutine(", 10);
-            if (coro->name)
-                xr_strbuf_append_cstr(sb, coro->name, strlen(coro->name));
+            const char *name = xr_coro_name(coro);
+            if (name)
+                xr_strbuf_append_cstr(sb, name, strlen(name));
             else
                 xr_strbuf_append_cstr(sb, "anonymous", 9);
             xr_strbuf_append_cstr(sb, ")", 1);

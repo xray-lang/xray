@@ -689,8 +689,10 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, con
 
     if (out_id)
         *out_id = target->id;
-    if (out_name)
-        *out_name = target->name ? target->name : "<unnamed>";
+    if (out_name) {
+        const char *name = xr_coro_name(target);
+        *out_name = name ? name : "<unnamed>";
+    }
     if (out_state)
         *out_state = coro_state_string(target);
 
@@ -861,7 +863,7 @@ bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char *
 
     // Get current coroutine from VM state
     XrCoroutine *coro = (XrCoroutine *) xr_isolate_get_vm_state(isolate)->current_coro;
-    if (!coro || !coro->parent_coro)
+    if (!coro || !xr_coro_parent(coro))
         return false;
 
     // Walk parent chain to build async stack trace
@@ -869,13 +871,15 @@ bool xr_debug_get_async_stack(XrayIsolate *isolate, int *out_depth, const char *
     XrCoroutine *c = coro;
 
     while (c && depth < 8) {
-        if (c->spawn_file || c->spawn_line > 0) {
+        const char *spawn_file = xr_coro_spawn_file(c);
+        int spawn_line = xr_coro_spawn_line(c);
+        if (spawn_file || spawn_line > 0) {
             dbg->async_names[depth] = "<go>";
-            dbg->async_files[depth] = c->spawn_file;
-            dbg->async_lines[depth] = c->spawn_line;
+            dbg->async_files[depth] = spawn_file;
+            dbg->async_lines[depth] = spawn_line;
             depth++;
         }
-        c = c->parent_coro;
+        c = xr_coro_parent(c);
     }
 
     if (depth == 0)

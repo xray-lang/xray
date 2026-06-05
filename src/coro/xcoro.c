@@ -360,11 +360,6 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     // Bootstrap-specific: mark as main coroutine
     coro->flags |= XR_CORO_FLG_MAIN;
     coro_vm_entry_reset_no_free(xr_coro_maybe_vm_state(coro));
-    coro->source_file = NULL;
-    coro->source_line = 0;
-    coro->parent_coro = NULL;
-    coro->spawn_line = 0;
-    coro->spawn_file = NULL;
     coro->pending_spawn = NULL;
 
     return coro;
@@ -380,7 +375,7 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     XR_DCHECK(vm_state != NULL, "coro_setup_main: missing VM state");
     vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
     vm_state->entry.closure = closure;
-    coro->source_file = closure->proto ? closure->proto->source_file : NULL;
+    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
     xr_coro_upgrade_heap(coro, 0);
     xr_coro_sync_vm_ctx(coro, X);
 }
@@ -414,7 +409,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
     xr_coro_clear_vm_entry_state(coro);
     vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
     vm_state->entry.closure = closure;
-    coro->source_file = closure->proto ? closure->proto->source_file : NULL;
+    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
 
     // Clear result/error from previous execution
     coro->result = xr_null();
@@ -514,6 +509,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->ext->yield_info.result_events = 0;
             coro->ext->yield_info.deadline = 0;
             coro->ext->yield_info.timed_out = false;
+            xr_coro_clear_debug_identity(coro);
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
@@ -551,7 +547,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
     coro->isolate = X;
-    coro->name = name;
+    if (!xr_coro_set_name(coro, name))
+        return false;
     coro->backend = vm_ctx ? xr_coro_vm_backend_vtable() : NULL;
     coro->backend_state = vm_ctx ? vm_state : NULL;
     if (!is_clean) {
@@ -709,8 +706,11 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
     // Parent coroutine outlives children via scope mechanism, so closure and
     // its upvalue objects remain valid for the child's entire lifetime.
     vm_state->entry.closure = closure;
-    coro->source_file = file;
-    coro->source_line = line;
+    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
+        xr_coro_free(coro);
+        coro_discard_uninitialized(coro);
+        return NULL;
+    }
 
     // Deep copy args to coroutine private heap (cross-coroutine safe)
     vm_state->arg_count = arg_count;
@@ -738,9 +738,12 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
 
     // Async stack trace: parent pointer + caller-provided file/line.
     // vm_go pre-computes these from the current frame, so no redundant frame walk here.
-    coro->parent_coro = (XrCoroutine *) X->vm.current_coro;
-    coro->spawn_file = file;
-    coro->spawn_line = line;
+    if (xr_coro_name(coro) &&
+        !xr_coro_set_spawn_origin(coro, (XrCoroutine *) X->vm.current_coro, file, line)) {
+        xr_coro_free(coro);
+        coro_discard_uninitialized(coro);
+        return NULL;
+    }
 
     return coro;
 }
@@ -798,8 +801,6 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
         return NULL;
     }
 
-    coro->source_file = NULL;
-    coro->source_line = 0;
     return coro;
 }
 
@@ -861,8 +862,6 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
     // CFunc-specific: entry type
     vm_state->entry_type = XR_CORO_ENTRY_CFUNC;
     vm_state->entry.cfunc = cfunc;
-    coro->source_file = NULL;
-    coro->source_line = 0;
 
     // Copy args (no deep copy needed for C function args)
     vm_state->arg_count = argc;
@@ -909,8 +908,6 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
 
     coro->backend = &native_backend_vtable;
     coro->backend_state = state;
-    coro->source_file = NULL;
-    coro->source_line = 0;
 
     return coro;
 }
@@ -1267,14 +1264,9 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro_select_storage_reset(coro->ext);
     coro->pending_result_slot = -1;
     coro->pending_spawn = NULL;
-    coro->parent_coro = NULL;
-    coro->spawn_line = 0;
-    coro->spawn_file = NULL;
     // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
     // are reset in coro_init_common dirty path; ext pointer preserved for io_buf reuse
-    coro->name = NULL;
-    coro->source_file = NULL;
-    coro->source_line = 0;
+    xr_coro_clear_debug_identity(coro);
     atomic_store_explicit(&coro->flags, 0, memory_order_relaxed);
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
     atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
@@ -1536,8 +1528,9 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
 
 // Format coroutine identifier into caller-provided buffer
 static XR_UNUSED const char *format_coro_id(XrCoroutine *coro, char *buf, size_t bufsz) {
-    if (coro->name) {
-        snprintf(buf, bufsz, "#%d \"%s\"", coro->id, coro->name);
+    const char *name = xr_coro_name(coro);
+    if (name) {
+        snprintf(buf, bufsz, "#%d \"%s\"", coro->id, name);
     } else {
         snprintf(buf, bufsz, "#%d", coro->id);
     }
