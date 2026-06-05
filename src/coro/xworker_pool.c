@@ -166,13 +166,14 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     if (!runtime || !coro)
         return;
 
-    if (!coro->backend || !coro->backend->reset_reusable) {
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->reset_reusable) {
         xr_coro_destroy(coro);
         return;
     }
 
     // Reset coroutine state
-    coro->backend->reset_reusable(coro);
+    ops->reset_reusable(coro);
     coro->result = xr_null();
     coro->error = xr_null();
     atomic_store(&coro->flags, 0);

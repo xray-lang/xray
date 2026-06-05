@@ -88,6 +88,11 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .trace_roots = NULL,
     .release = NULL,
     .destroy = vm_backend_destroy,
+    .debug_name = vm_backend_debug_name,
+    .debug_snapshot = vm_backend_debug_snapshot,
+};
+
+static const XrCoroBackendOps vm_backend_ops = {
     .ensure_state = vm_backend_ensure_state,
     .prepare_execution_state = vm_backend_prepare_execution_state,
     .reset_execution_state = vm_backend_reset_execution_state,
@@ -103,12 +108,14 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
     .call_closure = vm_backend_call_closure,
-    .debug_name = vm_backend_debug_name,
-    .debug_snapshot = vm_backend_debug_snapshot,
 };
 
 const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
     return &vm_backend_vtable;
+}
+
+const XrCoroBackendOps *xr_coro_vm_backend_ops(void) {
+    return &vm_backend_ops;
 }
 
 static const char *vm_backend_debug_name(const XrCoroutine *coro) {

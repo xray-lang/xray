@@ -11,7 +11,7 @@
  *   The scheduler owns coroutine lifecycle and queue state. Execution
  *   backends own how a suspendable body resumes. This ABI is the narrow
  *   contract between the two sides, so workers do not depend on VM-specific
- *   result enums or frame layouts.
+ *   result enums, frame layouts, or VM entry lifecycle hooks.
  */
 
 #ifndef XCORO_ABI_H
@@ -24,7 +24,6 @@
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
 typedef struct XrayIsolate XrayIsolate;
-typedef struct XrClosure XrClosure;
 
 #ifndef XR_CFUNC_RESULT_DEFINED
 typedef enum {
@@ -112,26 +111,6 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
-    bool (*ensure_state)(XrCoroutine *coro);
-    bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
-                                    bool need_storage, bool is_clean);
-    void (*reset_execution_state)(XrCoroutine *coro, XrayIsolate *X);
-    void (*clear_entry_state)(XrCoroutine *coro);
-    void (*reset_entry_state_no_free)(XrCoroutine *coro);
-    bool (*bind_closure_entry)(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure, XrValue *args,
-                               int arg_count, bool copy_args);
-    bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
-                             int arg_count);
-    bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
-    void (*reset_reusable)(XrCoroutine *coro);
-    void (*on_safepoint)(XrCoroutine *coro);
-    void (*detach_worker_state)(XrCoroutine *coro);
-    bool (*is_try_mode)(const XrCoroutine *coro);
-    bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
-                                     void *user_data);
-    bool (*has_continuation)(const XrCoroutine *coro);
-    int (*call_closure)(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure, XrValue *args,
-                        int nargs, void *continuation, void *user_ctx, XrValue *result);
     const char *(*debug_name)(const XrCoroutine *coro);
     void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;

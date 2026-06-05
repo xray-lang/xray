@@ -9,8 +9,9 @@
  *
  * KEY CONCEPT:
  *   XrCoroutine owns scheduler-visible state. Execution backends keep their
- *   stack/frame/resume payload behind backend_state and expose lifecycle hooks
- *   through XrCoroBackendVTable.
+ *   stack/frame/resume payload behind backend_state. Scheduler dispatch uses
+ *   the narrow coroutine ABI; VM-specific lifecycle services live in backend
+ *   ops outside that ABI.
  */
 
 #include "xcoroutine.h"
@@ -57,27 +58,31 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
 }
 
 void xr_coro_backend_on_safepoint(XrCoroutine *coro) {
-    if (!coro || !coro->backend || !coro->backend->on_safepoint)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->on_safepoint)
         return;
-    coro->backend->on_safepoint(coro);
+    ops->on_safepoint(coro);
 }
 
 void xr_coro_detach_worker_state(XrCoroutine *coro) {
-    if (!coro || !coro->backend || !coro->backend->detach_worker_state)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->detach_worker_state)
         return;
-    coro->backend->detach_worker_state(coro);
+    ops->detach_worker_state(coro);
 }
 
 bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
-    if (!coro || !coro->backend || !coro->backend->is_try_mode)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->is_try_mode)
         return false;
-    return coro->backend->is_try_mode(coro);
+    return ops->is_try_mode(coro);
 }
 
 bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
-    if (!coro || !coro->backend || !coro->backend->reset_execution_state)
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->reset_execution_state)
         return false;
-    coro->backend->reset_execution_state(coro, X);
+    ops->reset_execution_state(coro, X);
     return true;
 }
 
@@ -337,7 +342,8 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
 
 bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (need_storage && (!coro->backend || !coro->backend->prepare_execution_state))
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (need_storage && (!ops || !ops->prepare_execution_state))
         return false;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
@@ -428,8 +434,9 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     // Cache worker pointer (single TLS lookup for VM stack slab + ID allocation)
     XrWorker *w = xr_current_worker();
 
-    if (coro->backend && coro->backend->prepare_execution_state) {
-        if (!coro->backend->prepare_execution_state(coro, X, w, need_storage, is_clean))
+    ops = xr_coro_backend_ops(coro);
+    if (ops && ops->prepare_execution_state) {
+        if (!ops->prepare_execution_state(coro, X, w, need_storage, is_clean))
             return false;
     } else if (need_storage) {
         return false;
@@ -568,7 +575,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
     }
 
-    if (!coro->backend || !coro->backend->prepare_recycle) {
+    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
+    if (!ops || !ops->prepare_recycle) {
         xr_coro_destroy(coro);
         return;
     }
@@ -579,7 +587,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->coro_gc) {
         xr_coro_gc_reset(coro->coro_gc, coro);
     }
-    if (!coro->backend->prepare_recycle(coro, worker)) {
+    if (!ops->prepare_recycle(coro, worker)) {
         xr_coro_destroy(coro);
         return;
     }
