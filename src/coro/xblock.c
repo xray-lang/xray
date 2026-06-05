@@ -114,10 +114,13 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
 bool xr_coro_store_recv_value(XrCoroutine *coro, XrValue value) {
     if (!coro)
         return false;
-    if (coro->recv_slot_ref.kind != XR_SLOT_NONE)
-        return xr_slot_store_value(coro->recv_slot_ref, value);
-    if (coro->recv_slot) {
-        *coro->recv_slot = value;
+    XrCoroExt *ext = coro->ext;
+    if (!ext)
+        return false;
+    if (ext->recv_slot_ref.kind != XR_SLOT_NONE)
+        return xr_slot_store_value(ext->recv_slot_ref, value);
+    if (ext->recv_slot) {
+        *ext->recv_slot = value;
         return true;
     }
     return false;
@@ -247,8 +250,11 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
 
     XrValue *recv_addr = xr_slot_value_address(value_slot);
     if (coro) {
-        coro->recv_slot = recv_addr;
-        coro->recv_slot_ref = value_slot;
+        XrCoroExt *ext = xr_coro_ensure_ext(coro);
+        if (!ext)
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        ext->recv_slot = recv_addr;
+        ext->recv_slot_ref = value_slot;
     }
 
     if (timeout_ms == 0) {
