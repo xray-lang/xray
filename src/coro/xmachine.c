@@ -45,36 +45,13 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
     m->spinning = false;
     m->next_p = NULL;
     atomic_store_explicit(&m->current_coro, (struct XrCoroutine *) NULL, memory_order_relaxed);
+    m->tmp_strbuf = NULL;
+    m->backend_storage = NULL;
+    m->backend_storage_destroy = NULL;
     m->all_link = NULL;
     m->idle_link = NULL;
     atomic_store(&m->in_idle_worker_list, false);
     atomic_store(&m->heartbeat, 0);
-
-    // Initialize VM storage
-    memset(&m->vm_storage, 0, sizeof(XrMachineVMStorage));
-
-    // Initialize VM context bound to private storage
-    XrVMContext *ctx = &m->vm_ctx;
-    ctx->stack = m->vm_storage.stack;
-    ctx->stack_top = m->vm_storage.stack;
-    ctx->stack_capacity = XR_MACHINE_STACK_SIZE;
-    ctx->frames = m->vm_storage.frames;
-    ctx->frame_count = 0;
-    ctx->frame_capacity = XR_MACHINE_FRAME_SIZE;
-    ctx->handlers = ctx->handler_inline;
-    ctx->handler_count = 0;
-    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
-    ctx->module_base_frame = 0;
-    ctx->current_coro = NULL;
-    ctx->trace_execution = false;
-    if (runtime) {
-        ctx->isolate = runtime->isolate;
-    }
-    ctx->tmp_strbuf = NULL;
-    ctx->defer_stack = NULL;
-    ctx->defer_count = 0;
-    ctx->defer_capacity = 0;
-    ctx->defer_frame_marks = NULL;
 
     // Initialize futex-based park state
     atomic_store(&m->park_state, XR_PARK_IDLE);
@@ -85,19 +62,16 @@ void xr_machine_destroy(XrMachine *m) {
         return;
 
     // Free string buffer
-    if (m->vm_ctx.tmp_strbuf) {
-        xr_strbuf_free(m->vm_ctx.tmp_strbuf);
-        m->vm_ctx.tmp_strbuf = NULL;
+    if (m->tmp_strbuf) {
+        xr_strbuf_free(m->tmp_strbuf);
+        m->tmp_strbuf = NULL;
     }
-    // Free per-context defer stack
-    if (m->vm_ctx.defer_stack) {
-        xr_free(m->vm_ctx.defer_stack);
-        m->vm_ctx.defer_stack = NULL;
+
+    if (m->backend_storage_destroy && m->backend_storage) {
+        m->backend_storage_destroy(m->backend_storage);
+        m->backend_storage = NULL;
     }
-    if (m->vm_ctx.defer_frame_marks) {
-        xr_free(m->vm_ctx.defer_frame_marks);
-        m->vm_ctx.defer_frame_marks = NULL;
-    }
+    m->backend_storage_destroy = NULL;
 }
 
 // ========== M Park/Unpark ==========

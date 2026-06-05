@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Worker = embedded XrProc (P) + pointer to XrMachine (M).
  *   P owns scheduling resources (run queues, timer wheel, etc).
- *   M provides the OS thread and VM context.
+ *   M provides the OS thread and backend-local scratch storage.
  *   P and M are structurally separate; M count grows on demand via handoff.
  *
  * RELATED MODULES:

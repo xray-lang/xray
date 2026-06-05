@@ -287,9 +287,6 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         worker->p.last_timer_tick = xr_monotonic_ticks();
     }
 
-    // Ensure vm_ctx.isolate is set correctly
-    worker->m->vm_ctx.isolate = X;
-
     // Put the main coroutine into Worker 0's local queue.
     // Clear stale execution state from previous run (DONE, RUNNING, BLOCKED, etc.)
     // xr_coro_flags_set is atomic OR — without clearing first, old DONE flag persists

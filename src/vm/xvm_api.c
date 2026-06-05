@@ -14,6 +14,7 @@
 
 #include "xvm_internal.h"
 #include "xvm_coro_state.h"
+#include "xvm_worker_state.h"
 #include "../coro/xworker.h"
 #include "../coro/xcoroutine.h"
 #include "../runtime/gc/xcoro_gc.h"
@@ -30,10 +31,13 @@ XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate) {
     XR_DCHECK(isolate != NULL, "vm_current_ctx: NULL isolate");
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
-        XrCoroutine *coro = (XrCoroutine *) worker->m->vm_ctx.current_coro;
-        if (coro)
-            return xr_coro_vm_ctx(coro);
-        return &worker->m->vm_ctx;
+        XrVMContext *machine_ctx = xr_vm_machine_ctx(worker->m, isolate);
+        if (machine_ctx) {
+            XrCoroutine *coro = (XrCoroutine *) machine_ctx->current_coro;
+            if (coro)
+                return xr_coro_vm_ctx(coro);
+            return machine_ctx;
+        }
     }
     if (isolate->main_coro) {
         return xr_coro_vm_ctx((XrCoroutine *) isolate->main_coro);

@@ -227,7 +227,7 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 **
 ** Resolution order:
 **   1. Current worker's current coroutine VM backend context
-**   2. Current worker's M.vm_ctx scratch context
+**   2. Current worker's VM backend scratch context
 **   3. isolate->main_coro VM backend context
 **   4. &isolate->vm_ctx (static fallback)
 **
