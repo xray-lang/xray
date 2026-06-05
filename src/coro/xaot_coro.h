@@ -161,21 +161,42 @@ XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
-                                     XrValue send_value);
+                                     XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);
 
 static inline XrAotResult xr_aot_chan_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                                int64_t send_value) {
-    return xr_aot_chan_send(ctx, channel_value, XR_FROM_INT(send_value));
+    return xr_aot_chan_send(ctx, channel_value, XR_FROM_INT(send_value), xr_slot_none(), -1);
 }
 
 static inline XrAotResult xr_aot_chan_send_f64(const XrAotContext *ctx, XrValue channel_value,
                                                double send_value) {
-    return xr_aot_chan_send(ctx, channel_value, XR_FROM_FLOAT(send_value));
+    return xr_aot_chan_send(ctx, channel_value, XR_FROM_FLOAT(send_value), xr_slot_none(), -1);
 }
 
-XR_FUNC XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx);
+static inline XrAotResult xr_aot_chan_send_timeout(const XrAotContext *ctx, XrValue channel_value,
+                                                   XrValue send_value, int64_t timeout_ms,
+                                                   XrSlotRef result_slot) {
+    return xr_aot_chan_send(ctx, channel_value, send_value, result_slot, timeout_ms);
+}
+
+static inline XrAotResult xr_aot_chan_send_timeout_i64(const XrAotContext *ctx,
+                                                       XrValue channel_value, int64_t send_value,
+                                                       int64_t timeout_ms, XrSlotRef result_slot) {
+    return xr_aot_chan_send(ctx, channel_value, XR_FROM_INT(send_value), result_slot, timeout_ms);
+}
+
+static inline XrAotResult xr_aot_chan_send_timeout_f64(const XrAotContext *ctx,
+                                                       XrValue channel_value, double send_value,
+                                                       int64_t timeout_ms, XrSlotRef result_slot) {
+    return xr_aot_chan_send(ctx, channel_value, XR_FROM_FLOAT(send_value), result_slot, timeout_ms);
+}
+
+XR_FUNC XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx, XrSlotRef result_slot,
+                                            bool status_result);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue channel_value,
-                                          XrSlotRef out_slot);
-XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx);
+                                          XrSlotRef out_slot, int64_t timeout_ms,
+                                          bool tuple_result);
+XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
+                                                 bool tuple_result);
 
 #endif  // XAOT_CORO_H

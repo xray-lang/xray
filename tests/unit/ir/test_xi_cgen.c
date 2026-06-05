@@ -863,7 +863,7 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     assert(!had_error && "AOT channel recv should generate");
     assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
            "initial channel recv must register a backend-neutral slot");
-    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx);") &&
+    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), false);") &&
            "channel recv resume must recover the slot from coroutine wait state");
     assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
            "channel recv resume must not depend on a local slot variable");

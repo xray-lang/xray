@@ -1,0 +1,45 @@
+fn send_after_yield(ch: Channel<int>, value: int) -> int {
+    yield
+    ch.send(value)
+    return value
+}
+
+fn recv_after_yield(ch: Channel<int>) -> int {
+    yield
+    return ch.recv()
+}
+
+let buffered = new Channel<int>(1)
+print(buffered.sendTimeout(11, 0))
+let (v1, ok1) = buffered.recvTimeout(0)
+print(v1)
+print(ok1)
+buffered.close()
+
+let empty = new Channel<int>(0)
+let (v2, ok2) = empty.recvTimeout(5)
+print(ok2)
+empty.close()
+
+let rendezvous_recv = new Channel<int>(0)
+let sender = go send_after_yield(rendezvous_recv, 33)
+let (v3, ok3) = rendezvous_recv.recvTimeout(2000)
+print(v3)
+print(ok3)
+print(await sender)
+rendezvous_recv.close()
+
+let no_receiver = new Channel<int>(0)
+print(no_receiver.sendTimeout(44, 5))
+no_receiver.close()
+
+let rendezvous_send = new Channel<int>(0)
+let receiver = go recv_after_yield(rendezvous_send)
+print(rendezvous_send.sendTimeout(55, 2000))
+print(await receiver)
+rendezvous_send.close()
+
+let closed = new Channel<int>(0)
+closed.close()
+let (v4, ok4) = closed.recvTimeout(0)
+print(ok4)
