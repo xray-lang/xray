@@ -286,6 +286,25 @@ XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
     return jit_state->scratch ? jit_state : NULL;
 }
 
+void xr_coro_bump_jit_heartbeat(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (jit_state && jit_state->scratch && jit_state->scratch->heartbeat_ptr) {
+        atomic_fetch_add_explicit(jit_state->scratch->heartbeat_ptr, 1, memory_order_relaxed);
+    }
+}
+
+void xr_coro_clear_jit_scratch(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (jit_state) {
+        jit_state->scratch = NULL;
+    }
+}
+
+bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    return state && state->jit_state && state->jit_state->try_mode;
+}
+
 void xr_coro_reset_jit_state(XrCoroutine *coro) {
     XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (!jit_state)
