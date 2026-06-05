@@ -58,6 +58,7 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static void vm_backend_on_safepoint(XrCoroutine *coro);
 static void vm_backend_detach_worker_state(XrCoroutine *coro);
+static bool vm_backend_in_try_mode(const XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
@@ -76,6 +77,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .reset_reusable = vm_backend_reset_reusable,
     .on_safepoint = vm_backend_on_safepoint,
     .detach_worker_state = vm_backend_detach_worker_state,
+    .is_try_mode = vm_backend_in_try_mode,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
     .call_closure = vm_backend_call_closure,
@@ -305,7 +307,7 @@ static void vm_backend_detach_worker_state(XrCoroutine *coro) {
     }
 }
 
-bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
+static bool vm_backend_in_try_mode(const XrCoroutine *coro) {
     const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
     return state && state->jit_state && state->jit_state->try_mode;
 }
@@ -323,7 +325,7 @@ bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
     return true;
 }
 
-void xr_coro_reset_jit_state(XrCoroutine *coro) {
+static void vm_coro_reset_jit_state(XrCoroutine *coro) {
     XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (!jit_state)
         return;
@@ -332,7 +334,7 @@ void xr_coro_reset_jit_state(XrCoroutine *coro) {
     jit_state->suspend = suspend;
 }
 
-void xr_coro_free_jit_state(XrCoroutine *coro) {
+static void vm_coro_free_jit_state(XrCoroutine *coro) {
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state || !state->jit_state)
         return;
@@ -402,7 +404,7 @@ static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X
         ctx->handlers = saved_handlers ? saved_handlers : ctx->handler_inline;
         ctx->handler_capacity = saved_handler_cap ? saved_handler_cap : XR_HANDLER_INLINE_CAP;
         vm_entry_reset_no_free(state);
-        xr_coro_reset_jit_state(coro);
+        vm_coro_reset_jit_state(coro);
     }
 
     if (need_storage) {
@@ -505,7 +507,7 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
     ctx->handler_count = 0;
     vm_backend_free_defer_state(ctx);
     xr_coro_clear_vm_entry_state(coro);
-    xr_coro_reset_jit_state(coro);
+    vm_coro_reset_jit_state(coro);
     return true;
 }
 
@@ -513,7 +515,7 @@ static void vm_backend_reset_reusable(XrCoroutine *coro) {
     if (!vm_state_for_coro(coro))
         return;
     xr_coro_clear_vm_entry_state(coro);
-    xr_coro_reset_jit_state(coro);
+    vm_coro_reset_jit_state(coro);
 }
 
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
@@ -625,7 +627,7 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_backend_free_struct_storage(ctx);
     vm_backend_free_defer_state(ctx);
     xr_vm_ctx_free_ic_tables(ctx);
-    xr_coro_free_jit_state(coro);
+    vm_coro_free_jit_state(coro);
     xr_coro_clear_vm_entry_state(coro);
 
     if (coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) {

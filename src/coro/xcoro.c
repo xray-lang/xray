@@ -72,6 +72,12 @@ void xr_coro_detach_worker_state(XrCoroutine *coro) {
     coro->backend->detach_worker_state(coro);
 }
 
+bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
+    if (!coro || !coro->backend || !coro->backend->is_try_mode)
+        return false;
+    return coro->backend->is_try_mode(coro);
+}
+
 // Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
 // invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
 void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {

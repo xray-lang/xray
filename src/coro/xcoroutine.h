@@ -151,9 +151,6 @@ typedef struct XrCoroExt {
 
 /* ========== XrCoroutine - Coroutine Object ========== */
 
-typedef struct XrJitCoroState XrJitCoroState;
-typedef struct XrVmCoroState XrVmCoroState;
-
 struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
@@ -342,17 +339,12 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
     return atomic_load_explicit(&coro->affinity_p, memory_order_relaxed);
 }
 
-/* ========== JIT Integration APIs ========== */
+/* ========== Backend Integration APIs ========== */
 
-XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
-XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
-XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
-XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
-XR_FUNC bool xr_coro_jit_try_mode(const XrCoroutine *coro);
-XR_FUNC bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled);
 XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_backend_on_safepoint(XrCoroutine *coro);
 XR_FUNC void xr_coro_detach_worker_state(XrCoroutine *coro);
+XR_FUNC bool xr_coro_backend_in_try_mode(const XrCoroutine *coro);
 
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub
