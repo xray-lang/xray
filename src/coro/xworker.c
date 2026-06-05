@@ -782,8 +782,14 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) wake_dispatch, stats_ratio_u64(wake_drain, wake_dispatch),
             stats_percent_u64(wake_coalesce, wake_drain), stats_percent_u64(wake_stale, wake_drain),
             stats_ratio_u64(wake_forward, wake_dispatch));
-    fprintf(stderr, "Select: block=%llu heap_alloc=%llu inline_alloc=%llu\n",
+    fprintf(stderr,
+            "Select: block=%llu register=%llu unregister=%llu wake=%llu close_wake=%llu "
+            "heap_alloc=%llu inline_alloc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->select_block_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_register_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_unregister_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_wake_count),
+            (unsigned long long) xr_sched_metric_load(&s->select_close_wake_count),
             (unsigned long long) xr_sched_metric_load(&s->select_heap_alloc_count),
             (unsigned long long) xr_sched_metric_load(&s->select_inline_alloc_count));
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
@@ -796,6 +802,24 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_count));
+    fprintf(stderr,
+            "Channel ops: send_direct=%llu recv_direct=%llu send_buffer=%llu recv_buffer=%llu "
+            "send_block=%llu recv_block=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_direct_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_direct_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_buffer_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_buffer_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_block_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_block_count));
+    fprintf(stderr,
+            "Channel waitq: sendq_dequeue=%llu recvq_dequeue=%llu ready_wake=%llu "
+            "close_ready_wake=%llu close_send=%llu close_recv=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_sendq_dequeue_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recvq_dequeue_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_ready_wake_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_ready_wake_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_send_waiter_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_recv_waiter_count));
     fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
             (unsigned long long) xr_sched_metric_load(&s->handoff_create_count),

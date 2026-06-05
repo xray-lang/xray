@@ -412,6 +412,8 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
     int limit = count < sw->case_count ? count : sw->case_count;
 
+    uint64_t registered = 0;
+
     // Link each case into its channel's bucket select queue.
     // Also set select waiter masks on each channel for wake routing.
     for (int i = 0; i < limit; i++) {
@@ -438,6 +440,11 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
 
         XrChannel *ch = (XrChannel *) channel;
         xr_channel_note_select_waiter(ch, worker->p.id);
+        registered++;
+    }
+    if (worker->p.runtime) {
+        xr_sched_metric_add(worker->p.runtime,
+                            &worker->p.runtime->sched_stats.select_register_count, registered);
     }
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)
@@ -489,6 +496,15 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
                 int case_index = (int) (sc - sw->cases);
                 atomic_store_explicit(&sw->selected_index, case_index, memory_order_release);
                 atomic_store_explicit(&sw->selected_status, resume_status, memory_order_release);
+                if (worker->p.runtime) {
+                    xr_sched_metric_inc(worker->p.runtime,
+                                        &worker->p.runtime->sched_stats.select_wake_count);
+                    if (resume_status == XR_RESUME_CHANNEL_CLOSED) {
+                        xr_sched_metric_inc(
+                            worker->p.runtime,
+                            &worker->p.runtime->sched_stats.select_close_wake_count);
+                    }
+                }
                 // Remove from all bucket queues + blocked list
                 xr_worker_unblock_select(worker, coro);
 
@@ -523,6 +539,9 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
     if (!bucket)
         return;
 
+    bool was_linked = target->bucket != NULL || target->prev != NULL || target->next != NULL ||
+                      bucket->select_head == target || bucket->select_tail == target;
+
     if (target->prev) {
         target->prev->next = target->next;
     } else if (bucket->select_head == target) {
@@ -538,6 +557,10 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
     target->prev = NULL;
     target->next = NULL;
     target->bucket = NULL;
+    if (was_linked && worker->p.runtime) {
+        xr_sched_metric_inc(worker->p.runtime,
+                            &worker->p.runtime->sched_stats.select_unregister_count);
+    }
     worker_clear_channel_waiter_mask(worker, target->channel);
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 }
