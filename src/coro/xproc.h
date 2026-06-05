@@ -105,6 +105,7 @@ typedef struct XrProcStats {
     _Alignas(XR_CACHE_LINE) uint64_t executed_count;
     uint64_t stolen_count;          // Coros the owner has stolen from peers
     uint64_t steal_attempt_count;   // Steal scans started by this worker
+    uint64_t steal_skip_count;      // Steal scans skipped by the search gate
     uint64_t yielded_count;         // Voluntary yields
     uint64_t cont_steal_count;      // Continuations stolen (owner as stealer)
     uint64_t completed_count;       // Coros that finished

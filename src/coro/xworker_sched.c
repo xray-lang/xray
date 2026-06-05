@@ -735,9 +735,11 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_
 }
 
 static bool worker_try_enter_search(XrRuntime *runtime) {
-    int limit = runtime->worker_count / 2;
+    int limit = runtime->worker_count / XR_SEARCHING_WORKER_DIVISOR;
     if (limit < 1)
         limit = 1;
+    if (limit > XR_SEARCHING_WORKER_MAX)
+        limit = XR_SEARCHING_WORKER_MAX;
     int cur = atomic_load_explicit(&runtime->searching_count, memory_order_relaxed);
     while (cur < limit) {
         if (atomic_compare_exchange_weak_explicit(&runtime->searching_count, &cur, cur + 1,
@@ -844,6 +846,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
     *out_delay_hint = 0;
     *should_exit = false;
     if (!worker_try_enter_search(runtime)) {
+        worker->p.stats.steal_skip_count++;
         *out_delay_hint = 1;
         return NULL;
     }
