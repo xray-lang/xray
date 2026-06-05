@@ -628,6 +628,10 @@ TEST(cgen_coro_await_clones_tagged_result) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await should generate");
     assert(contains(code, "xr_aot_await_task(ctx,") && "await must use the AOT bridge");
+    assert(contains(code, "xr_aot_await_task_resume(ctx, &") &&
+           "await resume must recover the task from coroutine wait state");
+    assert(!contains(code, "xr_aot_await_task_resume(ctx, v") &&
+           "await resume must not keep the task operand in the AOT frame");
     assert(contains(code, "xrt_value_clone_for_coro(") &&
            "tagged await results must be cloned at the coroutine boundary");
 

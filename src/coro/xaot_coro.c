@@ -387,11 +387,14 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrVal
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
-XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue task_value,
-                                     XrValue *out_value, bool discard_result) {
-    if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
+XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue *out_value,
+                                     bool discard_result) {
+    if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
-    XrTask *task = xr_value_to_task(task_value);
+    XrCoroWaitState *wait = xr_coro_wait_state(ctx->coro);
+    XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
+    if (!task)
+        return xr_aot_error(XR_NULL_VAL, false);
     XrSlotRef out_slot = out_value ? xr_slot_xvalue_ptr(out_value) : xr_slot_none();
     XrCoroBlockResult block =
         xr_coro_await_task_resume_slot(ctx->isolate, ctx->coro, task, out_slot, discard_result);

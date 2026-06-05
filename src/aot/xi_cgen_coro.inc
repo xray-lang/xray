@@ -255,14 +255,6 @@ static bool cg_coro_block_uses_target_after(const XiBlock *blk, uint32_t start,
     return blk->control == target;
 }
 
-static bool cg_coro_suspend_keeps_operand(const XiValue *suspend, const XiValue *target) {
-    if (!suspend || !target)
-        return false;
-    if (suspend->op == XI_AWAIT && suspend->nargs >= 1 && suspend->args[0] == target)
-        return true;
-    return false;
-}
-
 static bool cg_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness *live,
                                               const XiValue *target) {
     if (!f || !live || !target)
@@ -284,7 +276,7 @@ static bool cg_coro_value_live_across_suspend(const XiFunc *f, const XiLiveness 
             }
             if (!available || !cg_coro_value_may_suspend(f, v))
                 continue;
-            if (cg_coro_suspend_keeps_operand(v, target) || xi_is_live_out(live, blk, target) ||
+            if (xi_is_live_out(live, blk, target) ||
                 cg_coro_block_uses_target_after(blk, vi + 1, target))
                 return true;
         }
@@ -506,9 +498,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, ", v->id);
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", &");
+        fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, &", v->id);
         emit_vref(out, v);
         fprintf(out, ", false);\n");
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
