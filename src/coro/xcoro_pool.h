@@ -43,6 +43,7 @@ struct XrVmCoroState;
 #define XR_CORO_GC_RECYCLABLE 0x0004      // Fire-and-forget, eligible for deferred recycle
 #define XR_CORO_GC_RECYCLED_CLEAN 0x0008  // Recycled with thorough field reset (skip memset)
 #define XR_CORO_GC_VM_STATE_OWNED 0x0010  // VM state allocated separately from pool block
+#define XR_CORO_GC_LIGHTWEIGHT 0x0020     // Struct allocated without VM backend state/slab
 
 // ========== Pool Block ==========
 

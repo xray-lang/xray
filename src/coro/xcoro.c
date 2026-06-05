@@ -155,6 +155,15 @@ static void coro_discard_uninitialized(XrCoroutine *coro) {
     }
 }
 
+static XrCoroutine *coro_alloc_lightweight_shell(void) {
+    XrCoroutine *coro = (XrCoroutine *) xr_calloc(1, sizeof(XrCoroutine));
+    if (!coro)
+        return NULL;
+    coro->gc.type = XR_TCOROUTINE;
+    coro->gc_flags = XR_CORO_GC_LIGHTWEIGHT;
+    return coro;
+}
+
 static void coro_release_backend_state(XrCoroutine *coro, bool destroy) {
     if (!coro || !coro->backend)
         return;
@@ -307,8 +316,9 @@ static void coro_select_storage_free(XrCoroExt *ext) {
 
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (!coro_ensure_vm_state(coro))
+    if (need_stack && !coro_ensure_vm_state(coro))
         return false;
+    XrVMContext *vm_ctx = coro->vm_state ? xr_coro_vm_ctx(coro) : NULL;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
     // Recycled coros already have all fields zeroed by xr_coro_recycle_local,
@@ -322,15 +332,16 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         // field stores on ARM64 (vectorized stp instructions).
         // Save fields set by pool_get, memset the rest, then restore.
         XrVmCoroState *saved_vm_state = coro->vm_state;
-        XrValue *saved_stack = xr_coro_vm_ctx(coro)->stack;
-        int saved_stack_cap = xr_coro_vm_ctx(coro)->stack_capacity;
-        XrBcCallFrame *saved_frames = xr_coro_vm_ctx(coro)->frames;
-        int saved_frame_cap = xr_coro_vm_ctx(coro)->frame_capacity;
-        XrExceptionHandler *saved_handlers = xr_coro_vm_ctx(coro)->handlers;
-        int saved_handler_cap = xr_coro_vm_ctx(coro)->handler_capacity;
+        XrValue *saved_stack = vm_ctx ? vm_ctx->stack : NULL;
+        int saved_stack_cap = vm_ctx ? vm_ctx->stack_capacity : 0;
+        XrBcCallFrame *saved_frames = vm_ctx ? vm_ctx->frames : NULL;
+        int saved_frame_cap = vm_ctx ? vm_ctx->frame_capacity : 0;
+        XrExceptionHandler *saved_handlers = vm_ctx ? vm_ctx->handlers : NULL;
+        int saved_handler_cap = vm_ctx ? vm_ctx->handler_capacity : 0;
         struct XrCoroGC *saved_coro_gc = coro->coro_gc;
-        uint16_t saved_pool_bits = coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL |
-                                                     XR_CORO_GC_VM_STATE_OWNED);
+        uint16_t saved_pool_bits =
+            coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL |
+                              XR_CORO_GC_VM_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
         XrCoroExt *saved_ext = coro->ext;
         // Preserve jit_suspend allocation for reuse (avoid free+malloc churn).
         // The memset below will zero the pointer; restore after.
@@ -340,13 +351,16 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
 
         coro->vm_state = saved_vm_state;
-        memset(&coro->vm_state->ctx, 0, sizeof(coro->vm_state->ctx));
-        xr_coro_vm_ctx(coro)->stack = saved_stack;
-        xr_coro_vm_ctx(coro)->stack_capacity = saved_stack_cap;
-        xr_coro_vm_ctx(coro)->frames = saved_frames;
-        xr_coro_vm_ctx(coro)->frame_capacity = saved_frame_cap;
-        xr_coro_vm_ctx(coro)->handlers = saved_handlers;
-        xr_coro_vm_ctx(coro)->handler_capacity = saved_handler_cap;
+        vm_ctx = coro->vm_state ? xr_coro_vm_ctx(coro) : NULL;
+        if (vm_ctx) {
+            memset(&coro->vm_state->ctx, 0, sizeof(coro->vm_state->ctx));
+            vm_ctx->stack = saved_stack;
+            vm_ctx->stack_capacity = saved_stack_cap;
+            vm_ctx->frames = saved_frames;
+            vm_ctx->frame_capacity = saved_frame_cap;
+            vm_ctx->handlers = saved_handlers;
+            vm_ctx->handler_capacity = saved_handler_cap;
+        }
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
@@ -398,8 +412,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     coro->schedule_count = 1;
     coro->isolate = X;
     coro->name = name;
-    coro->backend = xr_coro_vm_backend_vtable();
-    coro->backend_state = coro->vm_state;
+    coro->backend = vm_ctx ? xr_coro_vm_backend_vtable() : NULL;
+    coro->backend_state = vm_ctx ? coro->vm_state : NULL;
     if (!is_clean) {
         // Fresh allocation: set sentinel values (-1 means "not set")
         coro->recv_slot_ref = xr_slot_none();
@@ -416,7 +430,9 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     // Allocate VM stack and bytecode frames if needed.
     // coro_gc is created lazily on first heap allocation.
     if (need_stack) {
-        if (!xr_coro_vm_ctx(coro)->stack) {
+        if (!vm_ctx)
+            return false;
+        if (!vm_ctx->stack) {
             size_t stack_bytes = sizeof(XrValue) * INITIAL_STACK_CAPACITY;
             size_t frames_bytes = sizeof(XrBcCallFrame) * INITIAL_FRAME_CAPACITY;
             char *block = NULL;
@@ -431,10 +447,10 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             if (!block) {
                 return false;
             }
-            xr_coro_vm_ctx(coro)->stack = (XrValue *) block;
-            xr_coro_vm_ctx(coro)->stack_capacity = INITIAL_STACK_CAPACITY;
-            xr_coro_vm_ctx(coro)->frames = (XrBcCallFrame *) (block + stack_bytes);
-            xr_coro_vm_ctx(coro)->frame_capacity = INITIAL_FRAME_CAPACITY;
+            vm_ctx->stack = (XrValue *) block;
+            vm_ctx->stack_capacity = INITIAL_STACK_CAPACITY;
+            vm_ctx->frames = (XrBcCallFrame *) (block + stack_bytes);
+            vm_ctx->frame_capacity = INITIAL_FRAME_CAPACITY;
             memset(block, 0, stack_bytes + frames_bytes);
         }
         if (!is_clean) {
@@ -442,20 +458,21 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             // contents may be stale. Conservative GC scanning in
             // mark_coro_roots walks every slot up to proto->maxstacksize
             // (not stack_top), so all unwritten slots must be zeroed.
-            size_t total = sizeof(XrValue) * (size_t) xr_coro_vm_ctx(coro)->stack_capacity +
-                           sizeof(XrBcCallFrame) * (size_t) xr_coro_vm_ctx(coro)->frame_capacity;
-            memset(xr_coro_vm_ctx(coro)->stack, 0, total);
+            size_t total = sizeof(XrValue) * (size_t) vm_ctx->stack_capacity +
+                           sizeof(XrBcCallFrame) * (size_t) vm_ctx->frame_capacity;
+            memset(vm_ctx->stack, 0, total);
         }
     }
 
     // Inline vm_ctx sync
-    if (!is_clean) {
+    if (vm_ctx && !is_clean) {
         // Fresh allocation: full sync needed
-        xr_coro_vm_ctx(coro)->stack_top = xr_coro_vm_ctx(coro)->stack;
-        xr_coro_vm_ctx(coro)->isolate = X;
+        vm_ctx->stack_top = vm_ctx->stack;
+        vm_ctx->isolate = X;
     }
     // stack_top already reset by recycle_local for clean coros
-    xr_coro_vm_ctx(coro)->current_coro = coro;
+    if (vm_ctx)
+        vm_ctx->current_coro = coro;
 
     // Allocate ID (per-Worker batch cache to avoid atomic_fetch_add per spawn)
     {
@@ -590,37 +607,43 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
     }
 
     XrCoroutine *coro = NULL;
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (runtime) {
-        coro = xr_coro_pool_get(runtime);
-    }
-    if (!coro) {
-        if (X->sys_heap) {
-            coro = xr_sysheap_alloc_coro(X->sys_heap);
-            if (!coro)
-                return NULL;
-            coro->coro_gc = NULL;
-        } else {
-            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-            if (coro) {
-                memset(coro, 0, sizeof(XrCoroutine));
-                coro->gc.type = XR_TCOROUTINE;
+    if (!need_stack) {
+        coro = coro_alloc_lightweight_shell();
+    } else {
+        XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+        if (runtime) {
+            coro = xr_coro_pool_get(runtime);
+        }
+        if (!coro) {
+            if (X->sys_heap) {
+                coro = xr_sysheap_alloc_coro(X->sys_heap);
+                if (!coro)
+                    return NULL;
+                coro->coro_gc = NULL;
+            } else {
+                coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
+                if (coro) {
+                    memset(coro, 0, sizeof(XrCoroutine));
+                    coro->gc.type = XR_TCOROUTINE;
+                }
+                if (!coro)
+                    return NULL;
+                if (!coro_ensure_vm_state(coro)) {
+                    coro_discard_uninitialized(coro);
+                    return NULL;
+                }
+                xr_coro_vm_ctx(coro)->stack = NULL;
+                xr_coro_vm_ctx(coro)->frames = NULL;
+                coro->coro_gc = NULL;
             }
-            if (!coro)
-                return NULL;
-            if (!coro_ensure_vm_state(coro)) {
-                coro_discard_uninitialized(coro);
-                return NULL;
-            }
-            xr_coro_vm_ctx(coro)->stack = NULL;
-            xr_coro_vm_ctx(coro)->frames = NULL;
-            coro->coro_gc = NULL;
+        }
+        if (!coro_ensure_vm_state(coro)) {
+            coro_discard_uninitialized(coro);
+            return NULL;
         }
     }
-    if (!coro_ensure_vm_state(coro)) {
-        coro_discard_uninitialized(coro);
+    if (!coro)
         return NULL;
-    }
 
     if (!coro_init_common(coro, X, name, need_stack)) {
         xr_coro_free(coro);
@@ -825,6 +848,17 @@ void xr_coro_release_resources(XrCoroutine *coro) {
             xr_coro_gc_destroy(gc);
     }
 
+    if (!coro->vm_state) {
+        if (coro->args && coro->args != coro->inline_args) {
+            xr_free(coro->args);
+        }
+        coro->args = NULL;
+        coro->arg_count = 0;
+        coro->result = xr_null();
+        coro->error = xr_null();
+        return;
+    }
+
     // Try to recycle: keep stack/frames, put into Worker local pool
     XrWorker *worker = xr_current_worker();
     if (worker && xr_coro_vm_ctx(coro)->stack && xr_coro_vm_ctx(coro)->frames &&
@@ -947,8 +981,8 @@ void xr_coro_release_resources(XrCoroutine *coro) {
     coro->result = xr_null();
 }
 
-// Free coroutine internal resources (GC destructor)
-// Note: coroutine itself freed by GC, only free internally allocated arrays
+// Free coroutine internal resources.
+// The owner frees or recycles the coroutine object shell after this returns.
 void xr_coro_free(XrCoroutine *coro) {
     if (!coro)
         return;
@@ -962,68 +996,68 @@ void xr_coro_free(XrCoroutine *coro) {
         if (gc)
             xr_coro_gc_destroy(gc);
     }
-    // Free VM stack and bytecode frames (skip slab-embedded stacks — arena owns them)
-    if (xr_coro_vm_ctx(coro)->stack) {
-        if (coro->gc_flags & XR_CORO_GC_SLAB_STACK) {
-            // Slab VM stack: only free if grown beyond initial capacity.
-            if (xr_coro_vm_ctx(coro)->stack_capacity != INITIAL_STACK_CAPACITY) {
-                xr_free(xr_coro_vm_ctx(coro)->stack);
+    if (coro->vm_state) {
+        XrVMContext *vm_ctx = xr_coro_vm_ctx(coro);
+        // Free VM stack and bytecode frames (skip slab-embedded stacks — arena owns them)
+        if (vm_ctx->stack) {
+            if (coro->gc_flags & XR_CORO_GC_SLAB_STACK) {
+                // Slab VM stack: only free if grown beyond initial capacity.
+                if (vm_ctx->stack_capacity != INITIAL_STACK_CAPACITY) {
+                    xr_free(vm_ctx->stack);
+                }
+            } else {
+                char *stack_end = (char *) vm_ctx->stack + sizeof(XrValue) * vm_ctx->stack_capacity;
+                bool combined = (vm_ctx->frames && (char *) vm_ctx->frames == stack_end);
+                xr_free(vm_ctx->stack);
+                if (!combined && vm_ctx->frames) {
+                    xr_free(vm_ctx->frames);
+                }
             }
-        } else {
-            char *stack_end = (char *) xr_coro_vm_ctx(coro)->stack +
-                              sizeof(XrValue) * xr_coro_vm_ctx(coro)->stack_capacity;
-            bool combined = (xr_coro_vm_ctx(coro)->frames &&
-                             (char *) xr_coro_vm_ctx(coro)->frames == stack_end);
-            xr_free(xr_coro_vm_ctx(coro)->stack);
-            if (!combined && xr_coro_vm_ctx(coro)->frames) {
-                xr_free(xr_coro_vm_ctx(coro)->frames);
+            vm_ctx->stack = NULL;
+            vm_ctx->frames = NULL;
+        } else if (vm_ctx->frames) {
+            xr_free(vm_ctx->frames);
+            vm_ctx->frames = NULL;
+        }
+        // Exception handlers (only free if promoted to heap)
+        if (vm_ctx->handlers && vm_ctx->handlers != vm_ctx->handler_inline) {
+            xr_free(vm_ctx->handlers);
+            vm_ctx->handlers = NULL;
+        }
+        // Per-frame struct storage
+        if (vm_ctx->struct_areas) {
+            for (int i = 0; i < vm_ctx->struct_areas_cap; i++) {
+                if (vm_ctx->struct_areas[i])
+                    xr_free(vm_ctx->struct_areas[i]);
             }
+            xr_free(vm_ctx->struct_areas);
+            xr_free(vm_ctx->struct_area_caps);
+            vm_ctx->struct_areas = NULL;
+            vm_ctx->struct_area_caps = NULL;
+            vm_ctx->struct_areas_cap = 0;
         }
-        xr_coro_vm_ctx(coro)->stack = NULL;
-        xr_coro_vm_ctx(coro)->frames = NULL;
-    } else if (xr_coro_vm_ctx(coro)->frames) {
-        xr_free(xr_coro_vm_ctx(coro)->frames);
-        xr_coro_vm_ctx(coro)->frames = NULL;
-    }
-    // Exception handlers (only free if promoted to heap)
-    if (xr_coro_vm_ctx(coro)->handlers &&
-        xr_coro_vm_ctx(coro)->handlers != xr_coro_vm_ctx(coro)->handler_inline) {
-        xr_free(xr_coro_vm_ctx(coro)->handlers);
-        xr_coro_vm_ctx(coro)->handlers = NULL;
-    }
-    // Per-frame struct storage
-    if (xr_coro_vm_ctx(coro)->struct_areas) {
-        for (int i = 0; i < xr_coro_vm_ctx(coro)->struct_areas_cap; i++) {
-            if (xr_coro_vm_ctx(coro)->struct_areas[i])
-                xr_free(xr_coro_vm_ctx(coro)->struct_areas[i]);
+        // Struct return arena
+        if (vm_ctx->struct_ret_arena) {
+            xr_free(vm_ctx->struct_ret_arena);
+            vm_ctx->struct_ret_arena = NULL;
+            vm_ctx->struct_ret_arena_used = 0;
+            vm_ctx->struct_ret_arena_cap = 0;
         }
-        xr_free(xr_coro_vm_ctx(coro)->struct_areas);
-        xr_free(xr_coro_vm_ctx(coro)->struct_area_caps);
-        xr_coro_vm_ctx(coro)->struct_areas = NULL;
-        xr_coro_vm_ctx(coro)->struct_area_caps = NULL;
-        xr_coro_vm_ctx(coro)->struct_areas_cap = 0;
+        // Per-coroutine defer stack
+        if (vm_ctx->defer_stack) {
+            xr_free(vm_ctx->defer_stack);
+            vm_ctx->defer_stack = NULL;
+        }
+        if (vm_ctx->defer_frame_marks) {
+            xr_free(vm_ctx->defer_frame_marks);
+            vm_ctx->defer_frame_marks = NULL;
+        }
+        vm_ctx->defer_count = 0;
+        vm_ctx->defer_capacity = 0;
+        // Per-coroutine inline caches (mirrors xr_coro_release_resources path
+        // for coros that go straight to the GC destructor).
+        xr_vm_ctx_free_ic_tables(vm_ctx);
     }
-    // Struct return arena
-    if (xr_coro_vm_ctx(coro)->struct_ret_arena) {
-        xr_free(xr_coro_vm_ctx(coro)->struct_ret_arena);
-        xr_coro_vm_ctx(coro)->struct_ret_arena = NULL;
-        xr_coro_vm_ctx(coro)->struct_ret_arena_used = 0;
-        xr_coro_vm_ctx(coro)->struct_ret_arena_cap = 0;
-    }
-    // Per-coroutine defer stack
-    if (xr_coro_vm_ctx(coro)->defer_stack) {
-        xr_free(xr_coro_vm_ctx(coro)->defer_stack);
-        xr_coro_vm_ctx(coro)->defer_stack = NULL;
-    }
-    if (xr_coro_vm_ctx(coro)->defer_frame_marks) {
-        xr_free(xr_coro_vm_ctx(coro)->defer_frame_marks);
-        xr_coro_vm_ctx(coro)->defer_frame_marks = NULL;
-    }
-    xr_coro_vm_ctx(coro)->defer_count = 0;
-    xr_coro_vm_ctx(coro)->defer_capacity = 0;
-    // Per-coroutine inline caches (mirrors xr_coro_release_resources path
-    // for coros that go straight to the GC destructor).
-    xr_vm_ctx_free_ic_tables(xr_coro_vm_ctx(coro));
     // Cold extension (io_buf, locals, watched_by)
     if (coro->ext) {
         if (coro->ext->io_buf)
@@ -1041,7 +1075,16 @@ void xr_coro_free(XrCoroutine *coro) {
 
     coro_free_owned_vm_state(coro);
 
-    // Coroutine object itself freed by GC, no need for xr_free(coro)
+    // Coroutine object shell is freed or pooled by the caller.
+}
+
+void xr_coro_destroy(XrCoroutine *coro) {
+    if (!coro)
+        return;
+    bool free_shell = (coro->gc_flags & XR_CORO_GC_LIGHTWEIGHT) != 0;
+    xr_coro_free(coro);
+    if (free_shell)
+        xr_free(coro);
 }
 
 // Recycle coroutine to Worker local pool (thread-safe, lock-free)
@@ -1059,6 +1102,11 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         xr_worker_cancel_timer(worker, coro);
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
+    }
+
+    if (!coro->vm_state) {
+        xr_coro_destroy(coro);
+        return;
     }
 
     // Reset GC context: finalize objects, bulk free Immix blocks, reset state.
