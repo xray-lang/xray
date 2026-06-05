@@ -797,6 +797,22 @@ static void worker_update_steal_backoff(XrWorker *worker, bool found_work, int64
     worker->p.steal_backoff_until = now + delay_hint;
 }
 
+static void worker_wait_steal_delay(XrWorker *worker, XrRuntime *runtime, int64_t delay_ms) {
+    if (!worker || !runtime || delay_ms <= 0)
+        return;
+    if (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0)
+        return;
+    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+        return;
+    if (delay_ms > XR_STEAL_BACKOFF_MAX_MS)
+        delay_ms = XR_STEAL_BACKOFF_MAX_MS;
+    if (delay_ms < 1)
+        delay_ms = 1;
+    worker->p.stats.steal_throttle_wait_count++;
+    atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
+    xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, (uint32_t) delay_ms * 1000u);
+}
+
 static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len,
                                          int priority) {
     if (!worker || !runtime || victim_len <= 0)
@@ -1090,7 +1106,7 @@ void *worker_loop(void *arg) {
                 if (exit_flag)
                     goto exit_loop;
                 if (!coro && min_steal_delay > 0) {
-                    xr_thread_yield();
+                    worker_wait_steal_delay(worker, runtime, min_steal_delay);
                 }
             }
 
