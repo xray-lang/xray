@@ -21,6 +21,8 @@
 #include "../base/xdefs.h"
 #include "../runtime/value/xvalue.h"
 #include <stdbool.h>
+#include <stdatomic.h>
+#include <stdint.h>
 
 /* Forward declarations (avoid pulling in full headers) */
 struct XrCoroutine;
@@ -59,6 +61,14 @@ typedef struct XrJitHooks {
     void (*guard_page_free)(void *page);
     void (*guard_page_arm)(void *page);
     void (*guard_page_disarm)(void *page);
+
+    /* --- Worker-local scratch storage --- */
+
+    void *(*worker_state_create)(void);
+    void (*worker_state_destroy)(void *worker_state);
+    void *(*worker_scratch)(void *worker_state);
+    void *(*worker_safepoint_page)(void *worker_state);
+    void (*worker_set_heartbeat)(void *worker_state, _Atomic uint64_t *heartbeat);
 } XrJitHooks;
 
 /* Global hooks pointer.  NULL when JIT is not available. */

@@ -33,7 +33,6 @@
 #include "xsteal_queue.h"
 #include "xmpsc_queue.h"
 #include "xcoroutine.h"
-#include "xjit_scratch.h"
 #include "xnetpoll.h"           // XrLocalPoll
 #include "../base/xplatform.h"  // XR_CACHE_LINE
 
@@ -282,6 +281,10 @@ typedef struct XrProc {
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
     XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection
 
+    /* === Backend Worker Storage === */
+    void *backend_worker_storage;
+    void (*backend_worker_storage_destroy)(void *storage);
+
     /* === Adaptive Poll Skip (I/O load feedback) === */
     uint32_t io_poll_ewma;  // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
 
@@ -303,11 +306,6 @@ typedef struct XrProc {
      */
     XrProcStats stats;
     uint32_t rng_state;
-
-    /* === Per-Worker JIT Scratch Space ===
-     * JIT functions don't yield, so only one JIT execution per worker.
-     * Coroutines access this via xr_coro_jit_state(coro)->scratch pointer. */
-    XrJitScratch jit_scratch;
 
     /* === Runtime back pointer === */
     struct XrRuntime *runtime;

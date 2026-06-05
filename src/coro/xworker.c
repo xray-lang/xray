@@ -152,11 +152,13 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
         worker->p.runq_max_len[p] = 0;
     }
 
-    // Allocate guard page for JIT safepoint (one per worker)
-    if (XR_JIT_AVAILABLE()) {
-        worker->p.jit_scratch.safepoint_page = xr_jit_hooks->guard_page_alloc();
+    // Create backend worker storage, if the active backend needs one.
+    worker->p.backend_worker_storage = NULL;
+    worker->p.backend_worker_storage_destroy = NULL;
+    if (XR_JIT_AVAILABLE() && xr_jit_hooks->worker_state_create) {
+        worker->p.backend_worker_storage = xr_jit_hooks->worker_state_create();
+        worker->p.backend_worker_storage_destroy = xr_jit_hooks->worker_state_destroy;
     }
-    worker->p.jit_scratch.safepoint_return_pc = NULL;
 }
 
 // Destroy Worker
@@ -167,10 +169,11 @@ void xr_worker_destroy(XrWorker *worker) {
         xr_machine_destroy(worker->m);
     }
 
-    // Free guard page for JIT safepoint
-    if (worker->p.jit_scratch.safepoint_page && XR_JIT_AVAILABLE()) {
-        xr_jit_hooks->guard_page_free(worker->p.jit_scratch.safepoint_page);
-        worker->p.jit_scratch.safepoint_page = NULL;
+    // Free backend worker storage through the owner backend's destructor.
+    if (worker->p.backend_worker_storage && worker->p.backend_worker_storage_destroy) {
+        worker->p.backend_worker_storage_destroy(worker->p.backend_worker_storage);
+        worker->p.backend_worker_storage = NULL;
+        worker->p.backend_worker_storage_destroy = NULL;
     }
 
     // Free Per-Worker local poll (kqueue/epoll fd)

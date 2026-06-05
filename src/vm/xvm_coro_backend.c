@@ -284,6 +284,22 @@ static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfun
     return true;
 }
 
+static XrJitScratch *vm_worker_jit_scratch(XrWorker *worker) {
+    if (!worker || !XR_JIT_AVAILABLE() || !xr_jit_hooks->worker_scratch)
+        return NULL;
+    return (XrJitScratch *) xr_jit_hooks->worker_scratch(worker->p.backend_worker_storage);
+}
+
+static void vm_bind_worker_jit_scratch(XrWorker *worker, XrJitCoroState *jit_state) {
+    if (!jit_state)
+        return;
+    XrJitScratch *scratch = vm_worker_jit_scratch(worker);
+    jit_state->scratch = scratch;
+    if (scratch && worker && worker->m && xr_jit_hooks->worker_set_heartbeat) {
+        xr_jit_hooks->worker_set_heartbeat(worker->p.backend_worker_storage, &worker->m->heartbeat);
+    }
+}
+
 XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
     if (!coro || !vm_backend_ensure_state(coro))
         return NULL;
@@ -301,10 +317,7 @@ XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
     if (!jit_state)
         return NULL;
     XrWorker *worker = xr_current_worker();
-    if (worker) {
-        jit_state->scratch = &worker->p.jit_scratch;
-        worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
-    }
+    vm_bind_worker_jit_scratch(worker, jit_state);
     return jit_state->scratch ? jit_state : NULL;
 }
 
@@ -1390,10 +1403,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     XrVMContext *coro_ctx = &vm_state->ctx;
 
     XrJitCoroState *bound_jit_state = xr_coro_peek_jit_state(coro);
-    if (bound_jit_state) {
-        bound_jit_state->scratch = &worker->p.jit_scratch;
-    }
-    worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
+    vm_bind_worker_jit_scratch(worker, bound_jit_state);
 
     uint32_t _fast_flags = xr_coro_flags_load(coro);
     int _fast_resume = xr_coro_resume_load(coro);
