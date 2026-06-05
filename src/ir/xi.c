@@ -86,6 +86,35 @@ void *xi_func_arena_alloc(XiFunc *f, uint32_t size) {
     return arena_alloc(f, size);
 }
 
+XR_FUNC bool xi_block_ensure_value_capacity(XiBlock *blk, uint32_t min_cap) {
+    XR_DCHECK(blk != NULL, "xi_block_ensure_value_capacity: blk is NULL");
+    XR_DCHECK(blk->func != NULL, "xi_block_ensure_value_capacity: blk->func is NULL");
+
+    if (min_cap <= blk->values_cap)
+        return true;
+
+    uint32_t new_cap = blk->values_cap ? blk->values_cap : 16;
+    while (new_cap < min_cap) {
+        if (new_cap > UINT32_MAX / 2) {
+            new_cap = min_cap;
+            break;
+        }
+        new_cap *= 2;
+    }
+    if (new_cap > UINT32_MAX / (uint32_t) sizeof(XiValue *))
+        return false;
+
+    XiValue **new_values =
+        (XiValue **) xi_func_arena_alloc(blk->func, new_cap * (uint32_t) sizeof(XiValue *));
+    if (!new_values)
+        return false;
+    if (blk->values && blk->nvalues > 0)
+        memcpy(new_values, blk->values, blk->nvalues * sizeof(XiValue *));
+    blk->values = new_values;
+    blk->values_cap = new_cap;
+    return true;
+}
+
 XR_FUNC void xi_func_compute_effects(XiFunc *f) {
     XR_DCHECK(f != NULL, "xi_func_compute_effects: NULL func");
     uint8_t summary = 0;
@@ -312,15 +341,8 @@ static void block_append_value(XiBlock *blk, XiValue *v) {
     XR_DCHECK(blk != NULL, "block_append_value: blk is NULL");
     XR_DCHECK(v != NULL, "block_append_value: v is NULL");
 
-    if (blk->nvalues >= blk->values_cap) {
-        uint32_t new_cap = blk->values_cap * 2;
-        XiValue **new_values = (XiValue **) arena_alloc(blk->func, new_cap * sizeof(XiValue *));
-        if (!new_values)
-            return;
-        memcpy(new_values, blk->values, blk->nvalues * sizeof(XiValue *));
-        blk->values = new_values;
-        blk->values_cap = new_cap;
-    }
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
+        return;
     blk->values[blk->nvalues++] = v;
 }
 
@@ -342,16 +364,8 @@ XiValue *xi_value_insert_after(XiFunc *f, XiBlock *blk, XiValue *anchor, uint16_
     if (!v)
         return NULL;
 
-    /* Ensure capacity (mirror block_append_value growth). */
-    if (blk->nvalues >= blk->values_cap) {
-        uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 16;
-        XiValue **new_values = (XiValue **) arena_alloc(blk->func, new_cap * sizeof(XiValue *));
-        if (!new_values)
-            return NULL;
-        memcpy(new_values, blk->values, blk->nvalues * sizeof(XiValue *));
-        blk->values = new_values;
-        blk->values_cap = new_cap;
-    }
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
+        return NULL;
 
     /* Find anchor index; default to end (append) if absent. */
     uint32_t pos = blk->nvalues; /* insert position = after anchor */

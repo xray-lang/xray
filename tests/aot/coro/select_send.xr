@@ -1,0 +1,24 @@
+let ch = new Channel<int>(2)
+
+select {
+    100 to ch -> { print("sent 100") }
+    _ -> { print("send failed") }
+}
+
+select {
+    200 to ch -> { print("sent 200") }
+    _ -> { print("send failed") }
+}
+
+select {
+    300 to ch -> { print("sent 300") }
+    _ -> { print("buffer full") }
+}
+
+let (v1, ok1) = ch.tryRecv()
+let (v2, ok2) = ch.tryRecv()
+print(v1)
+print(v2)
+print(ok1 && ok2)
+ch.close()
+print("done")

@@ -133,11 +133,8 @@ static bool try_merge_into_pred(XiFunc *f, XiBlock *blk) {
         XiValue *v = blk->values[i];
         if (!v)
             continue;
-        if (pred->nvalues >= pred->values_cap) {
-            uint32_t new_cap = pred->values_cap ? pred->values_cap * 2 : 16;
-            XR_REALLOC_OR_ABORT(pred->values, new_cap * sizeof(XiValue *), "block merge values");
-            pred->values_cap = new_cap;
-        }
+        if (!xi_block_ensure_value_capacity(pred, pred->nvalues + 1))
+            return false;
         pred->values[pred->nvalues++] = v;
         v->block = pred;
     }

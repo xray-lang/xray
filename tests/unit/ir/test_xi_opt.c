@@ -1067,6 +1067,38 @@ TEST(block_simplify_preserves_phi_when_merging) {
     xi_func_free(f);
 }
 
+TEST(block_simplify_merges_past_arena_value_capacity) {
+    /* Block value arrays belong to the Xi arena. Merging a successor into a
+     * full predecessor must grow by arena-copying, not by heap realloc. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *exit_blk = xi_block_new(f);
+    exit_blk->sealed = true;
+
+    uint32_t initial_cap = entry->values_cap;
+    for (uint32_t i = 0; i < initial_cap; i++)
+        (void) xi_const_int(f, entry, (int64_t) i, &stub_int);
+
+    XiValue *ret = xi_const_int(f, exit_blk, 123, &stub_int);
+    xi_block_set_jump(entry, exit_blk);
+    xi_block_set_return(exit_blk, ret);
+
+    XiPassChange chg = xi_opt_block_simplify(f);
+
+    assert(chg.cfg_changed && "merge should report a CFG change");
+    assert(f->nblocks == 1 && "linear return chain should merge into entry");
+    assert(entry->nvalues == initial_cap + 1 && "merged value should be appended");
+    assert(entry->values[initial_cap] == ret && "merged value should retain order");
+    assert(ret->block == entry && "merged value should be rebound to predecessor");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "IR should remain valid after growing during block merge");
+    xi_func_free(f);
+}
+
 /* ========== Jump Thread Tests ========== */
 
 TEST(jump_thread_basic_redirect) {
@@ -1245,6 +1277,7 @@ int main(void) {
     run_block_simplify_single_pred_empty_block();
     run_block_simplify_keeps_ir_valid_for_multi_pred_empty();
     run_block_simplify_preserves_phi_when_merging();
+    run_block_simplify_merges_past_arena_value_capacity();
 
     /* Jump thread */
     run_jump_thread_basic_redirect();

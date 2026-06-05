@@ -25,7 +25,6 @@
 
 #include "xi_opt_ifconv.h"
 #include "../base/xchecks.h"
-#include "../base/xmalloc.h"
 
 #define IFCONV_MAX_INS 2
 #define IFCONV_MAX_PHIS 2
@@ -154,18 +153,8 @@ static void ifconv_replace_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
 
 /* Append a value (already allocated) to a block's values array. */
 static bool ifconv_append_value(XiBlock *blk, XiValue *v) {
-    if (blk->nvalues >= blk->values_cap) {
-        uint32_t new_cap = blk->values_cap ? blk->values_cap * 2 : 8;
-        XiValue **tmp = (XiValue **) xr_malloc(new_cap * sizeof(XiValue *));
-        if (!tmp)
-            return false;
-        if (blk->values) {
-            for (uint32_t i = 0; i < blk->nvalues; i++)
-                tmp[i] = blk->values[i];
-        }
-        blk->values = tmp;
-        blk->values_cap = new_cap;
-    }
+    if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
+        return false;
     blk->values[blk->nvalues++] = v;
     return true;
 }
