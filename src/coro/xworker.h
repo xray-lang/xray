@@ -68,6 +68,14 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t timer_cancel_local_count;
     _Atomic uint64_t timer_cancel_remote_count;
     _Atomic uint64_t timer_cancel_process_count;
+    _Atomic uint64_t timer_cancel_node_reuse_count;
+    _Atomic uint64_t timer_cancel_node_malloc_count;
+    _Atomic uint64_t timer_cancel_node_alloc_fail_count;
+    _Atomic uint64_t timer_cancel_node_free_cache_count;
+    _Atomic uint64_t timer_cancel_node_free_heap_count;
+    _Atomic uint64_t timer_cancel_drain_batch_count;
+    _Atomic uint64_t timer_cancel_drain_node_count;
+    _Atomic uint64_t timer_cancel_drain_max_count;
     _Atomic uint64_t chan_send_direct_count;
     _Atomic uint64_t chan_recv_direct_count;
     _Atomic uint64_t chan_send_buffer_count;
@@ -256,6 +264,17 @@ static inline void xr_sched_metric_add(XrRuntime *runtime, _Atomic uint64_t *cou
                                        uint64_t value) {
     if (xr_sched_stats_enabled(runtime) && value > 0) {
         atomic_fetch_add_explicit(counter, value, memory_order_relaxed);
+    }
+}
+
+static inline void xr_sched_metric_max(XrRuntime *runtime, _Atomic uint64_t *counter,
+                                       uint64_t value) {
+    if (!xr_sched_stats_enabled(runtime))
+        return;
+    uint64_t current = atomic_load_explicit(counter, memory_order_relaxed);
+    while (current < value &&
+           !atomic_compare_exchange_weak_explicit(counter, &current, value, memory_order_relaxed,
+                                                  memory_order_relaxed)) {
     }
 }
 

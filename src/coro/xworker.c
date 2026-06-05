@@ -804,6 +804,17 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_remote_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_process_count));
     fprintf(stderr,
+            "Timer cancel queue: node_reuse=%llu node_malloc=%llu alloc_fail=%llu "
+            "free_cache=%llu free_heap=%llu drain_batches=%llu drain_nodes=%llu drain_max=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_reuse_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_malloc_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_alloc_fail_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_free_cache_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_free_heap_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_batch_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_node_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_max_count));
+    fprintf(stderr,
             "Channel hot path: no_waiter_buffer=%llu kind_spsc=%llu kind_mpsc=%llu "
             "kind_mpmc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_buffer_no_waiter_count),
