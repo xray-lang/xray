@@ -407,6 +407,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         xr_free(buf);
         goto fail_free_ir;
     }
+    XiCgenCoroFrameStats coro_frame_stats = xi_cgen_coro_frame_stats(cg_ctx);
     xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */
@@ -432,6 +433,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     result->total_aot = total_funcs;
     result->nmodules = nmodules;
     result->features = features;
+    result->coro_frame_stats = coro_frame_stats;
 
     /* Cleanup module name arrays */
     for (int i = 0; i < nmodules; i++) {

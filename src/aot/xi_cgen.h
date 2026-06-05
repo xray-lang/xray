@@ -18,6 +18,8 @@
 #include "../ir/xi.h"
 #include "../ir/xi_module.h"
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 #include <stdio.h>
 
 /* Opaque codegen context — holds all mutable state for one C-generation
@@ -25,10 +27,21 @@
  * then freed.  No file-scope globals. */
 typedef struct XiCgenCtx XiCgenCtx;
 
+typedef struct XiCgenCoroFrameStats {
+    uint32_t coroutine_count;
+    size_t total_frame_bytes;
+    size_t max_frame_bytes;
+    uint32_t total_roots;
+    uint32_t total_releases;
+    uint32_t max_roots;
+    uint32_t max_releases;
+} XiCgenCoroFrameStats;
+
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
+XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()

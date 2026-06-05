@@ -250,7 +250,8 @@ static const char *make_opt_flag(const char *level) {
 static int cmd_build_bytecode(const char *input, const char *output, const char *cc,
                               const char *opt_flag, bool c_only, bool strip, const char *sysroot);
 static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, bool c_only, bool strip, const char *sysroot);
+                            const char *opt_flag, bool c_only, bool strip, const char *sysroot,
+                            bool verbose);
 
 /* ========== CLI Entry Point ========== */
 
@@ -266,6 +267,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
     bool c_only = xr_cli_opt_bool(&inv->options, "c-only");
     bool strip_symbols = xr_cli_opt_bool(&inv->options, "strip");
     bool native_mode = xr_cli_opt_bool(&inv->options, "native");
+    bool verbose = xr_cli_opt_bool(&inv->options, "verbose") || (inv->ctx && inv->ctx->verbose);
 
     if (!output_file)
         output_file = c_only ? "app.c" : "a.out";
@@ -274,7 +276,7 @@ XR_FUNC int cmd_build(const XrCliInvocation *inv) {
 
     if (native_mode) {
         return cmd_build_native(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
-                                sysroot);
+                                sysroot, verbose);
     }
     return cmd_build_bytecode(input_file, output_file, cc, opt_flag, c_only, strip_symbols,
                               sysroot);
@@ -343,12 +345,29 @@ static int cmd_build_bytecode(const char *input, const char *output, const char 
 
 #include "../../aot/xaot_driver.h"
 
+static void print_aot_coro_frame_stats(const XaotBuildResult *result) {
+    XR_DCHECK(result != NULL, "AOT result is NULL");
+    const XiCgenCoroFrameStats *stats = &result->coro_frame_stats;
+    if (stats->coroutine_count == 0) {
+        printf("[xi-native] Coroutine frames: none\n");
+        return;
+    }
+    double avg_frame = (double) stats->total_frame_bytes / (double) stats->coroutine_count;
+    printf("[xi-native] Coroutine frames: count=%u total=%zuB avg=%.1fB max=%zuB "
+           "roots=%u releases=%u max_roots=%u max_releases=%u\n",
+           stats->coroutine_count, stats->total_frame_bytes, avg_frame, stats->max_frame_bytes,
+           stats->total_roots, stats->total_releases, stats->max_roots, stats->max_releases);
+}
+
 static int cmd_build_native(const char *input, const char *output, const char *cc,
-                            const char *opt_flag, bool c_only, bool strip, const char *sysroot) {
+                            const char *opt_flag, bool c_only, bool strip, const char *sysroot,
+                            bool verbose) {
     XaotBuildResult aot_result;
     int rc = xaot_build(input, &aot_result);
     if (rc != 0)
         return rc;
+    if (verbose)
+        print_aot_coro_frame_stats(&aot_result);
 
     /* Write generated C to file */
     char c_file[512];
