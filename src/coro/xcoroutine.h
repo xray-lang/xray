@@ -358,15 +358,6 @@ static inline void xr_coro_request_yield(XrCoroutine *coro) {
     coro->reductions = 0;
 }
 
-// GC safepoint for JIT code: GC step + cancel check.
-// Returns 0 to continue, non-zero to request deopt exit.
-// Backend stub contract: check return value, jump to deopt_stub if non-zero.
-XR_FUNC int xr_coro_gc_safepoint(XrCoroutine *coro);
-
-// JIT write barriers: thin wrappers around GC barrier functions
-XR_FUNC void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child);
-XR_FUNC void xr_jit_barrier_back(XrCoroutine *coro, void *container);
-
 XR_FUNC void xr_coro_sync_vm_ctx(XrCoroutine *coro, struct XrayIsolate *X);
 XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
