@@ -604,6 +604,10 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
     emit_vref(out, v->args[1]);
 }
 
+static void emit_codegen_abort_expr(FILE *out) {
+    fprintf(out, "(abort(), XR_NULL_VAL)");
+}
+
 /* Emit the RHS expression for a single value. */
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
@@ -613,7 +617,8 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (cg_is_unsupported_coroutine_op(v->op)) {
         const char *op_name = xi_op_name(v->op);
         fprintf(stderr, "[xi_cgen] ERROR: unsupported coroutine Xi op %s\n", op_name);
-        fprintf(out, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op %s */", op_name);
+        emit_codegen_abort_expr(out);
+        fprintf(out, " /* unsupported coroutine Xi op %s */", op_name);
         ctx->error = true;
         return;
     }
@@ -1141,7 +1146,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 fprintf(stderr,
                         "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
                         target->name ? target->name : "?");
-                fprintf(out, "XR_NULL_VAL");
+                emit_codegen_abort_expr(out);
                 break;
             }
 
@@ -1486,7 +1491,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                             "[xi_cgen] ERROR: unsupported AOT sync method call to suspendable "
                             "function '%s'\n",
                             mfunc->name ? mfunc->name : "?");
-                    fprintf(out, "XR_NULL_VAL");
+                    emit_codegen_abort_expr(out);
                     break;
                 }
                 /* Direct class method call: NULL _cl, receiver is first visible param */

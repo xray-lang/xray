@@ -399,7 +399,60 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     assert(code != NULL);
 
     assert(had_error && "AOT cgen must reject unsupported coroutine Xi ops");
+    assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op") &&
+           "unsupported coroutine ops must not emit silent null placeholders");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_suspendable_wrapper_aborts) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "let task = go worker(41)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "supported AOT coroutine should generate without cgen errors");
+    assert(contains(code, "_aot_resume") && "suspendable function should emit AOT resume entry");
+    assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
+           "sync wrapper for suspendable AOT function must hard-fail");
+    assert(!contains(code, "return XR_NULL_VAL;\n}\n\ntypedef struct") &&
+           "sync wrapper must not silently return null");
+
+    printf("  Generated suspendable wrapper %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_sync_call_to_suspendable_aborts) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "print(worker(41))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(had_error && "sync call to suspendable AOT function must be rejected");
+    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
+           "rejected sync call should emit hard-fail expression only");
+    assert(!contains(code, "unsupported AOT sync call") &&
+           "diagnostics should go to stderr, not generated C comments");
+
+    printf("  Generated rejected sync call %zu bytes of C code\n", strlen(code));
     free(code);
     xi_func_free(ir);
 }
@@ -421,6 +474,8 @@ int main(void) {
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_unsupported_coroutine_ops_fail_fast();
+    run_cgen_suspendable_wrapper_aborts();
+    run_cgen_sync_call_to_suspendable_aborts();
 
     teardown();
 
