@@ -44,7 +44,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             return true;
         }
     } else if (wr == (XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT)) {
-        if (atomic_load(&coro->any_done)) {
+        if (atomic_load(&coro->any_done) || atomic_load(&coro->wait_count) == 0) {
             xr_coro_ready(runtime->isolate, coro, true);
             return true;
         }

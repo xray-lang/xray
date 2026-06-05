@@ -923,14 +923,11 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
     int count = xr_array_size(tasks);
     XrCoroutine *caller = xr_current_coro(isolate);
 
-// Task-only helpers
-#define ELEM_IS_TASK(cv) xr_value_is_task(cv)
-
-    // Fast path: check if all done
+    // Fast path: check if all tasks are done.
     bool all_done = true;
     for (int j = 0; j < count; j++) {
         XrValue cv = xr_array_get(tasks, j);
-        if (!ELEM_IS_TASK(cv))
+        if (!xr_value_is_task(cv))
             continue;
         if (!xr_task_is_done(xr_value_to_task(cv))) {
             all_done = false;
@@ -944,7 +941,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
         XrValue *rdata = (XrValue *) results->data;
         for (int j = 0; j < count; j++) {
             XrValue cv = xr_array_get(tasks, j);
-            if (!ELEM_IS_TASK(cv)) {
+            if (!xr_value_is_task(cv)) {
                 rdata[j] = xr_null();
                 continue;
             }
@@ -963,33 +960,14 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     if (caller) {
-        caller->await_results = NULL;
-        atomic_store(&caller->wait_count, 1);
-
-        for (int j = 0; j < count; j++) {
-            XrValue cv = xr_array_get(tasks, j);
-            if (!ELEM_IS_TASK(cv))
-                continue;
-            atomic_fetch_add(&caller->wait_count, 1);
-            XrTask *t = xr_value_to_task(cv);
-            atomic_store_explicit((_Atomic int *) &t->waiter_index, j, memory_order_relaxed);
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &t->waiter, caller,
-                                  memory_order_release);
-            if (xr_task_is_done(t)) {
-                XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
-                                                          NULL, memory_order_acq_rel);
-                if (w == caller)
-                    atomic_fetch_sub(&caller->wait_count, 1);
-            }
-        }
-
-        int remaining = atomic_fetch_sub(&caller->wait_count, 1) - 1;
-        if (remaining == 0) {
+        XrCoroBlockResult block = xr_coro_await_all_tasks(caller, tasks);
+        if (block.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_RESTART;
         }
-
-        xr_coro_set_wait_reason(caller, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
-        return XR_DISP_BLOCKED;
+        if (block.kind == XR_CORO_BLOCK_BLOCKED) {
+            return XR_DISP_BLOCKED;
+        }
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await all: unable to block");
     }
 
     // Main thread: spin wait
@@ -1004,7 +982,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
         bool ad = true;
         for (int j = 0; j < count; j++) {
             XrValue cv = xr_array_get(tasks, j);
-            if (!ELEM_IS_TASK(cv))
+            if (!xr_value_is_task(cv))
                 continue;
             if (!xr_task_is_done(xr_value_to_task(cv))) {
                 ad = false;
@@ -1019,8 +997,6 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
         }
     }
     return XR_DISP_RESTART;
-
-#undef ELEM_IS_TASK
 }
 
 XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
@@ -1040,12 +1016,14 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
     int count = xr_array_size(tasks);
     XrCoroutine *current = vm_get_coro(vm_ctx);
 
-    // Fast path: check if any already done
+    // Fast path: check if any task is already done.
     int done_count = 0;
+    int task_count = 0;
     for (int j = 0; j < count; j++) {
         XrValue cv = xr_array_get(tasks, j);
         if (!xr_value_is_task(cv))
             continue;
+        task_count++;
         XrTask *t = xr_value_to_task(cv);
         if (xr_task_is_done(t)) {
             if (mode == 1)
@@ -1057,7 +1035,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
         }
     }
 
-    if (mode == 1 && done_count == count) {
+    if (task_count == 0 || (mode == 1 && done_count == task_count)) {
         base[a] = xr_null();
         return XR_DISP_NEXT;
     }
@@ -1065,49 +1043,26 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
     // Slow path: wait
     if (current) {
         frame->pc = pc - 1;
-        atomic_store(&current->any_done, false);
-        atomic_store(&current->wait_count, 1);
-
-        for (int j = 0; j < count; j++) {
-            XrValue cv = xr_array_get(tasks, j);
-            if (!xr_value_is_task(cv))
-                continue;
-            atomic_fetch_add(&current->wait_count, 1);
-            int widx = (mode == 0) ? -3 : -4;
-            XrTask *t = xr_value_to_task(cv);
-            atomic_store_explicit((_Atomic int *) &t->waiter_index, widx, memory_order_relaxed);
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &t->waiter, current,
-                                  memory_order_release);
-            if (xr_task_is_done(t)) {
-                XrCoroutine *w = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &t->waiter,
-                                                          NULL, memory_order_acq_rel);
-                if (w == current) {
-                    if (mode == 0 || XR_IS_NULL(t->error)) {
-                        bool expected = false;
-                        if (atomic_compare_exchange_strong(&current->any_done, &expected, true))
-                            current->result = t->result;
-                    }
-                    atomic_fetch_sub(&current->wait_count, 1);
-                }
-            }
-        }
-
-        int remaining = atomic_fetch_sub(&current->wait_count, 1) - 1;
-        if (atomic_load(&current->any_done) || (mode == 1 && remaining == 0)) {
+        XrCoroBlockResult block = xr_coro_await_any_task(current, tasks, mode == 1);
+        if (block.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_RESTART;
         }
-
-        xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
-        return XR_DISP_BLOCKED;
+        if (block.kind == XR_CORO_BLOCK_BLOCKED) {
+            return XR_DISP_BLOCKED;
+        }
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD,
+                 mode == 0 ? "await any: unable to block" : "await anySuccess: unable to block");
     } else {
         // Main thread: poll wait
         int spin = 0;
         while (true) {
             done_count = 0;
+            task_count = 0;
             for (int j = 0; j < count; j++) {
                 XrValue cv = xr_array_get(tasks, j);
                 if (!xr_value_is_task(cv))
                     continue;
+                task_count++;
                 XrTask *t = xr_value_to_task(cv);
                 if (xr_task_is_done(t)) {
                     if (mode == 1)
@@ -1118,7 +1073,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
                     }
                 }
             }
-            if (mode == 1 && done_count == count) {
+            if (task_count == 0 || (mode == 1 && done_count == task_count)) {
                 base[a] = xr_null();
                 return XR_DISP_NEXT;
             }

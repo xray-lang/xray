@@ -426,6 +426,119 @@ XrCoroBlockResult xr_coro_await_task_slot(XrayIsolate *isolate, XrCoroutine *cor
     return result;
 }
 
+XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
+    if (!coro)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    if (!tasks)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    int count = xr_array_size(tasks);
+    bool all_done = true;
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        if (!xr_task_is_done(xr_value_to_task(cv))) {
+            all_done = false;
+            break;
+        }
+    }
+
+    if (all_done)
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+
+    coro->await_results = NULL;
+    atomic_store(&coro->wait_count, 1);
+
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+
+        atomic_fetch_add(&coro->wait_count, 1);
+        XrTask *task = xr_value_to_task(cv);
+        atomic_store_explicit((_Atomic int *) &task->waiter_index, j, memory_order_relaxed);
+        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
+        if (xr_task_is_done(task)) {
+            XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter,
+                                                           NULL, memory_order_acq_rel);
+            if (waiter == coro)
+                atomic_fetch_sub(&coro->wait_count, 1);
+        }
+    }
+
+    int remaining = atomic_fetch_sub(&coro->wait_count, 1) - 1;
+    if (remaining == 0)
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool success_only) {
+    if (!coro)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    if (!tasks)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    int count = xr_array_size(tasks);
+    int done_count = 0;
+    int task_count = 0;
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+
+        task_count++;
+        XrTask *task = xr_value_to_task(cv);
+        if (xr_task_is_done(task)) {
+            done_count++;
+            if (!success_only || XR_IS_NULL(task->error))
+                return block_result(XR_CORO_BLOCK_READY, task->result, true);
+        }
+    }
+
+    if (task_count == 0 || (success_only && done_count == task_count))
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
+
+    atomic_store(&coro->any_done, false);
+    atomic_store(&coro->wait_count, 1);
+
+    int waiter_index = success_only ? -4 : -3;
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+
+        atomic_fetch_add(&coro->wait_count, 1);
+        XrTask *task = xr_value_to_task(cv);
+        atomic_store_explicit((_Atomic int *) &task->waiter_index, waiter_index,
+                              memory_order_relaxed);
+        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
+        if (xr_task_is_done(task)) {
+            XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter,
+                                                           NULL, memory_order_acq_rel);
+            if (waiter == coro) {
+                if (!success_only || XR_IS_NULL(task->error)) {
+                    bool expected = false;
+                    if (atomic_compare_exchange_strong(&coro->any_done, &expected, true))
+                        coro->result = task->result;
+                }
+                atomic_fetch_sub(&coro->wait_count, 1);
+            }
+        }
+    }
+
+    int remaining = atomic_fetch_sub(&coro->wait_count, 1) - 1;
+    if (atomic_load(&coro->any_done))
+        return block_result(XR_CORO_BLOCK_READY, coro->result, true);
+    if (success_only && remaining == 0)
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
+
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
 XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
     if (milliseconds <= 0) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
