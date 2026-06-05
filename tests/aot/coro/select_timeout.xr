@@ -1,0 +1,12 @@
+fn wait_timeout() -> int {
+    select {
+        after 1 -> {
+            return 7
+        }
+    }
+    return 0
+}
+
+let task = go wait_timeout()
+let result = await task
+print(result)
