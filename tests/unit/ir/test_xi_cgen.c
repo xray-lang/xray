@@ -415,9 +415,15 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
         XiOp op;
         const char *name;
     } cases[] = {
+        {XI_GO, "GO"},
+        {XI_AWAIT, "AWAIT"},
+        {XI_CHAN_SEND, "CHAN_SEND"},
+        {XI_CHAN_RECV, "CHAN_RECV"},
+        {XI_CHAN_TRY_SEND, "CHAN_TRY_SEND"},
+        {XI_CHAN_TRY_RECV, "CHAN_TRY_RECV"},
+        {XI_CHAN_IS_CLOSED, "CHAN_IS_CLOSED"},
         {XI_SELECT_BLOCK, "SELECT_BLOCK"},
-        {XI_SCOPE_ENTER, "SCOPE_ENTER"},
-        {XI_SCOPE_EXIT, "SCOPE_EXIT"},
+        {XI_TIME_AFTER, "TIME_AFTER"},
         {XI_CORO_OP, "CORO_OP"},
     };
     XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 100, .frozen = true};
@@ -438,8 +444,14 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     assert(code != NULL);
 
     assert(had_error && "AOT cgen must reject unsupported coroutine Xi ops");
+    size_t abort_count = count_between(code, code + strlen(code),
+                                       "return (abort(), xr_aot_error(XR_NULL_VAL, false));");
+    assert(abort_count == sizeof(cases) / sizeof(cases[0]) &&
+           "each unsupported coroutine op must emit an abort expression");
     assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op") &&
            "unsupported coroutine ops must not emit silent null placeholders");
+    assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported AOT coroutine Xi op") &&
+           "unsupported AOT coroutine ops must not emit silent null placeholders");
     assert(!contains(code, "unsupported coroutine Xi op") &&
            "unsupported coroutine diagnostics should not be emitted into generated C");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));

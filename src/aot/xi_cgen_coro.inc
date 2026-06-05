@@ -966,6 +966,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: GO missing callee\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         const XiFunc *target = cg_resolve_go_target(ctx, f, v->args[0]);
@@ -974,6 +975,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (!target || (!target_is_coro && !target_is_sync_go)) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT go target\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         int priority = (((int) v->aux_int >> 8) & 0xff) - 1;
@@ -1010,6 +1012,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: AWAIT missing task\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         int sid = ++(*state_id);
@@ -1100,6 +1103,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             if (v->nargs < 2) {
                 ctx->error = true;
                 fprintf(stderr, "[xi_cgen] ERROR: AOT Coro.setPriority missing arguments\n");
+                emit_codegen_abort_aot_result(out);
                 return;
             }
             fprintf(out, "    (void)xr_aot_coro_set_priority(ctx, ");
@@ -1112,6 +1116,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n",
                 xi_op_name(v->op));
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
@@ -1208,6 +1213,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: TIME_AFTER missing timeout\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         fprintf(out, "    XrValue _timer_ch_%u = xr_aot_time_after(ctx, ", v->id);
@@ -1225,6 +1231,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs == 0) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: SELECT_BLOCK missing channels\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         int sid = ++(*state_id);
@@ -1281,6 +1288,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 2) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_SEND missing operands\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         const XiValue *send_arg = NULL;
@@ -1303,6 +1311,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_RECV missing channel\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv_value(ctx, ", v->id);
@@ -1320,6 +1329,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: CHAN_IS_CLOSED missing channel\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         fprintf(out, "    XrValue _chan_closed_%u = xr_aot_chan_is_closed(ctx, ", v->id);
@@ -1337,6 +1347,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: TUPLE_GET missing tuple\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         fprintf(out, "    XrValue _tuple_get_%u = xr_aot_tuple_get(ctx, ", v->id);
@@ -1357,6 +1368,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task field '%s'\n",
                     field ? field : "?");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         fprintf(out, "    XrValue _task_field_%u = %s(ctx, ", v->id, helper);
@@ -1393,6 +1405,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",
                 v->aux ? (const char *) v->aux : "?");
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
@@ -1462,6 +1475,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 2) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: channel send missing operands\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         const XiValue *channel = v->args[0];
@@ -1503,6 +1517,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (v->nargs < 1) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: channel recv missing channel\n");
+            emit_codegen_abort_aot_result(out);
             return;
         }
         int sid = ++(*state_id);
@@ -1583,6 +1598,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Channel method '%s'\n",
                 v->aux ? (const char *) v->aux : "?");
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
@@ -1605,18 +1621,21 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         v->op == XI_CORO_OP) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
     if (v->op == XI_TRY || v->op == XI_END_TRY) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: exceptions inside AOT coroutine are unsupported\n");
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: inlined struct inside AOT coroutine is unsupported\n");
+        emit_codegen_abort_aot_result(out);
         return;
     }
 
