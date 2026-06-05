@@ -333,7 +333,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
                 }                                                                                  \
                 /* Save pc before grow */                                                          \
                 savepc();                                                                          \
-                /* vm_ctx IS &coro->vm_ctx, grow modifies it in place */                           \
+                /* vm_ctx IS xr_coro_vm_ctx(coro), grow modifies it in place */                    \
                 XrValue *_old_stack = vm_ctx->stack;                                               \
                 int _old_cap = vm_ctx->stack_capacity;                                             \
                 bool _grow_ok;                                                                     \

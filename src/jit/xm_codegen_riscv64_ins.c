@@ -1301,7 +1301,7 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 
     uint32_t smap_id = rv64_record_safepoint(ctx);
 
-    /* t6 = coro->jit_suspend */
+    /* t6 = coro->jit_state.suspend */
     rv64_buf_emit(&ctx->buf,
                   rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
     RV64_CODEGEN_CHECK(ctx, suspend_id < XM_MAX_SUSPEND_ENTRIES, "suspend_id out of range");

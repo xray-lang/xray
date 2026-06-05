@@ -729,7 +729,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
  * Exit (JIT → interpreter):
  *   - Normal return: raw int64 payload reconstructed to XrValue via
  *     jit_value_from_tag() using compiled return_type.
- *   - Deopt return: XM_DEOPT_MARKER signals deopt; coro->jit_ctx->deopt_regs[]
+ *   - Deopt return: XM_DEOPT_MARKER signals deopt; coro->jit_state.scratch->deopt_regs[]
  *     holds saved register state. Recovery via xm_jit_deopt_recover():
  *     each slot rebuilt using deopt_reconstruct(raw, xm_type, xr_tag).
  *     When xr_tag is known (0-15), it is used directly for precise
@@ -774,23 +774,23 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
         return XM_JIT_DEOPT;
 
     // Lazy-allocate jit_suspend on first JIT entry (saves 320B per non-JIT coro)
-    if (!coro->jit_suspend) {
-        coro->jit_suspend = xr_calloc(1, sizeof(XrJitSuspendState));
-        if (!coro->jit_suspend)
+    if (!coro->jit_state.suspend) {
+        coro->jit_state.suspend = xr_calloc(1, sizeof(XrJitSuspendState));
+        if (!coro->jit_state.suspend)
             return XM_JIT_DEOPT;
     }
 
     // Reset frame stack: must be empty when entering JIT from interpreter.
     // Prevents stale frame pointers from previous deopt or aborted JIT calls.
-    coro->jit_ctx->jit_frame_depth = 0;
+    coro->jit_state.scratch->jit_frame_depth = 0;
     // Set stack map for GC scanning (proto->stack_map populated by codegen)
     {
-        XrProto *p = (XrProto *) coro->jit_ctx->call_proto;
-        coro->jit_ctx->active_stack_map = p ? p->stack_map : NULL;
+        XrProto *p = (XrProto *) coro->jit_state.scratch->call_proto;
+        coro->jit_state.scratch->active_stack_map = p ? p->stack_map : NULL;
     }
-    coro->jit_ctx->active_safepoint_id = UINT32_MAX;
-    coro->jit_ctx->invoke_deopt_id = UINT32_MAX;  // Safe default: no invoke recovery
-    coro->jit_ctx->yield_frame_pushed = false;    // clear stale yield state
+    coro->jit_state.scratch->active_safepoint_id = UINT32_MAX;
+    coro->jit_state.scratch->invoke_deopt_id = UINT32_MAX;  // Safe default: no invoke recovery
+    coro->jit_state.scratch->yield_frame_pushed = false;    // clear stale yield state
     // Derive return slot type from return_type_info for reconstruction
     uint8_t return_type = return_type_info ? xr_type_to_slot_type(return_type_info) : XR_SLOT_ANY;
 
@@ -800,7 +800,7 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
     // speculated type (I64/F64) instead of ANY for strict matching.
     uint8_t speculated[8];
     {
-        XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
+        XrProto *proto = (XrProto *) coro->jit_state.scratch->call_proto;
         for (int i = 0; i < 8; i++)
             speculated[i] = XR_SLOT_ANY;
         if (proto) {
@@ -829,7 +829,7 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
                 }
                 speculated[i] = gc;
                 if (!jit_tag_matches_slot(args[i].tag, gc)) {
-                    coro->jit_ctx->deopt_id = UINT32_MAX;
+                    coro->jit_state.scratch->deopt_id = UINT32_MAX;
                     return XM_JIT_DEOPT;  // type mismatch
                 }
             }
@@ -839,14 +839,14 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
     // Store param tags for nullable primitive null-check in JIT codegen.
     // Allows JIT to distinguish int(0) (tag=I64) from null (tag=NULL).
     for (int i = 0; i < nargs && i < 8; i++)
-        coro->jit_ctx->param_tags[i] = (int64_t) args[i].tag;
+        coro->jit_state.scratch->param_tags[i] = (int64_t) args[i].tag;
     // Missing params (default parameters) must have tag=NULL so
     // EQ(param, null) null-checks work correctly in JIT code.
     {
-        XrProto *p = (XrProto *) coro->jit_ctx->call_proto;
+        XrProto *p = (XrProto *) coro->jit_state.scratch->call_proto;
         int nparams = p ? p->numparams : 0;
         for (int i = nargs; i < nparams && i < 8; i++)
-            coro->jit_ctx->param_tags[i] = 0;  // XR_TAG_NULL
+            coro->jit_state.scratch->param_tags[i] = 0;  // XR_TAG_NULL
     }
 
     // Build raw args array: extract payload from XrValue
@@ -884,20 +884,20 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
     // Without this, GC between JIT calls would scan stale frame memory
     // using the still-valid active_safepoint_id + jit_frame_sp.
     // Safe here because SUSPEND case returned above (no jit_ctx access).
-    coro->jit_ctx->active_safepoint_id = UINT32_MAX;
-    coro->jit_ctx->jit_frame_sp = NULL;
+    coro->jit_state.scratch->active_safepoint_id = UINT32_MAX;
+    coro->jit_state.scratch->jit_frame_sp = NULL;
 
     if (ret == XM_DEOPT_MARKER) {
-        // Deopt triggered: registers saved in coro->jit_ctx->deopt_regs[] by stub.
+        // Deopt triggered: registers saved in coro->jit_state.scratch->deopt_regs[] by stub.
         // If JIT helper set an exception (e.g. division by zero), propagate
         // to VM exception system so try-catch can handle it properly.
-        if (coro->jit_ctx->exception) {
+        if (coro->jit_state.scratch->exception) {
             XrValue exc;
             exc.descriptor = 0;
             exc.tag = XR_TAG_PTR;
-            exc.ptr = coro->jit_ctx->exception;
+            exc.ptr = coro->jit_state.scratch->exception;
             exc.heap_type = (uint16_t) ((XrGCHeader *) exc.ptr)->type;
-            coro->jit_ctx->exception = NULL;
+            coro->jit_state.scratch->exception = NULL;
             xr_vm_unwind_with_trace(coro->isolate, exc);
         }
         // Record deopt for statistics
@@ -906,10 +906,10 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
 
         // Log deopt with generated disasm context (debug builds only)
         {
-            XrProto *dp = (XrProto *) coro->jit_ctx->call_proto;
-            uint32_t did = coro->jit_ctx->deopt_id;
+            XrProto *dp = (XrProto *) coro->jit_state.scratch->call_proto;
+            uint32_t did = coro->jit_state.scratch->deopt_id;
             if (did == UINT32_MAX)
-                did = coro->jit_ctx->invoke_deopt_id;
+                did = coro->jit_state.scratch->invoke_deopt_id;
             uint32_t bpc = UINT32_MAX;
             if (dp && dp->deopt_table && did < dp->ndeopt)
                 bpc = ((XmRtDeoptEntry *) dp->deopt_table)[did].bc_pc;
@@ -927,7 +927,7 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
     // Extract tag: Win64 reads from jit_ctx (stored by JIT epilogue);
     // System V reads from XrJitResult.tag (returned in RDX register).
 #ifdef _WIN32
-    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+    uint8_t tag = (uint8_t) coro->jit_state.scratch->call_result_tag;
 #else
     uint8_t tag = (uint8_t) jr.tag;
 #endif
@@ -967,26 +967,26 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
 /* ========== JIT Resume After Suspend ========== */
 
 int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
-    void *resume_entry = coro->jit_resume_entry;
+    void *resume_entry = coro->jit_state.resume_entry;
     if (!resume_entry || !result)
         return XM_JIT_DEOPT;
     // jit_suspend must exist if we were suspended (allocated in xm_jit_call)
-    XR_DCHECK(coro->jit_suspend != NULL, "xm_jit_resume: NULL jit_suspend");
+    XR_DCHECK(coro->jit_state.suspend != NULL, "xm_jit_resume: NULL jit_suspend");
 
     // Restore JIT scratch context from the proto that was suspended
-    XrProto *proto = (XrProto *) coro->jit_resume_proto;
+    XrProto *proto = (XrProto *) coro->jit_state.resume_proto;
     if (!proto)
         return XM_JIT_DEOPT;
 
-    coro->jit_ctx->call_proto = proto;
-    coro->jit_ctx->jit_frame_depth = 0;
-    coro->jit_ctx->active_stack_map = proto->stack_map;
-    coro->jit_ctx->active_safepoint_id = UINT32_MAX;
-    coro->jit_ctx->invoke_deopt_id = UINT32_MAX;
-    coro->jit_ctx->yield_frame_pushed = false;
+    coro->jit_state.scratch->call_proto = proto;
+    coro->jit_state.scratch->jit_frame_depth = 0;
+    coro->jit_state.scratch->active_stack_map = proto->stack_map;
+    coro->jit_state.scratch->active_safepoint_id = UINT32_MAX;
+    coro->jit_state.scratch->invoke_deopt_id = UINT32_MAX;
+    coro->jit_state.scratch->yield_frame_pushed = false;
 
     // The await result has already been written into
-    // coro->jit_suspend.result by the waker (xr_jit_await_block
+    // coro->jit_state.suspend.result by the waker (xr_jit_await_block
     // inline-resume path or worker resume path).
 
     // Call the resume entry stub: same calling convention as XmJitFn
@@ -1008,28 +1008,28 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
     }
 
     // Safe to access jit_ctx: DEOPT/OK paths mean coro is still ours.
-    coro->jit_ctx->active_safepoint_id = UINT32_MAX;
-    coro->jit_ctx->jit_frame_sp = NULL;
+    coro->jit_state.scratch->active_safepoint_id = UINT32_MAX;
+    coro->jit_state.scratch->jit_frame_sp = NULL;
 
     // Clear resume state (one-shot)
-    coro->jit_resume_entry = NULL;
-    coro->jit_resume_proto = NULL;
+    coro->jit_state.resume_entry = NULL;
+    coro->jit_state.resume_proto = NULL;
 
     if (ret == XM_DEOPT_MARKER) {
-        if (coro->jit_ctx->exception) {
+        if (coro->jit_state.scratch->exception) {
             XrValue exc;
             exc.descriptor = 0;
             exc.tag = XR_TAG_PTR;
-            exc.ptr = coro->jit_ctx->exception;
+            exc.ptr = coro->jit_state.scratch->exception;
             exc.heap_type = (uint16_t) ((XrGCHeader *) exc.ptr)->type;
-            coro->jit_ctx->exception = NULL;
+            coro->jit_state.scratch->exception = NULL;
             xr_vm_unwind_with_trace(coro->isolate, exc);
         }
         // Log resume-path deopt with generated disasm context
         {
-            uint32_t did = coro->jit_ctx->deopt_id;
+            uint32_t did = coro->jit_state.scratch->deopt_id;
             if (did == UINT32_MAX)
-                did = coro->jit_ctx->invoke_deopt_id;
+                did = coro->jit_state.scratch->invoke_deopt_id;
             uint32_t bpc = UINT32_MAX;
             if (proto && proto->deopt_table && did < proto->ndeopt)
                 bpc = ((XmRtDeoptEntry *) proto->deopt_table)[did].bc_pc;
@@ -1044,7 +1044,7 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
 
     // Reconstruct return value (same logic as xm_jit_call)
 #ifdef _WIN32
-    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+    uint8_t tag = (uint8_t) coro->jit_state.scratch->call_result_tag;
 #else
     uint8_t tag = (uint8_t) jr.tag;
 #endif
@@ -1079,7 +1079,7 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
 // Called after xm_jit_call() succeeds when nresults > 1.
 // results[0] is already filled by xm_jit_call; this fills results[1..ret_count-1].
 void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
-    XrJitScratch *ctx = coro->jit_ctx;
+    XrJitScratch *ctx = coro->jit_state.scratch;
     int ret_count = ctx->ret_count;
     if (ret_count <= 1)
         return;
@@ -1121,15 +1121,15 @@ void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
 /* ========== Mid-Function Deopt Recovery ========== */
 
 int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
-    XrProto *proto = (XrProto *) coro->jit_ctx->call_proto;
+    XrProto *proto = (XrProto *) coro->jit_state.scratch->call_proto;
     if (!proto || !proto->deopt_table)
         return -1;
 
-    uint32_t did = coro->jit_ctx->deopt_id;
+    uint32_t did = coro->jit_state.scratch->deopt_id;
     // CALL_C invoke recovery: UINT32_MAX signals that the real deopt_id
     // is stored in invoke_deopt_id (avoids deopt_id=0 vs CBNZ conflict).
     if (did == UINT32_MAX) {
-        did = coro->jit_ctx->invoke_deopt_id;
+        did = coro->jit_state.scratch->invoke_deopt_id;
     }
     if (did >= proto->ndeopt)
         return -1;
@@ -1146,11 +1146,11 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
         switch (s->loc_kind) {
             case DEOPT_LOC_REG:
                 if (s->loc.phys_reg < 29)
-                    raw = coro->jit_ctx->deopt_regs[s->loc.phys_reg];
+                    raw = coro->jit_state.scratch->deopt_regs[s->loc.phys_reg];
                 break;
             case DEOPT_LOC_FP_REG:
                 if (s->loc.phys_reg < 16)
-                    raw = coro->jit_ctx->deopt_fp_regs[s->loc.phys_reg];
+                    raw = coro->jit_state.scratch->deopt_fp_regs[s->loc.phys_reg];
                 break;
             case DEOPT_LOC_SPILL: {
                 // Read from deopt_spill_save[] — spill data copied by deopt stub
@@ -1158,7 +1158,7 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
                 int16_t slot = (int16_t) (s->loc.spill_offset / 8);
                 XR_DCHECK(slot >= 0 && slot < 32, "spill slot out of range");
                 if (slot >= 0 && slot < 32)
-                    raw = coro->jit_ctx->deopt_spill_save[slot];
+                    raw = coro->jit_state.scratch->deopt_spill_save[slot];
                 break;
             }
             case DEOPT_LOC_CONST_I64:
@@ -1177,7 +1177,7 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
         // Resolve xr_tag: prefer compile-time tag, fallback to vreg runtime tag
         uint8_t tag = s->xr_tag;
         if (tag == XR_RTAG_UNKNOWN && s->vreg_idx < XR_JIT_MAX_VREG_TAGS) {
-            uint8_t rt = coro->jit_ctx->vreg_runtime_tags[s->vreg_idx];
+            uint8_t rt = coro->jit_state.scratch->vreg_runtime_tags[s->vreg_idx];
             if (rt != 0 && rt != XR_RTAG_UNKNOWN)
                 tag = rt;
         }
@@ -1190,6 +1190,6 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
 /* ========== JIT→JIT Self-Call (CALLSELF) ========== */
 
 // Called from JIT code via CALL_C to perform recursive self-call.
-// Args are pre-stored in coro->jit_ctx->call_args by JIT code.
-// Proto pointer is in coro->jit_ctx->call_proto (set by JIT prologue-equivalent).
+// Args are pre-stored in coro->jit_state.scratch->call_args by JIT code.
+// Proto pointer is in coro->jit_state.scratch->call_proto (set by JIT prologue-equivalent).
 // extra_arg is unused (0).

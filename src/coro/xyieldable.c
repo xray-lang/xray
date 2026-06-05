@@ -56,9 +56,9 @@ static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro
     int frame_count;
 
     // Priority 1: coro's own vm_ctx (single source of truth for cfunc coros)
-    if (coro->vm_ctx.frame_count > 0 && coro->vm_ctx.frames) {
-        frames = coro->vm_ctx.frames;
-        frame_count = coro->vm_ctx.frame_count;
+    if (xr_coro_vm_ctx(coro)->frame_count > 0 && xr_coro_vm_ctx(coro)->frames) {
+        frames = xr_coro_vm_ctx(coro)->frames;
+        frame_count = xr_coro_vm_ctx(coro)->frame_count;
     }
     // Priority 2: isolate vm_ctx (for yieldable C funcs called from VM)
     else if (X && X->vm_ctx.frame_count > 0 && X->vm_ctx.frames) {
@@ -252,10 +252,10 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
 
 // xr_coro_has_continuation - Check if coroutine has pending continuation
 bool xr_coro_has_continuation(XrCoroutine *coro) {
-    if (!coro || coro->vm_ctx.frame_count == 0) {
+    if (!coro || xr_coro_vm_ctx(coro)->frame_count == 0) {
         return false;
     }
-    XrBcCallFrame *frame = &coro->vm_ctx.frames[coro->vm_ctx.frame_count - 1];
+    XrBcCallFrame *frame = &xr_coro_vm_ctx(coro)->frames[xr_coro_vm_ctx(coro)->frame_count - 1];
     return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
 }
 
@@ -282,7 +282,7 @@ XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
     if (!coro)
         return XR_CFUNC_ERROR;
 
-    XrVMContext *ctx = &coro->vm_ctx;
+    XrVMContext *ctx = xr_coro_vm_ctx(coro);
     XrProto *proto = closure->proto;
 
     XR_DCHECK(ctx->frame_count > 0, "yield_call_closure: no active frame");

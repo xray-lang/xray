@@ -598,7 +598,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
         x64_maybe_spill(ctx, blk->ins[i].dst);
 
         /* Exception check after call-sites.  xr_jit_throw sets
-         * coro->jit_ctx->exception to the pending exception; the callee
+         * coro->jit_state.scratch->exception to the pending exception; the callee
          * returns normally and the caller decides what to do.  Without
          * this check, throws from nested JIT-compiled callees silently
          * propagate as if no error occurred — the catch handler is never

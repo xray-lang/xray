@@ -134,8 +134,8 @@ static void sysmon_check(XrRuntime *runtime) {
                     // Diagnostic: read from vm_ctx (active during execution)
                     const char *func_name = "?";
                     int in_c = 0;
-                    int fc = coro->vm_ctx.frame_count;
-                    XrBcCallFrame *frames = coro->vm_ctx.frames;
+                    int fc = xr_coro_vm_ctx(coro)->frame_count;
+                    XrBcCallFrame *frames = xr_coro_vm_ctx(coro)->frames;
                     if (fc > 0 && frames) {
                         XrBcCallFrame *f = &frames[fc - 1];
                         in_c = (f->call_status & XR_CALL_C) ? 1 : 0;

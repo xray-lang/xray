@@ -620,9 +620,10 @@ static void handle_scopes(XdapController *ctrl, int seq, XrJsonValue *args) {
     XrBcCallFrame *frame = NULL;
     int actual_idx = -1;
     if (ctrl->stopped_coro) {
-        actual_idx = ctrl->stopped_coro->vm_ctx.frame_count - 1 - frame_id;
-        if (actual_idx >= 0 && actual_idx < ctrl->stopped_coro->vm_ctx.frame_count) {
-            frame = &ctrl->stopped_coro->vm_ctx.frames[actual_idx];
+        XrVMContext *ctx = xr_coro_vm_ctx(ctrl->stopped_coro);
+        actual_idx = ctx->frame_count - 1 - frame_id;
+        if (actual_idx >= 0 && actual_idx < ctx->frame_count) {
+            frame = &ctx->frames[actual_idx];
         }
     }
 

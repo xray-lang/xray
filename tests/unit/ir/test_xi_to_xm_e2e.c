@@ -56,7 +56,7 @@ static void env_init(void) {
     }
     memset(&g_jit_coro, 0, sizeof(g_jit_coro));
     memset(&g_jit_ctx, 0, sizeof(g_jit_ctx));
-    g_jit_coro.jit_ctx = &g_jit_ctx;
+    g_jit_coro.jit_state.scratch = &g_jit_ctx;
     g_jit_ctx.safepoint_page = g_safepoint_page;
 }
 

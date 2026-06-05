@@ -1360,7 +1360,7 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     uint32_t smap_id = x64_record_safepoint(ctx);
 
-    /* Load suspend_state pointer: R11 = coro->jit_suspend */
+    /* Load suspend_state pointer: R11 = coro->jit_state.suspend */
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
     CODEGEN_CHECK(ctx, suspend_id < XM_MAX_SUSPEND_ENTRIES, "suspend_id out of range");
 

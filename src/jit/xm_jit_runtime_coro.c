@@ -91,7 +91,7 @@ XrJitResult xr_jit_chan_new(XrCoroutine *coro, int64_t extra_arg) {
 // Returns 0.
 XrJitResult xr_jit_chan_close(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
         return XR_JIT_OK();
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -104,7 +104,7 @@ XrJitResult xr_jit_chan_close(XrCoroutine *coro, int64_t extra_arg) {
 // Returns 1 if closed, 0 otherwise.
 XrJitResult xr_jit_chan_is_closed(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
         return XR_JIT_BOOL(1);
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -118,13 +118,13 @@ XrJitResult xr_jit_chan_is_closed(XrCoroutine *coro, int64_t extra_arg) {
 // Canonical logic in xr_chan_try_send (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
         return XR_JIT_BOOL(0);
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    XrValue send_v =
-        jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue send_v = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                        coro->jit_state.scratch->call_arg_tags[1]);
 
     bool success = xr_chan_try_send(coro->isolate, ch, send_v);
     return XR_JIT_BOOL(success ? 1 : 0);
@@ -136,19 +136,19 @@ XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
 // Canonical logic in xr_chan_try_recv (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_ctx->call_args[1] = 0;  // ok = false
+        coro->jit_state.scratch->call_args[1] = 0;  // ok = false
         return XR_JIT_NULL();
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
     XrValue recv_val;
     if (xr_chan_try_recv(coro->isolate, ch, &recv_val, coro)) {
-        coro->jit_ctx->call_args[1] = 1;  // ok = true
+        coro->jit_state.scratch->call_args[1] = 1;  // ok = true
         return XR_JIT_VAL(recv_val);
     }
-    coro->jit_ctx->call_args[1] = 0;  // ok = false
+    coro->jit_state.scratch->call_args[1] = 0;  // ok = false
     return XR_JIT_NULL();
 }
 
@@ -160,7 +160,7 @@ XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
 // Returns XR_JIT_NULL on success, DEOPT_MARKER if needs blocking.
 XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
@@ -169,8 +169,8 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
 
-    XrValue send_v =
-        jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue send_v = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                        coro->jit_state.scratch->call_arg_tags[1]);
 
     // Deep copy mutable values for buffer safety
     if (XR_IS_PTR(send_v) && xr_value_needs_copy(send_v)) {
@@ -179,8 +179,8 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // Store prepared value for block helper
-    coro->jit_ctx->call_args[1] = send_v.i;
-    coro->jit_ctx->call_args[2] = (int64_t) send_v.tag;
+    coro->jit_state.scratch->call_args[1] = send_v.i;
+    coro->jit_state.scratch->call_args[2] = (int64_t) send_v.tag;
 
     bool ok = xr_channel_try_send(ch, send_v);
     if (ok) {
@@ -197,21 +197,21 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
 // Returns 0 if blocked, 1 if send succeeded during retry.
 XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_suspend->result = xr_null().i;
-        coro->jit_suspend->result_tag = XR_TAG_NULL;
+        coro->jit_state.suspend->result = xr_null().i;
+        coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};  // not blocked, handle error inline
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
-    uint8_t val_tag = (uint8_t) (coro->jit_ctx->call_args[2] & 0xFF);
-    XrValue send_v = jit_value_from_tag(coro->jit_ctx->call_args[1], val_tag);
+    uint8_t val_tag = (uint8_t) (coro->jit_state.scratch->call_args[2] & 0xFF);
+    XrValue send_v = jit_value_from_tag(coro->jit_state.scratch->call_args[1], val_tag);
 
     coro->send_value = send_v;
     XrChanResult cr = xr_channel_send(ch, send_v, coro);
     if (cr == XR_CHAN_OK) {
-        coro->jit_suspend->result = xr_null().i;
-        coro->jit_suspend->result_tag = XR_TAG_NULL;
+        coro->jit_state.suspend->result = xr_null().i;
+        coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr == XR_CHAN_BLOCK) {
@@ -221,8 +221,8 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {0, 0};  // blocked
     }
     // Closed or error: store null result, continue inline
-    coro->jit_suspend->result = xr_null().i;
-    coro->jit_suspend->result_tag = XR_TAG_NULL;
+    coro->jit_state.suspend->result = xr_null().i;
+    coro->jit_state.suspend->result_tag = XR_TAG_NULL;
     return XR_JIT_OK();
 }
 
@@ -232,9 +232,9 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
 // Stores ok flag in jit_call_args[1].
 XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_ctx->call_args[1] = 0;
+        coro->jit_state.scratch->call_args[1] = 0;
         return XR_JIT_NULL();
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -246,12 +246,12 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
         if (XR_IS_PTR(value) && xr_value_needs_copy(value)) {
             value = xr_deep_copy_to_coro(coro->isolate, value, coro);
         }
-        coro->jit_ctx->call_args[1] = 1;
+        coro->jit_state.scratch->call_args[1] = 1;
         return XR_JIT_RESULT(value);
     }
 
     if (xr_channel_is_closed(ch)) {
-        coro->jit_ctx->call_args[1] = 0;
+        coro->jit_state.scratch->call_args[1] = 0;
         return XR_JIT_NULL();
     }
 
@@ -264,10 +264,10 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
 // Returns 0 if blocked, 1 if recv succeeded during retry.
 XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue ch_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        coro->jit_suspend->result = xr_null().i;
-        coro->jit_suspend->result_tag = XR_TAG_NULL;
+        coro->jit_state.suspend->result = xr_null().i;
+        coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return XR_JIT_OK();
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
@@ -275,7 +275,7 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     // recv_slot must point to persistent memory — sender writes *recv_slot
     // after dequeuing this coro from recvq.  Use coro's bytecode stack[0]
     // which is always allocated and persistent (JIT doesn't use it).
-    coro->recv_slot = &coro->vm_ctx.stack[0];
+    coro->recv_slot = &xr_coro_vm_ctx(coro)->stack[0];
 
     XrValue out;
     XrChanResult cr = xr_channel_recv(ch, &out, coro);
@@ -284,13 +284,13 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
         if (XR_IS_PTR(out) && xr_value_needs_copy(out)) {
             out = xr_deep_copy_to_coro(coro->isolate, out, coro);
         }
-        coro->jit_suspend->result = out.i;
-        coro->jit_suspend->result_tag = out.tag;
+        coro->jit_state.suspend->result = out.i;
+        coro->jit_state.suspend->result_tag = out.tag;
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr == XR_CHAN_CLOSED) {
-        coro->jit_suspend->result = xr_null().i;
-        coro->jit_suspend->result_tag = XR_TAG_NULL;
+        coro->jit_state.suspend->result = xr_null().i;
+        coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};
     }
     if (cr == XR_CHAN_BLOCK) {
@@ -301,8 +301,8 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
         // Do NOT touch flags — coro may already be woken by another worker.
         return (XrJitResult) {0, 0};  // blocked
     }
-    coro->jit_suspend->result = xr_null().i;
-    coro->jit_suspend->result_tag = XR_TAG_NULL;
+    coro->jit_state.suspend->result = xr_null().i;
+    coro->jit_state.suspend->result_tag = XR_TAG_NULL;
     return XR_JIT_OK();
 }
 
@@ -318,7 +318,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     int method_idx = (int) ((extra_arg >> 8) & 0xFFFF);
     int nargs = (int) (extra_arg & 0xFF);
 
-    XrValue recv_val = jit_value_from_tag(coro->jit_ctx->call_args[0], recv_tag);
+    XrValue recv_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], recv_tag);
     if (!XR_IS_PTR(recv_val) || !recv_val.ptr)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     XrInstance *inst = xr_value_to_instance(recv_val);
@@ -342,11 +342,13 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
         XrValue prim_args[16];
         XrValue receiver = xr_value_from_instance(inst);
         for (int i = 0; i < nargs && i < 15; i++)
-            prim_args[i] = jit_value_from_tag(coro->jit_ctx->call_args[1 + i], XR_TAG_I64);
+            prim_args[i] =
+                jit_value_from_tag(coro->jit_state.scratch->call_args[1 + i], XR_TAG_I64);
         XrValue result = method->as.primitive(isolate, receiver, prim_args, nargs);
-        if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-            coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-            coro->vm_ctx.current_exception = XR_NULL_VAL;
+        if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
+            coro->jit_state.scratch->exception =
+                (void *) xr_coro_vm_ctx(coro)->current_exception.ptr;
+            xr_coro_vm_ctx(coro)->current_exception = XR_NULL_VAL;
             return XR_JIT_NULL();
         }
         return XR_JIT_RESULT(result);
@@ -364,7 +366,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     XrValue args[16];
     args[0] = xr_value_from_instance(inst);
     for (int i = 0; i < nargs && i < 15; i++) {
-        int64_t raw = coro->jit_ctx->call_args[1 + i];
+        int64_t raw = coro->jit_state.scratch->call_args[1 + i];
         uint8_t tag = XR_TAG_I64;
         if (proto->param_types && (i + 1) < proto->param_types_count && proto->param_types[i + 1])
             tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i + 1]));
@@ -380,9 +382,9 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     XrValue result = xr_vm_call_closure(isolate, closure, args, nargs + 1);
     xr_isolate_set_suppress_exception_print(isolate, saved_suppress);
 
-    if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-        coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-        coro->vm_ctx.current_exception = XR_NULL_VAL;
+    if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
+        coro->jit_state.scratch->exception = (void *) xr_coro_vm_ctx(coro)->current_exception.ptr;
+        xr_coro_vm_ctx(coro)->current_exception = XR_NULL_VAL;
         return XR_JIT_NULL();
     }
 
@@ -406,7 +408,7 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
 // Tries JIT path first, falls back to VM interpreter.
 XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     int nargs = (int) (nargs_encoded & 0xFF);
-    int64_t raw_closure = coro->jit_ctx->call_args[0];
+    int64_t raw_closure = coro->jit_state.scratch->call_args[0];
     // Detect poison values from uninitialized JIT registers (OSR edge case)
     if (raw_closure == 0 || ((uint64_t) raw_closure >> 48) != 0)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
@@ -436,8 +438,8 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         XrValue inst_val = xr_value_from_instance(instance);
         XrValue args[16];
         for (int i = 0; i < nargs && i < 15; i++) {
-            int64_t raw = coro->jit_ctx->call_args[1 + i];
-            uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
+            int64_t raw = coro->jit_state.scratch->call_args[1 + i];
+            uint8_t tag = coro->jit_state.scratch->call_arg_tags[1 + i];
             if (tag == XR_RTAG_UNKNOWN)
                 tag = XR_TAG_I64;
             args[i] = jit_value_from_tag(raw, tag);
@@ -453,17 +455,19 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
             xr_isolate_set_suppress_exception_print(isolate, true);
             xr_vm_call_closure(isolate, ctor->as.closure, ctor_args, nargs + 1);
             xr_isolate_set_suppress_exception_print(isolate, saved_suppress);
-            if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-                coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-                coro->vm_ctx.current_exception = XR_NULL_VAL;
+            if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
+                coro->jit_state.scratch->exception =
+                    (void *) xr_coro_vm_ctx(coro)->current_exception.ptr;
+                xr_coro_vm_ctx(coro)->current_exception = XR_NULL_VAL;
                 return XR_JIT_NULL();
             }
         } else if (ctor && ctor->type == XMETHOD_PRIMITIVE) {
             // Native constructor: box args and call C function
             ctor->as.primitive(isolate, inst_val, args, nargs);
-            if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-                coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-                coro->vm_ctx.current_exception = XR_NULL_VAL;
+            if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
+                coro->jit_state.scratch->exception =
+                    (void *) xr_coro_vm_ctx(coro)->current_exception.ptr;
+                xr_coro_vm_ctx(coro)->current_exception = XR_NULL_VAL;
                 return XR_JIT_NULL();
             }
         }
@@ -516,30 +520,30 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
 
     // JIT fast path: callee compiled (either pre-compiled or just-now compiled)
     if (direct_jit_ok && proto->jit_entry) {
-        void *saved_proto = coro->jit_ctx->call_proto;
-        void *saved_closure = coro->jit_ctx->call_closure;
-        void *saved_stack_map = coro->jit_ctx->active_stack_map;
-        uint32_t saved_safepoint_id = coro->jit_ctx->active_safepoint_id;
-        void *saved_frame_sp = coro->jit_ctx->jit_frame_sp;
-        void *saved_safepoint_saved_sp = coro->jit_ctx->safepoint_saved_sp;
-        uint32_t saved_frame_depth = coro->jit_ctx->jit_frame_depth;
+        void *saved_proto = coro->jit_state.scratch->call_proto;
+        void *saved_closure = coro->jit_state.scratch->call_closure;
+        void *saved_stack_map = coro->jit_state.scratch->active_stack_map;
+        uint32_t saved_safepoint_id = coro->jit_state.scratch->active_safepoint_id;
+        void *saved_frame_sp = coro->jit_state.scratch->jit_frame_sp;
+        void *saved_safepoint_saved_sp = coro->jit_state.scratch->safepoint_saved_sp;
+        uint32_t saved_frame_depth = coro->jit_state.scratch->jit_frame_depth;
         bool pushed_frame = false;
         if (saved_frame_sp) {
             bool already_pushed =
                 saved_frame_depth > 0 &&
-                coro->jit_ctx->jit_frame_stack[saved_frame_depth - 1] == saved_frame_sp;
+                coro->jit_state.scratch->jit_frame_stack[saved_frame_depth - 1] == saved_frame_sp;
             if (!already_pushed) {
                 if (saved_frame_depth >= XR_JIT_MAX_FRAME_DEPTH)
                     return (XrJitResult) {XM_DEOPT_MARKER, 0};
-                coro->jit_ctx->jit_frame_stack[saved_frame_depth] = saved_frame_sp;
-                coro->jit_ctx->jit_frame_depth = saved_frame_depth + 1;
+                coro->jit_state.scratch->jit_frame_stack[saved_frame_depth] = saved_frame_sp;
+                coro->jit_state.scratch->jit_frame_depth = saved_frame_depth + 1;
                 pushed_frame = true;
             }
         }
-        coro->jit_ctx->call_proto = proto;
-        coro->jit_ctx->call_closure = closure;
-        coro->jit_ctx->active_stack_map = proto->stack_map;
-        coro->jit_ctx->active_safepoint_id = UINT32_MAX;
+        coro->jit_state.scratch->call_proto = proto;
+        coro->jit_state.scratch->call_closure = closure;
+        coro->jit_state.scratch->active_stack_map = proto->stack_map;
+        coro->jit_state.scratch->active_safepoint_id = UINT32_MAX;
         // Set param_tags for callee's dynamic op tag lookups.
         // Derive tags from callee's param_types (the STORE_CORO builder path
         // does NOT populate call_arg_tags, so we use declared types).
@@ -548,34 +552,34 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
             uint8_t tag = XR_TAG_I64;
             if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
                 tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));
-            coro->jit_ctx->param_tags[i] = (int64_t) tag;
+            coro->jit_state.scratch->param_tags[i] = (int64_t) tag;
         }
 #ifdef _WIN32
         int64_t payload =
-            ((XmJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_ctx->call_args[1]);
-        XrJitResult ret = {payload, (uint64_t) coro->jit_ctx->call_result_tag};
+            ((XmJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_state.scratch->call_args[1]);
+        XrJitResult ret = {payload, (uint64_t) coro->jit_state.scratch->call_result_tag};
 #else
         XrJitResult ret =
-            ((XmJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_ctx->call_args[1]);
+            ((XmJitFn) proto->jit_entry)((intptr_t) coro, &coro->jit_state.scratch->call_args[1]);
 #endif
-        coro->jit_ctx->call_proto = saved_proto;
-        coro->jit_ctx->call_closure = saved_closure;
-        coro->jit_ctx->active_stack_map = saved_stack_map;
-        coro->jit_ctx->active_safepoint_id = saved_safepoint_id;
-        coro->jit_ctx->jit_frame_sp = saved_frame_sp;
-        coro->jit_ctx->safepoint_saved_sp = saved_safepoint_saved_sp;
+        coro->jit_state.scratch->call_proto = saved_proto;
+        coro->jit_state.scratch->call_closure = saved_closure;
+        coro->jit_state.scratch->active_stack_map = saved_stack_map;
+        coro->jit_state.scratch->active_safepoint_id = saved_safepoint_id;
+        coro->jit_state.scratch->jit_frame_sp = saved_frame_sp;
+        coro->jit_state.scratch->safepoint_saved_sp = saved_safepoint_saved_sp;
         if (pushed_frame) {
-            coro->jit_ctx->jit_frame_stack[saved_frame_depth] = NULL;
-            coro->jit_ctx->jit_frame_depth = saved_frame_depth;
+            coro->jit_state.scratch->jit_frame_stack[saved_frame_depth] = NULL;
+            coro->jit_state.scratch->jit_frame_depth = saved_frame_depth;
         }
         if (ret.payload != XM_DEOPT_MARKER)
             return ret;
         // Callee deoptimized — clear stale deopt_id so the outer JIT
         // caller's post-CALL_C CBNZ check doesn't see it and mistakenly
         // deopt the outer function with the callee's deopt_id.
-        coro->jit_ctx->deopt_id = 0;
+        coro->jit_state.scratch->deopt_id = 0;
         // Check if callee threw (jit_exception set by xr_jit_throw)
-        if (coro->jit_ctx->exception)
+        if (coro->jit_state.scratch->exception)
             return XR_JIT_NULL();
     }
 
@@ -586,12 +590,12 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
 
     XrValue args[16];
     for (int i = 0; i < nargs && i < 15; i++) {
-        int64_t raw = coro->jit_ctx->call_args[1 + i];
+        int64_t raw = coro->jit_state.scratch->call_args[1 + i];
         /* call_arg_tags[1+i] is set by emit_call_args_from_pool from the
          * caller's compile-time/runtime knowledge — use it first.  Only
          * fall back to proto->param_types when it is UNKNOWN, which is
          * what unions / dynamic args land as. */
-        uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
+        uint8_t tag = coro->jit_state.scratch->call_arg_tags[1 + i];
         if (tag == XR_RTAG_UNKNOWN || tag == 0) {
             tag = XR_TAG_I64;
             if (proto->param_types && i < proto->param_types_count && proto->param_types[i])
@@ -609,9 +613,9 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
     xr_isolate_set_suppress_exception_print(isolate, saved_suppress);
 
     // Check if callee threw an exception (propagate to JIT catch handler)
-    if (!XR_IS_NULL(coro->vm_ctx.current_exception)) {
-        coro->jit_ctx->exception = (void *) coro->vm_ctx.current_exception.ptr;
-        coro->vm_ctx.current_exception = XR_NULL_VAL;
+    if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
+        coro->jit_state.scratch->exception = (void *) xr_coro_vm_ctx(coro)->current_exception.ptr;
+        xr_coro_vm_ctx(coro)->current_exception = XR_NULL_VAL;
         return XR_JIT_NULL();
     }
 
@@ -640,7 +644,7 @@ bool xm_jit_osr_enter(void *osr_entry, XrCoroutine *coro, int64_t *values, uint8
     int64_t payload = ((XmJitFn) osr_entry)((intptr_t) coro, values);
     if (payload == XM_DEOPT_MARKER)
         return false;
-    uint8_t tag = (uint8_t) coro->jit_ctx->call_result_tag;
+    uint8_t tag = (uint8_t) coro->jit_state.scratch->call_result_tag;
 #else
     XrJitResult jr = ((XmJitFn) osr_entry)((intptr_t) coro, values);
     if (jr.payload == XM_DEOPT_MARKER)
@@ -752,7 +756,7 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
 
     // Step 5: set closure pointer for upvalue access
     // The closure is in the current call frame
-    coro->jit_ctx->call_proto = proto;
+    coro->jit_state.scratch->call_proto = proto;
 
     // Step 6: enter JIT at loop header
     int saved_id = coro->id;  // save before JIT call (coro may be resumed by another worker)
@@ -770,9 +774,9 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
         // continues from the deopt point, not from the OSR entry.
         int32_t deopt_pc = xm_jit_deopt_recover(coro, base, maxstack);
         if (deopt_pc >= 0) {
-            coro->jit_ctx->osr_deopt_pc = deopt_pc;
+            coro->jit_state.scratch->osr_deopt_pc = deopt_pc;
         } else {
-            coro->jit_ctx->osr_deopt_pc = -1;
+            coro->jit_state.scratch->osr_deopt_pc = -1;
         }
         return XM_JIT_DEOPT;
     }
@@ -786,7 +790,7 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
     }
 
 #ifdef _WIN32
-    uint8_t osr_tag = (uint8_t) coro->jit_ctx->call_result_tag;
+    uint8_t osr_tag = (uint8_t) coro->jit_state.scratch->call_result_tag;
 #else
     uint8_t osr_tag = (uint8_t) osr_jr.tag;
 #endif
@@ -813,13 +817,14 @@ XrJitResult xr_jit_rt_array_new(XrCoroutine *coro, int64_t capacity) {
 // extra_arg = val_slot_type
 XrJitResult xr_jit_rt_array_push(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrArray *arr = (XrArray *) (uintptr_t) coro->jit_ctx->call_args[0];
+    XrArray *arr = (XrArray *) (uintptr_t) coro->jit_state.scratch->call_args[0];
     if (!arr)
         return XR_JIT_OK();
     // Guard: type mismatch can pass non-array objects here
     if (XR_GC_GET_TYPE((XrGCHeader *) arr) != XR_TARRAY)
         return XR_JIT_OK();
-    XrValue val = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue val = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                     coro->jit_state.scratch->call_arg_tags[1]);
     xr_array_push(arr, val);
     return XR_JIT_OK();
 }
@@ -829,7 +834,7 @@ XrJitResult xr_jit_rt_array_push(XrCoroutine *coro, int64_t extra_arg) {
 // Returns array length as i64.
 XrJitResult xr_jit_rt_array_len(XrCoroutine *coro, int64_t unused) {
     (void) unused;
-    XrArray *arr = (XrArray *) (uintptr_t) coro->jit_ctx->call_args[0];
+    XrArray *arr = (XrArray *) (uintptr_t) coro->jit_state.scratch->call_args[0];
     if (!arr)
         return XR_JIT_INT(0);
     return XR_JIT_INT((int64_t) arr->length);
@@ -849,8 +854,10 @@ XrJitResult xr_jit_rt_map_new(XrCoroutine *coro, int64_t capacity) {
 // Handles: int+int, float+float, mixed numeric, string concat.
 XrJitResult xr_jit_rt_add(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue vb = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue vb = jit_value_from_tag(coro->jit_state.scratch->call_args[0],
+                                    coro->jit_state.scratch->call_arg_tags[0]);
+    XrValue vc = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                    coro->jit_state.scratch->call_arg_tags[1]);
 
     // Integer addition
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
@@ -888,8 +895,10 @@ XrJitResult xr_jit_rt_add(XrCoroutine *coro, int64_t extra_arg) {
 // Handles: int-int, mixed numeric (float promotion).
 XrJitResult xr_jit_rt_sub(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue vb = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue vb = jit_value_from_tag(coro->jit_state.scratch->call_args[0],
+                                    coro->jit_state.scratch->call_arg_tags[0]);
+    XrValue vc = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                    coro->jit_state.scratch->call_arg_tags[1]);
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
         XrValue r;
         r.descriptor = 0;
@@ -912,8 +921,10 @@ XrJitResult xr_jit_rt_sub(XrCoroutine *coro, int64_t extra_arg) {
 
 XrJitResult xr_jit_rt_mul(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue vb = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue vb = jit_value_from_tag(coro->jit_state.scratch->call_args[0],
+                                    coro->jit_state.scratch->call_arg_tags[0]);
+    XrValue vc = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                    coro->jit_state.scratch->call_arg_tags[1]);
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
         XrValue r;
         r.descriptor = 0;
@@ -936,14 +947,16 @@ XrJitResult xr_jit_rt_mul(XrCoroutine *coro, int64_t extra_arg) {
 
 XrJitResult xr_jit_rt_div(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue vb = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue vb = jit_value_from_tag(coro->jit_state.scratch->call_args[0],
+                                    coro->jit_state.scratch->call_arg_tags[0]);
+    XrValue vc = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                    coro->jit_state.scratch->call_arg_tags[1]);
     // Division always produces float
     double nb = 0, nc = 0;
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         if (nc == 0.0) {
             XrValue exc = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
-            coro->jit_ctx->exception = (void *) exc.ptr;
+            coro->jit_state.scratch->exception = (void *) exc.ptr;
             return XR_JIT_NULL();
         }
         XrValue r;
@@ -955,19 +968,21 @@ XrJitResult xr_jit_rt_div(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {raw, XR_TAG_F64};
     }
     XrValue exc = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
-    coro->jit_ctx->exception = (void *) exc.ptr;
+    coro->jit_state.scratch->exception = (void *) exc.ptr;
     return XR_JIT_NULL();
 }
 
 XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    XrValue vb = jit_value_from_tag(coro->jit_ctx->call_args[0], coro->jit_ctx->call_arg_tags[0]);
-    XrValue vc = jit_value_from_tag(coro->jit_ctx->call_args[1], coro->jit_ctx->call_arg_tags[1]);
+    XrValue vb = jit_value_from_tag(coro->jit_state.scratch->call_args[0],
+                                    coro->jit_state.scratch->call_arg_tags[0]);
+    XrValue vc = jit_value_from_tag(coro->jit_state.scratch->call_args[1],
+                                    coro->jit_state.scratch->call_arg_tags[1]);
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
         int64_t b = XR_TO_INT(vb), c = XR_TO_INT(vc);
         if (c == 0) {
             XrValue exc = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
-            coro->jit_ctx->exception = (void *) exc.ptr;
+            coro->jit_state.scratch->exception = (void *) exc.ptr;
             return XR_JIT_NULL();
         }
         XrValue r;
@@ -980,7 +995,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
     if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
         if (nc == 0.0) {
             XrValue exc = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
-            coro->jit_ctx->exception = (void *) exc.ptr;
+            coro->jit_state.scratch->exception = (void *) exc.ptr;
             return XR_JIT_NULL();
         }
         XrValue r;
@@ -992,7 +1007,7 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {raw, XR_TAG_F64};
     }
     XrValue exc2 = xr_exception_newf(coro->isolate, XR_ERR_DIV_BY_ZERO, "division by zero");
-    coro->jit_ctx->exception = (void *) exc2.ptr;
+    coro->jit_state.scratch->exception = (void *) exc2.ptr;
     return XR_JIT_NULL();
 }
 
@@ -1001,8 +1016,8 @@ XrJitResult xr_jit_rt_mod(XrCoroutine *coro, int64_t extra_arg) {
 // extra_arg = xr_tag of the value
 XrJitResult xr_jit_typeof(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
-    int64_t raw = coro->jit_ctx->call_args[0];
-    XrValue val = jit_value_from_tag(raw, coro->jit_ctx->call_arg_tags[0]);
+    int64_t raw = coro->jit_state.scratch->call_args[0];
+    XrValue val = jit_value_from_tag(raw, coro->jit_state.scratch->call_arg_tags[0]);
     return XR_JIT_INT((int64_t) xr_value_typeid(val));
 }
 
@@ -1013,8 +1028,8 @@ XrJitResult xr_jit_print(XrCoroutine *coro, int64_t extra_arg) {
     int newline = (int) (extra_arg & 1);
     int add_space = (int) ((extra_arg >> 1) & 1);
 
-    int64_t raw = coro->jit_ctx->call_args[0];
-    XrValue val = jit_value_from_tag(raw, coro->jit_ctx->call_arg_tags[0]);
+    int64_t raw = coro->jit_state.scratch->call_args[0];
+    XrValue val = jit_value_from_tag(raw, coro->jit_state.scratch->call_arg_tags[0]);
 
     if (add_space)
         printf(" ");
@@ -1098,7 +1113,7 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     bool fire_and_forget = (c_raw & 0x80) != 0;
     int nargs = c_raw & 0x7F;
 
-    XrValue fn_val = jit_value_from_tag(coro->jit_ctx->call_args[0], XR_TAG_PTR);
+    XrValue fn_val = jit_value_from_tag(coro->jit_state.scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_closure(fn_val))
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
@@ -1115,8 +1130,8 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     // Fallback: proto->param_types for truly unknown (any) types.
     XrValue args[16];
     for (int i = 0; i < nargs && i < 16; i++) {
-        int64_t raw = coro->jit_ctx->call_args[1 + i];
-        uint8_t tag = coro->jit_ctx->call_arg_tags[1 + i];
+        int64_t raw = coro->jit_state.scratch->call_args[1 + i];
+        uint8_t tag = coro->jit_state.scratch->call_arg_tags[1 + i];
         if (tag == XR_RTAG_UNKNOWN && proto->param_types && i < proto->param_types_count &&
             proto->param_types[i])
             tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));
@@ -1165,7 +1180,7 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
     int discard_result = (int) (extra_arg & 0xFF);
 
-    int64_t raw0 = coro->jit_ctx->call_args[0];
+    int64_t raw0 = coro->jit_state.scratch->call_args[0];
     XrValue val = jit_value_from_tag(raw0, XR_TAG_PTR);
 
     // Task fast path: return result if already done
@@ -1190,7 +1205,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  * JIT suspend helper for AWAIT blocking path.
  *
  * Called from XM_SUSPEND codegen AFTER live registers are saved to
- * coro->jit_suspend-> Performs the CAS coordination on Task to
+ * coro->jit_state.suspend-> Performs the CAS coordination on Task to
  * register this coro as waiter.
  *
  * The Task ptr was stored in jit_call_args[0] by the preceding CALL_C
@@ -1207,7 +1222,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
 
     /* Retrieve Task pointer from the preceding xr_jit_await call.
      * The fast-path helper stored it in call_args[0]. */
-    int64_t raw0 = coro->jit_ctx->call_args[0];
+    int64_t raw0 = coro->jit_state.scratch->call_args[0];
     XrValue val = jit_value_from_tag(raw0, XR_TAG_PTR);
     if (!xr_value_is_task(val))
         return (XrJitResult) {0, 0};  // safety fallback
@@ -1221,8 +1236,8 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         if (tstate == XR_TASK_COMPLETED && !discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
         }
-        coro->jit_suspend->result = res.i;
-        coro->jit_suspend->result_tag = res.tag;
+        coro->jit_state.suspend->result = res.i;
+        coro->jit_state.suspend->result_tag = res.tag;
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }
 
@@ -1251,8 +1266,8 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         if (!discard_result) {
             res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
         }
-        coro->jit_suspend->result = res.i;
-        coro->jit_suspend->result_tag = res.tag;
+        coro->jit_state.suspend->result = res.i;
+        coro->jit_state.suspend->result_tag = res.tag;
         atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
     }

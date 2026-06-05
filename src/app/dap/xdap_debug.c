@@ -49,9 +49,9 @@ XrCoroutine *xr_debug_get_coro(XrayIsolate *isolate);
 bool xr_debug_get_frame_ctx_ex(XrayIsolate *isolate, XrDebugFrameCtx *out) {
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     if (coro) {
-        out->frames = coro->vm_ctx.frames;
-        out->stack = coro->vm_ctx.stack;
-        out->frame_count = coro->vm_ctx.frame_count;
+        out->frames = xr_coro_vm_ctx(coro)->frames;
+        out->stack = xr_coro_vm_ctx(coro)->stack;
+        out->frame_count = xr_coro_vm_ctx(coro)->frame_count;
     } else {
         XrVMState *vm = xr_isolate_get_vm_state(isolate);
         out->frames = vm->frames;
@@ -467,7 +467,7 @@ void xr_debug_step_in(XrayIsolate *isolate) {
     dbg->current_action = XR_DBG_ACTION_STEP_IN;
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     dbg->step_depth =
-        coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
+        coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
 void xr_debug_step_out(XrayIsolate *isolate) {
@@ -477,7 +477,7 @@ void xr_debug_step_out(XrayIsolate *isolate) {
     dbg->current_action = XR_DBG_ACTION_STEP_OUT;
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     dbg->step_depth =
-        coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
+        coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
 void xr_debug_step_over(XrayIsolate *isolate) {
@@ -487,7 +487,7 @@ void xr_debug_step_over(XrayIsolate *isolate) {
     dbg->current_action = XR_DBG_ACTION_STEP_OVER;
     XrCoroutine *coro = xr_debug_get_coro(isolate);
     dbg->step_depth =
-        coro ? coro->vm_ctx.frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
+        coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
 // Resume VM execution after a debug break.

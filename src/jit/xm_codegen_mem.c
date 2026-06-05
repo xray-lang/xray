@@ -1152,7 +1152,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // 1. Record safepoint bitmap for GC
             uint32_t smap_id = record_safepoint(ctx);
 
-            // 2. Load suspend_state pointer: x16 = coro->jit_suspend
+            // 2. Load suspend_state pointer: x16 = coro->jit_state.suspend
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
             if (suspend_id >= XM_MAX_SUSPEND_ENTRIES) {
                 ctx->had_error = true;

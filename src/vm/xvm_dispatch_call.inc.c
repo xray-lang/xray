@@ -370,7 +370,7 @@ op_call_closure:
                     }
                 }
                 if (_aot_coro)
-                    _aot_coro->jit_ctx->call_closure = closure;
+                    _aot_coro->jit_state.scratch->call_closure = closure;
                 int64_t ret = ((AotThunkFn) proto->jit_entry)((intptr_t) _aot_coro, raw_args);
                 uint8_t rtype = proto->return_type_info
                                     ? xr_type_to_slot_type(proto->return_type_info)
@@ -431,9 +431,10 @@ op_call_closure:
             if (_jit_fast_ok && proto->jit_entry) {
                 XrValue jit_result;
                 XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
-                _jit_coro->jit_ctx->call_proto = proto;
-                _jit_coro->jit_ctx->call_closure = closure;
-                _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
+                _jit_coro->jit_state.scratch->call_proto = proto;
+                _jit_coro->jit_state.scratch->call_closure = closure;
+                _jit_coro->jit_state.scratch->call_base_offset =
+                    (int32_t) ((base + a + 1) - VM_STACK);
                 savepc();
                 int _jrc1 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                         proto->return_type_info, &jit_result);
@@ -441,8 +442,9 @@ op_call_closure:
                 if (_jrc1 == XM_JIT_OK) {
                     R(a) = jit_result;
                     // Multi-return: fill R[a+1..] from jit_ctx->ret_vals[]
-                    if (_jit_coro->jit_ctx->ret_count > 1)
-                        xm_jit_read_multi_ret(_jit_coro, &R(a), _jit_coro->jit_ctx->ret_count);
+                    if (_jit_coro->jit_state.scratch->ret_count > 1)
+                        xm_jit_read_multi_ret(_jit_coro, &R(a),
+                                              _jit_coro->jit_state.scratch->ret_count);
                     vmbreak;
                 }
                 if (_jrc1 == XM_JIT_SUSPEND) {
@@ -497,17 +499,19 @@ op_call_closure:
                 if (proto->jit_entry) {
                     XrValue jit_result;
                     XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
-                    _jit_coro->jit_ctx->call_proto = proto;
-                    _jit_coro->jit_ctx->call_closure = closure;
-                    _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
+                    _jit_coro->jit_state.scratch->call_proto = proto;
+                    _jit_coro->jit_state.scratch->call_closure = closure;
+                    _jit_coro->jit_state.scratch->call_base_offset =
+                        (int32_t) ((base + a + 1) - VM_STACK);
                     savepc();
                     int _jrc2 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                             proto->return_type_info, &jit_result);
                     VM_REFRESH_FRAME_CACHE();
                     if (_jrc2 == XM_JIT_OK) {
                         R(a) = jit_result;
-                        if (_jit_coro->jit_ctx->ret_count > 1)
-                            xm_jit_read_multi_ret(_jit_coro, &R(a), _jit_coro->jit_ctx->ret_count);
+                        if (_jit_coro->jit_state.scratch->ret_count > 1)
+                            xm_jit_read_multi_ret(_jit_coro, &R(a),
+                                                  _jit_coro->jit_state.scratch->ret_count);
                         vmbreak;
                     }
                     if (_jrc2 == XM_JIT_SUSPEND) {
@@ -736,15 +740,16 @@ vmcase(OP_CALLSELF) {
         if (_jit_fast_ok && proto->jit_entry) {
             XrValue jit_result;
             XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
-            _jit_coro->jit_ctx->call_proto = proto;
-            _jit_coro->jit_ctx->call_closure = closure;
-            _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
+            _jit_coro->jit_state.scratch->call_proto = proto;
+            _jit_coro->jit_state.scratch->call_closure = closure;
+            _jit_coro->jit_state.scratch->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
             int _jrc3 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                     proto->return_type_info, &jit_result);
             if (_jrc3 == XM_JIT_OK) {
                 R(a) = jit_result;
-                if (_jit_coro->jit_ctx->ret_count > 1)
-                    xm_jit_read_multi_ret(_jit_coro, &R(a), _jit_coro->jit_ctx->ret_count);
+                if (_jit_coro->jit_state.scratch->ret_count > 1)
+                    xm_jit_read_multi_ret(_jit_coro, &R(a),
+                                          _jit_coro->jit_state.scratch->ret_count);
                 vmbreak;
             }
             if (_jrc3 == XM_JIT_SUSPEND) {
@@ -796,15 +801,17 @@ vmcase(OP_CALLSELF) {
             if (proto->jit_entry) {
                 XrValue jit_result;
                 XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
-                _jit_coro->jit_ctx->call_proto = proto;
-                _jit_coro->jit_ctx->call_closure = closure;
-                _jit_coro->jit_ctx->call_base_offset = (int32_t) ((base + a + 1) - VM_STACK);
+                _jit_coro->jit_state.scratch->call_proto = proto;
+                _jit_coro->jit_state.scratch->call_closure = closure;
+                _jit_coro->jit_state.scratch->call_base_offset =
+                    (int32_t) ((base + a + 1) - VM_STACK);
                 int _jrc4 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                         proto->return_type_info, &jit_result);
                 if (_jrc4 == XM_JIT_OK) {
                     R(a) = jit_result;
-                    if (_jit_coro->jit_ctx->ret_count > 1)
-                        xm_jit_read_multi_ret(_jit_coro, &R(a), _jit_coro->jit_ctx->ret_count);
+                    if (_jit_coro->jit_state.scratch->ret_count > 1)
+                        xm_jit_read_multi_ret(_jit_coro, &R(a),
+                                              _jit_coro->jit_state.scratch->ret_count);
                     vmbreak;
                 }
                 if (_jrc4 == XM_JIT_SUSPEND) {

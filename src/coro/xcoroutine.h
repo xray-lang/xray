@@ -62,7 +62,9 @@
 
 #include <stdatomic.h>
 #include "../base/xconstants.h"
+#include "../base/xchecks.h"
 #include "xexec_frame.h"  // XrBcCallFrame, XrClosure, XrValue
+#include "xcoro_abi.h"
 #include "xcoro_flags.h"
 #include "xtimer_wheel.h"
 
@@ -327,6 +329,19 @@ typedef struct XrJitSuspendState {
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 
+typedef struct XrVmCoroState {
+    XrVMContext ctx;
+} XrVmCoroState;
+
+typedef struct XrJitCoroState {
+    struct XrJitScratch *scratch;
+    void *resume_entry;
+    void *resume_proto;
+    uint32_t suspend_id;
+    uint32_t suspend_smap_id;
+    XrJitSuspendState *suspend;
+} XrJitCoroState;
+
 struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
@@ -348,16 +363,18 @@ struct XrCoroutine {
     /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
     int64_t submit_time;  //  8 bytes: monotonic ms when enqueued to run queue
 
-    /* === VM Execution Context === */
-    XrVMContext vm_ctx;
+    /* === Backend Execution State === */
+    const XrCoroBackendVTable *backend;
+    void *backend_state;
+    XrVmCoroState *vm_state;
 
     /* ================================================================
      * WARM ZONE (Cache Line 3, offset 192+) — JIT/GC/result hot fields
      * Grouped here to minimize cache misses on JIT entry and GC safepoint.
      * ================================================================ */
-    struct XrJitScratch *jit_ctx;  // JIT prologue loads x28 from this
-    struct XrCoroGC *coro_gc;      // GC safepoint: checked every loop back-edge
-    struct XrayIsolate *isolate;   // JIT runtime helpers use 22+ times
+    XrJitCoroState jit_state;
+    struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
+    struct XrayIsolate *isolate;  // JIT runtime helpers use 22+ times
     XrValue result;
     XrValue error;
     /* true: `error` came from the value-return channel (user `throw <enum>`);
@@ -401,23 +418,6 @@ struct XrCoroutine {
     int16_t pending_result_slot;
     bool jit_try_mode;  // JIT try-mode: yieldable should return WOULD_BLOCK instead of blocking
 
-    /* === JIT Suspend/Resume ===
-     * When JIT code hits AWAIT and the child isn't done, it saves live
-     * registers here and returns XM_SUSPEND_MARKER. On resume, the
-     * worker calls jit_resume_entry which reloads registers and jumps
-     * to the continuation point via jit_suspend_id. */
-    void *jit_resume_entry;        // resume code address (NULL = not JIT-suspended)
-    void *jit_resume_proto;        // XrProto* that owns the resume code (for stack map)
-    uint32_t jit_suspend_id;       // resume point index (jump table dispatch)
-    uint32_t jit_suspend_smap_id;  // stack map id at suspend point (for GC)
-
-    /*
-     * JIT suspend state: saved registers across suspend/resume.
-     * Allocated on demand (lazy) to save 320 bytes per non-JIT coroutine.
-     * NULL until the first JIT call/resume that needs suspend support.
-     */
-    XrJitSuspendState *jit_suspend;
-
     /* === Identity (set once at creation, cold path) === */
     const char *name;
     const char *source_file;
@@ -444,6 +444,18 @@ struct XrCoroutine {
     /* === Cold Extension (io_buf, locals, watched_by — allocated on demand) === */
     XrCoroExt *ext;
 };
+
+static inline XrVMContext *xr_coro_vm_ctx(XrCoroutine *coro) {
+    XR_DCHECK(coro != NULL, "coro_vm_ctx: NULL coro");
+    XR_DCHECK(coro->vm_state != NULL, "coro_vm_ctx: missing VM state");
+    return &coro->vm_state->ctx;
+}
+
+static inline const XrVMContext *xr_coro_vm_ctx_const(const XrCoroutine *coro) {
+    XR_DCHECK(coro != NULL, "coro_vm_ctx_const: NULL coro");
+    XR_DCHECK(coro->vm_state != NULL, "coro_vm_ctx_const: missing VM state");
+    return &coro->vm_state->ctx;
+}
 
 /* ========== XrCoroExt Accessor ========== */
 

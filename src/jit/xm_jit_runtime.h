@@ -211,13 +211,13 @@ XR_FUNC XrJitResult xr_jit_await(struct XrCoroutine *coro, int64_t extra_arg);
 
 /* JIT suspend helper for AWAIT blocking path.
  * Sets up waiter + CAS state machine. Called from JIT suspend block
- * after live registers are saved to coro->jit_suspend.
+ * after live registers are saved to coro->jit_state.suspend.
  * Returns 0 if successfully blocked (JIT returns SUSPEND_MARKER).
  * Returns 1 if child completed during CAS race (JIT continues). */
 XR_FUNC XrJitResult xr_jit_await_block(struct XrCoroutine *coro, int64_t extra_arg);
 
 /* JIT resume entry — called by worker to re-enter JIT after suspend.
- * Reloads saved registers from coro->jit_suspend and jumps to
+ * Reloads saved registers from coro->jit_state.suspend and jumps to
  * the continuation point via jit_suspend_id jump table. */
 XR_FUNC int xm_jit_resume(struct XrCoroutine *coro, struct XrValue *result);
 

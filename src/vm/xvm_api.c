@@ -31,11 +31,11 @@ XrVMContext *xr_vm_current_ctx(XrayIsolate *isolate) {
     if (worker && worker->m) {
         XrCoroutine *coro = (XrCoroutine *) worker->m->vm_ctx.current_coro;
         if (coro)
-            return &coro->vm_ctx;
+            return xr_coro_vm_ctx(coro);
         return &worker->m->vm_ctx;
     }
     if (isolate->main_coro) {
-        return &((XrCoroutine *) isolate->main_coro)->vm_ctx;
+        return xr_coro_vm_ctx((XrCoroutine *) isolate->main_coro);
     }
     return &isolate->vm_ctx;
 }
