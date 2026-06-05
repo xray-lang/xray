@@ -77,6 +77,22 @@ static inline XrayIsolate *gc_get_isolate(XrCoroGC *gc) {
     return (gc && gc->owner) ? gc->owner->isolate : NULL;
 }
 
+static inline bool coro_gc_value_to_header(XrValue value, XrGCHeader **out) {
+    if (!XR_VALUE_NEEDS_GC(value))
+        return false;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj)
+        return false;
+    if (out)
+        *out = obj;
+    return true;
+}
+
+static inline bool coro_gc_header_is_heap_value(XrGCHeader *obj) {
+    XrGCHeader *roundtrip = NULL;
+    return obj && coro_gc_value_to_header(XR_FROM_PTR(obj), &roundtrip) && roundtrip == obj;
+}
+
 static inline bool xr_gc_needs_finalize_ext(XrCoroGC *gc, uint8_t type) {
     if (type >= XR_NATIVE_TYPE_MAX)
         return false;
@@ -495,6 +511,8 @@ static XrGCHeader *deferred_pop(XrCoroGC *gc) {
 XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
         return;
+    if (!coro_gc_header_is_heap_value(obj))
+        return;
     if (obj->extra & XR_OBJ_DEAD)
         return;
 
@@ -535,6 +553,8 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
 
 XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj) {
     if (!obj)
+        return NULL;
+    if (!coro_gc_header_is_heap_value(obj))
         return NULL;
     /* Shared / region / managed objects cannot be reused locally. */
     if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED))
