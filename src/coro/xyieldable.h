@@ -322,6 +322,9 @@ static inline XrCFuncResult xr_sm_run(struct XrayIsolate *X, void *state) {
                 // State function called xr_call_closure
                 return XR_CFUNC_CALL_CLOSURE;
 
+            case XR_CFUNC_WOULD_BLOCK:
+                return XR_CFUNC_WOULD_BLOCK;
+
             case XR_CFUNC_ERROR:
                 sm->done = true;
                 return XR_CFUNC_ERROR;

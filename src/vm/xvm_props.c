@@ -996,6 +996,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
                 case XR_CFUNC_CALL_CLOSURE:
                     // Closure frame pushed, return to VM main loop
                     return XR_DISP_RESTART;
+                case XR_CFUNC_WOULD_BLOCK:
+                    return XR_DISP_FATAL;
                 case XR_CFUNC_ERROR:
                     return XR_DISP_FATAL;
             }

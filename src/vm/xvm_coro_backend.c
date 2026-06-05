@@ -189,6 +189,8 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
             // Closure frame pushed by xr_call_closure, execute via VM.
             coro_ctx->module_base_frame = 0;
             return run(isolate, coro_ctx);
+        case XR_CFUNC_WOULD_BLOCK:
+            return XR_VM_RUNTIME_ERROR;
         default:
             return XR_VM_RUNTIME_ERROR;
     }
@@ -234,6 +236,8 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
                 case XR_CFUNC_CALL_CLOSURE:
                     coro_ctx->module_base_frame = 0;
                     return run(isolate, coro_ctx);
+                case XR_CFUNC_WOULD_BLOCK:
+                    return XR_VM_RUNTIME_ERROR;
                 default:
                     return XR_VM_RUNTIME_ERROR;
             }
@@ -396,6 +400,8 @@ static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrW
         case XR_CFUNC_CALL_CLOSURE:
             coro_ctx->module_base_frame = 0;
             return run(isolate, coro_ctx);
+        case XR_CFUNC_WOULD_BLOCK:
+            return XR_VM_RUNTIME_ERROR;
         case XR_CFUNC_ERROR:
         default:
             return XR_VM_RUNTIME_ERROR;

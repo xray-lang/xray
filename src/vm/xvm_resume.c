@@ -117,6 +117,9 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int 
                     // Return OK so run_cfunc_coro calls run() to execute the closure.
                     return XR_VM_OK;
 
+                case XR_CFUNC_WOULD_BLOCK:
+                    return XR_VM_RUNTIME_ERROR;
+
                 case XR_CFUNC_ERROR:
                     // Continuation error
                     return XR_VM_RUNTIME_ERROR;
