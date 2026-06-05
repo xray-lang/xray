@@ -1746,9 +1746,9 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
 // @param num_workers Worker count (0 means auto-detect CPU cores)
 //
 // Multi-core parallel execution:
-// - Each Worker thread executes coroutines with independent vm_ctx
+// - Each Worker thread executes backend-neutral coroutines
 // - Work stealing for load balancing across Workers
-// - Coroutines have independent VM stacks/frames, no global VM lock
+// - VM backend coroutines have independent VM stacks/frames, no global VM lock
 void xr_multicore_init(XrayIsolate *X, int num_workers) {
     if (!X)
         return;

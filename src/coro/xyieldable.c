@@ -53,7 +53,7 @@ static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro
     XrBcCallFrame *frames;
     int frame_count;
 
-    // Priority 1: coro's own vm_ctx (single source of truth for cfunc coros)
+    // Priority 1: coroutine VM backend context.
     if (xr_coro_vm_ctx(coro)->frame_count > 0 && xr_coro_vm_ctx(coro)->frames) {
         frames = xr_coro_vm_ctx(coro)->frames;
         frame_count = xr_coro_vm_ctx(coro)->frame_count;
@@ -258,7 +258,7 @@ bool xr_coro_has_continuation(XrCoroutine *coro) {
 //
 // xr_call_closure() allows C-layer code to invoke a user closure that may
 // itself yield (channel/await/sleep). The closure is pushed as a new call
-// frame on the coroutine's VM stack. When the closure returns, the VM
+// frame on the coroutine's VM backend stack. When the closure returns, the VM
 // detects CLOSURE_PENDING on the caller frame and invokes the continuation
 // with XR_RESUME_CLOSURE_DONE and the closure's return value delivered
 // through the resume_value parameter (or XR_RESUME_CLOSURE_ERROR plus the
