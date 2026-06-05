@@ -122,6 +122,9 @@ typedef struct XrProcStats {
     uint64_t lifo_gate_budget_count;
     uint64_t lifo_gate_backlog_count;
     uint64_t lifo_gate_priority_count;
+    uint64_t fast_dispatch_count;
+    uint64_t fast_dispatch_budget_stop_count;
+    uint64_t fast_dispatch_empty_count;
     uint64_t inbox_drain_count;     // Non-empty MPSC inbox drain batches
     uint64_t inject_pull_count;     // Coros pulled from global inject queues
     uint64_t park_count;            // Futex park attempts by this worker

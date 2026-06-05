@@ -382,11 +382,16 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // BLOCKED fast re-dispatch: skip full result handling/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by the active backend.
+    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget <= 1) {
+        p->stats.fast_dispatch_budget_stop_count++;
+    }
     if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget > 1) {
         XrCoroutine *next = xr_worker_try_pop_lifo(worker, false);
         if (!next) {
+            p->stats.fast_dispatch_empty_count++;
             goto normal_result_path;
         }
+        p->stats.fast_dispatch_count++;
         fast_dispatch_budget--;
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;

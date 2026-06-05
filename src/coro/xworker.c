@@ -643,6 +643,8 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
     uint64_t total_lifo_gate_priority = 0;
+    uint64_t total_fast_dispatch = 0, total_fast_dispatch_budget_stop = 0;
+    uint64_t total_fast_dispatch_empty = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
     uint64_t total_blocked = 0;
@@ -686,6 +688,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_lifo_gate_budget += p->stats.lifo_gate_budget_count;
         total_lifo_gate_backlog += p->stats.lifo_gate_backlog_count;
         total_lifo_gate_priority += p->stats.lifo_gate_priority_count;
+        total_fast_dispatch += p->stats.fast_dispatch_count;
+        total_fast_dispatch_budget_stop += p->stats.fast_dispatch_budget_stop_count;
+        total_fast_dispatch_empty += p->stats.fast_dispatch_empty_count;
         total_inbox += p->stats.inbox_drain_count;
         total_park += p->stats.park_count;
         total_unpark += p->stats.unpark_count;
@@ -750,6 +755,11 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         (unsigned long long) lifo_gate_total, (unsigned long long) total_lifo_gate_budget,
         (unsigned long long) total_lifo_gate_backlog, (unsigned long long) total_lifo_gate_priority,
         stats_percent_u64(lifo_gate_total, lifo_gate_total + total_lifo_hit));
+    fprintf(stderr, "Fast dispatch: hits=%llu budget_stop=%llu empty=%llu hit_share=%.2f%%\n",
+            (unsigned long long) total_fast_dispatch,
+            (unsigned long long) total_fast_dispatch_budget_stop,
+            (unsigned long long) total_fast_dispatch_empty,
+            stats_percent_u64(total_fast_dispatch, total_lifo_hit));
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
     uint64_t wake_alloc = xr_sched_metric_load(&s->chan_wake_cmd_alloc_count);
