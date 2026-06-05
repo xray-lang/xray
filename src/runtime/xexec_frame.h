@@ -11,9 +11,9 @@
  * KEY CONCEPT:
  *   These types model the *runtime* execution state. The VM interpreter
  *   (src/vm/) and JIT engine (src/jit/) read and write these structures but
- *   do not own them; Isolate and Coroutine hold them directly. Lives at the
- *   runtime layer so GC, reflection and error handling never reverse-include
- *   into vm/.
+ *   do not own their public shape; the isolate fallback and VM coroutine
+ *   backend state carry concrete instances. Lives at the runtime layer so GC,
+ *   reflection and error handling never reverse-include into vm/.
  */
 
 #ifndef XEXEC_FRAME_H
@@ -117,7 +117,7 @@ typedef struct XrCFunction {
 /* ========== Unified VM Context ========== */
 
 // Per-coroutine execution state (main thread or worker)
-// Each coroutine has its own XrVMContext for isolation
+// Each VM coroutine has its own XrVMContext for execution isolation.
 typedef struct XrVMContext {
     // Value stack
     XrValue *stack;      // stack base
@@ -145,12 +145,11 @@ typedef struct XrVMContext {
     void *current_coro;  // owning coroutine (XrCoroutine*)
 
     // Execution control
-    uint32_t instruction_count;   // for preemptive scheduling
-    bool preempt_pending;         // yield at next safe point
-    int last_nret;                // return value count from last call
-    bool trace_execution;         // debug: trace opcodes
-    struct XrStrBuf *tmp_strbuf;  // scratch buffer for string ops
-    XrayIsolate *isolate;         // parent isolate
+    uint32_t instruction_count;  // for preemptive scheduling
+    bool preempt_pending;        // yield at next safe point
+    int last_nret;               // return value count from last call
+    bool trace_execution;        // debug: trace opcodes
+    XrayIsolate *isolate;        // parent isolate
 
     // Per-frame struct storage (lazy-allocated, grows with frame depth)
     uint8_t **struct_areas;      // struct data pointers per frame
@@ -213,7 +212,6 @@ XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
 #define VMCTX_HANDLER_COUNT(ctx) ((ctx)->handler_count)
 #define VMCTX_EXCEPTION(ctx) ((ctx)->current_exception)
 #define VMCTX_CORO(ctx) ((ctx)->current_coro)
-#define VMCTX_TMP_STRBUF(ctx) ((ctx)->tmp_strbuf)
 #define VMCTX_ISOLATE(ctx) ((ctx)->isolate)
 #define VMCTX_GC(ctx) (&VMCTX_ISOLATE(ctx)->gc)
 #define VMCTX_GLOBALS(ctx) (VMCTX_ISOLATE(ctx)->vm.builtins)

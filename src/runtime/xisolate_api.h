@@ -55,6 +55,7 @@ XR_FUNC void xr_isolate_set_current_module(XrayIsolate *X, XrModule *mod);
 XR_FUNC XrGlobalsTable *xr_isolate_get_globals(XrayIsolate *X);
 XR_FUNC XrGlobalObject *xr_isolate_get_global_object(XrayIsolate *X);
 XR_FUNC struct XrGlobalStringPool *xr_isolate_get_string_pool(XrayIsolate *X);
+XR_FUNC struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrayIsolate *X);
 
 // Coroutine
 XR_FUNC XrCoroutine *xr_isolate_get_main_coro(XrayIsolate *X);
