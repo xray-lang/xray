@@ -111,104 +111,12 @@ vmcase(OP_CHAN_NEW_NAMED) {
 }
 
 vmcase(OP_CHAN_SEND) {
-    /* R[B].send(R[C]) - blocking send to Channel
-     * A = result register (null on success)
-     * B = Channel
-     * C = value to send
-     */
     TRACE_EXECUTION();
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-
-    // Check if resumed from blocking
-    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
-    XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, xr_slot_none());
-    if (resumed.kind == XR_CORO_BLOCK_READY) {
-        R(a) = xr_null();
-        vmbreak;
-    }
-    if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
-        R(a) = xr_null();
-        VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
-    }
-
-    // Get Channel
-    XrValue ch_val = R(b);
-    if (!xr_value_is_channel(ch_val)) {
-        R(a) = xr_null();
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "send: expected Channel");
-    }
-    XrChannel *ch = xr_value_to_channel(ch_val);
-
-    savepc();
-    frame->pc = pc - 1;
-    frame->call_status |= XR_CALL_YIELDED;
-    XrCoroBlockResult result = xr_coro_chan_send(isolate, current, ch, R(c), xr_slot_none(), -1);
-    if (result.kind == XR_CORO_BLOCK_READY) {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        R(a) = xr_null();
-        vmbreak;
-    } else if (result.kind == XR_CORO_BLOCK_CLOSED) {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
-    } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-        return XR_VM_BLOCKED;
-    } else {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel send failed");
-    }
+    VM_DISPATCH(vm_chan_send(isolate, vm_ctx, i, base, frame, pc));
 }
 
 vmcase(OP_CHAN_RECV) {
-    /* R[A], R[A+1] = R[B].recv() - receive from Channel (blocking), returns multi-value
-     * R[A] = received value
-     * R[A+1] = success (bool)
-     * B = Channel
-     */
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-
-    // Check if resumed from blocking (cache resume_load: 1 atomic instead of 2)
-    XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
-    if (current) {
-        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
-            isolate, current, xr_slot_xvalue_ptr(&R(a)), xr_slot_xvalue_ptr(&R(a + 1)));
-        if (resumed.kind == XR_CORO_BLOCK_READY) {
-            vmbreak;
-        }
-        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
-            R(a) = xr_null();
-            R(a + 1) = xr_bool(false);
-            vmbreak;
-        }
-    }
-
-    // Get Channel directly
-    XrValue ch_val = R(b);
-    if (!xr_value_is_channel(ch_val)) {
-        R(a) = xr_null();
-        R(a + 1) = xr_bool(false);
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "recv: expected Channel");
-    }
-    XrChannel *ch = xr_value_to_channel(ch_val);
-
-    savepc();
-    frame->pc = pc - 1;
-    frame->call_status |= XR_CALL_YIELDED;
-    XrCoroBlockResult result = xr_coro_chan_recv(isolate, current, ch, xr_slot_xvalue_ptr(&R(a)),
-                                                 xr_slot_xvalue_ptr(&R(a + 1)), -1);
-    if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        vmbreak;
-    } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-        return XR_VM_BLOCKED;
-    } else {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        R(a) = xr_null();
-        R(a + 1) = xr_bool(false);
-        VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "recv: need to use blocking recv in coroutine");
-    }
+    VM_DISPATCH(vm_chan_recv(isolate, vm_ctx, i, base, frame, pc));
 }
 
 vmcase(OP_CHAN_TRY_SEND) {
