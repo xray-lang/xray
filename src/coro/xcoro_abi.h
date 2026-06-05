@@ -100,6 +100,7 @@ typedef struct XrCoroBackendVTable {
     bool (*ensure_state)(XrCoroutine *coro);
     bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                     bool need_storage, bool is_clean);
+    void (*reset_execution_state)(XrCoroutine *coro, XrayIsolate *X);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
     void (*on_safepoint)(XrCoroutine *coro);

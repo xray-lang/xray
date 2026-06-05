@@ -65,7 +65,7 @@ static inline XrCoroutine *xr_test_init_coro(XrayIsolate *X) {
         return NULL;
 
     xr_coro_flags_set(coro, XR_CORO_FLG_MAIN);
-    xr_coro_sync_vm_ctx(coro, X);
+    (void) xr_coro_reset_execution_state(coro, X);
 
     // Set as main_coro in isolate
     X->main_coro = coro;
