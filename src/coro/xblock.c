@@ -359,6 +359,36 @@ static bool await_store_result(XrayIsolate *isolate, XrCoroutine *coro, XrTask *
     return xr_slot_store_value(result_slot, result);
 }
 
+static XrCoroBlockResult coro_arm_await_wait(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
+    atomic_store_explicit(&coro->await_task, task, memory_order_release);
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
+    if (timeout_ms > 0) {
+        coro_arm_timeout(coro, timeout_ms);
+    }
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+static XrCoroBlockResult coro_register_single_await(XrCoroutine *coro, XrTask *task,
+                                                    int64_t timeout_ms) {
+    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
+    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
+
+    int expected = XR_AWAIT_NONE;
+    if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected, XR_AWAIT_WAITING,
+                                                memory_order_acq_rel, memory_order_acquire)) {
+        return coro_arm_await_wait(coro, task, timeout_ms);
+    }
+
+    if (expected == XR_AWAIT_WAITING) {
+        return coro_arm_await_wait(coro, task, timeout_ms);
+    }
+
+    XR_CHECK(expected == XR_AWAIT_RESOLVED, "await: unexpected await state");
+    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
+    atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
+    return block_result(XR_CORO_BLOCK_READY, task->result, true);
+}
+
 XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCoroutine *coro,
                                                  XrTask *task, XrSlotRef result_slot,
                                                  bool discard_result) {
@@ -392,33 +422,7 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
 
-    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
-
-    int expected = XR_AWAIT_NONE;
-    if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected, XR_AWAIT_WAITING,
-                                                memory_order_acq_rel, memory_order_acquire)) {
-        atomic_store_explicit(&coro->await_task, task, memory_order_release);
-        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-        if (timeout_ms > 0) {
-            coro_arm_timeout(coro, timeout_ms);
-        }
-        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
-    }
-
-    if (expected == XR_AWAIT_WAITING) {
-        atomic_store_explicit(&coro->await_task, task, memory_order_release);
-        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-        if (timeout_ms > 0) {
-            coro_arm_timeout(coro, timeout_ms);
-        }
-        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
-    }
-
-    XR_CHECK(expected == XR_AWAIT_RESOLVED, "await: unexpected await state");
-    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
-    atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-    return block_result(XR_CORO_BLOCK_READY, task->result, true);
+    return coro_register_single_await(coro, task, timeout_ms);
 }
 
 XrCoroBlockResult xr_coro_await_task_slot(XrayIsolate *isolate, XrCoroutine *coro, XrTask *task,
