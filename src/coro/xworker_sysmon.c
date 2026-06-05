@@ -378,19 +378,19 @@ int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
     xr_coro_resume_store(coro, XR_RESUME_DEBUG);
 
     // Use standard coroutine run mechanism with debug flag
-    XrVMResult result = xr_coro_run_on_worker(worker, coro);
+    XrCoroRunResult result = xr_coro_run_on_worker(worker, coro);
 
     atomic_store(&runtime->running, false);
 
-    switch (result) {
-        case XR_VM_OK:
+    switch (result.kind) {
+        case XR_CORO_RUN_DONE:
             return 1;  // Program ended
 
-        case XR_VM_DEBUG_BREAK:
+        case XR_CORO_RUN_DEBUG_BREAK:
             return 0;  // Stopped at breakpoint/step
 
-        case XR_VM_YIELD:
-        case XR_VM_BLOCKED:
+        case XR_CORO_RUN_YIELD:
+        case XR_CORO_RUN_BLOCKED:
             return 0;  // Treat as stopped for debugging
 
         default:

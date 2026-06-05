@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xworker_exec.c - Coroutine execution core: dispatch, VM result, cont-stealing
+ * xworker_exec.c - Coroutine execution core: dispatch, run result, cont-stealing
  *
  * KEY CONCEPT:
  *   This file hosts the hot path where a coroutine is actually executed
@@ -14,13 +14,13 @@
  *       cfunc / JIT-resume / unroll-resume.
  *     - worker_exec_with_cont_stealing: push-parent / exec-child loop for
  *       continuation stealing, plus BLOCKED fast re-dispatch.
- *     - worker_handle_vm_result: dispatch of XR_VM_* outcomes (done, yield,
+ *     - worker_handle_run_result: dispatch of backend outcomes (done, yield,
  *       blocked, cancelled, error) including Task state + monitor hooks.
  *     - run_cfunc_coro: Yieldable C-function coroutine execution with
  *       inline fast path for single-frame continuations.
  *
  * KNOWN OVERSIZE:
- *   xr_coro_run_on_worker (~440 lines) currently exceeds the 150-line
+ *   vm_backend_resume_on_worker (~440 lines) currently exceeds the 150-line
  *   function limit. It is the dispatch hub for closure-first / resume
  *   / cfunc / jit paths and is intentionally kept inline for branch
  *   predictability; future split into run_closure_first / _resume /
@@ -54,6 +54,31 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
 static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx);
+
+static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *coro);
+static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                         const XrCoroRunContext *run_ctx);
+static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
+static XrCoroEvent worker_event_from_coro(XrCoroutine *coro);
+static const char *vm_backend_debug_name(const XrCoroutine *coro);
+
+static const XrCoroBackendVTable vm_backend_vtable = {
+    .kind = XR_CORO_BACKEND_VM,
+    .resume = vm_backend_resume,
+    .trace_roots = NULL,
+    .release = NULL,
+    .destroy = NULL,
+    .debug_name = vm_backend_debug_name,
+};
+
+const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
+    return &vm_backend_vtable;
+}
+
+static const char *vm_backend_debug_name(const XrCoroutine *coro) {
+    (void) coro;
+    return "vm";
+}
 
 static bool consume_select_channel_resume(XrCoroutine *coro) {
     if (!coro || !coro->select_wait)
@@ -100,10 +125,73 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
     return false;
 }
 
+static XrCoroEvent worker_event_from_coro(XrCoroutine *coro) {
+    XrCoroEvent event;
+    event.kind = XR_CORO_EVENT_START;
+    event.value = XR_NULL_VAL;
+    event.flags = 0;
+
+    if (!coro)
+        return event;
+
+    uint32_t flags = xr_coro_flags_load(coro);
+    event.flags = flags;
+    if (flags & XR_CORO_FLG_CANCEL_REQUESTED) {
+        event.kind = XR_CORO_EVENT_CANCEL;
+        return event;
+    }
+
+    int resume = xr_coro_resume_load(coro);
+    if (resume == XR_RESUME_DEBUG) {
+        event.kind = XR_CORO_EVENT_DEBUG;
+    } else if (resume == XR_RESUME_CHANNEL) {
+        event.kind = XR_CORO_EVENT_CHANNEL;
+    } else if (resume == XR_RESUME_CHANNEL_CLOSED) {
+        event.kind = XR_CORO_EVENT_CHANNEL_CLOSED;
+    } else if (flags & XR_CORO_FLG_STARTED) {
+        event.kind = XR_CORO_EVENT_RESUME;
+    }
+    return event;
+}
+
+static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {
+    XrValue value = coro ? coro->result : XR_NULL_VAL;
+    XrValue error = coro ? coro->error : XR_NULL_VAL;
+    bool error_is_value = coro ? coro->error_is_value : false;
+
+    switch (result) {
+        case XR_VM_OK:
+            return xr_coro_run_done(value);
+        case XR_VM_BLOCKED:
+            return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
+        case XR_VM_YIELD:
+            return xr_coro_run_result(XR_CORO_RUN_YIELD);
+        case XR_VM_GO_CHILD:
+            return xr_coro_run_spawn_child(coro ? coro->pending_spawn : NULL);
+        case XR_VM_CANCELLED:
+            return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
+        case XR_VM_DEBUG_BREAK:
+            return xr_coro_run_result(XR_CORO_RUN_DEBUG_BREAK);
+        case XR_VM_COMPILE_ERROR:
+        case XR_VM_RUNTIME_ERROR:
+        default:
+            return xr_coro_run_error(error, error_is_value);
+    }
+}
+
+static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                         const XrCoroRunContext *run_ctx) {
+    (void) event;
+    if (!run_ctx || !run_ctx->worker)
+        return xr_coro_run_error(XR_NULL_VAL, false);
+    XrVMResult result = vm_backend_resume_on_worker(run_ctx->worker, coro);
+    return worker_run_result_from_vm(coro, result);
+}
+
 /*
  * Unified BLOCKED post-processing (R5).
  *
- * Called after xr_coro_run_on_worker returns XR_VM_BLOCKED.
+ * Called after a backend returns XR_CORO_RUN_BLOCKED.
  * BLOCKED flag is already set by run_on_worker/run_cfunc_coro.
  *
  * Handles:
@@ -144,14 +232,14 @@ bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
     return false;
 }
 
-// Handle VM execution result for a coroutine. Returns true if runtime should stop.
-static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMResult result) {
+// Handle backend execution result for a coroutine. Returns true if runtime should stop.
+static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoroRunResult result) {
     XrRuntime *runtime = worker->p.runtime;
 
-    switch (result) {
-        case XR_VM_OK: {
+    switch (result.kind) {
+        case XR_CORO_RUN_DONE: {
             worker->p.yield_streak = 0;
-            // Result already saved in xr_coro_run_on_worker (coro->result).
+            // Result already saved in the backend resume path (coro->result).
             // flags_set uses release ordering, ensuring coro->result is visible
             // to other threads before FLG_DONE is observed.
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
@@ -178,7 +266,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             }
             break;
         }
-        case XR_VM_YIELD:
+        case XR_CORO_RUN_YIELD:
             xr_coro_resume_store(coro, XR_RESUME_OK);
             xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
             xr_coro_flags_set(coro, XR_CORO_FLG_READY);
@@ -187,14 +275,14 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             worker->p.yield_streak++;
             break;
 
-        case XR_VM_BLOCKED:
+        case XR_CORO_RUN_BLOCKED:
             worker->p.yield_streak = 0;
-            // BLOCKED flag already set by run_on_worker/run_cfunc_coro.
+            // BLOCKED flag already set by the backend resume path.
             // Unified post-processing: race check, fence, post_check, timer.
             worker_process_blocked(worker, coro);
             break;
 
-        case XR_VM_DEBUG_BREAK:
+        case XR_CORO_RUN_DEBUG_BREAK:
             xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED);
             if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
                 atomic_store(&runtime->running, false);
@@ -202,7 +290,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             }
             break;
 
-        case XR_VM_CANCELLED:
+        case XR_CORO_RUN_CANCELLED:
             worker->p.yield_streak = 0;
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
             xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_READY |
@@ -231,7 +319,12 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
             }
             break;
 
+        case XR_CORO_RUN_ERROR:
         default:
+            if (!XR_IS_NULL(result.error)) {
+                coro->error = result.error;
+                coro->error_is_value = result.error_is_value;
+            }
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
             /* Task/Executor separation: mark task failed.
              * Detach AFTER wake_waiter so task->waiter can be read. */
@@ -273,7 +366,7 @@ static bool worker_handle_vm_result(XrWorker *worker, XrCoroutine *coro, XrVMRes
 void worker_exec_with_cont_stealing(XrWorker *worker, XrCoroutine *coro) {
     XrMachine *m = worker->m;
     XrProc *p = &worker->p;
-    XrVMResult result;
+    XrCoroRunResult result;
     int fast_dispatch_budget = XR_FAST_DISPATCH_BUDGET;
 
 cont_exec:
@@ -298,8 +391,8 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // Children that yield (compute-heavy) go back to run queue where workers
     // can steal them. Children that block (channel I/O) go to blocked queue
     // and are not stealable — preserving cache locality for channel patterns.
-    if (result == XR_VM_GO_CHILD) {
-        XrCoroutine *child = coro->pending_spawn;
+    if (result.kind == XR_CORO_RUN_SPAWN_CHILD) {
+        XrCoroutine *child = result.child ? result.child : coro->pending_spawn;
         coro->pending_spawn = NULL;
         xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
         // Ensure worker threads are started (lazy init).
@@ -335,7 +428,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // BLOCKED fast re-dispatch: skip full handle_vm_result/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by run_on_worker/run_cfunc_coro.
-    if (result == XR_VM_BLOCKED && fast_dispatch_budget > 1) {
+    if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget > 1) {
         XrCoroutine *next = xr_worker_try_pop_lifo(worker, false);
         if (!next) {
             goto normal_result_path;
@@ -369,7 +462,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
 normal_result_path:
     // Check cancel flag (sysmon may have marked it)
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
-        result = XR_VM_CANCELLED;
+        result = xr_coro_run_result(XR_CORO_RUN_CANCELLED);
     }
 
     atomic_store_explicit(&m->current_coro, NULL, memory_order_relaxed);
@@ -379,9 +472,10 @@ normal_result_path:
     // has already been added to channel waitq (spinlock released). Another
     // thread may have woken it and started executing it on a different worker.
     // In that case we must NOT touch any coro fields — the coro is "gone".
-    if (result == XR_VM_BLOCKED && (xr_coro_resume_load(coro) == XR_RESUME_CHANNEL ||
-                                    xr_coro_resume_load(coro) == XR_RESUME_CHANNEL_CLOSED ||
-                                    (xr_coro_flags_load(coro) & XR_CORO_FLG_READY))) {
+    if (result.kind == XR_CORO_RUN_BLOCKED &&
+        (xr_coro_resume_load(coro) == XR_RESUME_CHANNEL ||
+         xr_coro_resume_load(coro) == XR_RESUME_CHANNEL_CLOSED ||
+         (xr_coro_flags_load(coro) & XR_CORO_FLG_READY))) {
         // Coro already woken by another thread — skip all coro field access
         p->local_active_coros--;
         goto pop_continuation;
@@ -394,13 +488,13 @@ normal_result_path:
     int prio = xr_coro_get_priority(xr_coro_flags_load(coro));
     xr_worker_reductions_executed(worker, prio, reds_used);
 
-    // Handle VM result
-    worker_handle_vm_result(worker, coro, result);
+    // Handle backend result
+    worker_handle_run_result(worker, coro, result);
 
     // Deferred recycle: fire-and-forget coro completed, defer to next pool_get.
     // gc_flags bit 2 = recyclable (set by vm_go for fire-and-forget go).
     // Push to pending linked list (via coro->next) — flushed in pool_get.
-    if (result == XR_VM_OK && (coro->gc_flags & XR_CORO_GC_RECYCLABLE) &&
+    if (result.kind == XR_CORO_RUN_DONE && (coro->gc_flags & XR_CORO_GC_RECYCLABLE) &&
         !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
         coro->next = p->pending_recycle_coro;
         p->pending_recycle_coro = coro;
@@ -986,12 +1080,12 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 
 // ========== Thin Dispatch Shell ==========
 //
-// xr_coro_run_on_worker is the dispatch hub combining
+// vm_backend_resume_on_worker is the VM backend dispatch hub combining
 // entry checks, channel-resume fast path, first-execution setup, JIT+unroll
 // resume, and result finalization. It is now a thin dispatch shell that
 // hands off to run_first_exec / run_resume_path / run_cfunc_coro /
 // run_finalize as appropriate.
-XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
+static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
         return XR_VM_RUNTIME_ERROR;
 
@@ -1150,4 +1244,15 @@ XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
     }
 
     return run_resume_path(isolate, worker, coro, ctx, coro_ctx);
+}
+
+XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro) {
+    XrCoroRunContext run_ctx;
+    run_ctx.worker = worker;
+    run_ctx.isolate = (worker && worker->p.runtime) ? worker->p.runtime->isolate : NULL;
+
+    XrCoroEvent event = worker_event_from_coro(coro);
+    const XrCoroBackendVTable *backend = xr_coro_vm_backend_vtable();
+    XR_DCHECK(backend != NULL && backend->resume != NULL, "VM coroutine backend is missing");
+    return backend->resume(coro, &event, &run_ctx);
 }
