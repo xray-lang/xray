@@ -1,0 +1,16 @@
+fn recv_once(ch: Channel<int>) -> int {
+    let value = ch.recv()
+    return value
+}
+
+fn caller(ch: Channel<int>) -> int {
+    yield
+    let value = recv_once(ch)
+    return value + 1
+}
+
+const ch = Channel(1)
+ch.send(41)
+let task = go caller(ch)
+print(await task)
+ch.close()

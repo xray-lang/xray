@@ -1,8 +1,6 @@
-fn recv_once(ch: Channel) -> int {
-    let v = ch.recv()
-    return v
+fn suspend_value() -> int {
+    yield
+    return 41
 }
 
-const ch = Channel(1)
-ch.send(41)
-print(recv_once(ch))
+print(suspend_value())
