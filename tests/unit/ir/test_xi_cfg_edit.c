@@ -173,6 +173,12 @@ TEST(compact_blocks_removes_unreachable_non_entry) {
     ASSERT(f->blocks[0] == entry);
     ASSERT(f->blocks[1] == live);
     ASSERT(live->id == 1);
+    ASSERT(f->next_block_id == f->nblocks);
+
+    XiBlock *after_compact = xi_block_new(f);
+    ASSERT(after_compact != NULL);
+    ASSERT(after_compact->id == 2);
+    ASSERT(f->blocks[2] == after_compact);
 
     xi_func_free(f);
 }

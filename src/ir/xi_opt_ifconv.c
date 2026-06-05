@@ -155,6 +155,7 @@ static void ifconv_replace_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
 static bool ifconv_append_value(XiBlock *blk, XiValue *v) {
     if (!xi_block_ensure_value_capacity(blk, blk->nvalues + 1))
         return false;
+    v->block = blk;
     blk->values[blk->nvalues++] = v;
     return true;
 }

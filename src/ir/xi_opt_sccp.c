@@ -780,6 +780,7 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     }
     bool blocks_removed = (write < n);
     f->nblocks = write;
+    f->next_block_id = write;
 
     /* Cleanup */
     xr_free(ctx.cells);

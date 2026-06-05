@@ -189,5 +189,6 @@ XR_FUNC uint32_t xi_cfg_compact_blocks(XiFunc *f) {
         }
     }
     f->nblocks = write;
+    f->next_block_id = write;
     return orig - write;
 }
