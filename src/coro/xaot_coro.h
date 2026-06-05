@@ -154,6 +154,6 @@ XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_va
 XR_FUNC XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue channel_value,
                                           XrSlotRef out_slot);
-XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot);
+XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx);
 
 #endif  // XAOT_CORO_H

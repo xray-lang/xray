@@ -817,8 +817,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    _chan_recv_%u = xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_%u);\n",
-                v->id, v->id);
+        fprintf(out, "    _chan_recv_%u = xr_aot_chan_recv_slot_resume(ctx);\n", v->id);
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);

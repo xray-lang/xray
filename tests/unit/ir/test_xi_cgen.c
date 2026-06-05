@@ -636,6 +636,30 @@ TEST(cgen_coro_await_clones_tagged_result) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
+    const char *src = "let ch = new Channel<int>(0)\n"
+                      "let value = ch.recv()\n"
+                      "print(value)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT channel recv should generate");
+    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "initial channel recv must register a backend-neutral slot");
+    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx);") &&
+           "channel recv resume must recover the slot from coroutine wait state");
+    assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
+           "channel recv resume must not depend on a local slot variable");
+
+    printf("  Generated channel recv wait-state slot %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -662,6 +686,7 @@ int main(void) {
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_await_clones_tagged_result();
+    run_cgen_coro_recv_resume_uses_wait_state_slot();
 
     teardown();
 
