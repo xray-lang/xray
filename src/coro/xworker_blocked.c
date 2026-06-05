@@ -197,7 +197,9 @@ static bool worker_blocked_bucket_remove_coro(XrWorker *worker, XrCoroutine *cor
         return false;
     if (coro->ext->wait_bucket_owner != worker->p.id)
         return false;
+    void *channel = bucket->channel;
     bucket_unlink_coro(bucket, coro);
+    worker_clear_channel_waiter_mask(worker, channel);
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
     return true;
 }
@@ -309,6 +311,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
 
     if (!coro)
         return NULL;
+    worker_clear_channel_waiter_mask(worker, channel);
 
     // Remove from linear queue
     if (worker_blocked_list_remove(worker, coro)) {
@@ -354,6 +357,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
 
     if (!coro)
         return NULL;
+    worker_clear_channel_waiter_mask(worker, channel);
 
     // Remove from linear queue
     if (worker_blocked_list_remove(worker, coro)) {
@@ -428,6 +432,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         coro = next;
     }
     bucket->recv_head = bucket->recv_tail = NULL;
+    worker_clear_channel_waiter_mask(worker, channel);
 
     // Reclaim the bucket if select_head is also empty.
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
