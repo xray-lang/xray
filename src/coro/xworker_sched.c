@@ -751,6 +751,42 @@ static bool worker_try_enter_search(XrRuntime *runtime) {
     return false;
 }
 
+static uint64_t runtime_stealable_candidates(XrRuntime *runtime, uint64_t self_bit) {
+    uint64_t candidates = 0;
+    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
+        candidates |=
+            atomic_load_explicit(&runtime->stealable_p_mask[p], memory_order_acquire) & ~self_bit;
+    }
+    return candidates;
+}
+
+static bool worker_steal_backoff_active(XrWorker *worker, XrRuntime *runtime, uint64_t self_bit,
+                                        int64_t now, int64_t *out_delay_hint) {
+    if (worker->p.steal_backoff_until <= now)
+        return false;
+
+    uint64_t high_candidates =
+        atomic_load_explicit(&runtime->stealable_p_mask[CORO_PRIORITY_HIGH], memory_order_acquire) &
+        ~self_bit;
+    if (high_candidates != 0)
+        return false;
+
+    *out_delay_hint = worker->p.steal_backoff_until - now;
+    worker->p.stats.steal_backoff_count++;
+    return true;
+}
+
+static void worker_update_steal_backoff(XrWorker *worker, bool found_work, int64_t now,
+                                        int64_t delay_hint) {
+    if (found_work || delay_hint <= 0) {
+        worker->p.steal_backoff_until = 0;
+        return;
+    }
+    if (delay_hint > XR_STEAL_BACKOFF_MAX_MS)
+        delay_hint = XR_STEAL_BACKOFF_MAX_MS;
+    worker->p.steal_backoff_until = now + delay_hint;
+}
+
 static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len,
                                          int priority) {
     if (!worker || !runtime || victim_len <= 0)
@@ -792,8 +828,10 @@ static int worker_find_steal_victim(XrWorker *worker, XrRuntime *runtime, _Atomi
 
         XrWorker *victim = &runtime->workers[i];
         int victim_len = xr_steal_queue_size(&victim->p.runq[priority].deque);
-        if (victim_len <= 0)
+        if (victim_len <= 0) {
+            xr_worker_refresh_runq_masks(victim);
             continue;
+        }
 
         XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq[priority].deque);
         int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len, priority);
@@ -846,6 +884,12 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                                      bool *should_exit) {
     *out_delay_hint = 0;
     *should_exit = false;
+    int64_t steal_now = xr_monotonic_ticks();
+    uint64_t self_bit = xr_runtime_worker_bit(worker->p.id);
+    if (runtime_stealable_candidates(runtime, self_bit) == 0)
+        return NULL;
+    if (worker_steal_backoff_active(worker, runtime, self_bit, steal_now, out_delay_hint))
+        return NULL;
     if (!worker_try_enter_search(runtime)) {
         worker->p.stats.steal_skip_count++;
         *out_delay_hint = 1;
@@ -853,9 +897,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
     }
     worker->p.stats.steal_attempt_count++;
     atomic_store(&worker->m->state, M_STEALING);
-    int64_t steal_now = xr_monotonic_ticks();
     XrCoroutine *coro = NULL;
-    uint64_t self_bit = xr_runtime_worker_bit(worker->p.id);
 
     for (int round = 0; round < 2 && !coro; round++) {
         for (int p = XR_RUNQ_COUNT - 1; p >= 0 && !coro; p--) {
@@ -880,6 +922,8 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                     xr_worker_refresh_runq_masks(victim);
                     xr_worker_refresh_runq_masks(worker);
                     coro = xr_worker_pop(worker);
+                } else {
+                    xr_worker_refresh_runq_masks(victim);
                 }
             }
 
@@ -892,6 +936,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
     }
 done:
     atomic_fetch_sub_explicit(&runtime->searching_count, 1, memory_order_acq_rel);
+    worker_update_steal_backoff(worker, coro != NULL, steal_now, *out_delay_hint);
     return coro;
 }
 

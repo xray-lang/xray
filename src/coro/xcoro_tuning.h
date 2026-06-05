@@ -54,6 +54,11 @@
 #define XR_SEARCHING_WORKER_DIVISOR 4
 #define XR_SEARCHING_WORKER_MAX 4
 
+/* Max delay before retrying a steal search after visible victims were too
+ * fresh to steal. Higher values reduce idle-worker scanning; lower values
+ * improve reaction time when a short local burst turns into backlog. */
+#define XR_STEAL_BACKOFF_MAX_MS 2
+
 /* Upper bound on consecutive "BLOCKED fast-redispatch" hops inside
  * worker_exec_with_cont_stealing. Limits worst-case starvation of other
  * coroutines when A and B bounce through a channel for ms-scale bursts. */

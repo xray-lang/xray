@@ -106,6 +106,7 @@ typedef struct XrProcStats {
     uint64_t stolen_count;          // Coros the owner has stolen from peers
     uint64_t steal_attempt_count;   // Steal scans started by this worker
     uint64_t steal_success_count;   // Steal scans that moved at least one coro
+    uint64_t steal_backoff_count;   // Steal scans deferred by freshness backoff
     uint64_t steal_skip_count;      // Steal scans skipped by the search gate
     uint64_t yielded_count;         // Voluntary yields
     uint64_t cont_steal_count;      // Continuations stolen (owner as stealer)
@@ -275,6 +276,7 @@ typedef struct XrProc {
     /* === Continuation Stealing === */
     XrStealQueue cont_deque;  // Chase-Lev deque for parent continuations
     int yield_streak;         // Consecutive yields without block/completion (detect compute-bound)
+    int64_t steal_backoff_until;
 
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
     XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection

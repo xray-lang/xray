@@ -630,7 +630,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             "\n%-8s %10s %10s %9s %8s %10s %8s %10s %10s %10s %9s %10s %9s %8s %8s %8s "
             "%8s %8s\n",
             "Worker", "Executed", "LocalPop", "LifoHit", "Inject", "Stolen", "StealOK", "StealTry",
-            "StealSkip", "Yielded", "Cont", "LifoFlush", "Inbox", "Park", "Unpark", "Timer",
+            "StealWait", "Yielded", "Cont", "LifoFlush", "Inbox", "Park", "Unpark", "Timer",
             "Burst", "Blocked");
     fprintf(stderr,
             "%-8s %10s %10s %9s %8s %10s %8s %10s %10s %10s %9s %10s %9s %8s %8s %8s "
@@ -640,7 +640,8 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             "-----", "-------");
 
     uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_steal_skip = 0;
-    uint64_t total_steal_success = 0, total_local_pop = 0, total_inject_pull = 0;
+    uint64_t total_steal_success = 0, total_steal_backoff = 0, total_local_pop = 0;
+    uint64_t total_inject_pull = 0;
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
@@ -660,7 +661,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) p->stats.stolen_count,
                 (unsigned long long) p->stats.steal_success_count,
                 (unsigned long long) p->stats.steal_attempt_count,
-                (unsigned long long) p->stats.steal_skip_count,
+                (unsigned long long) p->stats.steal_backoff_count,
                 (unsigned long long) p->stats.yielded_count,
                 (unsigned long long) p->stats.cont_steal_count,
                 (unsigned long long) p->stats.lifo_flush_count,
@@ -674,6 +675,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_inject_pull += p->stats.inject_pull_count;
         total_steal += p->stats.stolen_count;
         total_steal_success += p->stats.steal_success_count;
+        total_steal_backoff += p->stats.steal_backoff_count;
         total_steal_try += p->stats.steal_attempt_count;
         total_steal_skip += p->stats.steal_skip_count;
         total_yield += p->stats.yielded_count;
@@ -703,7 +705,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             "TOTAL", (unsigned long long) total_exec, (unsigned long long) total_local_pop,
             (unsigned long long) total_lifo_hit, (unsigned long long) total_inject_pull,
             (unsigned long long) total_steal, (unsigned long long) total_steal_success,
-            (unsigned long long) total_steal_try, (unsigned long long) total_steal_skip,
+            (unsigned long long) total_steal_try, (unsigned long long) total_steal_backoff,
             (unsigned long long) total_yield, (unsigned long long) total_cont,
             (unsigned long long) total_lifo_flush, (unsigned long long) total_inbox,
             (unsigned long long) total_park, (unsigned long long) total_unpark,
@@ -722,11 +724,13 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_cont);
     fprintf(stderr,
             "Steal: attempts=%llu success=%llu success_ratio=%.2f%% stolen_items=%llu "
-            "items_per_success=%.2f skipped=%llu skip_ratio=%.2f%%\n",
+            "items_per_success=%.2f skipped=%llu backoff=%llu defer_ratio=%.2f%% "
+            "skip_ratio=%.2f%%\n",
             (unsigned long long) total_steal_try, (unsigned long long) total_steal_success,
             stats_percent_u64(total_steal_success, total_steal_try),
             (unsigned long long) total_steal, stats_ratio_u64(total_steal, total_steal_success),
-            (unsigned long long) total_steal_skip,
+            (unsigned long long) total_steal_skip, (unsigned long long) total_steal_backoff,
+            stats_percent_u64(total_steal_backoff, total_steal_try + total_steal_backoff),
             stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
     fprintf(stderr,
             "Runnable wait: total_ms=%llu avg_ms=%.3f max_ms=%llu dispatches=%llu "
