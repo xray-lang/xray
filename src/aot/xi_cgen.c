@@ -2466,6 +2466,7 @@ XR_FUNC void xi_cgen_main(FILE *out, XiModule **modules, int n, int entry_index)
     if (entry_is_coro) {
         fprintf(out, "    XrayIsolateParams params;\n");
         fprintf(out, "    xray_isolate_params_init(&params);\n");
+        fprintf(out, "    xray_isolate_setup_full(&params);\n");
         fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
         fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
         fprintf(out, "    if (!X) return 1;\n");
@@ -2542,6 +2543,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     if (cg_func_needs_aot_coro(main_func)) {
         fprintf(out, "    XrayIsolateParams params;\n");
         fprintf(out, "    xray_isolate_params_init(&params);\n");
+        fprintf(out, "    xray_isolate_setup_full(&params);\n");
         fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
         fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
         fprintf(out, "    if (!X) return 1;\n");

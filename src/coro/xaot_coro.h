@@ -138,6 +138,7 @@ XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_va
 XR_FUNC XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value);
 XR_FUNC XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx);

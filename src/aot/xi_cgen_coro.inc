@@ -419,6 +419,23 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_TUPLE_GET) {
+        if (v->nargs < 1) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: TUPLE_GET missing tuple\n");
+            return;
+        }
+        fprintf(out, "    XrValue _tuple_get_%u = xr_aot_tuple_get(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %u);\n", (unsigned) v->aux_int);
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_tuple_get_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
     if (v->op == XI_CHAN_SEND || cg_is_channel_method_call(v, "send", 1)) {
         if (v->nargs < 2) {
             ctx->error = true;
