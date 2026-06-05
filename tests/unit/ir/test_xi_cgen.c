@@ -662,6 +662,8 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
            "scalar channel send must use the typed AOT bridge");
     assert(!contains(code, "xr_aot_chan_send(ctx,") &&
            "scalar channel send must not re-box at the generated call site");
+    assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
+           "scalar channel send should not emit a dead boxed send operand");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar channel send values must not call the deep-copy helper");
 
@@ -686,6 +688,8 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
            "scalar channel trySend must use the typed AOT bridge");
     assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
            "scalar channel trySend must not re-box at the generated call site");
+    assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
+           "scalar channel trySend should not emit a dead boxed send operand");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar channel trySend values must not call the deep-copy helper");
 
