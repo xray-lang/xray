@@ -388,6 +388,10 @@ static void dns_async_invoke(void *data) {
     d->success = do_resolve(d->cache, d->hostname, &d->addr, d->family);
 }
 
+static void dns_async_data_destroy(void *data) {
+    xr_free(data);
+}
+
 bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int worker_id,
                           const char *hostname, XrSockAddr *addr, XrAddrFamily family) {
     if (!hostname || !hostname[0] || !addr)
@@ -408,7 +412,7 @@ bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int w
 
     XrDnsAsyncData *data = (XrDnsAsyncData *) xr_malloc(sizeof(XrDnsAsyncData));
     if (!data)
-        return do_resolve(cache, hostname, addr, family);
+        return false;
 
     strncpy(data->hostname, hostname, sizeof(data->hostname) - 1);
     data->hostname[sizeof(data->hostname) - 1] = '\0';
@@ -419,11 +423,15 @@ bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int w
     XrAsyncJob *job = xr_async_job_create(coro, worker_id, dns_async_invoke, data);
     if (!job) {
         xr_free(data);
-        return do_resolve(cache, hostname, addr, family);
+        return false;
     }
+    job->destroy_data = dns_async_data_destroy;
 
-    xr_async_submit(pool, job);
-    return true;  // suspended; result populated when the worker resumes the coro
+    if (!xr_async_submit(pool, job)) {
+        xr_async_job_free(job);
+        return false;
+    }
+    return true;  // suspended; caller retries after completion warms the cache
 }
 
 /* ========== Cache control ========== */
