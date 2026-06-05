@@ -39,7 +39,7 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 
-/* ========== Helper: Collect all coroutines from all workers ========== */
+/* ========== Helper: Collect all coroutines from the runtime ========== */
 
 // VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_dispatch_helpers.h
 
@@ -62,64 +62,14 @@ static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const Xr
         xr_map_set(info, VM_INTERN_KEY("source"), xr_string_value(source));
 }
 
-// Collect coroutines from all workers into a flat array for diagnostic sub-ops.
+// Collect coroutines from runtime queues into a flat array for diagnostic sub-ops.
 // Returns the number of entries written. Best-effort snapshot (not atomic).
 int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
     XR_DCHECK(isolate != NULL, "vm_collect_all_coros: NULL isolate");
     XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime)
         return 0;
-
-    int count = 0;
-
-    // Temporary buffer for steal queue snapshots
-    XrCoroutine *snap_buf[256];
-
-    for (int wi = 0; wi < runtime->worker_count && count < max_out; wi++) {
-        XrWorker *w = &runtime->workers[wi];
-
-        // 1) Ready coroutines from Chase-Lev deque + overflow
-        for (int p = 0; p < XR_RUNQ_COUNT && count < max_out; p++) {
-            XrRunQueue *rq = &w->p.runq[p];
-
-            // Deque snapshot
-            int n = xr_steal_queue_snapshot(&rq->deque, snap_buf,
-                                            (max_out - count < 256) ? (max_out - count) : 256);
-            for (int i = 0; i < n && count < max_out; i++) {
-                out[count].coro = snap_buf[i];
-                out[count].state = "ready";
-                count++;
-            }
-
-            // Overflow list
-            XrCoroutine *ov = rq->overflow_first;
-            while (ov && count < max_out) {
-                out[count].coro = ov;
-                out[count].state = "ready";
-                count++;
-                ov = ov->next;
-            }
-        }
-
-        // 2) LIFO slot
-        XrCoroutine *_ls = atomic_load_explicit(&w->p.lifo_slot, memory_order_relaxed);
-        if (_ls && count < max_out) {
-            out[count].coro = _ls;
-            out[count].state = "ready";
-            count++;
-        }
-
-        // 3) Blocked coroutines
-        XrCoroutine *bc = w->p.blocked_head;
-        while (bc && count < max_out) {
-            out[count].coro = bc;
-            out[count].state = "blocked";
-            count++;
-            bc = bc->next;
-        }
-    }
-
-    return count;
+    return xr_runtime_collect_coros(runtime, out, max_out);
 }
 
 /* ========== Dispatch: OP_CORO_CTRL Sub-operations ========== */
@@ -140,17 +90,31 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 return XR_DISP_NEXT;
             }
 
-            int blocked_count = 0, ready_count = 0;
-            int active_count = xr_runtime_active_coros(runtime);
+            int blocked_count = 0, ready_count = 0, active_count = 0;
             uint64_t total_created = 0;
             for (int _si = 0; _si < runtime->worker_count; _si++)
                 total_created += runtime->workers[_si].p.stats.spawned_count;
 
-            for (int wi = 0; wi < runtime->worker_count; wi++) {
-                XrWorker *w = &runtime->workers[wi];
-                blocked_count += w->p.blocked_count;
-                for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-                    ready_count += xr_runq_len(&w->p.runq[p]);
+            VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
+            if (entries) {
+                int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
+                for (int i = 0; i < total; i++) {
+                    if (strcmp(entries[i].state, "ready") == 0)
+                        ready_count++;
+                    else if (strcmp(entries[i].state, "blocked") == 0)
+                        blocked_count++;
+                    else if (strcmp(entries[i].state, "running") == 0)
+                        active_count++;
+                }
+                xr_free(entries);
+            } else {
+                active_count = xr_runtime_active_coros(runtime);
+                for (int wi = 0; wi < runtime->worker_count; wi++) {
+                    XrWorker *w = &runtime->workers[wi];
+                    blocked_count += w->p.blocked_count;
+                    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
+                        ready_count += xr_runq_len(&w->p.runq[p]);
+                    }
                 }
             }
 
@@ -187,6 +151,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             }
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
+            if (!entries) {
+                base[a] = xr_value_from_array(xr_array_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
+            }
             int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
 
             XrArray *result = xr_array_new(vm_get_coro(vm_ctx));
@@ -284,6 +252,8 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 limit = 100;
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
+            if (!entries)
+                return XR_DISP_NEXT;
             int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
 
             int ready_count = 0, blocked_count = 0;
@@ -306,8 +276,11 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             int shown = 0;
             for (int i = 0; i < total && shown < limit; i++) {
                 XrCoroutine *coro = entries[i].coro;
-                const char *state_upper =
-                    (strcmp(entries[i].state, "blocked") == 0) ? "BLOCKED" : "READY";
+                const char *state_upper = "READY";
+                if (strcmp(entries[i].state, "blocked") == 0)
+                    state_upper = "BLOCKED";
+                else if (strcmp(entries[i].state, "running") == 0)
+                    state_upper = "RUNNING";
                 const char *block_reason = "-";
                 if (strcmp(entries[i].state, "blocked") == 0) {
                     void *wait_channel = coro->ext ? atomic_load_explicit(&coro->ext->wait_channel,
@@ -391,9 +364,18 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 int64_t value;
             } TopEntry;
             TopEntry *entries = xr_malloc(sizeof(TopEntry) * VM_CORO_COLLECT_MAX);
+            if (!entries) {
+                base[a] = xr_value_from_array(xr_array_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
+            }
             memset(entries, 0, sizeof(TopEntry) * VM_CORO_COLLECT_MAX);
 
             VmCoroEntry *raw = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
+            if (!raw) {
+                xr_free(entries);
+                base[a] = xr_value_from_array(xr_array_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
+            }
             int count = vm_collect_all_coros(isolate, raw, VM_CORO_COLLECT_MAX);
             for (int i = 0; i < count; i++) {
                 entries[i].coro = raw[i].coro;
@@ -451,6 +433,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             }
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
+            if (!entries) {
+                base[a] = xr_value_from_map(xr_map_new(vm_get_coro(vm_ctx)));
+                return XR_DISP_NEXT;
+            }
             int total = vm_collect_all_coros(isolate, entries, VM_CORO_COLLECT_MAX);
 
             XrMap *result = xr_map_new(vm_get_coro(vm_ctx));

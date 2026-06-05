@@ -365,12 +365,9 @@ XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 /* ========== Coroutine Scheduler ========== */
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
-XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);
-XR_FUNC void xr_sched_remove(XrCoroState *sched, XrCoroutine *target);
-XR_FUNC XrCoroutine *xr_sched_dequeue(XrCoroState *sched);
-// Scheduler initialization
-XR_FUNC void xr_sched_init(XrCoroState *sched);
-XR_FUNC void xr_sched_destroy(XrCoroState *sched);
+// Coroutine bookkeeping initialization
+XR_FUNC void xr_coro_state_init(XrCoroState *state);
+XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Multicore runtime
 XR_FUNC void xr_multicore_init(XrayIsolate *X, int num_workers);

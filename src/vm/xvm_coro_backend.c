@@ -290,12 +290,6 @@ XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrVal
     XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
     XR_DCHECK(arg_count == 0 || args != NULL, "coro_create_vm_closure: NULL args with count > 0");
 
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
-        xr_runtime_error(X, "coroutine limit exceeded (%d)", XR_MAX_COROUTINES);
-        return NULL;
-    }
-
     XrCoroutine *coro = vm_backend_alloc_shell(X, true);
     if (!coro)
         return NULL;
@@ -328,11 +322,6 @@ XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrVal
 
 XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X, XrCoroCFuncEntry cfunc, XrValue *args,
                                      int argc, const char *name) {
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
-        return NULL;
-    }
-
     XrCoroutine *coro = vm_backend_alloc_shell(X, true);
     if (!coro)
         return NULL;
