@@ -353,7 +353,7 @@ static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool
             return;
         }
         xr_worker_wake_all(worker, channel);
-        while (xr_worker_wake_select(worker, channel)) {
+        while (xr_worker_wake_select_with_status(worker, channel, XR_RESUME_CHANNEL_CLOSED)) {
         }
         return;
     }

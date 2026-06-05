@@ -1,0 +1,28 @@
+fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) {
+    ready.send(1)
+    select {
+        msg from ch -> {}
+    }
+    done.send(1)
+}
+
+@test
+fn test_select_wakes_on_channel_close() {
+    shared const ch = new Channel<int>(0)
+    shared const ready = new Channel<int>(0)
+    shared const done = new Channel<int>(1)
+
+    go wait_select_close(ch, ready, done)
+    assert_eq(ready.recv(), 1)
+
+    for (let i = 0; i < 16; i++) {
+        yield
+    }
+
+    ch.close()
+    let (value, ok) = done.recvTimeout(2000)
+    assert_eq(ok, true)
+    assert_eq(value, 1)
+    ready.close()
+    done.close()
+}

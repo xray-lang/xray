@@ -109,7 +109,7 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
     ASSERT_EQ_INT(coro.select_ready_case, 0);
     ASSERT_TRUE(atomic_load(&wait.triggered));
-    ASSERT_EQ_INT(xr_coro_resume_load(&coro), XR_RESUME_CHANNEL);
+    ASSERT_EQ_INT(xr_coro_resume_load(&coro), XR_RESUME_CHANNEL_CLOSED);
     ASSERT_TRUE(xr_coro_flags_has(&coro, XR_CORO_FLG_READY));
     ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_BLOCKED));
     ASSERT_NULL(worker_blocked_bucket_find(&f.worker, ch));
