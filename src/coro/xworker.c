@@ -626,6 +626,8 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_steal_skip = 0;
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
+    uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
+    uint64_t total_lifo_gate_priority = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
@@ -654,6 +656,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_cont += p->stats.cont_steal_count;
         total_lifo_hit += p->stats.lifo_hit_count;
         total_lifo_flush += p->stats.lifo_flush_count;
+        total_lifo_gate_budget += p->stats.lifo_gate_budget_count;
+        total_lifo_gate_backlog += p->stats.lifo_gate_backlog_count;
+        total_lifo_gate_priority += p->stats.lifo_gate_priority_count;
         total_inbox += p->stats.inbox_drain_count;
         total_park += p->stats.park_count;
         total_unpark += p->stats.unpark_count;
@@ -678,6 +683,12 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Runnable wait: total_ms=%llu max_ms=%llu priority_boost=%llu\n",
             (unsigned long long) total_wait_ms, (unsigned long long) max_wait_ms,
             (unsigned long long) total_prio_boost);
+    fprintf(stderr, "LIFO gate: total=%llu budget=%llu backlog=%llu priority=%llu\n",
+            (unsigned long long) (total_lifo_gate_budget + total_lifo_gate_backlog +
+                                  total_lifo_gate_priority),
+            (unsigned long long) total_lifo_gate_budget,
+            (unsigned long long) total_lifo_gate_backlog,
+            (unsigned long long) total_lifo_gate_priority);
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
     fprintf(stderr,

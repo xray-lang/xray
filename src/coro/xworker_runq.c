@@ -23,6 +23,13 @@
 
 #define XR_LIFO_INJECT_BACKLOG_THRESHOLD XR_INJECT_POP_BATCH
 
+typedef enum XrLifoGateDecision {
+    XR_LIFO_GATE_ALLOW,
+    XR_LIFO_GATE_BUDGET,
+    XR_LIFO_GATE_BACKLOG,
+    XR_LIFO_GATE_PRIORITY,
+} XrLifoGateDecision;
+
 // ========== Run Queue Implementation (Chase-Lev deque) ==========
 
 static int normalize_coro_priority(int priority) {
@@ -204,28 +211,51 @@ static bool runtime_backlog_should_gate_lifo(XrRuntime *runtime) {
     return false;
 }
 
-static bool worker_lifo_gate_allows(XrWorker *worker, XrCoroutine *lifo, bool consume_poll_budget) {
+static XrLifoGateDecision worker_lifo_gate_decision(XrWorker *worker, XrCoroutine *lifo,
+                                                    bool consume_poll_budget) {
     if (consume_poll_budget && worker->p.lifo_polls >= XR_MAX_LIFO_POLLS)
-        return false;
+        return XR_LIFO_GATE_BUDGET;
 
     XrRuntime *runtime = worker->p.runtime;
     if (runtime_backlog_should_gate_lifo(runtime))
-        return false;
+        return XR_LIFO_GATE_BACKLOG;
 
     int lifo_priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo)));
     if (lifo_priority >= CORO_PRIORITY_HIGH)
-        return true;
+        return XR_LIFO_GATE_ALLOW;
 
     if (runtime) {
         uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
         if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
              high_bit) == 0 &&
             xr_proc_local_runq_len(&worker->p) <= 1) {
-            return true;
+            return XR_LIFO_GATE_ALLOW;
         }
     }
 
-    return !worker_has_effective_high_work(worker, xr_monotonic_ticks());
+    return worker_has_effective_high_work(worker, xr_monotonic_ticks()) ? XR_LIFO_GATE_PRIORITY
+                                                                        : XR_LIFO_GATE_ALLOW;
+}
+
+static void worker_record_lifo_gate(XrWorker *worker, XrLifoGateDecision decision) {
+    if (!worker)
+        return;
+    switch (decision) {
+        case XR_LIFO_GATE_BUDGET:
+            worker->p.stats.lifo_gate_budget_count++;
+            break;
+        case XR_LIFO_GATE_BACKLOG:
+            worker->p.stats.lifo_gate_backlog_count++;
+            break;
+        case XR_LIFO_GATE_PRIORITY:
+            worker->p.stats.lifo_gate_priority_count++;
+            break;
+        case XR_LIFO_GATE_ALLOW:
+            break;
+        default:
+            XR_CHECK(false, "record_lifo_gate: invalid gate decision");
+            break;
+    }
 }
 
 XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) {
@@ -234,7 +264,8 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         return NULL;
 
     int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo)));
-    if (worker_lifo_gate_allows(worker, lifo, consume_poll_budget)) {
+    XrLifoGateDecision gate = worker_lifo_gate_decision(worker, lifo, consume_poll_budget);
+    if (gate == XR_LIFO_GATE_ALLOW) {
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
         if (consume_poll_budget)
             worker->p.lifo_polls++;
@@ -245,6 +276,7 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         return lifo;
     }
 
+    worker_record_lifo_gate(worker, gate);
     atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
     if (!worker_enqueue_runq_or_inject(worker, lifo, priority, true)) {
         xr_proc_local_runq_dec(&worker->p, 1);
