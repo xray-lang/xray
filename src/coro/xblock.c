@@ -20,6 +20,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
+#include "xdeep_copy.h"
 #include "xtask.h"
 #include "xworker.h"
 #include "xyieldable.h"
@@ -325,6 +326,43 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
 }
 
+XrValue xr_coro_await_result_value(XrayIsolate *isolate, XrCoroutine *dst_coro, XrTask *task,
+                                   bool discard_result) {
+    if (discard_result || !task)
+        return xr_null();
+
+    XrValue result = task->result;
+    if (dst_coro && isolate && xr_value_needs_copy(result)) {
+        result = xr_deep_copy_to_coro(isolate, result, dst_coro);
+        task->result = result;
+    }
+    return result;
+}
+
+static bool await_store_result(XrayIsolate *isolate, XrCoroutine *coro, XrTask *task,
+                               XrSlotRef result_slot, bool discard_result, XrValue *out_value) {
+    XrValue result = xr_coro_await_result_value(isolate, coro, task, discard_result);
+    if (out_value)
+        *out_value = result;
+    return xr_slot_store_value(result_slot, result);
+}
+
+XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCoroutine *coro,
+                                                 XrTask *task, XrSlotRef result_slot,
+                                                 bool discard_result) {
+    XrCoroBlockResult result = xr_coro_await_task_resume(coro, task);
+    if (result.kind == XR_CORO_BLOCK_READY) {
+        XrValue value = xr_null();
+        if (!await_store_result(isolate, coro, task, result_slot, discard_result, &value))
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        result.value = value;
+    } else if (result.kind == XR_CORO_BLOCK_TIMEOUT || result.kind == XR_CORO_BLOCK_CLOSED) {
+        if (!xr_slot_store_value(result_slot, xr_null()))
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+    return result;
+}
+
 XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
     XR_DCHECK(task != NULL, "xr_coro_await_task: NULL task");
 
@@ -369,6 +407,23 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
     atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
     atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
     return block_result(XR_CORO_BLOCK_READY, task->result, true);
+}
+
+XrCoroBlockResult xr_coro_await_task_slot(XrayIsolate *isolate, XrCoroutine *coro, XrTask *task,
+                                          XrSlotRef result_slot, int64_t timeout_ms,
+                                          bool discard_result) {
+    XrCoroBlockResult result = xr_coro_await_task(coro, task, timeout_ms);
+    if (result.kind == XR_CORO_BLOCK_READY) {
+        XrValue value = xr_coro_await_result_value(isolate, coro, task, discard_result);
+        if (!xr_slot_store_value(result_slot, value))
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        result.value = value;
+    } else if (result.kind == XR_CORO_BLOCK_TIMEOUT || result.kind == XR_CORO_BLOCK_CLOSED ||
+               result.kind == XR_CORO_BLOCK_NO_CORO) {
+        if (!xr_slot_store_value(result_slot, xr_null()))
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+    return result;
 }
 
 XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {

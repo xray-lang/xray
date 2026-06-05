@@ -14,6 +14,7 @@
  */
 
 #include "../coro/xworker_internal.h"
+#include "../coro/xblock.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
@@ -587,7 +588,7 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
             uint8_t tstate = atomic_load_explicit(&await_task->state, memory_order_acquire);
             XrValue res = xr_null();
             if (tstate == XR_TASK_COMPLETED) {
-                res = xr_deep_copy_to_coro(isolate, await_task->result, coro);
+                res = xr_coro_await_result_value(isolate, coro, await_task, false);
             }
             coro->jit_state.suspend->result = res.i;
             coro->jit_state.suspend->result_tag = res.tag;

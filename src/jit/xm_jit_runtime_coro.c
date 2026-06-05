@@ -1171,8 +1171,8 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
         XrTask *task = xr_value_to_task(val);
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (tstate == XR_TASK_COMPLETED) {
-            XrValue res = discard_result ? xr_null()
-                                         : xr_deep_copy_to_coro(coro->isolate, task->result, coro);
+            XrValue res =
+                xr_coro_await_result_value(coro->isolate, coro, task, discard_result != 0);
             return XR_JIT_RESULT(res);
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
@@ -1217,7 +1217,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         // Race win: result ready — store into suspend_regs[23] for inline resume
         XrValue res = xr_null();
         if (tstate == XR_TASK_COMPLETED && !discard_result) {
-            res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
+            res = xr_coro_await_result_value(coro->isolate, coro, task, false);
         }
         coro->jit_state.suspend->result = res.i;
         coro->jit_state.suspend->result_tag = res.tag;
@@ -1229,10 +1229,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {0, 0};  // blocked
     }
     if (await_result.kind == XR_CORO_BLOCK_READY) {
-        XrValue res = xr_null();
-        if (!discard_result) {
-            res = xr_deep_copy_to_coro(coro->isolate, task->result, coro);
-        }
+        XrValue res = xr_coro_await_result_value(coro->isolate, coro, task, discard_result != 0);
         coro->jit_state.suspend->result = res.i;
         coro->jit_state.suspend->result_tag = res.tag;
         return (XrJitResult) {1, 0};  // not blocked — JIT continues
