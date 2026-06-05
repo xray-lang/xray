@@ -376,6 +376,22 @@ static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(slot_value));
 }
 
+static void emit_coro_await_result_slot(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *prefix, const XiValue *await_value,
+                                        const XiValue *typed_slot_value) {
+    if (typed_slot_value) {
+        emit_coro_slot_ref(ctx, out, f, prefix, typed_slot_value);
+        return;
+    }
+    if (cg_coro_value_has_storage(f, await_value)) {
+        fprintf(out, "xr_slot_xvalue_ptr(&");
+        emit_vref(out, await_value);
+        fprintf(out, ")");
+        return;
+    }
+    fprintf(out, "xr_slot_none()");
+}
+
 static bool cg_is_channel_method_call(const XiValue *v, const char *method, int nargs) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
         return false;
@@ -489,6 +505,24 @@ static bool cg_coro_value_needs_runtime_slot(const XiValue *v) {
     return v && (v->op == XI_CHAN_RECV || cg_is_channel_method_call(v, "recv", 0));
 }
 
+static bool cg_coro_value_is_aggregate_await_tasks(const XiFunc *f, const XiValue *target) {
+    if (!f || !target)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_AWAIT || v->nargs < 1 || v->args[0] != target)
+                continue;
+            if (((int) v->aux_int & 0x7) != 0)
+                return true;
+        }
+    }
+    return false;
+}
+
 static bool cg_coro_value_needs_frame(const XiFunc *f, const XiLiveness *live,
                                       const XiValue *v) {
     if (!cg_coro_value_has_storage(f, v))
@@ -498,6 +532,8 @@ static bool cg_coro_value_needs_frame(const XiFunc *f, const XiLiveness *live,
     if (cg_coro_unbox_from_typed_recv(f, v))
         return true;
     if (cg_coro_value_needs_runtime_slot(v))
+        return true;
+    if (cg_coro_value_is_aggregate_await_tasks(f, v))
         return true;
     if (v->op == XI_GO)
         return true;
@@ -511,7 +547,8 @@ static bool cg_coro_phi_needs_frame(const XiFunc *f, const XiLiveness *live,
 
 static bool cg_coro_value_may_hold_frame_root(const XiFunc *f, const XiLiveness *live,
                                               const XiValue *v) {
-    return cg_coro_value_live_across_suspend(f, live, v) || cg_coro_value_needs_runtime_slot(v);
+    return cg_coro_value_live_across_suspend(f, live, v) || cg_coro_value_needs_runtime_slot(v) ||
+           cg_coro_value_is_aggregate_await_tasks(f, v);
 }
 
 static size_t cg_coro_align_up(size_t size, size_t align) {
@@ -835,17 +872,31 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         int sid = ++(*state_id);
         const XiValue *await_slot_value = cg_coro_typed_await_unbox_user(f, v);
-        fprintf(out, "    XrAotResult _await_%u = xr_aot_await_task(ctx, ", v->id);
+        int await_flags = (int) v->aux_int;
+        bool await_all = (await_flags & 2) != 0;
+        bool await_any_success = (await_flags & 4) != 0;
+        bool await_any = (await_flags & 1) != 0 || await_any_success;
+        if (await_all || await_any) {
+            fprintf(out, "    ");
+            emit_vref(out, v->args[0]);
+            fprintf(out, " = xrt_value_clone_for_coro(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ");\n");
+        }
+        if (await_all) {
+            fprintf(out, "    XrAotResult _await_%u = xr_aot_await_all_tasks(ctx, ", v->id);
+        } else if (await_any) {
+            fprintf(out, "    XrAotResult _await_%u = xr_aot_await_any_task(ctx, ", v->id);
+        } else {
+            fprintf(out, "    XrAotResult _await_%u = xr_aot_await_task(ctx, ", v->id);
+        }
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
-        if (await_slot_value) {
-            emit_coro_slot_ref(ctx, out, f, prefix, await_slot_value);
-        } else {
-            fprintf(out, "xr_slot_xvalue_ptr(&");
-            emit_vref(out, v);
-            fprintf(out, ")");
-        }
-        fprintf(out, ", false);\n");
+        emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
+        if (await_any)
+            fprintf(out, ", %s);\n", await_any_success ? "true" : "false");
+        else
+            fprintf(out, await_all ? ");\n" : ", false);\n");
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _await_%u;\n", v->id);
@@ -855,20 +906,34 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
-        fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, ", v->id);
-        if (await_slot_value) {
-            emit_coro_slot_ref(ctx, out, f, prefix, await_slot_value);
+        if (await_all) {
+            fprintf(out, "    _await_%u = xr_aot_await_all_tasks_resume(ctx, ", v->id);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
+            fprintf(out, ");\n");
+        } else if (await_any) {
+            fprintf(out, "    _await_%u = xr_aot_await_any_task_resume(ctx, ", v->id);
+            emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
+            fprintf(out, ");\n");
         } else {
-            fprintf(out, "xr_slot_xvalue_ptr(&");
-            emit_vref(out, v);
-            fprintf(out, ")");
+            fprintf(out, "    _await_%u = xr_aot_await_task_resume(ctx, ", v->id);
+            emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
+            fprintf(out, ", false);\n");
         }
-        fprintf(out, ", false);\n");
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        if ((await_all || await_any) && cg_coro_value_has_storage(f, v) &&
+            cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = xr_aot_bridge_value_to_xrt(");
+            emit_vref(out, v);
+            fprintf(out, ");\n");
+        }
         if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED &&
             cg_coro_value_needs_boundary_clone(v)) {
             fprintf(out, "    ");
