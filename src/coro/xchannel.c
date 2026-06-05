@@ -46,17 +46,6 @@ static inline bool channel_single_worker(uint64_t mask) {
     return mask != 0 && (mask & (mask - 1)) == 0;
 }
 
-static inline void channel_store_recv_slot(XrCoroutine *receiver, XrValue value) {
-    if (!receiver)
-        return;
-    if (receiver->recv_slot_ref.kind != XR_SLOT_NONE) {
-        (void) xr_slot_store_value(receiver->recv_slot_ref, value);
-        return;
-    }
-    if (receiver->recv_slot)
-        *receiver->recv_slot = value;
-}
-
 static XrChannelKind channel_infer_kind(XrChannel *ch) {
     if (!ch)
         return XR_CHAN_GENERIC;
@@ -299,8 +288,7 @@ static void timer_channel_fire_cb(void *arg) {
         // Try to hand value directly to a blocked receiver
         receiver = xr_waitq_dequeue(&ch->recvq);
         if (receiver) {
-            // Direct transfer to blocked receiver's slot
-            channel_store_recv_slot(receiver, xr_int(now));
+            (void) xr_coro_store_recv_value(receiver, xr_int(now));
         } else {
             // No receiver waiting: leave value in buffer for later recv
             ch->buffer[0] = xr_int(now);
@@ -465,7 +453,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     if (!receiver)
         return false;
     channel_note_worker_locked(ch, true);
-    channel_store_recv_slot(receiver, v);
+    (void) xr_coro_store_recv_value(receiver, v);
     xr_amutex_unlock(&ch->lock);
     channel_wake_coro(receiver);
     return true;
@@ -960,7 +948,7 @@ recv_locked:
     // Set blocked state and join recvq
     atomic_store_explicit(&coro->wait_channel, ch, memory_order_release);
     coro->wait_send = false;
-    // recv_slot already set by VM to stack register address
+    // recv_slot is owned by the backend-neutral block helper.
     // see send path comment for rationale.
     xr_coro_transition_to_blocked(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing

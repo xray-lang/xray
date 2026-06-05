@@ -111,6 +111,18 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
     }
 }
 
+bool xr_coro_store_recv_value(XrCoroutine *coro, XrValue value) {
+    if (!coro)
+        return false;
+    if (coro->recv_slot_ref.kind != XR_SLOT_NONE)
+        return xr_slot_store_value(coro->recv_slot_ref, value);
+    if (coro->recv_slot) {
+        *coro->recv_slot = value;
+        return true;
+    }
+    return false;
+}
+
 static void coro_finish_resume(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_finish_resume: NULL coro");
     xr_coro_resume_store(coro, XR_RESUME_OK);

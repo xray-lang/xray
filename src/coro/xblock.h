@@ -42,6 +42,7 @@ typedef struct {
 XR_FUNC bool xr_slot_store_value(XrSlotRef slot, XrValue value);
 XR_FUNC bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value);
 XR_FUNC XrValue *xr_slot_value_address(XrSlotRef slot);
+XR_FUNC bool xr_coro_store_recv_value(struct XrCoroutine *coro, XrValue value);
 
 XR_FUNC XrCoroBlockResult xr_coro_chan_send_resume(struct XrCoroutine *coro, XrSlotRef result_slot);
 XR_FUNC XrCoroBlockResult xr_coro_chan_recv_resume(struct XrayIsolate *isolate,
