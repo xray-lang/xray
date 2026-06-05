@@ -117,11 +117,16 @@ void xr_worker_refresh_runq_masks(XrWorker *worker) {
         lifo ? normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo))) : -1;
     bool has_cont = xr_steal_queue_size(&worker->p.cont_deque) > 0;
     for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
-        bool nonempty = xr_runq_len(&worker->p.runq[priority]) > 0 || lifo_priority == priority;
+        int deque_len = xr_steal_queue_size(&worker->p.runq[priority].deque);
+        bool nonempty =
+            deque_len > 0 || worker->p.runq[priority].overflow_len > 0 || lifo_priority == priority;
+        bool stealable = deque_len > 0;
         if (priority == CORO_PRIORITY_NORMAL && has_cont) {
             nonempty = true;
+            stealable = true;
         }
         xr_runtime_set_runq_nonempty(runtime, worker->p.id, priority, nonempty);
+        xr_runtime_set_runq_stealable(runtime, worker->p.id, priority, stealable);
     }
 }
 

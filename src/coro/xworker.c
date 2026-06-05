@@ -255,6 +255,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->needspinning, 0);
     for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
         atomic_store(&runtime->nonempty_p_mask[pi], 0);
+        atomic_store(&runtime->stealable_p_mask[pi], 0);
     }
     atomic_store(&runtime->timer_p_mask, 0);
     atomic_store(&runtime->idle_p_mask, 0);
@@ -716,12 +717,20 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) xr_sched_metric_load(&s->inject_spill_count), inject_len,
                 atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
     }
-    fprintf(stderr, "Masks: runq=[0x%llx,0x%llx,0x%llx] timer=0x%llx idle=0x%llx searching=%d\n",
+    fprintf(stderr,
+            "Masks: runq=[0x%llx,0x%llx,0x%llx] stealable=[0x%llx,0x%llx,0x%llx] "
+            "timer=0x%llx idle=0x%llx searching=%d\n",
             (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[0],
                                                       memory_order_relaxed),
             (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[1],
                                                       memory_order_relaxed),
             (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[2],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[0],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[1],
+                                                      memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[2],
                                                       memory_order_relaxed),
             (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
             (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
