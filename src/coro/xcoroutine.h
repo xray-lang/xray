@@ -8,8 +8,8 @@
  * xcoroutine.h - Coroutine type definitions
  *
  * KEY CONCEPT:
- *   - XrCoroutine: unified coroutine object (VM execution unit + user-visible task)
- *   - Per-coroutine VM execution context, value stack, and bytecode frames
+ *   - XrCoroutine: scheduler-owned coroutine shell plus backend payload
+ *   - VM/JIT/AOT execution state lives behind backend_state
  *   - 3-level priority scheduling (LOW/NORMAL/HIGH)
  *   - Reduction-based fair scheduling
  *
@@ -367,7 +367,6 @@ struct XrCoroutine {
     /* === Backend Execution State === */
     const XrCoroBackendVTable *backend;
     void *backend_state;
-    XrVmCoroState *vm_state;
 
     /* ================================================================
      * WARM ZONE — GC/result hot fields and backend-owned cold state
@@ -446,16 +445,34 @@ struct XrCoroutine {
     XrCoroExt *ext;
 };
 
+static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
+    return coro && coro->backend && coro->backend->kind == XR_CORO_BACKEND_VM;
+}
+
+static inline XrVmCoroState *xr_coro_maybe_vm_state(XrCoroutine *coro) {
+    if (!xr_coro_backend_is_vm(coro))
+        return NULL;
+    return (XrVmCoroState *) coro->backend_state;
+}
+
+static inline const XrVmCoroState *xr_coro_maybe_vm_state_const(const XrCoroutine *coro) {
+    if (!xr_coro_backend_is_vm(coro))
+        return NULL;
+    return (const XrVmCoroState *) coro->backend_state;
+}
+
 static inline XrVMContext *xr_coro_vm_ctx(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_vm_ctx: NULL coro");
-    XR_DCHECK(coro->vm_state != NULL, "coro_vm_ctx: missing VM state");
-    return &coro->vm_state->ctx;
+    XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
+    XR_DCHECK(state != NULL, "coro_vm_ctx: missing VM state");
+    return &state->ctx;
 }
 
 static inline const XrVMContext *xr_coro_vm_ctx_const(const XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_vm_ctx_const: NULL coro");
-    XR_DCHECK(coro->vm_state != NULL, "coro_vm_ctx_const: missing VM state");
-    return &coro->vm_state->ctx;
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    XR_DCHECK(state != NULL, "coro_vm_ctx_const: missing VM state");
+    return &state->ctx;
 }
 
 /* ========== XrCoroExt Accessor ========== */

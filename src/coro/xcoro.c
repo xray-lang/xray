@@ -128,11 +128,13 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
 static bool coro_ensure_vm_state(XrCoroutine *coro) {
     if (!coro)
         return false;
-    if (coro->vm_state)
+    if (xr_coro_maybe_vm_state(coro))
         return true;
-    coro->vm_state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
-    if (!coro->vm_state)
+    XrVmCoroState *vm_state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
+    if (!vm_state)
         return false;
+    coro->backend = xr_coro_vm_backend_vtable();
+    coro->backend_state = vm_state;
     coro->gc_flags |= XR_CORO_GC_VM_STATE_OWNED;
     return true;
 }
@@ -179,9 +181,10 @@ void xr_coro_free_jit_state(XrCoroutine *coro) {
 static void coro_free_owned_vm_state(XrCoroutine *coro) {
     if (!coro || !(coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED))
         return;
-    xr_free(coro->vm_state);
-    coro->vm_state = NULL;
+    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
+    xr_free(vm_state);
     coro->backend_state = NULL;
+    coro->backend = NULL;
     coro->gc_flags &= ~XR_CORO_GC_VM_STATE_OWNED;
 }
 
@@ -358,7 +361,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
     if (need_stack && !coro_ensure_vm_state(coro))
         return false;
-    XrVMContext *vm_ctx = coro->vm_state ? xr_coro_vm_ctx(coro) : NULL;
+    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
+    XrVMContext *vm_ctx = vm_state ? &vm_state->ctx : NULL;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
     // Recycled coros already have all fields zeroed by xr_coro_recycle_local,
@@ -371,7 +375,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         // Fresh allocation from pool/slab: bulk memset is faster than individual
         // field stores on ARM64 (vectorized stp instructions).
         // Save fields set by pool_get, memset the rest, then restore.
-        XrVmCoroState *saved_vm_state = coro->vm_state;
+        XrVmCoroState *saved_vm_state = vm_state;
         XrValue *saved_stack = vm_ctx ? vm_ctx->stack : NULL;
         int saved_stack_cap = vm_ctx ? vm_ctx->stack_capacity : 0;
         XrBcCallFrame *saved_frames = vm_ctx ? vm_ctx->frames : NULL;
@@ -388,10 +392,13 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         memset((char *) coro + offsetof(XrCoroutine, flags), 0,
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
 
-        coro->vm_state = saved_vm_state;
-        vm_ctx = coro->vm_state ? xr_coro_vm_ctx(coro) : NULL;
+        if (saved_vm_state) {
+            coro->backend = xr_coro_vm_backend_vtable();
+            coro->backend_state = saved_vm_state;
+        }
+        vm_ctx = saved_vm_state ? &saved_vm_state->ctx : NULL;
         if (vm_ctx) {
-            memset(&coro->vm_state->ctx, 0, sizeof(coro->vm_state->ctx));
+            memset(vm_ctx, 0, sizeof(*vm_ctx));
             vm_ctx->stack = saved_stack;
             vm_ctx->stack_capacity = saved_stack_cap;
             vm_ctx->frames = saved_frames;
@@ -452,7 +459,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     coro->isolate = X;
     coro->name = name;
     coro->backend = vm_ctx ? xr_coro_vm_backend_vtable() : NULL;
-    coro->backend_state = vm_ctx ? coro->vm_state : NULL;
+    coro->backend_state = vm_ctx ? vm_state : NULL;
     if (!is_clean) {
         // Fresh allocation: set sentinel values (-1 means "not set")
         coro->recv_slot_ref = xr_slot_none();
@@ -887,7 +894,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
             xr_coro_gc_destroy(gc);
     }
 
-    if (!coro->vm_state) {
+    if (!xr_coro_maybe_vm_state(coro)) {
         if (coro->args && coro->args != coro->inline_args) {
             xr_free(coro->args);
         }
@@ -1035,7 +1042,7 @@ void xr_coro_free(XrCoroutine *coro) {
         if (gc)
             xr_coro_gc_destroy(gc);
     }
-    if (coro->vm_state) {
+    if (xr_coro_maybe_vm_state(coro)) {
         XrVMContext *vm_ctx = xr_coro_vm_ctx(coro);
         // Free VM stack and bytecode frames (skip slab-embedded stacks — arena owns them)
         if (vm_ctx->stack) {
@@ -1145,7 +1152,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
     }
 
-    if (!coro->vm_state) {
+    if (!xr_coro_maybe_vm_state(coro)) {
         xr_coro_destroy(coro);
         return;
     }

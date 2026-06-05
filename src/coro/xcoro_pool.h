@@ -133,26 +133,29 @@ XR_FUNC void xr_coro_pool_print_stats(XrCoroStructPool *pool);
 #include "xexec_frame.h"
 static inline void xr_coro_init_from_slab(struct XrCoroutine *coro, XrCoroPoolBlock *block,
                                           uint32_t local_idx) {
-    coro->vm_state = block->vm_states ? &block->vm_states[local_idx] : NULL;
-    XR_DCHECK(coro->vm_state != NULL, "coro_init_from_slab: missing VM state");
-    xr_coro_vm_ctx(coro)->handlers = xr_coro_vm_ctx(coro)->handler_inline;
-    xr_coro_vm_ctx(coro)->handler_capacity = XR_HANDLER_INLINE_CAP;
+    XrVmCoroState *vm_state = block->vm_states ? &block->vm_states[local_idx] : NULL;
+    XR_DCHECK(vm_state != NULL, "coro_init_from_slab: missing VM state");
+    coro->backend = xr_coro_vm_backend_vtable();
+    coro->backend_state = vm_state;
+    XrVMContext *vm_ctx = &vm_state->ctx;
+    vm_ctx->handlers = vm_ctx->handler_inline;
+    vm_ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
     coro->coro_gc = NULL;
     coro->ext = NULL;
     coro->jit_state = NULL;
     if (block->slab) {
         char *entry = block->slab + local_idx * block->slab_entry_size;
         size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
-        xr_coro_vm_ctx(coro)->stack = (XrValue *) entry;
-        xr_coro_vm_ctx(coro)->stack_capacity = XR_CORO_POOL_STACK_SLOTS;
-        xr_coro_vm_ctx(coro)->frames = (XrBcCallFrame *) (entry + stack_bytes);
-        xr_coro_vm_ctx(coro)->frame_capacity = XR_CORO_POOL_FRAME_SLOTS;
+        vm_ctx->stack = (XrValue *) entry;
+        vm_ctx->stack_capacity = XR_CORO_POOL_STACK_SLOTS;
+        vm_ctx->frames = (XrBcCallFrame *) (entry + stack_bytes);
+        vm_ctx->frame_capacity = XR_CORO_POOL_FRAME_SLOTS;
         coro->gc_flags = XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL;
     } else {
-        xr_coro_vm_ctx(coro)->stack = NULL;
-        xr_coro_vm_ctx(coro)->stack_capacity = 0;
-        xr_coro_vm_ctx(coro)->frames = NULL;
-        xr_coro_vm_ctx(coro)->frame_capacity = 0;
+        vm_ctx->stack = NULL;
+        vm_ctx->stack_capacity = 0;
+        vm_ctx->frames = NULL;
+        vm_ctx->frame_capacity = 0;
         coro->gc_flags = XR_CORO_GC_FROM_POOL;
     }
 }
