@@ -1,0 +1,19 @@
+fn wait_for_value(ch: Channel<int>) -> int {
+    let value = ch.recv()
+    return value
+}
+
+fn quick_value(n: int) -> int {
+    yield
+    return n * 2
+}
+
+let ch = new Channel<int>(0)
+let blocked = go wait_for_value(ch)
+let timed_out = await(timeout: 1) blocked
+print(timed_out == null)
+ch.close()
+
+let quick = go quick_value(21)
+let value = await(timeout: 1000) quick
+print(value)

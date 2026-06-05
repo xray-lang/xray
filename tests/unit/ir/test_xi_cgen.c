@@ -821,6 +821,34 @@ TEST(cgen_coro_scalar_await_uses_typed_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_await_timeout_passes_deadline) {
+    const char *src = "fn worker(ch: Channel<int>) -> int {\n"
+                      "    let value = ch.recv()\n"
+                      "    return value\n"
+                      "}\n"
+                      "let ch = new Channel<int>(0)\n"
+                      "let task = go worker(ch)\n"
+                      "let result = await(timeout: 25) task\n"
+                      "print(result == null)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await timeout should generate");
+    assert(contains(code, "xr_aot_await_task(ctx,") &&
+           "timeout await must use the AOT await bridge");
+    assert(!contains(code, ", -1, false);") &&
+           "timeout await must not use the infinite-wait sentinel");
+    assert(contains(code, "INT64_C(25)") && "timeout expression should be evaluated");
+
+    printf("  Generated await timeout %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     const char *src = "let ch = new Channel<int>(0)\n"
                       "let value = ch.recv()\n"
@@ -1071,6 +1099,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_scalar_await_uses_typed_slot();
+    run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();

@@ -907,8 +907,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_coro_await_result_slot(ctx, out, f, prefix, v, await_slot_value);
         if (await_any)
             fprintf(out, ", %s);\n", await_any_success ? "true" : "false");
-        else
-            fprintf(out, await_all ? ");\n" : ", false);\n");
+        else if (await_all) {
+            fprintf(out, ");\n");
+        } else {
+            fprintf(out, ", ");
+            if (v->nargs >= 2)
+                emit_int64_arg(out, v->args[1]);
+            else
+                fprintf(out, "-1");
+            fprintf(out, ", false);\n");
+        }
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _await_%u;\n", v->id);

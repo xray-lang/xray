@@ -491,12 +491,12 @@ XrAotResult xr_aot_select_block(const XrAotContext *ctx, const XrValue *channel_
 }
 
 XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrSlotRef out_slot,
-                              bool discard_result) {
+                              int64_t timeout_ms, bool discard_result) {
     if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrTask *task = xr_value_to_task(task_value);
-    XrCoroBlockResult block =
-        xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, out_slot, -1, discard_result);
+    XrCoroBlockResult block = xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, out_slot,
+                                                      timeout_ms, discard_result);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
@@ -505,6 +505,8 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrSlo
     }
     if (block.kind == XR_CORO_BLOCK_CLOSED)
         return xr_aot_result(XR_AOT_RUN_DONE);
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
+        return aot_store_slot_result(out_slot, XR_NULL_VAL);
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
