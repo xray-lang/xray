@@ -658,11 +658,38 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT scalar channel send should generate");
-    assert(contains(code, "xr_aot_chan_send(ctx,") && "channel send must use the AOT bridge");
+    assert(contains(code, "xr_aot_chan_send_i64(ctx,") &&
+           "scalar channel send must use the typed AOT bridge");
+    assert(!contains(code, "xr_aot_chan_send(ctx,") &&
+           "scalar channel send must not re-box at the generated call site");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar channel send values must not call the deep-copy helper");
 
     printf("  Generated scalar channel send %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
+    const char *src = "let ch = new Channel<int>(1)\n"
+                      "let ok = ch.trySend(42)\n"
+                      "print(ok)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scalar channel trySend should generate");
+    assert(contains(code, "xr_aot_chan_try_send_i64(ctx,") &&
+           "scalar channel trySend must use the typed AOT bridge");
+    assert(!contains(code, "xr_aot_chan_try_send(ctx,") &&
+           "scalar channel trySend must not re-box at the generated call site");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "scalar channel trySend values must not call the deep-copy helper");
+
+    printf("  Generated scalar channel trySend %zu bytes of C code\n", strlen(code));
     free(code);
     xi_func_free(ir);
 }
@@ -770,6 +797,7 @@ int main(void) {
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
+    run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
