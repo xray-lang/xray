@@ -5,21 +5,23 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xresume.c - Coroutine resume and unroll mechanism
+ * xvm_resume.c - VM coroutine resume and unroll mechanism
  *
  * KEY CONCEPT:
  *   Implements coroutine resume with unroll mechanism.
  *   Walks call stack to process continuation functions layer by layer.
  */
 
-#include "xcoroutine.h"
+#include "xvm_resume.h"
+
+#include "../coro/xcoroutine.h"
 #include "../base/xchecks.h"
-#include "xyieldable.h"
+#include "../coro/xyieldable.h"
 #include "../runtime/xvm_call.h"  // XrVMResult, XR_VM_*
 #include "../runtime/xray_debug.h"
 #include <stdio.h>
 
-// xr_coro_resume_with_unroll - Coroutine resume (with unroll mechanism)
+// xr_vm_coro_resume_with_unroll - VM coroutine resume with unroll mechanism.
 //
 // Unroll algorithm:
 // 1. Start from current frame, check for continuation functions layer by layer
@@ -34,7 +36,7 @@
 //
 // Returns:
 //   XrVMResult: VM_OK (continue), VM_BLOCKED (blocked again), VM_ERROR (error)
-XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int resume_status) {
+XrVMResult xr_vm_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int resume_status) {
     if (!X || !coro) {
         return XR_VM_RUNTIME_ERROR;
     }
@@ -139,6 +141,3 @@ XrVMResult xr_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int res
     // Return OK, let VM continue bytecode (if frames empty, VM naturally ends)
     return XR_VM_OK;
 }
-
-// xr_coro_set_resume_status / xr_coro_get_resume_status are now
-// static inline in xresume.h (trivial wrappers around atomic load/store).

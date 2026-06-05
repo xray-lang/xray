@@ -23,6 +23,7 @@
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
+#include "xvm_resume.h"
 
 // ========== Forward Declarations ==========
 
@@ -160,7 +161,7 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
 
 // Resume a previously-suspended cfunc coroutine. Includes an inline fast
 // path for the common "single C frame with continuation" case (HTTP/WS
-// handlers); falls back to xr_coro_resume_with_unroll otherwise.
+// handlers); falls back to VM continuation unroll otherwise.
 static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
                                    uint32_t cur_flags) {
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
@@ -205,7 +206,7 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
     }
 
     // Slow path: full unroll.
-    XrVMResult result = xr_coro_resume_with_unroll(isolate, coro, resume_status);
+    XrVMResult result = xr_vm_coro_resume_with_unroll(isolate, coro, resume_status);
     if (result != XR_VM_OK)
         return result;
 
@@ -604,7 +605,7 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
 // xr_coro_run_on_worker handles directly.  Supports:
 //   - JIT suspend/resume (run_jit_resume re-enters compiled code)
 //   - XR_RESUME_CONTINUATION / XR_RESUME_DEBUG (run() directly)
-//   - Default unroll via xr_coro_resume_with_unroll then run()
+//   - Default unroll via VM continuation unroll then run()
 static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
                                   XrVMContext *ctx, XrVMContext *coro_ctx) {
     (void) worker;
@@ -646,7 +647,7 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 
     // Default: unroll then run.
     int resume_status = xr_coro_resume_load(coro) ? xr_coro_resume_load(coro) : XR_RESUME_IO_READY;
-    XrVMResult unroll_result = xr_coro_resume_with_unroll(isolate, coro, resume_status);
+    XrVMResult unroll_result = xr_vm_coro_resume_with_unroll(isolate, coro, resume_status);
     XR_DBG_CORO("run_on_worker: coro id=%d, unroll result=%d, frame_count=%d", coro->id,
                 unroll_result, coro_ctx->frame_count);
 
