@@ -48,6 +48,7 @@ static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *e
                                          const XrCoroRunContext *run_ctx);
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
+static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -56,6 +57,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .release = NULL,
     .destroy = NULL,
     .debug_name = vm_backend_debug_name,
+    .debug_snapshot = vm_backend_debug_snapshot,
 };
 
 const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
@@ -65,6 +67,32 @@ const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
 static const char *vm_backend_debug_name(const XrCoroutine *coro) {
     (void) coro;
     return "vm";
+}
+
+static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot) {
+    if (!snapshot)
+        return;
+    snapshot->backend_name = "vm";
+    snapshot->function_name = "?";
+    snapshot->frame_count = 0;
+    snapshot->in_c_frame = 0;
+    if (!coro)
+        return;
+
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    if (!state)
+        return;
+
+    const XrVMContext *ctx = &state->ctx;
+    snapshot->frame_count = ctx->frame_count;
+    if (ctx->frame_count <= 0 || !ctx->frames)
+        return;
+
+    const XrBcCallFrame *frame = &ctx->frames[ctx->frame_count - 1];
+    snapshot->in_c_frame = (frame->call_status & XR_CALL_C) ? 1 : 0;
+    if (frame->closure && frame->closure->proto && frame->closure->proto->name) {
+        snapshot->function_name = frame->closure->proto->name->data;
+    }
 }
 
 static bool consume_select_channel_resume(XrCoroutine *coro) {

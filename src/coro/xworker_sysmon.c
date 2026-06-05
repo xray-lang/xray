@@ -131,16 +131,17 @@ static void sysmon_check(XrRuntime *runtime) {
                 XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
                 if (coro && !xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                     xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
-                    // Diagnostic: read from vm_ctx (active during execution)
-                    const char *func_name = "?";
-                    int in_c = 0;
-                    int fc = xr_coro_vm_ctx(coro)->frame_count;
-                    XrBcCallFrame *frames = xr_coro_vm_ctx(coro)->frames;
-                    if (fc > 0 && frames) {
-                        XrBcCallFrame *f = &frames[fc - 1];
-                        in_c = (f->call_status & XR_CALL_C) ? 1 : 0;
-                        if (f->closure && f->closure->proto && f->closure->proto->name) {
-                            func_name = f->closure->proto->name->data;
+                    XrCoroDebugSnapshot snap = {
+                        .backend_name = "unknown",
+                        .function_name = "?",
+                        .frame_count = 0,
+                        .in_c_frame = 0,
+                    };
+                    if (coro->backend) {
+                        if (coro->backend->debug_snapshot) {
+                            coro->backend->debug_snapshot(coro, &snap);
+                        } else if (coro->backend->debug_name) {
+                            snap.backend_name = coro->backend->debug_name(coro);
                         }
                     }
                     const char *entry_str = "closure";
@@ -151,10 +152,13 @@ static void sysmon_check(XrRuntime *runtime) {
                     xr_log_warning("sysmon",
                                    "Worker %d stuck for %lldms, "
                                    "coro id=%d '%s' cancelled "
-                                   "(entry=%s, frame: %s, c=%d, fc=%d, reds=%d, flags=0x%x)",
+                                   "(backend=%s, entry=%s, frame: %s, c=%d, fc=%d, reds=%d, "
+                                   "flags=0x%x)",
                                    i, (long long) (elapsed_us / 1000), coro->id,
-                                   coro->name ? coro->name : "unknown", entry_str, func_name, in_c,
-                                   fc, coro->reductions, xr_coro_flags_load(coro));
+                                   coro->name ? coro->name : "unknown",
+                                   snap.backend_name ? snap.backend_name : "unknown", entry_str,
+                                   snap.function_name ? snap.function_name : "?", snap.in_c_frame,
+                                   snap.frame_count, coro->reductions, xr_coro_flags_load(coro));
                 }
             }
         } else {
