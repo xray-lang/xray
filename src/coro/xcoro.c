@@ -657,7 +657,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
     return coro;
 }
 
-XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_stack) {
+XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
 
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
@@ -665,44 +665,11 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
         return NULL;
     }
 
-    XrCoroutine *coro = NULL;
-    if (!need_stack) {
-        coro = coro_alloc_lightweight_shell();
-    } else {
-        XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-        if (runtime) {
-            coro = xr_coro_pool_get(runtime);
-        }
-        if (!coro) {
-            if (X->sys_heap) {
-                coro = xr_sysheap_alloc_coro(X->sys_heap);
-                if (!coro)
-                    return NULL;
-                coro->coro_gc = NULL;
-            } else {
-                coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-                if (coro) {
-                    memset(coro, 0, sizeof(XrCoroutine));
-                    coro->gc.type = XR_TCOROUTINE;
-                }
-                if (!coro)
-                    return NULL;
-                if (!coro_ensure_vm_backend_state(coro)) {
-                    coro_discard_uninitialized(coro);
-                    return NULL;
-                }
-                coro->coro_gc = NULL;
-            }
-        }
-        if (!coro_ensure_vm_backend_state(coro)) {
-            coro_discard_uninitialized(coro);
-            return NULL;
-        }
-    }
+    XrCoroutine *coro = coro_alloc_lightweight_shell();
     if (!coro)
         return NULL;
 
-    if (!coro_init_common(coro, X, name, need_stack)) {
+    if (!coro_init_common(coro, X, name, false)) {
         xr_coro_free(coro);
         coro_discard_uninitialized(coro);
         return NULL;
@@ -777,7 +744,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
     if (!X || !func)
         return NULL;
 
-    XrCoroutine *coro = xr_coro_create_empty(X, name, false);
+    XrCoroutine *coro = xr_coro_create_empty(X, name);
     if (!coro)
         return NULL;
 

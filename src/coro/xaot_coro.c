@@ -207,7 +207,7 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
     state->desc = desc;
     state->frame = frame;
 
-    XrCoroutine *coro = xr_coro_create_empty(X, name ? name : desc->name, false);
+    XrCoroutine *coro = xr_coro_create_empty(X, name ? name : desc->name);
     if (!coro) {
         aot_release_frame(desc, frame, NULL);
         xr_free(state);
