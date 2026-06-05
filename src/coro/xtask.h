@@ -33,8 +33,8 @@
  * RELATED MODULES:
  *   - xcoroutine.h: Executor (pool-allocated execution context),
  *                    XrScopeContext (orthogonal scope policy)
- *   - xvm_coro_ops.c: vm_await reads task->state/result
- *   - xworker.c: executor_complete writes task->result, recycles executor
+ *   - xblock.c: await helpers read task->state/result
+ *   - xworker_exec.c: executor completion writes task->result, recycles executor
  *   - linked go / monitored go syntax
  */
 

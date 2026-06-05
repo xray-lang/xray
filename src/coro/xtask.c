@@ -22,8 +22,8 @@
  * RELATED MODULES:
  *   - xtask.h: struct definition + inline helpers
  *   - xcoroutine.h: executor (XrCoroutine)
- *   - xworker.c: calls xr_task_complete on executor finish
- *   - xvm_coro_ops.c: vm_await reads task->state/result
+ *   - xworker_exec.c: calls xr_task_complete on executor finish
+ *   - xblock.c: await helpers read task->state/result
  */
 
 #include "xtask.h"
@@ -161,7 +161,7 @@ void xr_task_fail(XrTask *task, XrValue error) {
 void xr_task_cancel(XrTask *task) {
     if (!task)
         return;
-    /* Cancel can be invoked from XR_VM_CANCELLED (state ACTIVE/COMPLETING),
+    /* Cancel can be invoked from backend cancellation (state ACTIVE/COMPLETING),
      * from cancel_tree's finalize step (state CANCELLING), and from the
      * user task.cancel() API (any non-final state). Reject only final. */
     uint32_t from_mask =
@@ -248,7 +248,7 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
     // Fire completion listeners
     xr_task_fire_completion(task);
 
-    /* Wake any vm_await waiter. Without this, awaits on a task that reaches
+    /* Wake any await waiter. Without this, awaits on a task that reaches
      * its terminal state via finalize (cancel_tree's no_children branch,
      * fail_with_propagation's no_children branch, child_completed once the
      * last child reports back) deadlock — the happy path through
@@ -432,7 +432,7 @@ void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
         return;
 
     /* Treiber stack push: CAS the head pointer until we succeed. The
-     * caller (typically xvm_invoke task.monitor()) already checked
+     * caller (typically task.monitor() dispatch) already checked
      * xr_task_is_done() and decided to register a listener, but the
      * executor on another worker may transition the task to a terminal
      * state and run xr_task_fire_completion at any point during this
@@ -461,9 +461,9 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
         return;
 
     /* Unconditionally mark RESOLVED before checking waiter.
-     * If child completes before parent calls vm_await,
+     * If child completes before parent registers await,
      * waiter is NULL but await_state MUST be RESOLVED so
-     * vm_await's CAS(NONE->WAITING) fails and reads result. */
+     * await registration's CAS(NONE->WAITING) fails and reads result. */
     int old_await =
         atomic_exchange_explicit(&task->await_state, XR_AWAIT_RESOLVED, memory_order_acq_rel);
 

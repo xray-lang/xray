@@ -38,7 +38,7 @@ struct XrCoroutine;
 
 // XrCFuncResult - C function execution result
 //
-// Yieldable C functions return this enum to tell VM how to proceed:
+// Yieldable C functions return this enum to tell the active backend how to proceed:
 //   - DONE: function complete, result pushed to stack
 //   - YIELD: voluntarily yield, continue from continuation next time
 //   - BLOCKED: waiting for I/O, needs netpoll to wake
@@ -69,7 +69,7 @@ typedef enum XrResumeStatus {
     XR_RESUME_CHANNEL_CLOSED,  // Channel closed (need to recheck buffer)
     XR_RESUME_ERROR,           // Error
     XR_RESUME_DEBUG,           // Debug break resume (skip unroll)
-    XR_RESUME_CONTINUATION,    // Continuation stealing resume (vm_ctx already set, skip unroll)
+    XR_RESUME_CONTINUATION,    // Continuation stealing resume (backend state already rebound)
     XR_RESUME_CLOSURE_DONE,    // Closure called via xr_call_closure returned normally
     XR_RESUME_CLOSURE_ERROR    // Closure called via xr_call_closure threw exception
 } XrResumeStatus;
