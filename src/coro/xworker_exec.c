@@ -185,8 +185,8 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
 
             /* Task/Executor separation: cache result in Task before wake.
-             * Don't detach executor yet — vm_await will deep-copy result
-             * to awaiting coro's heap, then detach + recycle executor. */
+             * Await helpers copy the result to the awaiting coroutine's
+             * heap before the executor detaches and becomes recyclable. */
             if (coro->task) {
                 xr_task_complete(coro->task, coro->result);
             }
@@ -447,7 +447,7 @@ normal_result_path:
     worker_handle_run_result(worker, coro, result);
 
     // Deferred recycle: fire-and-forget coro completed, defer to next pool_get.
-    // gc_flags bit 2 = recyclable (set by vm_go for fire-and-forget go).
+    // gc_flags bit 2 = recyclable for fire-and-forget go.
     // Push to pending linked list (via coro->next) — flushed in pool_get.
     if (result.kind == XR_CORO_RUN_DONE && (coro->gc_flags & XR_CORO_GC_RECYCLABLE) &&
         !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {

@@ -30,9 +30,10 @@
  *   RUNNING and DONE coroutines are on no queue.
  *
  *   INVARIANT 4 (Reduction fairness): Each coroutine starts a time slice
- *   with XR_CORO_REDUCTIONS. The VM decrements on backward jumps and
- *   calls. When reductions <= 0, the coroutine yields to the scheduler.
- *   This prevents any single coroutine from starving others.
+ *   with XR_CORO_REDUCTIONS. Backends decrement on backward jumps,
+ *   calls, or their equivalent safepoints. When reductions <= 0, the
+ *   coroutine yields to the scheduler. This prevents any single coroutine
+ *   from starving others.
  *
  *   INVARIANT 5 (Affinity hint): affinity_p is a hint for wake targeting.
  *   It is NOT a hard binding. The scheduler may migrate coroutines via
