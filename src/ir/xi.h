@@ -707,62 +707,30 @@ typedef struct XiFunc {
      * cross-module import resolution tables.  NULL entries = not exported. */
     const char **export_names; /* array of nshared entries (arena-alloc'd) */
 
-    /* Per-slot owned names: maps shared slot → declaration name, for every
-     * slot this function DECLARES (not seeded from an enclosing REPL
-     * context).  Parallel to export_names but covers non-exported
-     * declarations too.  Enables the REPL symbol table to round-trip
-     * name ↔ slot without scanning the AST or relying on export flags.
-     * NULL for slots seeded by a REPL prior-input. */
+    /* Per-slot declaration names for REPL/module symbol round-tripping. */
     const char **slot_owned_names; /* array of nshared entries (arena-alloc'd) */
 
-    /* Per-slot const flag, parallel to slot_owned_names.  Non-zero when
-     * the declaration was AST_CONST_DECL (i.e. `const x = ...`), zero
-     * for `let`, `fn`, `class`, etc.  Carried through to the REPL
-     * symbol table so `.vars` can distinguish let from const without
-     * re-parsing.  May be NULL if no slots owned. */
+    /* Per-slot const flag, parallel to slot_owned_names. */
     uint8_t *slot_owned_consts; /* array of nshared bytes (arena-alloc'd) */
 
-    /* Re-export table: entries from "export { a } from './file'" and
-     * "export * from './file'" statements. Populated during lowering,
-     * emitted as OP_LOAD_MODULE_SLOT + OP_SET_EXPORT by emit_reexports. */
+    /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;
 
-    /* IR stage — monotonically non-decreasing; set by lowerer and
-     * advanced by stage-transition passes.  Backends and passes check
-     * this to reject functions that have not reached the required stage. */
+    /* IR stage, monotonically non-decreasing across pipeline passes. */
     XiStage stage;
 
-    /* Cumulative invariant mask — bits are set as passes establish
-     * properties.  Stage-specific verifiers check required bits.
-     * Automatically updated when stage advances. */
+    /* Cumulative invariant mask established by passes and stage transitions. */
     XiInvariantMask invariant_mask;
 
-    /* CFG / analysis version tags.  cfg_version is bumped by
-     * xi_cfg_invalidate() whenever the CFG changes (block split /
-     * merge / edge rewrite).  *_version fields record the
-     * cfg_version observed when each analysis was last computed;
-     * the corresponding xi_ensure_*() entry point recomputes lazily
-     * only when its version lags cfg_version.
-     *
-     * Initial cfg_version is 1 (set by xi_func_new); all *_version
-     * default to 0 (calloc), so the first ensure() call always
-     * recomputes.
-     *
-     * loop_cache is owned by the XiFunc — callers of xi_ensure_loops()
-     * must NOT free the returned pointer; xi_func_free() handles
-     * release, and a CFG-version mismatch triggers re-release inside
-     * xi_ensure_loops(). */
+    /* CFG and analysis version tags for lazy recomputation. */
     uint64_t cfg_version;
     uint64_t rpo_version;
     uint64_t dom_version;
     uint64_t loop_version;
     struct XiLoopInfo *loop_cache;
 
-    /* Cache-miss counters — incremented at the bottom of each
-     * xi_compute_* entry point.  xi_pipeline_stats_dump reports these
-     * so XRAY_XI_STATS=1 can show whether the cache actually saved
-     * work across a pipeline run. */
+    /* Cache-miss counters reported by xi_pipeline_stats_dump. */
     uint32_t rpo_recomputes;
     uint32_t dom_recomputes;
     uint32_t loop_recomputes;
@@ -774,54 +742,31 @@ typedef struct XiFunc {
     uint8_t test_attr;   /* AttributeKind: @test / @before_each / etc. */
     int test_timeout;    /* @test(timeout: N) seconds, 0 = no timeout */
 
-    /* True when params[0] is a BORROWED method receiver (`this`). The call
-     * ABI passes the receiver of an instance-method call borrowed: the
-     * caller keeps its owning reference and does NOT dup before the call
-     * (see xi_own_use_is_consuming: CALL_METHOD arg 0 is non-consuming).
-     * The callee must therefore NOT drop the receiver, and must dup it
-     * before any consuming use (Perceus borrowed-parameter rule). Set only
-     * for instance methods that are not constructors — a constructor owns
-     * its freshly-allocated `this` and moves it out via the return. */
+    /* True when params[0] is a borrowed method receiver. */
     bool receiver_borrowed;
 
-    /* True for operator-overload methods (operator+, operator==, operator[],
-     * ...). The VM operator dispatch passes ALL operands borrowed: the
-     * operands stay live in the caller's registers and the call site (a
-     * binary/index op like XI_ADD) does not dup them. So EVERY parameter of
-     * an operator method is borrowed, not just the receiver. */
+    /* True when every operator-overload parameter is borrowed. */
     bool operator_borrowed;
 
-    /* Effect summary: bitwise OR of XI_FLAG_* across all values.
-     * Computed by xi_func_compute_effects() after lowering completes.
-     * Callers use this to answer queries like "does this function
-     * may-suspend?" without rescanning the IR. */
+    /* Bitwise OR of XI_FLAG_* across all values. */
     uint8_t effect_summary;
 
     /* Source info */
     struct XaAnalyzer *analyzer; /* back-pointer for type queries */
 
-    /* Module back-pointer: set for program-level init functions so that
-     * the lowerer can populate XiModule.exports directly during lowering
-     * rather than relying on post-hoc IR scanning. */
+    /* Module back-pointer for program-level init functions. */
     struct XiModule *module;
 
-    /* Closure metadata: populated by xi_pass_close.  NULL for non-closures
-     * and for program-level init functions.  Backends read this for
-     * env layout, cell indices, and capture decisions. */
+    /* Closure metadata populated by xi_pass_close. */
     XiClosureMeta *closure_meta;
 
     /* C code generation scratch (assigned by xi_cgen, not by IR construction) */
     int cgen_id; /* unique name suffix for generated C functions */
 
-    /* Analysis side-tables: opaque pointers owned by analysis passes.
-     * [0] = range table (xi_range.c), [1] = reserved.
-     * Freed by xi_func_free or re-running the analysis. */
+    /* Opaque side-tables owned by analysis passes. */
     void *analysis_data[2];
 
-    /* IC snapshot metadata: side table mapping call-site value IDs
-     * to inline cache classification from VM profiling.  Set by
-     * xi_ic_attach() before speculative passes; NULL when no IC
-     * data is available (AOT path or first-tier JIT). */
+    /* Inline-cache snapshot metadata attached before speculative passes. */
     struct XiIcTable *ic_table;
 } XiFunc;
 
