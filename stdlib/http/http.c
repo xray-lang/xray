@@ -49,10 +49,10 @@
 /* ========== External Declarations ========== */
 
 // C function coroutine creation (supports Yieldable I/O)
-extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
-                                         XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                XrValue *),
-                                         XrValue *args, int argc, const char *name);
+extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                                   XrValue *),
+                                            XrValue *args, int argc, const char *name);
 
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);

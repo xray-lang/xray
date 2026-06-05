@@ -1113,7 +1113,7 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     if (!isolate)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-    XrCoroutine *child = xr_coro_create(isolate, closure, args, nargs, NULL, NULL, 0);
+    XrCoroutine *child = xr_coro_create_vm_closure(isolate, closure, args, nargs, NULL, NULL, 0);
     if (!child)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 

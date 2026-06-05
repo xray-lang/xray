@@ -396,8 +396,9 @@ struct XrayIsolate;
 struct XrClosure;
 
 // Lifecycle
-XR_FUNC XrCoroutine *xr_coro_create(struct XrayIsolate *X, struct XrClosure *closure, XrValue *args,
-                                    int arg_count, const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create_vm_closure(struct XrayIsolate *X, struct XrClosure *closure,
+                                               XrValue *args, int arg_count, const char *name,
+                                               const char *file, int line);
 XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrayIsolate *X, const char *name);
 XR_FUNC XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *), void *arg,
                                            const char *name);

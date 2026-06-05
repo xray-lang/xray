@@ -49,10 +49,10 @@ extern XrIOTryResult xr_socket_read_try(struct XrayIsolate *X, int fd, char *buf
 extern XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *data,
                                          size_t len);
 extern void xr_socket_close(struct XrayIsolate *X, int fd);
-extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
-                                         XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                XrValue *),
-                                         XrValue *args, int argc, const char *name);
+extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                                   XrValue *),
+                                            XrValue *args, int argc, const char *name);
 
 #include <stdlib.h>
 #include <errno.h>
@@ -1556,8 +1556,10 @@ static XrCFuncResult net_copy_bidirectional_yieldable(XrayIsolate *X, XrValue *a
     XrValue shared_ptr = xr_int((xr_Integer) (intptr_t) shared);
     XrValue ab_args[4] = {args[0], args[1], shared_ptr, xr_int(0)};
     XrValue ba_args[4] = {args[1], args[0], shared_ptr, xr_int(1)};
-    XrCoroutine *ab = xr_coro_create_cfunc(X, net_copy_direction_coro, ab_args, 4, "net.copy.ab");
-    XrCoroutine *ba = xr_coro_create_cfunc(X, net_copy_direction_coro, ba_args, 4, "net.copy.ba");
+    XrCoroutine *ab =
+        xr_coro_create_vm_cfunc(X, net_copy_direction_coro, ab_args, 4, "net.copy.ab");
+    XrCoroutine *ba =
+        xr_coro_create_vm_cfunc(X, net_copy_direction_coro, ba_args, 4, "net.copy.ba");
     if (!ab || !ba) {
         xr_free(shared);
         *result = XR_NULL_VAL;

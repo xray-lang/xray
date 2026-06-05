@@ -25,8 +25,9 @@
 #include "../../src/vm/xvm_internal.h"
 
 // Coroutine API
-extern XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, int arg_count,
-                                   const char *name, const char *file, int line);
+extern XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
+                                              int arg_count, const char *name, const char *file,
+                                              int line);
 extern XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *arg,
                                           const char *name);
 extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
