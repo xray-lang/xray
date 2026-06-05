@@ -136,6 +136,9 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_CATCH:
         case XI_END_TRY:
 
+        /* Value-return error channel propagation check */
+        case XI_ERR_CHECK:
+
         /* Control flow / SSA structural */
         case XI_PHI:
         case XI_SELECT:

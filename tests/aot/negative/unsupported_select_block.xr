@@ -1,0 +1,7 @@
+const ch = Channel()
+
+select {
+    msg from ch -> {
+        print(msg)
+    }
+}

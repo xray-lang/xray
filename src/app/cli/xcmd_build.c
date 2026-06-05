@@ -48,17 +48,27 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
         xray_include = include_path;
         xray_lib = lib_path;
     } else {
-        if (!xray_include)
+        if (!xray_include) {
+#ifdef XRT_SOURCE_INCLUDE_DIR
+            xray_include = XRT_SOURCE_INCLUDE_DIR;
+#else
             xray_include = "/usr/local/include/xray";
-        if (!xray_lib)
+#endif
+        }
+        if (!xray_lib) {
+#ifdef XRT_BUILD_LIB_DIR
+            xray_lib = XRT_BUILD_LIB_DIR;
+#else
             xray_lib = "/usr/local/lib";
+#endif
+        }
     }
 
     char include_flag[600], lib_flag[600];
     snprintf(include_flag, sizeof(include_flag), "-I%s", xray_include);
     snprintf(lib_flag, sizeof(lib_flag), "-L%s", xray_lib);
 
-    const char *spawn_argv[26];
+    const char *spawn_argv[28];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
@@ -73,6 +83,14 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 #endif
     spawn_argv[ai++] = lib_flag;
     spawn_argv[ai++] = "-lxray_core";
+#ifdef XR_OS_MACOS
+    spawn_argv[ai++] = "-L/opt/homebrew/opt/openssl@3/lib";
+#endif
+#ifdef XR_ENABLE_TLS
+    spawn_argv[ai++] = "-lssl";
+    spawn_argv[ai++] = "-lcrypto";
+#endif
+    spawn_argv[ai++] = "-lz";
     spawn_argv[ai++] = "-lpthread";
     spawn_argv[ai++] = "-lm";
 #ifdef XR_OS_MACOS
@@ -111,8 +129,13 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
 static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char *output_file,
                                 const char *c_file, bool strip_symbols, const char *sysroot) {
     char aot_include[600] = "";
+    char runtime_include[600] = "";
 #ifdef XRT_AOT_INCLUDE_DIR
+    (void) sysroot;
     snprintf(aot_include, sizeof(aot_include), "-I" XRT_AOT_INCLUDE_DIR);
+#ifdef XRT_SOURCE_INCLUDE_DIR
+    snprintf(runtime_include, sizeof(runtime_include), "-I" XRT_SOURCE_INCLUDE_DIR);
+#endif
 #else
     const char *xray_include = getenv("XRAY_INCLUDE");
     if (sysroot) {
@@ -124,7 +147,7 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
     }
 #endif
 
-    const char *spawn_argv[20];
+    const char *spawn_argv[22];
     int ai = 0;
     spawn_argv[ai++] = cc;
     spawn_argv[ai++] = opt_flag;
@@ -133,6 +156,8 @@ static int invoke_cc_standalone(const char *cc, const char *opt_flag, const char
     spawn_argv[ai++] = c_file;
     if (aot_include[0])
         spawn_argv[ai++] = aot_include;
+    if (runtime_include[0])
+        spawn_argv[ai++] = runtime_include;
     spawn_argv[ai++] = "-lm";
 #ifdef XR_OS_MACOS
     spawn_argv[ai++] = "-Wl,-dead_strip";
@@ -347,7 +372,12 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         return 0;
     }
 
-    int ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
+    int ret = 0;
+    if (aot_result.features.need_coro) {
+        ret = invoke_cc(cc, opt_flag, output, c_file, NULL, strip, sysroot);
+    } else {
+        ret = invoke_cc_standalone(cc, opt_flag, output, c_file, strip, sysroot);
+    }
     xr_fs_remove(c_file);
     if (ret == 0)
         printf("Generated: %s\n", output);

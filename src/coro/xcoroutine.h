@@ -608,6 +608,7 @@ struct XrClosure;
 // Lifecycle
 XR_FUNC XrCoroutine *xr_coro_create(struct XrayIsolate *X, struct XrClosure *closure, XrValue *args,
                                     int arg_count, const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrayIsolate *X, const char *name, bool need_stack);
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_heap(XrCoroutine *coro);
 XR_FUNC void xr_coro_release_resources(XrCoroutine *coro);
