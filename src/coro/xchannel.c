@@ -117,12 +117,13 @@ uint64_t xr_channel_get_close_count(struct XrayIsolate *X) {
 void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro) {
     XR_DCHECK(q != NULL, "waitq_enqueue: NULL queue");
     XR_DCHECK(coro != NULL, "waitq_enqueue: NULL coro");
-    XR_DCHECK(coro->chan_wait_queue == NULL, "waitq_enqueue: coro already in channel waitq");
-    coro->chan_wait_next = NULL;
-    coro->chan_wait_prev = q->last;
-    coro->chan_wait_queue = q;
+    XR_DCHECK(coro->ext != NULL, "waitq_enqueue: coro has no ext");
+    XR_DCHECK(coro->ext->chan_wait_queue == NULL, "waitq_enqueue: coro already in channel waitq");
+    coro->ext->chan_wait_next = NULL;
+    coro->ext->chan_wait_prev = q->last;
+    coro->ext->chan_wait_queue = q;
     if (q->last) {
-        q->last->chan_wait_next = coro;
+        q->last->ext->chan_wait_next = coro;
     } else {
         q->first = coro;
     }
@@ -132,12 +133,14 @@ void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro) {
 static void waitq_enqueue_front(XrWaitQueue *q, XrCoroutine *coro) {
     XR_DCHECK(q != NULL, "waitq_enqueue_front: NULL queue");
     XR_DCHECK(coro != NULL, "waitq_enqueue_front: NULL coro");
-    XR_DCHECK(coro->chan_wait_queue == NULL, "waitq_enqueue_front: coro already in channel waitq");
-    coro->chan_wait_next = q->first;
-    coro->chan_wait_prev = NULL;
-    coro->chan_wait_queue = q;
+    XR_DCHECK(coro->ext != NULL, "waitq_enqueue_front: coro has no ext");
+    XR_DCHECK(coro->ext->chan_wait_queue == NULL,
+              "waitq_enqueue_front: coro already in channel waitq");
+    coro->ext->chan_wait_next = q->first;
+    coro->ext->chan_wait_prev = NULL;
+    coro->ext->chan_wait_queue = q;
     if (q->first) {
-        q->first->chan_wait_prev = coro;
+        q->first->ext->chan_wait_prev = coro;
     }
     q->first = coro;
     if (!q->last) {
@@ -149,15 +152,15 @@ XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q) {
     XR_DCHECK(q != NULL, "waitq_dequeue: NULL queue");
     XrCoroutine *coro = q->first;
     if (coro) {
-        q->first = coro->chan_wait_next;
+        q->first = coro->ext->chan_wait_next;
         if (q->first == NULL) {
             q->last = NULL;
         } else {
-            q->first->chan_wait_prev = NULL;
+            q->first->ext->chan_wait_prev = NULL;
         }
-        coro->chan_wait_next = NULL;
-        coro->chan_wait_prev = NULL;
-        coro->chan_wait_queue = NULL;
+        coro->ext->chan_wait_next = NULL;
+        coro->ext->chan_wait_prev = NULL;
+        coro->ext->chan_wait_queue = NULL;
     }
     return coro;
 }
@@ -166,22 +169,22 @@ XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q) {
 static bool xr_waitq_remove(XrWaitQueue *q, XrCoroutine *coro) {
     XR_DCHECK(q != NULL, "waitq_remove: NULL queue");
     XR_DCHECK(coro != NULL, "waitq_remove: NULL coro");
-    if (coro->chan_wait_queue != q)
+    if (coro->ext->chan_wait_queue != q)
         return false;
 
-    if (coro->chan_wait_prev) {
-        coro->chan_wait_prev->chan_wait_next = coro->chan_wait_next;
+    if (coro->ext->chan_wait_prev) {
+        coro->ext->chan_wait_prev->ext->chan_wait_next = coro->ext->chan_wait_next;
     } else {
-        q->first = coro->chan_wait_next;
+        q->first = coro->ext->chan_wait_next;
     }
-    if (coro->chan_wait_next) {
-        coro->chan_wait_next->chan_wait_prev = coro->chan_wait_prev;
+    if (coro->ext->chan_wait_next) {
+        coro->ext->chan_wait_next->ext->chan_wait_prev = coro->ext->chan_wait_prev;
     } else {
-        q->last = coro->chan_wait_prev;
+        q->last = coro->ext->chan_wait_prev;
     }
-    coro->chan_wait_next = NULL;
-    coro->chan_wait_prev = NULL;
-    coro->chan_wait_queue = NULL;
+    coro->ext->chan_wait_next = NULL;
+    coro->ext->chan_wait_prev = NULL;
+    coro->ext->chan_wait_queue = NULL;
     return true;
 }
 
@@ -193,7 +196,7 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
     xr_amutex_lock(&ch->lock);
 
     // Try to remove from send queue
-    XrWaitQueue *q = coro->chan_wait_queue;
+    XrWaitQueue *q = coro->ext->chan_wait_queue;
     if (q == &ch->sendq) {
         xr_waitq_remove(&ch->sendq, coro);
     } else if (q == &ch->recvq) {
@@ -470,7 +473,7 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
     channel_note_worker_locked(ch, false);
     XrValue direct_val;
     if (ch->buf_size == 0) {
-        direct_val = sender->send_value;
+        direct_val = sender->ext->send_value;
     } else {
         if (ch->buf_count == 0) {
             waitq_enqueue_front(&ch->sendq, sender);
@@ -478,11 +481,11 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
         }
         direct_val = ch->buffer[ch->recv_idx];
         ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
-        ch->buffer[ch->send_idx] = sender->send_value;
+        ch->buffer[ch->send_idx] = sender->ext->send_value;
         ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
         // buf_count unchanged: take one, put one.
     }
-    sender->send_value = xr_null();
+    sender->ext->send_value = xr_null();
     xr_amutex_unlock(&ch->lock);
     *out = direct_val;
     channel_wake_coro(sender);
@@ -642,7 +645,7 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     }
 
     xr_coro_resume_store(coro, is_close ? XR_RESUME_CHANNEL_CLOSED : XR_RESUME_CHANNEL);
-    atomic_store_explicit((_Atomic(void *) *) &coro->wait_channel, NULL, memory_order_release);
+    atomic_store_explicit((_Atomic(void *) *) &coro->ext->wait_channel, NULL, memory_order_release);
 
     // Cancel timer (sendTimeout/recvTimeout case)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
@@ -661,10 +664,11 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         target_id = current->p.id;
     }
 
-    bool in_owner_blocked_bucket = coro->wait_bucket != NULL && coro->wait_bucket_owner >= 0 &&
-                                   coro->wait_bucket_owner < runtime->worker_count;
+    bool in_owner_blocked_bucket = coro->ext->wait_bucket != NULL &&
+                                   coro->ext->wait_bucket_owner >= 0 &&
+                                   coro->ext->wait_bucket_owner < runtime->worker_count;
     if (in_owner_blocked_bucket) {
-        target_id = coro->wait_bucket_owner;
+        target_id = coro->ext->wait_bucket_owner;
     }
     XrWorker *target = &runtime->workers[target_id];
     bool locked = xr_coro_is_thread_locked(coro);
@@ -720,9 +724,9 @@ static void channel_wake_coro(XrCoroutine *coro) {
 static bool channel_close_defer_to_owner_bucket(XrCoroutine *coro, XrWorker *current) {
     if (!coro || !current || !current->p.runtime)
         return false;
-    int owner = coro->wait_bucket_owner;
-    return coro->wait_bucket != NULL && owner >= 0 && owner < current->p.runtime->worker_count &&
-           owner != current->p.id;
+    int owner = coro->ext->wait_bucket_owner;
+    return coro->ext->wait_bucket != NULL && owner >= 0 &&
+           owner < current->p.runtime->worker_count && owner != current->p.id;
 }
 
 // Close channel
@@ -760,14 +764,14 @@ void xr_channel_close(XrChannel *ch) {
     // This way if buffer still has data, coroutine can get it
     XrCoroutine *coro;
     while ((coro = xr_waitq_dequeue(&ch->recvq)) != NULL) {
-        coro->chan_wait_next = recv_list;
+        coro->ext->chan_wait_next = recv_list;
         recv_list = coro;
     }
 
     // Collect all waiting senders
     while ((coro = xr_waitq_dequeue(&ch->sendq)) != NULL) {
-        coro->send_value = xr_null();
-        coro->chan_wait_next = send_list;
+        coro->ext->send_value = xr_null();
+        coro->ext->chan_wait_next = send_list;
         send_list = coro;
     }
 
@@ -778,16 +782,16 @@ void xr_channel_close(XrChannel *ch) {
     // Wake all waiters after releasing lock (close wake, let them recheck buffer)
     while (recv_list) {
         coro = recv_list;
-        recv_list = coro->chan_wait_next;
-        coro->chan_wait_next = NULL;
+        recv_list = coro->ext->chan_wait_next;
+        coro->ext->chan_wait_next = NULL;
         if (!channel_close_defer_to_owner_bucket(coro, current)) {
             channel_wake_coro_ex(coro, true);  // close wake
         }
     }
     while (send_list) {
         coro = send_list;
-        send_list = coro->chan_wait_next;
-        coro->chan_wait_next = NULL;
+        send_list = coro->ext->chan_wait_next;
+        coro->ext->chan_wait_next = NULL;
         if (!channel_close_defer_to_owner_bucket(coro, current)) {
             channel_wake_coro_ex(coro, true);  // close wake
         }
@@ -864,11 +868,15 @@ send_locked:
         xr_amutex_unlock(&ch->lock);
         return XR_CHAN_NO_CORO;
     }
+    if (!xr_coro_ensure_ext(coro)) {
+        xr_amutex_unlock(&ch->lock);
+        return XR_CHAN_FULL;
+    }
 
     // Set blocked state and join sendq
-    atomic_store_explicit(&coro->wait_channel, ch, memory_order_release);
-    coro->wait_send = true;
-    coro->send_value = value;  // Save value to send
+    atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
+    coro->ext->wait_send = true;
+    coro->ext->send_value = value;  // Save value to send
     // caller pre-saved frame state before this call,
     // so it is safe to set BLOCKED here under the channel lock.  The coro
     // becomes wakeable only after we enqueue + unlock below.
@@ -944,10 +952,14 @@ recv_locked:
         xr_amutex_unlock(&ch->lock);
         return XR_CHAN_NO_CORO;
     }
+    if (!xr_coro_ensure_ext(coro)) {
+        xr_amutex_unlock(&ch->lock);
+        return XR_CHAN_FULL;
+    }
 
     // Set blocked state and join recvq
-    atomic_store_explicit(&coro->wait_channel, ch, memory_order_release);
-    coro->wait_send = false;
+    atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
+    coro->ext->wait_send = false;
     // recv_slot is owned by the backend-neutral block helper.
     // see send path comment for rationale.
     xr_coro_transition_to_blocked(coro);

@@ -513,6 +513,21 @@ static void coro_recv_slot_reset(XrCoroExt *ext) {
     ext->recv_slot_ref = xr_slot_none();
 }
 
+static void coro_channel_wait_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    atomic_store_explicit(&ext->wait_channel, NULL, memory_order_relaxed);
+    ext->chan_wait_next = NULL;
+    ext->chan_wait_prev = NULL;
+    ext->chan_wait_queue = NULL;
+    ext->wait_link = NULL;
+    ext->wait_prev = NULL;
+    ext->wait_bucket = NULL;
+    ext->wait_bucket_owner = -1;
+    ext->wait_send = false;
+    ext->send_value = xr_null();
+}
+
 static void coro_clear_scope_membership(XrCoroutine *coro) {
     if (!coro || !coro->ext)
         return;
@@ -592,6 +607,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
             coro->ext->timer_wheel_owner = -1;
             atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
+            coro_channel_wait_reset(coro->ext);
             coro_recv_slot_reset(coro->ext);
             coro_wait_state_reset(coro->ext);
             coro_select_storage_reset(coro->ext);
@@ -628,7 +644,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     coro->backend_state = vm_ctx ? vm_state : NULL;
     if (!is_clean) {
         // Fresh allocation: set sentinel values (-1 means "not set")
-        coro->wait_bucket_owner = -1;
+        if (coro->ext)
+            coro->ext->wait_bucket_owner = -1;
         // timer.slot/lock_count/locked_worker initialized lazily in ext when alloc'd
     }
     // Clean path: recycle_local already set these to their sentinel values
@@ -1073,6 +1090,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         // drop them here rather than handing back stale state.
         xr_vm_ctx_free_ic_tables(xr_coro_vm_ctx(coro));
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
+        coro_channel_wait_reset(coro->ext);
         coro_recv_slot_reset(coro->ext);
         coro_wait_state_reset(coro->ext);
         coro_select_storage_reset(coro->ext);
@@ -1298,7 +1316,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->result = xr_null();
     coro->error = xr_null();
     coro->task = NULL;
-    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
     coro->current_scope = NULL;
     xr_coro_vm_ctx(coro)->stack_top = xr_coro_vm_ctx(coro)->stack;
     xr_coro_vm_ctx(coro)->frame_count = 0;
@@ -1318,15 +1335,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->next = NULL;
     coro->prev = NULL;
     xr_coro_reset_jit_state(coro);
-    coro->chan_wait_next = NULL;
-    coro->chan_wait_prev = NULL;
-    coro->chan_wait_queue = NULL;
-    coro->wait_link = NULL;
-    coro->wait_prev = NULL;
-    coro->wait_bucket = NULL;
-    coro->wait_bucket_owner = -1;
-    coro->wait_send = false;
-    coro->send_value = xr_null();
+    coro_channel_wait_reset(coro->ext);
     coro_recv_slot_reset(coro->ext);
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
@@ -1657,14 +1666,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
-    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-    coro->chan_wait_next = NULL;
-    coro->chan_wait_prev = NULL;
-    coro->chan_wait_queue = NULL;
-    coro->wait_link = NULL;
-    coro->wait_prev = NULL;
-    coro->wait_bucket = NULL;
-    coro->wait_bucket_owner = -1;
+    coro_channel_wait_reset(coro->ext);
     coro->result = xr_null();
 }
 
