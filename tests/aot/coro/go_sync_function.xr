@@ -7,10 +7,20 @@ fn mutate_copy(xs: Array<int>) -> int {
     return xs.length
 }
 
+fn identity_copy(xs: Array<int>) -> Array<int> {
+    return xs
+}
+
 let high = go(priority: Coro.HIGH) compute(5)
 print(await high)
 
 let xs = [1, 2]
 let copied = go mutate_copy(xs)
 print(await copied)
+print(xs.length)
+
+let roundtrip = go identity_copy(xs)
+let ys = await roundtrip
+ys.push(7)
+print(ys.length)
 print(xs.length)

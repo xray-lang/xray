@@ -721,7 +721,25 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "}\n\n");
 }
 
+static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index) {
+    return f && index < f->nparams && f->params[index] &&
+           cg_coro_type_needs_boundary_clone(f->params[index]->type);
+}
+
+static uint32_t count_sync_go_frame_releases(const XiFunc *f) {
+    if (!f)
+        return 0;
+    uint32_t count = 0;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_release(f, i))
+            count++;
+    }
+    return count;
+}
+
 static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+    uint32_t release_count = count_sync_go_frame_releases(f);
+
     emit_sync_go_frame_type(ctx, out, f, prefix);
     emit_sync_go_frame_factory(ctx, out, f, prefix);
 
@@ -741,6 +759,14 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     for (uint16_t i = 0; i < f->nparams; i++)
         fprintf(out, ", f->p%u", i);
     fprintf(out, ");\n");
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (!cg_sync_go_param_needs_release(f, i))
+            continue;
+        fprintf(out,
+                "    if (_result.tag == f->p%u.tag && _result.ptr == f->p%u.ptr)\n"
+                "        xrt_retain(_result);\n",
+                i, i);
+    }
     fprintf(out, "    return xr_aot_done(_result);\n");
     fprintf(out, "}\n\n");
 
@@ -761,7 +787,16 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame, struct XrCoroGC *gc) {\n");
     fprintf(out, "    (void)gc;\n");
-    fprintf(out, "    if (!frame)\n        return;\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)frame;\n");
+    fprintf(out, "    if (!f)\n        return;\n");
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_release(f, i))
+            fprintf(out, "    xrt_release(f->p%u);\n", i);
+    }
     fprintf(out, "    xr_aot_frame_free(frame);\n");
     fprintf(out, "}\n\n");
 
@@ -773,7 +808,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, "),\n");
     fprintf(out, "    .root_count = %u,\n", (unsigned) f->nparams);
-    fprintf(out, "    .release_count = 0,\n");
+    fprintf(out, "    .release_count = %u,\n", release_count);
     fprintf(out, "    .resume = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
     fprintf(out, ",\n");
