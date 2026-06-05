@@ -67,6 +67,17 @@ static int env_int_clamped(const char *name, int fallback, int min_value, int ma
     return parsed;
 }
 
+static void runtime_drain_timer_cancel_stacks(XrRuntime *runtime) {
+    if (!runtime)
+        return;
+    for (int i = 0; i < runtime->worker_count; i++) {
+        XrTimerWheel *tw = runtime->workers[i].p.timer_wheel;
+        while (xr_timer_cancel_pending(tw)) {
+            xr_timer_process_canceled_queue(tw);
+        }
+    }
+}
+
 static int default_handoff_max_m(int workers) {
     int extra = workers > 4 ? workers : 4;
     int max_m = workers + extra;
@@ -379,6 +390,8 @@ void xr_runtime_destroy(XrRuntime *runtime) {
             }
         }
     }
+
+    runtime_drain_timer_cancel_stacks(runtime);
 
     if (runtime->sched_stats_enabled) {
         xr_runtime_print_stats(runtime);
@@ -804,13 +817,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_remote_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_process_count));
     fprintf(stderr,
-            "Timer cancel queue: node_reuse=%llu node_malloc=%llu alloc_fail=%llu "
-            "free_cache=%llu free_heap=%llu drain_batches=%llu drain_nodes=%llu drain_max=%llu\n",
-            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_reuse_count),
-            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_malloc_count),
-            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_alloc_fail_count),
-            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_free_cache_count),
-            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_node_free_heap_count),
+            "Timer cancel queue: duplicate=%llu drain_batches=%llu drain_nodes=%llu "
+            "drain_max=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_duplicate_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_batch_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_node_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_max_count));

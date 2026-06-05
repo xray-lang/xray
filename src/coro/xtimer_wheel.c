@@ -10,14 +10,14 @@
  * KEY CONCEPT:
  *   - Dual-layer timer wheel design for efficient timeout management
  *   - Per-Worker timer wheel (PRIVATE, no mutex needed)
- *   - Cross-worker cancellation via MPSC canceled_queue
+ *   - Cross-worker cancellation via MPSC cancel stack
  *   - Only owner worker can directly manipulate the wheel
  *
  * ERLANG DESIGN:
  *   - Timer is bound to the worker that created it
  *   - Cancel from same worker: direct removal
- *   - Cancel from other worker: enqueue to canceled_queue
- *   - Owner processes canceled_queue before each bump
+ *   - Cancel from other worker: push to owner cancel stack
+ *   - Owner drains cancel stack before each bump
  */
 
 #include "xtimer_wheel.h"
@@ -547,59 +547,48 @@ done:
     return 0;
 }
 
-// ========== Canceled Queue Operations (MPSC) ==========
+// ========== Canceled Timer Stack Operations (MPSC) ==========
 
-// Initialize canceled timer queue
+// Initialize canceled timer stack.
 void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq) {
     XR_DCHECK(cq != NULL, "timer_cancel_queue_init: NULL cq");
-    cq->stub.next = NULL;
-    cq->stub.timer = NULL;
-    cq->stub.coro = NULL;
-    atomic_store_explicit(&cq->head, &cq->stub, memory_order_relaxed);
-    atomic_store_explicit(&cq->tail, &cq->stub, memory_order_relaxed);
-    // Post-condition: head == tail == &stub, queue is empty
-    XR_DCHECK(atomic_load(&cq->head) == &cq->stub, "timer_cancel_queue_init: head invariant");
+    atomic_store_explicit(&cq->head, NULL, memory_order_relaxed);
+    XR_DCHECK(atomic_load(&cq->head) == NULL, "timer_cancel_queue_init: head invariant");
 }
 
-// Queue a timer for cancellation (called from ANY worker, lock-free MPSC enqueue)
-// mark zombie FIRST (immediate visibility), then enqueue for cleanup
-void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoroutine *coro) {
+// Push a timer cancellation request from any worker.
+void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer) {
     XR_DCHECK(target_tw != NULL, "timer_queue_cancel: NULL target_tw");
     XR_DCHECK(timer != NULL, "timer_queue_cancel: NULL timer");
     if (target_tw->runtime) {
         xr_sched_metric_inc(target_tw->runtime,
                             &target_tw->runtime->sched_stats.timer_cancel_remote_count);
     }
-    // Step 1: Atomically mark as zombie (immediate cross-worker visibility)
-    // This allows find_next_timeout to skip this timer immediately, even before
-    // the owner worker processes the cancel queue
-    atomic_store_explicit(&timer->state, XR_TIMER_STATE_ZOMBIE, memory_order_release);
 
-    // Step 2: Allocate cancel node (try per-worker freelist first)
-    XrCanceledTimerNode *node = xr_cancel_node_alloc();
-    if (!node) {
+    uint8_t expected = XR_TIMER_STATE_ACTIVE;
+    if (!atomic_compare_exchange_strong_explicit(&timer->state, &expected, XR_TIMER_STATE_ZOMBIE,
+                                                 memory_order_acq_rel, memory_order_acquire)) {
         if (target_tw->runtime) {
-            xr_sched_metric_inc(
-                target_tw->runtime,
-                &target_tw->runtime->sched_stats.timer_cancel_node_alloc_fail_count);
+            xr_sched_metric_inc(target_tw->runtime,
+                                &target_tw->runtime->sched_stats.timer_cancel_duplicate_count);
         }
-        return;  // Out of memory, zombie will be cleaned up when slot is processed
+        return;
     }
 
-    node->next = NULL;
-    node->timer = timer;
-    node->coro = coro;
+    XrTWheelTimer *head =
+        atomic_load_explicit(&target_tw->canceled_queue.head, memory_order_relaxed);
+    do {
+        atomic_store_explicit(&timer->cancel_next, head, memory_order_relaxed);
+    } while (!atomic_compare_exchange_weak_explicit(&target_tw->canceled_queue.head, &head, timer,
+                                                    memory_order_release, memory_order_relaxed));
 
-    // Step 3: MPSC enqueue for owner to cleanup
-    XrCanceledTimerNode *prev =
-        atomic_exchange_explicit(&target_tw->canceled_queue.tail, node, memory_order_acq_rel);
-    // Link previous tail to new node
-    // Note: There's a brief window where prev->next is NULL, handled by consumer
-    atomic_store_explicit((_Atomic(XrCanceledTimerNode *) *) &prev->next, node,
-                          memory_order_release);
+    if (head == NULL && target_tw->runtime) {
+        xr_runtime_set_timer_pending(target_tw->runtime, target_tw->owner_worker_id, true);
+        xr_runtime_wake_worker(target_tw->runtime, target_tw->owner_worker_id);
+    }
 }
 
-// Process canceled queue (called by owner worker ONLY, before bump)
+// Process canceled stack (called by owner worker ONLY, before bump)
 // Returns number of timers processed
 int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XR_DCHECK(tw != NULL, "timer_process_canceled_queue: NULL tw");
@@ -609,29 +598,19 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
               "timer_process_canceled_queue: non-owner call");
     (void) cur;
     XrTimerCancelQueue *cq = &tw->canceled_queue;
-    XrCanceledTimerNode *head, *next;
     int count = 0;
     int drained = 0;
 
-    // Fast path: check if queue is empty
-    head = atomic_load_explicit(&cq->head, memory_order_acquire);
-    if (head == atomic_load_explicit(&cq->tail, memory_order_acquire)) {
-        return 0;  // Queue empty
+    XrTWheelTimer *timer = atomic_load_explicit(&cq->head, memory_order_acquire);
+    if (!timer) {
+        return 0;
     }
 
-    // Process all nodes from head
-    while (1) {
-        head = atomic_load_explicit(&cq->head, memory_order_acquire);
-        next = atomic_load_explicit((_Atomic(XrCanceledTimerNode *) *) &head->next,
-                                    memory_order_acquire);
+    timer = atomic_exchange_explicit(&cq->head, NULL, memory_order_acquire);
+    while (timer) {
+        XrTWheelTimer *next = atomic_load_explicit(&timer->cancel_next, memory_order_relaxed);
+        atomic_store_explicit(&timer->cancel_next, NULL, memory_order_relaxed);
 
-        if (next == NULL) {
-            // Either empty or in-progress enqueue
-            break;
-        }
-
-        // Process this timer cancellation (zombie cleanup)
-        XrTWheelTimer *timer = next->timer;
         if (timer &&
             atomic_load_explicit(&timer->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE &&
             timer->owner_worker_id == tw->owner_worker_id) {
@@ -648,14 +627,8 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
             }
         }
 
-        // Advance head (dequeue)
-        atomic_store_explicit(&cq->head, next, memory_order_release);
         drained++;
-
-        // Recycle the old head (return to per-worker freelist, not xr_free)
-        if (head != &cq->stub) {
-            xr_cancel_node_free(head);
-        }
+        timer = next;
     }
 
     if (drained > 0 && tw->runtime) {
@@ -669,64 +642,10 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         xr_sched_metric_add(tw->runtime, &tw->runtime->sched_stats.timer_cancel_process_count,
                             (uint64_t) count);
     }
+    if (drained > 0) {
+        timer_refresh_runtime_mask(tw);
+    }
     return count;
-}
-
-// ========== Cancel Node Pool ==========
-//
-// Per-worker freelists avoid malloc/free churn during cancel storms.
-// Alloc: pop from current worker's freelist, fallback to xr_malloc.
-// Free:  push to current worker's freelist (capped), overflow to xr_free.
-
-XrCanceledTimerNode *xr_cancel_node_alloc(void) {
-    XrWorker *w = xr_current_worker();
-    if (w && w->p.cancel_node_free) {
-        XrCanceledTimerNode *node = w->p.cancel_node_free;
-        w->p.cancel_node_free = node->next;
-        w->p.cancel_node_free_count--;
-        node->next = NULL;
-        node->timer = NULL;
-        node->coro = NULL;
-        if (w->p.runtime) {
-            xr_sched_metric_inc(w->p.runtime,
-                                &w->p.runtime->sched_stats.timer_cancel_node_reuse_count);
-        }
-        return node;
-    }
-    XrCanceledTimerNode *node = (XrCanceledTimerNode *) xr_malloc(sizeof(XrCanceledTimerNode));
-    if (node) {
-        node->next = NULL;
-        node->timer = NULL;
-        node->coro = NULL;
-        if (w && w->p.runtime) {
-            xr_sched_metric_inc(w->p.runtime,
-                                &w->p.runtime->sched_stats.timer_cancel_node_malloc_count);
-        }
-    }
-    return node;
-}
-
-void xr_cancel_node_free(XrCanceledTimerNode *node) {
-    if (!node)
-        return;
-    XrWorker *w = xr_current_worker();
-    if (w && w->p.cancel_node_free_count < XR_CANCEL_NODE_POOL_MAX) {
-        node->next = w->p.cancel_node_free;
-        node->timer = NULL;
-        node->coro = NULL;
-        w->p.cancel_node_free = node;
-        w->p.cancel_node_free_count++;
-        if (w->p.runtime) {
-            xr_sched_metric_inc(w->p.runtime,
-                                &w->p.runtime->sched_stats.timer_cancel_node_free_cache_count);
-        }
-        return;
-    }
-    if (w && w->p.runtime) {
-        xr_sched_metric_inc(w->p.runtime,
-                            &w->p.runtime->sched_stats.timer_cancel_node_free_heap_count);
-    }
-    xr_free(node);
 }
 
 // ========== Public API ==========
@@ -766,9 +685,10 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
     tw->next_timeout_time = tw->next_timeout_pos;
     tw->sentinel.next = &tw->sentinel;
     tw->sentinel.prev = &tw->sentinel;
+    atomic_store_explicit(&tw->sentinel.cancel_next, NULL, memory_order_relaxed);
     tw->sentinel.timeout = NULL;
     tw->sentinel.arg = NULL;
-    // record ownership and init canceled queue
+    // Record ownership and initialize the cancel stack.
     tw->owner_worker_id = owner_worker_id;
     tw->runtime = runtime;
     xr_timer_cancel_queue_init(&tw->canceled_queue);
@@ -780,27 +700,6 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
 void xr_timer_wheel_destroy(XrTimerWheel *tw) {
     if (!tw)
         return;
-
-    // Cleanup canceled queue: drain all remaining allocated nodes.
-    //
-    // Vyukov MPSC queue layout:
-    //   stub(embedded) -> node1 -> node2 -> ...
-    //   head points to stub initially; consumer advances head past stub.
-    //
-    // If consumer never ran, head == &stub and pending nodes are on stub.next.
-    // If consumer ran, head is some allocated sentinel node; the rest follow.
-    XrTimerCancelQueue *cq = &tw->canceled_queue;
-    XrCanceledTimerNode *node = atomic_load(&cq->head);
-
-    if (node == &cq->stub) {
-        // Consumer never ran — pending nodes start at stub.next
-        node = cq->stub.next;
-    }
-    while (node) {
-        XrCanceledTimerNode *next = node->next;
-        xr_free(node);
-        node = next;
-    }
 
     xr_free(tw);
 }
@@ -839,6 +738,7 @@ bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
     }
 
     XR_TW_ASSERT(p->slot == XR_TW_SLOT_INACTIVE);
+    atomic_store_explicit(&p->cancel_next, NULL, memory_order_relaxed);
     p->owner_worker_id = tw->owner_worker_id;  // Record ownership
 
     tw->nto++;

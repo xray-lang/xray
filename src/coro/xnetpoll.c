@@ -98,8 +98,16 @@ XrPollDesc *xr_poll_cache_alloc(XrPollCache *cache) {
         pd->wd = 0;
         pd->rrun = false;
         pd->wrun = false;
+        pd->rt_storage.prev = NULL;
+        pd->rt_storage.next = NULL;
+        atomic_store_explicit(&pd->rt_storage.cancel_next, NULL, memory_order_relaxed);
         pd->rt_storage.slot = XR_TW_SLOT_INACTIVE;
+        atomic_store_explicit(&pd->rt_storage.state, XR_TIMER_STATE_ACTIVE, memory_order_relaxed);
+        pd->wt_storage.prev = NULL;
+        pd->wt_storage.next = NULL;
+        atomic_store_explicit(&pd->wt_storage.cancel_next, NULL, memory_order_relaxed);
         pd->wt_storage.slot = XR_TW_SLOT_INACTIVE;
+        atomic_store_explicit(&pd->wt_storage.state, XR_TIMER_STATE_ACTIVE, memory_order_relaxed);
         pd->user_data = NULL;
         pd->netpoll = NULL;
         (void) is_new;  // currently informational; reserved for future asserts
@@ -693,11 +701,11 @@ XrPollDesc *xr_netpoll_open(XrNetpoll *np, int fd) {
                 if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
                     atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
                         XR_TIMER_STATE_ZOMBIE)
-                    xr_timer_queue_cancel(old_tw, &pd->rt_storage, NULL);
+                    xr_timer_queue_cancel(old_tw, &pd->rt_storage);
                 if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
                     atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
                         XR_TIMER_STATE_ZOMBIE)
-                    xr_timer_queue_cancel(old_tw, &pd->wt_storage, NULL);
+                    xr_timer_queue_cancel(old_tw, &pd->wt_storage);
             }
         }
         atomic_fetch_add(&pd->rseq, 1);
@@ -766,13 +774,13 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
             if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
                 atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
                     XR_TIMER_STATE_ZOMBIE) {
-                xr_timer_queue_cancel(tw, &pd->rt_storage, NULL);
+                xr_timer_queue_cancel(tw, &pd->rt_storage);
                 pd->rrun = false;
             }
             if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
                 atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
                     XR_TIMER_STATE_ZOMBIE) {
-                xr_timer_queue_cancel(tw, &pd->wt_storage, NULL);
+                xr_timer_queue_cancel(tw, &pd->wt_storage);
                 pd->wrun = false;
             }
             can_free_pd = false;
@@ -979,13 +987,13 @@ static void netpoll_rebind_worker(XrPollDesc *pd, XrWorker *current) {
             if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
                 atomic_load_explicit(&pd->rt_storage.state, memory_order_acquire) !=
                     XR_TIMER_STATE_ZOMBIE) {
-                xr_timer_queue_cancel(old_tw, &pd->rt_storage, NULL);
+                xr_timer_queue_cancel(old_tw, &pd->rt_storage);
                 pd->rrun = false;
             }
             if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE &&
                 atomic_load_explicit(&pd->wt_storage.state, memory_order_acquire) !=
                     XR_TIMER_STATE_ZOMBIE) {
-                xr_timer_queue_cancel(old_tw, &pd->wt_storage, NULL);
+                xr_timer_queue_cancel(old_tw, &pd->wt_storage);
                 pd->wrun = false;
             }
         }

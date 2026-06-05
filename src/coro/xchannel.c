@@ -410,6 +410,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     // Initialize the embedded timer-wheel node.
     ch->tw_timer.prev = NULL;
     ch->tw_timer.next = NULL;
+    atomic_init(&ch->tw_timer.cancel_next, NULL);
     ch->tw_timer.slot = XR_TW_SLOT_INACTIVE;
     atomic_init(&ch->tw_timer.state, XR_TIMER_STATE_ACTIVE);
 
