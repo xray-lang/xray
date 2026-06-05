@@ -306,10 +306,8 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
     XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_setup_main: NULL closure");
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    XR_DCHECK(vm_state != NULL, "coro_setup_main: missing VM state");
-    vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
-    vm_state->entry.closure = closure;
+    bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
+    XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
     xr_coro_upgrade_heap(coro, 0);
     xr_coro_sync_vm_ctx(coro, X);
@@ -339,11 +337,8 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
     xr_coro_sync_vm_ctx(coro, X);
 
     // Set new entry closure
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    XR_DCHECK(vm_state != NULL, "coro_reset_for_call: missing VM state");
-    xr_coro_clear_vm_entry_state(coro);
-    vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
-    vm_state->entry.closure = closure;
+    bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
+    XR_CHECK(bound, "coro_reset_for_call: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
 
     // Clear result/error from previous execution
@@ -620,46 +615,20 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
         return NULL;
     }
 
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    XR_DCHECK(vm_state != NULL, "coro_create: missing VM state");
-
-    // Closure-specific: entry type
-    vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
-
     // Share parent's closure directly — no copy needed.
     // Compiler-enforced is_coro_safe guarantees all upvalues are shared const
     // (closed immediately, value in upvalue->closed, independent of any stack).
     // Parent coroutine outlives children via scope mechanism, so closure and
     // its upvalue objects remain valid for the child's entire lifetime.
-    vm_state->entry.closure = closure;
-    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
+    if (!xr_coro_bind_vm_closure_entry(coro, X, closure, args, arg_count, true)) {
         xr_coro_free(coro);
         coro_discard_uninitialized(coro);
         return NULL;
     }
-
-    // Deep copy args to coroutine private heap (cross-coroutine safe)
-    vm_state->arg_count = arg_count;
-    if (arg_count <= 4) {
-        vm_state->args = vm_state->inline_args;
-        for (int i = 0; i < arg_count; i++) {
-            // Fast path: non-pointer values (int/float/bool/null) need no copy
-            vm_state->inline_args[i] =
-                XR_IS_PTR(args[i]) ? xr_deep_copy_to_coro(X, args[i], coro) : args[i];
-        }
-    } else if (arg_count > 0 && args != NULL) {
-        vm_state->args = (XrValue *) xr_malloc(sizeof(XrValue) * arg_count);
-        if (!vm_state->args) {
-            xr_coro_free(coro);
-            coro_discard_uninitialized(coro);
-            return NULL;
-        }
-        for (int i = 0; i < arg_count; i++) {
-            vm_state->args[i] =
-                XR_IS_PTR(args[i]) ? xr_deep_copy_to_coro(X, args[i], coro) : args[i];
-        }
-    } else {
-        vm_state->args = NULL;
+    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
+        xr_coro_free(coro);
+        coro_discard_uninitialized(coro);
+        return NULL;
     }
 
     // Async stack trace: parent pointer + caller-provided file/line.
@@ -778,32 +747,10 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
         return NULL;
     }
 
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    XR_DCHECK(vm_state != NULL, "coro_create_cfunc: missing VM state");
-
-    // CFunc-specific: entry type
-    vm_state->entry_type = XR_CORO_ENTRY_CFUNC;
-    vm_state->entry.cfunc = cfunc;
-
-    // Copy args (no deep copy needed for C function args)
-    vm_state->arg_count = argc;
-    if (argc > 0 && args) {
-        if (argc <= 4) {
-            for (int i = 0; i < argc; i++) {
-                vm_state->inline_args[i] = args[i];
-            }
-            vm_state->args = vm_state->inline_args;
-        } else {
-            vm_state->args = (XrValue *) xr_malloc(argc * sizeof(XrValue));
-            if (!vm_state->args) {
-                xr_coro_free(coro);
-                coro_discard_uninitialized(coro);
-                return NULL;
-            }
-            memcpy(vm_state->args, args, argc * sizeof(XrValue));
-        }
-    } else {
-        vm_state->args = NULL;
+    if (!xr_coro_bind_vm_cfunc_entry(coro, cfunc, args, argc)) {
+        xr_coro_free(coro);
+        coro_discard_uninitialized(coro);
+        return NULL;
     }
 
     return coro;

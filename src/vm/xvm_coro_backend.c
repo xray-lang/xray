@@ -193,6 +193,75 @@ void xr_coro_clear_vm_entry_state(XrCoroutine *coro) {
     vm_entry_reset_no_free(state);
 }
 
+static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState *state,
+                               XrValue *args, int arg_count, bool copy_args) {
+    if (!state || arg_count < 0 || (arg_count > 0 && !args))
+        return false;
+    state->arg_count = arg_count;
+    if (arg_count <= 0) {
+        state->args = NULL;
+        return true;
+    }
+
+    XrValue *dst = state->inline_args;
+    if (arg_count > 4) {
+        if ((size_t) arg_count > SIZE_MAX / sizeof(XrValue))
+            return false;
+        dst = (XrValue *) xr_malloc(sizeof(XrValue) * (size_t) arg_count);
+        if (!dst)
+            return false;
+    }
+
+    for (int i = 0; i < arg_count; i++) {
+        dst[i] = xr_null();
+    }
+    state->args = dst;
+    for (int i = 0; i < arg_count; i++) {
+        dst[i] =
+            (copy_args && XR_IS_PTR(args[i])) ? xr_deep_copy_to_coro(X, args[i], coro) : args[i];
+    }
+    return true;
+}
+
+bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+                                   XrValue *args, int arg_count, bool copy_args) {
+    if (!coro || !closure)
+        return false;
+    if (!xr_coro_ensure_vm_state(coro))
+        return false;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return false;
+    xr_coro_clear_vm_entry_state(coro);
+    state->entry_type = XR_CORO_ENTRY_CLOSURE;
+    state->entry.closure = closure;
+    if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
+        xr_coro_clear_vm_entry_state(coro);
+        return false;
+    }
+    return true;
+}
+
+bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
+                                 XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int, XrValue *),
+                                 XrValue *args, int arg_count) {
+    if (!coro || !cfunc)
+        return false;
+    if (!xr_coro_ensure_vm_state(coro))
+        return false;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return false;
+    xr_coro_clear_vm_entry_state(coro);
+    state->entry_type = XR_CORO_ENTRY_CFUNC;
+    state->entry.cfunc = cfunc;
+    if (!vm_entry_copy_args(coro, NULL, state, args, arg_count, false)) {
+        xr_coro_clear_vm_entry_state(coro);
+        return false;
+    }
+    return true;
+}
+
 XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
     if (!coro || !xr_coro_ensure_vm_state(coro))
         return NULL;
