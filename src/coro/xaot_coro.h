@@ -27,6 +27,7 @@
 
 struct XrayIsolate;
 struct XrCoroutine;
+struct XrCoroGC;
 struct XrTask;
 
 typedef enum {
@@ -54,7 +55,7 @@ typedef struct XrAotContext {
 
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
-typedef void (*XrAotFrameReleaseFn)(void *frame);
+typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroGC *gc);
 typedef void (*XrAotRootVisitFn)(XrValue value, void *ctx);
 
 typedef struct XrAotRootVisitor {
@@ -115,7 +116,7 @@ static inline XrAotResult xr_aot_error(XrValue error, bool error_is_value) {
 XR_FUNC void *xr_aot_frame_alloc(size_t size);
 XR_FUNC void xr_aot_frame_free(void *frame);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
-XR_FUNC void xr_aot_release_frame_value(XrValue value);
+XR_FUNC void xr_aot_release_frame_value(struct XrCoroGC *gc, XrValue value);
 
 XR_FUNC struct XrCoroutine *xr_coro_create_aot(struct XrayIsolate *X, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);

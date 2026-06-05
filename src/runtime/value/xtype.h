@@ -227,14 +227,16 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
  * dup/drop for such values: they are reachable across coroutines and held by
  * the executor, so an IR-local drop could free an object still in use.
  *
- * Statically identifiable in the type system: Channel (own kind) and the
- * Atomic builtin class. Task / Coroutine have no distinct XrType.kind (they
- * appear as instance/unknown); those are covered at runtime by the
- * XR_OBJ_MANAGED object-header backstop (see docs/design/706 §5). */
+ * Statically identifiable in the type system: Channel (own kind) plus native
+ * Task, Coroutine, and Atomic classes. The XR_OBJ_MANAGED object-header
+ * backstop still protects runtime values whose static type was erased or
+ * unknown. */
 static inline bool xr_type_is_runtime_managed(const XrType *t) {
     if (!t)
         return false;
     if (t->kind == XR_KIND_CHANNEL)
+        return true;
+    if (xr_type_is_named_class(t, "Task") || xr_type_is_named_class(t, "Coroutine"))
         return true;
     if (xr_type_is_named_class(t, "Atomic"))
         return true;

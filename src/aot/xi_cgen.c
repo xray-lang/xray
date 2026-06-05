@@ -23,6 +23,7 @@
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_opt.h"
+#include "../ir/xi_own.h"
 #include "../base/xdefs.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../base/xchecks.h"
