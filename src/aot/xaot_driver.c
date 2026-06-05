@@ -394,7 +394,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         xi_cgen_header(mem);
         for (int m = 0; m < nmodules; m++)
             xi_cgen_module(cg_ctx, mem, modules[m]);
-        xi_cgen_main(mem, modules, nmodules, entry_index);
+        xi_cgen_main(cg_ctx, mem, modules, nmodules, entry_index);
     }
     if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
         fprintf(stderr, "Error: xr_close_memstream failed\n");

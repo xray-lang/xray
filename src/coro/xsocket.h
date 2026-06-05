@@ -106,13 +106,13 @@ XR_FUNC int xr_socket_wait_writable(struct XrayIsolate *X, int fd, int timeout_m
 // Set socket to non-blocking mode
 XR_FUNC int xr_socket_set_nonblock(int fd);
 
-// Set TCP_NODELAY (wrapper for compatibility)
+// Set TCP_NODELAY for latency-sensitive coroutine sockets
 static inline int xr_socket_set_nodelay_simple(int fd) {
     int flag = 1;
     return setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
 }
 
-// Set SO_REUSEADDR (wrapper for compatibility)
+// Set SO_REUSEADDR for restart-friendly listener setup
 static inline int xr_socket_set_reuseaddr_simple(int fd) {
     int flag = 1;
     return setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof(flag));
