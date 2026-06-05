@@ -1,6 +1,9 @@
-fn suspend_value() -> int {
-    yield
-    return 41
+fn make_worker() -> () -> int {
+    return fn() -> int {
+        yield
+        return 41
+    }
 }
 
-print(suspend_value())
+let worker = make_worker()
+print(worker())

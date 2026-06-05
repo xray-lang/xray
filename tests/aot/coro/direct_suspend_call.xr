@@ -4,7 +4,6 @@ fn recv_once(ch: Channel<int>) -> int {
 }
 
 fn caller(ch: Channel<int>) -> int {
-    yield
     let value = recv_once(ch)
     return value + 1
 }

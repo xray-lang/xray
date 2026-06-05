@@ -2353,7 +2353,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             xi_cgen_func(ctx, out, f->children[i], prefix);
     }
 
-    if (cg_func_needs_aot_coro(f)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, f)) {
         xi_cgen_coro_func(ctx, out, f, prefix);
         return;
     }
@@ -2395,7 +2395,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     fprintf(out, "}\n\n");
 
-    if (cg_func_can_emit_sync_go_wrapper(f))
+    if (cg_func_can_emit_sync_go_wrapper_ctx(ctx, f))
         emit_sync_go_wrapper(ctx, out, f, prefix);
 }
 
@@ -2416,7 +2416,7 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", XrValue p%u", i);
     fprintf(out, ");\n");
 
-    if (cg_func_needs_aot_coro(f) || cg_func_can_emit_sync_go_wrapper(f)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, f) || cg_func_can_emit_sync_go_wrapper_ctx(ctx, f)) {
         fprintf(out, "static void *");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
@@ -2600,7 +2600,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     XR_DCHECK(entry_index >= 0 && entry_index < n, "xi_cgen_main: bad entry_index");
 
     bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
-                         cg_func_needs_aot_coro(modules[entry_index]->init);
+                         cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
 
     fprintf(out, "int main(void) {\n");
     fprintf(out, "    xrt_bump_enabled = 1;\n");
@@ -2627,7 +2627,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
         } else {
-            if (cg_func_needs_aot_coro(modules[m]->init)) {
+            if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
                 fprintf(stderr,
                         "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
                         "be the entry module\n",
@@ -2686,7 +2686,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     fprintf(out, "int main(void) {\n");
     fprintf(out, "    xrt_bump_enabled = 1;\n");
     fprintf(out, "    xrt_arc_init();\n");
-    if (cg_func_needs_aot_coro(main_func)) {
+    if (cg_func_needs_aot_coro_ctx(ctx, main_func)) {
         fprintf(out, "    XrayIsolateParams params;\n");
         fprintf(out, "    xray_isolate_params_init(&params);\n");
         fprintf(out, "    xray_isolate_setup_full(&params);\n");
