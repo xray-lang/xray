@@ -344,6 +344,7 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
 XR_FUNC void xr_coro_backend_on_safepoint(XrCoroutine *coro);
 XR_FUNC void xr_coro_detach_worker_state(XrCoroutine *coro);
 XR_FUNC bool xr_coro_backend_in_try_mode(const XrCoroutine *coro);
+XR_FUNC bool xr_coro_reset_execution_state(XrCoroutine *coro, struct XrayIsolate *X);
 
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub
@@ -357,7 +358,6 @@ static inline void xr_coro_request_yield(XrCoroutine *coro) {
     coro->reductions = 0;
 }
 
-XR_FUNC void xr_coro_sync_vm_ctx(XrCoroutine *coro, struct XrayIsolate *X);
 XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
 XR_FUNC bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, struct XrayIsolate *X,

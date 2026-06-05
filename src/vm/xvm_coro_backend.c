@@ -56,6 +56,7 @@ static void vm_backend_destroy(XrCoroutine *coro);
 static bool vm_backend_ensure_state(XrCoroutine *coro);
 static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                                bool need_storage, bool is_clean);
+static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static void vm_backend_on_safepoint(XrCoroutine *coro);
@@ -76,6 +77,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .destroy = vm_backend_destroy,
     .ensure_state = vm_backend_ensure_state,
     .prepare_execution_state = vm_backend_prepare_execution_state,
+    .reset_execution_state = vm_backend_reset_execution_state,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
     .on_safepoint = vm_backend_on_safepoint,
@@ -168,7 +170,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
     return true;
 }
 
-void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
+static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
     if (!coro)
         return;
 

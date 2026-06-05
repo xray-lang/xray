@@ -78,6 +78,13 @@ bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
     return coro->backend->is_try_mode(coro);
 }
 
+bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
+    if (!coro || !coro->backend || !coro->backend->reset_execution_state)
+        return false;
+    coro->backend->reset_execution_state(coro, X);
+    return true;
+}
+
 // Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
 // invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
 void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {
@@ -287,7 +294,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
 
     coro->coro_gc = NULL;
 
-    // Common initialization (flags, stack/frames, field resets, timer, GC fields, vm_ctx sync, ID)
+    // Common initialization (flags, stack/frames, field resets, timer, GC fields, ID)
     if (!coro_init_common(coro, X, "main", true)) {
         xr_coro_free(coro);
         coro_discard_uninitialized(coro);
@@ -324,7 +331,8 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
     XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
-    xr_coro_sync_vm_ctx(coro, X);
+    XR_CHECK(xr_coro_reset_execution_state(coro, X),
+             "coro_setup_main: failed to reset backend execution state");
 }
 
 // Reset main_coro for sequential re-execution (test runner, REPL).
@@ -347,8 +355,9 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
         coro->coro_gc->gc_disabled = 0;
     }
 
-    // Reset VM execution state (stack_top, frames, handlers, etc.)
-    xr_coro_sync_vm_ctx(coro, X);
+    // Reset backend execution state (stack_top, frames, handlers, etc.)
+    XR_CHECK(xr_coro_reset_execution_state(coro, X),
+             "coro_reset_for_call: failed to reset backend execution state");
 
     // Set new entry closure
     bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
@@ -362,7 +371,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
 }
 
 // Common coroutine initialization after object allocation.
-// Handles: flags, coro_gc, stack/frames, field resets, timer, GC fields, vm_ctx sync, ID.
+// Handles: flags, coro_gc, backend execution storage, timer, GC fields, ID.
 // need_stack: true for closure/cfunc coroutines, false for native callbacks.
 // Returns false on allocation failure (coro_gc/stack/frames cleaned up).
 //
