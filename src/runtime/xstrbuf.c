@@ -64,34 +64,33 @@ static void strbuf_grow(XrStrBuf *sb, size_t need) {
 
 /* ========== Create and Destroy ========== */
 
-// Get current execution context
-// Multi-core: returns Worker's vm_ctx
-// Single-thread: returns Isolate's vm_ctx
-static inline XrVMContext *xr_get_current_vm_context(XrayIsolate *X) {
+// Get current thread-local temp buffer slot.
+// Multi-core execution uses the current machine; single-thread execution
+// reuses the isolate VM context storage for historical embedding callers.
+static inline XrStrBuf **xr_get_tmp_strbuf_slot(XrayIsolate *X) {
     XrWorker *worker = xr_current_worker();
-    if (worker) {
-        return &worker->m->vm_ctx;
+    if (worker && worker->m) {
+        return &worker->m->tmp_strbuf;
     }
-    return xr_isolate_get_vm_ctx(X);
+    return &xr_isolate_get_vm_ctx(X)->tmp_strbuf;
 }
 
 XrStrBuf *xr_strbuf_tmp(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "strbuf_tmp: NULL isolate");
-    // Get current context's temp buffer
-    XrVMContext *ctx = xr_get_current_vm_context(X);
+    XrStrBuf **slot = xr_get_tmp_strbuf_slot(X);
 
     // Lazy allocation
-    if (!ctx->tmp_strbuf) {
-        ctx->tmp_strbuf = xr_strbuf_new(X, XR_STRBUF_MIN_CAP);
-        if (!ctx->tmp_strbuf) {
+    if (!*slot) {
+        *slot = xr_strbuf_new(X, XR_STRBUF_MIN_CAP);
+        if (!*slot) {
             fprintf(stderr, "[ERROR] tmp_strbuf allocation failed\n");
             return NULL;
         }
     }
 
     // Reset for reuse
-    xr_strbuf_reset(ctx->tmp_strbuf);
-    return ctx->tmp_strbuf;
+    xr_strbuf_reset(*slot);
+    return *slot;
 }
 
 XrStrBuf *xr_strbuf_new(XrayIsolate *X, size_t init_cap) {

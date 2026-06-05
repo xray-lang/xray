@@ -30,7 +30,6 @@
 #include <stdatomic.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include "xexec_frame.h"
 #include "../base/xplatform.h"
 
 /* ========== Futex-based Park/Unpark ========== */
@@ -83,6 +82,7 @@ struct XrProc;
 struct XrRuntime;
 struct XrCoroutine;
 struct XrWorker;
+struct XrStrBuf;
 
 /* ========== M State ========== */
 
@@ -97,16 +97,6 @@ typedef enum {
     M_SHUTDOWN   // Shutting down
 } XrMachineState;
 
-/* ========== Machine VM Storage ========== */
-
-#define XR_MACHINE_STACK_SIZE 1024
-#define XR_MACHINE_FRAME_SIZE 64
-
-typedef struct XrMachineVMStorage {
-    XrValue stack[XR_MACHINE_STACK_SIZE];
-    XrBcCallFrame frames[XR_MACHINE_FRAME_SIZE];
-} XrMachineVMStorage;
-
 /* ========== XrMachine (M) — OS thread, dynamic count ========== */
 
 typedef struct XrMachine {
@@ -117,9 +107,10 @@ typedef struct XrMachine {
     /* === Current P (NULL = idle/blocked) === */
     _Atomic(struct XrProc *) current_p;
 
-    /* === Thread-local VM Context === */
-    XrVMContext vm_ctx;
-    XrMachineVMStorage vm_storage;
+    /* === Thread-local runtime scratch === */
+    struct XrStrBuf *tmp_strbuf;
+    void *backend_storage;
+    void (*backend_storage_destroy)(void *storage);
     _Atomic(struct XrCoroutine *) current_coro;
 
     /* === State === */

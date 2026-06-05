@@ -27,6 +27,7 @@
 #include "../base/xlog.h"
 #include "xvm_coro_state.h"
 #include "xvm_resume.h"
+#include "xvm_worker_state.h"
 
 // ========== Forward Declarations ==========
 
@@ -885,7 +886,9 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
 // First-exec and resume are factored into helpers above so the
 // orchestration here stays small and obvious.
 static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate) {
-    XrVMContext *ctx = &worker->m->vm_ctx;
+    XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
+    if (!ctx)
+        return XR_VM_RUNTIME_ERROR;
     XrVMContext *coro_ctx = xr_coro_vm_ctx(coro);
 
     ctx->current_coro = coro;
@@ -1366,7 +1369,9 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     XR_DCHECK(worker->p.runtime->isolate != NULL, "worker thread: isolate is NULL");
 
     XrayIsolate *isolate = worker->p.runtime->isolate;
-    XrVMContext *ctx = &worker->m->vm_ctx;
+    XrVMContext *ctx = xr_vm_machine_ctx(worker->m, isolate);
+    if (!ctx)
+        return XR_VM_RUNTIME_ERROR;
     XrVmCoroState *vm_state = vm_state_for_coro(coro);
     if (!vm_state)
         return XR_VM_RUNTIME_ERROR;
