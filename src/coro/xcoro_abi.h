@@ -24,6 +24,7 @@
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
 typedef struct XrayIsolate XrayIsolate;
+typedef struct XrClosure XrClosure;
 
 /* ========== Backend Identity ========== */
 
@@ -101,6 +102,8 @@ typedef struct XrCoroBackendVTable {
     bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
                                      void *user_data);
     bool (*has_continuation)(const XrCoroutine *coro);
+    int (*call_closure)(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure, XrValue *args,
+                        int nargs, void *continuation, void *user_ctx, XrValue *result);
     const char *(*debug_name)(const XrCoroutine *coro);
     void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;
