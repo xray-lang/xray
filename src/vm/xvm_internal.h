@@ -363,12 +363,18 @@ XR_FUNC bool vm_numeric_greater_equal(XrValue left, XrValue right);
 XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 
 /* ========== VM Coroutine ========== */
-// Type definitions moved to runtime/coroutine/xcoroutine.h
-
 // VM Coroutine API
+XR_FUNC XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X);
+XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
+XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
+XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
                                                int arg_count, const char *name, const char *file,
                                                int line);
+XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                             XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                                    XrValue *),
+                                             XrValue *args, int argc, const char *name);
 
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);

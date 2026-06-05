@@ -358,16 +358,6 @@ static inline void xr_coro_request_yield(XrCoroutine *coro) {
     coro->reductions = 0;
 }
 
-/* ========== Bootstrap Main Coroutine ========== */
-
-XR_FUNC XrCoroutine *xr_coro_create_bootstrap(struct XrayIsolate *X);
-XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
-XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
-
-/* ========== VM Stack Growth ========== */
-
-XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
-
 /* ========== Coroutine State (single-thread scheduler + isolate-level coro bookkeeping) ==========
  */
 
@@ -386,9 +376,6 @@ struct XrayIsolate;
 struct XrClosure;
 
 // Lifecycle
-XR_FUNC XrCoroutine *xr_coro_create_vm_closure(struct XrayIsolate *X, struct XrClosure *closure,
-                                               XrValue *args, int arg_count, const char *name,
-                                               const char *file, int line);
 XR_FUNC XrCoroutine *xr_coro_create_empty(struct XrayIsolate *X, const char *name);
 XR_FUNC XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *), void *arg,
                                            const char *name);
