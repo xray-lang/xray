@@ -272,8 +272,6 @@ static void init_vm_context(XrayIsolate *isolate) {
     ctx->trace_execution = isolate->vm.trace_execution;
     ctx->isolate = isolate;
 
-    ctx->tmp_strbuf = NULL;
-
     // Defer stack is per-context (lazy-allocated on first OP_DEFER)
     ctx->defer_stack = NULL;
     ctx->defer_count = 0;

@@ -120,6 +120,10 @@ struct XrGlobalStringPool *xr_isolate_get_string_pool(XrayIsolate *X) {
     return X ? X->global_string_pool : NULL;
 }
 
+struct XrStrBuf **xr_isolate_tmp_strbuf_slot(XrayIsolate *X) {
+    return X ? &X->tmp_strbuf : NULL;
+}
+
 /* ========== Coroutine ========== */
 
 XrCoroutine *xr_isolate_get_main_coro(XrayIsolate *X) {

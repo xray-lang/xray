@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Growable string buffer for efficient string concatenation.
- *   Per-context temp buffer avoids repeated allocations.
+ *   Per-execution-owner temp buffer avoids repeated allocations.
  */
 
 #include "xstrbuf.h"
@@ -64,20 +64,22 @@ static void strbuf_grow(XrStrBuf *sb, size_t need) {
 
 /* ========== Create and Destroy ========== */
 
-// Get current thread-local temp buffer slot.
+// Get current execution-local temp buffer slot.
 // Multi-core execution uses the current machine; single-thread execution
-// reuses the isolate VM context storage for historical embedding callers.
+// reuses isolate-level runtime storage.
 static inline XrStrBuf **xr_get_tmp_strbuf_slot(XrayIsolate *X) {
     XrWorker *worker = xr_current_worker();
     if (worker && worker->m) {
         return &worker->m->tmp_strbuf;
     }
-    return &xr_isolate_get_vm_ctx(X)->tmp_strbuf;
+    return xr_isolate_tmp_strbuf_slot(X);
 }
 
 XrStrBuf *xr_strbuf_tmp(XrayIsolate *X) {
     XR_DCHECK(X != NULL, "strbuf_tmp: NULL isolate");
     XrStrBuf **slot = xr_get_tmp_strbuf_slot(X);
+    if (!slot)
+        return NULL;
 
     // Lazy allocation
     if (!*slot) {

@@ -12,7 +12,6 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../coro/xmachine.h"
-#include "../runtime/xstrbuf.h"
 #include <string.h>
 
 #define XR_VM_MACHINE_STACK_SIZE 1024
@@ -48,10 +47,6 @@ static void vm_machine_ctx_free(XrVMContext *ctx) {
     if (!ctx)
         return;
 
-    if (ctx->tmp_strbuf) {
-        xr_strbuf_free(ctx->tmp_strbuf);
-        ctx->tmp_strbuf = NULL;
-    }
     if (ctx->handlers && ctx->handlers != ctx->handler_inline) {
         xr_free(ctx->handlers);
     }

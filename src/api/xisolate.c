@@ -31,6 +31,7 @@
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/xstrbuf.h"
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
 #include "../coro/xcoroutine.h"
@@ -118,6 +119,10 @@ XrayIsolate *xray_isolate_new(const XrayIsolateParams *params) {
 fail_after_vm:
     xr_vm_cleanup(isolate);
 fail:
+    if (isolate->tmp_strbuf) {
+        xr_strbuf_free(isolate->tmp_strbuf);
+        isolate->tmp_strbuf = NULL;
+    }
     if (isolate->globals)
         xr_globals_destroy((XrGlobalsTable *) isolate->globals);
     if (isolate->sys_heap) {
@@ -164,6 +169,11 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     }
 
     xr_vm_cleanup(isolate);
+
+    if (isolate->tmp_strbuf) {
+        xr_strbuf_free(isolate->tmp_strbuf);
+        isolate->tmp_strbuf = NULL;
+    }
 
     // The globals table stores XrValue entries that reference fixedgc
     // bodies (enum types and the like). Drop the table BEFORE

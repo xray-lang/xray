@@ -16,6 +16,7 @@
 #define XVM_CORO_STATE_H
 
 #include "../coro/xcoroutine.h"
+#include "../runtime/xexec_frame.h"
 #include "../jit/xjit_coro_state.h"
 
 typedef struct XrVmCoroState XrVmCoroState;

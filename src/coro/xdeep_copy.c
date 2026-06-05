@@ -21,6 +21,7 @@
 #include "../runtime/object/xset.h"
 #include "../runtime/object/xjson.h"
 #include "../runtime/class/xinstance.h"
+#include "../runtime/closure/xclosure.h"
 #include "xcoroutine.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/closure/xcell.h"

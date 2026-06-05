@@ -63,7 +63,7 @@
 #include <stdatomic.h>
 #include "../base/xconstants.h"
 #include "../base/xchecks.h"
-#include "xexec_frame.h"  // XrBcCallFrame, XrClosure, XrValue
+#include "../runtime/value/xvalue.h"
 #include "xcoro_abi.h"
 #include "xcoro_flags.h"
 #include "xslot_ref.h"

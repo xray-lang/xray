@@ -92,6 +92,7 @@ struct XrayIsolate {
     // Global state
     XrGlobalsTable *globals;                 // Dynamic global variables table
     XrGlobalStringPool *global_string_pool;  // Global string pool (read-only)
+    struct XrStrBuf *tmp_strbuf;             // Single-thread scratch buffer for string ops
 
     // Type system
     XrTypeInferContext *type_infer_context;  // Type inference context
