@@ -33,6 +33,7 @@ static void setup(void) {
     if (!g_iso) {
         XrayIsolateParams p;
         xray_isolate_params_init(&p);
+        xray_isolate_setup_full(&p);
         g_iso = xray_isolate_new(&p);
     }
 }
@@ -345,6 +346,38 @@ TEST(member_access) {
             found_load_field = 1;
     }
     assert(found_load_field && "should have LOAD_FIELD op");
+    xi_func_free(f);
+}
+
+TEST(member_access_field_symbols_are_distinct) {
+    XiFunc *f = lower_source("fn worker() -> int {\n"
+                             "    yield\n"
+                             "    return 1\n"
+                             "}\n"
+                             "let task = go worker()\n"
+                             "print(task.done)\n"
+                             "print(task.cancelled)\n");
+    assert(f != NULL);
+
+    int64_t done_symbol = 0;
+    int64_t cancelled_symbol = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; blk && i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_LOAD_FIELD || !v->aux)
+                continue;
+            const char *name = (const char *) v->aux;
+            if (strcmp(name, "done") == 0)
+                done_symbol = v->aux_int;
+            if (strcmp(name, "cancelled") == 0)
+                cancelled_symbol = v->aux_int;
+        }
+    }
+
+    assert(done_symbol > 0 && "task.done should carry a field symbol");
+    assert(cancelled_symbol > 0 && "task.cancelled should carry a field symbol");
+    assert(done_symbol != cancelled_symbol && "different task fields need distinct symbols");
     xi_func_free(f);
 }
 
@@ -832,6 +865,7 @@ int main(void) {
     run_array_literal();
     run_index_access();
     run_member_access();
+    run_member_access_field_symbols_are_distinct();
     run_throw_stmt();
     run_for_in_loop();
     run_nullish_coalesce();

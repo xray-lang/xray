@@ -148,6 +148,44 @@ static bool cg_value_type_is_channel(const XiValue *v) {
     return v && cg_type_is_channel(v->type);
 }
 
+static bool cg_type_is_task(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, "Task") == 0;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (cg_type_is_task(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_value_type_is_task(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+        v = v->args[0];
+    return v && cg_type_is_task(v->type);
+}
+
+static const char *cg_task_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "done") == 0)
+        return "xr_aot_task_done";
+    if (strcmp(field, "cancelled") == 0)
+        return "xr_aot_task_cancelled";
+    if (strcmp(field, "result") == 0)
+        return "xr_aot_task_result";
+    if (strcmp(field, "error") == 0)
+        return "xr_aot_task_error";
+    return NULL;
+}
+
+static bool cg_task_field_needs_xrt_bridge(const char *field) {
+    return field && (strcmp(field, "result") == 0 || strcmp(field, "error") == 0);
+}
+
 static bool cg_channel_method_may_suspend(const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
         return false;
@@ -1340,6 +1378,24 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         case XI_LOAD_FIELD: {
             XR_DCHECK(v->nargs >= 1, "XI_LOAD_FIELD: need object");
             const char *field = (const char *) v->aux;
+            const char *task_helper =
+                cg_value_type_is_task(v->args[0]) ? cg_task_field_helper(field) : NULL;
+            if (task_helper) {
+                if (cg_rep(v) == XR_REP_I64)
+                    fprintf(out, "XR_TO_INT(");
+                else if (cg_rep(v) == XR_REP_F64)
+                    fprintf(out, "XR_TO_FLOAT(");
+                if (cg_task_field_needs_xrt_bridge(field))
+                    fprintf(out, "xr_aot_bridge_value_to_xrt(");
+                fprintf(out, "%s(NULL, ", task_helper);
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+                if (cg_task_field_needs_xrt_bridge(field))
+                    fprintf(out, ")");
+                if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+                    fprintf(out, ")");
+                break;
+            }
             /* Use xrt_getprop with symbol lookup for builtin properties,
              * or xrt_map_get for map-like objects */
             int sym = cg_method_sym(field);
@@ -1496,6 +1552,26 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     mfunc = cg_lookup_method(ctx, method, recv_class, &method_prefix);
             }
             uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+            if (v->op == XI_CALL_METHOD && cg_value_type_is_task(v->args[0])) {
+                if (nargs == 0 && method && strcmp(method, "cancel") == 0) {
+                    if (cg_rep(v) == XR_REP_I64)
+                        fprintf(out, "XR_TO_INT(");
+                    else if (cg_rep(v) == XR_REP_F64)
+                        fprintf(out, "XR_TO_FLOAT(");
+                    fprintf(out, "xr_aot_task_cancel(NULL, ");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, ")");
+                    if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+                        fprintf(out, ")");
+                } else {
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",
+                            method ? method : "?");
+                    emit_codegen_abort_expr(out);
+                }
+                break;
+            }
 
             if (mfunc) {
                 if (cg_func_needs_aot_coro(mfunc)) {

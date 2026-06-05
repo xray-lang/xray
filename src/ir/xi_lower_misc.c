@@ -70,6 +70,7 @@ XR_FUNC XiValue *xi_lower_enum_access(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = enum_val;
     v->aux = (void *) arena_strdup(l->func, ea->member_name);
+    v->aux_int = xi_lower_method_symbol(l, ea->member_name);
     v->line = (uint32_t) node->line;
     return v;
 }

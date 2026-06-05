@@ -519,6 +519,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
         return NULL;
     v->args[0] = obj;
     v->aux = (void *) arena_strdup(l->func, ma->name);
+    v->aux_int = xi_lower_method_symbol(l, ma->name);
     v->line = (uint32_t) node->line;
     return v;
 }
@@ -570,6 +571,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     v->args[0] = obj;
     v->args[1] = val;
     v->aux = (void *) arena_strdup(l->func, ms->member);
+    v->aux_int = xi_lower_method_symbol(l, ms->member);
     v->flags |= XI_FLAG_SIDE_EFFECT;
     v->line = (uint32_t) node->line;
     return v;
@@ -2316,6 +2318,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
             set->args[0] = call;
             set->args[1] = val_vals[i];
             set->aux = (void *) arena_strdup(l->func, sl->field_names[i]);
+            set->aux_int = xi_lower_method_symbol(l, sl->field_names[i]);
             set->flags |= XI_FLAG_SIDE_EFFECT;
         }
         return call;
@@ -2388,6 +2391,7 @@ static XiValue *lower_optional_chain(XiLower *l, AstNode *node) {
         if (access_val) {
             access_val->args[0] = obj;
             access_val->aux = (void *) oc->name;
+            access_val->aux_int = xi_lower_method_symbol(l, oc->name);
         }
     } else if (oc->index) {
         /* Index access: obj[idx] */

@@ -142,8 +142,8 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CONST         string: char*        int/bool/null literal value
  *                   (other: unused)
  *  XI_PARAM         —                    parameter index
- *  XI_LOAD_FIELD    —                    field index
- *  XI_STORE_FIELD   —                    field index
+ *  XI_LOAD_FIELD    field name or NULL   symbol id or field index
+ *  XI_STORE_FIELD   field name or NULL   symbol id or field index
  *  XI_JSON_NEW      char** field_names   field count
  *  XI_JSON_INIT_F   —                    field index
  *  XI_JSON_GET_F    —                    field index
@@ -234,8 +234,8 @@ typedef enum {
     XI_WIDEN_F32, /* (double)(float) roundtrip — explicit precision gate */
 
     /* Memory / field access */
-    XI_LOAD_FIELD,  /* obj.field: args[0]=obj, aux_int=field_index */
-    XI_STORE_FIELD, /* obj.field=val: args[0]=obj, args[1]=val, aux_int=field_index */
+    XI_LOAD_FIELD,  /* obj.field: args[0]=obj, aux=name, aux_int=symbol id */
+    XI_STORE_FIELD, /* obj.field=val: args[0]=obj, args[1]=val, aux=name, aux_int=symbol id */
     XI_INDEX_GET,   /* obj[key]: args[0]=obj, args[1]=key */
     XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
 

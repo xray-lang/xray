@@ -1067,6 +1067,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
             return;
         len->args[0] = coll;
         len->aux = (void *) "memberCount";
+        len->aux_int = xi_lower_method_symbol(l, "memberCount");
         len->line = (uint32_t) node->line;
 
         XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);
@@ -1089,6 +1090,7 @@ XR_FUNC void xi_lower_for_in(XiLower *l, AstNode *node) {
         return;
     len->args[0] = coll;
     len->aux = (void *) "length";
+    len->aux_int = xi_lower_method_symbol(l, "length");
     len->line = (uint32_t) node->line;
 
     XiValue *zero = xi_const_int(l->func, l->cur_block, 0, l->type_int);

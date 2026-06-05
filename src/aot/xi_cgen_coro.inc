@@ -216,8 +216,11 @@ static bool cg_coro_value_from_runtime_bridge(const XiValue *v) {
         case XI_CHAN_NEW:
         case XI_TUPLE_GET:
             return true;
+        case XI_LOAD_FIELD:
+            return origin->nargs >= 1 && cg_value_type_is_task(origin->args[0]);
         case XI_CALL_METHOD:
-            return origin->nargs >= 1 && cg_value_type_is_channel(origin->args[0]);
+            return origin->nargs >= 1 && (cg_value_type_is_channel(origin->args[0]) ||
+                                          cg_value_type_is_task(origin->args[0]));
         default:
             return false;
     }
@@ -403,6 +406,15 @@ static bool cg_is_channel_method_call(const XiValue *v, const char *method, int 
 
 static bool cg_is_blocking_channel_method_call(const XiValue *v) {
     return cg_is_channel_method_call(v, "send", 1) || cg_is_channel_method_call(v, "recv", 0);
+}
+
+static bool cg_is_task_method_call(const XiValue *v, const char *method, int nargs) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_task(v->args[0]))
+        return false;
+    const char *actual = (const char *) v->aux;
+    if (!actual || strcmp(actual, method) != 0)
+        return false;
+    return nargs < 0 || (int) v->nargs - 1 == nargs;
 }
 
 static bool cg_coro_value_may_suspend(const XiFunc *f, const XiValue *v) {
@@ -1177,6 +1189,52 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_tuple_get_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        return;
+    }
+
+    if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && cg_value_type_is_task(v->args[0])) {
+        const char *field = (const char *) v->aux;
+        const char *helper = cg_task_field_helper(field);
+        if (!helper) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task field '%s'\n",
+                    field ? field : "?");
+            return;
+        }
+        fprintf(out, "    XrValue _task_field_%u = %s(ctx, ", v->id, helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_task_field_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+            if (cg_rep(v) == XR_REP_TAGGED && cg_task_field_needs_xrt_bridge(field)) {
+                fprintf(out, "    ");
+                emit_vref(out, v);
+                fprintf(out, " = xr_aot_bridge_value_to_xrt(");
+                emit_vref(out, v);
+                fprintf(out, ");\n");
+            }
+        }
+        return;
+    }
+
+    if (cg_is_task_method_call(v, "cancel", 0)) {
+        fprintf(out, "    XrValue _task_method_%u = xr_aot_task_cancel(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_task_method_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (v->op == XI_CALL_METHOD && v->nargs >= 1 && cg_value_type_is_task(v->args[0])) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",
+                v->aux ? (const char *) v->aux : "?");
         return;
     }
 

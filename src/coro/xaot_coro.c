@@ -10,9 +10,11 @@
 
 #include "xaot_coro.h"
 #include "xaot_await.h"
+#include "xaot_task.h"
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -20,6 +22,8 @@
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xarray.h"
+#include "../runtime/object/xexception.h"
+#include "../runtime/object/xstring.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_internal.h"
 #include "xblock.h"
@@ -526,6 +530,67 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot
     if (block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_CLOSED)
         return xr_aot_result(XR_AOT_RUN_DONE);
     return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value) {
+    if (!xr_value_is_task(task_value))
+        return xr_null();
+    XrTask *task = xr_value_to_task(task_value);
+    XrCoroutine *coro = task->coro;
+    if (coro && !xr_task_is_done(task)) {
+        xr_coro_cancel(coro);
+        xr_task_cancel(task);
+        XrayIsolate *isolate = ctx ? ctx->isolate : NULL;
+        if (!isolate)
+            isolate = coro->isolate;
+        if (isolate)
+            xr_coro_wake_waiter(isolate, coro);
+    }
+    return xr_null();
+}
+
+XrValue xr_aot_task_done(const XrAotContext *ctx, XrValue task_value) {
+    (void) ctx;
+    if (!xr_value_is_task(task_value))
+        return xr_bool(false);
+    return xr_bool(xr_task_is_done(xr_value_to_task(task_value)));
+}
+
+XrValue xr_aot_task_cancelled(const XrAotContext *ctx, XrValue task_value) {
+    (void) ctx;
+    if (!xr_value_is_task(task_value))
+        return xr_bool(false);
+    return xr_bool(xr_task_is_cancelled(xr_value_to_task(task_value)));
+}
+
+XrValue xr_aot_task_result(const XrAotContext *ctx, XrValue task_value) {
+    if (!xr_value_is_task(task_value))
+        return xr_null();
+    XrTask *task = xr_value_to_task(task_value);
+    if (!xr_task_is_done(task) || !XR_IS_NULL(task->error))
+        return xr_null();
+    return xr_coro_await_result_value(ctx ? ctx->isolate : NULL, ctx ? ctx->coro : NULL, task,
+                                      false);
+}
+
+XrValue xr_aot_task_error(const XrAotContext *ctx, XrValue task_value) {
+    if (!xr_value_is_task(task_value))
+        return xr_null();
+    XrTask *task = xr_value_to_task(task_value);
+    if (atomic_load_explicit(&task->state, memory_order_acquire) != XR_TASK_FAILED ||
+        XR_IS_NULL(task->error))
+        return xr_null();
+
+    XrayIsolate *isolate = ctx ? ctx->isolate : NULL;
+    XrValue err = task->error;
+    if (isolate && xr_value_is_exception(isolate, err)) {
+        const char *message = xr_exception_get_message(isolate, err);
+        if (!message)
+            return xr_null();
+        XrString *s = xr_string_intern(isolate, message, strlen(message), 0);
+        return s ? xr_string_value(s) : xr_null();
+    }
+    return err;
 }
 
 XrAotResult xr_aot_await_all_tasks(const XrAotContext *ctx, XrValue tasks_value,

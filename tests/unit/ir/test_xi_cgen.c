@@ -99,8 +99,8 @@ static XiFunc *compile_to_ir(const char *source) {
     return ir;
 }
 
-/* Generate C code for Xi IR into a malloc'd string.
- * Caller must free the returned string. */
+/* Generate C code for Xi IR into an xr_malloc-owned string.
+ * Caller releases the returned string with xr_free(). */
 static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error) {
     assert(ir != NULL);
 
@@ -188,7 +188,7 @@ TEST(cgen_simple_arith) {
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -211,7 +211,7 @@ TEST(cgen_variable_and_print) {
     assert(contains(code, "xrt_print") && "should call print");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -238,7 +238,7 @@ TEST(cgen_if_else) {
     assert(contains(code, "if (") && "should have if branch");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -264,7 +264,7 @@ TEST(cgen_multi_print) {
     assert(contains(code, "xrt_print") && "should call print");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -291,7 +291,7 @@ TEST(cgen_while_loop) {
     assert(contains(code, "<") && "should have comparison");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -311,7 +311,7 @@ TEST(cgen_string_literal) {
     assert(contains(code, "xr_box_str") && "string should be boxed");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -336,7 +336,7 @@ TEST(cgen_function_call) {
     assert(contains(code, "return") && "add should have return");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -361,7 +361,7 @@ TEST(cgen_recursive) {
     assert(contains(code, "if (") && "should have conditional");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -385,7 +385,7 @@ TEST(cgen_for_loop) {
     assert(contains(code, "+") && "should have addition");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -422,7 +422,7 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     assert(!contains(code, "unsupported coroutine Xi op") &&
            "unsupported coroutine diagnostics should not be emitted into generated C");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -449,7 +449,7 @@ TEST(cgen_suspendable_wrapper_aborts) {
            "sync wrapper must not silently return null");
 
     printf("  Generated suspendable wrapper %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -473,7 +473,7 @@ TEST(cgen_sync_call_to_suspendable_aborts) {
            "diagnostics should go to stderr, not generated C comments");
 
     printf("  Generated rejected sync call %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -559,7 +559,7 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
            "scalar coroutine frame should report zero ARC release slots");
 
     printf("  Generated typed coroutine param frame %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -596,7 +596,7 @@ TEST(cgen_coro_frame_skips_dead_ssa_slots) {
            "non-frame scalar SSA values should be resume-local variables");
 
     printf("  Generated compact coroutine frame %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -643,7 +643,7 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
            "frame release must not call the old untyped release helper");
 
     printf("  Generated ARC-aware coroutine release %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -669,7 +669,7 @@ TEST(cgen_coro_go_clones_tagged_args) {
            "tagged go arguments must be cloned at the coroutine boundary");
 
     printf("  Generated coroutine argument clone %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -691,7 +691,7 @@ TEST(cgen_coro_channel_send_clones_value) {
            "channel send values must be cloned at the coroutine boundary");
 
     printf("  Generated channel send clone %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -716,7 +716,7 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
            "scalar channel send values must not call the deep-copy helper");
 
     printf("  Generated scalar channel send %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -742,7 +742,7 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
            "scalar channel trySend values must not call the deep-copy helper");
 
     printf("  Generated scalar channel trySend %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -771,7 +771,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
            "tagged await results must be cloned at the coroutine boundary");
 
     printf("  Generated await result clone %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -817,7 +817,7 @@ TEST(cgen_coro_scalar_await_uses_typed_slot) {
            "typed await should not unbox a tagged await value after resume");
 
     printf("  Generated scalar await slot %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -841,7 +841,7 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
            "channel recv resume must not depend on a local slot variable");
 
     printf("  Generated channel recv wait-state slot %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -888,7 +888,7 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
            "typed recv should not unbox a tagged receive value after resume");
 
     printf("  Generated scalar channel recv slot %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -912,7 +912,7 @@ TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
            "tagged channel recv frame should report one traced root slot");
 
     printf("  Generated traced channel recv slot %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -943,7 +943,7 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
            "await all runtime result arrays must be converted back to AOT arrays");
 
     printf("  Generated await all aggregate bridge %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -975,7 +975,69 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
            "scalar await any results should use a typed frame slot");
 
     printf("  Generated await any aggregate bridge %zu bytes of C code\n", strlen(code));
-    free(code);
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_task_status_uses_task_bridge) {
+    const char *src = "fn wait_for_value(ch: Channel<int>) -> int {\n"
+                      "    let value = ch.recv()\n"
+                      "    return value\n"
+                      "}\n"
+                      "fn quick_value(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n * 2\n"
+                      "}\n"
+                      "fn task_done(task: Task) -> bool {\n"
+                      "    return task.done\n"
+                      "}\n"
+                      "fn task_cancelled(task: Task) -> bool {\n"
+                      "    return task.cancelled\n"
+                      "}\n"
+                      "fn task_result(task: Task) -> Json {\n"
+                      "    return task.result\n"
+                      "}\n"
+                      "const ch = new Channel<int>(0)\n"
+                      "let blocked = go wait_for_value(ch)\n"
+                      "blocked.cancel()\n"
+                      "let cancelled_value = await blocked\n"
+                      "print(blocked.done)\n"
+                      "print(blocked.cancelled)\n"
+                      "print(cancelled_value == null)\n"
+                      "let quick = go quick_value(21)\n"
+                      "let quick_result = await quick\n"
+                      "print(quick.done)\n"
+                      "print(quick.result)\n"
+                      "print(quick_result)\n"
+                      "print(task_done(quick))\n"
+                      "print(task_cancelled(quick))\n"
+                      "print(task_result(quick))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT Task status access should generate");
+    assert(contains(code, "xr_aot_task_cancel(ctx,") && "Task.cancel must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_done(ctx,") && "Task.done must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_cancelled(ctx,") &&
+           "Task.cancelled must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_result(ctx,") && "Task.result must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_done(NULL,") &&
+           "sync AOT Task.done must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_cancelled(NULL,") &&
+           "sync AOT Task.cancelled must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_result(NULL,") &&
+           "sync AOT Task.result must use the AOT Task bridge");
+    assert(!contains(code, "xrt_method_0(v") &&
+           "Task.cancel must not fall back to AOT dynamic method dispatch");
+    assert(!contains(code, "xrt_getprop(v") &&
+           "Task fields must not fall back to AOT dynamic property dispatch");
+
+    printf("  Generated Task status bridge %zu bytes of C code\n", strlen(code));
+    xr_free(code);
     xi_func_free(ir);
 }
 
@@ -1014,6 +1076,7 @@ int main(void) {
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
     run_cgen_coro_await_all_uses_aggregate_bridge();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
+    run_cgen_coro_task_status_uses_task_bridge();
 
     teardown();
 
