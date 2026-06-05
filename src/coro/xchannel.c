@@ -115,9 +115,16 @@ static XrChannelKind channel_infer_kind(XrChannel *ch) {
     return XR_CHAN_MPMC;
 }
 
+static inline bool channel_kind_observation_stable(XrChannelKind kind) {
+    return kind == XR_CHAN_MPMC || kind == XR_CHAN_RENDEZVOUS || kind == XR_CHAN_WORK_QUEUE;
+}
+
 static void channel_note_worker_locked(XrChannel *ch, bool producer) {
+    if (!ch || channel_kind_observation_stable(ch->kind))
+        return;
+
     XrWorker *worker = xr_current_worker();
-    if (!ch || !worker)
+    if (!worker)
         return;
 
     uint64_t bit = xr_runtime_worker_bit(worker->p.id);
