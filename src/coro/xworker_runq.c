@@ -21,6 +21,8 @@
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
 
+#define XR_LIFO_INJECT_BACKLOG_THRESHOLD XR_INJECT_POP_BATCH
+
 // ========== Run Queue Implementation (Chase-Lev deque) ==========
 
 static int normalize_coro_priority(int priority) {
@@ -181,17 +183,39 @@ static bool worker_has_effective_high_work(XrWorker *worker, int64_t now) {
             high_bit) != 0;
 }
 
+static bool runtime_backlog_should_gate_lifo(XrRuntime *runtime) {
+    if (!runtime)
+        return false;
+    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+        return true;
+
+    uint32_t mask = atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
+    if (mask == 0)
+        return false;
+
+    int pending = 0;
+    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
+        if ((mask & ((uint32_t) 1u << priority)) == 0)
+            continue;
+        pending += atomic_load_explicit(&runtime->injectq[priority].len, memory_order_relaxed);
+        if (pending >= XR_LIFO_INJECT_BACKLOG_THRESHOLD)
+            return true;
+    }
+    return false;
+}
+
 static bool worker_lifo_gate_allows(XrWorker *worker, XrCoroutine *lifo, bool consume_poll_budget) {
     if (consume_poll_budget && worker->p.lifo_polls >= XR_MAX_LIFO_POLLS)
+        return false;
+
+    XrRuntime *runtime = worker->p.runtime;
+    if (runtime_backlog_should_gate_lifo(runtime))
         return false;
 
     int lifo_priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(lifo)));
     if (lifo_priority >= CORO_PRIORITY_HIGH)
         return true;
 
-    XrRuntime *runtime = worker->p.runtime;
-    if (runtime && atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
-        return false;
     if (runtime) {
         uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
         if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
