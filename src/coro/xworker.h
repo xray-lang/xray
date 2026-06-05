@@ -83,6 +83,8 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t inject_push_count;
     _Atomic uint64_t inject_pop_count;
     _Atomic uint64_t inject_spill_count;
+    _Atomic uint64_t inject_push_batch_count;
+    _Atomic uint64_t inject_pop_batch_count;
     _Atomic uint64_t handoff_reuse_count;
     _Atomic uint64_t handoff_create_count;
     _Atomic uint64_t handoff_cap_hit_count;

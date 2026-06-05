@@ -847,18 +847,26 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         uint64_t inject_push = xr_sched_metric_load(&s->inject_push_count);
         uint64_t inject_pop = xr_sched_metric_load(&s->inject_pop_count);
         uint64_t inject_spill = xr_sched_metric_load(&s->inject_spill_count);
+        uint64_t inject_push_batches = xr_sched_metric_load(&s->inject_push_batch_count);
+        uint64_t inject_pop_batches = xr_sched_metric_load(&s->inject_pop_batch_count);
         long long inject_pending = (long long) inject_push - (long long) inject_pop;
         long long pull_pop_delta = (long long) total_inject_pull - (long long) inject_pop;
-        fprintf(stderr, "Inject: push=%llu pop=%llu spill=%llu len=%d mask=0x%x\n",
+        fprintf(stderr,
+                "Inject: push=%llu pop=%llu spill=%llu push_batches=%llu pop_batches=%llu len=%d "
+                "mask=0x%x\n",
                 (unsigned long long) inject_push, (unsigned long long) inject_pop,
-                (unsigned long long) inject_spill, inject_len,
+                (unsigned long long) inject_spill, (unsigned long long) inject_push_batches,
+                (unsigned long long) inject_pop_batches, inject_len,
                 atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
         fprintf(stderr,
                 "Inject diagnostics: pop_push_ratio=%.2f%% spill_ratio=%.2f%% pending_est=%lld "
-                "worker_pull=%llu pull_pop_delta=%lld\n",
+                "worker_pull=%llu pull_pop_delta=%lld push_items_per_batch=%.2f "
+                "pop_items_per_batch=%.2f\n",
                 stats_percent_u64(inject_pop, inject_push),
                 stats_percent_u64(inject_spill, inject_push), inject_pending,
-                (unsigned long long) total_inject_pull, pull_pop_delta);
+                (unsigned long long) total_inject_pull, pull_pop_delta,
+                stats_ratio_u64(inject_push, inject_push_batches),
+                stats_ratio_u64(inject_pop, inject_pop_batches));
     }
     fprintf(stderr,
             "Masks: runq=[0x%llx,0x%llx,0x%llx] stealable=[0x%llx,0x%llx,0x%llx] "
