@@ -75,6 +75,12 @@ static XrCoroEvent worker_event_from_coro(XrCoroutine *coro) {
         event.kind = XR_CORO_EVENT_CHANNEL;
     } else if (resume == XR_RESUME_CHANNEL_CLOSED) {
         event.kind = XR_CORO_EVENT_CHANNEL_CLOSED;
+    } else if (resume == XR_RESUME_TIMEOUT) {
+        event.kind = XR_CORO_EVENT_TIMEOUT;
+    } else if (resume == XR_RESUME_IO_READY) {
+        event.kind = XR_CORO_EVENT_IO_READY;
+    } else if (resume == XR_RESUME_CANCELLED) {
+        event.kind = XR_CORO_EVENT_CANCEL;
     } else if (flags & XR_CORO_FLG_STARTED) {
         event.kind = XR_CORO_EVENT_RESUME;
     }
