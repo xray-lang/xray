@@ -91,6 +91,7 @@ static const XrCliOptionSpec build_options[] = {
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR", "System root directory"},
     {"strip", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Strip debug symbols"},
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Use AOT native backend"},
+    {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec deps_options[] = {

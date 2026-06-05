@@ -24,6 +24,7 @@
 #define XAOT_DRIVER_H
 
 #include "../base/xchecks.h"
+#include "xi_cgen.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -79,6 +80,7 @@ typedef struct {
     int total_aot;           /* total AOT-eligible functions found */
     int nmodules;            /* number of modules in the bundle */
     XaotFeatureSet features; /* inferred feature set */
+    XiCgenCoroFrameStats coro_frame_stats;
 } XaotBuildResult;
 
 /* Full AOT pipeline: Source → AST → Xi IR → C.

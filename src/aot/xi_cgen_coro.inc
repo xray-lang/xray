@@ -311,6 +311,75 @@ static bool cg_coro_value_may_hold_frame_root(const XiFunc *f, const XiLiveness 
     return cg_coro_value_live_across_suspend(f, live, v) || cg_coro_value_needs_runtime_slot(v);
 }
 
+static size_t cg_coro_align_up(size_t size, size_t align) {
+    if (align <= 1)
+        return size;
+    size_t rem = size % align;
+    return rem == 0 ? size : size + (align - rem);
+}
+
+static void cg_coro_layout_add(size_t *size, size_t *max_align, size_t field_size,
+                               size_t field_align) {
+    XR_DCHECK(size != NULL, "coro layout: NULL size");
+    XR_DCHECK(max_align != NULL, "coro layout: NULL align");
+    XR_DCHECK(field_size > 0, "coro layout: zero field size");
+    if (field_align == 0)
+        field_align = 1;
+    *size = cg_coro_align_up(*size, field_align) + field_size;
+    if (*max_align < field_align)
+        *max_align = field_align;
+}
+
+static void cg_coro_layout_add_rep(size_t *size, size_t *max_align, XrRep rep) {
+    if (rep == XR_REP_I64) {
+        cg_coro_layout_add(size, max_align, sizeof(int64_t), _Alignof(int64_t));
+    } else if (rep == XR_REP_F64) {
+        cg_coro_layout_add(size, max_align, sizeof(double), _Alignof(double));
+    } else {
+        cg_coro_layout_add(size, max_align, sizeof(XrValue), _Alignof(XrValue));
+    }
+}
+
+static size_t estimate_coro_frame_size(const XiFunc *f, const XiLiveness *live) {
+    size_t size = 0;
+    size_t max_align = 1;
+    cg_coro_layout_add(&size, &max_align, sizeof(uint32_t), _Alignof(uint32_t));
+    for (uint16_t i = 0; i < f->nparams; i++)
+        cg_coro_layout_add_rep(&size, &max_align, cg_rep(f->params[i]));
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_coro_phi_needs_frame(f, live, phi))
+                cg_coro_layout_add_rep(&size, &max_align, cg_rep(&phi->value));
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (cg_coro_value_needs_frame(f, live, v))
+                cg_coro_layout_add_rep(&size, &max_align, cg_rep(v));
+        }
+    }
+    return cg_coro_align_up(size, max_align);
+}
+
+static void record_coro_frame_stats(XiCgenCtx *ctx, size_t frame_size, uint32_t root_count,
+                                    uint32_t release_count) {
+    if (!ctx)
+        return;
+    XiCgenCoroFrameStats *stats = &ctx->coro_frame_stats;
+    stats->coroutine_count++;
+    stats->total_frame_bytes += frame_size;
+    stats->total_roots += root_count;
+    stats->total_releases += release_count;
+    if (stats->max_frame_bytes < frame_size)
+        stats->max_frame_bytes = frame_size;
+    if (stats->max_roots < root_count)
+        stats->max_roots = root_count;
+    if (stats->max_releases < release_count)
+        stats->max_releases = release_count;
+}
+
 static const XiFunc *cg_resolve_go_target(XiCgenCtx *ctx, const XiFunc *current,
                                           const XiValue *callee) {
     if (!callee)
@@ -1169,6 +1238,10 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
                 f->name ? f->name : "?");
         return;
     }
+    size_t frame_size = estimate_coro_frame_size(f, live);
+    uint32_t root_count = count_coro_frame_roots(f, live);
+    uint32_t release_count = count_coro_frame_releases(f, live);
+    record_coro_frame_stats(ctx, frame_size, root_count, release_count);
 
     emit_coro_frame_type(ctx, out, f, live, prefix);
     emit_coro_sync_wrapper(ctx, out, f, prefix);
@@ -1240,8 +1313,8 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    .frame_size = sizeof(");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, "),\n");
-    fprintf(out, "    .root_count = %u,\n", count_coro_frame_roots(f, live));
-    fprintf(out, "    .release_count = %u,\n", count_coro_frame_releases(f, live));
+    fprintf(out, "    .root_count = %u,\n", root_count);
+    fprintf(out, "    .release_count = %u,\n", release_count);
     fprintf(out, "    .resume = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
     fprintf(out, ",\n");

@@ -264,6 +264,7 @@ struct XiCgenCtx {
     XiModule **all_modules; /* full modules array for resolved-index lookups */
     int all_nmodules;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
+    XiCgenCoroFrameStats coro_frame_stats;
 };
 
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
@@ -280,6 +281,13 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
 
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {
     return ctx && ctx->error;
+}
+
+XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx) {
+    XiCgenCoroFrameStats stats = {0};
+    if (ctx)
+        stats = ctx->coro_frame_stats;
+    return stats;
 }
 
 /* Find the constructor child XiFunc from a XiClassData descriptor.
