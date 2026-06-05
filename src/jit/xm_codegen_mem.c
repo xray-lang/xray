@@ -1152,8 +1152,10 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // 1. Record safepoint bitmap for GC
             uint32_t smap_id = record_safepoint(ctx);
 
-            // 2. Load suspend_state pointer: x16 = coro->jit_state.suspend
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+            // 2. Load suspend_state pointer: x16 = jit_state->suspend
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
             if (suspend_id >= XM_MAX_SUSPEND_ENTRIES) {
                 ctx->had_error = true;
                 break;
@@ -1205,10 +1207,13 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
 
             // 5. Store suspend_id and smap_id
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) suspend_id, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_ID_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str_w(SCRATCH_REG2, SCRATCH_REG, XM_JIT_STATE_SUSPEND_ID_OFFSET));
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) smap_id, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_SMAP_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str_w(SCRATCH_REG2, SCRATCH_REG, XM_JIT_STATE_SUSPEND_SMAP_OFFSET));
             // Update frame + jit_ctx smap for GC during blocked state
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, A64_FP, FRAME_SMAP_ID_OFFSET));
             a64_buf_emit(&ctx->buf,
@@ -1218,11 +1223,13 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Once block_helper sets BLOCKED under lock, another worker may
             // wake and resume this coro immediately. resume_entry/proto must
             // already be valid at that point.
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_CALL_PROTO_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XM_CORO_RESUME_PROTO_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_PROTO_OFFSET));
             a64_buf_emit(&ctx->buf,
-                         a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_PROTO_JIT_RESUME_ENTRY_OFFSET));
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG, CORO_REG, XM_CORO_RESUME_ENTRY_OFFSET));
+                         a64_str(SCRATCH_REG2, SCRATCH_REG, XM_JIT_STATE_RESUME_PROTO_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG2, SCRATCH_REG2, XM_PROTO_JIT_RESUME_ENTRY_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_str(SCRATCH_REG2, SCRATCH_REG, XM_JIT_STATE_RESUME_ENTRY_OFFSET));
 
             // 7. Call block helper(coro, extra_arg)
             // Block helper selection: func metadata takes priority over default.
@@ -1269,7 +1276,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
 
             // Reload suspend pointer (x16 clobbered by BLR)
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 
             // Reload x1-x15 from suspend_regs (x20-x27 survived as callee-saved)
             a64_buf_emit(&ctx->buf,

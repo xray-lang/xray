@@ -68,12 +68,10 @@ static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
     if (!block)
         return;
 
-    // Free lazily-allocated jit_suspend state for each coroutine
+    // Free lazily-allocated JIT state for each coroutine.
     if (block->coros) {
         for (size_t i = 0; i < block->capacity; i++) {
-            if (block->coros[i].jit_state.suspend) {
-                xr_free(block->coros[i].jit_state.suspend);
-            }
+            xr_coro_free_jit_state(&block->coros[i]);
         }
         xr_free(block->coros);
     }
@@ -200,13 +198,17 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             coro = head;
             atomic_fetch_add_explicit(&pool->free_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
-            // Zero struct (next pointer may be dirty).
+            // Zero struct (next pointer may be dirty) while keeping cold JIT
+            // state allocated for reuse.
             XrVmCoroState *saved_vm_state = coro->vm_state;
+            XrJitCoroState *saved_jit_state = coro->jit_state;
             uint16_t saved_gc_flags =
                 coro->gc_flags &
                 (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
             memset(coro, 0, sizeof(XrCoroutine));
             coro->vm_state = saved_vm_state;
+            coro->jit_state = saved_jit_state;
+            xr_coro_reset_jit_state(coro);
             coro->gc_flags = saved_gc_flags;
             return coro;
         }
@@ -278,6 +280,7 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
             &pool->free_list, &head, coro, memory_order_release, memory_order_relaxed));
     } else {
         // From malloc: free directly
+        xr_coro_free_jit_state(coro);
         if ((coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) && coro->vm_state) {
             xr_free(coro->vm_state);
             coro->vm_state = NULL;

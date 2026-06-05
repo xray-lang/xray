@@ -293,7 +293,7 @@ typedef struct XrProc {
 
     /* === Per-Worker JIT Scratch Space ===
      * JIT functions don't yield, so only one JIT execution per worker.
-     * Coroutines access this via coro->jit_state.scratch pointer. */
+     * Coroutines access this via xr_coro_jit_state(coro)->scratch pointer. */
     XrJitScratch jit_scratch;
 
     /* === Runtime back pointer === */

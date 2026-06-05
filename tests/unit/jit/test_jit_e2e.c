@@ -70,6 +70,7 @@ typedef int64_t (*JitFn)(intptr_t, int64_t *);
  * (deopt_id, call_args, jit_frame_depth, ...) does not leak.
  * ==================================================================== */
 static XrCoroutine g_jit_coro;
+static XrJitCoroState g_jit_state;
 static XrJitScratch g_jit_ctx;
 static void *g_safepoint_page = NULL;
 
@@ -84,8 +85,10 @@ static void jit_env_init(void) {
 #endif
     }
     memset(&g_jit_coro, 0, sizeof(g_jit_coro));
+    memset(&g_jit_state, 0, sizeof(g_jit_state));
     memset(&g_jit_ctx, 0, sizeof(g_jit_ctx));
-    g_jit_coro.jit_state.scratch = &g_jit_ctx;
+    g_jit_coro.jit_state = &g_jit_state;
+    g_jit_state.scratch = &g_jit_ctx;
     g_jit_ctx.safepoint_page = g_safepoint_page;
 }
 
@@ -2422,8 +2425,9 @@ static XrJitResult jit_test_reentry_audit(void *coro_raw, int64_t unused) {
     (void) unused;
     XrCoroutine *coro = (XrCoroutine *) coro_raw;
     assert(coro != NULL);
-    assert(coro->jit_state.scratch != NULL);
-    XrJitScratch *ctx = coro->jit_state.scratch;
+    assert(coro->jit_state != NULL);
+    assert(coro->jit_state->scratch != NULL);
+    XrJitScratch *ctx = coro->jit_state->scratch;
     XrProto *proto = (XrProto *) ctx->call_proto;
     assert(proto != NULL);
     assert(proto->stack_map != NULL);
@@ -2701,7 +2705,7 @@ static void test_spill_only_param_init(void) {
 static void test_alloc_inline(void) {
     fprintf(stderr, "  test_alloc_inline...");
 
-    // Reuse global fake env so the JIT prologue can deref coro->jit_state.scratch.
+    // Reuse global fake env so the JIT prologue can deref coro->jit_state->scratch.
     // We only need to attach a fake coro_gc + immix heap on top of it.
     static uint8_t fake_gc[512];
     // Oversized buffer to manually align to 16KB boundary.

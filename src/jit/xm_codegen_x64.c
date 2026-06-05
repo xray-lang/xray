@@ -349,8 +349,9 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     /* Save coro pointer from platform-ABI first arg register */
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
 
-    /* Load jit_ctx from coro */
-    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
+    /* Load jit_ctx through the coroutine JIT state. */
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
     /* Save stack_map_ptr from jit_ctx into frame for GC and smap restoration
      * after JIT→JIT calls. Mirrors ARM64's FRAME_SMAP_PTR_OFFSET store. */
@@ -484,8 +485,9 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
     /* Save coro pointer from platform-ABI first arg register */
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
 
-    /* Load jit_ctx pointer */
-    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET);
+    /* Load jit_ctx pointer through the coroutine JIT state. */
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
     /* Save stack_map_ptr from jit_ctx into frame */
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET);
@@ -598,7 +600,7 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
         x64_maybe_spill(ctx, blk->ins[i].dst);
 
         /* Exception check after call-sites.  xr_jit_throw sets
-         * coro->jit_state.scratch->exception to the pending exception; the callee
+         * xr_coro_jit_state(coro)->scratch->exception to the pending exception; the callee
          * returns normally and the caller decides what to do.  Without
          * this check, throws from nested JIT-compiled callees silently
          * propagate as if no error occurred — the catch handler is never

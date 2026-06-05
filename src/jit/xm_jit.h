@@ -74,7 +74,7 @@ typedef struct XmJitState {
 /* ========== Suspend/Resume ========== */
 
 // Sentinel return value from JIT code when AWAIT needs to block.
-// JIT saves live registers to coro->jit_state.suspend and returns this.
+// JIT saves live registers to xr_coro_jit_state(coro)->suspend and returns this.
 // xm_jit_call detects it and returns XR_VM_BLOCKED to the worker.
 // On resume, worker calls jit_resume_entry to re-enter JIT code.
 #define XM_SUSPEND_MARKER ((int64_t) 0xDEAD0002DEAD0002LL)
@@ -118,7 +118,7 @@ XR_FUNC void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nres
 XR_FUNC int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack);
 
 // Resume JIT execution after suspend (await blocked then woken).
-// Called by worker when coro->jit_state.resume_entry != NULL.
+// Called by worker when xr_coro_jit_state(coro)->resume_entry != NULL.
 // Re-enters JIT via resume entry stub, which reloads saved registers
 // and dispatches to the continuation point.
 // Returns: XM_JIT_OK on success, XM_JIT_DEOPT on deopt, XM_JIT_SUSPEND

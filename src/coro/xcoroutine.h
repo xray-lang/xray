@@ -370,10 +370,9 @@ struct XrCoroutine {
     XrVmCoroState *vm_state;
 
     /* ================================================================
-     * WARM ZONE (Cache Line 3, offset 192+) — JIT/GC/result hot fields
-     * Grouped here to minimize cache misses on JIT entry and GC safepoint.
+     * WARM ZONE — GC/result hot fields and backend-owned cold state
      * ================================================================ */
-    XrJitCoroState jit_state;
+    XrJitCoroState *jit_state;
     struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
     struct XrayIsolate *isolate;  // JIT runtime helpers use 22+ times
     XrValue result;
@@ -495,6 +494,21 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
 }
 
 /* ========== JIT Integration APIs ========== */
+
+XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
+XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
+XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
+XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
+
+static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
+    XR_DCHECK(coro != NULL, "coro_jit_state: NULL coro");
+    if (!coro->jit_state || !coro->jit_state->scratch) {
+        XrJitCoroState *state = xr_coro_prepare_jit_state(coro);
+        XR_DCHECK(state != NULL, "coro_jit_state: missing JIT state");
+        return state;
+    }
+    return coro->jit_state;
+}
 
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub

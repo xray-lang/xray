@@ -58,8 +58,9 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     // Bump worker heartbeat so sysmon doesn't misdetect long-running
     // JIT code as stuck (JIT stays inside run_on_worker across many
     // C helper calls like go/await without returning to worker loop)
-    if (coro->jit_state.scratch && coro->jit_state.scratch->heartbeat_ptr) {
-        atomic_fetch_add_explicit(coro->jit_state.scratch->heartbeat_ptr, 1, memory_order_relaxed);
+    XrJitCoroState *jit_state = coro->jit_state;
+    if (jit_state && jit_state->scratch && jit_state->scratch->heartbeat_ptr) {
+        atomic_fetch_add_explicit(jit_state->scratch->heartbeat_ptr, 1, memory_order_relaxed);
     }
 
     // Cancel check: watchdog sets this via xr_runtime_force_stop
@@ -136,6 +137,45 @@ static bool coro_ensure_vm_state(XrCoroutine *coro) {
     return true;
 }
 
+XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
+    if (!coro)
+        return NULL;
+    if (coro->jit_state)
+        return coro->jit_state;
+    coro->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
+    return coro->jit_state;
+}
+
+XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_ensure_jit_state(coro);
+    if (!jit_state)
+        return NULL;
+    XrWorker *worker = xr_current_worker();
+    if (worker) {
+        jit_state->scratch = &worker->p.jit_scratch;
+        worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
+    }
+    return jit_state->scratch ? jit_state : NULL;
+}
+
+void xr_coro_reset_jit_state(XrCoroutine *coro) {
+    if (!coro || !coro->jit_state)
+        return;
+    XrJitSuspendState *suspend = coro->jit_state->suspend;
+    memset(coro->jit_state, 0, sizeof(*coro->jit_state));
+    coro->jit_state->suspend = suspend;
+}
+
+void xr_coro_free_jit_state(XrCoroutine *coro) {
+    if (!coro || !coro->jit_state)
+        return;
+    if (coro->jit_state->suspend) {
+        xr_free(coro->jit_state->suspend);
+    }
+    xr_free(coro->jit_state);
+    coro->jit_state = NULL;
+}
+
 static void coro_free_owned_vm_state(XrCoroutine *coro) {
     if (!coro || !(coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED))
         return;
@@ -148,6 +188,7 @@ static void coro_free_owned_vm_state(XrCoroutine *coro) {
 static void coro_discard_uninitialized(XrCoroutine *coro) {
     if (!coro)
         return;
+    xr_coro_free_jit_state(coro);
     coro_free_owned_vm_state(coro);
     if (!(coro->gc_flags & XR_CORO_GC_FROM_POOL)) {
         xr_free(coro);
@@ -342,9 +383,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL |
                               XR_CORO_GC_VM_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
         XrCoroExt *saved_ext = coro->ext;
-        // Preserve jit_suspend allocation for reuse (avoid free+malloc churn).
-        // The memset below will zero the pointer; restore after.
-        XrJitSuspendState *saved_jit_suspend = coro->jit_state.suspend;
+        XrJitCoroState *saved_jit_state = coro->jit_state;
 
         memset((char *) coro + offsetof(XrCoroutine, flags), 0,
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
@@ -363,7 +402,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
-        coro->jit_state.suspend = saved_jit_suspend;
+        coro->jit_state = saved_jit_state;
+        xr_coro_reset_jit_state(coro);
         // Reset ext fields that must not persist across lifetimes
         if (coro->ext) {
             coro->ext->locals = NULL;
@@ -1066,6 +1106,8 @@ void xr_coro_free(XrCoroutine *coro) {
         coro->ext = NULL;
     }
 
+    xr_coro_free_jit_state(coro);
+
     // Only free non-inline args (allocated when >2 args)
     if (coro->args && coro->args != coro->inline_args) {
         xr_free(coro->args);
@@ -1154,7 +1196,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->sched_link = NULL;
     coro->next = NULL;
     coro->prev = NULL;
-    coro->jit_state.scratch = NULL;
+    xr_coro_reset_jit_state(coro);
     coro->chan_wait_next = NULL;
     coro->chan_wait_prev = NULL;
     coro->chan_wait_queue = NULL;

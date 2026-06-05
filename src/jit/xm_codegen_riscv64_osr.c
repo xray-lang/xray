@@ -143,7 +143,9 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
         /* Copy coro pointer from a0 and load jit_ctx */
         rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
         rv64_buf_emit(&ctx->buf,
-                      rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET));
+                      rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+        rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
+                                         (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 
         /* Save stack_map_ptr from jit_ctx into frame */
         rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
@@ -252,7 +254,7 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
  * JIT-suspended (XM_SUSPEND returned SUSPEND_MARKER), the worker calls
  * this entry point to re-enter JIT code. The stub:
  *   - Builds a new stack frame (identical to normal entry)
- *   - Reloads saved registers from coro->jit_state.suspend
+ *   - Reloads saved registers from xr_coro_jit_state(coro)->suspend
  *   - Restores spill slots
  *   - Dispatches to the correct continuation point by suspend_id */
 XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
@@ -298,7 +300,9 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
     /* Setup CORO_REG and JIT_CTX_REG */
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
     rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET));
+                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 
     /* Save JIT frame SP for GC */
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_FP, RV64_JIT_CTX_REG, (int32_t) XM_JIT_FRAME_SP_OFFSET));
@@ -318,11 +322,13 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
 
     /* === Load suspend_id into t5 (SCRATCH_REG2) for later dispatch === */
     rv64_buf_emit(&ctx->buf,
-                  rv64_lw(RV64_SCRATCH_REG2, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET));
+                  rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG2, RV64_SCRATCH_REG,
+                                     (int32_t) XM_JIT_STATE_SUSPEND_ID_OFFSET));
 
     /* === Load suspend_state pointer into t6 (SCRATCH_REG) === */
-    rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG,
+                                     (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 
     /* === Restore spill slots FIRST (a0 available as temp) === */
     {
@@ -351,8 +357,8 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
                               (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8));
 
     /* === Clear jit_resume_entry (one-shot: prevent double-resume) === */
-    rv64_buf_emit(&ctx->buf,
-                  rv64_sd(RV64_X0, RV64_CORO_REG, (int32_t) XM_CORO_RESUME_ENTRY_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_A0, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, RV64_A0, (int32_t) XM_JIT_STATE_RESUME_ENTRY_OFFSET));
 
     /* === Per-suspend-id dispatch: compare + branch chain ===
      * t5 (SCRATCH_REG2) holds suspend_id. */
@@ -379,8 +385,10 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
             rv64_beq(RV64_SCRATCH_REG2, RV64_SCRATCH_REG, patch_off);
 
         /* Reload suspend pointer for result access */
-        rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG,
-                                         (int32_t) XM_CORO_SUSPEND_PTR_OFFSET));
+        rv64_buf_emit(&ctx->buf,
+                      rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+        rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG,
+                                         (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 
         /* Load result into the correct register */
         Rv64Reg result_rd = (Rv64Reg) ctx->suspend_result_regs[i];
