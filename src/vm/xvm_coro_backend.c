@@ -128,6 +128,112 @@ static XrVmCoroState *vm_state_for_coro(XrCoroutine *coro) {
     return xr_coro_maybe_vm_state(coro);
 }
 
+static void vm_entry_reset_no_free(XrVmCoroState *state) {
+    if (!state)
+        return;
+    state->entry_type = XR_CORO_ENTRY_CLOSURE;
+    state->entry.closure = NULL;
+    state->args = NULL;
+    state->arg_count = 0;
+    for (int i = 0; i < 4; i++)
+        state->inline_args[i] = xr_null();
+}
+
+bool xr_coro_ensure_vm_state(XrCoroutine *coro) {
+    if (!coro)
+        return false;
+    if (vm_state_for_coro(coro))
+        return true;
+    XrVmCoroState *state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
+    if (!state)
+        return false;
+    state->ctx.handlers = state->ctx.handler_inline;
+    state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
+    coro->backend = xr_coro_vm_backend_vtable();
+    coro->backend_state = state;
+    coro->gc_flags |= XR_CORO_GC_VM_STATE_OWNED;
+    return true;
+}
+
+void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
+    if (!coro)
+        return;
+
+    XrVMContext *ctx = xr_coro_vm_ctx(coro);
+    ctx->stack_top = ctx->stack;
+    ctx->frame_count = 0;
+    ctx->module_base_frame = 0;
+    ctx->handlers = ctx->handler_inline;
+    ctx->handler_count = 0;
+    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
+    ctx->current_exception = xr_null();
+    ctx->pending_error = xr_null();
+    ctx->current_coro = coro;
+    ctx->instruction_count = 0;
+    ctx->preempt_pending = false;
+    ctx->last_nret = 0;
+    ctx->defer_count = 0;
+    ctx->trace_execution = false;
+    ctx->isolate = X;
+}
+
+void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro) {
+    vm_entry_reset_no_free(vm_state_for_coro(coro));
+}
+
+void xr_coro_clear_vm_entry_state(XrCoroutine *coro) {
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return;
+    if (state->args && state->args != state->inline_args)
+        xr_free(state->args);
+    vm_entry_reset_no_free(state);
+}
+
+XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
+    if (!coro || !xr_coro_ensure_vm_state(coro))
+        return NULL;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return NULL;
+    if (state->jit_state)
+        return state->jit_state;
+    state->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
+    return state->jit_state;
+}
+
+XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_ensure_jit_state(coro);
+    if (!jit_state)
+        return NULL;
+    XrWorker *worker = xr_current_worker();
+    if (worker) {
+        jit_state->scratch = &worker->p.jit_scratch;
+        worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
+    }
+    return jit_state->scratch ? jit_state : NULL;
+}
+
+void xr_coro_reset_jit_state(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (!jit_state)
+        return;
+    XrJitSuspendState *suspend = jit_state->suspend;
+    memset(jit_state, 0, sizeof(*jit_state));
+    jit_state->suspend = suspend;
+}
+
+void xr_coro_free_jit_state(XrCoroutine *coro) {
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state || !state->jit_state)
+        return;
+    XrJitCoroState *jit_state = state->jit_state;
+    if (jit_state->suspend)
+        xr_free(jit_state->suspend);
+    xr_free(jit_state);
+    state->jit_state = NULL;
+}
+
 static void vm_backend_free_stack_frames(XrCoroutine *coro, XrVMContext *ctx) {
     if (!coro || !ctx)
         return;
