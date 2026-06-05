@@ -31,6 +31,7 @@
 | `dining_philosophers/` | 哲学家就餐 | 通道同步, 死锁避免 |
 | `starvation/` | 公平调度 | safepoint抢占验证 |
 | `cancel_storm/` | 大量取消 | cancel路径效率 |
+| `blocking_storm/` | 阻塞调用风暴 | handoff M 上限；需 `XR_BUILD_TEST_MODULES=ON` |
 
 ## 运行方式
 
@@ -44,6 +45,9 @@
 
 # 指定 worker 数并输出 JSON
 ./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --json docs/bench/coro-latest.json
+
+# 同时采集调度器统计指标
+./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --sched-stats --json docs/bench/coro-sched.json
 
 # 只跑部分场景
 ./scripts/run_coro_benchmark.sh --tests producer_consumer,select_multiplex,thundering_herd

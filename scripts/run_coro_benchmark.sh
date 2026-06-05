@@ -27,6 +27,7 @@ RUN_XRAY=true
 JSON_OUTPUT=""
 WORKERS_LIST=""
 TEST_FILTER=""
+ENABLE_SCHED_STATS=false
 
 TESTS=(
     "spawn"
@@ -45,7 +46,7 @@ TESTS=(
 
 usage() {
     cat <<EOF
-Usage: $0 [--go] [--xray-only] [--all] [--json FILE] [--workers LIST] [--tests LIST] [--xray-bin PATH]
+Usage: $0 [--go] [--xray-only] [--all] [--json FILE] [--workers LIST] [--tests LIST] [--sched-stats] [--xray-bin PATH]
 
 Options:
   --go              Run Go benchmarks in addition to xray.
@@ -54,6 +55,7 @@ Options:
   --json FILE       Also write machine-readable results as JSON.
   --workers LIST    Comma-separated worker counts, e.g. 1,2,4,8.
   --tests LIST      Comma-separated benchmark names.
+  --sched-stats     Enable XRAY_SCHED_STATS=1 for xray runs and include parsed metrics in JSON.
   --xray-bin PATH   Override xray executable path.
   --list            Print benchmark names and exit.
 EOF
@@ -98,6 +100,10 @@ while [[ $# -gt 0 ]]; do
             fi
             TEST_FILTER="$2"
             shift 2
+            ;;
+        --sched-stats)
+            ENABLE_SCHED_STATS=true
+            shift
             ;;
         --xray-bin)
             if [ $# -lt 2 ]; then
@@ -179,8 +185,9 @@ record_result() {
     local wall_ms=$6
     local reported_time_ms=$7
     local throughput=$8
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$test_name" "$runtime" "$workers" "$status" \
-        "$exit_code" "$wall_ms" "$reported_time_ms" "$throughput" >> "$RESULTS_TSV"
+    local metrics=$9
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$test_name" "$runtime" "$workers" "$status" \
+        "$exit_code" "$wall_ms" "$reported_time_ms" "$throughput" "$metrics" >> "$RESULTS_TSV"
 }
 
 extract_first_number() {
@@ -198,6 +205,56 @@ extract_first_number() {
     ' "$file"
 }
 
+extract_kv_metric() {
+    local label=$1
+    local key=$2
+    local file=$3
+    awk -v label="$label" -v key="$key" '
+        index($0, label) == 1 {
+            for (i = 1; i <= NF; i++) {
+                if ($i ~ "^" key "=") {
+                    value = $i
+                    sub("^" key "=", "", value)
+                    sub(/[^0-9.-].*$/, "", value)
+                    print value
+                    exit
+                }
+            }
+        }
+    ' "$file"
+}
+
+metric_pair() {
+    local name=$1
+    local value=$2
+    printf '%s=' "$name"
+    if [[ ${value:-} =~ ^-?[0-9]+([.][0-9]+)?$ ]]; then
+        printf '%s' "$value"
+    else
+        printf 'null'
+    fi
+}
+
+collect_sched_metrics() {
+    local file=$1
+    local metrics=()
+    metrics+=("$(metric_pair steal_attempts "$(extract_kv_metric "Steal:" "attempts" "$file")")")
+    metrics+=("$(metric_pair steal_success "$(extract_kv_metric "Steal:" "success" "$file")")")
+    metrics+=("$(metric_pair chan_wake_dispatch "$(extract_kv_metric "Channel wake commands:" "dispatch" "$file")")")
+    metrics+=("$(metric_pair chan_wake_stale "$(extract_kv_metric "Channel wake commands:" "stale" "$file")")")
+    metrics+=("$(metric_pair chan_wake_forward "$(extract_kv_metric "Channel wake commands:" "forward" "$file")")")
+    metrics+=("$(metric_pair timeout_yield_retry "$(extract_kv_metric "Timeout:" "yield_retry" "$file")")")
+    metrics+=("$(metric_pair timeout_event_block "$(extract_kv_metric "Timeout:" "event_block" "$file")")")
+    metrics+=("$(metric_pair handoff_reuse "$(extract_kv_metric "Handoff:" "reuse" "$file")")")
+    metrics+=("$(metric_pair handoff_create "$(extract_kv_metric "Handoff:" "create" "$file")")")
+    metrics+=("$(metric_pair handoff_cap_hit "$(extract_kv_metric "Handoff:" "cap_hit" "$file")")")
+    metrics+=("$(metric_pair async_submit "$(extract_kv_metric "Async:" "submit" "$file")")")
+    metrics+=("$(metric_pair async_complete "$(extract_kv_metric "Async:" "complete" "$file")")")
+    metrics+=("$(metric_pair async_reject "$(extract_kv_metric "Async:" "reject" "$file")")")
+    local IFS=';'
+    printf '%s' "${metrics[*]}"
+}
+
 run_one() {
     local test_name=$1
     local runtime=$2
@@ -205,7 +262,7 @@ run_one() {
     local test_dir="$BENCHMARK_DIR/$test_name"
     local out_file="$TMP_DIR/${test_name}_${runtime}_${workers:-default}.log"
     local exit_code=0
-    local start_ms end_ms wall_ms reported_time_ms throughput status
+    local start_ms end_ms wall_ms reported_time_ms throughput status metrics
 
     start_ms=$(now_ms)
     set +e
@@ -213,11 +270,15 @@ run_one() {
         local xr_file="$test_dir/$test_name.xr"
         if [ ! -f "$xr_file" ]; then
             set -e
-            record_result "$test_name" "$runtime" "$workers" "missing" 127 0 "" ""
+            record_result "$test_name" "$runtime" "$workers" "missing" 127 0 "" "" ""
             echo -e "${YELLOW}跳过: $xr_file 不存在${NC}"
             return
         fi
-        if [ -n "$workers" ]; then
+        if [ "$ENABLE_SCHED_STATS" = true ] && [ -n "$workers" ]; then
+            XRAY_WORKERS="$workers" XRAY_SCHED_STATS=1 "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+        elif [ "$ENABLE_SCHED_STATS" = true ]; then
+            XRAY_SCHED_STATS=1 "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+        elif [ -n "$workers" ]; then
             XRAY_WORKERS="$workers" "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
         else
             "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
@@ -227,7 +288,7 @@ run_one() {
         local go_file="$test_dir/$test_name.go"
         if [ ! -f "$go_file" ]; then
             set -e
-            record_result "$test_name" "$runtime" "$workers" "missing" 127 0 "" ""
+            record_result "$test_name" "$runtime" "$workers" "missing" 127 0 "" "" ""
             echo -e "${YELLOW}跳过: $go_file 不存在${NC}"
             return
         fi
@@ -252,8 +313,13 @@ run_one() {
 
     reported_time_ms=$(extract_first_number "时间:|Time:" "$out_file")
     throughput=$(extract_first_number "吞吐量:|throughput|Throughput" "$out_file")
+    if [ "$runtime" = "xray" ] && [ "$ENABLE_SCHED_STATS" = true ]; then
+        metrics=$(collect_sched_metrics "$out_file")
+    else
+        metrics=""
+    fi
     record_result "$test_name" "$runtime" "$workers" "$status" "$exit_code" "$wall_ms" \
-        "$reported_time_ms" "$throughput"
+        "$reported_time_ms" "$throughput" "$metrics"
 }
 
 write_json_results() {
@@ -270,6 +336,7 @@ write_json_results() {
         printf ',\n'
         printf '  "run_xray": %s,\n' "$RUN_XRAY"
         printf '  "run_go": %s,\n' "$RUN_GO"
+        printf '  "sched_stats": %s,\n' "$ENABLE_SCHED_STATS"
         printf '  "workers": '
         if [ -z "$WORKERS_LIST" ]; then
             printf 'null'
@@ -288,7 +355,7 @@ write_json_results() {
         printf ',\n'
         printf '  "results": [\n'
         local first=true
-        while IFS=$'\t' read -r test_name runtime workers status exit_code wall_ms reported_time_ms throughput; do
+        while IFS=$'\t' read -r test_name runtime workers status exit_code wall_ms reported_time_ms throughput metrics; do
             if ! $first; then
                 printf ',\n'
             fi
@@ -309,6 +376,30 @@ write_json_results() {
             json_number_or_null "$reported_time_ms"
             printf ', "throughput": '
             json_number_or_null "$throughput"
+            printf ', "metrics": {'
+            if [ -n "$metrics" ]; then
+                local first_metric=true
+                local metric_items=()
+                local old_ifs=$IFS
+                IFS=';' read -r -a metric_items <<< "$metrics"
+                IFS=$old_ifs
+                for item in "${metric_items[@]}"; do
+                    local metric_name=${item%%=*}
+                    local metric_value=${item#*=}
+                    if ! $first_metric; then
+                        printf ','
+                    fi
+                    first_metric=false
+                    printf ' '
+                    json_string "$metric_name"
+                    printf ': '
+                    json_number_or_null "$metric_value"
+                done
+                if ! $first_metric; then
+                    printf ' '
+                fi
+            fi
+            printf '}'
             printf ' }'
         done < "$RESULTS_TSV"
         printf '\n  ]\n'
@@ -322,6 +413,9 @@ echo "=========================================="
 echo "xray: $XRAY_BIN"
 if [ -n "$WORKERS_LIST" ]; then
     echo "workers: $WORKERS_LIST"
+fi
+if [ "$ENABLE_SCHED_STATS" = true ]; then
+    echo "scheduler stats: enabled"
 fi
 echo ""
 
