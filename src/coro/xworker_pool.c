@@ -166,6 +166,11 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     if (!runtime || !coro)
         return;
 
+    if (!xr_coro_maybe_vm_state(coro)) {
+        xr_coro_destroy(coro);
+        return;
+    }
+
     // Reset coroutine state
     coro->entry_type = XR_CORO_ENTRY_CLOSURE;
     coro->entry.closure = NULL;

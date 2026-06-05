@@ -491,6 +491,8 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
            "frame release must receive coroutine GC context");
     assert(contains(code, "xrt_release(f->v3)") &&
            "AOT ARC string value should be released from the frame");
+    assert(contains(code, "xr_aot_frame_free(frame)") &&
+           "AOT coroutine frame release should free the frame");
     assert(!contains(code, "xr_aot_release_frame_value(f->") &&
            "frame release must not call the old untyped release helper");
 

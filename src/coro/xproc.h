@@ -103,15 +103,18 @@ typedef struct XrProcStats {
     // trailing __attribute__((aligned)) on the typedef name;
     // MSVC's __declspec(align) cannot legally appear there.
     _Alignas(XR_CACHE_LINE) uint64_t executed_count;
-    uint64_t stolen_count;          // Coros the owner has stolen from peers
-    uint64_t steal_attempt_count;   // Steal scans started by this worker
-    uint64_t steal_skip_count;      // Steal scans skipped by the search gate
-    uint64_t yielded_count;         // Voluntary yields
-    uint64_t cont_steal_count;      // Continuations stolen (owner as stealer)
-    uint64_t completed_count;       // Coros that finished
-    uint64_t spawned_count;         // Coros spawned by this worker
-    uint64_t lifo_hit_count;        // Coros consumed from the run-next slot
-    uint64_t lifo_flush_count;      // Run-next occupants forced back to queues
+    uint64_t stolen_count;         // Coros the owner has stolen from peers
+    uint64_t steal_attempt_count;  // Steal scans started by this worker
+    uint64_t steal_skip_count;     // Steal scans skipped by the search gate
+    uint64_t yielded_count;        // Voluntary yields
+    uint64_t cont_steal_count;     // Continuations stolen (owner as stealer)
+    uint64_t completed_count;      // Coros that finished
+    uint64_t spawned_count;        // Coros spawned by this worker
+    uint64_t lifo_hit_count;       // Coros consumed from the run-next slot
+    uint64_t lifo_flush_count;     // Run-next occupants forced back to queues
+    uint64_t lifo_gate_budget_count;
+    uint64_t lifo_gate_backlog_count;
+    uint64_t lifo_gate_priority_count;
     uint64_t inbox_drain_count;     // Non-empty MPSC inbox drain batches
     uint64_t park_count;            // Futex park attempts by this worker
     uint64_t unpark_count;          // Park waits that returned to the owner
