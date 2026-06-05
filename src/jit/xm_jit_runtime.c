@@ -302,11 +302,12 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                                 if (cfunc->is_yieldable) {
                                     /* Try-mode fast path: if IO is ready, completes
                                      * inline (zero deopt). */
-                                    coro->jit_try_mode = true;
+                                    if (!xr_coro_set_jit_try_mode(coro, true))
+                                        return XR_JIT_NULL();
                                     XrValue try_result;
                                     XrCFuncResult status =
                                         cfunc->as.yieldable(isolate, args, nargs + 1, &try_result);
-                                    coro->jit_try_mode = false;
+                                    (void) xr_coro_set_jit_try_mode(coro, false);
 
                                     if (status == XR_CFUNC_DONE) {
                                         return (XrJitResult) {try_result.i, 0};
