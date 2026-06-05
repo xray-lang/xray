@@ -458,6 +458,36 @@ TEST(cgen_sync_call_to_suspendable_aborts) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_frame_params_use_typed_storage) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "let task = go worker(41)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine with typed params should generate");
+    assert(contains(code, "uint32_t state;\n    int64_t p0;") &&
+           "AOT coroutine int params should be stored unboxed in the frame");
+    assert(contains(code, "f->p0 = XR_TO_INT(p0);") &&
+           "AOT coroutine frame factory should unbox int params at the boundary");
+    assert(!contains(code, "p0.i") &&
+           "AOT coroutine typed params must not be unboxed as tagged values");
+    assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
+           "scalar frame params must not be traced as XrValue roots");
+
+    printf("  Generated typed coroutine param frame %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_runtime_managed_types_skip_arc) {
     XrType task_type = {.kind = XR_KIND_INSTANCE};
     XrType channel_type = {.kind = XR_KIND_CHANNEL};
@@ -593,6 +623,7 @@ int main(void) {
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_sync_call_to_suspendable_aborts();
+    run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
