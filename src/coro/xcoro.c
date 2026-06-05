@@ -85,6 +85,44 @@ void xr_jit_barrier_back(XrCoroutine *coro, void *container) {
     (void) container;
 }
 
+XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->parent_scope : NULL;
+}
+
+bool xr_coro_set_parent_scope(XrCoroutine *coro, XrScopeContext *scope) {
+    if (!coro)
+        return false;
+    if (!scope) {
+        if (coro->ext)
+            coro->ext->parent_scope = NULL;
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->parent_scope = scope;
+    return true;
+}
+
+XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? coro->ext->scope_sibling : NULL;
+}
+
+bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling) {
+    if (!coro)
+        return false;
+    if (!sibling) {
+        if (coro->ext)
+            coro->ext->scope_sibling = NULL;
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->scope_sibling = sibling;
+    return true;
+}
+
 // ========== Memory Sync Helper Functions ==========
 
 // Reset vm_ctx execution state (stack/frames pointers already set during allocation)
@@ -443,6 +481,13 @@ static void coro_select_storage_free(XrCoroExt *ext) {
     memset(&ext->select_storage, 0, sizeof(ext->select_storage));
 }
 
+static void coro_clear_scope_membership(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return;
+    coro->ext->parent_scope = NULL;
+    coro->ext->scope_sibling = NULL;
+}
+
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
     if (need_stack && !coro_ensure_vm_state(coro))
@@ -502,6 +547,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         if (coro->ext) {
             coro->ext->locals = NULL;
             coro->ext->watched_by = NULL;
+            coro_clear_scope_membership(coro);
             coro->ext->yield_info.wait_fd = 0;
             coro->ext->yield_info.wait_events = 0;
             coro->ext->yield_info.result_events = 0;
@@ -998,6 +1044,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         xr_vm_ctx_free_ic_tables(xr_coro_vm_ctx(coro));
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
         coro_select_storage_reset(coro->ext);
+        coro_clear_scope_membership(coro);
         coro->select_wait = NULL;
         // Add to pool
         coro->next = worker->p.local_free_list;
@@ -1253,6 +1300,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->recv_slot_ref = xr_slot_none();
     coro->select_wait = NULL;
     coro_select_storage_reset(coro->ext);
+    coro_clear_scope_membership(coro);
     coro->pending_spawn = NULL;
     // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
     // are reset in coro_init_common dirty path; ext pointer preserved for io_buf reuse
@@ -1627,7 +1675,8 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
         return;  // Not in scope
 
     // Record belonging scope (decrement count on complete)
-    coro->parent_scope = scope;
+    if (!xr_coro_set_parent_scope(coro, scope))
+        return;
     atomic_fetch_add(&scope->count, 1);
 }
 
@@ -1741,9 +1790,9 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
  *
  * scope->child_lock is a spin-lock guarding three pieces of state:
  *
- *   - scope->first_child / coro->scope_sibling      (the child list)
+ *   - scope->first_child / child's scope sibling    (the child list)
  *   - scope->cancel_requested                       (linked-mode latch)
- *   - sib->parent_scope clearing during sibling cancel
+ *   - child parent-scope clearing during sibling cancel
  *
  * Hold time is bounded (a single list mutation or a small sibling
  * walk); callers must not perform GC-triggering allocations or call
@@ -1818,14 +1867,21 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
 /* Unlink coro from scope->first_child. Caller must hold scope->child_lock.
  * This prevents recycled coroutine slots from remaining in the child list. */
 static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro, XrScopeContext *scope) {
-    XrCoroutine **pp = &scope->first_child;
-    while (*pp) {
-        if (*pp == coro) {
-            *pp = coro->scope_sibling;
-            coro->scope_sibling = NULL;
+    XrCoroutine *prev = NULL;
+    XrCoroutine *cur = scope->first_child;
+    while (cur) {
+        XrCoroutine *next = xr_coro_scope_sibling(cur);
+        if (cur == coro) {
+            if (prev) {
+                (void) xr_coro_set_scope_sibling(prev, next);
+            } else {
+                scope->first_child = next;
+            }
+            xr_coro_set_scope_sibling(coro, NULL);
             return;
         }
-        pp = &(*pp)->scope_sibling;
+        prev = cur;
+        cur = next;
     }
 }
 
@@ -1833,7 +1889,7 @@ static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro, XrScopeConte
  * must have already unlinked the failing child, so the walk only visits
  * still-live siblings. Each sibling receives a cooperative cancel request. */
 static void wake_waiter_cancel_linked_siblings_locked(XrScopeContext *scope) {
-    for (XrCoroutine *sib = scope->first_child; sib; sib = sib->scope_sibling) {
+    for (XrCoroutine *sib = scope->first_child; sib; sib = xr_coro_scope_sibling(sib)) {
         if (xr_coro_flags_has(sib, XR_CORO_FLG_DONE))
             continue;
         xr_coro_flags_set(sib, XR_CORO_FLG_CANCEL_REQUESTED);
@@ -1856,7 +1912,7 @@ static void wake_waiter_finish_scope_completion(XrayIsolate *X, XrCoroutine *cor
     XrCoroutine *owner = scope->owner;
     bool owner_waiting_scope = wake_waiter_scope_owner_ready(scope, owner);
     int remaining = atomic_fetch_sub(&scope->count, 1) - 1;
-    coro->parent_scope = NULL;
+    xr_coro_set_parent_scope(coro, NULL);
     if (remaining == 0 && owner_waiting_scope) {
         xr_coro_ready(X, owner, true);
     }
@@ -1892,7 +1948,7 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 
-    XrScopeContext *scope = coro->parent_scope;
+    XrScopeContext *scope = xr_coro_parent_scope(coro);
     if (scope) {
         wake_waiter_handle_scope_completion(X, coro, scope);
     }

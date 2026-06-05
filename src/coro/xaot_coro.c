@@ -258,10 +258,17 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     if (!scope && runtime)
         scope = runtime->current_scope;
     if (scope && parent) {
-        child->parent_scope = scope;
+        if (!xr_coro_set_parent_scope(child, scope)) {
+            xr_coro_destroy(child);
+            return result;
+        }
         while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {
         }
-        child->scope_sibling = scope->first_child;
+        if (!xr_coro_set_scope_sibling(child, scope->first_child)) {
+            atomic_store_explicit(&scope->child_lock, false, memory_order_release);
+            xr_coro_destroy(child);
+            return result;
+        }
         scope->first_child = child;
         atomic_store_explicit(&scope->child_lock, false, memory_order_release);
         atomic_fetch_add_explicit(&scope->count, 1, memory_order_relaxed);
@@ -269,7 +276,7 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
             task->link_mode = XR_LINK_LINKED;
     }
 
-    if (task->link_mode == XR_LINK_LINKED && parent && parent->task && !child->parent_scope)
+    if (task->link_mode == XR_LINK_LINKED && parent && parent->task && !xr_coro_parent_scope(child))
         xr_task_attach_child(parent->task, task);
 
     result.task_value = xr_value_from_task(task);

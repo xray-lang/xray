@@ -675,11 +675,16 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         if (!_scope && runtime->current_scope)
             _scope = runtime->current_scope;
         if (_scope && parent) {
-            coro->parent_scope = _scope;
+            if (!xr_coro_set_parent_scope(coro, _scope)) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
+            }
             // Protect child list prepend with the scope spinlock
             while (atomic_exchange_explicit(&_scope->child_lock, true, memory_order_acquire)) {
             }
-            coro->scope_sibling = _scope->first_child;
+            if (!xr_coro_set_scope_sibling(coro, _scope->first_child)) {
+                atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
+            }
             _scope->first_child = coro;
             atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
             atomic_fetch_add_explicit(&_scope->count, 1, memory_order_relaxed);
@@ -696,7 +701,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     /* linked go (standalone, NOT in scope): establish parent-child Task hierarchy.
      * Scope children use scope-based error propagation (first_error + SCOPE_EXIT).
      * Only standalone linked go uses Task hierarchy (fail_with_propagation). */
-    if (task->link_mode == XR_LINK_LINKED && parent && parent->task && !coro->parent_scope) {
+    if (task->link_mode == XR_LINK_LINKED && parent && parent->task &&
+        !xr_coro_parent_scope(coro)) {
         xr_task_attach_child(parent->task, task);
     }
 
