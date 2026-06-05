@@ -729,6 +729,14 @@ static void channel_wake_coro(XrCoroutine *coro) {
     channel_wake_coro_ex(coro, false);
 }
 
+static bool channel_close_defer_to_owner_bucket(XrCoroutine *coro, XrWorker *current) {
+    if (!coro || !current || !current->p.runtime)
+        return false;
+    int owner = coro->wait_bucket_owner;
+    return coro->wait_bucket != NULL && owner >= 0 && owner < current->p.runtime->worker_count &&
+           owner != current->p.id;
+}
+
 // Close channel
 // After close: send returns false, recv can still get buffered data
 // When buffer empty, recv returns null + ok=false
@@ -777,18 +785,24 @@ void xr_channel_close(XrChannel *ch) {
 
     xr_amutex_unlock(&ch->lock);
 
+    XrWorker *current = xr_current_worker();
+
     // Wake all waiters after releasing lock (close wake, let them recheck buffer)
     while (recv_list) {
         coro = recv_list;
         recv_list = coro->chan_wait_next;
         coro->chan_wait_next = NULL;
-        channel_wake_coro_ex(coro, true);  // close wake
+        if (!channel_close_defer_to_owner_bucket(coro, current)) {
+            channel_wake_coro_ex(coro, true);  // close wake
+        }
     }
     while (send_list) {
         coro = send_list;
         send_list = coro->chan_wait_next;
         coro->chan_wait_next = NULL;
-        channel_wake_coro_ex(coro, true);  // close wake
+        if (!channel_close_defer_to_owner_bucket(coro, current)) {
+            channel_wake_coro_ex(coro, true);  // close wake
+        }
     }
 
     xr_runtime_wake_channel_all(ch->isolate, ch);

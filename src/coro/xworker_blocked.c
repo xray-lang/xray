@@ -370,10 +370,14 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
+        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+        }
         // Claim the wake atomically: a racing waker (e.g. channel_wake_coro_ex
         // on the close path) may have already taken this coro BLOCKED->READY.
         // Only the claim winner enqueues, so the coro is never double-pushed.
         if (xr_coro_claim_wake(coro)) {
+            xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }
 
@@ -391,7 +395,11 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
 
         atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
+        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+        }
         if (xr_coro_claim_wake(coro)) {
+            xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }
 
