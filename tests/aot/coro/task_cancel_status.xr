@@ -1,0 +1,41 @@
+fn wait_for_value(ch: Channel<int>) -> int {
+    let value = ch.recv()
+    return value
+}
+
+fn quick_value(n: int) -> int {
+    yield
+    return n * 2
+}
+
+fn task_done(task: Task) -> bool {
+    return task.done
+}
+
+fn task_cancelled(task: Task) -> bool {
+    return task.cancelled
+}
+
+fn task_result(task: Task) -> Json {
+    return task.result
+}
+
+const ch = new Channel<int>(0)
+let blocked = go wait_for_value(ch)
+blocked.cancel()
+let cancelled_value = await blocked
+print(blocked.done)
+print(blocked.cancelled)
+print(cancelled_value == null)
+ch.close()
+
+let quick = go quick_value(21)
+let quick_result = await quick
+quick.cancel()
+print(quick.done)
+print(quick.cancelled)
+print(quick.result)
+print(quick_result)
+print(task_done(quick))
+print(task_cancelled(quick))
+print(task_result(quick))

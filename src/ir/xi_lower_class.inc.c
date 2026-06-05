@@ -149,6 +149,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
             st->args[0] = this_val;
             st->args[1] = val;
             st->aux = (void *) arena_strdup(ml.func, f->name);
+            st->aux_int = xi_lower_method_symbol(&ml, f->name);
             st->flags |= XI_FLAG_SIDE_EFFECT;
         }
     }

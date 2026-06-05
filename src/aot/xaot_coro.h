@@ -15,6 +15,7 @@
 #include "../runtime/gc/xgc_header.h"
 #include "../coro/xaot_await.h"
 #include "../coro/xaot_coro.h"
+#include "../coro/xaot_task.h"
 
 typedef struct XrAotRuntimeStringView {
     XrGCHeader gc;
