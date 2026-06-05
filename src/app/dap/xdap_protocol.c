@@ -14,6 +14,7 @@
 #include "../../runtime/xisolate_api.h"
 #include "../../base/xmalloc.h"
 #include "../../coro/xcoroutine.h"
+#include "../../vm/xvm_coro_state.h"
 #include "../../runtime/closure/xclosure.h"
 #include "../../runtime/xexec_frame.h"
 #include "../../runtime/value/xchunk.h"

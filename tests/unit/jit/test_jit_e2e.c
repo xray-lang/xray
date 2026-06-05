@@ -32,6 +32,7 @@
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/closure/xclosure.h"
 #include "../../../src/coro/xcoroutine.h"
+#include "../../../src/vm/xvm_coro_state.h"
 
 /*
  * Pick the native JIT backend for this host. xm_codegen_arm64 and

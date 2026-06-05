@@ -26,6 +26,7 @@
 #include "../../runtime/object/xjson.h"
 #include "../../runtime/object/xstringbuilder.h"
 #include "../../coro/xcoroutine.h"
+#include "../../vm/xvm_coro_state.h"
 #include "../../module/xmodule.h"
 #include "../../runtime/class/xinstance.h"
 #include "../../runtime/symbol/xsymbol_table.h"

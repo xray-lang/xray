@@ -25,6 +25,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../base/xlog.h"
+#include "xvm_coro_state.h"
 #include "xvm_resume.h"
 
 // ========== Forward Declarations ==========
@@ -303,6 +304,19 @@ void xr_coro_clear_jit_scratch(XrCoroutine *coro) {
 bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
     const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
     return state && state->jit_state && state->jit_state->try_mode;
+}
+
+bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
+    if (!coro)
+        return false;
+    XrJitCoroState *current = xr_coro_peek_jit_state(coro);
+    if (!enabled && !current)
+        return true;
+    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : current;
+    if (!state)
+        return false;
+    state->try_mode = enabled;
+    return true;
 }
 
 void xr_coro_reset_jit_state(XrCoroutine *coro) {

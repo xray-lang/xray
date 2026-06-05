@@ -33,6 +33,7 @@
 #include "../runtime/class/xclass.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xtype_names.h"
+#include "../vm/xvm_coro_state.h"
 #include "../runtime/value/xvalue_print.h"
 #include "../runtime/closure/xcell.h"
 #include "../runtime/symbol/xsymbol_table.h"

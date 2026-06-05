@@ -29,7 +29,7 @@ TEST(native_coroutine_uses_native_backend_without_vm_state) {
     ASSERT_NOT_NULL(coro);
     ASSERT_NOT_NULL(coro->backend);
     ASSERT_EQ_INT(coro->backend->kind, XR_CORO_BACKEND_NATIVE);
-    ASSERT_NULL(xr_coro_maybe_vm_state(coro));
+    ASSERT_FALSE(xr_coro_backend_is_vm(coro));
     ASSERT_TRUE((coro->gc_flags & XR_CORO_GC_LIGHTWEIGHT) != 0);
 
     XrCoroEvent event = {
@@ -45,7 +45,7 @@ TEST(native_coroutine_uses_native_backend_without_vm_state) {
 
     ASSERT_EQ_INT(result.kind, XR_CORO_RUN_DONE);
     ASSERT_EQ_INT(counter, 1);
-    ASSERT_NULL(xr_coro_maybe_vm_state(coro));
+    ASSERT_FALSE(xr_coro_backend_is_vm(coro));
 
     xr_coro_destroy(coro);
 }

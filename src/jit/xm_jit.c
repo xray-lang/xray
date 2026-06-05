@@ -38,6 +38,7 @@
 #include "../coro/xdeep_copy.h"
 #include "../coro/xcoroutine.h"
 #include "../coro/xtask.h"
+#include "../vm/xvm_coro_state.h"
 #include "../runtime/xexec_frame.h"
 #include "../runtime/xexec_state.h"
 #include "../vm/xvm.h"

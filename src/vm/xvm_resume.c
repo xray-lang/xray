@@ -14,6 +14,7 @@
 
 #include "xvm_resume.h"
 
+#include "xvm_coro_state.h"
 #include "../coro/xcoroutine.h"
 #include "../base/xchecks.h"
 #include "../coro/xyieldable.h"
