@@ -1136,6 +1136,15 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             if (!is_class_call && import_is_class && target)
                 is_class_call = true;
 
+            if (target && cg_func_needs_aot_coro(target)) {
+                ctx->error = true;
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
+                        target->name ? target->name : "?");
+                fprintf(out, "XR_NULL_VAL");
+                break;
+            }
+
             if (target && is_class_call) {
                 /* Class constructor call: alloc map instance + call ctor.
                  * xrt_map_new returns a tagged XrValue directly. */

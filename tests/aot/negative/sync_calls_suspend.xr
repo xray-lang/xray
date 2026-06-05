@@ -1,0 +1,8 @@
+fn recv_once(ch: Channel) -> int {
+    let v = ch.recv()
+    return v
+}
+
+const ch = Channel(1)
+ch.send(41)
+print(recv_once(ch))

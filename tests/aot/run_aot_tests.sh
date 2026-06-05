@@ -96,7 +96,7 @@ run_negative_test() {
         return
     fi
 
-    if grep -Eq "unsupported .*coroutine Xi op" "$log_out"; then
+    if grep -Eq "unsupported .*coroutine Xi op|unsupported AOT sync call to suspendable function" "$log_out"; then
         echo "PASS (rejected)"
         PASS=$((PASS + 1))
         rm -f "$c_out" "$log_out"
