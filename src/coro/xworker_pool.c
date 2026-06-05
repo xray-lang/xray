@@ -172,10 +172,7 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     }
 
     // Reset coroutine state
-    coro->entry_type = XR_CORO_ENTRY_CLOSURE;
-    coro->entry.closure = NULL;
-    coro->args = NULL;
-    coro->arg_count = 0;
+    xr_coro_clear_vm_entry_state(coro);
     coro->result = xr_null();
     coro->error = xr_null();
     coro->await_results = NULL;

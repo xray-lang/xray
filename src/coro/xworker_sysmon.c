@@ -144,19 +144,14 @@ static void sysmon_check(XrRuntime *runtime) {
                             snap.backend_name = coro->backend->debug_name(coro);
                         }
                     }
-                    const char *entry_str = "closure";
-                    if (coro->entry_type == XR_CORO_ENTRY_NATIVE)
-                        entry_str = "native";
-                    else if (coro->entry_type == XR_CORO_ENTRY_CFUNC)
-                        entry_str = "cfunc";
                     xr_log_warning("sysmon",
                                    "Worker %d stuck for %lldms, "
                                    "coro id=%d '%s' cancelled "
-                                   "(backend=%s, entry=%s, frame: %s, c=%d, fc=%d, reds=%d, "
+                                   "(backend=%s, frame: %s, c=%d, fc=%d, reds=%d, "
                                    "flags=0x%x)",
                                    i, (long long) (elapsed_us / 1000), coro->id,
                                    coro->name ? coro->name : "unknown",
-                                   snap.backend_name ? snap.backend_name : "unknown", entry_str,
+                                   snap.backend_name ? snap.backend_name : "unknown",
                                    snap.function_name ? snap.function_name : "?", snap.in_c_frame,
                                    snap.frame_count, coro->reductions, xr_coro_flags_load(coro));
                 }

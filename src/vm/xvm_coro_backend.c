@@ -110,6 +110,10 @@ static bool is_select_channel_resume(XrCoroutine *coro, int resume_status) {
     return resume_status == XR_RESUME_CHANNEL || resume_status == XR_RESUME_CHANNEL_CLOSED;
 }
 
+static XrVmCoroState *vm_state_for_coro(XrCoroutine *coro) {
+    return xr_coro_maybe_vm_state(coro);
+}
+
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {
     XrValue value = coro ? coro->result : XR_NULL_VAL;
     XrValue error = coro ? coro->error : XR_NULL_VAL;
@@ -149,6 +153,10 @@ static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *e
 // First call of a cfunc coroutine: build the C frame, run the body.
 static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
                                        XrVMContext *coro_ctx, uint32_t cur_flags) {
+    XrVmCoroState *vm_state = vm_state_for_coro(coro);
+    if (!vm_state || vm_state->entry_type != XR_CORO_ENTRY_CFUNC || !vm_state->entry.cfunc)
+        return XR_VM_RUNTIME_ERROR;
+
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
     atomic_store_explicit(&coro->flags,
                           (cur_flags & ~(XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
@@ -170,13 +178,14 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
     frame->u.c.has_cfunc_result = false;
 
     XrValue *base = coro_ctx->stack + frame->base_offset;
-    for (int i = 0; i < coro->arg_count && i < 4; i++) {
-        base[i] = coro->args[i];
+    for (int i = 0; i < vm_state->arg_count && i < 4; i++) {
+        base[i] = vm_state->args[i];
     }
-    coro_ctx->stack_top = coro_ctx->stack + 1 + coro->arg_count;
+    coro_ctx->stack_top = coro_ctx->stack + 1 + vm_state->arg_count;
 
     XrValue cfunc_result = xr_null();
-    XrCFuncResult status = coro->entry.cfunc(isolate, coro->args, coro->arg_count, &cfunc_result);
+    XrCFuncResult status =
+        vm_state->entry.cfunc(isolate, vm_state->args, vm_state->arg_count, &cfunc_result);
     switch (status) {
         case XR_CFUNC_DONE:
             coro_ctx->stack[0] = cfunc_result;
@@ -508,12 +517,17 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
 // before falling back to the interpreter.
 //
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
-// bound current_coro on both ctx and coro_ctx. coro->entry.closure must be
-// a non-NULL closure with a non-NULL proto (validated upstream).
+// bound current_coro on both ctx and coro_ctx. VM state must carry a
+// non-NULL closure with a non-NULL proto (validated upstream).
 static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
                                  XrVMContext *ctx, XrVMContext *coro_ctx) {
     (void) worker;
-    XrClosure *closure = coro->entry.closure;
+    XrVmCoroState *vm_state = vm_state_for_coro(coro);
+    if (!vm_state || vm_state->entry_type != XR_CORO_ENTRY_CLOSURE)
+        return XR_VM_RUNTIME_ERROR;
+    XrClosure *closure = vm_state->entry.closure;
+    if (!closure || !closure->proto)
+        return XR_VM_RUNTIME_ERROR;
     XrProto *proto = closure->proto;
 
     // Ensure stack capacity covers the entry function's register file.
@@ -531,8 +545,8 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
     stack_base[0] = xr_null();  // Reserved return slot.
     XrValue *func_base = stack_base + 1;
 
-    for (int i = 0; i < coro->arg_count; i++) {
-        func_base[i] = coro->args[i];
+    for (int i = 0; i < vm_state->arg_count; i++) {
+        func_base[i] = vm_state->args[i];
     }
 
     coro_ctx->frame_count = 1;
@@ -557,7 +571,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
     // go-spawned coroutines bypass OP_CALL and would otherwise always run
     // in the interpreter even when JIT code exists. deopt_count==0 guard
     // prevents replaying a proto whose first coroutine deopted.
-    if (XR_JIT_AVAILABLE() && proto->numparams == coro->arg_count) {
+    if (XR_JIT_AVAILABLE() && proto->numparams == vm_state->arg_count) {
         if (!proto->jit_entry) {
             void *pending = atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire);
             if (pending && (uintptr_t) pending > 1) {
@@ -571,8 +585,9 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
                 jit_state->scratch->call_closure = closure;
                 jit_state->scratch->call_base_offset = (int32_t) (func_base - coro_ctx->stack);
                 XrValue jit_result;
-                int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base, coro->arg_count,
-                                              proto->return_type_info, &jit_result);
+                int _jrc =
+                    xr_jit_hooks->call(proto->jit_entry, coro, func_base, vm_state->arg_count,
+                                       proto->return_type_info, &jit_result);
                 if (_jrc == XR_JIT_OK) {
                     coro_ctx->stack[0] = jit_result;
                     return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
@@ -743,7 +758,10 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 
     XrayIsolate *isolate = worker->p.runtime->isolate;
     XrVMContext *ctx = &worker->m->vm_ctx;
-    XrVMContext *coro_ctx = xr_coro_vm_ctx(coro);
+    XrVmCoroState *vm_state = vm_state_for_coro(coro);
+    if (!vm_state)
+        return XR_VM_RUNTIME_ERROR;
+    XrVMContext *coro_ctx = &vm_state->ctx;
 
     if (coro->jit_state) {
         coro->jit_state->scratch = &worker->p.jit_scratch;
@@ -803,13 +821,13 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 
     // ========== Cfunc First-Run + Resume Fast Path ==========
     // Must check BEFORE closure path: entry union overlaps.
-    if (coro->entry_type == XR_CORO_ENTRY_CFUNC && coro->entry.cfunc) {
+    if (vm_state->entry_type == XR_CORO_ENTRY_CFUNC && vm_state->entry.cfunc) {
         return run_cfunc_coro(worker, coro, isolate);
     }
 
     // ========== Closure First Execution Fast Path ==========
     if (!(_fast_flags & XR_CORO_FLG_STARTED) && _fast_resume == 0) {
-        XrClosure *closure = coro->entry.closure;
+        XrClosure *closure = vm_state->entry.closure;
         if (closure && closure->proto) {
             ctx->current_coro = coro;
             coro_ctx->current_coro = coro;
@@ -834,7 +852,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     }
 
     // Cfunc (after isolate check): same as fast path.
-    if (coro->entry_type == XR_CORO_ENTRY_CFUNC && coro->entry.cfunc) {
+    if (vm_state->entry_type == XR_CORO_ENTRY_CFUNC && vm_state->entry.cfunc) {
         return run_cfunc_coro(worker, coro, isolate);
     }
 
@@ -866,7 +884,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
                 XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
             memory_order_release);
 
-        XrClosure *_slow_cl = coro->entry.closure;
+        XrClosure *_slow_cl = vm_state->entry.closure;
         if (!_slow_cl || !_slow_cl->proto) {
             xr_log_warning("coro", "coroutine closure invalid (closure=%p, coro=%p)",
                            (void *) _slow_cl, (void *) coro);
