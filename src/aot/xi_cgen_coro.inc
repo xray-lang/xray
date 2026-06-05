@@ -386,6 +386,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = xrt_value_clone_for_coro(");
+            emit_vref(out, v);
+            fprintf(out, ");\n");
+        }
         return;
     }
 
