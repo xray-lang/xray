@@ -491,8 +491,6 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
                 int case_idx = (int) (sc - sw->cases);
                 XR_DCHECK(case_idx >= 0 && case_idx < sw->case_count,
                           "wake_select: case index out of range");
-                coro->select_ready_case = case_idx;
-
                 // Remove from all bucket queues + blocked list
                 xr_worker_unblock_select(worker, coro);
 

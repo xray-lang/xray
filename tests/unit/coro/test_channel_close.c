@@ -82,7 +82,6 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     memset(&coro, 0, sizeof(coro));
     coro.id = 7;
     coro.isolate = &f.isolate_storage;
-    coro.select_ready_case = -1;
     atomic_store(&coro.flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED | XR_CORO_PRIO_NORMAL);
     atomic_store(&coro.coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro.resume_status, XR_RESUME_OK);
@@ -96,7 +95,6 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     cases[0].owner = &coro;
     wait.cases = cases;
     wait.case_count = 1;
-    wait.timer_case_index = -1;
     atomic_store(&wait.triggered, false);
     coro.select_wait = &wait;
 
@@ -107,7 +105,6 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     xr_channel_close(ch);
 
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
-    ASSERT_EQ_INT(coro.select_ready_case, 0);
     ASSERT_TRUE(atomic_load(&wait.triggered));
     ASSERT_EQ_INT(xr_coro_resume_load(&coro), XR_RESUME_CHANNEL_CLOSED);
     ASSERT_TRUE(xr_coro_flags_has(&coro, XR_CORO_FLG_READY));

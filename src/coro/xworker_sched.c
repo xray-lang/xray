@@ -416,9 +416,6 @@ static void worker_sleep_timeout_callback(void *arg) {
             // Already woken by another channel, ignore this timer
             return;
         }
-        // Record timer timeout
-        coro->select_ready_case = sw->timer_case_index;
-
         // Remove from blocked queue
         xr_worker_unblock_select(worker, coro);
     } else {

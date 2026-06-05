@@ -432,7 +432,6 @@ static void coro_select_storage_reset(XrCoroExt *ext) {
     memset(&ext->select_storage, 0, sizeof(ext->select_storage));
     ext->select_storage.heap_cases = heap_cases;
     ext->select_storage.heap_capacity = heap_capacity;
-    ext->select_storage.wait.timer_case_index = -1;
 }
 
 static void coro_select_storage_free(XrCoroExt *ext) {
@@ -442,7 +441,6 @@ static void coro_select_storage_free(XrCoroExt *ext) {
         xr_free(ext->select_storage.heap_cases);
     }
     memset(&ext->select_storage, 0, sizeof(ext->select_storage));
-    ext->select_storage.wait.timer_case_index = -1;
 }
 
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
@@ -1001,7 +999,6 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
         coro_select_storage_reset(coro->ext);
         coro->select_wait = NULL;
-        coro->select_ready_case = 0;
         // Add to pool
         coro->next = worker->p.local_free_list;
         worker->p.local_free_list = coro;
@@ -1255,7 +1252,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->recv_slot = NULL;
     coro->recv_slot_ref = xr_slot_none();
     coro->select_wait = NULL;
-    coro->select_ready_case = 0;
     coro_select_storage_reset(coro->ext);
     coro->pending_spawn = NULL;
     // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
