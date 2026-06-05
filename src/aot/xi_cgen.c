@@ -57,6 +57,14 @@ static const char *ctype_str(XrRep rep) {
     }
 }
 
+static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+           v->nargs >= 1) {
+        v = v->args[0];
+    }
+    return v;
+}
+
 /* Check whether an op is void-like (produces no named result).
  * At STAGE_BACKEND, XI_PRINT etc. are XI_CALL_BUILTIN with aux name. */
 static bool cg_is_void_like(const XiValue *v) {
@@ -198,16 +206,22 @@ static bool cg_channel_method_may_suspend(const XiValue *v) {
                       strcmp(method, "sendTimeout") == 0 || strcmp(method, "recvTimeout") == 0);
 }
 
-static bool cg_import_ref_is_module(const XiValue *v, const char *module_name) {
-    if (!v || v->op != XI_IMPORT_REF || !v->aux || !module_name)
-        return false;
-    const XiImportRef *ref = (const XiImportRef *) v->aux;
-    return ref->module_path && strcmp(ref->module_path, module_name) == 0 && !ref->member_name;
+static const XiImportRef *cg_value_import_ref(const XiValue *v) {
+    v = cg_unwrap_identity_value(v);
+    if (!v || v->op != XI_IMPORT_REF || !v->aux)
+        return NULL;
+    return (const XiImportRef *) v->aux;
 }
 
-static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const char *module_name) {
-    if (!f || slot < 0 || !module_name)
-        return false;
+static bool cg_import_ref_is_module(const XiValue *v, const char *module_name) {
+    const XiImportRef *ref = cg_value_import_ref(v);
+    return ref && module_name && ref->module_path && strcmp(ref->module_path, module_name) == 0 &&
+           !ref->member_name;
+}
+
+static const XiImportRef *cg_shared_slot_import_ref(const XiFunc *f, int slot) {
+    if (!f || slot < 0)
+        return NULL;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
@@ -216,11 +230,18 @@ static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const cha
             const XiValue *v = blk->values[vi];
             if (!v || v->op != XI_SET_SHARED || (int) v->aux_int != slot || v->nargs < 1)
                 continue;
-            if (cg_import_ref_is_module(v->args[0], module_name))
-                return true;
+            const XiImportRef *ref = cg_value_import_ref(v->args[0]);
+            if (ref)
+                return ref;
         }
     }
-    return false;
+    return NULL;
+}
+
+static bool cg_shared_slot_is_module_import(const XiFunc *f, int slot, const char *module_name) {
+    const XiImportRef *ref = cg_shared_slot_import_ref(f, slot);
+    return ref && module_name && ref->module_path && strcmp(ref->module_path, module_name) == 0 &&
+           !ref->member_name;
 }
 
 static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const char *module_name) {
@@ -573,6 +594,140 @@ static void emit_fname_suffix(XiCgenCtx *ctx, FILE *out, const char *prefix, con
                               const char *suffix) {
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "%s", suffix ? suffix : "");
+}
+
+typedef struct {
+    const XiFunc *func;
+    const char *prefix;
+    bool is_class_constructor;
+} CgStaticFunctionCall;
+
+static CgStaticFunctionCall cg_no_static_function_call(void) {
+    CgStaticFunctionCall call;
+    call.func = NULL;
+    call.prefix = NULL;
+    call.is_class_constructor = false;
+    return call;
+}
+
+static CgStaticFunctionCall cg_static_function_call(const XiFunc *func, const char *prefix) {
+    CgStaticFunctionCall call;
+    call.func = func;
+    call.prefix = prefix;
+    call.is_class_constructor = false;
+    return call;
+}
+
+static CgStaticFunctionCall cg_static_class_constructor_call(const XiFunc *func,
+                                                             const char *prefix) {
+    CgStaticFunctionCall call;
+    call.func = func;
+    call.prefix = prefix;
+    call.is_class_constructor = true;
+    return call;
+}
+
+static bool cg_func_tree_contains(const XiFunc *root, const XiFunc *target) {
+    if (!root || !target)
+        return false;
+    if (root == target)
+        return true;
+    for (uint16_t i = 0; i < root->nchildren; i++) {
+        if (cg_func_tree_contains(root->children[i], target))
+            return true;
+    }
+    return false;
+}
+
+static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc *target) {
+    if (!ctx || !target || !ctx->all_modules || ctx->all_nmodules <= 0)
+        return NULL;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *mod = ctx->all_modules[i];
+        if (!mod || !mod->init)
+            continue;
+        if (cg_func_tree_contains(mod->init, target))
+            return mod->name;
+    }
+    return NULL;
+}
+
+static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
+                                                            const XiImportRef *ref) {
+    if (!ctx || !ref)
+        return cg_no_static_function_call();
+
+    if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules) {
+        const XiModule *target_module = ctx->all_modules[ref->resolved_mod_index];
+        const char *target_module_name = target_module ? target_module->name : NULL;
+        for (int ii = 0; ii < ctx->nimports; ii++) {
+            CgImportEntry *imp = &ctx->imports[ii];
+            if (!imp->target_func)
+                continue;
+            if (imp->target_mod_name && target_module_name &&
+                strcmp(imp->target_mod_name, target_module_name) == 0 && imp->member_name &&
+                ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
+                return imp->target_class
+                           ? cg_static_class_constructor_call(imp->target_func,
+                                                              imp->target_mod_name)
+                           : cg_static_function_call(imp->target_func, imp->target_mod_name);
+            }
+        }
+    }
+
+    for (int ii = 0; ii < ctx->nimports; ii++) {
+        CgImportEntry *imp = &ctx->imports[ii];
+        if (!imp->target_func)
+            continue;
+        if (imp->module_path && ref->module_path &&
+            strcmp(imp->module_path, ref->module_path) == 0 && imp->member_name &&
+            ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
+            return imp->target_class
+                       ? cg_static_class_constructor_call(imp->target_func, imp->target_mod_name)
+                       : cg_static_function_call(imp->target_func, imp->target_mod_name);
+        }
+    }
+    return cg_no_static_function_call();
+}
+
+static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, const XiFunc *current,
+                                                            const XiValue *callee) {
+    if (!callee)
+        return cg_no_static_function_call();
+
+    if ((callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY ||
+         callee->op == XI_MOVE) &&
+        callee->nargs >= 1) {
+        CgStaticFunctionCall inner = cg_resolve_static_function_call(ctx, current, callee->args[0]);
+        if (inner.func)
+            return inner;
+    }
+
+    if (callee->op == XI_CLOSURE_NEW && callee->aux) {
+        const XiFunc *target = (const XiFunc *) callee->aux;
+        return cg_static_function_call(target, cg_module_prefix_for_func(ctx, target));
+    }
+
+    if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL && current &&
+        current->name) {
+        return cg_static_function_call(current, NULL);
+    }
+
+    if (callee->op == XI_GET_SHARED && ctx) {
+        int slot = (int) callee->aux_int;
+        if (slot >= 0 && slot < ctx->nshared && ctx->shared_funcs[slot])
+            return cg_static_function_call(ctx->shared_funcs[slot], NULL);
+        const XiFunc *module_init = ctx->module ? ctx->module->init : current;
+        const XiImportRef *ref = cg_shared_slot_import_ref(module_init, slot);
+        CgStaticFunctionCall imported = cg_resolve_import_function_call(ctx, ref);
+        if (imported.func)
+            return imported;
+    }
+
+    if (callee->op == XI_IMPORT_REF && callee->aux)
+        return cg_resolve_import_function_call(ctx, (const XiImportRef *) callee->aux);
+
+    return cg_no_static_function_call();
 }
 
 /* Write a value reference: v<id> or phi<id> for phi nodes */
@@ -1120,47 +1275,13 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         /* Function call: args[0]=callee, args[1..n]=params */
         case XI_CALL: {
             XiValue *callee = v->args[0];
-            const XiFunc *target = NULL;
-
-            /* Resolve callee to a known XiFunc:
-             *   1. XI_CLOSURE_NEW with aux → direct child reference
-             *   2. XI_BOX of XI_CLOSURE_NEW → boxed child reference
-             *   3. XI_CONST null inside a named child → self-recursive call
-             *   4. XI_GET_SHARED → module-level function via prescan table
-             *   5. XI_UNBOX / XI_BOX wrappers around the above */
-            if (callee->op == XI_CLOSURE_NEW && callee->aux) {
-                target = (const XiFunc *) callee->aux;
-            } else if (callee->op == XI_BOX && callee->args[0]->op == XI_CLOSURE_NEW &&
-                       callee->args[0]->aux) {
-                target = (const XiFunc *) callee->args[0]->aux;
-            } else if (callee->op == XI_CONST && callee->type &&
-                       callee->type->kind == XR_KIND_NULL && f->name) {
-                /* Self-recursive call: lowerer stores null as self-ref */
-                target = f;
-            } else if (callee->op == XI_BOX && callee->args[0]->op == XI_CONST &&
-                       callee->args[0]->type && callee->args[0]->type->kind == XR_KIND_NULL &&
-                       f->name) {
-                /* Self-recursive call wrapped by select_rep BOX */
-                target = f;
-            }
-            /* GET_SHARED(slot) → lookup in prescan table */
-            if (!target && callee->op == XI_GET_SHARED) {
-                int slot = (int) callee->aux_int;
-                if (slot >= 0 && slot < ctx->nshared)
-                    target = ctx->shared_funcs[slot];
-            }
-            /* BOX(GET_SHARED(slot)) or UNBOX(GET_SHARED(slot)) */
-            if (!target && (callee->op == XI_BOX || callee->op == XI_UNBOX) && callee->nargs >= 1 &&
-                callee->args[0]->op == XI_GET_SHARED) {
-                int slot = (int) callee->args[0]->aux_int;
-                if (slot >= 0 && slot < ctx->nshared)
-                    target = ctx->shared_funcs[slot];
-            }
+            CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, callee);
+            const XiFunc *target = static_call.func;
 
             /* XI_IMPORT_REF callee → cross-module imported function or class.
              * Try resolved-index fast path first, then fall back to string scan. */
-            const char *import_prefix = NULL;
-            bool import_is_class = false;
+            const char *import_prefix = static_call.prefix;
+            bool import_is_class = static_call.is_class_constructor;
             if (!target && callee->op == XI_IMPORT_REF && callee->aux) {
                 const XiImportRef *ref = (const XiImportRef *) callee->aux;
                 /* Fast path: use resolved fields to find the matching import entry */
