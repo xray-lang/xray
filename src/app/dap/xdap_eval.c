@@ -25,6 +25,7 @@
 #include "../../runtime/object/xjson.h"
 #include "../../runtime/class/xinstance.h"
 #include "../../coro/xcoroutine.h"
+#include "../../vm/xvm_coro_state.h"
 #include "../../runtime/closure/xcell.h"
 #include "../../frontend/parser/xparse.h"
 #include "../../frontend/parser/xast.h"

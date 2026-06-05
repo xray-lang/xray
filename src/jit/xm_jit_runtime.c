@@ -33,6 +33,7 @@
 #include "../runtime/object/xexception.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xclass.h"
+#include "../vm/xvm_coro_state.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xstruct_layout.h"
 #include "../runtime/value/xtype_names.h"

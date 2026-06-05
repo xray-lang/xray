@@ -30,6 +30,7 @@
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/coro/xcoroutine.h"
+#include "../../../src/vm/xvm_coro_state.h"
 #include "../../../src/base/xmalloc.h"
 
 /* Pick native codegen backend */

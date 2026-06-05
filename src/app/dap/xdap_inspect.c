@@ -13,6 +13,7 @@
 #include "../../base/xmalloc.h"
 #include "../../runtime/xisolate_api.h"
 #include "../../coro/xcoroutine.h"
+#include "../../vm/xvm_coro_state.h"
 #include "../../runtime/xexec_frame.h"
 #include "../../runtime/value/xvalue.h"
 #include "../../runtime/value/xchunk.h"

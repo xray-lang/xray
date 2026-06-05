@@ -90,23 +90,6 @@ typedef enum {
 #define XR_GC_FLG_IN_GC 0x0002
 #define XR_GC_FLG_PROMOTED 0x0004
 
-/* ========== Coroutine Entry Type ========== */
-
-typedef enum {
-    XR_CORO_ENTRY_CLOSURE,
-    XR_CORO_ENTRY_NATIVE,
-    XR_CORO_ENTRY_CFUNC
-} XrCoroEntryType;
-
-typedef union {
-    XrClosure *closure;
-    struct {
-        void (*func)(void *);
-        void *arg;
-    } native;
-    XrCFuncResult (*cfunc)(struct XrayIsolate *, XrValue *, int, XrValue *);
-} XrCoroEntry;
-
 /* ========== JIT Scratch Space (per-Worker, not per-coroutine) ==========
  *
  * JIT functions are synchronous — they never yield (channel/spawn/sleep
@@ -362,16 +345,7 @@ typedef struct XrJitSuspendState {
 } XrJitSuspendState;
 
 typedef struct XrJitCoroState XrJitCoroState;
-
-typedef struct XrVmCoroState {
-    XrJitCoroState *jit_state;
-    XrVMContext ctx;
-    XrCoroEntryType entry_type;
-    XrCoroEntry entry;
-    XrValue *args;
-    int arg_count;
-    XrValue inline_args[4];
-} XrVmCoroState;
+typedef struct XrVmCoroState XrVmCoroState;
 
 struct XrJitCoroState {
     struct XrJitScratch *scratch;
@@ -432,32 +406,6 @@ struct XrCoroutine {
 
 static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
     return coro && coro->backend && coro->backend->kind == XR_CORO_BACKEND_VM;
-}
-
-static inline XrVmCoroState *xr_coro_maybe_vm_state(XrCoroutine *coro) {
-    if (!xr_coro_backend_is_vm(coro))
-        return NULL;
-    return (XrVmCoroState *) coro->backend_state;
-}
-
-static inline const XrVmCoroState *xr_coro_maybe_vm_state_const(const XrCoroutine *coro) {
-    if (!xr_coro_backend_is_vm(coro))
-        return NULL;
-    return (const XrVmCoroState *) coro->backend_state;
-}
-
-static inline XrVMContext *xr_coro_vm_ctx(XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "coro_vm_ctx: NULL coro");
-    XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
-    XR_DCHECK(state != NULL, "coro_vm_ctx: missing VM state");
-    return &state->ctx;
-}
-
-static inline const XrVMContext *xr_coro_vm_ctx_const(const XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "coro_vm_ctx_const: NULL coro");
-    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
-    XR_DCHECK(state != NULL, "coro_vm_ctx_const: missing VM state");
-    return &state->ctx;
 }
 
 /* ========== XrCoroExt Accessor ========== */
@@ -606,36 +554,8 @@ XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_bump_jit_heartbeat(XrCoroutine *coro);
 XR_FUNC void xr_coro_clear_jit_scratch(XrCoroutine *coro);
 XR_FUNC bool xr_coro_jit_try_mode(const XrCoroutine *coro);
+XR_FUNC bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled);
 XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
-
-static inline XrJitCoroState *xr_coro_peek_jit_state(XrCoroutine *coro) {
-    XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
-    return state ? state->jit_state : NULL;
-}
-
-static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "coro_jit_state: NULL coro");
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (!jit_state || !jit_state->scratch) {
-        XrJitCoroState *state = xr_coro_prepare_jit_state(coro);
-        XR_DCHECK(state != NULL, "coro_jit_state: missing JIT state");
-        return state;
-    }
-    return jit_state;
-}
-
-static inline bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
-    if (!coro)
-        return false;
-    XrJitCoroState *current = xr_coro_peek_jit_state(coro);
-    if (!enabled && !current)
-        return true;
-    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : current;
-    if (!state)
-        return false;
-    state->try_mode = enabled;
-    return true;
-}
 
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub

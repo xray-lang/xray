@@ -13,6 +13,7 @@
  */
 
 #include "xvm_internal.h"
+#include "xvm_coro_state.h"
 #include "../coro/xworker.h"
 #include "../coro/xcoroutine.h"
 #include "../runtime/gc/xcoro_gc.h"

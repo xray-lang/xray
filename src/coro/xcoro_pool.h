@@ -26,8 +26,6 @@
 
 // Forward declaration
 struct XrCoroutine;
-struct XrVmCoroState;
-
 // ========== Configuration ==========
 
 #define XR_CORO_POOL_INIT_SIZE 4096          // Initial pool size

@@ -41,6 +41,7 @@
 #endif  // ========== Includes ==========
 
 #include "xvm_internal.h"
+#include "xvm_coro_state.h"
 #include "../runtime/closure/xcell.h"
 #include "../base/xchecks.h"
 #include "xvm_checks.h"
