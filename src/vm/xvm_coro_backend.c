@@ -53,6 +53,8 @@ static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapsh
 static void vm_backend_destroy(XrCoroutine *coro);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
+static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
+                                                void *continuation, void *user_data);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -62,6 +64,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .destroy = vm_backend_destroy,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
+    .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
@@ -215,6 +218,36 @@ static void vm_backend_reset_reusable(XrCoroutine *coro) {
         return;
     xr_coro_clear_vm_entry_state(coro);
     xr_coro_reset_jit_state(coro);
+}
+
+static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
+                                                void *continuation, void *user_data) {
+    if (!coro || !continuation)
+        return false;
+    XrBcCallFrame *frames = NULL;
+    int frame_count = 0;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    XrVMContext *ctx = state ? &state->ctx : NULL;
+
+    if (ctx && ctx->frame_count > 0 && ctx->frames) {
+        frames = ctx->frames;
+        frame_count = ctx->frame_count;
+    } else if (X && X->vm_ctx.frame_count > 0 && X->vm_ctx.frames) {
+        frames = X->vm_ctx.frames;
+        frame_count = X->vm_ctx.frame_count;
+    } else {
+        return false;
+    }
+
+    XrBcCallFrame *frame = &frames[frame_count - 1];
+    int16_t saved_result_slot = frame->u.c.result_slot;
+    frame->u.c.continuation = continuation;
+    frame->u.c.continuation_ctx = user_data;
+    frame->u.c.has_cfunc_result = false;
+    frame->u.c.cfunc_result = xr_null();
+    frame->call_status |= XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED;
+    frame->u.c.result_slot = saved_result_slot >= 0 ? saved_result_slot : -1;
+    return true;
 }
 
 static void vm_backend_destroy(XrCoroutine *coro) {
