@@ -17,8 +17,26 @@ fn captured_suspend_go(x: int) -> int {
     return await task
 }
 
+fn nested_captured_suspend_go(x: int) -> int {
+    fn mid() -> int {
+        fn inner() -> int {
+            yield
+            return x + 2
+        }
+
+        let task = go inner()
+        return await task
+    }
+
+    let task = go mid()
+    return await task
+}
+
 let sync_task = go captured_sync_go(6)
 print(await sync_task)
 
 let suspend_task = go captured_suspend_go(41)
 print(await suspend_task)
+
+let nested_task = go nested_captured_suspend_go(40)
+print(await nested_task)

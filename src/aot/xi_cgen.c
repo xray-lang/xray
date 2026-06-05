@@ -1302,11 +1302,20 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
                 emit_fname(ctx, out, prefix, child);
                 fprintf(out, ", %u).ptr; ", ncap);
-                for (uint16_t ci = 0; ci < ncap && ci < v->nargs; ci++) {
-                    if (v->args[ci]) {
+                for (uint16_t ci = 0; ci < ncap; ci++) {
+                    XiCapture *cap = &child->captures[ci];
+                    if (ci < v->nargs && v->args[ci]) {
                         fprintf(out, "_c->upvals[%u] = ", ci);
                         emit_vref(out, v->args[ci]);
                         fprintf(out, "; ");
+                    } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
+                        fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
+                                (unsigned) cap->index);
+                    } else {
+                        ctx->error = true;
+                        fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
+                                cap->name ? cap->name : "?");
+                        fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
                     }
                 }
                 fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
