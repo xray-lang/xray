@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_flags.h - Coroutine state and flags management (R4 split design)
+ * xcoro_flags.h - Coroutine state and flags management
  *
  * KEY CONCEPT:
  *   State is split into two fields for lock-free transitions:
@@ -14,14 +14,13 @@
  *   - flags (uint32_t atomic): priority + wait_reason + mark flags
  *     Marks use atomic OR/AND (no CAS contention with state transitions).
  *
- *   The flags field also shadows state bits for backward compat with
- *   code that reads coro->flags directly.
+ *   The flags field also shadows state bits for snapshot-style reads.
  *
  * WHY THIS DESIGN:
- *   - Old design: single 32-bit field, all transitions use CAS loop.
+ *   - A single 32-bit state word makes all transitions use a CAS loop.
  *     CAS fails when unrelated fields (e.g. sysmon sets CANCEL_REQUESTED)
  *     modify the same word concurrently — unnecessary retries on hot path.
- *   - New design: state transitions are single-byte atomic store (zero retry).
+ *   - Split state transitions are single-byte atomic stores (zero retry).
  *     Mark modifications (OR/AND) don't contend with state transitions.
  *
  * CORO_STATE FIELD (uint8_t atomic — authoritative):
@@ -149,7 +148,7 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
     return XR_CORO_STATE_NONE;
 }
 
-/* ========== State Operations (R4: route through coro_state) ========== */
+/* ========== State Operations (route through coro_state) ========== */
 
 /*
  * Load flags with state bits reconstructed from authoritative coro_state.
