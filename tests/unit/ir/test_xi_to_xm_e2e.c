@@ -46,6 +46,7 @@ typedef int64_t (*JitFn)(intptr_t, int64_t *);
 
 /* Minimal fake JIT runtime env */
 static XrCoroutine g_jit_coro;
+static XrVmCoroState g_vm_state;
 static XrJitCoroState g_jit_state;
 static XrJitScratch g_jit_ctx;
 static void *g_safepoint_page = NULL;
@@ -56,9 +57,12 @@ static void env_init(void) {
         assert(g_safepoint_page != MAP_FAILED);
     }
     memset(&g_jit_coro, 0, sizeof(g_jit_coro));
+    memset(&g_vm_state, 0, sizeof(g_vm_state));
     memset(&g_jit_state, 0, sizeof(g_jit_state));
     memset(&g_jit_ctx, 0, sizeof(g_jit_ctx));
-    g_jit_coro.jit_state = &g_jit_state;
+    g_jit_coro.backend = xr_coro_vm_backend_vtable();
+    g_jit_coro.backend_state = &g_vm_state;
+    g_vm_state.jit_state = &g_jit_state;
     g_jit_state.scratch = &g_jit_ctx;
     g_jit_ctx.safepoint_page = g_safepoint_page;
 }

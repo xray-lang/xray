@@ -306,6 +306,7 @@ static XrCoroutine *worker_pop_weighted(XrWorker *worker) {
             if (!coro)
                 continue;
             budget->credit[effective]--;
+            worker->p.stats.local_runq_pop_count++;
             worker_record_runnable_wait(worker, coro, now);
             if (effective > actual) {
                 worker->p.stats.priority_boost_count++;
