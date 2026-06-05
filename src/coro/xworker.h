@@ -29,6 +29,7 @@
 #include "xproc.h"                       // XrProc, XrRunQueue, XR_RUNQ_COUNT
 #include "xmachine.h"                    // XrMachine
 #include "xbalance.h"                    // XrMigrationPath
+#include "xcoro_abi.h"                   // XrCoroRunResult
 
 // Forward decl: full definition in src/io/xio_runtime.h. Coro is the
 // lower layer and must not include the IO header.
@@ -236,8 +237,7 @@ XR_FUNC XrCoroutine *xr_worker_pop(XrWorker *worker);
 XR_FUNC void xr_worker_push(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_refresh_runq_masks(XrWorker *worker);
-XR_FUNC XrVMResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro);
-XR_FUNC XrVMResult xr_worker_run_simple(XrWorker *worker);
+XR_FUNC XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro);
 
 /* ========== Run Queue Operations (declared in xproc.h) ========== */
 
