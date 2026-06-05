@@ -70,6 +70,34 @@ static bool cg_coro_value_needs_arc_release(const XiValue *v) {
            !cg_coro_value_from_runtime_bridge(v);
 }
 
+static bool cg_coro_type_needs_boundary_clone(const XrType *type) {
+    if (!type)
+        return true;
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_JSON:
+            return true;
+        case XR_KIND_INSTANCE:
+            return type->instance.class_name && strcmp(type->instance.class_name, "StringBuilder") == 0;
+        case XR_KIND_UNION:
+            for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+                if (cg_coro_type_needs_boundary_clone(type->union_type.members[i]))
+                    return true;
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+static bool cg_coro_value_needs_boundary_clone(const XiValue *v) {
+    const XiValue *origin = cg_coro_release_origin(v);
+    return cg_coro_type_needs_boundary_clone(origin ? origin->type : (v ? v->type : NULL));
+}
+
 static void emit_boxed_vref(FILE *out, const XiValue *v) {
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_I64) {
@@ -83,6 +111,16 @@ static void emit_boxed_vref(FILE *out, const XiValue *v) {
     } else {
         emit_vref(out, v);
     }
+}
+
+static void emit_coro_boundary_value(FILE *out, const XiValue *v) {
+    if (cg_coro_value_needs_boundary_clone(v)) {
+        fprintf(out, "xrt_value_clone_for_coro(");
+        emit_boxed_vref(out, v);
+        fprintf(out, ")");
+        return;
+    }
+    emit_boxed_vref(out, v);
 }
 
 static void emit_int64_arg(FILE *out, const XiValue *v) {
@@ -345,20 +383,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         for (uint16_t a = 1; a < v->nargs; a++) {
             if (a > 1)
                 fprintf(out, ", ");
-            XrRep rep = cg_rep(v->args[a]);
-            if (rep == XR_REP_TAGGED) {
-                fprintf(out, "xrt_value_clone_for_coro(");
-                emit_vref(out, v->args[a]);
-                fprintf(out, ")");
-            } else if (rep == XR_REP_I64) {
-                fprintf(out, "XR_FROM_INT(");
-                emit_vref(out, v->args[a]);
-                fprintf(out, ")");
-            } else {
-                fprintf(out, "XR_FROM_FLOAT(");
-                emit_vref(out, v->args[a]);
-                fprintf(out, ")");
-            }
+            emit_coro_boundary_value(out, v->args[a]);
         }
         fprintf(out, ");\n");
         fprintf(out, "    XrAotSpawnResult _spawn_%u = xr_aot_spawn(ctx, &", v->id);
@@ -408,7 +433,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
+        if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED &&
+            cg_coro_value_needs_boundary_clone(v)) {
             fprintf(out, "    ");
             emit_vref(out, v);
             fprintf(out, " = xrt_value_clone_for_coro(");
@@ -588,9 +614,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_send(ctx, ", v->id);
         emit_vref(out, v->args[0]);
-        fprintf(out, ", xrt_value_clone_for_coro(");
-        emit_boxed_vref(out, v->args[1]);
-        fprintf(out, "));\n");
+        fprintf(out, ", ");
+        emit_coro_boundary_value(out, v->args[1]);
+        fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
@@ -661,9 +687,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         int sid = ++(*state_id);
         fprintf(out, "    XrAotResult _chan_send_%u = xr_aot_chan_send(ctx, ", v->id);
         emit_vref(out, channel);
-        fprintf(out, ", xrt_value_clone_for_coro(");
-        emit_boxed_vref(out, send_value);
-        fprintf(out, "));\n");
+        fprintf(out, ", ");
+        emit_coro_boundary_value(out, send_value);
+        fprintf(out, ");\n");
         fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_send_%u;\n", v->id);
@@ -720,9 +746,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_is_channel_method_call(v, "trySend", 1)) {
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_try_send(ctx, ", v->id);
             emit_vref(out, v->args[0]);
-            fprintf(out, ", xrt_value_clone_for_coro(");
-            emit_boxed_vref(out, v->args[1]);
-            fprintf(out, "));\n");
+            fprintf(out, ", ");
+            emit_coro_boundary_value(out, v->args[1]);
+            fprintf(out, ");\n");
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);

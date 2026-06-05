@@ -482,6 +482,8 @@ TEST(cgen_coro_frame_params_use_typed_storage) {
            "AOT coroutine typed params must not be unboxed as tagged values");
     assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
            "scalar frame params must not be traced as XrValue roots");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "scalar go and await boundaries must not call the deep-copy helper");
 
     printf("  Generated typed coroutine param frame %zu bytes of C code\n", strlen(code));
     free(code);
@@ -579,6 +581,26 @@ TEST(cgen_coro_channel_send_clones_value) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_scalar_channel_send_skips_clone) {
+    const char *src = "let ch = new Channel<int>(1)\n"
+                      "ch.send(42)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scalar channel send should generate");
+    assert(contains(code, "xr_aot_chan_send(ctx,") && "channel send must use the AOT bridge");
+    assert(!contains(code, "xrt_value_clone_for_coro(") &&
+           "scalar channel send values must not call the deep-copy helper");
+
+    printf("  Generated scalar channel send %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_await_clones_tagged_result) {
     const char *src = "fn worker() -> Array<int> {\n"
                       "    yield\n"
@@ -628,6 +650,7 @@ int main(void) {
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_channel_send_clones_value();
+    run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_await_clones_tagged_result();
 
     teardown();
