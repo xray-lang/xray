@@ -19,6 +19,7 @@
 #include "xslot_ref.h"
 
 struct XrayIsolate;
+struct XrArray;
 struct XrCoroutine;
 struct XrTask;
 
@@ -68,6 +69,9 @@ XR_FUNC XrCoroBlockResult xr_coro_await_task_slot(struct XrayIsolate *isolate,
                                                   struct XrCoroutine *coro, struct XrTask *task,
                                                   XrSlotRef result_slot, int64_t timeout_ms,
                                                   bool discard_result);
+XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, struct XrArray *tasks);
+XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struct XrArray *tasks,
+                                                 bool success_only);
 
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
 XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
