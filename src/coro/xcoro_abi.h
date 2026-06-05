@@ -98,6 +98,8 @@ typedef struct XrCoroBackendVTable {
     void (*destroy)(XrCoroutine *coro);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
+    bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
+                                     void *user_data);
     const char *(*debug_name)(const XrCoroutine *coro);
     void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;

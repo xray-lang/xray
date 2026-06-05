@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   - Unified internal implementation, avoid duplicate code
  *   - Only two public APIs: xr_yield and xr_yield_for_io
- *   - All yield functions set XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED
+ *   - Continuation storage is delegated to the active coroutine backend
  */
 
 #include "xyieldable.h"
@@ -46,48 +46,11 @@ static int64_t get_time_us(void) {
     return (int64_t) (xr_time_monotonic_ns() / 1000ULL);
 }
 
-// yield_setup_frame - Set frame state for yield.
-// Replaces memset with targeted field writes (Opt2: ~48B memset eliminated).
-static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro,
-                                               XrContinuation cont, void *user_data) {
-    XrBcCallFrame *frames;
-    int frame_count;
-
-    // Priority 1: coroutine VM backend context.
-    if (xr_coro_vm_ctx(coro)->frame_count > 0 && xr_coro_vm_ctx(coro)->frames) {
-        frames = xr_coro_vm_ctx(coro)->frames;
-        frame_count = xr_coro_vm_ctx(coro)->frame_count;
-    }
-    // Priority 2: isolate vm_ctx (for yieldable C funcs called from VM)
-    else if (X && X->vm_ctx.frame_count > 0 && X->vm_ctx.frames) {
-        frames = X->vm_ctx.frames;
-        frame_count = X->vm_ctx.frame_count;
-    } else {
-        return NULL;
-    }
-
-    XrBcCallFrame *frame = &frames[frame_count - 1];
-
-    // Save result_slot before overwriting u.c (u.c and u.l share memory)
-    int16_t saved_result_slot = frame->u.c.result_slot;
-
-    // Targeted field writes instead of memset(&frame->u, 0, sizeof(frame->u)).
-    // Only write the fields we actually use — saves ~48B zero-fill per yield.
-    frame->u.c.continuation = (void *) cont;
-    frame->u.c.continuation_ctx = user_data;
-    frame->u.c.has_cfunc_result = false;
-    frame->u.c.cfunc_result = xr_null();
-
-    frame->call_status |= XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED;
-
-    // Restore result_slot
-    if (saved_result_slot >= 0) {
-        frame->u.c.result_slot = saved_result_slot;
-    } else {
-        frame->u.c.result_slot = -1;
-    }
-
-    return frame;
+static inline bool yield_setup_continuation(XrayIsolate *X, XrCoroutine *coro, XrContinuation cont,
+                                            void *user_data) {
+    if (!coro || !coro->backend || !coro->backend->setup_yield_continuation)
+        return false;
+    return coro->backend->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
 // ========== Public API ==========
@@ -142,8 +105,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                                 // JIT try-mode: can't recurse, bail out
                                 if (xr_coro_jit_try_mode(coro))
                                     return XR_CFUNC_WOULD_BLOCK;
-                                XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-                                if (!frame)
+                                if (!yield_setup_continuation(X, coro, cont, user_data))
                                     return XR_CFUNC_ERROR;
                                 return XR_CFUNC_YIELD;
                             }
@@ -157,8 +119,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                         if (xr_coro_jit_try_mode(coro))
                             return XR_CFUNC_WOULD_BLOCK;
                         // Actually yielding — set up frame now
-                        XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-                        if (!frame)
+                        if (!yield_setup_continuation(X, coro, cont, user_data))
                             return XR_CFUNC_ERROR;
 
                         // CAS NIL → coro (prevents overwriting concurrent READY)
@@ -189,8 +150,7 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
         if (xr_coro_jit_try_mode(coro))
             return XR_CFUNC_WOULD_BLOCK;
         // Pure timeout (no fd): set up frame + register timer in timer wheel
-        XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-        if (!frame)
+        if (!yield_setup_continuation(X, coro, cont, user_data))
             return XR_CFUNC_ERROR;
         XrWorker *worker = xr_current_worker();
         if (worker) {
@@ -231,9 +191,7 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
         return XR_CFUNC_WOULD_BLOCK;
     }
 
-    // Use unified frame setup function
-    XrBcCallFrame *frame = yield_setup_frame(X, coro, cont, user_data);
-    if (!frame) {
+    if (!yield_setup_continuation(X, coro, cont, user_data)) {
         return XR_CFUNC_ERROR;
     }
 
