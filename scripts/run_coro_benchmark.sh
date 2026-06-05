@@ -28,6 +28,7 @@ JSON_OUTPUT=""
 WORKERS_LIST=""
 TEST_FILTER=""
 ENABLE_SCHED_STATS=false
+BENCH_ARGS=""
 
 TESTS=(
     "spawn"
@@ -46,7 +47,7 @@ TESTS=(
 
 usage() {
     cat <<EOF
-Usage: $0 [--go] [--xray-only] [--all] [--json FILE] [--workers LIST] [--tests LIST] [--sched-stats] [--xray-bin PATH]
+Usage: $0 [--go] [--xray-only] [--all] [--json FILE] [--workers LIST] [--tests LIST] [--args ARGS] [--sched-stats] [--xray-bin PATH]
 
 Options:
   --go              Run Go benchmarks in addition to xray.
@@ -55,6 +56,7 @@ Options:
   --json FILE       Also write machine-readable results as JSON.
   --workers LIST    Comma-separated worker counts, e.g. 1,2,4,8.
   --tests LIST      Comma-separated benchmark names.
+  --args ARGS       Space-separated benchmark arguments passed to both xray and Go.
   --sched-stats     Enable XRAY_SCHED_STATS=1 for xray runs and include parsed metrics in JSON.
   --xray-bin PATH   Override xray executable path.
   --list            Print benchmark names and exit.
@@ -99,6 +101,14 @@ while [[ $# -gt 0 ]]; do
                 exit 1
             fi
             TEST_FILTER="$2"
+            shift 2
+            ;;
+        --args)
+            if [ $# -lt 2 ]; then
+                echo "Missing value for --args" >&2
+                exit 1
+            fi
+            BENCH_ARGS="$2"
             shift 2
             ;;
         --sched-stats)
@@ -175,6 +185,23 @@ json_number_or_null() {
     else
         printf 'null'
     fi
+}
+
+json_words_array() {
+    local words=()
+    if [ -n "${1:-}" ]; then
+        read -r -a words <<< "$1"
+    fi
+    printf '['
+    local first_word=true
+    for word in "${words[@]}"; do
+        if ! $first_word; then
+            printf ', '
+        fi
+        first_word=false
+        json_string "$word"
+    done
+    printf ']'
 }
 
 record_result() {
@@ -297,6 +324,10 @@ run_one() {
     local out_file="$TMP_DIR/${test_name}_${runtime}_${workers:-default}.log"
     local exit_code=0
     local start_ms end_ms wall_ms reported_time_ms throughput status metrics
+    local bench_args=()
+    if [ -n "$BENCH_ARGS" ]; then
+        read -r -a bench_args <<< "$BENCH_ARGS"
+    fi
 
     start_ms=$(now_ms)
     set +e
@@ -308,14 +339,18 @@ run_one() {
             echo -e "${YELLOW}跳过: $xr_file 不存在${NC}"
             return
         fi
+        local xray_cmd=("$XRAY_BIN" run "$xr_file")
+        if [ ${#bench_args[@]} -gt 0 ]; then
+            xray_cmd+=(-- "${bench_args[@]}")
+        fi
         if [ "$ENABLE_SCHED_STATS" = true ] && [ -n "$workers" ]; then
-            XRAY_WORKERS="$workers" XRAY_SCHED_STATS=1 "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+            XRAY_WORKERS="$workers" XRAY_SCHED_STATS=1 "${xray_cmd[@]}" > "$out_file" 2>&1
         elif [ "$ENABLE_SCHED_STATS" = true ]; then
-            XRAY_SCHED_STATS=1 "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+            XRAY_SCHED_STATS=1 "${xray_cmd[@]}" > "$out_file" 2>&1
         elif [ -n "$workers" ]; then
-            XRAY_WORKERS="$workers" "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+            XRAY_WORKERS="$workers" "${xray_cmd[@]}" > "$out_file" 2>&1
         else
-            "$XRAY_BIN" run "$xr_file" > "$out_file" 2>&1
+            "${xray_cmd[@]}" > "$out_file" 2>&1
         fi
         exit_code=$?
     else
@@ -326,10 +361,14 @@ run_one() {
             echo -e "${YELLOW}跳过: $go_file 不存在${NC}"
             return
         fi
+        local go_cmd=(go run "$test_name.go")
+        if [ ${#bench_args[@]} -gt 0 ]; then
+            go_cmd+=("${bench_args[@]}")
+        fi
         if [ -n "$workers" ]; then
-            (cd "$test_dir" && GOMAXPROCS="$workers" go run "$test_name.go") > "$out_file" 2>&1
+            (cd "$test_dir" && GOMAXPROCS="$workers" "${go_cmd[@]}") > "$out_file" 2>&1
         else
-            (cd "$test_dir" && go run "$test_name.go") > "$out_file" 2>&1
+            (cd "$test_dir" && "${go_cmd[@]}") > "$out_file" 2>&1
         fi
         exit_code=$?
     fi
@@ -367,6 +406,9 @@ write_json_results() {
         printf ',\n'
         printf '  "xray_bin": '
         json_string "$XRAY_BIN"
+        printf ',\n'
+        printf '  "benchmark_args": '
+        json_words_array "$BENCH_ARGS"
         printf ',\n'
         printf '  "run_xray": %s,\n' "$RUN_XRAY"
         printf '  "run_go": %s,\n' "$RUN_GO"
@@ -450,6 +492,9 @@ if [ -n "$WORKERS_LIST" ]; then
 fi
 if [ "$ENABLE_SCHED_STATS" = true ]; then
     echo "scheduler stats: enabled"
+fi
+if [ -n "$BENCH_ARGS" ]; then
+    echo "args: $BENCH_ARGS"
 fi
 echo ""
 
