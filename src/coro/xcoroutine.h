@@ -603,6 +603,7 @@ XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
 XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
+XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
 
 static inline XrJitCoroState *xr_coro_peek_jit_state(XrCoroutine *coro) {
     XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
@@ -666,6 +667,7 @@ XR_FUNC void xr_jit_barrier_back(XrCoroutine *coro, void *container);
 XR_FUNC void xr_coro_sync_vm_ctx(XrCoroutine *coro, struct XrayIsolate *X);
 XR_FUNC bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size);
 XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
+XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
 
 /* ========== Bootstrap Main Coroutine ========== */
 

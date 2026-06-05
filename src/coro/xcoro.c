@@ -140,32 +140,6 @@ void xr_coro_clear_select_wait(XrCoroutine *coro) {
     sw->timer_channel = NULL;
 }
 
-// ========== Memory Sync Helper Functions ==========
-
-// Reset vm_ctx execution state (stack/frames pointers already set during allocation)
-void xr_coro_sync_vm_ctx(XrCoroutine *coro, XrayIsolate *X) {
-    if (!coro)
-        return;
-
-    // Targeted field resets instead of memset (avoids zeroing preserved pointers)
-    XrVMContext *ctx = xr_coro_vm_ctx(coro);
-    ctx->stack_top = ctx->stack;
-    ctx->frame_count = 0;
-    ctx->module_base_frame = 0;
-    ctx->handlers = ctx->handler_inline;
-    ctx->handler_count = 0;
-    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
-    ctx->current_exception = xr_null();
-    ctx->pending_error = xr_null();
-    ctx->current_coro = coro;
-    ctx->instruction_count = 0;
-    ctx->preempt_pending = false;
-    ctx->last_nret = 0;
-    ctx->defer_count = 0;
-    ctx->trace_execution = false;
-    ctx->isolate = X;
-}
-
 // Upgrade coroutine heap (for main coroutine)
 // Replace small heap with large heap for deep recursion
 bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size) {
@@ -181,105 +155,11 @@ bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size) {
 // Forward declaration (defined after bootstrap)
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack);
 
-static bool coro_ensure_vm_state(XrCoroutine *coro) {
-    if (!coro)
-        return false;
-    if (xr_coro_maybe_vm_state(coro))
-        return true;
-    XrVmCoroState *vm_state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
-    if (!vm_state)
-        return false;
-    vm_state->ctx.handlers = vm_state->ctx.handler_inline;
-    vm_state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
-    coro->backend = xr_coro_vm_backend_vtable();
-    coro->backend_state = vm_state;
-    coro->gc_flags |= XR_CORO_GC_VM_STATE_OWNED;
-    return true;
-}
-
-XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
-    if (!coro)
-        return NULL;
-    if (!coro_ensure_vm_state(coro))
-        return NULL;
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    if (!vm_state)
-        return NULL;
-    if (vm_state->jit_state)
-        return vm_state->jit_state;
-    vm_state->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
-    return vm_state->jit_state;
-}
-
-XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_ensure_jit_state(coro);
-    if (!jit_state)
-        return NULL;
-    XrWorker *worker = xr_current_worker();
-    if (worker) {
-        jit_state->scratch = &worker->p.jit_scratch;
-        worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
-    }
-    return jit_state->scratch ? jit_state : NULL;
-}
-
-void xr_coro_reset_jit_state(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (!jit_state)
-        return;
-    XrJitSuspendState *suspend = jit_state->suspend;
-    memset(jit_state, 0, sizeof(*jit_state));
-    jit_state->suspend = suspend;
-}
-
-void xr_coro_free_jit_state(XrCoroutine *coro) {
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    if (!vm_state || !vm_state->jit_state)
-        return;
-    XrJitCoroState *jit_state = vm_state->jit_state;
-    if (jit_state->suspend) {
-        xr_free(jit_state->suspend);
-    }
-    xr_free(jit_state);
-    vm_state->jit_state = NULL;
-}
-
-static void coro_free_owned_vm_state(XrCoroutine *coro) {
-    if (!coro || !(coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED))
-        return;
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    xr_free(vm_state);
-    coro->backend_state = NULL;
-    coro->backend = NULL;
-    coro->gc_flags &= ~XR_CORO_GC_VM_STATE_OWNED;
-}
-
-static void coro_vm_entry_reset_no_free(XrVmCoroState *vm_state) {
-    if (!vm_state)
-        return;
-    vm_state->entry_type = XR_CORO_ENTRY_CLOSURE;
-    vm_state->entry.closure = NULL;
-    vm_state->args = NULL;
-    vm_state->arg_count = 0;
-    for (int i = 0; i < 4; i++)
-        vm_state->inline_args[i] = xr_null();
-}
-
-void xr_coro_clear_vm_entry_state(XrCoroutine *coro) {
-    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-    if (!vm_state)
-        return;
-    if (vm_state->args && vm_state->args != vm_state->inline_args)
-        xr_free(vm_state->args);
-    coro_vm_entry_reset_no_free(vm_state);
-}
-
 static void coro_discard_uninitialized(XrCoroutine *coro) {
     if (!coro)
         return;
-    xr_coro_free_jit_state(coro);
-    xr_coro_clear_vm_entry_state(coro);
-    coro_free_owned_vm_state(coro);
+    if (coro->backend && coro->backend->destroy)
+        coro->backend->destroy(coro);
     if (!(coro->gc_flags & XR_CORO_GC_FROM_POOL)) {
         xr_free(coro);
     }
@@ -390,7 +270,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     }
     if (!coro)
         return NULL;
-    if (!coro_ensure_vm_state(coro)) {
+    if (!xr_coro_ensure_vm_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
@@ -422,7 +302,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
 
     // Bootstrap-specific: mark as main coroutine
     coro->flags |= XR_CORO_FLG_MAIN;
-    coro_vm_entry_reset_no_free(xr_coro_maybe_vm_state(coro));
+    xr_coro_reset_vm_entry_no_free(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
 
     return coro;
@@ -569,7 +449,7 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
 
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (need_stack && !coro_ensure_vm_state(coro))
+    if (need_stack && !xr_coro_ensure_vm_state(coro))
         return false;
     XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
     XrVMContext *vm_ctx = vm_state ? &vm_state->ctx : NULL;
@@ -615,7 +495,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             vm_ctx->handlers = saved_handlers;
             vm_ctx->handler_capacity = saved_handler_cap;
         }
-        coro_vm_entry_reset_no_free(saved_vm_state);
+        xr_coro_reset_vm_entry_no_free(coro);
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
@@ -792,7 +672,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
             }
             if (!coro)
                 return NULL;
-            if (!coro_ensure_vm_state(coro)) {
+            if (!xr_coro_ensure_vm_state(coro)) {
                 coro_discard_uninitialized(coro);
                 return NULL;
             }
@@ -801,7 +681,7 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
             coro->coro_gc = NULL;
         }
     }
-    if (!coro_ensure_vm_state(coro)) {
+    if (!xr_coro_ensure_vm_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
@@ -897,7 +777,7 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
                 }
                 if (!coro)
                     return NULL;
-                if (!coro_ensure_vm_state(coro)) {
+                if (!xr_coro_ensure_vm_state(coro)) {
                     coro_discard_uninitialized(coro);
                     return NULL;
                 }
@@ -906,7 +786,7 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
                 coro->coro_gc = NULL;
             }
         }
-        if (!coro_ensure_vm_state(coro)) {
+        if (!xr_coro_ensure_vm_state(coro)) {
             coro_discard_uninitialized(coro);
             return NULL;
         }
@@ -954,7 +834,7 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
             }
             if (!coro)
                 return NULL;
-            if (!coro_ensure_vm_state(coro)) {
+            if (!xr_coro_ensure_vm_state(coro)) {
                 coro_discard_uninitialized(coro);
                 return NULL;
             }
@@ -963,7 +843,7 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
             coro->coro_gc = NULL;
         }
     }
-    if (!coro_ensure_vm_state(coro)) {
+    if (!xr_coro_ensure_vm_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
