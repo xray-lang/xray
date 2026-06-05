@@ -52,6 +52,7 @@ static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult r
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 static void vm_backend_destroy(XrCoroutine *coro);
+static bool vm_backend_ensure_state(XrCoroutine *coro);
 static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                                bool need_storage, bool is_clean);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
@@ -72,6 +73,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .trace_roots = NULL,
     .release = NULL,
     .destroy = vm_backend_destroy,
+    .ensure_state = vm_backend_ensure_state,
     .prepare_execution_state = vm_backend_prepare_execution_state,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
@@ -149,7 +151,7 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
         state->inline_args[i] = xr_null();
 }
 
-bool xr_coro_ensure_vm_state(XrCoroutine *coro) {
+static bool vm_backend_ensure_state(XrCoroutine *coro) {
     if (!coro)
         return false;
     if (vm_state_for_coro(coro))
@@ -234,7 +236,7 @@ bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure 
                                    XrValue *args, int arg_count, bool copy_args) {
     if (!coro || !closure)
         return false;
-    if (!xr_coro_ensure_vm_state(coro))
+    if (!vm_backend_ensure_state(coro))
         return false;
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
@@ -254,7 +256,7 @@ bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
                                  XrValue *args, int arg_count) {
     if (!coro || !cfunc)
         return false;
-    if (!xr_coro_ensure_vm_state(coro))
+    if (!vm_backend_ensure_state(coro))
         return false;
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
@@ -270,7 +272,7 @@ bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
 }
 
 XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
-    if (!coro || !xr_coro_ensure_vm_state(coro))
+    if (!coro || !vm_backend_ensure_state(coro))
         return NULL;
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)

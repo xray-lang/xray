@@ -341,7 +341,6 @@ static inline int xr_coro_wake_target_id(XrCoroutine *coro) {
 
 /* ========== Backend Integration APIs ========== */
 
-XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_backend_on_safepoint(XrCoroutine *coro);
 XR_FUNC void xr_coro_detach_worker_state(XrCoroutine *coro);
 XR_FUNC bool xr_coro_backend_in_try_mode(const XrCoroutine *coro);

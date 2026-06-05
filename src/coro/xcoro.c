@@ -162,6 +162,19 @@ static void coro_discard_uninitialized(XrCoroutine *coro) {
     }
 }
 
+static bool coro_ensure_backend_state(XrCoroutine *coro, const XrCoroBackendVTable *backend) {
+    if (!coro || !backend || !backend->ensure_state)
+        return false;
+    if (coro->backend && coro->backend != backend && coro->backend_state)
+        return false;
+    coro->backend = backend;
+    return backend->ensure_state(coro);
+}
+
+static bool coro_ensure_vm_backend_state(XrCoroutine *coro) {
+    return coro_ensure_backend_state(coro, xr_coro_vm_backend_vtable());
+}
+
 static XrCoroutine *coro_alloc_lightweight_shell(void) {
     XrCoroutine *coro = (XrCoroutine *) xr_calloc(1, sizeof(XrCoroutine));
     if (!coro)
@@ -267,7 +280,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     }
     if (!coro)
         return NULL;
-    if (!xr_coro_ensure_vm_state(coro)) {
+    if (!coro_ensure_vm_backend_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
@@ -437,7 +450,7 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
 
 static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (need_stack && !xr_coro_ensure_vm_state(coro))
+    if (need_stack && (!coro->backend || !coro->backend->prepare_execution_state))
         return false;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
@@ -597,14 +610,14 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
             }
             if (!coro)
                 return NULL;
-            if (!xr_coro_ensure_vm_state(coro)) {
+            if (!coro_ensure_vm_backend_state(coro)) {
                 coro_discard_uninitialized(coro);
                 return NULL;
             }
             coro->coro_gc = NULL;
         }
     }
-    if (!xr_coro_ensure_vm_state(coro)) {
+    if (!coro_ensure_vm_backend_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
@@ -674,14 +687,14 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_st
                 }
                 if (!coro)
                     return NULL;
-                if (!xr_coro_ensure_vm_state(coro)) {
+                if (!coro_ensure_vm_backend_state(coro)) {
                     coro_discard_uninitialized(coro);
                     return NULL;
                 }
                 coro->coro_gc = NULL;
             }
         }
-        if (!xr_coro_ensure_vm_state(coro)) {
+        if (!coro_ensure_vm_backend_state(coro)) {
             coro_discard_uninitialized(coro);
             return NULL;
         }
@@ -729,14 +742,14 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
             }
             if (!coro)
                 return NULL;
-            if (!xr_coro_ensure_vm_state(coro)) {
+            if (!coro_ensure_vm_backend_state(coro)) {
                 coro_discard_uninitialized(coro);
                 return NULL;
             }
             coro->coro_gc = NULL;
         }
     }
-    if (!xr_coro_ensure_vm_state(coro)) {
+    if (!coro_ensure_vm_backend_state(coro)) {
         coro_discard_uninitialized(coro);
         return NULL;
     }
