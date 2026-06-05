@@ -39,10 +39,14 @@ TESTS=(
     "producer_consumer"
     "parallel_sum"
     "work_pool"
+    "work_pool_queue"
+    "pipeline"
     "select_multiplex"
     "thundering_herd"
     "timeout_storm"
     "sleep_storm"
+    "cancel_storm"
+    "priority_latency"
 )
 
 usage() {
