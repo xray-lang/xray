@@ -165,6 +165,8 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
         case XI_ITER_VALID:
         case XI_SLICE:
         case XI_RANGE:
+        case XI_CHAN_IS_CLOSED:
+        case XI_TIME_AFTER:
             return false;
 
         /* ---- COPY/BOX/UNBOX/PHI are transparent; treat as borrow here.

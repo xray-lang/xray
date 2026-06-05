@@ -136,9 +136,13 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_CHAN_RECV:
                 case XI_CHAN_TRY_SEND:
                 case XI_CHAN_TRY_RECV:
+                case XI_CHAN_IS_CLOSED:
+                case XI_TIME_AFTER:
                 case XI_SELECT_BLOCK:
                     fs->need_channel = true;
                     fs->need_coro = true;
+                    if (v->op == XI_TIME_AFTER)
+                        fs->need_timer = true;
                     break;
                 case XI_SCOPE_ENTER:
                 case XI_SCOPE_EXIT:

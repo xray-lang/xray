@@ -295,14 +295,16 @@ typedef enum {
     XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 
     /* Coroutine */
-    XI_GO,            /* go expr: args[0]=callee, args[1..n]=params */
-    XI_AWAIT,         /* await task: args[0]=task */
-    XI_CHAN_SEND,     /* ch.send(v): args[0]=chan, args[1]=val */
-    XI_CHAN_RECV,     /* ch.recv(): args[0]=chan */
-    XI_CHAN_TRY_SEND, /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
-    XI_CHAN_TRY_RECV, /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
-    XI_SELECT_BLOCK,  /* blocking select wait: args[0..n]=channels */
-    XI_YIELD,         /* yield execution */
+    XI_GO,             /* go expr: args[0]=callee, args[1..n]=params */
+    XI_AWAIT,          /* await task: args[0]=task */
+    XI_CHAN_SEND,      /* ch.send(v): args[0]=chan, args[1]=val */
+    XI_CHAN_RECV,      /* ch.recv(): args[0]=chan */
+    XI_CHAN_TRY_SEND,  /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
+    XI_CHAN_TRY_RECV,  /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
+    XI_CHAN_IS_CLOSED, /* ch.isClosed: args[0]=chan */
+    XI_TIME_AFTER,     /* time.after(ms): args[0]=timeout_ms, returns timer channel */
+    XI_SELECT_BLOCK,   /* blocking select wait: args[0..n]=channels */
+    XI_YIELD,          /* yield execution */
     /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
 

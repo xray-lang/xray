@@ -570,8 +570,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_SEND ||
-        v->op == XI_CHAN_TRY_RECV || v->op == XI_SELECT_BLOCK || v->op == XI_CHAN_NEW ||
-        v->op == XI_SCOPE_ENTER || v->op == XI_SCOPE_EXIT || v->op == XI_CORO_OP) {
+        v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_TIME_AFTER ||
+        v->op == XI_SELECT_BLOCK || v->op == XI_CHAN_NEW || v->op == XI_SCOPE_ENTER ||
+        v->op == XI_SCOPE_EXIT || v->op == XI_CORO_OP) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
         return;

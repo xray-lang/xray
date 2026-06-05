@@ -338,6 +338,30 @@ XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         ctx->max_reg = ctx->next_reg;
 }
 
+/* ch.isClosed: read the channel closed flag into dst. */
+XR_FUNC void xi_emit_chan_is_closed(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t ch = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_CHAN_IS_CLOSED, dst, ch, 0));
+}
+
+/* time.after(args[0]): create a timer channel in dst. */
+XR_FUNC void xi_emit_time_after(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t timeout = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_TIME_AFTER, dst, timeout, 0));
+}
+
 /* Blocking select wait. Channel operands are copied into a contiguous
  * register window because OP_SELECT_BLOCK uses base/count encoding. */
 XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, uint8_t dst) {

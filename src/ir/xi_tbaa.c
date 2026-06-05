@@ -35,6 +35,7 @@ XR_FUNC bool xi_is_memory_load(uint16_t op) {
         case XI_GET_GLOBAL:
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
         case XI_SELECT_BLOCK:
         case XI_GET_BUILTIN:
             return true;
@@ -56,6 +57,7 @@ XR_FUNC bool xi_is_memory_store(uint16_t op) {
         case XI_SET_GLOBAL:
         case XI_CHAN_SEND:
         case XI_CHAN_TRY_SEND:
+        case XI_TIME_AFTER:
             return true;
         default:
             return false;
@@ -118,6 +120,8 @@ static XiMemGroup classify_op(uint16_t op) {
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
+        case XI_TIME_AFTER:
         case XI_SELECT_BLOCK:
             return XI_MEM_CHAN;
 
