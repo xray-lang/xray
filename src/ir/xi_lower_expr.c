@@ -452,8 +452,27 @@ static int json_field_index(struct XrType *type, const char *name) {
     return -1;
 }
 
+static int coro_priority_const(const char *name) {
+    if (!name)
+        return -1;
+    if (strcmp(name, "LOW") == 0)
+        return 0;
+    if (strcmp(name, "NORMAL") == 0)
+        return 1;
+    if (strcmp(name, "HIGH") == 0)
+        return 2;
+    return -1;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
+
+    if (ma->object && ma->object->type == AST_VARIABLE && ma->object->as.variable.name &&
+        strcmp(ma->object->as.variable.name, "Coro") == 0) {
+        int priority = coro_priority_const(ma->name);
+        if (priority >= 0)
+            return xi_const_int(l->func, l->cur_block, priority, l->type_int);
+    }
 
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
