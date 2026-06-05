@@ -55,6 +55,7 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
+static bool vm_backend_has_continuation(const XrCoroutine *coro);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -65,6 +66,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
+    .has_continuation = vm_backend_has_continuation,
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
@@ -248,6 +250,14 @@ static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *cor
     frame->call_status |= XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED;
     frame->u.c.result_slot = saved_result_slot >= 0 ? saved_result_slot : -1;
     return true;
+}
+
+static bool vm_backend_has_continuation(const XrCoroutine *coro) {
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    if (!state || state->ctx.frame_count == 0 || !state->ctx.frames)
+        return false;
+    const XrBcCallFrame *frame = &state->ctx.frames[state->ctx.frame_count - 1];
+    return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
 }
 
 static void vm_backend_destroy(XrCoroutine *coro) {

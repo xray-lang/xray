@@ -100,6 +100,7 @@ typedef struct XrCoroBackendVTable {
     void (*reset_reusable)(XrCoroutine *coro);
     bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
                                      void *user_data);
+    bool (*has_continuation)(const XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);
     void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;
