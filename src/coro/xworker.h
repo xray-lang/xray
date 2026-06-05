@@ -59,6 +59,10 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t select_inline_alloc_count;
     _Atomic uint64_t timeout_yield_retry_count;
     _Atomic uint64_t timeout_event_block_count;
+    _Atomic uint64_t chan_buffer_no_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_count;
+    _Atomic uint64_t chan_kind_mpsc_count;
+    _Atomic uint64_t chan_kind_mpmc_count;
     _Atomic uint64_t inject_push_count;
     _Atomic uint64_t inject_pop_count;
     _Atomic uint64_t inject_spill_count;

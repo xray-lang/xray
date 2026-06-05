@@ -680,6 +680,13 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
             (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
+    fprintf(stderr,
+            "Channel hot path: no_waiter_buffer=%llu kind_spsc=%llu kind_mpsc=%llu "
+            "kind_mpmc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_buffer_no_waiter_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_count));
     fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
             (unsigned long long) xr_sched_metric_load(&s->handoff_create_count),

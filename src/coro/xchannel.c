@@ -19,6 +19,7 @@
 
 #include "xchannel.h"
 #include "xcoroutine.h"
+#include "xworker.h"
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xisolate_internal.h"
 #include "../base/xchecks.h"
@@ -38,6 +39,58 @@ static void channel_wake_coro(XrCoroutine *coro);
 // on ARM64 (~1-2 cycles vs ~10 cycles for SDIV+MSUB)
 static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
     return (++idx >= buf_size) ? 0 : idx;
+}
+
+static inline bool channel_single_worker(uint64_t mask) {
+    return mask != 0 && (mask & (mask - 1)) == 0;
+}
+
+static XrChannelKind channel_infer_kind(XrChannel *ch) {
+    if (!ch)
+        return XR_CHAN_GENERIC;
+    if (ch->buf_size == 0)
+        return XR_CHAN_RENDEZVOUS;
+
+    uint64_t producers = ch->producer_worker_mask;
+    uint64_t consumers = ch->consumer_worker_mask;
+    if (producers == 0 || consumers == 0)
+        return XR_CHAN_GENERIC;
+    if (channel_single_worker(producers) && channel_single_worker(consumers))
+        return XR_CHAN_SPSC;
+    if (!channel_single_worker(producers) && channel_single_worker(consumers))
+        return XR_CHAN_MPSC;
+    return XR_CHAN_MPMC;
+}
+
+static void channel_note_worker_locked(XrChannel *ch, bool producer) {
+    XrWorker *worker = xr_current_worker();
+    if (!ch || !worker)
+        return;
+
+    uint64_t bit = xr_runtime_worker_bit(worker->p.id);
+    if (bit == 0)
+        return;
+
+    uint64_t *mask = producer ? &ch->producer_worker_mask : &ch->consumer_worker_mask;
+    if ((*mask & bit) != 0)
+        return;
+
+    *mask |= bit;
+    XrChannelKind next = channel_infer_kind(ch);
+    if (next == ch->kind)
+        return;
+
+    ch->kind = next;
+    XrRuntime *runtime = worker->p.runtime;
+    if (!runtime)
+        return;
+    if (next == XR_CHAN_SPSC) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_spsc_count);
+    } else if (next == XR_CHAN_MPSC) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_mpsc_count);
+    } else if (next == XR_CHAN_MPMC) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_mpmc_count);
+    }
 }
 
 // Distributed channel hooks live on XrayIsolate::channel_dist_hooks.
@@ -381,12 +434,27 @@ static void channel_wake_select_waiter(XrChannel *ch) {
     xr_runtime_wake_channel(ch->isolate, ch, false);
 }
 
+static void channel_wake_select_waiter_if_present(XrChannel *ch) {
+    if (!ch)
+        return;
+    if (atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire) == 0) {
+        XrWorker *worker = xr_current_worker();
+        XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_buffer_no_waiter_count);
+        }
+        return;
+    }
+    channel_wake_select_waiter(ch);
+}
+
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
 static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
     XrCoroutine *receiver = xr_waitq_dequeue(&ch->recvq);
     if (!receiver)
         return false;
+    channel_note_worker_locked(ch, true);
     XrValue *slot = receiver->recv_slot;
     if (slot)
         *slot = v;
@@ -403,6 +471,7 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
     XrCoroutine *sender = xr_waitq_dequeue(&ch->sendq);
     if (!sender)
         return false;
+    channel_note_worker_locked(ch, false);
     XrValue direct_val;
     if (ch->buf_size == 0) {
         direct_val = sender->send_value;
@@ -468,8 +537,9 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     if (chan_direct_send(ch, value))
         return true;
     if (chan_buffer_push(ch, value)) {
+        channel_note_worker_locked(ch, true);
         xr_amutex_unlock(&ch->lock);
-        channel_wake_select_waiter(ch);
+        channel_wake_select_waiter_if_present(ch);
         return true;
     }
 
@@ -501,8 +571,9 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
     if (chan_direct_send(ch, value))
         return true;
     if (chan_buffer_push(ch, value)) {
+        channel_note_worker_locked(ch, true);
         xr_amutex_unlock(&ch->lock);
-        channel_wake_select_waiter(ch);
+        channel_wake_select_waiter_if_present(ch);
         return true;
     }
 
@@ -532,10 +603,12 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
     // are never woken by tryRecv.
     XrValue value;
     if (chan_direct_recv(ch, &value)) {
+        channel_note_worker_locked(ch, false);
         *ok = true;
         return value;
     }
     if (chan_buffer_pop(ch, &value)) {
+        channel_note_worker_locked(ch, false);
         xr_amutex_unlock(&ch->lock);
         *ok = true;
         return value;
@@ -556,7 +629,6 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
 
 // ========== Channel Close ==========
 
-#include "xworker.h"
 #include "xyieldable.h"
 
 // Internal: wake coroutine (set state and add to run queue)
@@ -747,8 +819,9 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
             ch->buffer[ch->send_idx] = value;
             ch->send_idx = chan_advance_idx(ch->send_idx, ch->buf_size);
             ch->buf_count++;
+            channel_note_worker_locked(ch, true);
             xr_amutex_unlock(&ch->lock);
-            channel_wake_select_waiter(ch);
+            channel_wake_select_waiter_if_present(ch);
             return XR_CHAN_OK;
         }
         // Conditions not met under trylock: fall through with lock held
@@ -768,8 +841,9 @@ send_locked:
     if (chan_direct_send(ch, value))
         return XR_CHAN_OK;
     if (chan_buffer_push(ch, value)) {
+        channel_note_worker_locked(ch, true);
         xr_amutex_unlock(&ch->lock);
-        channel_wake_select_waiter(ch);
+        channel_wake_select_waiter_if_present(ch);
         return XR_CHAN_OK;
     }
 
@@ -792,7 +866,7 @@ send_locked:
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
         atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
-                                 memory_order_relaxed);
+                                 memory_order_release);
     }
     xr_waitq_enqueue(&ch->sendq, coro);
 
@@ -826,6 +900,7 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
             ch->buffer[ch->recv_idx] = xr_null();
             ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
             ch->buf_count--;
+            channel_note_worker_locked(ch, false);
             xr_amutex_unlock(&ch->lock);
             return XR_CHAN_OK;
         }
@@ -840,6 +915,7 @@ recv_locked:
     if (chan_direct_recv(ch, out))
         return XR_CHAN_OK;
     if (chan_buffer_pop(ch, out)) {
+        channel_note_worker_locked(ch, false);
         xr_amutex_unlock(&ch->lock);
         return XR_CHAN_OK;
     }
@@ -868,7 +944,7 @@ recv_locked:
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
         atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
-                                 memory_order_relaxed);
+                                 memory_order_release);
     }
     xr_waitq_enqueue(&ch->recvq, coro);
 
