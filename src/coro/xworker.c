@@ -805,6 +805,28 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_count));
+    uint64_t chan_lock_fast = xr_sched_metric_load(&s->chan_lock_fast_count);
+    uint64_t chan_lock_contended = xr_sched_metric_load(&s->chan_lock_contended_count);
+    uint64_t chan_lock_slow = xr_sched_metric_load(&s->chan_lock_slow_count);
+    uint64_t chan_buffer_fast_try = xr_sched_metric_load(&s->chan_buffer_fast_try_count);
+    uint64_t chan_buffer_fast_hit = xr_sched_metric_load(&s->chan_buffer_fast_hit_count);
+    uint64_t chan_buffer_fast_miss = xr_sched_metric_load(&s->chan_buffer_fast_miss_count);
+    uint64_t chan_buffer_fast_busy = xr_sched_metric_load(&s->chan_buffer_fast_busy_count);
+    fprintf(stderr,
+            "Channel lock: fast=%llu contended=%llu slow=%llu contention=%.2f%% "
+            "slow_per_contention=%.2f\n",
+            (unsigned long long) chan_lock_fast, (unsigned long long) chan_lock_contended,
+            (unsigned long long) chan_lock_slow,
+            stats_percent_u64(chan_lock_contended, chan_lock_fast + chan_lock_contended),
+            stats_ratio_u64(chan_lock_slow, chan_lock_contended));
+    fprintf(stderr,
+            "Channel buffered fast path: try=%llu hit=%llu miss=%llu busy=%llu "
+            "hit_rate=%.2f%% busy_rate=%.2f%% miss_rate=%.2f%%\n",
+            (unsigned long long) chan_buffer_fast_try, (unsigned long long) chan_buffer_fast_hit,
+            (unsigned long long) chan_buffer_fast_miss, (unsigned long long) chan_buffer_fast_busy,
+            stats_percent_u64(chan_buffer_fast_hit, chan_buffer_fast_try),
+            stats_percent_u64(chan_buffer_fast_busy, chan_buffer_fast_try),
+            stats_percent_u64(chan_buffer_fast_miss, chan_buffer_fast_try));
     fprintf(stderr,
             "Channel ops: send_direct=%llu recv_direct=%llu send_buffer=%llu recv_buffer=%llu "
             "send_block=%llu recv_block=%llu\n",

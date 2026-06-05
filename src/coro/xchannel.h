@@ -96,6 +96,7 @@ XR_FUNC XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q);
 
 struct XrChannel;
 XR_FUNC void xr_channel_remove_waiter(struct XrChannel *ch, XrCoroutine *coro);
+XR_FUNC void xr_channel_lock_observed(struct XrChannel *ch);
 
 /* ========== Distributed Channel Hooks ========== */
 

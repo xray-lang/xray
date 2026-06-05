@@ -57,6 +57,37 @@ static XrRuntime *channel_stats_runtime(XrChannel *ch) {
             xr_sched_metric_add(_rt, &_rt->sched_stats.field, (value));                            \
     } while (0)
 
+XR_FUNC void xr_channel_lock_observed(XrChannel *ch) {
+    XR_DCHECK(ch != NULL, "channel_lock_observed: NULL channel");
+    XrRuntime *runtime = channel_stats_runtime(ch);
+    if (runtime) {
+        if (xr_amutex_trylock(&ch->lock)) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_fast_count);
+            return;
+        }
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_contended_count);
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_slow_count);
+    }
+    xr_amutex_lock(&ch->lock);
+}
+
+static bool channel_trylock_observed(XrChannel *ch) {
+    XR_DCHECK(ch != NULL, "channel_trylock_observed: NULL channel");
+    bool locked = xr_amutex_trylock(&ch->lock);
+    XrRuntime *runtime = channel_stats_runtime(ch);
+    if (runtime) {
+        xr_sched_metric_inc(runtime, locked ? &runtime->sched_stats.chan_lock_fast_count
+                                            : &runtime->sched_stats.chan_lock_contended_count);
+    }
+    return locked;
+}
+
+static void channel_lock_after_failed_try(XrChannel *ch) {
+    XR_DCHECK(ch != NULL, "channel_lock_after_failed_try: NULL channel");
+    CHANNEL_METRIC_INC(ch, chan_lock_slow_count);
+    xr_amutex_lock(&ch->lock);
+}
+
 // Ring buffer index advance: conditional increment is faster than modulo division
 // on ARM64 (~1-2 cycles vs ~10 cycles for SDIV+MSUB)
 static inline uint32_t chan_advance_idx(uint32_t idx, uint32_t buf_size) {
@@ -214,7 +245,7 @@ void xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
     if (!ch || !coro)
         return;
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
 
     // Try to remove from send queue
     XrWaitQueue *q = coro->ext->chan_wait_queue;
@@ -307,7 +338,7 @@ static void timer_channel_fire_cb(void *arg) {
     int64_t now = xr_monotonic_ticks();
     XrCoroutine *receiver = NULL;
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
     if (!atomic_load_explicit(&ch->timer_fired, memory_order_relaxed)) {
         // Try to hand value directly to a blocked receiver
         receiver = xr_waitq_dequeue(&ch->recvq);
@@ -573,7 +604,7 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     if (!ch)
         return false;
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
 
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
         xr_amutex_unlock(&ch->lock);
@@ -605,7 +636,7 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
         return hooks->try_send(ch, value);
     }
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
 
     // Check if closed
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
@@ -643,7 +674,7 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
         return hooks->try_recv(ch, ok);
     }
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
 
     // Direct transfer from waiting sender (handles unbuffered and full-
     // buffered rotate). Must be checked first, otherwise blocked senders
@@ -792,7 +823,7 @@ void xr_channel_close(XrChannel *ch) {
         hooks->close(ch);
     }
 
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
 
     if (atomic_load_explicit(&ch->closed, memory_order_relaxed)) {
         // Already closed, idempotent
@@ -893,19 +924,26 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
 
     // Trylock fast path: for buffered channels with buffer space and no waiters.
     // Avoids spin contention under high concurrency (e.g. 20 coros on 1 channel).
-    if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
-        if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
-            chan_buffer_push(ch, value)) {
-            channel_note_worker_locked(ch, true);
-            xr_amutex_unlock(&ch->lock);
-            channel_wake_select_waiter_if_present(ch);
-            return XR_CHAN_OK;
+    if (ch->buf_size > 0) {
+        CHANNEL_METRIC_INC(ch, chan_buffer_fast_try_count);
+        if (channel_trylock_observed(ch)) {
+            if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
+                chan_buffer_push(ch, value)) {
+                CHANNEL_METRIC_INC(ch, chan_buffer_fast_hit_count);
+                channel_note_worker_locked(ch, true);
+                xr_amutex_unlock(&ch->lock);
+                channel_wake_select_waiter_if_present(ch);
+                return XR_CHAN_OK;
+            }
+            CHANNEL_METRIC_INC(ch, chan_buffer_fast_miss_count);
+            // Conditions not met under trylock: fall through with lock held
+            goto send_locked;
         }
-        // Conditions not met under trylock: fall through with lock held
-        goto send_locked;
+        CHANNEL_METRIC_INC(ch, chan_buffer_fast_busy_count);
+        channel_lock_after_failed_try(ch);
+    } else {
+        xr_channel_lock_observed(ch);
     }
-
-    xr_amutex_lock(&ch->lock);
 
 send_locked:
     // Recheck closed (with lock held)
@@ -975,17 +1013,24 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
     // Trylock fast path: for buffered channels with data and no waiting senders.
     // Avoids spin contention under high concurrency.
-    if (ch->buf_size > 0 && xr_amutex_trylock(&ch->lock)) {
-        if (!ch->sendq.first && chan_buffer_pop(ch, out)) {
-            channel_note_worker_locked(ch, false);
-            xr_amutex_unlock(&ch->lock);
-            return XR_CHAN_OK;
+    if (ch->buf_size > 0) {
+        CHANNEL_METRIC_INC(ch, chan_buffer_fast_try_count);
+        if (channel_trylock_observed(ch)) {
+            if (!ch->sendq.first && chan_buffer_pop(ch, out)) {
+                CHANNEL_METRIC_INC(ch, chan_buffer_fast_hit_count);
+                channel_note_worker_locked(ch, false);
+                xr_amutex_unlock(&ch->lock);
+                return XR_CHAN_OK;
+            }
+            CHANNEL_METRIC_INC(ch, chan_buffer_fast_miss_count);
+            // Conditions not met under trylock: fall through with lock held
+            goto recv_locked;
         }
-        // Conditions not met under trylock: fall through with lock held
-        goto recv_locked;
+        CHANNEL_METRIC_INC(ch, chan_buffer_fast_busy_count);
+        channel_lock_after_failed_try(ch);
+    } else {
+        xr_channel_lock_observed(ch);
     }
-
-    xr_amutex_lock(&ch->lock);
 
 recv_locked:
     // Direct transfer from waiting sender, or buffer pop.
