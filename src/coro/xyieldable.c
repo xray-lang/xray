@@ -18,7 +18,6 @@
 #include "../os/os_time.h"
 #include "xcoroutine.h"
 #include "xworker.h"
-#include "../runtime/xvm_call.h"  // XrVMResult
 #include "xnetpoll.h"
 #include "../runtime/xray_debug.h"
 #include "xexec_frame.h"

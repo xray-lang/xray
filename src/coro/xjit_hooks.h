@@ -19,7 +19,7 @@
 #define XJIT_HOOKS_H
 
 #include "../base/xdefs.h"
-#include "../runtime/xvm_call.h"  // XrVMResult, XrValue
+#include "../runtime/value/xvalue.h"
 #include <stdbool.h>
 
 /* Forward declarations (avoid pulling in full headers) */
@@ -29,9 +29,11 @@ struct XrType;
 
 /* ========== JIT result codes (mirror jit/xm_jit.h constants) ========== */
 
-#define XR_JIT_OK 0
-#define XR_JIT_DEOPT 1
-#define XR_JIT_SUSPEND 2
+enum {
+    XR_JIT_OK = 0,
+    XR_JIT_DEOPT = 1,
+    XR_JIT_SUSPEND = 2,
+};
 
 /* ========== JIT Hooks Vtable ========== */
 
