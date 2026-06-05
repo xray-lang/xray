@@ -714,12 +714,18 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "    xs.push(99)\n"
                       "    return xs.length\n"
                       "}\n"
+                      "fn identity_copy(xs: Array<int>) -> Array<int> {\n"
+                      "    return xs\n"
+                      "}\n"
                       "let high = go(priority: Coro.HIGH) compute(5)\n"
                       "print(await high)\n"
                       "let xs = [1, 2]\n"
                       "let copied = go mutate_copy(xs)\n"
                       "print(await copied)\n"
-                      "print(xs.length)\n";
+                      "print(xs.length)\n"
+                      "let roundtrip = go identity_copy(xs)\n"
+                      "let ys = await roundtrip\n"
+                      "print(ys.length)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -732,6 +738,14 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
            "sync go wrapper must call the normal AOT function body");
     assert(contains(code, "XrValue _result = test_mutate_copy_") &&
            "sync go wrapper must call normal function bodies for tagged arguments");
+    assert(contains(code, "XrValue _result = test_identity_copy_") &&
+           "sync go wrapper must support tagged results that alias frame params");
+    assert(contains(code, "xrt_retain(_result)") &&
+           "sync go wrapper must retain a result that aliases an owned frame param");
+    assert(contains(code, "xrt_release(f->p0)") &&
+           "sync go wrapper must release cloned tagged frame params");
+    assert(contains(code, ".release_count = 1,") &&
+           "sync go wrapper descriptor must report cloned tagged param releases");
     assert(contains(code, "xr_aot_done(_result)") &&
            "sync go wrapper must complete through the AOT coroutine result ABI");
     assert(contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
