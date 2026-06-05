@@ -110,6 +110,12 @@ TEST(simplifies_constant_branch) {
     ASSERT(chg.cfg_changed || chg.values_changed);
     /* Entry must no longer be a two-way branch on a known-true condition. */
     ASSERT(entry->kind != XI_BLOCK_IF);
+    ASSERT(f->next_block_id == f->nblocks);
+
+    XiBlock *after_sccp = xi_block_new(f);
+    ASSERT(after_sccp != NULL);
+    ASSERT(after_sccp->id == f->nblocks - 1);
+    ASSERT(f->blocks[f->nblocks - 1] == after_sccp);
 
     xi_func_free(f);
 }

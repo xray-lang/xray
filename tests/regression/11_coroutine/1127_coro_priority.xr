@@ -3,17 +3,21 @@
 ** 作者：xingleixu@gmail.com
 **
 ** Test 1: setPriority(task, 0/1/2) API 可用性
-** Test 2: 先创建 LOW 任务、后创建 HIGH 任务，验证 HIGH 仍先完成
-**         每个任务含多次 yield，让调度器按优先级反复择优
+** Test 2: 先创建 LOW 任务、后创建 HIGH 任务，全部就绪后统一释放
+**         验证 HIGH 在 soft priority 调度中更早完成
 */
 
 fn compute(n: int) -> int {
     return n * n
 }
 
-fn work_and_report(label: string, ch: Channel<string>) -> string {
+fn work_and_report(label: string, start: Channel<int>, ready: Channel<int>,
+                   ch: Channel<string>) -> string {
+    ready.send(1)
+    start.recv()
+
     let sum = 0
-    for (let i = 0; i < 200; i++) {
+    for (let i = 0; i < 400; i++) {
         sum = sum + i
         if (i % 20 == 0) { yield }
     }
@@ -39,23 +43,36 @@ fn test_coro_priority() {
     // LOW tasks created first (FIFO-advantaged), HIGH tasks created after
     // If priority works, HIGH still completes earlier
     print("test2: priority scheduling")
-    const ch = new Channel<string>(20)
+    const total_low = 10
+    const total_high = 10
+    const total = total_low + total_high
+    const start = new Channel<int>(total)
+    const ready = new Channel<int>(total)
+    const ch = new Channel<string>(total)
 
-    for (let i = 0; i < 10; i++) {
-        go(priority: Coro.LOW) work_and_report("L", ch)
+    for (let i = 0; i < total_low; i++) {
+        go(priority: Coro.LOW) work_and_report("L", start, ready, ch)
     }
-    for (let i = 0; i < 10; i++) {
-        go(priority: Coro.HIGH) work_and_report("H", ch)
+    for (let i = 0; i < total_high; i++) {
+        go(priority: Coro.HIGH) work_and_report("H", start, ready, ch)
     }
 
-    // Collect completion order (20 recvs = all tasks done)
+    for (let i = 0; i < total; i++) {
+        assert_eq(ready.recv(), 1)
+    }
+    for (let i = 0; i < total; i++) {
+        start.send(1)
+    }
+
     let high_early = 0
-    for (let i = 0; i < 20; i++) {
+    for (let i = 0; i < total; i++) {
         let label = ch.recv()
-        if (i < 10 && label == "H") {
+        if (i < total_high && label == "H") {
             high_early = high_early + 1
         }
     }
+    start.close()
+    ready.close()
     ch.close()
 
     // With priority scheduling, majority of HIGH tasks complete in first half

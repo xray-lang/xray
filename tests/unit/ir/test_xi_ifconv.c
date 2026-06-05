@@ -139,6 +139,8 @@ TEST(basic_diamond) {
     /* Both arms collapse to UNREACHABLE. */
     ASSERT(then_b->kind == XI_BLOCK_UNREACHABLE);
     ASSERT(else_b->kind == XI_BLOCK_UNREACHABLE);
+    ASSERT(tv->block == entry);
+    ASSERT(ev->block == entry);
 
     /* The phi is gone and join now has a single predecessor (the if-block). */
     ASSERT(join->phis == NULL);
