@@ -1,0 +1,30 @@
+fn send_after_yield(ch: Channel<int>, n: int) {
+    yield
+    ch.send(n)
+}
+
+fn linked_value() -> int {
+    yield
+    return 41
+}
+
+let ch = new Channel<int>(2)
+scope {
+    go send_after_yield(ch, 1)
+    go send_after_yield(ch, 2)
+}
+
+let a = ch.recv()
+let b = ch.recv()
+print(a + b)
+ch.close()
+
+linked scope {
+    let task = go linked_value()
+    let value = await task
+    print(value + 1)
+}
+
+let errors = supervisor scope {
+}
+print(errors.length)

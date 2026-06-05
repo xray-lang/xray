@@ -128,6 +128,9 @@ XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDe
                                       bool fire_and_forget, const char *name);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
+XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);
+XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode,
+                                      XrValue *out_value);
 XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value,
                                       XrValue *out_value, bool discard_result);
 XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue task_value,
