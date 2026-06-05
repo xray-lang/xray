@@ -12,8 +12,12 @@
 
 #include <stdatomic.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
+#include "../runtime/object/xarray.h"
+#include "../runtime/xisolate_internal.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
 #include "xtask.h"
@@ -231,8 +235,9 @@ static void coro_cancel_owned_timer(XrCoroutine *coro) {
         return;
 
     XrWorker *worker = xr_current_worker();
-    if (worker && worker->p.timer_wheel) {
-        xr_twheel_cancel_timer(worker->p.timer_wheel, &coro->ext->timer);
+    if (worker) {
+        xr_worker_cancel_timer(worker, coro);
+        return;
     }
     atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
 }
@@ -306,4 +311,209 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
     atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
     atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
     return block_result(XR_CORO_BLOCK_READY, task->result, true);
+}
+
+XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
+    if (milliseconds <= 0) {
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+    if (!coro) {
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    }
+
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext) {
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+
+    ext->yield_info.wait_fd = -1;
+    ext->yield_info.wait_events = 0;
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
+
+    XrWorker *worker = xr_current_worker();
+    if (!worker || !worker->p.timer_wheel) {
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    }
+
+    xr_worker_add_sleep_timer(worker, coro, milliseconds);
+    if (!atomic_load_explicit(&ext->timer_active, memory_order_relaxed)) {
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+static XrSelectCase *coro_select_alloc_cases(XrRuntime *runtime, XrSelectStorage *storage,
+                                             int case_slots) {
+    if (case_slots <= XR_SELECT_INLINE_CASES) {
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.select_inline_alloc_count);
+        }
+        return storage->inline_cases;
+    }
+
+    if (storage->heap_capacity < case_slots) {
+        XrSelectCase *new_cases =
+            (XrSelectCase *) xr_malloc((size_t) case_slots * sizeof(XrSelectCase));
+        if (!new_cases) {
+            return NULL;
+        }
+        if (storage->heap_cases) {
+            xr_free(storage->heap_cases);
+        }
+        storage->heap_cases = new_cases;
+        storage->heap_capacity = case_slots;
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
+        }
+    }
+    return storage->heap_cases;
+}
+
+static void coro_select_notify_enter(XrayIsolate *isolate, XrSelectWait *sw) {
+    XrChannelDistHooks *dhooks =
+        isolate ? (XrChannelDistHooks *) isolate->channel_dist_hooks : NULL;
+    if (!dhooks || !dhooks->on_select_enter) {
+        return;
+    }
+
+    for (int ci = 0; ci < sw->case_count; ci++) {
+        XrChannel *ch = (XrChannel *) sw->cases[ci].channel;
+        if (ch && ch->dist) {
+            dhooks->on_select_enter(ch);
+        }
+    }
+}
+
+static void coro_select_arm_timer(XrWorker *worker, XrCoroutine *coro, XrChannel *timer_ch) {
+    if (!worker || !coro || !timer_ch ||
+        atomic_load_explicit(&timer_ch->timer_fired, memory_order_acquire)) {
+        return;
+    }
+
+    int64_t now_ms = xr_monotonic_ticks();
+    int64_t elapsed = now_ms - timer_ch->timer_start_ticks;
+    int64_t remaining = timer_ch->timer_timeout_ms - elapsed;
+    if (remaining < 1) {
+        remaining = 1;
+    }
+    if (worker->p.timer_wheel) {
+        coro_cancel_owned_timer(coro);
+        xr_worker_add_sleep_timer(worker, coro, remaining);
+    }
+}
+
+XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
+                                       const XrValue *channel_values, int ch_count, int case_count,
+                                       int result_reg_base) {
+    if (!coro) {
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    }
+
+    XrWorker *worker = xr_current_worker();
+    if (!worker) {
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    }
+    XrRuntime *runtime = worker->p.runtime;
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_block_count);
+    }
+
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext) {
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+
+    int case_slots = case_count > ch_count ? case_count : ch_count;
+    if (case_slots <= 0) {
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+
+    XrSelectStorage *storage = &ext->select_storage;
+    XrSelectCase *cases = coro_select_alloc_cases(runtime, storage, case_slots);
+    if (!cases) {
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    }
+
+    memset(cases, 0, (size_t) case_slots * sizeof(XrSelectCase));
+    memset(&storage->wait, 0, sizeof(storage->wait));
+
+    XrSelectWait *sw = &storage->wait;
+    sw->cases = cases;
+    sw->case_count = ch_count < case_count ? ch_count : case_count;
+    sw->timer_channel = NULL;
+    sw->timer_case_index = -1;
+    atomic_store(&sw->triggered, false);
+
+    XrChannel *timer_ch = NULL;
+    for (int ci = 0; ci < ch_count && ci < sw->case_count; ci++) {
+        XrValue ch_val = channel_values ? channel_values[ci] : xr_null();
+        if (!xr_value_is_channel(ch_val)) {
+            sw->cases[ci].channel = NULL;
+            continue;
+        }
+
+        XrChannel *ch = xr_value_to_channel(ch_val);
+        sw->cases[ci].channel = ch;
+        sw->cases[ci].is_send = false;
+        sw->cases[ci].result_reg = result_reg_base + ci;
+        sw->cases[ci].owner = coro;
+        if (atomic_load(&ch->is_timer)) {
+            timer_ch = ch;
+        }
+    }
+
+    sw->timer_channel = timer_ch;
+    for (int ci = 0; ci < sw->case_count; ci++) {
+        if (sw->cases[ci].channel == timer_ch) {
+            sw->timer_case_index = ci;
+            break;
+        }
+    }
+
+    coro->select_wait = sw;
+    coro->select_ready_case = -1;
+    coro_select_arm_timer(worker, coro, timer_ch);
+    coro_select_notify_enter(isolate, sw);
+
+    xr_worker_block_select(worker, coro, NULL, sw->case_count);
+    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+}
+
+XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
+    if (!coro) {
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+    }
+
+    XrScopeContext *scope = coro->current_scope;
+    if (!scope) {
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+
+    if (atomic_load(&scope->count) > 0) {
+        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
+        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+    }
+    atomic_store(&coro->wait_count, 0);
+
+    if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
+        XrValue err = scope->first_error;
+        bool err_is_value = scope->first_error_is_value;
+        coro->current_scope = scope->parent;
+        xr_free(scope);
+        return block_result(XR_CORO_BLOCK_ERROR, err, err_is_value);
+    }
+
+    XrValue supervisor_result = xr_null();
+    if (scope_mode == XR_SCOPE_SUPERVISOR) {
+        if (scope->errors && scope->errors->length > 0) {
+            supervisor_result = xr_value_from_array(scope->errors);
+        } else {
+            XrArray *empty = xr_array_new(coro);
+            supervisor_result = empty ? xr_value_from_array(empty) : xr_null();
+        }
+    }
+
+    coro->current_scope = scope->parent;
+    xr_free(scope);
+    return block_result(XR_CORO_BLOCK_READY, supervisor_result, true);
 }

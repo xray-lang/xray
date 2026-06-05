@@ -90,4 +90,11 @@ XR_FUNC XrCoroBlockResult xr_coro_await_task_resume(struct XrCoroutine *coro, st
 XR_FUNC XrCoroBlockResult xr_coro_await_task(struct XrCoroutine *coro, struct XrTask *task,
                                              int64_t timeout_ms);
 
+XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
+XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
+                                               struct XrCoroutine *coro,
+                                               const XrValue *channel_values, int ch_count,
+                                               int case_count, int result_reg_base);
+XR_FUNC XrCoroBlockResult xr_coro_scope_exit(struct XrCoroutine *coro, uint8_t scope_mode);
+
 #endif  // XBLOCK_H

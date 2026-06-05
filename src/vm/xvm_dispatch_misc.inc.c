@@ -198,25 +198,17 @@ vmcase(OP_SCOPE_EXIT) {
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
 
     if (current) {
-        XrScopeContext *scope = current->current_scope;
-        if (!scope)
-            vmbreak;
-
-        if (atomic_load(&scope->count) > 0) {
-            // Children still running — block and re-execute on resume
+        XrCoroBlockResult scope_result = xr_coro_scope_exit(current, (uint8_t) scope_mode);
+        if (scope_result.kind == XR_CORO_BLOCK_BLOCKED) {
             frame->pc = pc - 1;
-            xr_coro_set_wait_reason(current, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
             return XR_VM_BLOCKED;
         }
-        atomic_store(&current->wait_count, 0);
-
-        // All children done
-        if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
-            XrValue err = scope->first_error;
-            bool err_is_value = scope->first_error_is_value;
-            current->current_scope = scope->parent;
-            xr_free(scope);
-            if (err_is_value) {
+        if (scope_result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vmbreak;
+        }
+        if (scope_result.kind == XR_CORO_BLOCK_ERROR) {
+            XrValue err = scope_result.value;
+            if (scope_result.ok) {
                 /* Child failed via the value-return channel (user
                  * `throw <enum>`).  Re-raise on the same channel so the
                  * parent's `catch (e)` observes it.  The lowerer emits an
@@ -238,16 +230,8 @@ vmcase(OP_SCOPE_EXIT) {
             goto startfunc;
         }
         if (scope_mode == XR_SCOPE_SUPERVISOR) {
-            // supervisor scope: write collected errors[] to result_reg
-            if (scope->errors && scope->errors->length > 0) {
-                base[result_reg] = xr_value_from_array(scope->errors);
-            } else {
-                XrArray *empty = xr_array_new(current);
-                base[result_reg] = empty ? xr_value_from_array(empty) : xr_null();
-            }
+            base[result_reg] = scope_result.value;
         }
-        current->current_scope = scope->parent;
-        xr_free(scope);
     } else {
         // Main thread fallback
         XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
@@ -358,43 +342,18 @@ vmcase(OP_SLEEP) {
     // Check if in coroutine
     XrCoroutine *coro = (XrCoroutine *) VM_CURRENT_CORO;
     if (coro) {
-        // Coroutine mode: use Timer Wheel for precise timed wake
-        XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
-        (void) rt;
-
-        // First set as pure sleep (no fd)
-        XrCoroExt *sleep_ext = xr_coro_ensure_ext(coro);
-        if (sleep_ext) {
-            sleep_ext->yield_info.wait_fd = -1;
-            sleep_ext->yield_info.wait_events = 0;
+        XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
+        if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
+            frame->pc = pc;
+            return XR_VM_BLOCKED;
         }
-        // Set wait reason in flags
-        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
-
-        // Add timer to current Worker's Timer Wheel (Per-Worker lock-free)
-        XrWorker *worker = xr_current_worker();
-        XrTimerWheel *tw = worker ? worker->p.timer_wheel : NULL;
-
-        if (tw) {
-            // Use Per-Worker Timer Wheel (lock-free)
-            XR_DBG_TIMER("Add timer: coro=%d, ms=%lld, worker=%d, tw=%p", coro->id,
-                         (long long) milliseconds, worker->p.id, (void *) tw);
-            xr_worker_add_sleep_timer(worker, coro, milliseconds);
-        } else {
-            /* Timer wheel must exist for all workers.
-             * If missing, fall back to blocking sleep to avoid
-             * setting timer_active without timer wheel registration. */
+        if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "sleep: out of memory");
+        }
+        if (sleep_result.kind == XR_CORO_BLOCK_NO_CORO) {
             xr_time_sleep_ms((uint64_t) milliseconds);
             vmbreak;
         }
-
-        // Mark as pure sleep (no fd) - already set above
-
-        // Save current instruction address, re-execute on resume
-        frame->pc = pc;
-
-        // Return BLOCKED, let scheduler switch to other coroutines
-        return XR_VM_BLOCKED;
     }
 
     // Non-coroutine mode: blocking sleep.
