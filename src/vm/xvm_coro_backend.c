@@ -499,7 +499,7 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         if (coro->error_is_value && xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) &&
             !(isolate && isolate->suppress_exception_print) && !XR_IS_NULL(coro->error)) {
             XrString *msg = xr_value_to_string(isolate, coro->error);
-            fprintf(stderr, "\n[Uncaught Error] %s\n", msg && msg->data ? msg->data : "<error>");
+            fprintf(stderr, "\n[Uncaught Error] %s\n", msg ? msg->data : "<error>");
         }
         coro_ctx->current_exception = xr_null();
         coro_ctx->pending_error = xr_null();
