@@ -798,6 +798,11 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
             (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
+    fprintf(stderr, "Timer: fire=%llu cancel_local=%llu cancel_remote=%llu cancel_process=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->timer_fire_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_local_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_remote_count),
+            (unsigned long long) xr_sched_metric_load(&s->timer_cancel_process_count));
     fprintf(stderr,
             "Channel hot path: no_waiter_buffer=%llu kind_spsc=%llu kind_mpsc=%llu "
             "kind_mpmc=%llu\n",
