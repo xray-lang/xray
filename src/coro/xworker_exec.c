@@ -124,6 +124,10 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
                                 memory_order_acquire) == 0;
 }
 
+static bool worker_should_keep_parent_local(XrCoroutine *parent, XrCoroutine *child) {
+    return worker_coro_priority(child) > worker_coro_priority(parent);
+}
+
 /*
  * Unified BLOCKED post-processing.
  *
@@ -355,7 +359,9 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Detach worker-local backend state before running the child.
         // Re-bound by xr_coro_run_on_worker when the parent resumes.
         xr_coro_detach_worker_state(coro);
-        if (!xr_steal_queue_push(&p->cont_deque, coro)) {
+        if (worker_should_keep_parent_local(coro, child)) {
+            xr_worker_push_lifo(worker, coro);
+        } else if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {
             xr_worker_refresh_runq_masks(worker);

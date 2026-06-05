@@ -226,9 +226,12 @@ static XrLifoGateDecision worker_lifo_gate_decision(XrWorker *worker, XrCoroutin
 
     if (runtime) {
         uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
-        if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
-             high_bit) == 0 &&
-            xr_proc_local_runq_len(&worker->p) <= 1) {
+        bool high_inject =
+            (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
+             high_bit) != 0;
+        bool high_worker = atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH],
+                                                memory_order_acquire) != 0;
+        if (!high_inject && !high_worker && xr_proc_local_runq_len(&worker->p) <= 1) {
             return XR_LIFO_GATE_ALLOW;
         }
     }

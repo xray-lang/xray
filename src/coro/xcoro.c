@@ -14,9 +14,7 @@
  */
 
 #include "xcoroutine.h"
-#include "../runtime/xisolate_api.h"       // xr_runtime_error
 #include "../runtime/xisolate_internal.h"  // XrayIsolate definition
-#include "../runtime/gc/xgc.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
 #include "../runtime/xray_debug.h"
@@ -26,8 +24,6 @@
 #include "xchannel.h"
 #include "xtimer_wheel.h"
 #include "../runtime/gc/xcoro_gc.h"
-#include "xdeep_copy.h"
-#include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/object/xexception.h"
 #include "xcoro_registry.h"
 #include "xtask.h"
@@ -83,26 +79,6 @@ bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
         return false;
     coro->backend->reset_execution_state(coro, X);
     return true;
-}
-
-static void coro_reset_entry_state_no_free(XrCoroutine *coro) {
-    if (!coro || !coro->backend || !coro->backend->reset_entry_state_no_free)
-        return;
-    coro->backend->reset_entry_state_no_free(coro);
-}
-
-static bool coro_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
-                                    XrValue *args, int arg_count, bool copy_args) {
-    if (!coro || !coro->backend || !coro->backend->bind_closure_entry)
-        return false;
-    return coro->backend->bind_closure_entry(coro, X, closure, args, arg_count, copy_args);
-}
-
-static bool coro_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
-                                  int arg_count) {
-    if (!coro || !coro->backend || !coro->backend->bind_cfunc_entry)
-        return false;
-    return coro->backend->bind_cfunc_entry(coro, cfunc, args, arg_count);
 }
 
 // Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
@@ -176,10 +152,7 @@ void xr_coro_clear_select_wait(XrCoroutine *coro) {
 
 // ========== Coroutine Creation and Destruction ==========
 
-// Forward declaration (defined after bootstrap)
-static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack);
-
-static void coro_discard_uninitialized(XrCoroutine *coro) {
+void xr_coro_discard_uninitialized(XrCoroutine *coro) {
     if (!coro)
         return;
     if (coro->backend && coro->backend->destroy)
@@ -187,19 +160,6 @@ static void coro_discard_uninitialized(XrCoroutine *coro) {
     if (!(coro->gc_flags & XR_CORO_GC_FROM_POOL)) {
         xr_free(coro);
     }
-}
-
-static bool coro_ensure_backend_state(XrCoroutine *coro, const XrCoroBackendVTable *backend) {
-    if (!coro || !backend || !backend->ensure_state)
-        return false;
-    if (coro->backend && coro->backend != backend && coro->backend_state)
-        return false;
-    coro->backend = backend;
-    return backend->ensure_state(coro);
-}
-
-static bool coro_ensure_vm_backend_state(XrCoroutine *coro) {
-    return coro_ensure_backend_state(coro, xr_coro_vm_backend_vtable());
 }
 
 static XrCoroutine *coro_alloc_lightweight_shell(void) {
@@ -288,108 +248,6 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .debug_snapshot = native_backend_debug_snapshot,
 };
 
-// Create bootstrap main coroutine (no closure, no scheduler)
-// Called during isolate init before any script execution.
-// Provides coro_gc so all init-phase allocations go through coro heap.
-// Later upgraded by xr_coro_setup_main() when proto is ready.
-XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
-    XR_DCHECK(X != NULL, "coro_create_bootstrap: NULL isolate");
-    XrCoroutine *coro = NULL;
-
-    if (X->sys_heap) {
-        coro = xr_sysheap_alloc_coro(X->sys_heap);
-    } else {
-        coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-        if (coro) {
-            memset(coro, 0, sizeof(XrCoroutine));
-            coro->gc.type = XR_TCOROUTINE;
-        }
-    }
-    if (!coro)
-        return NULL;
-    if (!coro_ensure_vm_backend_state(coro)) {
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    coro->coro_gc = NULL;
-
-    // Common initialization (flags, stack/frames, field resets, timer, GC fields, ID)
-    if (!coro_init_common(coro, X, "main", true)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Main coroutine needs coro_gc immediately (GC API, init-phase allocations)
-    // Use main-specific config: larger threshold, slower GC (long-lived coroutine)
-    if (!coro->coro_gc) {
-        XrCoroGCConfig main_config = {
-            .gc_threshold = XR_MAIN_CORO_GC_THRESHOLD,
-            .gc_pause = XR_MAIN_CORO_GC_PAUSE,
-            .gc_stepmul = XR_MAIN_CORO_GC_STEPMUL,
-        };
-        coro->coro_gc = xr_coro_gc_create(coro, &main_config);
-        if (!coro->coro_gc)
-            return NULL;
-    }
-
-    // Bootstrap-specific: mark as main coroutine
-    coro->flags |= XR_CORO_FLG_MAIN;
-    coro_reset_entry_state_no_free(coro);
-    (void) xr_coro_set_pending_spawn(coro, NULL);
-
-    return coro;
-}
-
-// Setup bootstrap main_coro for script execution.
-// Binds the entry closure and syncs backend state for VM execution.
-void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
-    XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
-    XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
-    XR_DCHECK(closure != NULL, "coro_setup_main: NULL closure");
-    bool bound = coro_bind_closure_entry(coro, X, closure, NULL, 0, false);
-    XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
-    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
-    XR_CHECK(xr_coro_reset_execution_state(coro, X),
-             "coro_setup_main: failed to reset backend execution state");
-}
-
-// Reset main_coro for sequential re-execution (test runner, REPL).
-// Reuses existing stack/frames/GC heap, only resets execution state.
-//
-// WHY THIS DESIGN:
-//   Between sequential calls (e.g. @test functions), the GC heap accumulates
-//   dead objects from previous executions. A fullgc before reset ensures:
-//   1. Dead objects are properly collected (stack references are about to vanish)
-//   2. gc_disabled counter is reset (previous call may have left GC disabled)
-//   3. GC state machine is in PAUSE (clean slate for next execution)
-void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
-    XR_DCHECK(coro != NULL, "coro_reset_for_call: NULL coro");
-    XR_DCHECK(X != NULL, "coro_reset_for_call: NULL isolate");
-    XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
-
-    // Reset gc_disabled counter: previous call may have done gc.disable()
-    // without gc.enable(). Leave gcstate alone — GC manages its own transitions.
-    if (coro->coro_gc) {
-        coro->coro_gc->gc_disabled = 0;
-    }
-
-    // Reset backend execution state (stack_top, frames, handlers, etc.)
-    XR_CHECK(xr_coro_reset_execution_state(coro, X),
-             "coro_reset_for_call: failed to reset backend execution state");
-
-    // Set new entry closure
-    bool bound = coro_bind_closure_entry(coro, X, closure, NULL, 0, false);
-    XR_CHECK(bound, "coro_reset_for_call: failed to bind VM closure");
-    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
-
-    // Clear result/error from previous execution
-    coro->result = xr_null();
-    coro->error = xr_null();
-    coro->current_scope = NULL;
-}
-
 // Common coroutine initialization after object allocation.
 // Handles: flags, coro_gc, backend execution storage, timer, GC fields, ID.
 // need_stack: true for closure/cfunc coroutines, false for native callbacks.
@@ -477,9 +335,9 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
     coro->ext->scope_sibling = NULL;
 }
 
-static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_stack) {
+bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (need_stack && (!coro->backend || !coro->backend->prepare_execution_state))
+    if (need_storage && (!coro->backend || !coro->backend->prepare_execution_state))
         return false;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
@@ -571,9 +429,9 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     XrWorker *w = xr_current_worker();
 
     if (coro->backend && coro->backend->prepare_execution_state) {
-        if (!coro->backend->prepare_execution_state(coro, X, w, need_stack, is_clean))
+        if (!coro->backend->prepare_execution_state(coro, X, w, need_storage, is_clean))
             return false;
-    } else if (need_stack) {
+    } else if (need_storage) {
         return false;
     }
 
@@ -603,90 +461,6 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     return true;
 }
 
-// Create VM closure coroutine (GC managed)
-// Optimization: try to get stack and frames from pool
-XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
-                                       int arg_count, const char *name, const char *file,
-                                       int line) {
-    XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
-    XR_DCHECK(closure != NULL, "coro_create_vm_closure: NULL closure");
-    XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
-    XR_DCHECK(arg_count == 0 || args != NULL, "coro_create_vm_closure: NULL args with count > 0");
-    // Check coroutine limit
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
-        xr_runtime_error(X, "coroutine limit exceeded (%d)", XR_MAX_COROUTINES);
-        return NULL;
-    }
-
-    // Allocate: try pool first, then system heap
-    XrCoroutine *coro = NULL;
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (runtime) {
-        coro = xr_coro_pool_get(runtime);
-    }
-    if (!coro) {
-        if (X->sys_heap) {
-            coro = xr_sysheap_alloc_coro(X->sys_heap);
-            // sysheap pool may have pre-set stack/frames from arena slab — keep them
-            if (!coro)
-                return NULL;
-            coro->coro_gc = NULL;
-        } else {
-            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-            if (coro) {
-                memset(coro, 0, sizeof(XrCoroutine));
-                coro->gc.type = XR_TCOROUTINE;
-            }
-            if (!coro)
-                return NULL;
-            if (!coro_ensure_vm_backend_state(coro)) {
-                coro_discard_uninitialized(coro);
-                return NULL;
-            }
-            coro->coro_gc = NULL;
-        }
-    }
-    if (!coro_ensure_vm_backend_state(coro)) {
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Common initialization (flags, coro_gc, stack/frames, field resets, timer, GC, ID)
-    if (!coro_init_common(coro, X, name, true)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Share parent's closure directly — no copy needed.
-    // Compiler-enforced is_coro_safe guarantees all upvalues are shared const
-    // (closed immediately, value in upvalue->closed, independent of any stack).
-    // Parent coroutine outlives children via scope mechanism, so closure and
-    // its upvalue objects remain valid for the child's entire lifetime.
-    if (!coro_bind_closure_entry(coro, X, closure, args, arg_count, true)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Async stack trace: parent pointer + caller-provided file/line.
-    // vm_go pre-computes these from the current frame, so no redundant frame walk here.
-    if (xr_coro_name(coro) &&
-        !xr_coro_set_spawn_origin(coro, (XrCoroutine *) X->vm.current_coro, file, line)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    return coro;
-}
-
 XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
 
@@ -699,69 +473,9 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     if (!coro)
         return NULL;
 
-    if (!coro_init_common(coro, X, name, false)) {
+    if (!xr_coro_init_shell(coro, X, name, false)) {
         xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    return coro;
-}
-
-// Create VM C function coroutine (supports Yieldable I/O)
-// Unlike native coroutine, has stack and frames, supports internal Yieldable C calls
-// Used for HTTP connection handling and other I/O wait scenarios
-XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                     XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                            XrValue *),
-                                     XrValue *args, int argc, const char *name) {
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
-        return NULL;
-    }
-
-    // Allocate: try pool first, then system heap
-    XrCoroutine *coro = NULL;
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (runtime) {
-        coro = xr_coro_pool_get(runtime);
-    }
-    if (!coro) {
-        if (X->sys_heap) {
-            coro = xr_sysheap_alloc_coro(X->sys_heap);
-            if (!coro)
-                return NULL;
-            coro->coro_gc = NULL;
-        } else {
-            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-            if (coro) {
-                memset(coro, 0, sizeof(XrCoroutine));
-                coro->gc.type = XR_TCOROUTINE;
-            }
-            if (!coro)
-                return NULL;
-            if (!coro_ensure_vm_backend_state(coro)) {
-                coro_discard_uninitialized(coro);
-                return NULL;
-            }
-            coro->coro_gc = NULL;
-        }
-    }
-    if (!coro_ensure_vm_backend_state(coro)) {
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Common initialization (flags, coro_gc, stack/frames, field resets, timer, GC, ID)
-    if (!coro_init_common(coro, X, name, true)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    if (!coro_bind_cfunc_entry(coro, cfunc, args, argc)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
+        xr_coro_discard_uninitialized(coro);
         return NULL;
     }
 
@@ -875,8 +589,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         return;
     }
 
-    // Thorough reset: zero all fields that coro_init_common would memset.
-    // This allows coro_init_common to skip the full shell memset for recycled coros.
+    // Thorough reset: zero all fields that xr_coro_init_shell would memset.
+    // This allows xr_coro_init_shell to skip the full shell memset for recycled coros.
     coro->result = xr_null();
     coro->error = xr_null();
     coro->task = NULL;
@@ -891,14 +605,14 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro_clear_scope_membership(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
     // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
-    // are reset in coro_init_common dirty path; ext pointer preserved for io_buf reuse
+    // are reset in xr_coro_init_shell dirty path; ext pointer preserved for io_buf reuse
     xr_coro_clear_debug_identity(coro);
     atomic_store_explicit(&coro->flags, 0, memory_order_relaxed);
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
     atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
     atomic_store_explicit(&coro->affinity_p, 0, memory_order_relaxed);
-    // timer fields live in ext; reset happens in coro_init_common dirty path
-    // Mark as "clean" — coro_init_common can skip memset
+    // timer fields live in ext; reset happens in xr_coro_init_shell dirty path
+    // Mark as "clean" — xr_coro_init_shell can skip memset
     coro->gc_flags |= XR_CORO_GC_RECYCLED_CLEAN;
 
     // Add to Worker local free list (lock-free, only this Worker accesses)
