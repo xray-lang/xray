@@ -682,7 +682,7 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
             return false;
 
         xr_worker_unblock_select(worker, coro);
-        coro->select_wait = NULL;
+        xr_coro_clear_select_wait(coro);
         xr_coro_resume_store(coro, XR_RESUME_OK);
         xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
         xr_coro_transition_to_running(coro);
@@ -731,6 +731,7 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
     sw->cases = cases;
     sw->case_count = ch_count < case_count ? ch_count : case_count;
     sw->timer_channel = NULL;
+    atomic_store(&sw->active, true);
     atomic_store(&sw->triggered, false);
 
     XrChannel *timer_ch = NULL;
@@ -753,7 +754,6 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
 
     sw->timer_channel = timer_ch;
 
-    coro->select_wait = sw;
     coro_select_arm_timer(worker, coro, timer_ch);
     coro_select_notify_enter(isolate, sw);
 

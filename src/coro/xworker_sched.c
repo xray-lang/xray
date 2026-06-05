@@ -409,7 +409,7 @@ static void worker_sleep_timeout_callback(void *arg) {
     }
 
     // Check if select wait (use CAS to prevent duplicate wake)
-    XrSelectWait *sw = coro->select_wait;
+    XrSelectWait *sw = xr_coro_select_wait(coro);
     if (sw) {
         bool expected = false;
         if (!atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {

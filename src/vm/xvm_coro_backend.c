@@ -96,15 +96,15 @@ static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapsh
 }
 
 static bool consume_select_channel_resume(XrCoroutine *coro) {
-    if (!coro || !coro->select_wait)
+    if (!xr_coro_select_wait(coro))
         return false;
-    coro->select_wait = NULL;
+    xr_coro_clear_select_wait(coro);
     xr_coro_resume_store(coro, XR_RESUME_OK);
     return true;
 }
 
 static bool is_select_channel_resume(XrCoroutine *coro, int resume_status) {
-    if (!coro || !coro->select_wait)
+    if (!xr_coro_select_wait(coro))
         return false;
     return resume_status == XR_RESUME_CHANNEL || resume_status == XR_RESUME_CHANNEL_CLOSED;
 }

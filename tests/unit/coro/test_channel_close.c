@@ -87,16 +87,18 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     atomic_store(&coro.resume_status, XR_RESUME_OK);
     atomic_store(&coro.affinity_p, 0);
 
-    XrSelectCase cases[1];
-    XrSelectWait wait;
-    memset(cases, 0, sizeof(cases));
-    memset(&wait, 0, sizeof(wait));
+    XrCoroExt ext;
+    memset(&ext, 0, sizeof(ext));
+    coro.ext = &ext;
+
+    XrSelectCase *cases = ext.select_storage.inline_cases;
+    XrSelectWait *wait = &ext.select_storage.wait;
     cases[0].channel = ch;
     cases[0].owner = &coro;
-    wait.cases = cases;
-    wait.case_count = 1;
-    atomic_store(&wait.triggered, false);
-    coro.select_wait = &wait;
+    wait->cases = cases;
+    wait->case_count = 1;
+    atomic_store(&wait->active, true);
+    atomic_store(&wait->triggered, false);
 
     xr_worker_block_select(&f.worker, &coro, NULL, 1);
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 1);
@@ -105,7 +107,7 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     xr_channel_close(ch);
 
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
-    ASSERT_TRUE(atomic_load(&wait.triggered));
+    ASSERT_TRUE(atomic_load(&wait->triggered));
     ASSERT_EQ_INT(xr_coro_resume_load(&coro), XR_RESUME_CHANNEL_CLOSED);
     ASSERT_TRUE(xr_coro_flags_has(&coro, XR_CORO_FLG_READY));
     ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_BLOCKED));

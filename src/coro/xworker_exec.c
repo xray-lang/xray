@@ -158,7 +158,7 @@ bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
     }
 
     // Select wait: already handled by select infrastructure
-    if (coro->select_wait)
+    if (xr_coro_select_wait(coro))
         return false;
 
     // Timer active: add to blocked queue for tracking

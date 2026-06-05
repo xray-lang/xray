@@ -236,6 +236,7 @@ typedef struct XrSelectWait {
     XrSelectCase *cases;
     int case_count;
     void *timer_channel;
+    _Atomic bool active;
     _Atomic bool triggered;
 } XrSelectWait;
 
@@ -422,7 +423,6 @@ struct XrCoroutine {
     XrValue send_value;
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
-    struct XrSelectWait *select_wait;
 
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;
@@ -761,6 +761,8 @@ XR_FUNC struct XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_parent_scope(XrCoroutine *coro, struct XrScopeContext *scope);
 XR_FUNC XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling);
+XR_FUNC XrSelectWait *xr_coro_select_wait(XrCoroutine *coro);
+XR_FUNC void xr_coro_clear_select_wait(XrCoroutine *coro);
 
 // Scheduler
 XR_FUNC void xr_sched_init(XrCoroState *sched);
