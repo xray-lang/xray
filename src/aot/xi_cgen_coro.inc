@@ -151,7 +151,7 @@ static int count_coro_suspend_states(const XiFunc *f) {
                 continue;
             if (v->op == XI_YIELD || v->op == XI_GO || v->op == XI_AWAIT || v->op == XI_CHAN_SEND ||
                 v->op == XI_CHAN_RECV || cg_is_blocking_channel_method_call(v) ||
-                v->op == XI_SCOPE_EXIT || cg_is_time_sleep_call(f, v))
+                v->op == XI_SELECT_BLOCK || v->op == XI_SCOPE_EXIT || cg_is_time_sleep_call(f, v))
                 count++;
         }
     }
@@ -485,6 +485,53 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_TIME_AFTER) {
+        if (v->nargs < 1) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: TIME_AFTER missing timeout\n");
+            return;
+        }
+        fprintf(out, "    XrValue _timer_ch_%u = xr_aot_time_after(ctx, ", v->id);
+        emit_int64_arg(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_timer_ch_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (v->op == XI_SELECT_BLOCK) {
+        if (v->nargs == 0) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: SELECT_BLOCK missing channels\n");
+            return;
+        }
+        int sid = ++(*state_id);
+        fprintf(out, "    XrValue _select_channels_%u[%u];\n", v->id, (unsigned) v->nargs);
+        for (uint16_t i = 0; i < v->nargs; i++) {
+            fprintf(out, "    _select_channels_%u[%u] = ", v->id, (unsigned) i);
+            emit_boxed_vref(out, v->args[i]);
+            fprintf(out, ";\n");
+        }
+        fprintf(out,
+                "    XrAotResult _select_%u = xr_aot_select_block(ctx, _select_channels_%u, "
+                "%u, %u);\n",
+                v->id, v->id, (unsigned) v->nargs, (unsigned) v->aux_int);
+        fprintf(out, "    if (_select_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
+        fprintf(out, "        f->state = %d;\n", sid);
+        fprintf(out, "        return _select_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    if (_select_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "        return _select_%u;\n", v->id);
+        fprintf(out, "    goto S%d_DONE;\n", sid);
+        fprintf(out, "S%d:;\n", sid);
+        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "S%d_DONE:;\n", sid);
+        return;
+    }
+
     if (v->op == XI_CHAN_NEW) {
         fprintf(out, "    XrValue _chan_%u = xr_aot_channel_new(ctx, ", v->id);
         if (v->nargs >= 1)
@@ -525,12 +572,29 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(stderr, "[xi_cgen] ERROR: CHAN_TRY_RECV missing channel\n");
             return;
         }
-        fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv(ctx, ", v->id);
+        fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv_value(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ");\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (v->op == XI_CHAN_IS_CLOSED) {
+        if (v->nargs < 1) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: CHAN_IS_CLOSED missing channel\n");
+            return;
+        }
+        fprintf(out, "    XrValue _chan_closed_%u = xr_aot_chan_is_closed(ctx, ", v->id);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ");\n");
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[40];
+            snprintf(tmp, sizeof(tmp), "_chan_closed_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
         return;
@@ -687,8 +751,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CHAN_SEND || v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_SEND ||
-        v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_TIME_AFTER ||
-        v->op == XI_SELECT_BLOCK || v->op == XI_CHAN_NEW || v->op == XI_CORO_OP) {
+        v->op == XI_CHAN_TRY_RECV || v->op == XI_CHAN_IS_CLOSED || v->op == XI_CHAN_NEW ||
+        v->op == XI_CORO_OP) {
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
         return;

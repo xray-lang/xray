@@ -1,0 +1,17 @@
+fn wait_recv(ch: Channel<int>) -> int {
+    let result = 0
+    select {
+        value from ch -> {
+            result = value + 1
+        }
+    }
+    return result
+}
+
+let ch = new Channel<int>(1)
+ch.send(41)
+let task = go wait_recv(ch)
+
+let result = await task
+print(result)
+ch.close()
