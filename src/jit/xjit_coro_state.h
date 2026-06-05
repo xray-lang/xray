@@ -17,7 +17,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../coro/xjit_scratch.h"
+#include "xjit_scratch.h"
 
 /*
  * Capacity of XrJitSuspendState::spill[].
