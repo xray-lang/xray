@@ -140,6 +140,12 @@ void worker_unpark(XrWorker *worker) {
     xr_park_futex_wake(&m->park_state);
 }
 
+void xr_runtime_wake_worker(XrRuntime *runtime, int worker_id) {
+    if (!runtime || worker_id < 0 || worker_id >= runtime->worker_count)
+        return;
+    worker_unpark(&runtime->workers[worker_id]);
+}
+
 // Enqueue coro to target worker's inbox with full Dekker synchronization + wake.
 // This is the single correct path for all cross-worker inbox delivery.
 void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *coro) {
@@ -323,7 +329,7 @@ after_netpoll:
     // after ~100 timeouts per bump call (XR_TW_COST_TIMEOUT=100), so a
     // burst of 10000 timers requires ~100 iterations.
     int64_t now = xr_monotonic_ticks();
-    if (p->timer_wheel && now > p->last_timer_tick) {
+    if (p->timer_wheel && (xr_timer_cancel_pending(p->timer_wheel) || now > p->last_timer_tick)) {
         int32_t inbox_before =
             atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed);
         int timer_passes = 0;
@@ -335,7 +341,9 @@ after_netpoll:
         if (timer_passes > 1) {
             p->stats.timer_burst_count++;
         }
-        p->last_timer_tick = now;
+        if (now > p->last_timer_tick) {
+            p->last_timer_tick = now;
+        }
         // After timer batch: wake idle workers to help process burst.
         // Wake count = min(new_items, idle_workers) — no point waking
         // more workers than available work or idle capacity.
@@ -474,6 +482,7 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
     // Initialize timer node
     timer->prev = NULL;
     timer->next = NULL;
+    atomic_store_explicit(&timer->cancel_next, NULL, memory_order_relaxed);
     timer->slot = XR_TW_SLOT_INACTIVE;
 
     // Increment sequence number (prevent stale notifications)
@@ -498,7 +507,7 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
 //
 // Design:
 // - If current worker owns the timer: direct cancel (lock-free)
-// - If other worker owns the timer: enqueue to owner's canceled_queue
+// - If other worker owns the timer: push to owner's cancel stack
 void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
     if (!coro || !coro->ext)
         return;
@@ -530,8 +539,8 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         XR_DBG_TIMER("Timer canceled locally: coro=%d, owner=%d", coro->id, owner_id);
     } else {
-        // Cross-worker: enqueue to owner's canceled_queue (async)
-        xr_timer_queue_cancel(owner_tw, &coro->ext->timer, coro);
+        // Cross-worker: push to owner's cancel stack.
+        xr_timer_queue_cancel(owner_tw, &coro->ext->timer);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         XR_DBG_TIMER("Timer cancel queued: coro=%d, owner=%d, current=%d", coro->id, owner_id,
                      current_worker ? current_worker->p.id : -1);
@@ -654,7 +663,9 @@ static void worker_park(XrWorker *worker) {
         }
 
         // Timer-aware: clamp timeout to next timer expiry
-        if (worker->p.timer_wheel) {
+        if (worker->p.timer_wheel && xr_timer_cancel_pending(worker->p.timer_wheel)) {
+            timeout_ms = 1;
+        } else if (worker->p.timer_wheel) {
             int64_t next = xr_check_next_timeout_time(worker->p.timer_wheel);
             int64_t now_ticks = xr_monotonic_ticks();
             if (next > now_ticks) {
@@ -1036,10 +1047,13 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
         if ((spin & 0x3) == 0) {
             cached_now = xr_monotonic_ticks();
         }
-        if (worker->p.timer_wheel && cached_now > worker->p.last_timer_tick) {
+        if (worker->p.timer_wheel && (xr_timer_cancel_pending(worker->p.timer_wheel) ||
+                                      cached_now > worker->p.last_timer_tick)) {
             xr_bump_timers(worker->p.timer_wheel, cached_now);
             worker->p.stats.timer_bump_count++;
-            worker->p.last_timer_tick = cached_now;
+            if (cached_now > worker->p.last_timer_tick) {
+                worker->p.last_timer_tick = cached_now;
+            }
         }
         coro = xr_worker_pop(worker);
     }

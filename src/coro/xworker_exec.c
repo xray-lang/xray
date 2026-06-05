@@ -404,10 +404,13 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         }
         if ((fast_dispatch_budget & 15) == 0) {
             int64_t _now = xr_monotonic_ticks();
-            if (p->timer_wheel && _now > p->last_timer_tick) {
+            if (p->timer_wheel &&
+                (xr_timer_cancel_pending(p->timer_wheel) || _now > p->last_timer_tick)) {
                 xr_bump_timers(p->timer_wheel, _now);
                 p->stats.timer_bump_count++;
-                p->last_timer_tick = _now;
+                if (_now > p->last_timer_tick) {
+                    p->last_timer_tick = _now;
+                }
             }
         }
 

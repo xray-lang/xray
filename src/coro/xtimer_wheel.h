@@ -10,14 +10,14 @@
  * KEY CONCEPT:
  *   - Two-level timer wheel design (Soon + Later)
  *   - Per-Worker timer wheel (lock-free, no mutex)
- *   - Cross-worker cancellation via async canceled_queue
+ *   - Cross-worker cancellation via async cancel stack
  *   - Timer ownership tracked by worker_id
  *
  * ERLANG DESIGN PRINCIPLES:
  *   - Timer wheel is PRIVATE to its owner worker
  *   - Only owner worker can directly manipulate the wheel
- *   - Cross-worker cancel: enqueue to owner's canceled_queue
- *   - Owner processes canceled_queue before each bump
+ *   - Cross-worker cancel: push to owner's cancel stack
+ *   - Owner drains cancel stack before each bump
  *
  * ZOMBIE OPTIMIZATION:
  *   - Cancel marks timer as ZOMBIE atomically (immediate cross-worker visibility)
@@ -34,7 +34,6 @@
 #include <stdatomic.h>
 #include "../base/xdefs.h"
 
-typedef struct XrCoroutine XrCoroutine;
 typedef struct XrRuntime XrRuntime;
 typedef struct XrWorker XrWorker;
 
@@ -76,6 +75,7 @@ typedef void (*XrTimeoutProc)(void *arg);
 typedef struct XrTWheelTimer {
     struct XrTWheelTimer *prev;
     struct XrTWheelTimer *next;
+    _Atomic(struct XrTWheelTimer *) cancel_next;
     int64_t timeout_pos;
     int slot;
     XrTimeoutProc timeout;
@@ -84,20 +84,11 @@ typedef struct XrTWheelTimer {
     _Atomic(uint8_t) state;  // Timer state (zombie flag, atomic for cross-worker)
 } XrTWheelTimer;
 
-/* ========== Canceled Timer Queue (MPSC) ========== */
+/* ========== Canceled Timer Stack (MPSC) ========== */
 
-// Node for canceled timer queue (lock-free MPSC)
-typedef struct XrCanceledTimerNode {
-    struct XrCanceledTimerNode *next;
-    XrTWheelTimer *timer;
-    XrCoroutine *coro;  // Associated coroutine (for cleanup)
-} XrCanceledTimerNode;
-
-// MPSC queue for cross-worker timer cancellation
+// MPSC stack for cross-worker timer cancellation cleanup.
 typedef struct XrTimerCancelQueue {
-    _Atomic(XrCanceledTimerNode *) head;  // Consumer reads from head
-    _Atomic(XrCanceledTimerNode *) tail;  // Producers append to tail
-    XrCanceledTimerNode stub;             // Stub node for empty queue
+    _Atomic(XrTWheelTimer *) head;
 } XrTimerCancelQueue;
 
 /* ========== Timer Wheel (Per-Worker, Lock-Free) ========== */
@@ -142,9 +133,13 @@ typedef struct XrTimerWheel {
     int owner_worker_id;  // Worker that owns this timer wheel
     XrRuntime *runtime;
 
-    /* === Canceled Timer Queue (cross-worker cancellation) === */
+    /* === Canceled Timer Stack (cross-worker cancellation) === */
     XrTimerCancelQueue canceled_queue;
 } XrTimerWheel;
+
+static inline bool xr_timer_cancel_pending(XrTimerWheel *tw) {
+    return tw && atomic_load_explicit(&tw->canceled_queue.head, memory_order_acquire) != NULL;
+}
 
 /* ========== API ========== */
 
@@ -160,7 +155,7 @@ XR_FUNC bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *timer, XrTimeo
 // For cross-worker cancel, use xr_timer_queue_cancel()
 XR_FUNC void xr_twheel_cancel_timer(XrTimerWheel *tw, XrTWheelTimer *timer);
 
-// Bump timers (processes canceled_queue first, then triggers timeouts)
+// Bump timers (drains cancel stack first, then triggers timeouts)
 XR_FUNC void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time);
 
 // Query next timeout
@@ -172,22 +167,13 @@ XR_FUNC int64_t *xr_get_next_timeout_reference(XrTimerWheel *tw);
 // Initialize canceled timer queue
 XR_FUNC void xr_timer_cancel_queue_init(XrTimerCancelQueue *cq);
 
-// Queue a timer for cancellation (called from any worker)
-// This is lock-free MPSC enqueue
-XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer,
-                                   XrCoroutine *coro);
+// Push a timer cancellation request (called from any worker).
+// This is lock-free MPSC push.
+XR_FUNC void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer);
 
-// Process canceled queue (called by owner worker before bump)
+// Process canceled stack (called by owner worker before bump).
 // Returns number of timers processed
 XR_FUNC int xr_timer_process_canceled_queue(XrTimerWheel *tw);
-
-/* ========== Cancel Node Pool ========== */
-
-// Allocate a cancel node from current worker's freelist, fallback to xr_malloc.
-XR_FUNC XrCanceledTimerNode *xr_cancel_node_alloc(void);
-
-// Return a cancel node to the owner worker's freelist (called during queue drain).
-XR_FUNC void xr_cancel_node_free(XrCanceledTimerNode *node);
 
 /* ========== Helpers ========== */
 

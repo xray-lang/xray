@@ -68,11 +68,7 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t timer_cancel_local_count;
     _Atomic uint64_t timer_cancel_remote_count;
     _Atomic uint64_t timer_cancel_process_count;
-    _Atomic uint64_t timer_cancel_node_reuse_count;
-    _Atomic uint64_t timer_cancel_node_malloc_count;
-    _Atomic uint64_t timer_cancel_node_alloc_fail_count;
-    _Atomic uint64_t timer_cancel_node_free_cache_count;
-    _Atomic uint64_t timer_cancel_node_free_heap_count;
+    _Atomic uint64_t timer_cancel_duplicate_count;
     _Atomic uint64_t timer_cancel_drain_batch_count;
     _Atomic uint64_t timer_cancel_drain_node_count;
     _Atomic uint64_t timer_cancel_drain_max_count;
@@ -331,6 +327,7 @@ XR_FUNC void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro);
 
 // Wake one idle worker (O(1) pop from idle stack + unpark)
 XR_FUNC void xr_runtime_wake_idle_worker(XrRuntime *runtime);
+XR_FUNC void xr_runtime_wake_worker(XrRuntime *runtime, int worker_id);
 
 // Sum per-Worker local_active_coros (replaces global atomic active_coros)
 static inline int xr_runtime_active_coros(XrRuntime *runtime) {

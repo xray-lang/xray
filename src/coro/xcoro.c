@@ -387,7 +387,12 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+            coro->ext->timer.prev = NULL;
+            coro->ext->timer.next = NULL;
+            atomic_store_explicit(&coro->ext->timer.cancel_next, NULL, memory_order_relaxed);
             coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
+            atomic_store_explicit(&coro->ext->timer.state, XR_TIMER_STATE_ACTIVE,
+                                  memory_order_relaxed);
             coro->ext->timer_wheel_owner = -1;
             atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
             coro_channel_wait_reset(coro->ext);
