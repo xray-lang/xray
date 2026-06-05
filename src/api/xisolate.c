@@ -176,15 +176,19 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     }
 
     if (isolate->sys_heap) {
-        /* The system heap owns coroutine shells. Destroy it before fixed GC
-         * cleanup so per-coroutine finalizers can still read fixed objects
-         * such as enum values while releasing their fields. */
+        /* Coroutine shells must release their per-coroutine heaps before
+         * fixed GC finalization. Class/module metadata remains alive until
+         * fixed GC destroy hooks finish reading instance layouts. */
+        xr_sysheap_destroy_coro_storage(isolate->sys_heap);
+    }
+
+    xr_gc_cleanup(&isolate->gc);
+
+    if (isolate->sys_heap) {
         xr_sysheap_destroy(isolate->sys_heap);
         xr_free(isolate->sys_heap);
         isolate->sys_heap = NULL;
     }
-
-    xr_gc_cleanup(&isolate->gc);
 
     if (isolate->global_string_pool) {
         xr_global_pool_free(isolate->global_string_pool);

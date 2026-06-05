@@ -109,6 +109,9 @@ XR_FUNC bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config);
 // Destroy system heap and release all memory
 XR_FUNC void xr_sysheap_destroy(XrSystemHeap *heap);
 
+// Destroy coroutine-owned system resources before fixed-GC finalization.
+XR_FUNC void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap);
+
 /* ========== Coroutine Allocation ========== */
 
 // Allocate coroutine from pool (reuses freed coroutines)
