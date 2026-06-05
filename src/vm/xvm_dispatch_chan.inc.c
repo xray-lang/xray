@@ -37,6 +37,27 @@ vmcase(OP_CHAN_NEW) {
     vmbreak;
 }
 
+vmcase(OP_CHAN_NEW_CAP) {
+    /* R[A] = Channel(R[B]) - create Channel with runtime capacity. */
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+
+    uint32_t buffer_size = 0;
+    if (XR_IS_INT(R(b))) {
+        int64_t v = XR_TO_INT(R(b));
+        if (v > 0 && v <= MAXARG_Bx)
+            buffer_size = (uint32_t) v;
+    }
+
+    XrChannel *ch = xr_channel_new(isolate, buffer_size);
+    if (!ch) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
+    }
+
+    R(a) = xr_value_from_channel(ch);
+    vmbreak;
+}
+
 vmcase(OP_CHAN_NEW_NAMED) {
     /* R[A] = Channel(R[B], R[C]) - Named Channel
      * R[B] = buffer size (int)
@@ -51,7 +72,7 @@ vmcase(OP_CHAN_NEW_NAMED) {
     uint32_t buf_size = 0;
     if (XR_IS_INT(R(b))) {
         int64_t v = XR_TO_INT(R(b));
-        if (v > 0 && v <= 262143)
+        if (v > 0 && v <= MAXARG_Bx)
             buf_size = (uint32_t) v;
     }
 

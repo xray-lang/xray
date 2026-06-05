@@ -264,11 +264,21 @@ XR_FUNC void xi_emit_yield(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
 /* Channel new */
 XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    uint8_t buf = 0;
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-        buf = (uint8_t) v->args[0]->aux_int;
+        int64_t cap = v->args[0]->aux_int;
+        if (cap >= 0 && cap <= MAXARG_Bx) {
+            emit_inst(ctx, CREATE_ABx(OP_CHAN_NEW, dst, (int) cap));
+            return;
+        }
     }
-    emit_inst(ctx, CREATE_ABx(OP_CHAN_NEW, dst, buf));
+    if (v->nargs >= 1) {
+        uint8_t cap_reg = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_CHAN_NEW_CAP, dst, cap_reg, 0));
+        return;
+    }
+    emit_inst(ctx, CREATE_ABx(OP_CHAN_NEW, dst, 0));
 }
 
 /* Channel send */
