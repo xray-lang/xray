@@ -23,7 +23,6 @@
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
 #include "xcoro_pool.h"
-#include "xdeep_copy.h"
 #include "xtask.h"
 #include "xworker.h"
 
@@ -207,20 +206,6 @@ static void aot_recycle_completed_executor(XrTask *task) {
     }
 }
 
-static XrValue aot_task_consume_result(const XrAotContext *ctx, XrTask *task, bool discard_result) {
-    if (discard_result)
-        return XR_NULL_VAL;
-
-    XrCoroutine *dst = ctx ? ctx->coro : NULL;
-    XrayIsolate *X = ctx ? ctx->isolate : NULL;
-    XrValue result = task ? task->result : XR_NULL_VAL;
-    if (dst && X && XR_IS_PTR(result))
-        result = xr_deep_copy_to_coro(X, result, dst);
-    if (task)
-        task->result = result;
-    return result;
-}
-
 XrValue xr_aot_run_main(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) {
     XrCoroutine *main_coro = xr_coro_create_aot(X, desc, frame, desc ? desc->name : "main");
     if (!main_coro)
@@ -302,12 +287,12 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrVal
     if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrTask *task = xr_value_to_task(task_value);
-    XrCoroBlockResult block = xr_coro_await_task(ctx->coro, task, -1);
+    XrSlotRef out_slot = out_value ? xr_slot_xvalue_ptr(out_value) : xr_slot_none();
+    XrCoroBlockResult block =
+        xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, out_slot, -1, discard_result);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
-        if (out_value)
-            *out_value = aot_task_consume_result(ctx, task, discard_result);
         aot_recycle_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }
@@ -324,14 +309,15 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue task_value
     if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrTask *task = xr_value_to_task(task_value);
-    XrCoroBlockResult block = xr_coro_await_task_resume(ctx->coro, task);
+    XrSlotRef out_slot = out_value ? xr_slot_xvalue_ptr(out_value) : xr_slot_none();
+    XrCoroBlockResult block =
+        xr_coro_await_task_resume_slot(ctx->isolate, ctx->coro, task, out_slot, discard_result);
     if (block.kind == XR_CORO_BLOCK_NOT_RESUMED)
-        block = xr_coro_await_task(ctx->coro, task, -1);
+        block =
+            xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, out_slot, -1, discard_result);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
-        if (out_value)
-            *out_value = aot_task_consume_result(ctx, task, discard_result);
         aot_recycle_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }

@@ -738,15 +738,11 @@ static inline void vm_await_recycle_coro(XrCoroutine *coro) {
     }
 }
 
-/* Read task->result with deep copy to dst_coro's heap, then detach + recycle executor.
+/* Read task->result with deep copy to dst_coro's heap, then detach executor.
  * After this call, task->result points to the copied value (safe for re-await). */
 static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
                                              XrCoroutine *dst_coro, int discard_result) {
-    XrValue res = task->result;
-    if (!discard_result && dst_coro && xr_value_needs_copy(res)) {
-        res = xr_deep_copy_to_coro(isolate, res, dst_coro);
-        task->result = res;  // update for re-await safety
-    }
+    XrValue res = xr_coro_await_result_value(isolate, dst_coro, task, discard_result != 0);
     /* Detach executor only — do NOT recycle.
      * Task lives on executor's Immix heap; parent's tasks array still
      * references it. Recycling frees the Immix block, causing

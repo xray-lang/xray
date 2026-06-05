@@ -57,6 +57,17 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrayIsolate *isolate, struct 
 XR_FUNC XrCoroBlockResult xr_coro_await_task_resume(struct XrCoroutine *coro, struct XrTask *task);
 XR_FUNC XrCoroBlockResult xr_coro_await_task(struct XrCoroutine *coro, struct XrTask *task,
                                              int64_t timeout_ms);
+XR_FUNC XrValue xr_coro_await_result_value(struct XrayIsolate *isolate,
+                                           struct XrCoroutine *dst_coro, struct XrTask *task,
+                                           bool discard_result);
+XR_FUNC XrCoroBlockResult xr_coro_await_task_resume_slot(struct XrayIsolate *isolate,
+                                                         struct XrCoroutine *coro,
+                                                         struct XrTask *task, XrSlotRef result_slot,
+                                                         bool discard_result);
+XR_FUNC XrCoroBlockResult xr_coro_await_task_slot(struct XrayIsolate *isolate,
+                                                  struct XrCoroutine *coro, struct XrTask *task,
+                                                  XrSlotRef result_slot, int64_t timeout_ms,
+                                                  bool discard_result);
 
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
 XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
