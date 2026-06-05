@@ -111,6 +111,7 @@ typedef struct XrProcStats {
     uint64_t steal_no_candidate_count;    // Steal checks with no visible candidates
     uint64_t steal_fresh_reject_count;    // Victims rejected by freshness delay
     uint64_t steal_candidate_scan_count;  // Candidate victim deques inspected
+    uint64_t steal_throttle_wait_count;   // Short waits after freshness deferral
     uint64_t yielded_count;               // Voluntary yields
     uint64_t cont_steal_count;            // Continuations stolen (owner as stealer)
     uint64_t completed_count;             // Coros that finished
