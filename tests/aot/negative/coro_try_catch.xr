@@ -1,0 +1,17 @@
+enum AppErr {
+    Bad(code: int)
+}
+
+fn worker() -> int {
+    let result = 0
+    try {
+        yield
+        throw AppErr.Bad(7)
+    } catch (e) {
+        result = 42
+    }
+    return result
+}
+
+let task = go worker()
+print(await task)
