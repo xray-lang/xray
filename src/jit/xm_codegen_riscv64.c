@@ -430,9 +430,11 @@ static void rv64_emit_prologue(Rv64CodegenCtx *ctx) {
     /* Copy coro pointer from a0 (first ABI arg) */
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
 
-    /* Load jit_ctx from coro */
+    /* Load jit_ctx through the coroutine JIT state. */
     rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_CTX_OFFSET));
+                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
+                                     (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 
     /* Save stack_map_ptr from jit_ctx into frame for GC */
     rv64_buf_emit(&ctx->buf,

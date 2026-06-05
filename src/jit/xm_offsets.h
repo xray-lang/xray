@@ -27,15 +27,16 @@
 
 #define XM_CORO_REDUCTIONS_OFFSET offsetof(XrCoroutine, reductions)
 #define XM_CORO_GC_OFFSET offsetof(XrCoroutine, coro_gc)
-#define XM_CORO_JIT_CTX_OFFSET offsetof(XrCoroutine, jit_state.scratch)
+#define XM_CORO_JIT_STATE_OFFSET offsetof(XrCoroutine, jit_state)
 
-/* ========== XrCoroutine JIT suspend/resume fields ========== */
+/* ========== XrJitCoroState fields ========== */
 
-#define XM_CORO_RESUME_ENTRY_OFFSET offsetof(XrCoroutine, jit_state.resume_entry)
-#define XM_CORO_RESUME_PROTO_OFFSET offsetof(XrCoroutine, jit_state.resume_proto)
-#define XM_CORO_SUSPEND_ID_OFFSET offsetof(XrCoroutine, jit_state.suspend_id)
-#define XM_CORO_SUSPEND_SMAP_OFFSET offsetof(XrCoroutine, jit_state.suspend_smap_id)
-#define XM_CORO_SUSPEND_PTR_OFFSET offsetof(XrCoroutine, jit_state.suspend)
+#define XM_JIT_STATE_SCRATCH_OFFSET offsetof(XrJitCoroState, scratch)
+#define XM_JIT_STATE_RESUME_ENTRY_OFFSET offsetof(XrJitCoroState, resume_entry)
+#define XM_JIT_STATE_RESUME_PROTO_OFFSET offsetof(XrJitCoroState, resume_proto)
+#define XM_JIT_STATE_SUSPEND_ID_OFFSET offsetof(XrJitCoroState, suspend_id)
+#define XM_JIT_STATE_SUSPEND_SMAP_OFFSET offsetof(XrJitCoroState, suspend_smap_id)
+#define XM_JIT_STATE_SUSPEND_PTR_OFFSET offsetof(XrJitCoroState, suspend)
 // Sub-field offsets within XrJitSuspendState (for ARM64 codegen addressing)
 #define XM_SUSPEND_CALLER_SAVED_OFF offsetof(XrJitSuspendState, caller_saved)
 #define XM_SUSPEND_CALLEE_SAVED_OFF offsetof(XrJitSuspendState, callee_saved)
@@ -158,6 +159,8 @@
 _Static_assert(offsetof(XrCoroutine, reductions) == XM_CORO_REDUCTIONS_OFFSET,
                "reductions offset mismatch");
 _Static_assert(offsetof(XrCoroutine, coro_gc) == XM_CORO_GC_OFFSET, "coro_gc offset mismatch");
+_Static_assert(offsetof(XrCoroutine, jit_state) == XM_CORO_JIT_STATE_OFFSET,
+               "jit_state offset mismatch");
 _Static_assert(sizeof(XrValue) == XM_XRVALUE_SIZE, "XrValue size mismatch");
 _Static_assert(offsetof(XrValue, tag) == XM_XRVALUE_TAG_OFFSET, "XrValue.tag offset mismatch");
 _Static_assert(sizeof(XrGCHeader) == XM_GC_HEADER_SIZE, "GCHeader size mismatch");

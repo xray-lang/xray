@@ -525,21 +525,24 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
             }
         }
         if (proto->jit_entry && proto->deopt_count < 20) {
-            coro->jit_state.scratch->call_proto = proto;
-            coro->jit_state.scratch->call_closure = closure;
-            coro->jit_state.scratch->call_base_offset = (int32_t) (func_base - coro_ctx->stack);
-            XrValue jit_result;
-            int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base, coro->arg_count,
-                                          proto->return_type_info, &jit_result);
-            if (_jrc == XR_JIT_OK) {
-                coro_ctx->stack[0] = jit_result;
-                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
+            XrJitCoroState *jit_state = xr_coro_prepare_jit_state(coro);
+            if (jit_state) {
+                jit_state->scratch->call_proto = proto;
+                jit_state->scratch->call_closure = closure;
+                jit_state->scratch->call_base_offset = (int32_t) (func_base - coro_ctx->stack);
+                XrValue jit_result;
+                int _jrc = xr_jit_hooks->call(proto->jit_entry, coro, func_base, coro->arg_count,
+                                              proto->return_type_info, &jit_result);
+                if (_jrc == XR_JIT_OK) {
+                    coro_ctx->stack[0] = jit_result;
+                    return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
+                }
+                if (_jrc == XR_JIT_SUSPEND) {
+                    return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
+                }
+                // JIT deopt: disable fast path for this proto.
+                proto->deopt_count++;
             }
-            if (_jrc == XR_JIT_SUSPEND) {
-                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
-            }
-            // JIT deopt: disable fast path for this proto.
-            proto->deopt_count++;
         }
     }
 
@@ -556,16 +559,17 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 // -1 for channel-close (caller should clear jit_resume_entry and deopt).
 static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
                           XrValue *jit_result_out) {
-    XR_DCHECK(coro->jit_state.resume_entry != NULL, "run_jit_resume: no resume entry");
-    XR_DCHECK(coro->jit_state.scratch != NULL, "run_jit_resume: no jit_ctx");
+    XrJitCoroState *jit_state = xr_coro_jit_state(coro);
+    XR_DCHECK(jit_state->resume_entry != NULL, "run_jit_resume: no resume entry");
+    XR_DCHECK(jit_state->scratch != NULL, "run_jit_resume: no jit_ctx");
     XR_DCHECK(XR_JIT_AVAILABLE(), "run_jit_resume: JIT hooks not registered");
 
     int resume_reason = xr_coro_resume_load(coro);
 
     // Channel close wake: deopt to bytecode (rare edge case).
     if (resume_reason == XR_RESUME_CHANNEL_CLOSED) {
-        coro->jit_state.resume_entry = NULL;
-        coro->jit_state.resume_proto = NULL;
+        jit_state->resume_entry = NULL;
+        jit_state->resume_proto = NULL;
         return -1;
     }
 
@@ -576,8 +580,8 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
         if (XR_IS_PTR(rv) && xr_value_needs_copy(rv)) {
             rv = xr_deep_copy_to_coro(isolate, rv, coro);
         }
-        coro->jit_state.suspend->result = rv.i;
-        coro->jit_state.suspend->result_tag = rv.tag;
+        jit_state->suspend->result = rv.i;
+        jit_state->suspend->result_tag = rv.tag;
     }
 
     // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
@@ -590,8 +594,8 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
             if (tstate == XR_TASK_COMPLETED) {
                 res = xr_coro_await_result_value(isolate, coro, await_task, false);
             }
-            coro->jit_state.suspend->result = res.i;
-            coro->jit_state.suspend->result_tag = res.tag;
+            jit_state->suspend->result = res.i;
+            jit_state->suspend->result_tag = res.tag;
             atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
         }
     }
@@ -615,7 +619,8 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 
     XrVMResult result;
 
-    if (XR_JIT_AVAILABLE() && coro->jit_state.resume_entry && coro->jit_state.scratch) {
+    XrJitCoroState *jit_state = coro->jit_state;
+    if (XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry && jit_state->scratch) {
         XrValue jit_result;
         int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
         if (jrc == XR_JIT_OK) {
@@ -700,8 +705,9 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     XrVMContext *ctx = &worker->m->vm_ctx;
     XrVMContext *coro_ctx = xr_coro_vm_ctx(coro);
 
-    // Per-Worker JIT scratch pointer (JIT code accesses via coro->jit_state.scratch).
-    coro->jit_state.scratch = &worker->p.jit_scratch;
+    if (coro->jit_state) {
+        coro->jit_state->scratch = &worker->p.jit_scratch;
+    }
     worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
 
     uint32_t _fast_flags = xr_coro_flags_load(coro);
@@ -723,8 +729,9 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 
         // JIT channel resume: propagate recv_slot → jit_suspend.result,
         // then re-enter compiled code directly (no detour via run_resume_path).
-        if (!select_resume && XR_JIT_AVAILABLE() && coro->jit_state.resume_entry &&
-            coro->jit_state.scratch) {
+        XrJitCoroState *jit_state = coro->jit_state;
+        if (!select_resume && XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry &&
+            jit_state->scratch) {
             XrValue jit_result;
             int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
             if (jrc == XR_JIT_OK) {

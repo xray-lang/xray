@@ -311,8 +311,9 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         a64_buf_emit(&ctx->buf, a64_stp_fp(14, 15, A64_SP, 144));
         a64_buf_emit(&ctx->buf, a64_add_imm(A64_FP, A64_SP, 0));
         a64_buf_emit(&ctx->buf, a64_mov(CORO_REG, A64_X0));
-        // LDR x28, [x19, #jit_ctx_offset]  (load per-Worker JIT scratch pointer)
-        a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_CTX_OFFSET));
+        // Load per-Worker JIT scratch pointer through the coroutine JIT state.
+        a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+        a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, JIT_CTX_REG, XM_JIT_STATE_SCRATCH_OFFSET));
 
         // Store stack_map_ptr into frame from jit_ctx->active_stack_map
         a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));
@@ -668,7 +669,7 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
  * When a coroutine is JIT-suspended (XM_SUSPEND returned SUSPEND_MARKER),
  * the worker calls this entry point to re-enter JIT code. The stub:
  * 1. Sets up the same frame as the normal prologue
- * 2. Reloads ALL live registers from coro->jit_state.suspend (pointer)
+ * 2. Reloads ALL live registers from xr_coro_jit_state(coro)->suspend (pointer)
  * 3. Loads the await result into the correct physical register
  * 4. Dispatches to the continuation point via suspend_id jump table
  *
@@ -711,8 +712,9 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     a64_buf_emit(&ctx->buf, a64_add_imm(A64_FP, A64_SP, 0));
     // MOV x19, x0 (CORO_REG = coro)
     a64_buf_emit(&ctx->buf, a64_mov(CORO_REG, A64_X0));
-    // LDR x28, [x19, #jit_ctx_offset]
-    a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_CTX_OFFSET));
+    // Load per-Worker JIT scratch pointer through the coroutine JIT state.
+    a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, JIT_CTX_REG, XM_JIT_STATE_SCRATCH_OFFSET));
 
     // Store stack_map_ptr into frame
     a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, JIT_CTX_REG, XM_JIT_ACTIVE_SMAP_OFFSET));
@@ -725,13 +727,12 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     // Save JIT frame SP for GC
     a64_buf_emit(&ctx->buf, a64_str(A64_FP, JIT_CTX_REG, XM_JIT_FRAME_SP_OFFSET));
 
-    // === Load suspend_id ===
-    // LDR w16, [x19, #suspend_id_offset]
-    a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_ID_OFFSET));
+    // === Load suspend_id and suspend state through jit_state ===
+    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XM_JIT_STATE_SUSPEND_ID_OFFSET));
 
-    // === Reload ALL registers from coro->jit_state.suspend (pointer deref) ===
-    // LDR x17, [x19, #jit_suspend_ptr_offset]
-    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+    // === Reload ALL registers from jit_state->suspend ===
+    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG2, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 
     // x1-x15 from suspend_regs[0..14]
     a64_buf_emit(&ctx->buf, a64_ldp(A64_X1, A64_X2, SCRATCH_REG2, XM_SUSPEND_CALLER_SAVED_OFF));
@@ -765,7 +766,8 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
                  a64_ldr(SAFEPT_PAGE_REG, JIT_CTX_REG, (int32_t) XM_JIT_SAFEPOINT_PAGE_OFFSET));
 
     // === Clear jit_resume_entry (one-shot: prevent double-resume) ===
-    a64_buf_emit(&ctx->buf, a64_str(A64_XZR, CORO_REG, XM_CORO_RESUME_ENTRY_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_str(A64_XZR, SCRATCH_REG, XM_JIT_STATE_RESUME_ENTRY_OFFSET));
 
     // === Restore spill slots from suspend_state.spill[] into new frame ===
     // The XM_SUSPEND codegen saved the old frame's spill area into
@@ -776,7 +778,9 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
             ns = XM_SUSPEND_SPILL_MAX;
         if (ns > 0) {
             // Load jit_suspend pointer into SCRATCH_REG for spill access
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_buf_emit(&ctx->buf,
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
             for (uint32_t s = 0; s < ns; s++) {
                 int32_t regs_off = XM_SUSPEND_SPILL_OFF + (int32_t) s * 8;
                 int32_t frame_off = SPILL_BASE + (int32_t) s * 8;
@@ -820,8 +824,10 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
         int32_t off = (int32_t) here - (int32_t) trampoline_patches[i];
         ctx->buf.code[trampoline_patches[i]] = a64_bcond(A64_CC_EQ, off);
 
-        // Reload x17 = coro->jit_state.suspend (pointer deref for result + result_tag)
-        a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_SUSPEND_PTR_OFFSET));
+        // Reload x17 = jit_state->suspend for result + result_tag.
+        a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+        a64_buf_emit(&ctx->buf,
+                     a64_ldr(SCRATCH_REG2, SCRATCH_REG2, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 
         // Load result from suspend_state.result into the correct register
         A64Reg rd = (A64Reg) ctx->suspend_result_regs[i];

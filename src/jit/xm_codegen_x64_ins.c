@@ -1360,8 +1360,10 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
     uint32_t smap_id = x64_record_safepoint(ctx);
 
-    /* Load suspend_state pointer: R11 = coro->jit_state.suspend */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
+    /* Load suspend_state pointer: R11 = jit_state->suspend */
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
+               (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET);
     CODEGEN_CHECK(ctx, suspend_id < XM_MAX_SUSPEND_ENTRIES, "suspend_id out of range");
 
     /* Save caller-saved GP regs */
@@ -1388,17 +1390,18 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     }
 
     /* Store suspend_id and smap_id */
-    x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) suspend_id);
-    x64_mov_mr32(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_ID_OFFSET, X64_RCX);
-    x64_load_imm64(&ctx->buf, X64_RCX, (uint64_t) smap_id);
-    x64_mov_mr32(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_SMAP_OFFSET, X64_RCX);
-    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET, X64_RCX);
+    x64_mov_rm(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t) suspend_id);
+    x64_mov_mr32(&ctx->buf, X64_RCX, (int32_t) XM_JIT_STATE_SUSPEND_ID_OFFSET, X64_RAX);
+    x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t) smap_id);
+    x64_mov_mr32(&ctx->buf, X64_RCX, (int32_t) XM_JIT_STATE_SUSPEND_SMAP_OFFSET, X64_RAX);
+    x64_mov_mr32(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET, X64_RAX);
 
     /* Pre-store resume info (gopark pattern) */
-    x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET);
-    x64_mov_mr(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_RESUME_PROTO_OFFSET, X64_RCX);
-    x64_mov_rm(&ctx->buf, X64_RCX, X64_RCX, (int32_t) XM_PROTO_JIT_RESUME_ENTRY_OFFSET);
-    x64_mov_mr(&ctx->buf, X64_CORO_REG, (int32_t) XM_CORO_RESUME_ENTRY_OFFSET, X64_RCX);
+    x64_mov_rm(&ctx->buf, X64_RAX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET);
+    x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_JIT_STATE_RESUME_PROTO_OFFSET, X64_RAX);
+    x64_mov_rm(&ctx->buf, X64_RAX, X64_RAX, (int32_t) XM_PROTO_JIT_RESUME_ENTRY_OFFSET);
+    x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_JIT_STATE_RESUME_ENTRY_OFFSET, X64_RAX);
 
     /* Call block_helper(coro, extra_arg) */
     void *block_helper = ctx->func->suspend_block_helpers[suspend_id];
@@ -1434,7 +1437,9 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_patch_rel32(&ctx->buf, jne_not_blocked, ctx->buf.pos);
 
     /* Reload suspend pointer (R11 clobbered by CALL) */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_SUSPEND_PTR_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
+               (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET);
 
     /* Reload caller-saved GP regs */
     for (int i = 0; i < X64_NGPR_CALLER_SAVE && i < X64_MAX_PHYS_REGS; i++)
