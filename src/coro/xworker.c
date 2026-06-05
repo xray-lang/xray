@@ -616,25 +616,27 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Machines: total=%d cap=%d idle=%d\n",
             atomic_load_explicit(&runtime->m_count, memory_order_relaxed), runtime->handoff_max_m,
             atomic_load_explicit(&runtime->idle_m_count, memory_order_relaxed));
-    fprintf(stderr, "\n%-8s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n", "Worker",
-            "Executed", "Stolen", "StealTry", "Yielded", "ContSteal", "LifoHit", "LifoFlush",
-            "Inbox", "Park", "Unpark", "Timer", "Burst", "Blocked");
-    fprintf(stderr, "%-8s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n", "------",
-            "--------", "------", "--------", "-------", "---------", "-------", "---------",
-            "-----", "----", "------", "-----", "-----", "-------");
+    fprintf(stderr, "\n%-8s %10s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n",
+            "Worker", "Executed", "Stolen", "StealTry", "StealSkip", "Yielded", "ContSteal",
+            "LifoHit", "LifoFlush", "Inbox", "Park", "Unpark", "Timer", "Burst", "Blocked");
+    fprintf(stderr, "%-8s %10s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n",
+            "------", "--------", "------", "--------", "---------", "-------", "---------",
+            "-------", "---------", "-----", "----", "------", "-----", "-----", "-------");
 
-    uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_yield = 0;
+    uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_steal_skip = 0;
+    uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
         fprintf(stderr,
-                "W%-7d %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
-                "%8llu %8llu %8d\n",
+                "W%-7d %10llu %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu "
+                "%8llu %8llu %8llu %8d\n",
                 i, (unsigned long long) p->stats.executed_count,
                 (unsigned long long) p->stats.stolen_count,
                 (unsigned long long) p->stats.steal_attempt_count,
+                (unsigned long long) p->stats.steal_skip_count,
                 (unsigned long long) p->stats.yielded_count,
                 (unsigned long long) p->stats.cont_steal_count,
                 (unsigned long long) p->stats.lifo_hit_count,
@@ -647,6 +649,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_exec += p->stats.executed_count;
         total_steal += p->stats.stolen_count;
         total_steal_try += p->stats.steal_attempt_count;
+        total_steal_skip += p->stats.steal_skip_count;
         total_yield += p->stats.yielded_count;
         total_cont += p->stats.cont_steal_count;
         total_lifo_hit += p->stats.lifo_hit_count;
@@ -663,14 +666,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_prio_boost += p->stats.priority_boost_count;
     }
     fprintf(stderr,
-            "%-8s %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
+            "%-8s %10llu %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
             "%8llu %8llu\n",
             "TOTAL", (unsigned long long) total_exec, (unsigned long long) total_steal,
-            (unsigned long long) total_steal_try, (unsigned long long) total_yield,
-            (unsigned long long) total_cont, (unsigned long long) total_lifo_hit,
-            (unsigned long long) total_lifo_flush, (unsigned long long) total_inbox,
-            (unsigned long long) total_park, (unsigned long long) total_unpark,
-            (unsigned long long) total_timer, (unsigned long long) total_burst);
+            (unsigned long long) total_steal_try, (unsigned long long) total_steal_skip,
+            (unsigned long long) total_yield, (unsigned long long) total_cont,
+            (unsigned long long) total_lifo_hit, (unsigned long long) total_lifo_flush,
+            (unsigned long long) total_inbox, (unsigned long long) total_park,
+            (unsigned long long) total_unpark, (unsigned long long) total_timer,
+            (unsigned long long) total_burst);
     fprintf(stderr, "Runnable wait: total_ms=%llu max_ms=%llu priority_boost=%llu\n",
             (unsigned long long) total_wait_ms, (unsigned long long) max_wait_ms,
             (unsigned long long) total_prio_boost);

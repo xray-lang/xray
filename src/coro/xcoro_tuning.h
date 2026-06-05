@@ -47,6 +47,13 @@
  * overhead under bursty load, lower = better responsiveness when idle. */
 #define XR_WORKER_SPIN_COUNT 20
 
+/* Maximum workers allowed to scan for steal victims at the same time.
+ * The dynamic gate is worker_count / XR_SEARCHING_WORKER_DIVISOR, capped by
+ * XR_SEARCHING_WORKER_MAX. This keeps idle workers from turning a small amount
+ * of stealable work into an all-worker cache-line storm. */
+#define XR_SEARCHING_WORKER_DIVISOR 4
+#define XR_SEARCHING_WORKER_MAX 4
+
 /* Upper bound on consecutive "BLOCKED fast-redispatch" hops inside
  * worker_exec_with_cont_stealing. Limits worst-case starvation of other
  * coroutines when A and B bounce through a channel for ms-scale bursts. */
