@@ -368,7 +368,6 @@ XR_FUNC void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child);
 XR_FUNC void xr_jit_barrier_back(XrCoroutine *coro, void *container);
 
 XR_FUNC void xr_coro_sync_vm_ctx(XrCoroutine *coro, struct XrayIsolate *X);
-XR_FUNC bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size);
 XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
 XR_FUNC bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, struct XrayIsolate *X,
