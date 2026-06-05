@@ -166,13 +166,13 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     if (!runtime || !coro)
         return;
 
-    if (!xr_coro_maybe_vm_state(coro)) {
+    if (!coro->backend || !coro->backend->reset_reusable) {
         xr_coro_destroy(coro);
         return;
     }
 
     // Reset coroutine state
-    xr_coro_clear_vm_entry_state(coro);
+    coro->backend->reset_reusable(coro);
     coro->result = xr_null();
     coro->error = xr_null();
     atomic_store(&coro->flags, 0);

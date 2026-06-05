@@ -172,19 +172,21 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             coro = head;
             atomic_fetch_add_explicit(&pool->free_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
-            // Zero struct (next pointer may be dirty) while keeping cold JIT
-            // state allocated for reuse.
-            XrVmCoroState *saved_vm_state = xr_coro_maybe_vm_state(coro);
+            // Zero struct (next pointer may be dirty) while keeping reusable
+            // backend state allocated for reuse.
+            const XrCoroBackendVTable *saved_backend = coro->backend;
+            void *saved_backend_state = coro->backend_state;
             uint16_t saved_gc_flags =
                 coro->gc_flags &
                 (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
-            xr_coro_clear_vm_entry_state(coro);
-            memset(coro, 0, sizeof(XrCoroutine));
-            if (saved_vm_state) {
-                coro->backend = xr_coro_vm_backend_vtable();
-                coro->backend_state = saved_vm_state;
+            if (saved_backend && saved_backend->reset_reusable) {
+                saved_backend->reset_reusable(coro);
             }
-            xr_coro_reset_jit_state(coro);
+            memset(coro, 0, sizeof(XrCoroutine));
+            if (saved_backend_state) {
+                coro->backend = saved_backend;
+                coro->backend_state = saved_backend_state;
+            }
             coro->gc_flags = saved_gc_flags;
             return coro;
         }
@@ -245,7 +247,9 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
 
     // Check if from pool via gc_flags bit (O(1) instead of block list traversal)
     bool from_pool = (coro->gc_flags & XR_CORO_GC_FROM_POOL) != 0;
-    xr_coro_clear_vm_entry_state(coro);
+    if (coro->backend && coro->backend->reset_reusable) {
+        coro->backend->reset_reusable(coro);
+    }
 
     if (from_pool) {
         // Lock-free Treiber push.
@@ -257,12 +261,7 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
             &pool->free_list, &head, coro, memory_order_release, memory_order_relaxed));
     } else {
         // From malloc: free directly
-        xr_coro_free_jit_state(coro);
-        XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
-        if ((coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) && vm_state) {
-            xr_free(vm_state);
-            coro->backend_state = NULL;
-        }
+        xr_coro_free(coro);
         xr_free(coro);
     }
 

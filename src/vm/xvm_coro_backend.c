@@ -52,6 +52,7 @@ static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 static void vm_backend_destroy(XrCoroutine *coro);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
+static void vm_backend_reset_reusable(XrCoroutine *coro);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -60,6 +61,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .release = NULL,
     .destroy = vm_backend_destroy,
     .prepare_recycle = vm_backend_prepare_recycle,
+    .reset_reusable = vm_backend_reset_reusable,
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
@@ -206,6 +208,13 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
     xr_coro_clear_vm_entry_state(coro);
     xr_coro_reset_jit_state(coro);
     return true;
+}
+
+static void vm_backend_reset_reusable(XrCoroutine *coro) {
+    if (!vm_state_for_coro(coro))
+        return;
+    xr_coro_clear_vm_entry_state(coro);
+    xr_coro_reset_jit_state(coro);
 }
 
 static void vm_backend_destroy(XrCoroutine *coro) {
