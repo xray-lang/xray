@@ -83,12 +83,9 @@ static inline XrBcCallFrame *yield_setup_frame(XrayIsolate *X, XrCoroutine *coro
     // Restore result_slot
     if (saved_result_slot >= 0) {
         frame->u.c.result_slot = saved_result_slot;
-    } else if (coro->pending_result_slot >= 0) {
-        frame->u.c.result_slot = coro->pending_result_slot;
     } else {
         frame->u.c.result_slot = -1;
     }
-    coro->pending_result_slot = -1;
 
     return frame;
 }

@@ -423,9 +423,6 @@ struct XrCoroutine {
     struct XrSelectWait *select_wait;
     int select_ready_case;
 
-    /* === Resume State (extended) === */
-    int16_t pending_result_slot;
-
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;
 
