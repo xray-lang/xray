@@ -203,7 +203,7 @@ static void aot_recycle_completed_executor(XrTask *task) {
     if (worker) {
         xr_coro_recycle_local(worker, exec);
     } else {
-        xr_coro_release_heap(exec);
+        xr_coro_destroy(exec);
     }
 }
 
@@ -226,7 +226,9 @@ XrValue xr_aot_run_main(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) 
     if (!main_coro)
         return XR_NULL_VAL;
     xr_main_thread_run(X, main_coro);
-    return main_coro->result;
+    XrValue result = main_coro->result;
+    xr_coro_destroy(main_coro);
+    return result;
 }
 
 XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc, void *frame,
@@ -246,7 +248,7 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
 
     XrTask *task = xr_task_create(ctx->coro, child);
     if (!task) {
-        xr_coro_free(child);
+        xr_coro_destroy(child);
         return result;
     }
     task->link_mode = (uint8_t) link_mode;
