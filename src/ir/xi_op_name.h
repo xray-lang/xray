@@ -170,6 +170,10 @@ static inline const char *xi_op_name(uint16_t op) {
             return "CHAN_TRY_SEND";
         case XI_CHAN_TRY_RECV:
             return "CHAN_TRY_RECV";
+        case XI_CHAN_IS_CLOSED:
+            return "CHAN_IS_CLOSED";
+        case XI_TIME_AFTER:
+            return "TIME_AFTER";
         case XI_SELECT_BLOCK:
             return "SELECT_BLOCK";
         case XI_YIELD:

@@ -116,6 +116,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_MAP_NEW:
         case XI_SET_NEW:
         case XI_CHAN_NEW:
+        case XI_TIME_AFTER:
         case XI_CLOSURE_NEW:
         case XI_CLASS_CREATE:
         case XI_REGEX_COMPILE:
@@ -195,6 +196,7 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
         case XI_CHAN_TRY_SEND:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM;
         case XI_SELECT_BLOCK:
             return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_SUSPEND | XI_FLAG_READS_MEM;

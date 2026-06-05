@@ -30,33 +30,98 @@ static void lower_stmts(XiLower *l, AstNode **stmts, int count);
 
 /* ========== Select Statement ========== */
 
+static XiValue *lower_select_time_after(XiLower *l, SelectCaseNode *sc, int line) {
+    XiValue *timeout = xi_lower_expr(l, sc->value);
+    if (!timeout || !l->cur_block)
+        return NULL;
+
+    struct XrType *timer_type = xr_type_new_channel(l->isolate, l->type_int);
+    if (!timer_type)
+        timer_type = l->type_any;
+
+    XiValue *timer = xi_value_new(l->func, l->cur_block, XI_TIME_AFTER, timer_type, 1);
+    if (!timer)
+        return NULL;
+    timer->args[0] = timeout;
+    timer->line = (uint32_t) line;
+    return timer;
+}
+
+static void lower_select_recv_ready_branch(XiLower *l, XiValue *recv, XiValue *chan,
+                                           XiBlock *body_blk, XiBlock *next_blk) {
+    XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
+    if (!is_null || !recv)
+        return;
+    is_null->args[0] = recv;
+
+    XiValue *not_null = xi_value_new(l->func, l->cur_block, XI_NOT, l->type_bool, 1);
+    XiValue *is_closed = xi_value_new(l->func, l->cur_block, XI_CHAN_IS_CLOSED, l->type_bool, 1);
+    if (not_null)
+        not_null->args[0] = is_null;
+    if (is_closed)
+        is_closed->args[0] = chan;
+    if (!not_null || !is_closed)
+        return;
+
+    XiValue *ready = xi_binary(l->func, l->cur_block, XI_BOR, l->type_bool, not_null, is_closed);
+    if (ready)
+        xi_block_set_if(l->cur_block, ready, body_blk, next_blk);
+}
+
 XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     SelectStmtNode *sel = &node->as.select_stmt;
     int n = sel->case_count;
 
     XiBlock *merge = xi_block_new(l->func);
     int max_cases = n > 32 ? 32 : n;
-    bool has_fallback_case = false;
+    bool has_default_case = false;
+    bool has_timeout_case = false;
     bool has_send_case = false;
+    bool blocking_select = false;
+    XiBlock *try_head = NULL;
+    XiValue *case_channels[32] = {0};
+    XiValue *case_send_values[32] = {0};
     XiValue *block_channels[32];
     int block_channel_count = 0;
     for (int i = 0; i < max_cases; i++) {
         SelectCaseNode *sc = &sel->cases[i]->as.select_case;
-        if (sc->is_default || sc->is_timeout) {
-            has_fallback_case = true;
-        }
-        if (sc->is_send) {
+        if (sc->is_default)
+            has_default_case = true;
+        if (sc->is_timeout)
+            has_timeout_case = true;
+        if (sc->is_send)
             has_send_case = true;
+    }
+
+    blocking_select = !has_default_case;
+    if (blocking_select) {
+        for (int i = 0; i < max_cases; i++) {
+            SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+            if (sc->is_default)
+                continue;
+            if (sc->is_timeout) {
+                case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
+                continue;
+            }
+            case_channels[i] = xi_lower_expr(l, sc->channel);
+            if (sc->is_send)
+                case_send_values[i] = xi_lower_expr(l, sc->value);
+            if (!l->cur_block)
+                return;
         }
+
+        try_head = xi_block_new(l->func);
+        if (!try_head)
+            return;
+        xi_block_set_jump(l->cur_block, try_head);
+        l->cur_block = try_head;
     }
 
     for (int i = 0; i < max_cases; i++) {
         AstNode *case_node = sel->cases[i];
         SelectCaseNode *sc = &case_node->as.select_case;
 
-        if (sc->is_default || sc->is_timeout) {
-            /* Default and after-timeout cases execute when no channel case
-             * fired in the non-blocking try-recv/try-send chain above. */
+        if (sc->is_default) {
             xi_lower_stmt(l, sc->body);
             if (l->cur_block)
                 xi_block_set_jump(l->cur_block, merge);
@@ -65,8 +130,9 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             XiBlock *next_blk = xi_block_new(l->func);
 
             if (sc->is_send) {
-                XiValue *chan = xi_lower_expr(l, sc->channel);
-                XiValue *val = xi_lower_expr(l, sc->value);
+                XiValue *chan = case_channels[i] ? case_channels[i] : xi_lower_expr(l, sc->channel);
+                XiValue *val =
+                    case_send_values[i] ? case_send_values[i] : xi_lower_expr(l, sc->value);
                 if (chan && val) {
                     XiValue *send =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_SEND, l->type_bool, 2);
@@ -78,7 +144,12 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                     }
                 }
             } else {
-                XiValue *chan = xi_lower_expr(l, sc->channel);
+                XiValue *chan = NULL;
+                if (sc->is_timeout)
+                    chan = case_channels[i] ? case_channels[i]
+                                            : lower_select_time_after(l, sc, case_node->line);
+                else
+                    chan = case_channels[i] ? case_channels[i] : xi_lower_expr(l, sc->channel);
                 if (chan) {
                     if (block_channel_count < 32) {
                         block_channels[block_channel_count++] = chan;
@@ -90,15 +161,9 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         recv->args[0] = chan;
                         recv->flags |= XI_FLAG_SIDE_EFFECT;
                     }
-                    /* Try-recv returns null on empty channel.
-                     * Branch: null→next_blk (try next case),
-                     *         non-null→body_blk (handle this case). */
-                    XiValue *is_null =
-                        xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
-                    if (is_null && recv) {
-                        is_null->args[0] = recv;
-                        xi_block_set_if(l->cur_block, is_null, next_blk, body_blk);
-                    }
+                    /* Try-recv returns null on empty channel. A closed
+                     * channel is also ready: recv() would return null. */
+                    lower_select_recv_ready_branch(l, recv, chan, body_blk, next_blk);
                     if (sc->var_name && recv) {
                         int var_id =
                             xi_lower_var_create(l, sc->var_symbol_id, sc->var_name, val_type);
@@ -120,8 +185,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     }
 
     if (l->cur_block && l->cur_block != merge) {
-        if (!has_fallback_case) {
-            if (!has_send_case && block_channel_count > 0) {
+        if (!has_default_case) {
+            if ((!has_send_case || has_timeout_case) && block_channel_count > 0) {
                 XiValue *block = xi_value_new(l->func, l->cur_block, XI_SELECT_BLOCK, l->type_unit,
                                               (uint16_t) block_channel_count);
                 if (block) {
@@ -138,10 +203,17 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                     yield->line = (uint32_t) node->line;
                 }
             }
+            if (try_head)
+                xi_block_set_jump(l->cur_block, try_head);
+            else
+                xi_block_set_jump(l->cur_block, merge);
+        } else {
+            xi_block_set_jump(l->cur_block, merge);
         }
-        xi_block_set_jump(l->cur_block, merge);
     }
 
+    if (try_head)
+        xi_lower_braun_seal(l, try_head);
     xi_lower_braun_seal(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
 }

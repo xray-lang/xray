@@ -89,6 +89,8 @@ static bool cg_is_unsupported_coroutine_op(uint16_t op) {
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
+        case XI_TIME_AFTER:
         case XI_SELECT_BLOCK:
         case XI_YIELD:
         case XI_CHAN_NEW:
@@ -111,6 +113,8 @@ static bool cg_is_aot_suspend_op(uint16_t op) {
         case XI_CHAN_RECV:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_TRY_RECV:
+        case XI_CHAN_IS_CLOSED:
+        case XI_TIME_AFTER:
         case XI_SELECT_BLOCK:
         case XI_CHAN_NEW:
         case XI_SCOPE_ENTER:
