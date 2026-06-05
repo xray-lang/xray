@@ -357,4 +357,52 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 
+static inline XrValue xrt_value_clone_for_coro(XrValue val) {
+    switch (val.tag) {
+        case XR_TAG_ARRAY: {
+            xrt_array_t *src = (xrt_array_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue dstv = xrt_array_new_typed(src->cap, src->elem_type);
+            xrt_array_t *dst = (xrt_array_t *) dstv.ptr;
+            dst->len = src->len;
+            if (src->elem_type == XR_ELEM_ANY) {
+                for (int64_t i = 0; i < src->len; i++) {
+                    XrValue item = xr_typed_get(src->data, (int32_t) i, src->elem_type);
+                    xr_typed_set(dst->data, (int32_t) i, xrt_value_clone_for_coro(item),
+                                 dst->elem_type);
+                }
+            } else {
+                memcpy(dst->data, src->data, (size_t) src->len * (size_t) src->elem_size);
+            }
+            return dstv;
+        }
+        case XR_TAG_MAP: {
+            xrt_map_t *src = (xrt_map_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue dstv = xrt_map_new(src->cap);
+            xrt_map_t *dst = (xrt_map_t *) dstv.ptr;
+            for (int64_t i = 0; i < src->len; i++) {
+                XrValue cloned = xrt_value_clone_for_coro(src->entries[i].val);
+                xrt_map_set(dst, src->entries[i].key, cloned);
+            }
+            return dstv;
+        }
+        case XR_TAG_STRBUF: {
+            xrt_strbuf_t *src = (xrt_strbuf_t *) val.ptr;
+            if (!src)
+                return val;
+            XrValue dstv = xrt_strbuf_new();
+            xrt_strbuf_t *dst = (xrt_strbuf_t *) dstv.ptr;
+            xrt_strbuf_grow(dst, src->len);
+            memcpy(dst->buf, src->buf, (size_t) src->len + 1u);
+            dst->len = src->len;
+            return dstv;
+        }
+        default:
+            return val;
+    }
+}
+
 #endif  // XRT_COLL_H
