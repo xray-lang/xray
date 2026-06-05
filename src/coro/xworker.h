@@ -360,7 +360,7 @@ XR_FUNC int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro);
 
 /* ========== Debug Support ========== */
 
-// Resume execution after debug break, returns when next breakpoint hit or program ends
-XR_FUNC int xr_debug_resume_vm(XrayIsolate *isolate, XrCoroutine *coro);
+// Resume coroutine execution after debug break, returns when next breakpoint hit or program ends
+XR_FUNC int xr_debug_resume_coro(XrayIsolate *isolate, XrCoroutine *coro);
 
 #endif  // XWORKER_H

@@ -491,7 +491,7 @@ void xr_debug_step_over(XrayIsolate *isolate) {
         coro ? xr_coro_vm_ctx(coro)->frame_count : xr_isolate_get_vm_state(isolate)->frame_count;
 }
 
-// Resume VM execution after a debug break.
+// Resume coroutine execution after a debug break.
 // Returns classified result instead of flattened bool.
 XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate) {
     if (!isolate)
@@ -501,8 +501,8 @@ XdapResumeResult xr_debug_resume_execution(XrayIsolate *isolate) {
     if (!coro)
         return XDAP_RESUME_ERROR;
 
-    // xr_debug_resume_vm: 0 = debug_break, 1 = ended, -1 = error
-    int result = xr_debug_resume_vm(isolate, coro);
+    // xr_debug_resume_coro: 0 = debug_break, 1 = ended, -1 = error
+    int result = xr_debug_resume_coro(isolate, coro);
 
     switch (result) {
         case 0:
