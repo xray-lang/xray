@@ -152,43 +152,10 @@ vmcase(OP_BYTES_NEW) {
 vmcase(OP_SCOPE_ENTER) {
     // Enter structured concurrency scope
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
-    if (current) {
-        XrCoroWaitState *wait = xr_coro_ensure_wait_state(current);
-        if (!wait)
-            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "scope: out of memory");
-        atomic_store(&wait->wait_count, 0);
-        atomic_store(&wait->any_done, false);
-    }
-
-    // Create scope context — per-coroutine tracking
     int scope_mode = GETARG_A(i);
-    XrScopeContext *scope = (XrScopeContext *) xr_malloc(sizeof(XrScopeContext));
-    if (scope) {
-        atomic_store(&scope->count, 0);
-        scope->mode = (uint8_t) scope_mode;
-        atomic_store(&scope->cancel_requested, false);
-        atomic_init(&scope->child_lock, false);
-        scope->first_error = xr_null();
-        // Eager-allocate the supervisor errors[] on the scope owner's
-        // GC heap so wake_waiter can push under the scope lock without
-        // touching the allocator. The owner is the coroutine running
-        // this OP_SCOPE_ENTER (its lifetime brackets the scope block).
-        scope->errors = (scope_mode == XR_SCOPE_SUPERVISOR && current)
-                            ? xr_array_with_capacity(current, 4)
-                            : NULL;
-        scope->first_child = NULL;
-        scope->owner = current;
-        if (current) {
-            scope->parent = current->current_scope;
-            current->current_scope = scope;
-        } else {
-            // Main thread fallback: use scheduler global
-            XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
-            if (sched) {
-                scope->parent = sched->current_scope;
-                sched->current_scope = scope;
-            }
-        }
+    XrCoroBlockResult enter_result = xr_coro_scope_enter(isolate, current, (uint8_t) scope_mode);
+    if (enter_result.kind == XR_CORO_BLOCK_ERROR) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "scope: out of memory");
     }
     vmbreak;
 }

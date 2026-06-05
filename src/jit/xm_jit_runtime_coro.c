@@ -1045,30 +1045,9 @@ XrJitResult xr_jit_scope_enter(XrCoroutine *coro, int64_t extra_arg) {
     if (!coro)
         return XR_JIT_OK();
 
-    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
-    if (!wait)
+    XrCoroBlockResult enter = xr_coro_scope_enter(coro->isolate, coro, XR_SCOPE_WAIT);
+    if (enter.kind == XR_CORO_BLOCK_ERROR)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
-
-    atomic_store(&wait->wait_count, 0);
-    atomic_store(&wait->any_done, false);
-
-    XrScopeContext *scope = (XrScopeContext *) xr_malloc(sizeof(XrScopeContext));
-    if (scope) {
-        atomic_store(&scope->count, 0);
-        // JIT only handles the WAIT mode here; LINKED / SUPERVISOR
-        // scopes deopt to the interpreter (see OP_SCOPE_ENTER in
-        // xvm_dispatch_misc.inc.c) which is the path that allocates
-        // errors[] eagerly for the supervisor case.
-        scope->mode = XR_SCOPE_WAIT;
-        atomic_init(&scope->cancel_requested, false);
-        atomic_init(&scope->child_lock, false);
-        scope->first_error = xr_null();
-        scope->errors = NULL;
-        scope->first_child = NULL;
-        scope->parent = coro->current_scope;
-        scope->owner = coro;
-        coro->current_scope = scope;
-    }
     return XR_JIT_OK();
 }
 

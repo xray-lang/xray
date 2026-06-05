@@ -79,6 +79,8 @@ XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
                                                struct XrCoroutine *coro,
                                                const XrValue *channel_values, int ch_count,
                                                int case_count, int result_reg_base);
+XR_FUNC XrCoroBlockResult xr_coro_scope_enter(struct XrayIsolate *isolate, struct XrCoroutine *coro,
+                                              uint8_t scope_mode);
 XR_FUNC XrCoroBlockResult xr_coro_scope_exit(struct XrCoroutine *coro, uint8_t scope_mode);
 
 #endif  // XBLOCK_H

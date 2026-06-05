@@ -774,6 +774,43 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
+XrCoroBlockResult xr_coro_scope_enter(XrayIsolate *isolate, XrCoroutine *coro, uint8_t scope_mode) {
+    XrCoroState *sched = isolate ? (XrCoroState *) isolate->vm.coro_state : NULL;
+    if (!coro && !sched)
+        return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
+
+    if (coro) {
+        XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+        if (!wait)
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        atomic_store(&wait->wait_count, 0);
+        atomic_store(&wait->any_done, false);
+    }
+
+    XrScopeContext *scope = (XrScopeContext *) xr_malloc(sizeof(XrScopeContext));
+    if (!scope)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    atomic_store(&scope->count, 0);
+    scope->mode = scope_mode;
+    atomic_store(&scope->cancel_requested, false);
+    atomic_init(&scope->child_lock, false);
+    scope->first_error = xr_null();
+    scope->first_error_is_value = false;
+    scope->errors =
+        (scope_mode == XR_SCOPE_SUPERVISOR && coro) ? xr_array_with_capacity(coro, 4) : NULL;
+    scope->first_child = NULL;
+    scope->owner = coro;
+    if (coro) {
+        scope->parent = coro->current_scope;
+        coro->current_scope = scope;
+    } else {
+        scope->parent = sched->current_scope;
+        sched->current_scope = scope;
+    }
+    return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+}
+
 XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
     if (!coro) {
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
