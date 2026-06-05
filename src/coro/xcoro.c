@@ -1225,7 +1225,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->error = xr_null();
     coro->task = NULL;
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-    coro->await_results = NULL;
     coro->current_scope = NULL;
     xr_coro_vm_ctx(coro)->stack_top = xr_coro_vm_ctx(coro)->stack;
     xr_coro_vm_ctx(coro)->frame_count = 0;

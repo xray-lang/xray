@@ -530,16 +530,14 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             }
             break;
         }
-        default:
-            // await all (idx >= 0): store result at index, wake when all done
-            if (waiter->await_results && idx < waiter->await_results->length) {
-                xr_array_set_direct(waiter->await_results, idx, task->result);
-            }
+        default: {
+            // await all (idx >= 0): wake when all children are done.
             int remaining = atomic_fetch_sub(&waiter->wait_count, 1) - 1;
             if (remaining == 0 && xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                 xr_coro_ready(X, waiter, true);
             }
             break;
+        }
     }
 }
 

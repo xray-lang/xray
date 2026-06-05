@@ -397,7 +397,6 @@ struct XrCoroutine {
     struct XrTask *_Atomic await_task;  // task being awaited (for post-check race detection)
     _Atomic int wait_count;
     _Atomic bool any_done;
-    struct XrArray *await_results;
     struct XrScopeContext *parent_scope;
     struct XrCoroutine *scope_sibling;  // linked list within parent_scope
 
