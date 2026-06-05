@@ -139,6 +139,23 @@ static bool wake_queue_has_pending(XrWorker *worker) {
     return next != NULL;
 }
 
+static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
+                                      XrayIsolate *isolate, XrChannel *ch, bool wait_send) {
+    memset(coro, 0, sizeof(*coro));
+    memset(ext, 0, sizeof(*ext));
+    coro->id = id;
+    coro->isolate = isolate;
+    coro->ext = ext;
+    uint32_t wait_flag = wait_send ? XR_CORO_WAIT_CHANNEL_SEND : XR_CORO_WAIT_CHANNEL_RECV;
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | wait_flag | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&coro->resume_status, XR_RESUME_OK);
+    atomic_store(&coro->affinity_p, 0);
+    atomic_store_explicit(&ext->wait_channel, ch, memory_order_release);
+    ext->wait_send = wait_send;
+    ext->wait_bucket_owner = -1;
+}
+
 TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -215,10 +232,52 @@ TEST(channel_ready_wake_dispatches_single_remote_worker) {
     wake_route_fixture_cleanup(&f);
 }
 
+TEST(channel_direction_masks_refresh_after_partial_wake) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroutine receiver;
+    XrCoroExt sender_ext;
+    XrCoroExt receiver_ext;
+    init_blocked_channel_coro(&sender, &sender_ext, 11, &f.isolate_storage, ch, true);
+    init_blocked_channel_coro(&receiver, &receiver_ext, 12, &f.isolate_storage, ch, false);
+
+    xr_worker_block(&f.worker, &sender);
+    xr_worker_block(&f.worker, &receiver);
+    xr_channel_note_waiter(ch, f.worker.p.id, true);
+    xr_channel_note_waiter(ch, f.worker.p.id, false);
+
+    uint64_t bit = xr_channel_worker_bit(f.worker.p.id);
+    ASSERT_TRUE((atomic_load(&ch->waiter_worker_mask) & bit) != 0);
+    ASSERT_TRUE((atomic_load(&ch->sender_waiter_worker_mask) & bit) != 0);
+    ASSERT_TRUE((atomic_load(&ch->receiver_waiter_worker_mask) & bit) != 0);
+
+    ASSERT_EQ_PTR(xr_worker_wake_one(&f.worker, ch, true), &sender);
+    ASSERT_TRUE((atomic_load(&ch->waiter_worker_mask) & bit) != 0);
+    ASSERT_FALSE((atomic_load(&ch->sender_waiter_worker_mask) & bit) != 0);
+    ASSERT_TRUE((atomic_load(&ch->receiver_waiter_worker_mask) & bit) != 0);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &sender);
+
+    ASSERT_EQ_PTR(xr_worker_wake_one(&f.worker, ch, false), &receiver);
+    ASSERT_FALSE((atomic_load(&ch->waiter_worker_mask) & bit) != 0);
+    ASSERT_FALSE((atomic_load(&ch->sender_waiter_worker_mask) & bit) != 0);
+    ASSERT_FALSE((atomic_load(&ch->receiver_waiter_worker_mask) & bit) != 0);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &receiver);
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
 RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
+RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 
 TEST_MAIN_END()
