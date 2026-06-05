@@ -51,6 +51,8 @@ static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult r
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 static void vm_backend_destroy(XrCoroutine *coro);
+static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
+                                               bool need_storage, bool is_clean);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
@@ -66,6 +68,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .trace_roots = NULL,
     .release = NULL,
     .destroy = vm_backend_destroy,
+    .prepare_execution_state = vm_backend_prepare_execution_state,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
@@ -232,6 +235,81 @@ void xr_coro_free_jit_state(XrCoroutine *coro) {
         xr_free(jit_state->suspend);
     xr_free(jit_state);
     state->jit_state = NULL;
+}
+
+static bool vm_backend_alloc_stack_frames(XrCoroutine *coro, XrVMContext *ctx, XrWorker *worker) {
+    if (!coro || !ctx)
+        return false;
+    if (ctx->stack)
+        return true;
+
+    size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
+    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_POOL_FRAME_SLOTS;
+    char *block = NULL;
+    if (worker && worker->p.stack_slab_free) {
+        block = (char *) worker->p.stack_slab_free;
+        worker->p.stack_slab_free = *(void **) block;
+        worker->p.stack_slab_count--;
+    } else {
+        block = (char *) xr_malloc(stack_bytes + frames_bytes);
+    }
+    if (!block)
+        return false;
+
+    ctx->stack = (XrValue *) block;
+    ctx->stack_capacity = XR_CORO_POOL_STACK_SLOTS;
+    ctx->frames = (XrBcCallFrame *) (block + stack_bytes);
+    ctx->frame_capacity = XR_CORO_POOL_FRAME_SLOTS;
+    memset(block, 0, stack_bytes + frames_bytes);
+    return true;
+}
+
+static void vm_backend_clear_stack_frames(XrVMContext *ctx) {
+    if (!ctx || !ctx->stack)
+        return;
+    memset(ctx->stack, 0, sizeof(XrValue) * (size_t) ctx->stack_capacity);
+    if (ctx->frames) {
+        memset(ctx->frames, 0, sizeof(XrBcCallFrame) * (size_t) ctx->frame_capacity);
+    }
+}
+
+static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
+                                               bool need_storage, bool is_clean) {
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return !need_storage;
+
+    XrVMContext *ctx = &state->ctx;
+    if (!is_clean) {
+        XrValue *saved_stack = ctx->stack;
+        int saved_stack_cap = ctx->stack_capacity;
+        XrBcCallFrame *saved_frames = ctx->frames;
+        int saved_frame_cap = ctx->frame_capacity;
+        XrExceptionHandler *saved_handlers = ctx->handlers;
+        int saved_handler_cap = ctx->handler_capacity;
+
+        memset(ctx, 0, sizeof(*ctx));
+        ctx->stack = saved_stack;
+        ctx->stack_capacity = saved_stack_cap;
+        ctx->frames = saved_frames;
+        ctx->frame_capacity = saved_frame_cap;
+        ctx->handlers = saved_handlers ? saved_handlers : ctx->handler_inline;
+        ctx->handler_capacity = saved_handler_cap ? saved_handler_cap : XR_HANDLER_INLINE_CAP;
+        vm_entry_reset_no_free(state);
+        xr_coro_reset_jit_state(coro);
+    }
+
+    if (need_storage) {
+        if (!vm_backend_alloc_stack_frames(coro, ctx, worker))
+            return false;
+        if (!is_clean)
+            vm_backend_clear_stack_frames(ctx);
+        ctx->stack_top = ctx->stack;
+    }
+
+    ctx->current_coro = coro;
+    ctx->isolate = X;
+    return true;
 }
 
 static void vm_backend_free_stack_frames(XrCoroutine *coro, XrVMContext *ctx) {
