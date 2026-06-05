@@ -30,6 +30,20 @@ typedef struct CloseFixture {
     bool worker_initialized;
 } CloseFixture;
 
+#define WAKE_ROUTE_WORKERS 3
+
+typedef struct WakeRouteFixture {
+    XrayIsolate isolate_storage;
+    XrSystemHeap sys_heap;
+    XrRuntime runtime;
+    XrWorker workers[WAKE_ROUTE_WORKERS];
+    XrMachine machines[WAKE_ROUTE_WORKERS];
+    XrWorker *saved_worker;
+    XrMachine *saved_machine;
+    int initialized_workers;
+    bool sys_heap_initialized;
+} WakeRouteFixture;
+
 static bool close_fixture_init(CloseFixture *f) {
     memset(f, 0, sizeof(*f));
 
@@ -69,6 +83,60 @@ static void close_fixture_cleanup(CloseFixture *f) {
         xr_sysheap_destroy(&f->sys_heap);
         f->sys_heap_initialized = false;
     }
+}
+
+static bool wake_route_fixture_init(WakeRouteFixture *f) {
+    memset(f, 0, sizeof(*f));
+
+    if (!xr_sysheap_init(&f->sys_heap, NULL)) {
+        return false;
+    }
+    f->sys_heap_initialized = true;
+    f->isolate_storage.sys_heap = &f->sys_heap;
+
+    f->saved_worker = tls_current_worker;
+    f->saved_machine = tls_current_machine;
+
+    f->runtime.isolate = &f->isolate_storage;
+    f->runtime.worker_count = WAKE_ROUTE_WORKERS;
+    f->runtime.workers = f->workers;
+    f->runtime.machines = f->machines;
+    f->runtime.sched_stats_enabled = true;
+    atomic_store(&f->runtime.running, true);
+    atomic_store(&f->runtime.threads_started, false);
+
+    for (int i = 0; i < WAKE_ROUTE_WORKERS; i++) {
+        xr_worker_init(&f->workers[i], i, &f->runtime);
+        f->initialized_workers++;
+    }
+
+    f->isolate_storage.vm.runtime = &f->runtime;
+    tls_current_worker = &f->workers[0];
+    tls_current_machine = &f->machines[0];
+    return true;
+}
+
+static void wake_route_fixture_cleanup(WakeRouteFixture *f) {
+    for (int i = f->initialized_workers - 1; i >= 0; i--) {
+        xr_worker_destroy(&f->workers[i]);
+    }
+    f->initialized_workers = 0;
+    tls_current_worker = f->saved_worker;
+    tls_current_machine = f->saved_machine;
+    if (f->sys_heap_initialized) {
+        xr_sysheap_destroy(&f->sys_heap);
+        f->sys_heap_initialized = false;
+    }
+}
+
+static bool wake_queue_has_pending(XrWorker *worker) {
+    XrChanWakeCmdQueue *q = &worker->p.chan_wake_queue;
+    XrChanWakeCmd *head = atomic_load_explicit(&q->head, memory_order_acquire);
+    if (!head)
+        return false;
+    XrChanWakeCmd *next =
+        atomic_load_explicit((_Atomic(XrChanWakeCmd *) *) &head->next, memory_order_acquire);
+    return next != NULL;
 }
 
 TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
@@ -119,9 +187,38 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_ready_wake_dispatches_single_remote_worker) {
+    WakeRouteFixture f;
+    ASSERT_TRUE(wake_route_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 1);
+    ASSERT_NOT_NULL(ch);
+
+    uint64_t remote_waiters = ((uint64_t) 1 << 1) | ((uint64_t) 1 << 2);
+    atomic_store_explicit(&ch->waiter_worker_mask, remote_waiters, memory_order_release);
+
+    ASSERT_NULL(xr_runtime_wake_channel(&f.isolate_storage, ch, false));
+
+    ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_wake_cmd_dispatch_count),
+                  1);
+
+    int queued_workers = 0;
+    for (int i = 1; i < WAKE_ROUTE_WORKERS; i++) {
+        if (wake_queue_has_pending(&f.workers[i])) {
+            queued_workers++;
+        }
+    }
+    ASSERT_EQ_INT(queued_workers, 1);
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    wake_route_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
 RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
+RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 
 TEST_MAIN_END()
