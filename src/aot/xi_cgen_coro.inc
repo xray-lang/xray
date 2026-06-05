@@ -10,10 +10,63 @@
 
 /* ========== AOT Coroutine Frame Emission ========== */
 
+static const XiValue *cg_coro_box_scalar_source(const XiValue *v) {
+    if (!v || v->op != XI_BOX || v->nargs < 1)
+        return NULL;
+    XrRep rep = cg_rep(v->args[0]);
+    return (rep == XR_REP_I64 || rep == XR_REP_F64) ? v->args[0] : NULL;
+}
+
+static bool cg_coro_is_typed_send_use(const XiValue *user, const XiValue *target,
+                                      uint16_t arg_idx) {
+    if (!user || !target || !cg_coro_box_scalar_source(target) || arg_idx != 1)
+        return false;
+    if ((user->op == XI_CHAN_SEND || user->op == XI_CHAN_TRY_SEND) && user->nargs >= 2)
+        return true;
+    if (user->op != XI_CALL_METHOD || user->nargs < 2 || !cg_value_type_is_channel(user->args[0]))
+        return false;
+    const char *method = (const char *) user->aux;
+    return method && (strcmp(method, "send") == 0 || strcmp(method, "trySend") == 0);
+}
+
+static bool cg_coro_box_only_feeds_typed_send(const XiFunc *f, const XiValue *target) {
+    if (!f || !cg_coro_box_scalar_source(target))
+        return false;
+    bool seen_use = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                if (!cg_coro_is_typed_send_use(user, target, a))
+                    return false;
+                seen_use = true;
+            }
+        }
+    }
+    return seen_use;
+}
+
 static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_PARAM)
+        return false;
+    if (cg_coro_box_only_feeds_typed_send(f, v))
         return false;
     if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
@@ -128,11 +181,9 @@ static void emit_coro_boundary_value(FILE *out, const XiValue *v) {
 static const XiValue *cg_coro_unboxed_scalar_value(const XiValue *v) {
     if (!v)
         return NULL;
-    if (v->op == XI_BOX && v->nargs >= 1) {
-        XrRep boxed_rep = cg_rep(v->args[0]);
-        if (boxed_rep == XR_REP_I64 || boxed_rep == XR_REP_F64)
-            return v->args[0];
-    }
+    const XiValue *boxed = cg_coro_box_scalar_source(v);
+    if (boxed)
+        return boxed;
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_I64 || rep == XR_REP_F64)
         return v;
@@ -615,6 +666,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         return;
     }
+
+    if (cg_coro_box_only_feeds_typed_send(f, v))
+        return;
 
     if (v->op == XI_GO) {
         if (v->nargs < 1) {
