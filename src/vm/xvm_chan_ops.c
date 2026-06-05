@@ -47,128 +47,20 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     int case_count = GETARG_C(instr);
 
     XrCoroutine *coro = vm_get_coro(vm_ctx);
-    if (!coro)
+    if (!coro) {
         return XR_DISP_NEXT;
-
-    XrWorker *worker = xr_current_worker();
-    if (!worker)
-        return XR_DISP_NEXT;
-    XrRuntime *runtime = worker->p.runtime;
-    if (runtime) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.select_block_count);
     }
 
-    XrCoroExt *ext = xr_coro_ensure_ext(coro);
-    if (!ext) {
+    XrCoroBlockResult result =
+        xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, case_count, base_reg);
+    if (result.kind == XR_CORO_BLOCK_ERROR) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
-
-    int case_slots = case_count > ch_count ? case_count : ch_count;
-    if (case_slots <= 0) {
-        case_slots = ch_count;
+    if (result.kind == XR_CORO_BLOCK_BLOCKED) {
+        frame->pc = pc;
+        return XR_DISP_BLOCKED;
     }
-    XrSelectStorage *storage = &ext->select_storage;
-    XrSelectCase *cases = NULL;
-    if (case_slots <= XR_SELECT_INLINE_CASES) {
-        cases = storage->inline_cases;
-        if (runtime) {
-            xr_sched_metric_inc(runtime, &runtime->sched_stats.select_inline_alloc_count);
-        }
-    } else {
-        if (storage->heap_capacity < case_slots) {
-            XrSelectCase *new_cases =
-                (XrSelectCase *) xr_malloc((size_t) case_slots * sizeof(XrSelectCase));
-            if (!new_cases) {
-                VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
-            }
-            if (storage->heap_cases) {
-                xr_free(storage->heap_cases);
-            }
-            storage->heap_cases = new_cases;
-            storage->heap_capacity = case_slots;
-            if (runtime) {
-                xr_sched_metric_inc(runtime, &runtime->sched_stats.select_heap_alloc_count);
-            }
-        }
-        cases = storage->heap_cases;
-    }
-
-    memset(cases, 0, (size_t) case_slots * sizeof(XrSelectCase));
-    memset(&storage->wait, 0, sizeof(storage->wait));
-
-    XrSelectWait *sw = &storage->wait;
-    sw->cases = cases;
-    sw->case_count = ch_count < case_count ? ch_count : case_count;
-    sw->timer_channel = NULL;
-    sw->timer_case_index = -1;
-    atomic_store(&sw->triggered, false);
-
-    XrChannel *timer_ch = NULL;
-
-    for (int ci = 0; ci < ch_count && ci < sw->case_count; ci++) {
-        XrValue ch_val = base[base_reg + ci];
-        if (!xr_value_is_channel(ch_val)) {
-            sw->cases[ci].channel = NULL;
-            continue;
-        }
-        XrChannel *ch = xr_value_to_channel(ch_val);
-        sw->cases[ci].channel = ch;
-        sw->cases[ci].is_send = false;
-        sw->cases[ci].result_reg = base_reg + ci;
-        sw->cases[ci].owner = coro;
-        if (atomic_load(&ch->is_timer))
-            timer_ch = ch;
-    }
-
-    sw->timer_channel = timer_ch;
-
-    for (int ci = 0; ci < sw->case_count; ci++) {
-        if (sw->cases[ci].channel == timer_ch) {
-            sw->timer_case_index = ci;
-            break;
-        }
-    }
-
-    coro->select_wait = sw;
-    coro->select_ready_case = -1;
-
-    // Arm sleep timer so the worker wakes the coro when the timer
-    // channel fires.  The tw_timer callback writes data to the buffer; when
-    // the coro re-polls after wakeup, OP_CHAN_TRY_RECV will find it.
-    // Clamp remaining to at least 1ms so that xr_bump_timers fires both the
-    // tw_timer and the sleep timer on the next tick (handles after 0 case).
-    if (timer_ch && !atomic_load_explicit(&timer_ch->timer_fired, memory_order_acquire)) {
-        int64_t now_ms = xr_monotonic_ticks();
-        int64_t elapsed = now_ms - timer_ch->timer_start_ticks;
-        int64_t remaining = timer_ch->timer_timeout_ms - elapsed;
-        if (remaining < 1)
-            remaining = 1;
-        if (worker->p.timer_wheel) {
-            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-                xr_twheel_cancel_timer(worker->p.timer_wheel, &coro->ext->timer);
-                atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-            }
-            xr_worker_add_sleep_timer(worker, coro, remaining);
-        }
-    }
-
-    // Notify dist channels about entering select (subscribe for push model)
-    XrChannelDistHooks *dhooks = isolate ? isolate->channel_dist_hooks : NULL;
-    if (dhooks && dhooks->on_select_enter) {
-        for (int ci = 0; ci < sw->case_count; ci++) {
-            if (!sw->cases[ci].channel)
-                continue;
-            XrChannel *dch = (XrChannel *) sw->cases[ci].channel;
-            if (dch->dist) {
-                dhooks->on_select_enter(dch);
-            }
-        }
-    }
-
-    frame->pc = pc;
-    xr_worker_block_select(worker, coro, NULL, sw->case_count);
-
-    return XR_DISP_BLOCKED;
+    return XR_DISP_NEXT;
 }
 
 XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext *vm_ctx,

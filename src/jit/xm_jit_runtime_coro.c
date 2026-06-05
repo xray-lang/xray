@@ -1076,14 +1076,11 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
     if (!scope)
         return XR_JIT_OK();
 
-    if (atomic_load(&scope->count) > 0) {
+    XrCoroBlockResult scope_result = xr_coro_scope_exit(coro, XR_SCOPE_WAIT);
+    if (scope_result.kind == XR_CORO_BLOCK_BLOCKED) {
         // Children still running — deopt to interpreter for blocking wait
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
-
-    // All children done — safe to unlink and free scope
-    coro->current_scope = scope->parent;
-    xr_free(scope);
     return XR_JIT_OK();
 }
 
