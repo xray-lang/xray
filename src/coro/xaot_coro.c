@@ -150,6 +150,18 @@ void xr_aot_frame_free(void *frame) {
     xr_free(frame);
 }
 
+void xr_aot_trace_frame_value(void *visitor, XrValue value) {
+    if (!visitor || !XR_IS_PTR(value))
+        return;
+    XrAotRootVisitor *root_visitor = (XrAotRootVisitor *) visitor;
+    if (root_visitor->visit)
+        root_visitor->visit(value, root_visitor->ctx);
+}
+
+void xr_aot_release_frame_value(XrValue value) {
+    (void) value;
+}
+
 XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame,
                                 const char *name) {
     if (!X || !desc || !desc->resume || !frame) {

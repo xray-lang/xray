@@ -2724,6 +2724,39 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
 }
 
+static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                        const char *helper, bool with_visitor) {
+    (void) ctx;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        fprintf(out, "    %s(", helper);
+        if (with_visitor)
+            fprintf(out, "visitor, ");
+        fprintf(out, "f->p%u);\n", i);
+    }
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_rep(&phi->value) != XR_REP_TAGGED)
+                continue;
+            fprintf(out, "    %s(", helper);
+            if (with_visitor)
+                fprintf(out, "visitor, ");
+            fprintf(out, "f->phi%u);\n", phi->value.id);
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!cg_coro_value_has_storage(f, v) || cg_rep(v) != XR_REP_TAGGED)
+                continue;
+            fprintf(out, "    %s(", helper);
+            if (with_visitor)
+                fprintf(out, "visitor, ");
+            fprintf(out, "f->v%u);\n", v->id);
+        }
+    }
+}
+
 static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     if (f->ncaptures > 0) {
         ctx->error = true;
@@ -2769,8 +2802,27 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "\n");
 
     fprintf(out, "static void ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
+    fprintf(out, "(void *frame, void *visitor) {\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)frame;\n");
+    fprintf(out, "    if (!f)\n        return;\n");
+    emit_coro_frame_value_visit(ctx, out, f, "xr_aot_trace_frame_value", true);
+    fprintf(out, "}\n\n");
+
+    fprintf(out, "static void ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, "(void *frame) {\n");
+    fprintf(out, "    ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *f = (");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
+    fprintf(out, " *)frame;\n");
+    fprintf(out, "    if (!f)\n        return;\n");
+    emit_coro_frame_value_visit(ctx, out, f, "xr_aot_release_frame_value", false);
     fprintf(out, "    xr_aot_frame_free(frame);\n");
     fprintf(out, "}\n\n");
 
@@ -2784,7 +2836,9 @@ static void xi_cgen_coro_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *
     fprintf(out, "    .resume = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
     fprintf(out, ",\n");
-    fprintf(out, "    .trace_roots = NULL,\n");
+    fprintf(out, "    .trace_roots = ");
+    emit_fname_suffix(ctx, out, prefix, f, "_aot_trace");
+    fprintf(out, ",\n");
     fprintf(out, "    .release_frame = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_release");
     fprintf(out, ",\n");
