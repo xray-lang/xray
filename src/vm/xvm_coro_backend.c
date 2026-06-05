@@ -21,6 +21,9 @@
 #include "../coro/xyieldable.h"
 #include "../runtime/xexec_frame.h"
 #include "../runtime/xvm_call.h"
+#include "../runtime/xisolate_api.h"
+#include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xsystem_heap.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -173,6 +176,8 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
         return false;
     if (vm_state_for_coro(coro))
         return true;
+    if (coro->backend && coro->backend != &vm_backend_vtable && coro->backend_state)
+        return false;
     XrVmCoroState *state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
     if (!state)
         return false;
@@ -182,6 +187,169 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
     coro->backend_state = state;
     coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;
     return true;
+}
+
+static XrCoroutine *vm_backend_alloc_shell(XrayIsolate *X, bool use_runtime_pool) {
+    XrCoroutine *coro = NULL;
+    if (use_runtime_pool) {
+        XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+        if (runtime) {
+            coro = xr_coro_pool_get(runtime);
+        }
+    }
+    if (!coro) {
+        if (X->sys_heap) {
+            coro = xr_sysheap_alloc_coro(X->sys_heap);
+            if (!coro)
+                return NULL;
+            coro->coro_gc = NULL;
+        } else {
+            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
+            if (!coro)
+                return NULL;
+            memset(coro, 0, sizeof(XrCoroutine));
+            coro->gc.type = XR_TCOROUTINE;
+            coro->coro_gc = NULL;
+        }
+    }
+    if (!vm_backend_ensure_state(coro)) {
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+    return coro;
+}
+
+// Create bootstrap main coroutine before script execution.
+XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
+    XR_DCHECK(X != NULL, "coro_create_bootstrap: NULL isolate");
+    XrCoroutine *coro = vm_backend_alloc_shell(X, false);
+    if (!coro)
+        return NULL;
+
+    if (!xr_coro_init_shell(coro, X, "main", true)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    if (!coro->coro_gc) {
+        XrCoroGCConfig main_config = {
+            .gc_threshold = XR_MAIN_CORO_GC_THRESHOLD,
+            .gc_pause = XR_MAIN_CORO_GC_PAUSE,
+            .gc_stepmul = XR_MAIN_CORO_GC_STEPMUL,
+        };
+        coro->coro_gc = xr_coro_gc_create(coro, &main_config);
+        if (!coro->coro_gc) {
+            xr_coro_free(coro);
+            xr_coro_discard_uninitialized(coro);
+            return NULL;
+        }
+    }
+
+    coro->flags |= XR_CORO_FLG_MAIN;
+    vm_backend_reset_entry_state_no_free(coro);
+    (void) xr_coro_set_pending_spawn(coro, NULL);
+    return coro;
+}
+
+void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
+    XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
+    XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_setup_main: NULL closure");
+    bool bound = vm_backend_bind_closure_entry(coro, X, closure, NULL, 0, false);
+    XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
+    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
+    vm_backend_reset_execution_state(coro, X);
+}
+
+void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
+    XR_DCHECK(coro != NULL, "coro_reset_for_call: NULL coro");
+    XR_DCHECK(X != NULL, "coro_reset_for_call: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_reset_for_call: NULL closure");
+
+    if (coro->coro_gc) {
+        coro->coro_gc->gc_disabled = 0;
+    }
+
+    vm_backend_reset_execution_state(coro, X);
+
+    bool bound = vm_backend_bind_closure_entry(coro, X, closure, NULL, 0, false);
+    XR_CHECK(bound, "coro_reset_for_call: failed to bind VM closure");
+    (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
+
+    coro->result = xr_null();
+    coro->error = xr_null();
+    coro->current_scope = NULL;
+}
+
+XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
+                                       int arg_count, const char *name, const char *file,
+                                       int line) {
+    XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_create_vm_closure: NULL closure");
+    XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
+    XR_DCHECK(arg_count == 0 || args != NULL, "coro_create_vm_closure: NULL args with count > 0");
+
+    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
+    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
+        xr_runtime_error(X, "coroutine limit exceeded (%d)", XR_MAX_COROUTINES);
+        return NULL;
+    }
+
+    XrCoroutine *coro = vm_backend_alloc_shell(X, true);
+    if (!coro)
+        return NULL;
+
+    if (!xr_coro_init_shell(coro, X, name, true)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    if (!vm_backend_bind_closure_entry(coro, X, closure, args, arg_count, true)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+    if (xr_coro_name(coro) && !xr_coro_set_source(coro, file, line)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+    if (xr_coro_name(coro) &&
+        !xr_coro_set_spawn_origin(coro, (XrCoroutine *) X->vm.current_coro, file, line)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    return coro;
+}
+
+XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X, XrCoroCFuncEntry cfunc, XrValue *args,
+                                     int argc, const char *name) {
+    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
+    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
+        return NULL;
+    }
+
+    XrCoroutine *coro = vm_backend_alloc_shell(X, true);
+    if (!coro)
+        return NULL;
+
+    if (!xr_coro_init_shell(coro, X, name, true)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    if (!vm_backend_bind_cfunc_entry(coro, cfunc, args, argc)) {
+        xr_coro_free(coro);
+        xr_coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    return coro;
 }
 
 static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {

@@ -726,7 +726,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     base[a] = xr_value_from_task(task);
     frame->pc = pc;
 
-    // coro_init_common already sets XR_CORO_FLG_READY — no redundant atomic OR needed
+    // xr_coro_init_shell already sets XR_CORO_FLG_READY.
     if (!parent) {
         xr_runtime_spawn(runtime, coro);
         return XR_DISP_NEXT;
