@@ -1,0 +1,24 @@
+fn captured_sync_go(x: int) -> int {
+    fn inner() -> int {
+        return x * 7
+    }
+
+    let task = go inner()
+    return await task
+}
+
+fn captured_suspend_go(x: int) -> int {
+    fn inner() -> int {
+        yield
+        return x + 1
+    }
+
+    let task = go inner()
+    return await task
+}
+
+let sync_task = go captured_sync_go(6)
+print(await sync_task)
+
+let suspend_task = go captured_suspend_go(41)
+print(await suspend_task)

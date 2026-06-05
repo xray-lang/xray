@@ -2411,11 +2411,7 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, "static void *");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
-        for (uint16_t i = 0; i < f->nparams; i++) {
-            if (i > 0)
-                fprintf(out, ", ");
-            fprintf(out, "XrValue p%u", i);
-        }
+        emit_aot_frame_new_params(out, f);
         fprintf(out, ");\n");
         fprintf(out, "static XrAotResult ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
