@@ -44,13 +44,22 @@ run_test() {
         return
     fi
 
-    # Step 2: Compile .c → binary
-    if ! cc -O2 -Wall -Wno-initializer-overrides \
-            -I "$AOT_INCLUDE" -I "$VM_INCLUDE" \
-            "$c_out" -o "$bin_out" 2>/dev/null; then
-        echo "FAIL (C compile error)"
-        FAIL=$((FAIL + 1))
-        return
+    # Step 2: Compile .c → binary. Coroutine AOT needs xray_core and
+    # platform runtime libs, so delegate that link mode to xray build.
+    if grep -q "xr_aot_run_main" "$c_out"; then
+        if ! "$XRAY" build --native "$xr_file" -o "$bin_out" >/dev/null 2>&1; then
+            echo "FAIL (runtime link error)"
+            FAIL=$((FAIL + 1))
+            return
+        fi
+    else
+        if ! cc -O2 -Wall -Wno-initializer-overrides \
+                -I "$AOT_INCLUDE" -I "$VM_INCLUDE" \
+                "$c_out" -o "$bin_out" 2>/dev/null; then
+            echo "FAIL (C compile error)"
+            FAIL=$((FAIL + 1))
+            return
+        fi
     fi
 
     # Step 3: Run VM and AOT, capture stdout only
@@ -87,7 +96,7 @@ run_negative_test() {
         return
     fi
 
-    if grep -q "unsupported coroutine Xi op" "$log_out"; then
+    if grep -Eq "unsupported .*coroutine Xi op" "$log_out"; then
         echo "PASS (rejected)"
         PASS=$((PASS + 1))
         rm -f "$c_out" "$log_out"
@@ -100,7 +109,7 @@ run_negative_test() {
 }
 
 # Run all .xr files in test directories
-for dir in "$SCRIPT_DIR"/basic "$SCRIPT_DIR"/modules; do
+for dir in "$SCRIPT_DIR"/basic "$SCRIPT_DIR"/modules "$SCRIPT_DIR"/coro; do
     if [ -d "$dir" ]; then
         echo "--- $(basename "$dir") ---"
         for f in "$dir"/*.xr; do

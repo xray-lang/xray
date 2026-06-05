@@ -155,6 +155,16 @@ static void coro_discard_uninitialized(XrCoroutine *coro) {
     }
 }
 
+static void coro_release_backend_state(XrCoroutine *coro, bool destroy) {
+    if (!coro || !coro->backend)
+        return;
+    if (destroy && coro->backend->destroy) {
+        coro->backend->destroy(coro);
+    } else if (!destroy && coro->backend->release) {
+        coro->backend->release(coro);
+    }
+}
+
 // Create bootstrap main coroutine (no closure, no scheduler)
 // Called during isolate init before any script execution.
 // Provides coro_gc so all init-phase allocations go through coro heap.
@@ -570,6 +580,63 @@ XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, i
     return coro;
 }
 
+XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name, bool need_stack) {
+    XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
+
+    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
+    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
+        return NULL;
+    }
+
+    XrCoroutine *coro = NULL;
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (runtime) {
+        coro = xr_coro_pool_get(runtime);
+    }
+    if (!coro) {
+        if (X->sys_heap) {
+            coro = xr_sysheap_alloc_coro(X->sys_heap);
+            if (!coro)
+                return NULL;
+            coro->coro_gc = NULL;
+        } else {
+            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
+            if (coro) {
+                memset(coro, 0, sizeof(XrCoroutine));
+                coro->gc.type = XR_TCOROUTINE;
+            }
+            if (!coro)
+                return NULL;
+            if (!coro_ensure_vm_state(coro)) {
+                coro_discard_uninitialized(coro);
+                return NULL;
+            }
+            xr_coro_vm_ctx(coro)->stack = NULL;
+            xr_coro_vm_ctx(coro)->frames = NULL;
+            coro->coro_gc = NULL;
+        }
+    }
+    if (!coro_ensure_vm_state(coro)) {
+        coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    if (!coro_init_common(coro, X, name, need_stack)) {
+        xr_coro_free(coro);
+        coro_discard_uninitialized(coro);
+        return NULL;
+    }
+
+    coro->entry_type = XR_CORO_ENTRY_NATIVE;
+    coro->entry.native.func = NULL;
+    coro->entry.native.arg = NULL;
+    coro->source_file = NULL;
+    coro->source_line = 0;
+    coro->arg_count = 0;
+    coro->args = NULL;
+    return coro;
+}
+
 // Create C function coroutine (supports Yieldable I/O)
 // Unlike native coroutine, has stack and frames, supports internal Yieldable C calls
 // Used for HTTP connection handling and other I/O wait scenarios
@@ -746,6 +813,8 @@ void xr_coro_release_resources(XrCoroutine *coro) {
     if (!coro)
         return;
 
+    coro_release_backend_state(coro, false);
+
     // Destroy coro_gc (Immix heap) — use atomic exchange to prevent
     // double-free race with early release in xr_coro_run_on_worker
     {
@@ -883,6 +952,8 @@ void xr_coro_free(XrCoroutine *coro) {
     if (!coro)
         return;
 
+    coro_release_backend_state(coro, true);
+
     // Free GC context — atomic exchange to prevent double-free race
     {
         XrCoroGC *gc = atomic_exchange_explicit((_Atomic(XrCoroGC *) *) &coro->coro_gc, NULL,
@@ -979,6 +1050,8 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         return;
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
     XR_DCHECK(!coro->coro_gc || !coro->coro_gc->in_gc, "recycle_local: GC active during recycle");
+
+    coro_release_backend_state(coro, false);
 
     // Cancel timer using cross-worker cancellation
     // This handles both local (direct) and cross-worker (async queue) cancellation

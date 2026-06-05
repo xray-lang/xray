@@ -1,0 +1,5 @@
+const ch = Channel(1)
+ch.send(41)
+let v = ch.recv()
+print(v + 1)
+ch.close()

@@ -148,6 +148,12 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                 case XI_AWAIT:
                     fs->need_coro = true;
                     break;
+                case XI_CALL_METHOD:
+                    if (v->aux && strcmp((const char *) v->aux, "sleep") == 0 && v->nargs == 2) {
+                        fs->need_coro = true;
+                        fs->need_timer = true;
+                    }
+                    break;
                 case XI_TRY:
                 case XI_THROW:
                     fs->need_exception = true;

@@ -1,0 +1,11 @@
+fn sender(ch: Channel) -> int {
+    ch.send(41)
+    return 1
+}
+
+const ch = Channel()
+const task = go sender(ch)
+let v = ch.recv()
+let done = await task
+print(v + done)
+ch.close()

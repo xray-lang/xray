@@ -761,8 +761,12 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     )
 endif()
 
-# Expose AOT runtime header path (xrt_vm.h, xrt_common.h) for cmd_build's C compiler
-add_compile_definitions(XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot")
+# Expose development-tree paths for cmd_build's C compiler.
+add_compile_definitions(
+    XRT_AOT_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/src/aot"
+    XRT_SOURCE_INCLUDE_DIR="${CMAKE_CURRENT_SOURCE_DIR}/include"
+    XRT_BUILD_LIB_DIR="${CMAKE_CURRENT_BINARY_DIR}"
+)
 
 
 # Core library include paths (detailed configuration)
