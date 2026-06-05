@@ -469,6 +469,28 @@ static void channel_wake_select_waiter_if_present(XrChannel *ch) {
     channel_wake_select_waiter(ch);
 }
 
+static void channel_refresh_any_waiter_mask(XrChannel *ch) {
+    if (!ch)
+        return;
+    uint64_t mask = atomic_load_explicit(&ch->sender_waiter_worker_mask, memory_order_acquire) |
+                    atomic_load_explicit(&ch->receiver_waiter_worker_mask, memory_order_acquire) |
+                    atomic_load_explicit(&ch->select_waiter_worker_mask, memory_order_acquire);
+    atomic_store_explicit(&ch->waiter_worker_mask, mask, memory_order_release);
+}
+
+static void channel_clear_drained_direction_masks(XrChannel *ch, bool send_drained,
+                                                  bool recv_drained) {
+    if (!ch)
+        return;
+    if (send_drained) {
+        atomic_store_explicit(&ch->sender_waiter_worker_mask, 0, memory_order_release);
+    }
+    if (recv_drained) {
+        atomic_store_explicit(&ch->receiver_waiter_worker_mask, 0, memory_order_release);
+    }
+    channel_refresh_any_waiter_mask(ch);
+}
+
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
 static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
@@ -812,6 +834,8 @@ void xr_channel_close(XrChannel *ch) {
     CHANNEL_METRIC_ADD(ch, chan_close_send_waiter_count, send_waiters);
 
     XrWorker *current = xr_current_worker();
+    uint64_t deferred_recv_waiters = 0;
+    uint64_t deferred_send_waiters = 0;
 
     // Wake all waiters after releasing lock (close wake, let them recheck buffer)
     while (recv_list) {
@@ -820,6 +844,8 @@ void xr_channel_close(XrChannel *ch) {
         coro->ext->chan_wait_next = NULL;
         if (!channel_close_defer_to_owner_bucket(coro, current)) {
             channel_wake_coro_ex(coro, true);  // close wake
+        } else {
+            deferred_recv_waiters++;
         }
     }
     while (send_list) {
@@ -828,9 +854,13 @@ void xr_channel_close(XrChannel *ch) {
         coro->ext->chan_wait_next = NULL;
         if (!channel_close_defer_to_owner_bucket(coro, current)) {
             channel_wake_coro_ex(coro, true);  // close wake
+        } else {
+            deferred_send_waiters++;
         }
     }
 
+    channel_clear_drained_direction_masks(ch, deferred_send_waiters == 0,
+                                          deferred_recv_waiters == 0);
     xr_runtime_wake_channel_all(ch->isolate, ch);
 }
 
