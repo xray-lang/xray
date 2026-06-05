@@ -340,6 +340,27 @@ TEST(cgen_function_call) {
     xi_func_free(ir);
 }
 
+TEST(cgen_module_prefix_is_c_identifier) {
+    const char *src = "fn compute(n: int) -> int { return n * n }\n"
+                      "print(compute(3))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "1127_coro_priority", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "numeric module prefixes should generate");
+    assert(contains(code, "static XrValue _1127_coro_priority_compute_") &&
+           "numeric module prefixes must be emitted as legal C identifiers");
+    assert(!contains(code, "static XrValue 1127_coro_priority_compute_") &&
+           "numeric module prefixes must not be emitted raw");
+
+    printf("  Generated numeric-prefix module %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
     const char *src = "fn fact(n: int) -> int {\n"
@@ -709,6 +730,31 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
            "go lowering must spawn sync wrappers through an AOT descriptor");
 
     printf("  Generated sync go wrapper %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_set_priority_uses_aot_bridge) {
+    const char *src = "fn compute(n: int) -> int {\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "let task = go compute(3)\n"
+                      "Coro.setPriority(task, 2)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT Coro.setPriority should generate");
+    assert(contains(code, "xr_aot_coro_set_priority(ctx,") &&
+           "Coro.setPriority must use the AOT coroutine runtime bridge");
+    assert(!contains(code, "unsupported AOT coroutine Xi op CORO_OP") &&
+           "Coro.setPriority must not fall through to unsupported CORO_OP emission");
+
+    printf("  Generated Coro.setPriority bridge %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1129,6 +1175,7 @@ int main(void) {
     run_cgen_while_loop();
     run_cgen_string_literal();
     run_cgen_function_call();
+    run_cgen_module_prefix_is_c_identifier();
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_unsupported_coroutine_ops_fail_fast();
@@ -1141,6 +1188,7 @@ int main(void) {
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
+    run_cgen_coro_set_priority_uses_aot_bridge();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();

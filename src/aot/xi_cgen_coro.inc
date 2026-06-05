@@ -173,6 +173,10 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
         return false;
     if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
+    if (v->op == XI_CORO_OP &&
+        (v->aux_int == XI_CORO_SUB_SET_PRIORITY || v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
+         v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL))
+        return false;
     if (cg_is_void_like(v))
         return false;
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
@@ -1088,6 +1092,26 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_vref(out, v);
             fprintf(out, ");\n");
         }
+        return;
+    }
+
+    if (v->op == XI_CORO_OP) {
+        if (v->aux_int == XI_CORO_SUB_SET_PRIORITY) {
+            if (v->nargs < 2) {
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: AOT Coro.setPriority missing arguments\n");
+                return;
+            }
+            fprintf(out, "    (void)xr_aot_coro_set_priority(ctx, ");
+            emit_boxed_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_boxed_vref(out, v->args[1]);
+            fprintf(out, ");\n");
+            return;
+        }
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n",
+                xi_op_name(v->op));
         return;
     }
 

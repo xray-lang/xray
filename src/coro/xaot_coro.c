@@ -419,6 +419,40 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     return result;
 }
 
+XrValue xr_aot_coro_set_priority(const XrAotContext *ctx, XrValue target_value,
+                                 XrValue priority_value) {
+    XrCoroutine *coro = NULL;
+    if (xr_value_is_task(target_value)) {
+        XrTask *task = xr_value_to_task(target_value);
+        coro = task ? task->coro : NULL;
+    } else if (xr_value_is_coro(target_value)) {
+        coro = xr_value_to_coro(target_value);
+    }
+    if (!coro)
+        return XR_NULL_VAL;
+
+    XrCoroPriority new_prio = CORO_PRIORITY_NORMAL;
+    if (XR_IS_INT(priority_value)) {
+        int prio_int = (int) XR_TO_INT(priority_value);
+        if (prio_int >= 0 && prio_int < XR_CORO_PRIORITY_COUNT)
+            new_prio = (XrCoroPriority) prio_int;
+    }
+
+    int old_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
+    if (ctx && ctx->isolate && xr_coro_flags_has(coro, XR_CORO_FLG_READY) &&
+        old_prio != (int) new_prio) {
+        XrCoroState *sched = (XrCoroState *) ctx->isolate->vm.coro_state;
+        if (sched) {
+            xr_sched_remove(sched, coro);
+            xr_coro_set_priority(coro, new_prio);
+            xr_sched_enqueue(sched, coro);
+            return XR_NULL_VAL;
+        }
+    }
+    xr_coro_set_priority(coro, new_prio);
+    return XR_NULL_VAL;
+}
+
 XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
