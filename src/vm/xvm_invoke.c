@@ -26,7 +26,6 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xstruct_layout.h"
-#include "../coro/xworker.h"
 #include "xvm_checks.h"
 #include "xdebug.h"
 #include "../runtime/xray_debug_hooks.h"
@@ -47,16 +46,6 @@
 #include "../runtime/class/xenum.h"
 
 /* ========== Dispatch: OP_INVOKE Channel Methods ========== */
-
-static void vm_record_timeout_event_block(void) {
-    XrWorker *worker = xr_current_worker();
-    if (!worker)
-        return;
-    XrRuntime *runtime = worker->p.runtime;
-    if (runtime) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
-    }
-}
 
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
@@ -87,26 +76,27 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     // ch.send(value) - blocking send
     if (nargs == 1 && method_symbol == SYMBOL_SEND) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
+        XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, xr_slot_none());
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
             base[a] = xr_null();
             return XR_DISP_NEXT;
         }
-        XrValue send_v = vm_chan_copy_send(isolate, base[a + 2]);
-        // Pre-save frame — see hot path comment.
-        if (current)
-            current->send_value = send_v;
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+            base[a] = xr_null();
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
+        }
         frame->pc = pc - 1;
         frame->call_status |= XR_CALL_YIELDED;
-        XrChanResult result = xr_channel_send(ch, send_v, current);
-        if (result == XR_CHAN_OK) {
+        XrCoroBlockResult result =
+            xr_coro_chan_send(isolate, current, ch, base[a + 2], xr_slot_none(), -1);
+        if (result.kind == XR_CORO_BLOCK_READY) {
             frame->call_status &= ~XR_CALL_YIELDED;
             base[a] = xr_null();
             return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_CLOSED) {
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED) {
             frame->call_status &= ~XR_CALL_YIELDED;
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
-        } else if (result == XR_CHAN_BLOCK) {
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         } else {
             frame->call_status &= ~XR_CALL_YIELDED;
@@ -117,35 +107,20 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     // ch.recv() - blocking receive
     if (nargs == 0 && method_symbol == SYMBOL_RECV) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            base[a] = vm_chan_copy_recv(isolate, base[a], vm_ctx);  // Deep copy recv_slot value
+        XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrCoroBlockResult resumed =
+            xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_NEXT;
         }
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
-            // Close wakeup: need to re-execute recv logic to check buffer
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            // Continue with recv logic below
-        }
-        // Set recv_slot to result register address
-        if (current) {
-            current->recv_slot = &base[a];
-        }
-        // Pre-save frame — see hot path comment.
         frame->pc = pc - 1;
         frame->call_status |= XR_CALL_YIELDED;
-        XrValue value;
-        XrChanResult result = xr_channel_recv(ch, &value, current);
-        if (result == XR_CHAN_OK) {
+        XrCoroBlockResult result =
+            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), -1);
+        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
             frame->call_status &= ~XR_CALL_YIELDED;
-            base[a] = vm_chan_copy_recv(isolate, value, vm_ctx);
             return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_CLOSED) {
-            frame->call_status &= ~XR_CALL_YIELDED;
-            base[a] = xr_null();
-            return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_BLOCK) {
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         } else {
             frame->call_status &= ~XR_CALL_YIELDED;
@@ -171,50 +146,20 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     if (nargs == 2 && method_symbol == SYMBOL_SENDTIMEOUT) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         int64_t timeout_ms = XR_TO_INT(base[a + 3]);
+        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
 
-        // Check if woken from timeout
-        if (current && xr_coro_resume_load(current) == XR_RESUME_TIMEOUT) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            base[a] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        // Check if woken from channel close
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            base[a] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            base[a] = xr_bool(true);
+        XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
+        if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
+            resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
 
-        // Try to send (deep copy mutable values for buffer safety)
-        XrValue send_val = vm_chan_copy_send(isolate, base[a + 2]);
-        XrChanResult result = xr_channel_send(ch, send_val, current);
-        if (result == XR_CHAN_OK) {
-            base[a] = xr_bool(true);
+        XrCoroBlockResult result =
+            xr_coro_chan_send(isolate, current, ch, base[a + 2], result_slot, timeout_ms);
+        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
+            result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_CLOSED) {
-            base[a] = xr_bool(false);
-            return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_BLOCK) {
-            // Blocked: set timeout timer
-            if (!current) {
-                base[a] = xr_bool(false);
-                return XR_DISP_NEXT;
-            }
-            current->send_value = send_val;
-            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
-            XrWorker *worker = xr_current_worker();
-            if (worker) {
-                xr_worker_add_sleep_timer(worker, current, timeout_ms);
-            }
-            vm_record_timeout_event_block();
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             frame->pc = pc - 1;
             frame->call_status |= XR_CALL_YIELDED;
             return XR_DISP_BLOCKED;
@@ -241,54 +186,28 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         base[a] = xr_value_from_tuple(_vt_t);                                                      \
     } while (0)
 
-        // Check if woken from timeout
-        if (current && xr_coro_resume_load(current) == XR_RESUME_TIMEOUT) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+        XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrCoroBlockResult resumed =
+            xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
+        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
             VM_RECV_TUPLE_RESULT(xr_null(), false);
             return XR_DISP_NEXT;
         }
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            // Sender wrote the value via recv_slot (= &base[a]) before
-            // wake; lift it into a (value, true) tuple in place.
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
             VM_RECV_TUPLE_RESULT(base[a], true);
             return XR_DISP_NEXT;
         }
-        if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL_CLOSED) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+
+        XrCoroBlockResult result =
+            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), timeout_ms);
+        if (result.kind == XR_CORO_BLOCK_READY) {
+            VM_RECV_TUPLE_RESULT(base[a], true);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_TIMEOUT ||
+                   result.kind == XR_CORO_BLOCK_NO_CORO) {
             VM_RECV_TUPLE_RESULT(xr_null(), false);
             return XR_DISP_NEXT;
-        }
-
-        // Set recv_slot — sender writes raw value here, resume path
-        // wraps it into a tuple (see RESUME_CHANNEL branch above).
-        if (current) {
-            current->recv_slot = &base[a];
-        }
-
-        // Try to receive
-        XrValue value;
-        XrChanResult result = xr_channel_recv(ch, &value, current);
-        if (result == XR_CHAN_OK) {
-            VM_RECV_TUPLE_RESULT(value, true);
-            return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_CLOSED) {
-            VM_RECV_TUPLE_RESULT(xr_null(), false);
-            return XR_DISP_NEXT;
-        } else if (result == XR_CHAN_BLOCK) {
-            // Blocked: set timeout timer
-            if (!current) {
-                VM_RECV_TUPLE_RESULT(xr_null(), false);
-                return XR_DISP_NEXT;
-            }
-            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
-            XrWorker *worker = xr_current_worker();
-            if (worker) {
-                xr_worker_add_sleep_timer(worker, current, timeout_ms);
-            }
-            vm_record_timeout_event_block();
+        } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             frame->pc = pc - 1;
             frame->call_status |= XR_CALL_YIELDED;
             return XR_DISP_BLOCKED;

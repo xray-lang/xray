@@ -175,6 +175,7 @@ static inline XrBcCallFrame *vm_push_bc_frame(XrVMContext *vm_ctx, XrClosure *cl
 }
 
 /* ========== Channel Deep Copy Helpers ========== */
+#include "../coro/xblock.h"
 #include "../coro/xchannel_ops.h"
 
 static inline XrValue vm_chan_copy_send(XrayIsolate *isolate, XrValue value) {

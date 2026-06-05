@@ -42,6 +42,7 @@
 #include "../runtime/xisolate_api.h"
 #include "../runtime/xstrbuf.h"
 #include "../coro/xcoroutine.h"
+#include "../coro/xblock.h"
 #include "../coro/xchannel.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xchannel_ops.h"
@@ -192,8 +193,7 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
 }
 
 // Block helper for channel send (called from XM_SUSPEND after regs saved).
-// Follows Go gopark pattern: regs already saved → call xr_channel_send
-// which sets BLOCKED under lock.
+// Runtime helper owns waiter registration; JIT only publishes suspend result.
 // Returns 0 if blocked, 1 if send succeeded during retry.
 XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
@@ -207,15 +207,14 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
     uint8_t val_tag = (uint8_t) (coro->jit_state.scratch->call_args[2] & 0xFF);
     XrValue send_v = jit_value_from_tag(coro->jit_state.scratch->call_args[1], val_tag);
 
-    coro->send_value = send_v;
-    XrChanResult cr = xr_channel_send(ch, send_v, coro);
-    if (cr == XR_CHAN_OK) {
+    XrCoroBlockResult cr = xr_coro_chan_send(coro->isolate, coro, ch, send_v, xr_slot_none(), -1);
+    if (cr.kind == XR_CORO_BLOCK_READY) {
         coro->jit_state.suspend->result = xr_null().i;
         coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
-    if (cr == XR_CHAN_BLOCK) {
-        // BLOCKED already set by xr_channel_send under lock (gopark pattern).
+    if (cr.kind == XR_CORO_BLOCK_BLOCKED) {
+        // BLOCKED is already set under the channel lock.
         // Do NOT touch flags after this point — coro may already be woken
         // by another worker. VM bytecode path also doesn't set wait_reason.
         return (XrJitResult) {0, 0};  // blocked
@@ -239,13 +238,8 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    bool ok;
-    XrValue value = xr_channel_try_recv(ch, &ok);
-    if (ok) {
-        // Deep copy to receiver's heap
-        if (XR_IS_PTR(value) && xr_value_needs_copy(value)) {
-            value = xr_deep_copy_to_coro(coro->isolate, value, coro);
-        }
+    XrValue value;
+    if (xr_chan_try_recv(coro->isolate, ch, &value, coro)) {
         coro->jit_state.scratch->call_args[1] = 1;
         return XR_JIT_RESULT(value);
     }
@@ -260,7 +254,7 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
 }
 
 // Block helper for channel recv (called from XM_SUSPEND after regs saved).
-// Sets recv_slot to &suspend_regs[23] so sender writes directly there.
+// Runtime helper owns waiter registration; JIT only publishes suspend result.
 // Returns 0 if blocked, 1 if recv succeeded during retry.
 XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     (void) extra_arg;
@@ -272,30 +266,22 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    // recv_slot must point to persistent memory — sender writes *recv_slot
-    // after dequeuing this coro from recvq.  Use coro's bytecode stack[0]
-    // which is always allocated and persistent (JIT doesn't use it).
-    coro->recv_slot = &xr_coro_vm_ctx(coro)->stack[0];
-
-    XrValue out;
-    XrChanResult cr = xr_channel_recv(ch, &out, coro);
-    if (cr == XR_CHAN_OK) {
-        // Deep copy to receiver's heap
-        if (XR_IS_PTR(out) && xr_value_needs_copy(out)) {
-            out = xr_deep_copy_to_coro(coro->isolate, out, coro);
-        }
+    XrValue *slot = &xr_coro_vm_ctx(coro)->stack[0];
+    XrCoroBlockResult cr =
+        xr_coro_chan_recv(coro->isolate, coro, ch, xr_slot_xvalue_ptr(slot), xr_slot_none(), -1);
+    if (cr.kind == XR_CORO_BLOCK_READY) {
+        XrValue out = *slot;
         coro->jit_state.suspend->result = out.i;
         coro->jit_state.suspend->result_tag = out.tag;
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
-    if (cr == XR_CHAN_CLOSED) {
+    if (cr.kind == XR_CORO_BLOCK_CLOSED) {
         coro->jit_state.suspend->result = xr_null().i;
         coro->jit_state.suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};
     }
-    if (cr == XR_CHAN_BLOCK) {
-        // BLOCKED already set by xr_channel_recv under lock (gopark pattern).
-        // recv_slot → stack[0] is persistent; sender will write there.
+    if (cr.kind == XR_CORO_BLOCK_BLOCKED) {
+        // recv slot points to stack[0], a persistent bridge slot.
         // Worker resume path copies stack[0] → jit_suspend.result before
         // calling xm_jit_resume.
         // Do NOT touch flags — coro may already be woken by another worker.

@@ -102,10 +102,14 @@ vmcase(OP_CHAN_SEND) {
 
     // Check if resumed from blocking
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
-    if (current && xr_coro_resume_load(current) == XR_RESUME_CHANNEL) {
-        xr_coro_resume_store(current, XR_RESUME_OK);
+    XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, xr_slot_none());
+    if (resumed.kind == XR_CORO_BLOCK_READY) {
         R(a) = xr_null();
         vmbreak;
+    }
+    if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+        R(a) = xr_null();
+        VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
     }
 
     // Get Channel
@@ -116,25 +120,18 @@ vmcase(OP_CHAN_SEND) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    // Deep copy mutable values for buffer safety
-    XrValue send_v = vm_chan_copy_send(isolate, R(c));
-
-    // Pre-save frame
-    if (current)
-        current->send_value = send_v;
     savepc();
     frame->pc = pc - 1;
     frame->call_status |= XR_CALL_YIELDED;
-    // Blocking send
-    XrChanResult result = xr_channel_send(ch, send_v, current);
-    if (result == XR_CHAN_OK) {
+    XrCoroBlockResult result = xr_coro_chan_send(isolate, current, ch, R(c), xr_slot_none(), -1);
+    if (result.kind == XR_CORO_BLOCK_READY) {
         frame->call_status &= ~XR_CALL_YIELDED;
         R(a) = xr_null();
         vmbreak;
-    } else if (result == XR_CHAN_CLOSED) {
+    } else if (result.kind == XR_CORO_BLOCK_CLOSED) {
         frame->call_status &= ~XR_CALL_YIELDED;
         VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
-    } else if (result == XR_CHAN_BLOCK) {
+    } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
         return XR_VM_BLOCKED;
     } else {
         frame->call_status &= ~XR_CALL_YIELDED;
@@ -154,17 +151,15 @@ vmcase(OP_CHAN_RECV) {
     // Check if resumed from blocking (cache resume_load: 1 atomic instead of 2)
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current) {
-        int _rs = xr_coro_resume_load(current);
-        if (_rs == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            R(a) = vm_chan_copy_recv(isolate, R(a), vm_ctx);
-            R(a + 1) = xr_bool(true);
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
+            isolate, current, xr_slot_xvalue_ptr(&R(a)), xr_slot_xvalue_ptr(&R(a + 1)));
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
             vmbreak;
         }
-        if (_rs == XR_RESUME_CHANNEL_CLOSED) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
+        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
+            R(a) = xr_null();
+            R(a + 1) = xr_bool(false);
+            vmbreak;
         }
     }
 
@@ -177,26 +172,15 @@ vmcase(OP_CHAN_RECV) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    // Set recv_slot before recv — see hot path comment for rationale
-    if (current)
-        current->recv_slot = &R(a);
-    // Pre-save frame
     savepc();
     frame->pc = pc - 1;
     frame->call_status |= XR_CALL_YIELDED;
-    XrValue value;
-    XrChanResult result = xr_channel_recv(ch, &value, current);
-    if (result == XR_CHAN_OK) {
+    XrCoroBlockResult result = xr_coro_chan_recv(isolate, current, ch, xr_slot_xvalue_ptr(&R(a)),
+                                                 xr_slot_xvalue_ptr(&R(a + 1)), -1);
+    if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
         frame->call_status &= ~XR_CALL_YIELDED;
-        R(a) = vm_chan_copy_recv(isolate, value, vm_ctx);
-        R(a + 1) = xr_bool(true);
         vmbreak;
-    } else if (result == XR_CHAN_CLOSED) {
-        frame->call_status &= ~XR_CALL_YIELDED;
-        R(a) = xr_null();
-        R(a + 1) = xr_bool(false);
-        vmbreak;
-    } else if (result == XR_CHAN_BLOCK) {
+    } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
         return XR_VM_BLOCKED;
     } else {
         frame->call_status &= ~XR_CALL_YIELDED;

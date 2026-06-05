@@ -184,7 +184,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
         return XR_DISP_NEXT;
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
-    XrValue value = vm_chan_copy_send(isolate, base[c]);
+    XrValue value = base[c];
     XrValue timeout_val = base[c + 1];
 
     int64_t timeout_ms = 0;
@@ -197,66 +197,19 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (current) {
-        int resume_status = xr_coro_resume_load(current);
-        if (resume_status == XR_RESUME_TIMEOUT) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a] = xr_bool(false);
+        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
+        if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
+            resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
-        if (resume_status == XR_RESUME_CHANNEL_CLOSED) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a] = xr_bool(false);
+        XrCoroBlockResult result =
+            xr_coro_chan_send(isolate, current, ch, value, result_slot, timeout_ms);
+        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
+            result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             return XR_DISP_NEXT;
         }
-        if (resume_status == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a] = xr_bool(true);
-            return XR_DISP_NEXT;
-        }
-    }
-
-    // Try immediate send
-    if (xr_channel_try_send(ch, value)) {
-        base[a] = xr_bool(true);
-        xr_runtime_wake_channel(isolate, ch, false);
-        return XR_DISP_NEXT;
-    }
-    if (xr_channel_is_closed(ch)) {
-        base[a] = xr_bool(false);
-        return XR_DISP_NEXT;
-    }
-    if (timeout_ms <= 0) {
-        base[a] = xr_bool(false);
-        return XR_DISP_NEXT;
-    }
-
-    if (current) {
-        XrChanResult result = xr_channel_send(ch, value, current);
-        if (result == XR_CHAN_OK) {
-            base[a] = xr_bool(true);
-            return XR_DISP_NEXT;
-        }
-        if (result == XR_CHAN_CLOSED || result == XR_CHAN_NO_CORO) {
-            base[a] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        if (result == XR_CHAN_BLOCK) {
-            current->send_value = value;
-            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
-            XrWorker *worker = xr_current_worker();
-            if (worker) {
-                xr_worker_add_sleep_timer(worker, current, timeout_ms);
-                XrRuntime *runtime = worker->p.runtime;
-                if (runtime) {
-                    xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
-                }
-            }
+        if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             frame->pc = pc - 1;
             return XR_DISP_BLOCKED;
         }
@@ -265,6 +218,17 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
     }
 
     // Main thread: synchronous polling
+    value = xr_chan_prepare_send(isolate, value);
+    if (xr_channel_try_send(ch, value)) {
+        base[a] = xr_bool(true);
+        xr_runtime_wake_channel(isolate, ch, false);
+        return XR_DISP_NEXT;
+    }
+    if (xr_channel_is_closed(ch) || timeout_ms <= 0) {
+        base[a] = xr_bool(false);
+        return XR_DISP_NEXT;
+    }
+
     uint64_t start_ns = xr_time_monotonic_ns();
     while (1) {
         int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
@@ -310,73 +274,20 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
 
     XrCoroutine *current = vm_get_coro(vm_ctx);
     if (current) {
-        int resume_status = xr_coro_resume_load(current);
-        if (resume_status == XR_RESUME_TIMEOUT) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
+        XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
+        XrSlotRef ok_slot = xr_slot_xvalue_ptr(&base[a + 1]);
+        XrCoroBlockResult resumed = xr_coro_chan_recv_resume(isolate, current, value_slot, ok_slot);
+        if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
+            resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
-        if (resume_status == XR_RESUME_CHANNEL_CLOSED) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
+        XrCoroBlockResult result =
+            xr_coro_chan_recv(isolate, current, ch, value_slot, ok_slot, timeout_ms);
+        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
+            result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             return XR_DISP_NEXT;
         }
-        if (resume_status == XR_RESUME_CHANNEL) {
-            xr_coro_resume_store(current, XR_RESUME_OK);
-            atomic_store_explicit(&current->wait_channel, NULL, memory_order_relaxed);
-            current->channel_deadline = 0;
-            base[a + 1] = xr_bool(true);
-            return XR_DISP_NEXT;
-        }
-        current->recv_slot = &base[a];
-    }
-
-    // Try immediate receive via unified helper
-    XrValue recv_val;
-    if (xr_chan_try_recv(isolate, ch, &recv_val, current)) {
-        base[a] = recv_val;
-        base[a + 1] = xr_bool(true);
-        return XR_DISP_NEXT;
-    }
-    if (xr_channel_is_closed(ch)) {
-        base[a] = xr_null();
-        base[a + 1] = xr_bool(false);
-        return XR_DISP_NEXT;
-    }
-    if (timeout_ms <= 0) {
-        base[a] = xr_null();
-        base[a + 1] = xr_bool(false);
-        return XR_DISP_NEXT;
-    }
-
-    if (current) {
-        XrChanResult result = xr_channel_recv(ch, &recv_val, current);
-        if (result == XR_CHAN_OK) {
-            base[a] = recv_val;
-            base[a + 1] = xr_bool(true);
-            return XR_DISP_NEXT;
-        }
-        if (result == XR_CHAN_CLOSED || result == XR_CHAN_NO_CORO) {
-            base[a] = xr_null();
-            base[a + 1] = xr_bool(false);
-            return XR_DISP_NEXT;
-        }
-        if (result == XR_CHAN_BLOCK) {
-            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
-            XrWorker *worker = xr_current_worker();
-            if (worker) {
-                xr_worker_add_sleep_timer(worker, current, timeout_ms);
-                XrRuntime *runtime = worker->p.runtime;
-                if (runtime) {
-                    xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
-                }
-            }
+        if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             frame->pc = pc - 1;
             return XR_DISP_BLOCKED;
         }
@@ -386,6 +297,18 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
     }
 
     // Main thread: synchronous polling
+    XrValue recv_val;
+    if (xr_chan_try_recv(isolate, ch, &recv_val, NULL)) {
+        base[a] = recv_val;
+        base[a + 1] = xr_bool(true);
+        return XR_DISP_NEXT;
+    }
+    if (xr_channel_is_closed(ch) || timeout_ms <= 0) {
+        base[a] = xr_null();
+        base[a + 1] = xr_bool(false);
+        return XR_DISP_NEXT;
+    }
+
     uint64_t start_ns = xr_time_monotonic_ns();
     while (1) {
         int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
