@@ -55,6 +55,7 @@ static inline uint32_t xr_xorshift32(uint32_t *state) {
 // Time / TLS / idle stack (xworker.c or xworker_sched.c)
 XR_FUNC int64_t get_current_time_us(void);
 XR_FUNC void wake_idle_worker(XrRuntime *rt);
+XR_FUNC void wake_idle_workers(XrRuntime *rt, int max_wakes);
 XR_FUNC void worker_unpark(XrWorker *worker);
 XR_FUNC void *worker_loop(void *arg);
 
@@ -72,6 +73,7 @@ XR_FUNC bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro);
 
 // Poll & inbox drain (xworker_sched.c) — shared with handoff
 XR_FUNC void worker_drain_inbox(XrWorker *worker);
+XR_FUNC int worker_pull_inject(XrWorker *worker, int max_per_priority);
 // Returns a fast-path IO coroutine (affinity match, skip queue) or NULL.
 XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 

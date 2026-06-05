@@ -441,6 +441,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Periodic lightweight housekeeping during fast dispatch
         if ((fast_dispatch_budget & 7) == 0) {
             worker_drain_inbox(worker);  // O(1) if empty
+            worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
         }
         if ((fast_dispatch_budget & 15) == 0) {
             int64_t _now = xr_monotonic_ticks();
