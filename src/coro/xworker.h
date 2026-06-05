@@ -142,6 +142,7 @@ typedef struct XrRuntime {
 
     /* === Scheduler Hint Bitsets === */
     _Atomic uint64_t nonempty_p_mask[XR_CORO_PRIORITY_COUNT];
+    _Atomic uint64_t stealable_p_mask[XR_CORO_PRIORITY_COUNT];
     _Atomic uint64_t timer_p_mask;
     _Atomic uint64_t idle_p_mask;
     _Atomic int searching_count;
@@ -190,6 +191,13 @@ static inline void xr_runtime_set_runq_nonempty(XrRuntime *runtime, int worker_i
     if (!runtime || priority < 0 || priority >= XR_CORO_PRIORITY_COUNT)
         return;
     xr_runtime_set_mask_bit(&runtime->nonempty_p_mask[priority], worker_id, nonempty);
+}
+
+static inline void xr_runtime_set_runq_stealable(XrRuntime *runtime, int worker_id, int priority,
+                                                 bool stealable) {
+    if (!runtime || priority < 0 || priority >= XR_CORO_PRIORITY_COUNT)
+        return;
+    xr_runtime_set_mask_bit(&runtime->stealable_p_mask[priority], worker_id, stealable);
 }
 
 static inline void xr_runtime_set_timer_pending(XrRuntime *runtime, int worker_id, bool pending) {
