@@ -453,16 +453,19 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_SELECT);
 }
 
-// xr_worker_wake_select - Wake select coroutine waiting on specified Channel
+// xr_worker_wake_select_with_status - Wake select coroutine waiting on specified Channel
 //
 // Traverse bucket->select_head (XrSelectCase chain) instead of
 // scanning all blocked coros.  Complexity = O(select waiters on this channel).
-XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
+XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, int resume_status) {
     if (!worker || !channel)
         return NULL;
     // MUST only be called from the owning worker thread.
     XR_DCHECK(xr_current_worker() == worker,
               "wake_select: cross-worker call detected (use chan_wake_queue)");
+    if (resume_status != XR_RESUME_CHANNEL && resume_status != XR_RESUME_CHANNEL_CLOSED) {
+        resume_status = XR_RESUME_CHANNEL;
+    }
 
     // Fast path: no select waiters at all
     if (worker->p.select_waiter_count == 0)
@@ -494,7 +497,7 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
                 xr_worker_unblock_select(worker, coro);
 
                 // Set wake state
-                xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
+                xr_coro_resume_store(coro, resume_status);
                 xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
                 xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
@@ -506,6 +509,10 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
     }
 
     return NULL;
+}
+
+XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
+    return xr_worker_wake_select_with_status(worker, channel, XR_RESUME_CHANNEL);
 }
 
 // Remove a single XrSelectCase from its bucket's select queue.

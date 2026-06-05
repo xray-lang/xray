@@ -76,6 +76,12 @@ static bool consume_select_channel_resume(XrCoroutine *coro) {
     return true;
 }
 
+static bool is_select_channel_resume(XrCoroutine *coro, int resume_status) {
+    if (!coro || !coro->select_wait)
+        return false;
+    return resume_status == XR_RESUME_CHANNEL || resume_status == XR_RESUME_CHANNEL_CLOSED;
+}
+
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {
     XrValue value = coro ? coro->result : XR_NULL_VAL;
     XrValue error = coro ? coro->error : XR_NULL_VAL;
@@ -719,7 +725,8 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     // recv_slot is visible before we enter run().
     // Handles both VM bytecode and JIT coroutines (the redundant separate
     // !jit_resume_entry exclusion — JIT now uses run_jit_resume directly).
-    if (_fast_resume == XR_RESUME_CHANNEL && (_fast_flags & XR_CORO_FLG_STARTED)) {
+    if ((_fast_resume == XR_RESUME_CHANNEL || is_select_channel_resume(coro, _fast_resume)) &&
+        (_fast_flags & XR_CORO_FLG_STARTED)) {
         ctx->current_coro = coro;
         coro_ctx->current_coro = coro;
         coro->next = NULL;

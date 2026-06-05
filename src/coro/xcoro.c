@@ -32,6 +32,7 @@
 #include "xcoro_registry.h"
 #include "xtask.h"
 #include "xcoro_pool.h"
+#include "xyieldable.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
 
@@ -1469,7 +1470,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     // Local worker: direct wake (owner-safe)
     if (current) {
         xr_worker_wake_all(current, channel);
-        while (xr_worker_wake_select(current, channel)) {
+        while (xr_worker_wake_select_with_status(current, channel, XR_RESUME_CHANNEL_CLOSED)) {
             // Keep waking until no more select waiters
         }
     }
