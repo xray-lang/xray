@@ -52,6 +52,17 @@
  * coroutines when A and B bounce through a channel for ms-scale bursts. */
 #define XR_FAST_DISPATCH_BUDGET 64
 
+/* Max coroutines pulled from each global inject priority queue during a
+ * normal scheduler poll. Larger batches reduce mutex traffic under external
+ * spawn bursts; smaller batches keep per-worker queues from monopolizing
+ * global work. */
+#define XR_INJECT_POP_BATCH 32
+
+/* Smaller inject pull used inside blocked fast-dispatch. This keeps tight
+ * channel ping-pong loops from starving externally injected work without
+ * destroying the locality benefit of the fast path. */
+#define XR_FAST_DISPATCH_INJECT_BATCH 4
+
 /* ========== Coroutine Pool ==========
  *
  * Subsystem-internal sizing lives in xcoro_pool.h

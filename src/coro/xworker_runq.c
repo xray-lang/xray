@@ -339,7 +339,7 @@ void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *
     xr_mutex_unlock(&q->lock);
 
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_push_count, (uint64_t) actual_count);
-    wake_idle_worker(runtime);
+    wake_idle_workers(runtime, actual_count);
 }
 
 void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro) {

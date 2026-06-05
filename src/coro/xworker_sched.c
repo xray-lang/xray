@@ -30,8 +30,6 @@
 #include "../os/os_thread.h"
 #include <time.h>
 
-#define XR_INJECT_POP_BATCH 32
-
 // ========== Lock-free Idle Worker Stack ==========
 //
 // Treiber stack of parked XrMachine*. Replaces the prior
@@ -109,6 +107,22 @@ void wake_idle_worker(XrRuntime *rt) {
         return;
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
     xr_park_futex_wake(&m->park_state);
+}
+
+void wake_idle_workers(XrRuntime *rt, int max_wakes) {
+    if (!rt || max_wakes <= 0)
+        return;
+
+    int idle_count = atomic_load_explicit(&rt->idle_worker_count, memory_order_relaxed);
+    if (idle_count <= 0)
+        return;
+    int wakes = max_wakes < idle_count ? max_wakes : idle_count;
+    if (wakes > rt->worker_count)
+        wakes = rt->worker_count;
+
+    for (int i = 0; i < wakes; i++) {
+        wake_idle_worker(rt);
+    }
 }
 
 // Public API: wake one idle worker (for use by xcoro.c etc.)
@@ -201,7 +215,7 @@ void worker_drain_inbox(XrWorker *worker) {
     }
 }
 
-static int worker_pull_inject(XrWorker *worker, int max_per_priority) {
+int worker_pull_inject(XrWorker *worker, int max_per_priority) {
     if (!worker || max_per_priority <= 0)
         return 0;
     XrRuntime *runtime = worker->p.runtime;
@@ -330,8 +344,7 @@ after_netpoll:
             int wakes = new_items < idle_count ? new_items : idle_count;
             if (wakes < 1)
                 wakes = 1;
-            for (int _w = 0; _w < wakes; _w++)
-                wake_idle_worker(runtime);
+            wake_idle_workers(runtime, wakes);
         }
     }
 
@@ -919,8 +932,14 @@ void *worker_loop(void *arg) {
 
             // Anti-starvation: probabilistically drain inbox BEFORE local pop
             // so cross-worker deliveries are not starved by a full local queue.
-            if (xr_xorshift32(&worker->p.rng_state) % (2 * runtime->worker_count) == 0) {
+            uint32_t sched_sample = xr_xorshift32(&worker->p.rng_state);
+            if (sched_sample % (2 * runtime->worker_count) == 0) {
                 worker_drain_inbox(worker);
+            }
+            if ((sched_sample & 3u) == 0 &&
+                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0 &&
+                xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH) {
+                worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
             }
 
             // Fast path: local queue first.
