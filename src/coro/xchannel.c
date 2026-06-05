@@ -790,6 +790,8 @@ void xr_channel_close(XrChannel *ch) {
         coro->chan_wait_next = NULL;
         channel_wake_coro_ex(coro, true);  // close wake
     }
+
+    xr_runtime_wake_channel_all(ch->isolate, ch);
 }
 
 bool xr_channel_is_closed(XrChannel *ch) {

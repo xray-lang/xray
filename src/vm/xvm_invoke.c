@@ -131,7 +131,6 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     // ch.close()
     if (nargs == 0 && method_symbol == SYMBOL_CLOSE) {
         xr_channel_close(ch);
-        xr_runtime_wake_channel_all(isolate, ch);
         base[a] = xr_null();
         return XR_DISP_NEXT;
     }

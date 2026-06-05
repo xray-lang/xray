@@ -243,6 +243,7 @@ add_xray_unit_test(test_xmalloc base/test_xmalloc.c)
 add_xray_unit_test(test_mpsc_queue coro/test_mpsc_queue.c)
 add_xray_unit_test(test_steal_queue coro/test_steal_queue.c)
 add_xray_unit_test(test_handoff_budget coro/test_handoff_budget.c)
+add_xray_unit_test(test_channel_close coro/test_channel_close.c)
 
 # ============================================================================
 # module/ — Resolver, semver, lockfile, source cache
