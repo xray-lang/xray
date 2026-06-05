@@ -127,14 +127,12 @@ static void coro_finish_resume(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_finish_resume: NULL coro");
     xr_coro_resume_store(coro, XR_RESUME_OK);
     atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
-    coro->channel_deadline = 0;
 }
 
 static void coro_arm_timeout(XrCoroutine *coro, int64_t timeout_ms) {
     XR_DCHECK(coro != NULL, "coro_arm_timeout: NULL coro");
     XR_DCHECK(timeout_ms > 0, "coro_arm_timeout: non-positive timeout");
 
-    coro->channel_deadline = xr_monotonic_ticks() + timeout_ms;
     XrWorker *worker = xr_current_worker();
     if (!worker)
         return;
