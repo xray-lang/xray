@@ -523,10 +523,11 @@ XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue channel_value
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
-XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
+XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx) {
     if (!ctx || !ctx->isolate || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
 
+    XrSlotRef out_slot = ctx->coro->ext ? ctx->coro->ext->recv_slot_ref : xr_slot_none();
     XrCoroBlockResult block =
         xr_coro_chan_recv_resume(ctx->isolate, ctx->coro, out_slot, xr_slot_none());
     if (block.kind == XR_CORO_BLOCK_READY) {
