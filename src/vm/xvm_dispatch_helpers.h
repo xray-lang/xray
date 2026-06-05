@@ -19,6 +19,7 @@
 #include "xvm_internal.h"
 
 #include "../coro/xchannel.h"
+#include "../coro/xcoro_snapshot.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xworker.h"
 #include "../coro/xyieldable.h"
@@ -203,10 +204,7 @@ static inline XrValue vm_chan_copy_recv(XrayIsolate *isolate, XrValue value, XrV
 
 #define VM_CORO_COLLECT_MAX 10000
 
-typedef struct {
-    XrCoroutine *coro;
-    const char *state;
-} VmCoroEntry;
+typedef XrCoroSnapshotEntry VmCoroEntry;
 
 /* ========== Class Resolution for OP_INVOKE ========== */
 

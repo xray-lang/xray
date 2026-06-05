@@ -464,11 +464,6 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
 XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     XR_DCHECK(X != NULL, "coro_create_empty: NULL isolate");
 
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
-        return NULL;
-    }
-
     XrCoroutine *coro = coro_alloc_lightweight_shell();
     if (!coro)
         return NULL;
@@ -633,16 +628,10 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
 // ========== Scheduler Operations ==========
 
 // Initialize scheduler
-void xr_sched_init(XrCoroState *sched) {
+void xr_coro_state_init(XrCoroState *sched) {
     if (!sched)
         return;
 
-    // Initialize multi-level priority queues
-    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
-        sched->ready_head[i] = NULL;
-        sched->ready_tail[i] = NULL;
-    }
-    sched->coro_count = 0;
     sched->total_created = 0;
 
     // Initialize scope
@@ -656,17 +645,9 @@ void xr_sched_init(XrCoroState *sched) {
 }
 
 // Destroy scheduler
-void xr_sched_destroy(XrCoroState *sched) {
+void xr_coro_state_destroy(XrCoroState *sched) {
     if (!sched)
         return;
-
-    // Coroutines managed by GC, just clear list refs
-    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
-        sched->ready_head[i] = NULL;
-        sched->ready_tail[i] = NULL;
-    }
-
-    sched->coro_count = 0;
 
     // Destroy named coroutine registry
     if (sched->coro_registry) {
@@ -674,88 +655,6 @@ void xr_sched_destroy(XrCoroState *sched) {
         xr_free(sched->coro_registry);
         sched->coro_registry = NULL;
     }
-}
-
-// Add coroutine to ready queue tail (select queue by priority)
-void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro) {
-    if (!sched || !coro)
-        return;
-
-    xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
-    xr_coro_flags_set(coro, XR_CORO_FLG_READY);
-    coro->next = NULL;
-
-    // Select queue by priority (from flags)
-    int prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (prio < 0)
-        prio = 0;
-    if (prio >= XR_CORO_PRIORITY_COUNT)
-        prio = XR_CORO_PRIORITY_COUNT - 1;
-
-    if (sched->ready_tail[prio]) {
-        sched->ready_tail[prio]->next = coro;
-        sched->ready_tail[prio] = coro;
-    } else {
-        sched->ready_head[prio] = coro;
-        sched->ready_tail[prio] = coro;
-    }
-    sched->coro_count++;
-}
-
-// Remove specific coroutine from ready queue (for await direct execution)
-// Note: don't decrement coro_count, coroutine still active (just not in ready queue)
-void xr_sched_remove(XrCoroState *sched, XrCoroutine *target) {
-    if (!sched || !target)
-        return;
-
-    // Search all priority queues
-    for (int prio = 0; prio < XR_CORO_PRIORITY_COUNT; prio++) {
-        XrCoroutine *prev = NULL;
-        XrCoroutine *coro = sched->ready_head[prio];
-
-        while (coro) {
-            if (coro == target) {
-                // Found, remove from queue
-                if (prev) {
-                    prev->next = coro->next;
-                } else {
-                    sched->ready_head[prio] = coro->next;
-                }
-                if (coro == sched->ready_tail[prio]) {
-                    sched->ready_tail[prio] = prev;
-                }
-                coro->next = NULL;
-                // Don't decrement coro_count, coroutine still active
-                return;
-            }
-            prev = coro;
-            coro = coro->next;
-        }
-    }
-}
-
-// Dequeue coroutine from ready queue (high to low priority)
-XrCoroutine *xr_sched_dequeue(XrCoroState *sched) {
-    if (!sched)
-        return NULL;
-
-    // Search from high to low priority
-    for (int prio = XR_CORO_PRIORITY_COUNT - 1; prio >= 0; prio--) {
-        if (sched->ready_head[prio]) {
-            XrCoroutine *coro = sched->ready_head[prio];
-            sched->ready_head[prio] = coro->next;
-
-            if (!sched->ready_head[prio]) {
-                sched->ready_tail[prio] = NULL;
-            }
-
-            coro->next = NULL;
-            sched->coro_count--;
-            return coro;
-        }
-    }
-
-    return NULL;
 }
 
 // Note: xr_coro_save_context, xr_coro_restore_context, xr_coro_run removed.
@@ -871,42 +770,6 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
 
     // Clear the mask — channel is closed, no future waiters expected.
     xr_channel_clear_all_waiter_masks(ch);
-}
-
-// ========== Deadlock Diagnosis ==========
-
-// Format coroutine identifier into caller-provided buffer
-static XR_UNUSED const char *format_coro_id(XrCoroutine *coro, char *buf, size_t bufsz) {
-    const char *name = xr_coro_name(coro);
-    if (name) {
-        snprintf(buf, bufsz, "#%d \"%s\"", coro->id, name);
-    } else {
-        snprintf(buf, bufsz, "#%d", coro->id);
-    }
-    return buf;
-}
-
-// Print deadlock diagnosis info (simplified: blocked queue managed by Runtime)
-static XR_UNUSED void xr_sched_print_deadlock(XrCoroState *sched) {
-    if (!sched)
-        return;
-
-    int ready_count = 0;
-    for (int prio = 0; prio < XR_CORO_PRIORITY_COUNT; prio++) {
-        XrCoroutine *r = sched->ready_head[prio];
-        while (r) {
-            ready_count++;
-            r = r->next;
-        }
-    }
-
-    fprintf(stderr, "\n");
-    fprintf(stderr, "========================================\n");
-    fprintf(stderr, "Coroutine Deadlock Detection Report\n");
-    fprintf(stderr, "========================================\n");
-    fprintf(stderr, "Ready coroutines: %d, Total created: %d\n", ready_count, sched->total_created);
-    fprintf(stderr, "Note: Blocked queue managed by Runtime\n");
-    fprintf(stderr, "========================================\n\n");
 }
 
 // ========== GC Integration ==========

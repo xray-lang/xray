@@ -248,7 +248,7 @@ static void init_globals(XrayIsolate *isolate) {
 static void init_coro_state(XrayIsolate *isolate) {
     XrCoroState *sched = (XrCoroState *) xr_malloc(sizeof(XrCoroState));
     if (sched) {
-        xr_sched_init(sched);
+        xr_coro_state_init(sched);
     }
     isolate->vm.coro_state = sched;
     isolate->vm.current_coro = NULL;
@@ -340,7 +340,7 @@ void xr_vm_cleanup(XrayIsolate *isolate) {
 
     // Cleanup coroutine state
     if (isolate->vm.coro_state != NULL) {
-        xr_sched_destroy((XrCoroState *) isolate->vm.coro_state);
+        xr_coro_state_destroy((XrCoroState *) isolate->vm.coro_state);
         xr_free(isolate->vm.coro_state);
         isolate->vm.coro_state = NULL;
     }

@@ -23,7 +23,7 @@
 #include "../../runtime/symbol/xsymbol_table.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xcoro_flags.h"
-#include "../../coro/xworker.h"
+#include "../../coro/xcoro_snapshot.h"
 #include "../../base/xmalloc.h"
 #include <stdlib.h>
 #include <string.h>
@@ -578,6 +578,8 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
 // Coroutine Debugging
 // ============================================================================
 
+#define XDAP_CORO_SNAPSHOT_MAX 10000
+
 // Map coroutine state + wait reason to human-readable string
 static const char *coro_state_string(XrCoroutine *coro) {
     uint8_t st = atomic_load_explicit(&coro->coro_state, memory_order_relaxed);
@@ -616,76 +618,37 @@ static const char *coro_state_string(XrCoroutine *coro) {
 }
 
 int xr_debug_get_coro_count(XrayIsolate *isolate) {
-    if (!xr_isolate_get_vm_state(isolate)->coro_state)
+    if (!isolate || !xr_isolate_get_vm_state(isolate)->runtime)
         return 0;
 
-    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(isolate)->coro_state;
-    int count = 0;
-
-    // Ready queues (all priority levels)
-    for (int p = 0; p < XR_CORO_PRIORITY_COUNT; p++) {
-        XrCoroutine *coro = sched->ready_head[p];
-        while (coro) {
-            count++;
-            coro = coro->sched_link;
-        }
-    }
-
-    // Blocked coroutines in per-worker queues
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XDAP_CORO_SNAPSHOT_MAX);
+    if (!entries)
+        return 0;
     XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
-    if (rt) {
-        for (int w = 0; w < rt->worker_count; w++) {
-            XrCoroutine *bc = rt->workers[w].p.blocked_head;
-            while (bc) {
-                count++;
-                bc = bc->sched_link;
-            }
-        }
-    }
-
+    int count = xr_runtime_collect_coros(rt, entries, XDAP_CORO_SNAPSHOT_MAX);
+    xr_free(entries);
     return count;
 }
 
 bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, const char **out_name,
                             const char **out_state) {
-    if (!xr_isolate_get_vm_state(isolate)->coro_state)
+    if (!isolate || coro_idx < 0 || !xr_isolate_get_vm_state(isolate)->runtime)
         return false;
 
-    XrCoroState *sched = (XrCoroState *) xr_isolate_get_vm_state(isolate)->coro_state;
-    int idx = 0;
-    XrCoroutine *target = NULL;
-
-    // Ready queues
-    if (!target) {
-        for (int p = 0; p < XR_CORO_PRIORITY_COUNT && !target; p++) {
-            XrCoroutine *coro = sched->ready_head[p];
-            while (coro && !target) {
-                if (idx == coro_idx)
-                    target = coro;
-                idx++;
-                coro = coro->sched_link;
-            }
-        }
-    }
-
-    // Blocked coroutines in per-worker queues
-    if (!target) {
-        XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
-        if (rt) {
-            for (int w = 0; w < rt->worker_count && !target; w++) {
-                XrCoroutine *bc = rt->workers[w].p.blocked_head;
-                while (bc && !target) {
-                    if (idx == coro_idx)
-                        target = bc;
-                    idx++;
-                    bc = bc->sched_link;
-                }
-            }
-        }
-    }
-
-    if (!target)
+    XrCoroSnapshotEntry *entries =
+        (XrCoroSnapshotEntry *) xr_malloc(sizeof(XrCoroSnapshotEntry) * XDAP_CORO_SNAPSHOT_MAX);
+    if (!entries)
         return false;
+
+    XrRuntime *rt = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
+    int count = xr_runtime_collect_coros(rt, entries, XDAP_CORO_SNAPSHOT_MAX);
+    XrCoroutine *target = coro_idx < count ? entries[coro_idx].coro : NULL;
+
+    if (!target) {
+        xr_free(entries);
+        return false;
+    }
 
     if (out_id)
         *out_id = target->id;
@@ -696,6 +659,7 @@ bool xr_debug_get_coro_info(XrayIsolate *isolate, int coro_idx, int *out_id, con
     if (out_state)
         *out_state = coro_state_string(target);
 
+    xr_free(entries);
     return true;
 }
 

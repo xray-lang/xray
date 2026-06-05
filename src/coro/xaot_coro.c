@@ -421,6 +421,7 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
 
 XrValue xr_aot_coro_set_priority(const XrAotContext *ctx, XrValue target_value,
                                  XrValue priority_value) {
+    (void) ctx;
     XrCoroutine *coro = NULL;
     if (xr_value_is_task(target_value)) {
         XrTask *task = xr_value_to_task(target_value);
@@ -438,17 +439,6 @@ XrValue xr_aot_coro_set_priority(const XrAotContext *ctx, XrValue target_value,
             new_prio = (XrCoroPriority) prio_int;
     }
 
-    int old_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (ctx && ctx->isolate && xr_coro_flags_has(coro, XR_CORO_FLG_READY) &&
-        old_prio != (int) new_prio) {
-        XrCoroState *sched = (XrCoroState *) ctx->isolate->vm.coro_state;
-        if (sched) {
-            xr_sched_remove(sched, coro);
-            xr_coro_set_priority(coro, new_prio);
-            xr_sched_enqueue(sched, coro);
-            return XR_NULL_VAL;
-        }
-    }
     xr_coro_set_priority(coro, new_prio);
     return XR_NULL_VAL;
 }

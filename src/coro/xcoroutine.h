@@ -358,13 +358,9 @@ static inline void xr_coro_request_yield(XrCoroutine *coro) {
     coro->reductions = 0;
 }
 
-/* ========== Coroutine State (single-thread scheduler + isolate-level coro bookkeeping) ==========
- */
+/* ========== Coroutine State (isolate-level coroutine bookkeeping) ========== */
 
 typedef struct XrCoroState {
-    XrCoroutine *ready_head[XR_CORO_PRIORITY_COUNT];
-    XrCoroutine *ready_tail[XR_CORO_PRIORITY_COUNT];
-    int coro_count;
     _Atomic int total_created;
     XrScopeContext *current_scope;
     struct XrCoroRegistry *coro_registry;  // Named coroutine registry (lazy init)
@@ -391,12 +387,9 @@ XR_FUNC void xr_coro_clear_select_wait(XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child);
 XR_FUNC XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro);
 
-// Scheduler
-XR_FUNC void xr_sched_init(XrCoroState *sched);
-XR_FUNC void xr_sched_destroy(XrCoroState *sched);
-XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);
-XR_FUNC void xr_sched_remove(XrCoroState *sched, XrCoroutine *target);
-XR_FUNC XrCoroutine *xr_sched_dequeue(XrCoroState *sched);
+// Isolate-level coroutine bookkeeping
+XR_FUNC void xr_coro_state_init(XrCoroState *state);
+XR_FUNC void xr_coro_state_destroy(XrCoroState *state);
 
 // Multicore runtime
 XR_FUNC void xr_multicore_init(struct XrayIsolate *X, int num_workers);

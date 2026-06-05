@@ -211,17 +211,7 @@ vmcase(OP_SET_PRIORITY) {
             new_prio = (XrCoroPriority) prio_int;
         }
     }
-    int old_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (xr_coro_flags_has(coro, XR_CORO_FLG_READY) && old_prio != (int) new_prio) {
-        XrCoroState *sched = (XrCoroState *) isolate->vm.coro_state;
-        if (sched) {
-            xr_sched_remove(sched, coro);
-            xr_coro_set_priority(coro, new_prio);
-            xr_sched_enqueue(sched, coro);
-        }
-    } else {
-        xr_coro_set_priority(coro, new_prio);
-    }
+    xr_coro_set_priority(coro, new_prio);
     vmbreak;
 }
 
