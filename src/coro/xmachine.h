@@ -31,7 +31,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "xexec_frame.h"
-#include "../runtime/xvm_call.h"
 #include "../base/xplatform.h"
 
 /* ========== Futex-based Park/Unpark ========== */
