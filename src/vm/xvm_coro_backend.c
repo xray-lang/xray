@@ -23,6 +23,7 @@
 #include "../runtime/xvm_call.h"
 #include "../runtime/value/xvalue_format.h"
 #include "../base/xchecks.h"
+#include "../base/xmalloc.h"
 #include "../base/xlog.h"
 #include "xvm_resume.h"
 
@@ -49,13 +50,16 @@ static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *e
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result);
 static const char *vm_backend_debug_name(const XrCoroutine *coro);
 static void vm_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
+static void vm_backend_destroy(XrCoroutine *coro);
+static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
     .resume = vm_backend_resume,
     .trace_roots = NULL,
     .release = NULL,
-    .destroy = NULL,
+    .destroy = vm_backend_destroy,
+    .prepare_recycle = vm_backend_prepare_recycle,
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
@@ -111,6 +115,119 @@ static bool is_select_channel_resume(XrCoroutine *coro, int resume_status) {
 
 static XrVmCoroState *vm_state_for_coro(XrCoroutine *coro) {
     return xr_coro_maybe_vm_state(coro);
+}
+
+static void vm_backend_free_stack_frames(XrCoroutine *coro, XrVMContext *ctx) {
+    if (!coro || !ctx)
+        return;
+    if (ctx->stack) {
+        if (coro->gc_flags & XR_CORO_GC_SLAB_STACK) {
+            if (ctx->stack_capacity != XR_CORO_POOL_STACK_SLOTS) {
+                xr_free(ctx->stack);
+            }
+        } else {
+            char *stack_end = (char *) ctx->stack + sizeof(XrValue) * ctx->stack_capacity;
+            bool combined = (ctx->frames && (char *) ctx->frames == stack_end);
+            xr_free(ctx->stack);
+            if (!combined && ctx->frames) {
+                xr_free(ctx->frames);
+            }
+        }
+        ctx->stack = NULL;
+        ctx->frames = NULL;
+    } else if (ctx->frames) {
+        xr_free(ctx->frames);
+        ctx->frames = NULL;
+    }
+}
+
+static void vm_backend_reset_handlers(XrVMContext *ctx) {
+    if (!ctx)
+        return;
+    if (ctx->handlers && ctx->handlers != ctx->handler_inline) {
+        xr_free(ctx->handlers);
+    }
+    ctx->handlers = ctx->handler_inline;
+    ctx->handler_count = 0;
+    ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
+}
+
+static void vm_backend_free_struct_storage(XrVMContext *ctx) {
+    if (!ctx)
+        return;
+    if (ctx->struct_areas) {
+        for (int i = 0; i < ctx->struct_areas_cap; i++) {
+            if (ctx->struct_areas[i])
+                xr_free(ctx->struct_areas[i]);
+        }
+        xr_free(ctx->struct_areas);
+        xr_free(ctx->struct_area_caps);
+        ctx->struct_areas = NULL;
+        ctx->struct_area_caps = NULL;
+        ctx->struct_areas_cap = 0;
+    }
+    if (ctx->struct_ret_arena) {
+        xr_free(ctx->struct_ret_arena);
+        ctx->struct_ret_arena = NULL;
+        ctx->struct_ret_arena_used = 0;
+        ctx->struct_ret_arena_cap = 0;
+    }
+}
+
+static void vm_backend_free_defer_state(XrVMContext *ctx) {
+    if (!ctx)
+        return;
+    if (ctx->defer_stack) {
+        xr_free(ctx->defer_stack);
+        ctx->defer_stack = NULL;
+    }
+    if (ctx->defer_frame_marks) {
+        xr_free(ctx->defer_frame_marks);
+        ctx->defer_frame_marks = NULL;
+    }
+    ctx->defer_count = 0;
+    ctx->defer_capacity = 0;
+}
+
+static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
+    (void) worker;
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!state)
+        return false;
+    XrVMContext *ctx = &state->ctx;
+    if (!ctx->stack || !ctx->frames)
+        return false;
+
+    ctx->stack[0] = xr_null();
+    ctx->stack_top = ctx->stack;
+    ctx->frame_count = 0;
+    ctx->handler_count = 0;
+    vm_backend_free_defer_state(ctx);
+    xr_coro_clear_vm_entry_state(coro);
+    xr_coro_reset_jit_state(coro);
+    return true;
+}
+
+static void vm_backend_destroy(XrCoroutine *coro) {
+    XrVmCoroState *state = vm_state_for_coro(coro);
+    if (!coro || !state)
+        return;
+    XrVMContext *ctx = &state->ctx;
+
+    vm_backend_free_stack_frames(coro, ctx);
+    vm_backend_reset_handlers(ctx);
+    vm_backend_free_struct_storage(ctx);
+    vm_backend_free_defer_state(ctx);
+    xr_vm_ctx_free_ic_tables(ctx);
+    xr_coro_free_jit_state(coro);
+    xr_coro_clear_vm_entry_state(coro);
+
+    if (coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) {
+        xr_free(state);
+        coro->backend_state = NULL;
+        coro->backend = NULL;
+        coro->gc_flags &= ~XR_CORO_GC_VM_STATE_OWNED;
+    }
 }
 
 static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult result) {

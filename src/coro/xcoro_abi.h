@@ -96,6 +96,7 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
+    bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     const char *(*debug_name)(const XrCoroutine *coro);
     void (*debug_snapshot)(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot);
 } XrCoroBackendVTable;
