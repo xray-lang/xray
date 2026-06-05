@@ -26,6 +26,21 @@ typedef struct XrWorker XrWorker;
 typedef struct XrayIsolate XrayIsolate;
 typedef struct XrClosure XrClosure;
 
+#ifndef XR_CFUNC_RESULT_DEFINED
+typedef enum {
+    XR_CFUNC_DONE = 0,
+    XR_CFUNC_YIELD,
+    XR_CFUNC_BLOCKED,
+    XR_CFUNC_ERROR,
+    XR_CFUNC_CALL_CLOSURE,
+    XR_CFUNC_WOULD_BLOCK
+} XrCFuncResult;
+#define XR_CFUNC_RESULT_DEFINED
+#endif
+
+typedef XrCFuncResult (*XrCoroCFuncEntry)(XrayIsolate *isolate, XrValue *args, int nargs,
+                                          XrValue *result);
+
 /* ========== Backend Identity ========== */
 
 typedef enum {
@@ -101,6 +116,12 @@ typedef struct XrCoroBackendVTable {
     bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                     bool need_storage, bool is_clean);
     void (*reset_execution_state)(XrCoroutine *coro, XrayIsolate *X);
+    void (*clear_entry_state)(XrCoroutine *coro);
+    void (*reset_entry_state_no_free)(XrCoroutine *coro);
+    bool (*bind_closure_entry)(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure, XrValue *args,
+                               int arg_count, bool copy_args);
+    bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
+                             int arg_count);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
     void (*on_safepoint)(XrCoroutine *coro);

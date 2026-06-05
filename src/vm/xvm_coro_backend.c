@@ -57,6 +57,12 @@ static bool vm_backend_ensure_state(XrCoroutine *coro);
 static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X, XrWorker *worker,
                                                bool need_storage, bool is_clean);
 static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X);
+static void vm_backend_clear_entry_state(XrCoroutine *coro);
+static void vm_backend_reset_entry_state_no_free(XrCoroutine *coro);
+static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+                                          XrValue *args, int arg_count, bool copy_args);
+static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
+                                        int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
 static void vm_backend_on_safepoint(XrCoroutine *coro);
@@ -78,6 +84,10 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .ensure_state = vm_backend_ensure_state,
     .prepare_execution_state = vm_backend_prepare_execution_state,
     .reset_execution_state = vm_backend_reset_execution_state,
+    .clear_entry_state = vm_backend_clear_entry_state,
+    .reset_entry_state_no_free = vm_backend_reset_entry_state_no_free,
+    .bind_closure_entry = vm_backend_bind_closure_entry,
+    .bind_cfunc_entry = vm_backend_bind_cfunc_entry,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
     .on_safepoint = vm_backend_on_safepoint,
@@ -192,11 +202,11 @@ static void vm_backend_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) 
     ctx->isolate = X;
 }
 
-void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro) {
+static void vm_backend_reset_entry_state_no_free(XrCoroutine *coro) {
     vm_entry_reset_no_free(vm_state_for_coro(coro));
 }
 
-void xr_coro_clear_vm_entry_state(XrCoroutine *coro) {
+static void vm_backend_clear_entry_state(XrCoroutine *coro) {
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
         return;
@@ -235,8 +245,8 @@ static bool vm_entry_copy_args(XrCoroutine *coro, XrayIsolate *X, XrVmCoroState 
     return true;
 }
 
-bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
-                                   XrValue *args, int arg_count, bool copy_args) {
+static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+                                          XrValue *args, int arg_count, bool copy_args) {
     if (!coro || !closure)
         return false;
     if (!vm_backend_ensure_state(coro))
@@ -244,19 +254,18 @@ bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure 
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
         return false;
-    xr_coro_clear_vm_entry_state(coro);
+    vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
     state->entry.closure = closure;
     if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
-        xr_coro_clear_vm_entry_state(coro);
+        vm_backend_clear_entry_state(coro);
         return false;
     }
     return true;
 }
 
-bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
-                                 XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int, XrValue *),
-                                 XrValue *args, int arg_count) {
+static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
+                                        int arg_count) {
     if (!coro || !cfunc)
         return false;
     if (!vm_backend_ensure_state(coro))
@@ -264,11 +273,11 @@ bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
     XrVmCoroState *state = vm_state_for_coro(coro);
     if (!state)
         return false;
-    xr_coro_clear_vm_entry_state(coro);
+    vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CFUNC;
     state->entry.cfunc = cfunc;
     if (!vm_entry_copy_args(coro, NULL, state, args, arg_count, false)) {
-        xr_coro_clear_vm_entry_state(coro);
+        vm_backend_clear_entry_state(coro);
         return false;
     }
     return true;
@@ -511,7 +520,7 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
     ctx->frame_count = 0;
     ctx->handler_count = 0;
     vm_backend_free_defer_state(ctx);
-    xr_coro_clear_vm_entry_state(coro);
+    vm_backend_clear_entry_state(coro);
     vm_coro_reset_jit_state(coro);
     return true;
 }
@@ -519,7 +528,7 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
 static void vm_backend_reset_reusable(XrCoroutine *coro) {
     if (!vm_state_for_coro(coro))
         return;
-    xr_coro_clear_vm_entry_state(coro);
+    vm_backend_clear_entry_state(coro);
     vm_coro_reset_jit_state(coro);
 }
 
@@ -633,7 +642,7 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_backend_free_defer_state(ctx);
     xr_vm_ctx_free_ic_tables(ctx);
     vm_coro_free_jit_state(coro);
-    xr_coro_clear_vm_entry_state(coro);
+    vm_backend_clear_entry_state(coro);
 
     if (coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) {
         xr_free(state);

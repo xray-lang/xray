@@ -358,16 +358,6 @@ static inline void xr_coro_request_yield(XrCoroutine *coro) {
     coro->reductions = 0;
 }
 
-XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
-XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
-XR_FUNC bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, struct XrayIsolate *X,
-                                           XrClosure *closure, XrValue *args, int arg_count,
-                                           bool copy_args);
-XR_FUNC bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
-                                         XrCFuncResult (*cfunc)(struct XrayIsolate *, XrValue *,
-                                                                int, XrValue *),
-                                         XrValue *args, int arg_count);
-
 /* ========== Bootstrap Main Coroutine ========== */
 
 XR_FUNC XrCoroutine *xr_coro_create_bootstrap(struct XrayIsolate *X);

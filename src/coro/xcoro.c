@@ -85,6 +85,26 @@ bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
     return true;
 }
 
+static void coro_reset_entry_state_no_free(XrCoroutine *coro) {
+    if (!coro || !coro->backend || !coro->backend->reset_entry_state_no_free)
+        return;
+    coro->backend->reset_entry_state_no_free(coro);
+}
+
+static bool coro_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure,
+                                    XrValue *args, int arg_count, bool copy_args) {
+    if (!coro || !coro->backend || !coro->backend->bind_closure_entry)
+        return false;
+    return coro->backend->bind_closure_entry(coro, X, closure, args, arg_count, copy_args);
+}
+
+static bool coro_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
+                                  int arg_count) {
+    if (!coro || !coro->backend || !coro->backend->bind_cfunc_entry)
+        return false;
+    return coro->backend->bind_cfunc_entry(coro, cfunc, args, arg_count);
+}
+
 // Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
 // invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
 void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {
@@ -316,7 +336,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
 
     // Bootstrap-specific: mark as main coroutine
     coro->flags |= XR_CORO_FLG_MAIN;
-    xr_coro_reset_vm_entry_no_free(coro);
+    coro_reset_entry_state_no_free(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
 
     return coro;
@@ -328,7 +348,7 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
     XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
     XR_DCHECK(closure != NULL, "coro_setup_main: NULL closure");
-    bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
+    bool bound = coro_bind_closure_entry(coro, X, closure, NULL, 0, false);
     XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
     XR_CHECK(xr_coro_reset_execution_state(coro, X),
@@ -360,7 +380,7 @@ void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closur
              "coro_reset_for_call: failed to reset backend execution state");
 
     // Set new entry closure
-    bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
+    bool bound = coro_bind_closure_entry(coro, X, closure, NULL, 0, false);
     XR_CHECK(bound, "coro_reset_for_call: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
 
@@ -644,7 +664,7 @@ XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrVal
     // (closed immediately, value in upvalue->closed, independent of any stack).
     // Parent coroutine outlives children via scope mechanism, so closure and
     // its upvalue objects remain valid for the child's entire lifetime.
-    if (!xr_coro_bind_vm_closure_entry(coro, X, closure, args, arg_count, true)) {
+    if (!coro_bind_closure_entry(coro, X, closure, args, arg_count, true)) {
         xr_coro_free(coro);
         coro_discard_uninitialized(coro);
         return NULL;
@@ -739,7 +759,7 @@ XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
         return NULL;
     }
 
-    if (!xr_coro_bind_vm_cfunc_entry(coro, cfunc, args, argc)) {
+    if (!coro_bind_cfunc_entry(coro, cfunc, args, argc)) {
         xr_coro_free(coro);
         coro_discard_uninitialized(coro);
         return NULL;
