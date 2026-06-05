@@ -34,7 +34,9 @@ static void sysmon_arm_guard_pages(XrRuntime *runtime) {
         if (st != M_RUNNING)
             continue;
 
-        void *page = w->p.jit_scratch.safepoint_page;
+        void *page = xr_jit_hooks->worker_safepoint_page
+                         ? xr_jit_hooks->worker_safepoint_page(w->p.backend_worker_storage)
+                         : NULL;
         if (page)
             xr_jit_hooks->guard_page_arm(page);
     }

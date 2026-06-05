@@ -128,6 +128,41 @@ XR_FUNC void xm_jit_install_to_proto(XrProto *proto, const XmInstallData *data) 
 
 /* ========== JIT State Management ========== */
 
+static void *xm_jit_worker_state_create(void) {
+    XrJitScratch *scratch = (XrJitScratch *) xr_calloc(1, sizeof(XrJitScratch));
+    if (!scratch)
+        return NULL;
+    scratch->safepoint_page = jit_guard_page_alloc();
+    scratch->safepoint_return_pc = NULL;
+    return scratch;
+}
+
+static void xm_jit_worker_state_destroy(void *worker_state) {
+    XrJitScratch *scratch = (XrJitScratch *) worker_state;
+    if (!scratch)
+        return;
+    if (scratch->safepoint_page) {
+        jit_guard_page_free(scratch->safepoint_page);
+        scratch->safepoint_page = NULL;
+    }
+    xr_free(scratch);
+}
+
+static void *xm_jit_worker_scratch(void *worker_state) {
+    return worker_state;
+}
+
+static void *xm_jit_worker_safepoint_page(void *worker_state) {
+    XrJitScratch *scratch = (XrJitScratch *) worker_state;
+    return scratch ? scratch->safepoint_page : NULL;
+}
+
+static void xm_jit_worker_set_heartbeat(void *worker_state, _Atomic uint64_t *heartbeat) {
+    XrJitScratch *scratch = (XrJitScratch *) worker_state;
+    if (scratch)
+        scratch->heartbeat_ptr = heartbeat;
+}
+
 XmJitState *xm_jit_init(XrayIsolate *isolate, int threshold) {
     XR_DCHECK(threshold >= 0, "xm_jit_init: negative threshold");
     XmJitState *jit = (XmJitState *) xr_calloc(1, sizeof(XmJitState));
@@ -161,6 +196,11 @@ XmJitState *xm_jit_init(XrayIsolate *isolate, int threshold) {
         .guard_page_free = jit_guard_page_free,
         .guard_page_arm = jit_guard_page_arm,
         .guard_page_disarm = jit_guard_page_disarm,
+        .worker_state_create = xm_jit_worker_state_create,
+        .worker_state_destroy = xm_jit_worker_state_destroy,
+        .worker_scratch = xm_jit_worker_scratch,
+        .worker_safepoint_page = xm_jit_worker_safepoint_page,
+        .worker_set_heartbeat = xm_jit_worker_set_heartbeat,
     };
     xr_jit_hooks = &hooks;
 
