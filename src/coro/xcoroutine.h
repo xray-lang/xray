@@ -674,7 +674,7 @@ XR_FUNC XrCoroutine *xr_coro_create_bootstrap(struct XrayIsolate *X);
 // Upgrade bootstrap coro with closure for script execution
 XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
 // Reset main_coro for sequential re-execution (test runner, REPL)
-// Resets vm_ctx, result/error fields, and sets new closure.
+// Resets VM backend context, result/error fields, and sets new closure.
 // Caller then calls xr_main_thread_run() which handles flag reset.
 XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
 

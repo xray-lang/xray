@@ -226,9 +226,9 @@ XR_FUNC bool xr_vm_is_truthy(XrValue value);
 ** Single authoritative VM context resolver.
 **
 ** Resolution order:
-**   1. Current worker's M.vm_ctx.current_coro -> coro->vm_ctx
-**   2. Current worker's M.vm_ctx (no active coro on this M)
-**   3. isolate->main_coro->vm_ctx (fallback during bootstrap / non-worker thread)
+**   1. Current worker's current coroutine VM backend context
+**   2. Current worker's M.vm_ctx scratch context
+**   3. isolate->main_coro VM backend context
 **   4. &isolate->vm_ctx (static fallback)
 **
 ** This is the ONLY supported way to obtain the live execution context inside
@@ -322,9 +322,9 @@ XR_FUNC void xr_vm_ctx_free_ic_tables(XrVMContext *ctx);
 ** vm_create_function_frame, vm_get_safe_stack_start) were removed.
 **
 ** They read/wrote isolate->vm.* (the legacy embedded XrVMState), but live
-** execution state belongs to XrVMContext (per-coroutine). Frame creation
-** in the dispatch loop is performed inline via VM_FRAMES / VM_FRAME_COUNT
-** macros that operate on vm_ctx. Public C-callers must use
+** execution state belongs to the active XrVMContext. Frame creation in the
+** dispatch loop is performed inline via VM_FRAMES / VM_FRAME_COUNT macros
+** that operate on vm_ctx. Public C-callers must use
 ** xr_vm_call_closure / xr_vm_interpret_proto / xr_vm_execute_module.
 */
 
