@@ -114,6 +114,7 @@ op_call_entry:;
                 // Native class constructor
                 XrPrimitiveMethodFn func = constructor->as.primitive;
                 XrValue result = func(isolate, R(a), &R(a + 1), nargs);
+                VM_REBIND_AFTER_NATIVE_CALL();
                 R(a) = result;
                 vmbreak;
             }
@@ -197,6 +198,7 @@ op_call_entry:;
     if (xr_value_is_bound_method(func_val)) {
         XrBoundMethod *bm = xr_value_to_bound_method(func_val);
         XrValue result = bm->handler(isolate, bm->receiver, &R(a + 1), nargs);
+        VM_REBIND_AFTER_NATIVE_CALL();
         if (XR_UNLIKELY(XR_IS_NOTFOUND(result))) {
             VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_METHOD, "bound method call failed: method not found");
         }
@@ -237,6 +239,7 @@ op_call_cfunc:
             if (is_slow) {
                 xr_worker_exitsyscall();
             }
+            VM_REBIND_AFTER_NATIVE_CALL();
 
             switch (status) {
                 case XR_CFUNC_DONE:
@@ -270,6 +273,7 @@ op_call_cfunc:
             if (is_slow) {
                 xr_worker_exitsyscall();
             }
+            VM_REBIND_AFTER_NATIVE_CALL();
 
             R(a) = result;
             vmbreak;

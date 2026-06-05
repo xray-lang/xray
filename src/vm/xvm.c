@@ -309,6 +309,21 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
 #define KB(inst) (K(GETARG_B(i)))
 #define KC(inst) (K(GETARG_C(i)))
 
+#define VM_REBIND_AFTER_NATIVE_CALL()                                                              \
+    do {                                                                                           \
+        if (XR_UNLIKELY(VM_FRAME_COUNT <= 0)) {                                                    \
+            return XR_VM_RUNTIME_ERROR;                                                            \
+        }                                                                                          \
+        ci = &VM_FRAMES[VM_FRAME_COUNT - 1];                                                       \
+        cl = ci->closure;                                                                          \
+        if (XR_UNLIKELY(cl == NULL || cl->proto == NULL)) {                                        \
+            return XR_VM_RUNTIME_ERROR;                                                            \
+        }                                                                                          \
+        base = VM_STACK + ci->base_offset;                                                         \
+        k = (XrValue *) cl->proto->constants.data;                                                 \
+        frame = ci;                                                                                \
+    } while (0)
+
 /* ========== Stack Boundary Check (Dynamic Growth) ========== */
 #define VM_STACK_CHECK(needed_slots)                                                               \
     do {                                                                                           \

@@ -10,15 +10,15 @@
  * KEY CONCEPT:
  *   Each worker maintains a local free list of recycled coroutines
  *   (fast path, lock-free) and an arena-reservation cache (batch
- *   allocation from the global XrCoroStructPool to avoid per-coro
+ *   allocation from the global XrCoroStructPool to avoid per-shell
  *   atomic fetch_add on the pool alloc index).
  *
  * BUFFER HIERARCHY:
  *   1. Deferred recycle list (this coro and its siblings just finished)
  *   2. Local free list (fast reuse, lock-free)
- *   3. Global free list (batch steal under pool->free_lock)
- *   4. Local arena cache (slab range reserved from pool)
- *   5. Global arena (atomic fetch_add on pool->alloc_idx)
+ *   3. Global free list (lock-free batch steal)
+ *   4. Local shell arena cache (slot range reserved from pool)
+ *   5. Global shell arena (atomic fetch_add on pool->alloc_idx)
  *
  * Tuning constants (XR_CORO_BATCH_SIZE / XR_ARENA_BATCH_SIZE /
  * XR_CORO_LOCAL_FREE_MAX) live in xcoro_tuning.h and xworker.h.
@@ -126,7 +126,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                 uint32_t idx = worker->p.arena_cache_start++;
                 XrCoroutine *coro = &cached_block->coros[idx];
                 coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
-                xr_coro_init_from_slab(coro, cached_block, idx);
+                xr_coro_init_from_pool_slot(coro, cached_block, idx);
                 return coro;
             }
 
@@ -146,7 +146,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
 
                     XrCoroutine *coro = &block->coros[local_base];
                     coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
-                    xr_coro_init_from_slab(coro, block, local_base);
+                    xr_coro_init_from_pool_slot(coro, block, local_base);
                     return coro;
                 }
                 // Arena exhausted, invalidate cache

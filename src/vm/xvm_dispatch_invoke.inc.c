@@ -121,8 +121,10 @@ invoke_dispatch:;
         /* Dispatch: other channel methods (tryRecv, close, etc.) */
         XrDispatchAction _cr =
             vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_BLOCKED)
             return XR_VM_BLOCKED;
         if (!xr_vm_is_catch_reachable(isolate))
@@ -134,8 +136,10 @@ invoke_dispatch:;
     if (xr_value_is_task(receiver)) {
         XrDispatchAction _cr =
             vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
@@ -145,8 +149,10 @@ invoke_dispatch:;
     if (xr_value_is_coro(receiver)) {
         XrDispatchAction _cr =
             vm_invoke_coro_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
@@ -156,8 +162,10 @@ invoke_dispatch:;
     if (xr_value_is_module(receiver)) {
         XrDispatchAction _cr =
             vm_invoke_module(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
         if (_cr == XR_DISP_BLOCKED)
@@ -202,10 +210,14 @@ invoke_dispatch:;
         xr_vm_ctx_ensure_ic_methods(vm_ctx, frame->closure->proto);
         XrDispatchAction _cr = vm_invoke_class(isolate, vm_ctx, receiver, method_symbol, nargs,
                                                base, a, ci, pc, invoke_is_tail);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
+        if (_cr == XR_DISP_FATAL)
+            return XR_VM_RUNTIME_ERROR;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
@@ -256,8 +268,10 @@ invoke_dispatch:;
         if (klass->builtin_kind == XR_BK_ENUM_VALUE || klass->builtin_kind == XR_BK_ENUM_TYPE) {
             XrDispatchAction _cr =
                 vm_invoke_enum(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-            if (_cr == XR_DISP_NEXT)
+            if (_cr == XR_DISP_NEXT) {
+                VM_REBIND_AFTER_NATIVE_CALL();
                 vmbreak;
+            }
             if (_cr == XR_DISP_RAISE) {
                 if (!xr_vm_is_catch_reachable(isolate))
                     return XR_VM_RUNTIME_ERROR;
@@ -270,8 +284,10 @@ invoke_dispatch:;
         if (klass->builtin_kind == XR_BK_ADT_ENUM) {
             XrDispatchAction _cr =
                 vm_invoke_adt_instance(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
-            if (_cr == XR_DISP_NEXT)
+            if (_cr == XR_DISP_NEXT) {
+                VM_REBIND_AFTER_NATIVE_CALL();
                 vmbreak;
+            }
             if (_cr == XR_DISP_RAISE) {
                 if (!xr_vm_is_catch_reachable(isolate))
                     return XR_VM_RUNTIME_ERROR;
@@ -296,7 +312,9 @@ invoke_dispatch:;
 
         /* Primitive method (C function): all native type methods land here */
         if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-            R(a) = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            XrValue result = method->as.primitive(isolate, receiver, &R(a + 2), nargs);
+            VM_REBIND_AFTER_NATIVE_CALL();
+            R(a) = result;
             VM_BUILTIN_INVOKE_CHECK_EXC();
             vmbreak;
         }
@@ -379,10 +397,14 @@ vmcase(OP_SUPERINVOKE) {
      * just like OP_INVOKE's primitive path.  Without this, primitive
      * super-method calls (e.g. Exception subclass super(msg)) crash with
      * "no catch reachable" because the dispatcher misreads the result. */
-    if (_cr == XR_DISP_NEXT)
+    if (_cr == XR_DISP_NEXT) {
+        VM_REBIND_AFTER_NATIVE_CALL();
         vmbreak;
+    }
     if (_cr == XR_DISP_RESTART)
         goto startfunc;
+    if (_cr == XR_DISP_FATAL)
+        return XR_VM_RUNTIME_ERROR;
     if (!xr_vm_is_catch_reachable(isolate))
         return XR_VM_RUNTIME_ERROR;
     goto startfunc;
@@ -439,7 +461,9 @@ vmcase(OP_INVOKE_DIRECT) {
      * native method), accessing .as.closure would read the wrong union
      * member and crash.  Guard defensively. */
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
-        R(a) = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+        XrValue result = method->as.primitive(isolate, R(a + 1), &R(a + 2), nargs);
+        VM_REBIND_AFTER_NATIVE_CALL();
+        R(a) = result;
         VM_BUILTIN_INVOKE_CHECK_EXC();
         vmbreak;
     }

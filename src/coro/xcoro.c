@@ -133,6 +133,8 @@ static bool coro_ensure_vm_state(XrCoroutine *coro) {
     XrVmCoroState *vm_state = (XrVmCoroState *) xr_calloc(1, sizeof(XrVmCoroState));
     if (!vm_state)
         return false;
+    vm_state->ctx.handlers = vm_state->ctx.handler_inline;
+    vm_state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
     coro->backend = xr_coro_vm_backend_vtable();
     coro->backend_state = vm_state;
     coro->gc_flags |= XR_CORO_GC_VM_STATE_OWNED;

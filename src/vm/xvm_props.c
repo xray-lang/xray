@@ -789,7 +789,13 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 (getter_symbol >= 0) ? xr_class_lookup_method(scls, getter_symbol) : NULL;
             if (getter) {
                 if (getter->type == XMETHOD_PRIMITIVE) {
-                    base[a] = getter->as.primitive(isolate, obj, NULL, 0);
+                    int base_offset = (int) (base - vm_ctx->stack);
+                    int frame_index = (int) (frame - vm_ctx->frames);
+                    XrValue result = getter->as.primitive(isolate, obj, NULL, 0);
+                    if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base,
+                                                     &frame))
+                        return XR_DISP_FATAL;
+                    base[a] = result;
                     return XR_DISP_NEXT;
                 }
                 if (getter->as.closure) {
@@ -885,7 +891,12 @@ XR_FUNC XrDispatchAction vm_getprop_instance_getter(XrayIsolate *isolate, XrVMCo
 
     // PRIMITIVE type getter
     if (getter->type == XMETHOD_PRIMITIVE) {
-        base[a] = getter->as.primitive(isolate, obj, NULL, 0);
+        int base_offset = (int) (base - vm_ctx->stack);
+        int frame_index = (int) (frame - vm_ctx->frames);
+        XrValue result = getter->as.primitive(isolate, obj, NULL, 0);
+        if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+            return XR_DISP_FATAL;
+        base[a] = result;
         return XR_DISP_NEXT;
     }
 

@@ -23,7 +23,7 @@
 
 // ========== Internal Functions ==========
 
-// Create new pool block with embedded VM stack and bytecode frame slab
+// Create new pool block with coroutine shells only.
 static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
     XR_DCHECK(capacity > 0, "coro_pool_block_create: zero capacity");
     XrCoroPoolBlock *block = xr_malloc(sizeof(XrCoroPoolBlock));
@@ -35,26 +35,6 @@ static XrCoroPoolBlock *xr_coro_pool_block_create(size_t capacity) {
         xr_free(block);
         return NULL;
     }
-
-    block->vm_states = xr_calloc(capacity, sizeof(XrVmCoroState));
-    if (!block->vm_states) {
-        xr_free(block->coros);
-        xr_free(block);
-        return NULL;
-    }
-
-    // Allocate slab for embedded VM stack and bytecode frames (one entry per coroutine)
-    size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
-    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_POOL_FRAME_SLOTS;
-    block->slab_entry_size = stack_bytes + frames_bytes;
-    block->slab = xr_malloc(capacity * block->slab_entry_size);
-    if (!block->slab) {
-        xr_free(block->vm_states);
-        xr_free(block->coros);
-        xr_free(block);
-        return NULL;
-    }
-    memset(block->slab, 0, capacity * block->slab_entry_size);
 
     block->capacity = capacity;
     block->base_idx = 0;
@@ -68,18 +48,12 @@ static void xr_coro_pool_block_destroy(XrCoroPoolBlock *block) {
     if (!block)
         return;
 
-    // Free lazily-allocated JIT state for each coroutine.
+    // Free lazily-attached backend state for each coroutine shell.
     if (block->coros) {
         for (size_t i = 0; i < block->capacity; i++) {
-            xr_coro_free_jit_state(&block->coros[i]);
+            xr_coro_free(&block->coros[i]);
         }
         xr_free(block->coros);
-    }
-    if (block->vm_states) {
-        xr_free(block->vm_states);
-    }
-    if (block->slab) {
-        xr_free(block->slab);
     }
     xr_free(block);
 }
@@ -180,7 +154,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             coro = &block->coros[local_idx];
             atomic_fetch_add_explicit(&pool->fast_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
-            xr_coro_init_from_slab(coro, block, local_idx);
+            xr_coro_init_from_pool_slot(coro, block, local_idx);
             return coro;
         }
     }
@@ -231,7 +205,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             coro = &block->coros[local_idx];
             atomic_fetch_add_explicit(&pool->fast_alloc, 1, memory_order_relaxed);
             atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
-            xr_coro_init_from_slab(coro, block, local_idx);
+            xr_coro_init_from_pool_slot(coro, block, local_idx);
             return coro;
         }
     }
@@ -258,7 +232,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
         coro = &block->coros[local_idx2];
         atomic_fetch_add_explicit(&pool->fast_alloc, 1, memory_order_relaxed);
         atomic_fetch_add_explicit(&pool->total_alloc, 1, memory_order_relaxed);
-        xr_coro_init_from_slab(coro, block, local_idx2);
+        xr_coro_init_from_pool_slot(coro, block, local_idx2);
         return coro;
     }
 
