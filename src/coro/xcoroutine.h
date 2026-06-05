@@ -246,6 +246,12 @@ typedef struct XrSelectStorage {
     int heap_capacity;
 } XrSelectStorage;
 
+typedef struct XrCoroWaitState {
+    struct XrTask *_Atomic await_task;
+    _Atomic int wait_count;
+    _Atomic bool any_done;
+} XrCoroWaitState;
+
 struct XrBlockedBucket {
     void *channel;
     XrCoroutine *send_head;
@@ -284,6 +290,9 @@ typedef struct XrCoroExt {
     /* === Thread-lock extras (only set when Coro.lockThread() is called) === */
     _Atomic int lock_count;  // lock nesting depth (0 = unlocked)
     int locked_worker;       // Worker ID that owns the lock (-1 = none)
+
+    /* === Await/scope wait state (cold; only blocking await/scope paths use it) === */
+    XrCoroWaitState wait;
 
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
@@ -396,10 +405,6 @@ struct XrCoroutine {
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
 
-    /* === Await/Wait Support (caller-side only; awaited-side fields live on XrTask) === */
-    struct XrTask *_Atomic await_task;  // task being awaited (for post-check race detection)
-    _Atomic int wait_count;
-    _Atomic bool any_done;
     /* === Channel Blocking === */
     struct XrCoroutine *chan_wait_next;
     struct XrCoroutine *chan_wait_prev;
@@ -468,6 +473,19 @@ static inline XrCoroExt *xr_coro_ensure_ext(XrCoroutine *coro) {
         coro->ext = (XrCoroExt *) xr_calloc(1, sizeof(XrCoroExt));
     }
     return coro->ext;
+}
+
+static inline XrCoroWaitState *xr_coro_wait_state(XrCoroutine *coro) {
+    return (coro && coro->ext) ? &coro->ext->wait : NULL;
+}
+
+static inline const XrCoroWaitState *xr_coro_wait_state_const(const XrCoroutine *coro) {
+    return (coro && coro->ext) ? &coro->ext->wait : NULL;
+}
+
+static inline XrCoroWaitState *xr_coro_ensure_wait_state(XrCoroutine *coro) {
+    XrCoroExt *ext = coro ? xr_coro_ensure_ext(coro) : NULL;
+    return ext ? &ext->wait : NULL;
 }
 
 static inline const char *xr_coro_name(const XrCoroutine *coro) {

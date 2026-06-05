@@ -257,7 +257,9 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                            xr_value_from_map(xr_map_new(vm_get_coro(vm_ctx))));
             }
 
-            xr_map_set(info, VM_INTERN_KEY("waitCount"), xr_int(atomic_load(&coro->wait_count)));
+            const XrCoroWaitState *wait = xr_coro_wait_state_const(coro);
+            int wait_count = wait ? atomic_load(&wait->wait_count) : 0;
+            xr_map_set(info, VM_INTERN_KEY("waitCount"), xr_int(wait_count));
             xr_map_set(info, VM_INTERN_KEY("cancelled"), xr_bool(flags & XR_CORO_FLG_CANCELLED));
 
             if (flags & XR_CORO_FLG_DONE) {

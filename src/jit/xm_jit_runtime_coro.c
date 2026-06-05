@@ -1045,8 +1045,12 @@ XrJitResult xr_jit_scope_enter(XrCoroutine *coro, int64_t extra_arg) {
     if (!coro)
         return XR_JIT_OK();
 
-    atomic_store(&coro->wait_count, 0);
-    atomic_store(&coro->any_done, false);
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+
+    atomic_store(&wait->wait_count, 0);
+    atomic_store(&wait->any_done, false);
 
     XrScopeContext *scope = (XrScopeContext *) xr_malloc(sizeof(XrScopeContext));
     if (scope) {
