@@ -506,6 +506,13 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
 }
 
+static void coro_recv_slot_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    ext->recv_slot = NULL;
+    ext->recv_slot_ref = xr_slot_none();
+}
+
 static void coro_clear_scope_membership(XrCoroutine *coro) {
     if (!coro || !coro->ext)
         return;
@@ -585,6 +592,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
             coro->ext->timer_wheel_owner = -1;
             atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
+            coro_recv_slot_reset(coro->ext);
             coro_wait_state_reset(coro->ext);
             coro_select_storage_reset(coro->ext);
         }
@@ -620,7 +628,6 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     coro->backend_state = vm_ctx ? vm_state : NULL;
     if (!is_clean) {
         // Fresh allocation: set sentinel values (-1 means "not set")
-        coro->recv_slot_ref = xr_slot_none();
         coro->wait_bucket_owner = -1;
         // timer.slot/lock_count/locked_worker initialized lazily in ext when alloc'd
     }
@@ -1066,6 +1073,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         // drop them here rather than handing back stale state.
         xr_vm_ctx_free_ic_tables(xr_coro_vm_ctx(coro));
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
+        coro_recv_slot_reset(coro->ext);
         coro_wait_state_reset(coro->ext);
         coro_select_storage_reset(coro->ext);
         coro_clear_scope_membership(coro);
@@ -1319,8 +1327,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->wait_bucket_owner = -1;
     coro->wait_send = false;
     coro->send_value = xr_null();
-    coro->recv_slot = NULL;
-    coro->recv_slot_ref = xr_slot_none();
+    coro_recv_slot_reset(coro->ext);
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
     coro_clear_scope_membership(coro);

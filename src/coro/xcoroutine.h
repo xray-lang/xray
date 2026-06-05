@@ -295,6 +295,9 @@ typedef struct XrCoroExt {
     /* === Await/scope wait state (cold; only blocking await/scope paths use it) === */
     XrCoroWaitState wait;
 
+    XrValue *recv_slot;
+    XrSlotRef recv_slot_ref;
+
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
     _Atomic bool timer_active;
@@ -421,8 +424,6 @@ struct XrCoroutine {
     _Atomic(void *) wait_channel;
     bool wait_send;
     XrValue send_value;
-    XrValue *recv_slot;
-    XrSlotRef recv_slot_ref;
 
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;
