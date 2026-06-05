@@ -2358,6 +2358,9 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     }
 
     fprintf(out, "}\n\n");
+
+    if (cg_func_can_emit_sync_go_wrapper(f))
+        emit_sync_go_wrapper(ctx, out, f, prefix);
 }
 
 /* ========== Forward Declarations ========== */
@@ -2377,7 +2380,7 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", XrValue p%u", i);
     fprintf(out, ");\n");
 
-    if (cg_func_needs_aot_coro(f)) {
+    if (cg_func_needs_aot_coro(f) || cg_func_can_emit_sync_go_wrapper(f)) {
         fprintf(out, "static void *");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");

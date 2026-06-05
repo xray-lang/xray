@@ -673,6 +673,46 @@ TEST(cgen_coro_go_clones_tagged_args) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
+    const char *src = "fn compute(n: int) -> int {\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "fn mutate_copy(xs: Array<int>) -> int {\n"
+                      "    xs.push(99)\n"
+                      "    return xs.length\n"
+                      "}\n"
+                      "let high = go(priority: Coro.HIGH) compute(5)\n"
+                      "print(await high)\n"
+                      "let xs = [1, 2]\n"
+                      "let copied = go mutate_copy(xs)\n"
+                      "print(await copied)\n"
+                      "print(xs.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT go of sync functions should generate");
+    assert(contains(code, "XrValue _result = test_compute_") &&
+           "sync go wrapper must call the normal AOT function body");
+    assert(contains(code, "XrValue _result = test_mutate_copy_") &&
+           "sync go wrapper must call normal function bodies for tagged arguments");
+    assert(contains(code, "xr_aot_done(_result)") &&
+           "sync go wrapper must complete through the AOT coroutine result ABI");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
+           "sync go wrapper params must remain traceable while queued");
+    assert(contains(code, "xrt_value_clone_for_coro(") &&
+           "sync go tagged arguments must still cross the coroutine clone boundary");
+    assert(contains(code, "_aot_desc, _child_frame_") &&
+           "go lowering must spawn sync wrappers through an AOT descriptor");
+
+    printf("  Generated sync go wrapper %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_channel_send_clones_value) {
     const char *src = "let ch = new Channel<Array<int>>(1)\n"
                       "let xs = [1, 2]\n"
@@ -1100,6 +1140,7 @@ int main(void) {
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
+    run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
