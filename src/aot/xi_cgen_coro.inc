@@ -436,9 +436,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_send(ctx, ", v->id);
         emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
+        fprintf(out, ", xrt_value_clone_for_coro(");
         emit_boxed_vref(out, v->args[1]);
-        fprintf(out, ");\n");
+        fprintf(out, "));\n");
         if (cg_coro_value_has_storage(f, v)) {
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
@@ -492,9 +492,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         int sid = ++(*state_id);
         fprintf(out, "    XrAotResult _chan_send_%u = xr_aot_chan_send(ctx, ", v->id);
         emit_vref(out, channel);
-        fprintf(out, ", ");
+        fprintf(out, ", xrt_value_clone_for_coro(");
         emit_boxed_vref(out, send_value);
-        fprintf(out, ");\n");
+        fprintf(out, "));\n");
         fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
         fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_send_%u;\n", v->id);
@@ -551,9 +551,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_is_channel_method_call(v, "trySend", 1)) {
             fprintf(out, "    XrValue _chan_method_%u = xr_aot_chan_try_send(ctx, ", v->id);
             emit_vref(out, v->args[0]);
-            fprintf(out, ", ");
+            fprintf(out, ", xrt_value_clone_for_coro(");
             emit_boxed_vref(out, v->args[1]);
-            fprintf(out, ");\n");
+            fprintf(out, "));\n");
             if (cg_coro_value_has_storage(f, v)) {
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
