@@ -1,0 +1,9 @@
+fn worker() -> string {
+    let s = "hello" + "_aot"
+    yield
+    return s
+}
+
+let task = go worker()
+let result = await task
+print(result)

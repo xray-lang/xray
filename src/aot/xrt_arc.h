@@ -154,13 +154,17 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
     return (char *) hdr + sizeof(XrtArcHdr);
 }
 
+static inline int xrt_arc_value_has_header(XrValue v) {
+    if (!v.ptr)
+        return 0;
+    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE;
+}
+
 /* ARC retain: increment refcount.
  * Called by generated code for values with escape > NO_ESCAPE.
- * No-op for: NULL pointers, scalar tags, bump-allocated objects. */
+ * No-op for values that do not carry an XrtArcHdr. */
 static inline void xrt_retain(XrValue v) {
-    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 || v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
-        return; /* scalars have no header */
-    if (!v.ptr)
+    if (!xrt_arc_value_has_header(v))
         return;
     XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->flags & XRT_ARC_BUMP)
@@ -169,11 +173,9 @@ static inline void xrt_retain(XrValue v) {
 }
 
 /* ARC release: decrement refcount, free on zero.
- * No-op for: NULL pointers, scalar tags, bump-allocated objects. */
+ * No-op for values that do not carry an XrtArcHdr. */
 static inline void xrt_release(XrValue v) {
-    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 || v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
-        return;
-    if (!v.ptr)
+    if (!xrt_arc_value_has_header(v))
         return;
     XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->flags & XRT_ARC_BUMP)
@@ -190,9 +192,7 @@ static inline void xrt_release(XrValue v) {
 /* Drop-Reuse: drop an object and return its memory for immediate reuse
  * if it was the last reference. Returns raw pointer (reuse token) or NULL. */
 static inline void *xrt_drop_reuse(XrValue v) {
-    if (v.tag == XR_TAG_I64 || v.tag == XR_TAG_F64 || v.tag == XR_TAG_BOOL || v.tag == XR_TAG_NULL)
-        return NULL;
-    if (!v.ptr)
+    if (!xrt_arc_value_has_header(v))
         return NULL;
     XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->flags & XRT_ARC_BUMP)

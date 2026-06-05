@@ -11,6 +11,7 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/aot/xi_cgen.h"
 #include "../../../src/ir/xi_opt.h"
+#include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
@@ -457,6 +458,47 @@ TEST(cgen_sync_call_to_suspendable_aborts) {
     xi_func_free(ir);
 }
 
+TEST(cgen_runtime_managed_types_skip_arc) {
+    XrType task_type = {.kind = XR_KIND_INSTANCE};
+    XrType channel_type = {.kind = XR_KIND_CHANNEL};
+    XrType string_type = {.kind = XR_KIND_STRING};
+
+    task_type.instance.class_name = "Task";
+
+    assert(!xi_own_type_is_rc(&task_type) && "Task is owned by the coroutine runtime");
+    assert(!xi_own_type_is_rc(&channel_type) && "Channel is owned by the coroutine runtime");
+    assert(xi_own_type_is_rc(&string_type) && "String remains compiler ARC managed");
+}
+
+TEST(cgen_coro_frame_release_uses_aot_arc) {
+    const char *src = "fn worker() -> string {\n"
+                      "    let s = \"hello\" + \"_aot\"\n"
+                      "    yield\n"
+                      "    return s\n"
+                      "}\n"
+                      "let task = go worker()\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine with ARC values should generate");
+    assert(contains(code, "_aot_release(void *frame, struct XrCoroGC *gc)") &&
+           "frame release must receive coroutine GC context");
+    assert(contains(code, "xrt_release(f->v3)") &&
+           "AOT ARC string value should be released from the frame");
+    assert(!contains(code, "xr_aot_release_frame_value(f->") &&
+           "frame release must not call the old untyped release helper");
+
+    printf("  Generated ARC-aware coroutine release %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -476,6 +518,8 @@ int main(void) {
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_sync_call_to_suspendable_aborts();
+    run_cgen_runtime_managed_types_skip_arc();
+    run_cgen_coro_frame_release_uses_aot_arc();
 
     teardown();
 

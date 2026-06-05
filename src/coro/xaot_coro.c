@@ -43,16 +43,16 @@ static void aot_release_state(XrCoroutine *coro) {
         return;
 
     if (state->desc && state->desc->release_frame && state->frame)
-        state->desc->release_frame(state->frame);
+        state->desc->release_frame(state->frame, coro ? coro->coro_gc : NULL);
     xr_free(state);
     coro->backend_state = NULL;
 }
 
-static void aot_release_frame(const XrAotCoroDesc *desc, void *frame) {
+static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroGC *gc) {
     if (!frame)
         return;
     if (desc && desc->release_frame) {
-        desc->release_frame(frame);
+        desc->release_frame(frame, gc);
         return;
     }
     xr_aot_frame_free(frame);
@@ -157,20 +157,22 @@ void xr_aot_trace_frame_value(void *visitor, XrValue value) {
         root_visitor->visit(value, root_visitor->ctx);
 }
 
-void xr_aot_release_frame_value(XrValue value) {
-    (void) value;
+void xr_aot_release_frame_value(XrCoroGC *gc, XrValue value) {
+    if (!gc || !XR_IS_PTR(value))
+        return;
+    xr_gc_release_value(gc, value);
 }
 
 XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame,
                                 const char *name) {
     if (!X || !desc || !desc->resume || !frame) {
-        aot_release_frame(desc, frame);
+        aot_release_frame(desc, frame, NULL);
         return NULL;
     }
 
     XrAotCoroState *state = (XrAotCoroState *) xr_calloc(1, sizeof(XrAotCoroState));
     if (!state) {
-        aot_release_frame(desc, frame);
+        aot_release_frame(desc, frame, NULL);
         return NULL;
     }
     state->desc = desc;
@@ -178,7 +180,7 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
 
     XrCoroutine *coro = xr_coro_create_empty(X, name ? name : desc->name, false);
     if (!coro) {
-        aot_release_frame(desc, frame);
+        aot_release_frame(desc, frame, NULL);
         xr_free(state);
         return NULL;
     }
