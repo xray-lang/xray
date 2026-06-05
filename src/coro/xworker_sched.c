@@ -234,6 +234,9 @@ int worker_pull_inject(XrWorker *worker, int max_per_priority) {
             continue;
         total += xr_injectq_pop_batch(runtime, worker, priority, max_per_priority);
     }
+    if (total > 0) {
+        worker->p.stats.inject_pull_count += (uint64_t) total;
+    }
     return total;
 }
 
@@ -873,6 +876,7 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                     xr_proc_local_runq_dec(&victim->p, stolen);
                     xr_proc_local_runq_inc(&worker->p, stolen);
                     worker->p.stats.stolen_count += stolen;
+                    worker->p.stats.steal_success_count++;
                     xr_worker_refresh_runq_masks(victim);
                     xr_worker_refresh_runq_masks(worker);
                     coro = xr_worker_pop(worker);

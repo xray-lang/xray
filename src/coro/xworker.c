@@ -77,6 +77,16 @@ static int default_handoff_max_m(int workers) {
     return max_m;
 }
 
+static double stats_ratio_u64(uint64_t numerator, uint64_t denominator) {
+    if (denominator == 0)
+        return 0.0;
+    return (double) numerator / (double) denominator;
+}
+
+static double stats_percent_u64(uint64_t numerator, uint64_t denominator) {
+    return 100.0 * stats_ratio_u64(numerator, denominator);
+}
+
 // Get current thread's Worker
 XrWorker *xr_current_worker(void) {
     return tls_current_worker;
@@ -616,32 +626,43 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     fprintf(stderr, "Machines: total=%d cap=%d idle=%d\n",
             atomic_load_explicit(&runtime->m_count, memory_order_relaxed), runtime->handoff_max_m,
             atomic_load_explicit(&runtime->idle_m_count, memory_order_relaxed));
-    fprintf(stderr, "\n%-8s %10s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n",
-            "Worker", "Executed", "Stolen", "StealTry", "StealSkip", "Yielded", "ContSteal",
-            "LifoHit", "LifoFlush", "Inbox", "Park", "Unpark", "Timer", "Burst", "Blocked");
-    fprintf(stderr, "%-8s %10s %10s %10s %10s %10s %10s %9s %10s %9s %8s %8s %8s %8s %8s\n",
-            "------", "--------", "------", "--------", "---------", "-------", "---------",
-            "-------", "---------", "-----", "----", "------", "-----", "-----", "-------");
+    fprintf(stderr,
+            "\n%-8s %10s %10s %9s %8s %10s %8s %10s %10s %10s %9s %10s %9s %8s %8s %8s "
+            "%8s %8s\n",
+            "Worker", "Executed", "LocalPop", "LifoHit", "Inject", "Stolen", "StealOK", "StealTry",
+            "StealSkip", "Yielded", "Cont", "LifoFlush", "Inbox", "Park", "Unpark", "Timer",
+            "Burst", "Blocked");
+    fprintf(stderr,
+            "%-8s %10s %10s %9s %8s %10s %8s %10s %10s %10s %9s %10s %9s %8s %8s %8s "
+            "%8s %8s\n",
+            "------", "--------", "--------", "-------", "------", "------", "-------", "--------",
+            "---------", "-------", "----", "---------", "-----", "----", "------", "-----",
+            "-----", "-------");
 
     uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_steal_skip = 0;
+    uint64_t total_steal_success = 0, total_local_pop = 0, total_inject_pull = 0;
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
     uint64_t total_lifo_gate_priority = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
+    uint64_t total_blocked = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
         fprintf(stderr,
-                "W%-7d %10llu %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu "
-                "%8llu %8llu %8llu %8d\n",
+                "W%-7d %10llu %10llu %9llu %8llu %10llu %8llu %10llu %10llu %10llu %9llu "
+                "%10llu %9llu %8llu %8llu %8llu %8llu %8d\n",
                 i, (unsigned long long) p->stats.executed_count,
+                (unsigned long long) p->stats.local_runq_pop_count,
+                (unsigned long long) p->stats.lifo_hit_count,
+                (unsigned long long) p->stats.inject_pull_count,
                 (unsigned long long) p->stats.stolen_count,
+                (unsigned long long) p->stats.steal_success_count,
                 (unsigned long long) p->stats.steal_attempt_count,
                 (unsigned long long) p->stats.steal_skip_count,
                 (unsigned long long) p->stats.yielded_count,
                 (unsigned long long) p->stats.cont_steal_count,
-                (unsigned long long) p->stats.lifo_hit_count,
                 (unsigned long long) p->stats.lifo_flush_count,
                 (unsigned long long) p->stats.inbox_drain_count,
                 (unsigned long long) p->stats.park_count,
@@ -649,7 +670,10 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) p->stats.timer_bump_count,
                 (unsigned long long) p->stats.timer_burst_count, p->blocked_count);
         total_exec += p->stats.executed_count;
+        total_local_pop += p->stats.local_runq_pop_count;
+        total_inject_pull += p->stats.inject_pull_count;
         total_steal += p->stats.stolen_count;
+        total_steal_success += p->stats.steal_success_count;
         total_steal_try += p->stats.steal_attempt_count;
         total_steal_skip += p->stats.steal_skip_count;
         total_yield += p->stats.yielded_count;
@@ -669,37 +693,74 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             max_wait_ms = p->stats.runnable_wait_max_ms;
         }
         total_prio_boost += p->stats.priority_boost_count;
+        if (p->blocked_count > 0) {
+            total_blocked += (uint64_t) p->blocked_count;
+        }
     }
     fprintf(stderr,
-            "%-8s %10llu %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
-            "%8llu %8llu\n",
-            "TOTAL", (unsigned long long) total_exec, (unsigned long long) total_steal,
+            "%-8s %10llu %10llu %9llu %8llu %10llu %8llu %10llu %10llu %10llu %9llu "
+            "%10llu %9llu %8llu %8llu %8llu %8llu %8llu\n",
+            "TOTAL", (unsigned long long) total_exec, (unsigned long long) total_local_pop,
+            (unsigned long long) total_lifo_hit, (unsigned long long) total_inject_pull,
+            (unsigned long long) total_steal, (unsigned long long) total_steal_success,
             (unsigned long long) total_steal_try, (unsigned long long) total_steal_skip,
             (unsigned long long) total_yield, (unsigned long long) total_cont,
-            (unsigned long long) total_lifo_hit, (unsigned long long) total_lifo_flush,
-            (unsigned long long) total_inbox, (unsigned long long) total_park,
-            (unsigned long long) total_unpark, (unsigned long long) total_timer,
-            (unsigned long long) total_burst);
-    fprintf(stderr, "Runnable wait: total_ms=%llu max_ms=%llu priority_boost=%llu\n",
-            (unsigned long long) total_wait_ms, (unsigned long long) max_wait_ms,
+            (unsigned long long) total_lifo_flush, (unsigned long long) total_inbox,
+            (unsigned long long) total_park, (unsigned long long) total_unpark,
+            (unsigned long long) total_timer, (unsigned long long) total_burst,
+            (unsigned long long) total_blocked);
+
+    uint64_t ready_dispatches = total_local_pop + total_lifo_hit;
+    uint64_t lifo_gate_total =
+        total_lifo_gate_budget + total_lifo_gate_backlog + total_lifo_gate_priority;
+    fprintf(stderr,
+            "Dispatch mix: local_runq=%llu lifo=%llu lifo_share=%.2f%% inject_pull=%llu "
+            "stolen_items=%llu cont_steal=%llu\n",
+            (unsigned long long) total_local_pop, (unsigned long long) total_lifo_hit,
+            stats_percent_u64(total_lifo_hit, ready_dispatches),
+            (unsigned long long) total_inject_pull, (unsigned long long) total_steal,
+            (unsigned long long) total_cont);
+    fprintf(stderr,
+            "Steal: attempts=%llu success=%llu success_ratio=%.2f%% stolen_items=%llu "
+            "items_per_success=%.2f skipped=%llu skip_ratio=%.2f%%\n",
+            (unsigned long long) total_steal_try, (unsigned long long) total_steal_success,
+            stats_percent_u64(total_steal_success, total_steal_try),
+            (unsigned long long) total_steal, stats_ratio_u64(total_steal, total_steal_success),
+            (unsigned long long) total_steal_skip,
+            stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
+    fprintf(stderr,
+            "Runnable wait: total_ms=%llu avg_ms=%.3f max_ms=%llu dispatches=%llu "
+            "priority_boost=%llu\n",
+            (unsigned long long) total_wait_ms, stats_ratio_u64(total_wait_ms, ready_dispatches),
+            (unsigned long long) max_wait_ms, (unsigned long long) ready_dispatches,
             (unsigned long long) total_prio_boost);
-    fprintf(stderr, "LIFO gate: total=%llu budget=%llu backlog=%llu priority=%llu\n",
-            (unsigned long long) (total_lifo_gate_budget + total_lifo_gate_backlog +
-                                  total_lifo_gate_priority),
-            (unsigned long long) total_lifo_gate_budget,
-            (unsigned long long) total_lifo_gate_backlog,
-            (unsigned long long) total_lifo_gate_priority);
+    fprintf(
+        stderr, "LIFO gate: total=%llu budget=%llu backlog=%llu priority=%llu gate_ratio=%.2f%%\n",
+        (unsigned long long) lifo_gate_total, (unsigned long long) total_lifo_gate_budget,
+        (unsigned long long) total_lifo_gate_backlog, (unsigned long long) total_lifo_gate_priority,
+        stats_percent_u64(lifo_gate_total, lifo_gate_total + total_lifo_hit));
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
+    uint64_t wake_alloc = xr_sched_metric_load(&s->chan_wake_cmd_alloc_count);
+    uint64_t wake_free = xr_sched_metric_load(&s->chan_wake_cmd_free_count);
+    uint64_t wake_dispatch = xr_sched_metric_load(&s->chan_wake_cmd_dispatch_count);
+    uint64_t wake_drain = xr_sched_metric_load(&s->chan_wake_cmd_drain_count);
+    uint64_t wake_coalesce = xr_sched_metric_load(&s->chan_wake_cmd_coalesce_count);
+    uint64_t wake_stale = xr_sched_metric_load(&s->chan_wake_cmd_stale_count);
+    uint64_t wake_forward = xr_sched_metric_load(&s->chan_wake_cmd_forward_count);
     fprintf(stderr,
             "\nChannel wake commands: alloc=%llu free=%llu dispatch=%llu drain=%llu coalesce=%llu "
-            "stale=%llu\n",
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_alloc_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_free_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_dispatch_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_drain_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_coalesce_count),
-            (unsigned long long) xr_sched_metric_load(&s->chan_wake_cmd_stale_count));
+            "stale=%llu forward=%llu\n",
+            (unsigned long long) wake_alloc, (unsigned long long) wake_free,
+            (unsigned long long) wake_dispatch, (unsigned long long) wake_drain,
+            (unsigned long long) wake_coalesce, (unsigned long long) wake_stale,
+            (unsigned long long) wake_forward);
+    fprintf(stderr,
+            "Channel wake diagnostics: cross_worker=%llu drain_per_dispatch=%.2f "
+            "coalesce_ratio=%.2f%% stale_ratio=%.2f%% forward_per_dispatch=%.2f\n",
+            (unsigned long long) wake_dispatch, stats_ratio_u64(wake_drain, wake_dispatch),
+            stats_percent_u64(wake_coalesce, wake_drain), stats_percent_u64(wake_stale, wake_drain),
+            stats_ratio_u64(wake_forward, wake_dispatch));
     fprintf(stderr, "Select: block=%llu heap_alloc=%llu inline_alloc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->select_block_count),
             (unsigned long long) xr_sched_metric_load(&s->select_heap_alloc_count),
@@ -738,11 +799,21 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
             inject_len += atomic_load_explicit(&runtime->injectq[pi].len, memory_order_relaxed);
         }
+        uint64_t inject_push = xr_sched_metric_load(&s->inject_push_count);
+        uint64_t inject_pop = xr_sched_metric_load(&s->inject_pop_count);
+        uint64_t inject_spill = xr_sched_metric_load(&s->inject_spill_count);
+        long long inject_pending = (long long) inject_push - (long long) inject_pop;
+        long long pull_pop_delta = (long long) total_inject_pull - (long long) inject_pop;
         fprintf(stderr, "Inject: push=%llu pop=%llu spill=%llu len=%d mask=0x%x\n",
-                (unsigned long long) xr_sched_metric_load(&s->inject_push_count),
-                (unsigned long long) xr_sched_metric_load(&s->inject_pop_count),
-                (unsigned long long) xr_sched_metric_load(&s->inject_spill_count), inject_len,
+                (unsigned long long) inject_push, (unsigned long long) inject_pop,
+                (unsigned long long) inject_spill, inject_len,
                 atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
+        fprintf(stderr,
+                "Inject diagnostics: pop_push_ratio=%.2f%% spill_ratio=%.2f%% pending_est=%lld "
+                "worker_pull=%llu pull_pop_delta=%lld\n",
+                stats_percent_u64(inject_pop, inject_push),
+                stats_percent_u64(inject_spill, inject_push), inject_pending,
+                (unsigned long long) total_inject_pull, pull_pop_delta);
     }
     fprintf(stderr,
             "Masks: runq=[0x%llx,0x%llx,0x%llx] stealable=[0x%llx,0x%llx,0x%llx] "

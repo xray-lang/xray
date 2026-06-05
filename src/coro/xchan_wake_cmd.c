@@ -375,6 +375,8 @@ static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool
         if (!coro) {
             worker_clear_channel_waiter_mask(worker, channel);
             xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_stale_count);
+            xr_sched_metric_add(runtime, &runtime->sched_stats.chan_wake_cmd_forward_count,
+                                (uint64_t) (count - i));
             worker_forward_chan_wakes(channel, wake_sender, count - i);
             break;
         }
