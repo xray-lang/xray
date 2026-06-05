@@ -14,9 +14,9 @@
  * TRACE_EXECUTION, ...) provided by the surrounding scope.
  * CMake excludes *.inc.c from the VM_SRC glob.
  *
- * Owns the OP_CHAN_* family plus the OP_SELECT_* placeholder
- * stubs. The two timeout variants delegate to dispatch helpers
- * in xvm_chan_ops.c (vm_chan_send_timeout / vm_chan_recv_timeout).
+ * Owns the OP_CHAN_* family. The two timeout variants delegate to
+ * dispatch helpers in xvm_chan_ops.c (vm_chan_send_timeout /
+ * vm_chan_recv_timeout).
  */
 
 vmcase(OP_CHAN_NEW) {
@@ -290,21 +290,4 @@ vmcase(OP_CHAN_IS_CLOSED) {
 
     R(a) = xr_bool(xr_channel_is_closed(ch));
     vmbreak;
-}
-
-/* === Select multiplexing (placeholder) === */
-
-vmcase(OP_SELECT_START) {
-    // Start select block
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "select not yet implemented");
-}
-
-vmcase(OP_SELECT_CASE) {
-    // Add select case
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "select case not yet implemented");
-}
-
-vmcase(OP_SELECT_END) {
-    // Execute select
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_NO_CALL, "select end not yet implemented");
 }
