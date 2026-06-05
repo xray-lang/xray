@@ -325,7 +325,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 fprintf(out, ", ");
             XrRep rep = cg_rep(v->args[a]);
             if (rep == XR_REP_TAGGED) {
+                fprintf(out, "xrt_value_clone_for_coro(");
                 emit_vref(out, v->args[a]);
+                fprintf(out, ")");
             } else if (rep == XR_REP_I64) {
                 fprintf(out, "XR_FROM_INT(");
                 emit_vref(out, v->args[a]);

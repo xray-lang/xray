@@ -499,6 +499,32 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_go_clones_tagged_args) {
+    const char *src = "fn worker(xs: Array<int>) -> int {\n"
+                      "    xs.push(99)\n"
+                      "    yield\n"
+                      "    return xs.length\n"
+                      "}\n"
+                      "let xs = [1, 2]\n"
+                      "let task = go worker(xs)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine with tagged go args should generate");
+    assert(contains(code, "xrt_value_clone_for_coro(") &&
+           "tagged go arguments must be cloned at the coroutine boundary");
+
+    printf("  Generated coroutine argument clone %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -520,6 +546,7 @@ int main(void) {
     run_cgen_sync_call_to_suspendable_aborts();
     run_cgen_runtime_managed_types_skip_arc();
     run_cgen_coro_frame_release_uses_aot_arc();
+    run_cgen_coro_go_clones_tagged_args();
 
     teardown();
 
