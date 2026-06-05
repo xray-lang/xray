@@ -803,37 +803,20 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: runtime not initialized");
         }
 
-        // CAS on task->await_state (await coordination lives on the task)
         if (current) {
-            atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, current,
-                                  memory_order_release);
-
-            int expected = XR_AWAIT_NONE;
-            if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected,
-                                                        XR_AWAIT_WAITING, memory_order_acq_rel,
-                                                        memory_order_acquire)) {
-                // Store task in await_task for post-check
-                atomic_store_explicit(&current->await_task, task, memory_order_release);
-                xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
+            XrCoroBlockResult await_result = xr_coro_await_task(current, task, -1);
+            if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 frame->pc = pc - 1;
                 return XR_DISP_BLOCKED;
             }
-
-            if (expected == XR_AWAIT_WAITING) {
-                atomic_store_explicit(&current->await_task, task, memory_order_release);
-                xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-                frame->pc = pc - 1;
-                return XR_DISP_BLOCKED;
+            if (await_result.kind == XR_CORO_BLOCK_READY) {
+                base[a] = vm_task_consume_result(isolate, task, current, discard_result);
+                return XR_DISP_NEXT;
             }
-
-            // RESOLVED: result already cached in task by executor_complete
-            XR_CHECK(expected == XR_AWAIT_RESOLVED, "await: unexpected state, expected RESOLVED");
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
-                                  memory_order_relaxed);
-            base[a] = vm_task_consume_result(isolate, task, current, discard_result);
-            atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-            return XR_DISP_NEXT;
+            if (await_result.kind == XR_CORO_BLOCK_CLOSED) {
+                base[a] = xr_null();
+                return XR_DISP_NEXT;
+            }
         }
 
         // Main thread: spin wait
@@ -898,27 +881,13 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
             return XR_DISP_NEXT;
         }
 
-        // Woken from timeout
-        if (caller && xr_coro_resume_load(caller) == XR_RESUME_TIMEOUT) {
-            xr_coro_resume_store(caller, XR_RESUME_OK);
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
-                                  memory_order_relaxed);
+        XrCoroBlockResult resumed = xr_coro_await_task_resume(caller, task);
+        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
             base[a] = xr_null();
             return XR_DISP_NEXT;
         }
-
-        // Woken from normal completion (read task->await_state)
-        if (caller &&
-            atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_RESOLVED) {
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
             base[a] = vm_task_consume_result(isolate, task, caller, 0);
-            atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-            if (caller->ext &&
-                atomic_load_explicit(&caller->ext->timer_active, memory_order_relaxed)) {
-                XrWorker *worker = xr_current_worker();
-                if (worker && worker->p.timer_wheel)
-                    xr_twheel_cancel_timer(worker->p.timer_wheel, &caller->ext->timer);
-                atomic_store_explicit(&caller->ext->timer_active, false, memory_order_relaxed);
-            }
             return XR_DISP_NEXT;
         }
 
@@ -928,19 +897,21 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
 
         XrCoroutine *current = vm_get_coro(vm_ctx);
         if (current && rt) {
-            atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, current,
-                                  memory_order_release);
-            current->channel_deadline = xr_monotonic_ticks() + timeout_ms;
-
-            XrWorker *worker = xr_current_worker();
-            if (worker && timeout_ms > 0)
-                xr_worker_add_sleep_timer(worker, current, timeout_ms);
-
-            xr_coro_set_wait_reason(current, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-
-            frame->pc = pc - 1;
-            return XR_DISP_BLOCKED;
+            XrCoroBlockResult await_result = xr_coro_await_task(current, task, timeout_ms);
+            if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
+                frame->pc = pc - 1;
+                return XR_DISP_BLOCKED;
+            }
+            if (await_result.kind == XR_CORO_BLOCK_READY) {
+                base[a] = vm_task_consume_result(isolate, task, caller, 0);
+                return XR_DISP_NEXT;
+            }
+            if (await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
+                await_result.kind == XR_CORO_BLOCK_CLOSED ||
+                await_result.kind == XR_CORO_BLOCK_NO_CORO) {
+                base[a] = xr_null();
+                return XR_DISP_NEXT;
+            }
         }
 
         // Main thread: synchronous wait

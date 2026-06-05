@@ -19,6 +19,7 @@
 
 struct XrayIsolate;
 struct XrCoroutine;
+struct XrTask;
 
 typedef enum {
     XR_SLOT_NONE = 0,
@@ -84,5 +85,9 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrayIsolate *isolate, struct 
 XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrayIsolate *isolate, struct XrCoroutine *coro,
                                             XrChannel *ch, XrSlotRef value_slot, XrSlotRef ok_slot,
                                             int64_t timeout_ms);
+
+XR_FUNC XrCoroBlockResult xr_coro_await_task_resume(struct XrCoroutine *coro, struct XrTask *task);
+XR_FUNC XrCoroBlockResult xr_coro_await_task(struct XrCoroutine *coro, struct XrTask *task,
+                                             int64_t timeout_ms);
 
 #endif  // XBLOCK_H
