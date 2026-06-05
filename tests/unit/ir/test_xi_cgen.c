@@ -547,6 +547,31 @@ TEST(cgen_coro_channel_send_clones_value) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_await_clones_tagged_result) {
+    const char *src = "fn worker() -> Array<int> {\n"
+                      "    yield\n"
+                      "    return [1, 2]\n"
+                      "}\n"
+                      "let task = go worker()\n"
+                      "let result = await task\n"
+                      "print(result.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await should generate");
+    assert(contains(code, "xr_aot_await_task(ctx,") && "await must use the AOT bridge");
+    assert(contains(code, "xrt_value_clone_for_coro(") &&
+           "tagged await results must be cloned at the coroutine boundary");
+
+    printf("  Generated await result clone %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -570,6 +595,7 @@ int main(void) {
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_channel_send_clones_value();
+    run_cgen_coro_await_clones_tagged_result();
 
     teardown();
 

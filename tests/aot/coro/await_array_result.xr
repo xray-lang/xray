@@ -1,0 +1,11 @@
+fn build_array() -> Array<int> {
+    let xs = [1, 2]
+    yield
+    return xs
+}
+
+let task = go build_array()
+let xs = await task
+print(xs.length)
+xs.push(3)
+print(xs.length)
