@@ -90,11 +90,10 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     return true;
 }
 
-void xr_sysheap_destroy(XrSystemHeap *heap) {
+void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
     if (!heap || !heap->initialized)
         return;
 
-    // Destroy coroutine pool
     if (heap->coro_pool) {
         xr_coro_pool_destroy(heap->coro_pool);
         xr_free(heap->coro_pool);
@@ -105,6 +104,13 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
     // finalizers may recycle GC structs back into this pool while their
     // shells are being released.
     sysheap_gc_pool_drain(heap);
+}
+
+void xr_sysheap_destroy(XrSystemHeap *heap) {
+    if (!heap || !heap->initialized)
+        return;
+
+    xr_sysheap_destroy_coro_storage(heap);
     xr_mutex_destroy(&heap->gc_pool_mu);
 
     // Destroy class arena
