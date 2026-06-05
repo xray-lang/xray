@@ -375,6 +375,13 @@ XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value) {
     return xr_bool(xr_channel_is_closed(xr_value_to_channel(channel_value)));
 }
 
+XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index) {
+    (void) ctx;
+    if (!xr_value_is_tuple(tuple_value))
+        return XR_NULL_VAL;
+    return xr_tuple_get(xr_value_to_tuple(tuple_value), index);
+}
+
 XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
     if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_channel(channel_value))
         return xr_aot_error(XR_NULL_VAL, false);
