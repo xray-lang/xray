@@ -19,13 +19,8 @@
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "xnetpoll.h"
-#include "../runtime/xray_debug.h"
 #include "xexec_frame.h"
-#include "../runtime/value/xchunk.h"
-#include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_internal.h"
-#include <stdlib.h>
-#include <string.h>
 
 // ========== Internal Helper Functions ==========
 
@@ -234,68 +229,8 @@ XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
     if (!coro)
         return XR_CFUNC_ERROR;
 
-    XrVMContext *ctx = xr_coro_vm_ctx(coro);
-    XrProto *proto = closure->proto;
-
-    XR_DCHECK(ctx->frame_count > 0, "yield_call_closure: no active frame");
-    XrBcCallFrame *caller = &ctx->frames[ctx->frame_count - 1];
-
-    /* Calculate where the closure frame's registers start.
-     * For bytecode caller: after caller's register file.
-     * For cfunc coro frame-0: at current stack_top. */
-    int closure_base_offset;
-    if (caller->closure && caller->closure->proto) {
-        closure_base_offset = caller->base_offset + caller->closure->proto->maxstacksize;
-    } else {
-        closure_base_offset = (int) (ctx->stack_top - ctx->stack);
-    }
-
-    // Ensure stack and frame capacity
-    int needed = closure_base_offset + proto->maxstacksize + 1;
-    if (needed > ctx->stack_capacity || ctx->frame_count + 1 >= ctx->frame_capacity) {
-        int extra = needed - ctx->stack_capacity + 64;
-        if (extra < 64)
-            extra = 64;
-        bool ok = xr_coro_grow_stack(coro, extra);
-        if (!ok)
-            return XR_CFUNC_ERROR;
-        // Re-read after potential realloc
-        caller = &ctx->frames[ctx->frame_count - 1];
-    }
-
-    // OP_RETURN writes return value to base_offset - 1
-    int return_slot_offset = closure_base_offset - 1;
-    if (return_slot_offset >= 0 && return_slot_offset < ctx->stack_capacity) {
-        ctx->stack[return_slot_offset] = xr_null();
-    }
-
-    // Mark caller frame: continuation will be called when closure returns
-    caller->call_status |= XR_CALL_CLOSURE_PENDING | XR_CALL_HAS_CONT | XR_CALL_C;
-    caller->u.c.continuation = (void *) on_complete;
-    caller->u.c.continuation_ctx = user_ctx;
-    caller->u.c.has_cfunc_result = false;
-    caller->u.c.result_slot = (int16_t) (return_slot_offset - caller->base_offset);
-
-    // Push closure call frame
-    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
-    memset(frame, 0, sizeof(XrBcCallFrame));
-    frame->closure = closure;
-    frame->pc = PROTO_CODE_BASE(proto);
-    frame->base_offset = closure_base_offset;
-
-    // Copy arguments into closure's register file
-    XrValue *closure_base = ctx->stack + closure_base_offset;
-    int copy_count = nargs < proto->numparams ? nargs : proto->numparams;
-    for (int i = 0; i < copy_count; i++) {
-        closure_base[i] = args[i];
-    }
-    for (int i = copy_count; i < proto->maxstacksize; i++) {
-        closure_base[i] = xr_null();
-    }
-
-    // Update stack top
-    ctx->stack_top = ctx->stack + closure_base_offset + proto->maxstacksize;
-
-    (void) result;
-    return XR_CFUNC_CALL_CLOSURE;
+    if (!coro->backend || !coro->backend->call_closure)
+        return XR_CFUNC_ERROR;
+    return (XrCFuncResult) coro->backend->call_closure(X, coro, closure, args, nargs,
+                                                       (void *) on_complete, user_ctx, result);
 }

@@ -56,6 +56,9 @@ static void vm_backend_reset_reusable(XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
+static int vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
+                                   XrValue *result);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -67,6 +70,7 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .reset_reusable = vm_backend_reset_reusable,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
+    .call_closure = vm_backend_call_closure,
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
@@ -258,6 +262,66 @@ static bool vm_backend_has_continuation(const XrCoroutine *coro) {
         return false;
     const XrBcCallFrame *frame = &state->ctx.frames[state->ctx.frame_count - 1];
     return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
+}
+
+static int vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
+                                   XrValue *result) {
+    (void) X;
+    (void) result;
+    if (!coro || !closure || !closure->proto || !continuation)
+        return XR_CFUNC_ERROR;
+    XrVMContext *ctx = xr_coro_vm_ctx(coro);
+    XrProto *proto = closure->proto;
+
+    XR_DCHECK(ctx->frame_count > 0, "yield_call_closure: no active frame");
+    XrBcCallFrame *caller = &ctx->frames[ctx->frame_count - 1];
+
+    int closure_base_offset;
+    if (caller->closure && caller->closure->proto) {
+        closure_base_offset = caller->base_offset + caller->closure->proto->maxstacksize;
+    } else {
+        closure_base_offset = (int) (ctx->stack_top - ctx->stack);
+    }
+
+    int needed = closure_base_offset + proto->maxstacksize + 1;
+    if (needed > ctx->stack_capacity || ctx->frame_count + 1 >= ctx->frame_capacity) {
+        int extra = needed - ctx->stack_capacity + 64;
+        if (extra < 64)
+            extra = 64;
+        if (!xr_coro_grow_stack(coro, extra))
+            return XR_CFUNC_ERROR;
+        caller = &ctx->frames[ctx->frame_count - 1];
+    }
+
+    int return_slot_offset = closure_base_offset - 1;
+    if (return_slot_offset >= 0 && return_slot_offset < ctx->stack_capacity) {
+        ctx->stack[return_slot_offset] = xr_null();
+    }
+
+    caller->call_status |= XR_CALL_CLOSURE_PENDING | XR_CALL_HAS_CONT | XR_CALL_C;
+    caller->u.c.continuation = continuation;
+    caller->u.c.continuation_ctx = user_ctx;
+    caller->u.c.has_cfunc_result = false;
+    caller->u.c.result_slot = (int16_t) (return_slot_offset - caller->base_offset);
+
+    XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
+    memset(frame, 0, sizeof(XrBcCallFrame));
+    frame->closure = closure;
+    frame->pc = PROTO_CODE_BASE(proto);
+    frame->base_offset = closure_base_offset;
+
+    XrValue *closure_base = ctx->stack + closure_base_offset;
+    int copy_count = nargs < proto->numparams ? nargs : proto->numparams;
+    for (int i = 0; i < copy_count; i++) {
+        closure_base[i] = args[i];
+    }
+    for (int i = copy_count; i < proto->maxstacksize; i++) {
+        closure_base[i] = xr_null();
+    }
+
+    ctx->stack_top = ctx->stack + closure_base_offset + proto->maxstacksize;
+    return XR_CFUNC_CALL_CLOSURE;
 }
 
 static void vm_backend_destroy(XrCoroutine *coro) {
