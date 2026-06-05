@@ -236,7 +236,6 @@ typedef struct XrSelectWait {
     XrSelectCase *cases;
     int case_count;
     void *timer_channel;
-    int timer_case_index;
     _Atomic bool triggered;
 } XrSelectWait;
 
@@ -418,7 +417,6 @@ struct XrCoroutine {
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
     struct XrSelectWait *select_wait;
-    int select_ready_case;
 
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;

@@ -99,7 +99,6 @@ static bool consume_select_channel_resume(XrCoroutine *coro) {
     if (!coro || !coro->select_wait)
         return false;
     coro->select_wait = NULL;
-    coro->select_ready_case = 0;
     xr_coro_resume_store(coro, XR_RESUME_OK);
     return true;
 }
