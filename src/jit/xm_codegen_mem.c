@@ -1153,7 +1153,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             uint32_t smap_id = record_safepoint(ctx);
 
             // 2. Load suspend_state pointer: x16 = jit_state->suspend
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_emit_load_jit_state(ctx, SCRATCH_REG);
             a64_buf_emit(&ctx->buf,
                          a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
             if (suspend_id >= XM_MAX_SUSPEND_ENTRIES) {
@@ -1207,7 +1207,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
 
             // 5. Store suspend_id and smap_id
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_emit_load_jit_state(ctx, SCRATCH_REG);
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, (uint16_t) suspend_id, 0));
             a64_buf_emit(&ctx->buf,
                          a64_str_w(SCRATCH_REG2, SCRATCH_REG, XM_JIT_STATE_SUSPEND_ID_OFFSET));
@@ -1276,7 +1276,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
 
             // Reload suspend pointer (x16 clobbered by BLR)
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+            a64_emit_load_jit_state(ctx, SCRATCH_REG);
             a64_buf_emit(&ctx->buf,
                          a64_ldr(SCRATCH_REG, SCRATCH_REG, XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 

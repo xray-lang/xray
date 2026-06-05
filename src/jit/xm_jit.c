@@ -970,9 +970,9 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
 /* ========== JIT Resume After Suspend ========== */
 
 int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
-    if (!coro || !coro->jit_state)
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (!jit_state)
         return XM_JIT_DEOPT;
-    XrJitCoroState *jit_state = coro->jit_state;
     void *resume_entry = jit_state->resume_entry;
     if (!resume_entry || !result)
         return XM_JIT_DEOPT;

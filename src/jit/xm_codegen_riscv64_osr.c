@@ -142,8 +142,7 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
 
         /* Copy coro pointer from a0 and load jit_ctx */
         rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
-        rv64_buf_emit(&ctx->buf,
-                      rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+        rv64_emit_load_jit_state(ctx, RV64_JIT_CTX_REG);
         rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
                                          (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 
@@ -299,8 +298,7 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
 
     /* Setup CORO_REG and JIT_CTX_REG */
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
-    rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_emit_load_jit_state(ctx, RV64_JIT_CTX_REG);
     rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
                                      (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 
@@ -321,8 +319,7 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
                                      (int32_t) XM_JIT_ACTIVE_SMAP_ID_OFFSET));
 
     /* === Load suspend_id into t5 (SCRATCH_REG2) for later dispatch === */
-    rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_emit_load_jit_state(ctx, RV64_SCRATCH_REG);
     rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG2, RV64_SCRATCH_REG,
                                      (int32_t) XM_JIT_STATE_SUSPEND_ID_OFFSET));
 
@@ -357,7 +354,7 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
                               (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8));
 
     /* === Clear jit_resume_entry (one-shot: prevent double-resume) === */
-    rv64_buf_emit(&ctx->buf, rv64_ld(RV64_A0, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_emit_load_jit_state(ctx, RV64_A0);
     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_X0, RV64_A0, (int32_t) XM_JIT_STATE_RESUME_ENTRY_OFFSET));
 
     /* === Per-suspend-id dispatch: compare + branch chain ===
@@ -385,8 +382,7 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
             rv64_beq(RV64_SCRATCH_REG2, RV64_SCRATCH_REG, patch_off);
 
         /* Reload suspend pointer for result access */
-        rv64_buf_emit(&ctx->buf,
-                      rv64_ld(RV64_SCRATCH_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+        rv64_emit_load_jit_state(ctx, RV64_SCRATCH_REG);
         rv64_buf_emit(&ctx->buf, rv64_ld(RV64_SCRATCH_REG, RV64_SCRATCH_REG,
                                          (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET));
 

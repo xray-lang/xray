@@ -361,7 +361,10 @@ typedef struct XrJitSuspendState {
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame → suspend → new frame)
 } XrJitSuspendState;
 
+typedef struct XrJitCoroState XrJitCoroState;
+
 typedef struct XrVmCoroState {
+    XrJitCoroState *jit_state;
     XrVMContext ctx;
     XrCoroEntryType entry_type;
     XrCoroEntry entry;
@@ -370,7 +373,7 @@ typedef struct XrVmCoroState {
     XrValue inline_args[4];
 } XrVmCoroState;
 
-typedef struct XrJitCoroState {
+struct XrJitCoroState {
     struct XrJitScratch *scratch;
     void *resume_entry;
     void *resume_proto;
@@ -378,7 +381,7 @@ typedef struct XrJitCoroState {
     uint32_t suspend_smap_id;
     XrJitSuspendState *suspend;
     bool try_mode;
-} XrJitCoroState;
+};
 
 struct XrCoroutine {
     /* ================================================================
@@ -407,7 +410,6 @@ struct XrCoroutine {
     /* ================================================================
      * WARM ZONE — GC/result hot fields and backend-owned cold state
      * ================================================================ */
-    XrJitCoroState *jit_state;
     struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
     struct XrayIsolate *isolate;  // JIT runtime helpers use 22+ times
     XrValue result;
@@ -602,26 +604,34 @@ XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
 
+static inline XrJitCoroState *xr_coro_peek_jit_state(XrCoroutine *coro) {
+    XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
+    return state ? state->jit_state : NULL;
+}
+
 static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_jit_state: NULL coro");
-    if (!coro->jit_state || !coro->jit_state->scratch) {
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (!jit_state || !jit_state->scratch) {
         XrJitCoroState *state = xr_coro_prepare_jit_state(coro);
         XR_DCHECK(state != NULL, "coro_jit_state: missing JIT state");
         return state;
     }
-    return coro->jit_state;
+    return jit_state;
 }
 
 static inline bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
-    return coro && coro->jit_state && coro->jit_state->try_mode;
+    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
+    return state && state->jit_state && state->jit_state->try_mode;
 }
 
 static inline bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
     if (!coro)
         return false;
-    if (!enabled && !coro->jit_state)
+    XrJitCoroState *current = xr_coro_peek_jit_state(coro);
+    if (!enabled && !current)
         return true;
-    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : coro->jit_state;
+    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : current;
     if (!state)
         return false;
     state->try_mode = enabled;

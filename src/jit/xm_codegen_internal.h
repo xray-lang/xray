@@ -168,6 +168,11 @@ typedef struct {
     XmPostCallTracker post_call_tracker;
 } CodegenCtx;
 
+static inline void a64_emit_load_jit_state(CodegenCtx *ctx, A64Reg dst) {
+    a64_buf_emit(&ctx->buf, a64_ldr(dst, CORO_REG, XM_CORO_BACKEND_STATE_OFFSET));
+    a64_buf_emit(&ctx->buf, a64_ldr(dst, dst, XM_VM_STATE_JIT_STATE_OFFSET));
+}
+
 // Register allocation tables (defined in xm_codegen.c)
 extern const A64Reg alloc_regs[MAX_PHYS_REGS];
 extern const A64Reg alloc_fp_regs[MAX_FP_REGS];

@@ -431,8 +431,7 @@ static void rv64_emit_prologue(Rv64CodegenCtx *ctx) {
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_CORO_REG, RV64_A0));
 
     /* Load jit_ctx through the coroutine JIT state. */
-    rv64_buf_emit(&ctx->buf,
-                  rv64_ld(RV64_JIT_CTX_REG, RV64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET));
+    rv64_emit_load_jit_state(ctx, RV64_JIT_CTX_REG);
     rv64_buf_emit(&ctx->buf, rv64_ld(RV64_JIT_CTX_REG, RV64_JIT_CTX_REG,
                                      (int32_t) XM_JIT_STATE_SCRATCH_OFFSET));
 

@@ -36,6 +36,11 @@
 #define X64_CORO_REG X64_R15
 #define X64_JIT_CTX_REG X64_R14  // jit_ctx pointer (XrJitScratch*)
 
+static inline void x64_emit_load_jit_state(X64Buf *buf, X64Reg dst) {
+    x64_mov_rm(buf, dst, X64_CORO_REG, (int32_t) XM_CORO_BACKEND_STATE_OFFSET);
+    x64_mov_rm(buf, dst, dst, (int32_t) XM_VM_STATE_JIT_STATE_OFFSET);
+}
+
 /* ========== Platform ABI Abstraction ========== */
 
 #ifdef _WIN32

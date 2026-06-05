@@ -59,7 +59,7 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     // Bump worker heartbeat so sysmon doesn't misdetect long-running
     // JIT code as stuck (JIT stays inside run_on_worker across many
     // C helper calls like go/await without returning to worker loop)
-    XrJitCoroState *jit_state = coro->jit_state;
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (jit_state && jit_state->scratch && jit_state->scratch->heartbeat_ptr) {
         atomic_fetch_add_explicit(jit_state->scratch->heartbeat_ptr, 1, memory_order_relaxed);
     }
@@ -200,10 +200,15 @@ static bool coro_ensure_vm_state(XrCoroutine *coro) {
 XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
     if (!coro)
         return NULL;
-    if (coro->jit_state)
-        return coro->jit_state;
-    coro->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
-    return coro->jit_state;
+    if (!coro_ensure_vm_state(coro))
+        return NULL;
+    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
+    if (!vm_state)
+        return NULL;
+    if (vm_state->jit_state)
+        return vm_state->jit_state;
+    vm_state->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
+    return vm_state->jit_state;
 }
 
 XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
@@ -219,21 +224,24 @@ XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
 }
 
 void xr_coro_reset_jit_state(XrCoroutine *coro) {
-    if (!coro || !coro->jit_state)
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (!jit_state)
         return;
-    XrJitSuspendState *suspend = coro->jit_state->suspend;
-    memset(coro->jit_state, 0, sizeof(*coro->jit_state));
-    coro->jit_state->suspend = suspend;
+    XrJitSuspendState *suspend = jit_state->suspend;
+    memset(jit_state, 0, sizeof(*jit_state));
+    jit_state->suspend = suspend;
 }
 
 void xr_coro_free_jit_state(XrCoroutine *coro) {
-    if (!coro || !coro->jit_state)
+    XrVmCoroState *vm_state = xr_coro_maybe_vm_state(coro);
+    if (!vm_state || !vm_state->jit_state)
         return;
-    if (coro->jit_state->suspend) {
-        xr_free(coro->jit_state->suspend);
+    XrJitCoroState *jit_state = vm_state->jit_state;
+    if (jit_state->suspend) {
+        xr_free(jit_state->suspend);
     }
-    xr_free(coro->jit_state);
-    coro->jit_state = NULL;
+    xr_free(jit_state);
+    vm_state->jit_state = NULL;
 }
 
 static void coro_free_owned_vm_state(XrCoroutine *coro) {
@@ -589,7 +597,6 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL |
                               XR_CORO_GC_VM_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
         XrCoroExt *saved_ext = coro->ext;
-        XrJitCoroState *saved_jit_state = coro->jit_state;
 
         memset((char *) coro + offsetof(XrCoroutine, flags), 0,
                sizeof(XrCoroutine) - offsetof(XrCoroutine, flags));
@@ -612,7 +619,6 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
-        coro->jit_state = saved_jit_state;
         xr_coro_reset_jit_state(coro);
         // Reset ext fields that must not persist across lifetimes
         if (coro->ext) {

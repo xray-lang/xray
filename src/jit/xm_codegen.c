@@ -982,7 +982,7 @@ static void emit_prologue(CodegenCtx *ctx) {
     // MOV x19, x0  (save coro pointer)
     a64_buf_emit(&ctx->buf, a64_mov(CORO_REG, A64_X0));
     // Load per-Worker JIT scratch pointer through the coroutine JIT state.
-    a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+    a64_emit_load_jit_state(ctx, JIT_CTX_REG);
     a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, JIT_CTX_REG, XM_JIT_STATE_SCRATCH_OFFSET));
 
     // Store stack_map_ptr into frame from jit_ctx->active_stack_map (set by xm_jit_call)
@@ -1093,7 +1093,7 @@ static void emit_fast_prologue(CodegenCtx *ctx) {
     // MOV x19, x0  (save coro pointer)
     a64_buf_emit(&ctx->buf, a64_mov(CORO_REG, A64_X0));
     // Load per-Worker JIT scratch pointer through the coroutine JIT state.
-    a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, CORO_REG, XM_CORO_JIT_STATE_OFFSET));
+    a64_emit_load_jit_state(ctx, JIT_CTX_REG);
     a64_buf_emit(&ctx->buf, a64_ldr(JIT_CTX_REG, JIT_CTX_REG, XM_JIT_STATE_SCRATCH_OFFSET));
 
     // Store stack_map_ptr into frame from jit_ctx->active_stack_map

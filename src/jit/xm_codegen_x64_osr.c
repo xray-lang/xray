@@ -138,7 +138,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
 
         /* Save coro and load jit_ctx — use platform ABI arg registers */
         x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
-        x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+        x64_emit_load_jit_state(&ctx->buf, X64_JIT_CTX_REG);
         x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG,
                    (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
@@ -292,7 +292,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
 
     /* Setup CORO_REG and JIT_CTX_REG — use platform ABI arg register */
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
-    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_JIT_CTX_REG);
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
     /* Save JIT frame SP for GC */
@@ -307,13 +307,13 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
                  X64_SCRATCH_REG);
 
     /* === Save suspend_id to stack (before we clobber RCX with reg restore) === */
-    x64_mov_rm(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_RCX);
     x64_mov_rm32(&ctx->buf, X64_RCX, X64_RCX, (int32_t) XM_JIT_STATE_SUSPEND_ID_OFFSET);
     x64_push_r(&ctx->buf, X64_RCX);
     CODEGEN_CHECK(ctx, ctx->nsuspend <= XM_MAX_SUSPEND_ENTRIES, "too many suspend points");
 
     /* === Load suspend_state pointer into R11 === */
-    x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_SCRATCH_REG);
     x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
                (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET);
 
@@ -342,7 +342,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
                    (int32_t) XM_SUSPEND_CALLEE_SAVED_OFF + i * 8);
 
     /* === Clear jit_resume_entry (one-shot: prevent double-resume) === */
-    x64_mov_rm(&ctx->buf, X64_RCX, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_RCX);
     x64_xor_rr(&ctx->buf, X64_RAX, X64_RAX);
     x64_mov_mr(&ctx->buf, X64_RCX, (int32_t) XM_JIT_STATE_RESUME_ENTRY_OFFSET, X64_RAX);
 
@@ -368,7 +368,7 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
         x64_patch_rel32(&ctx->buf, trampoline_patches[i], ctx->buf.pos);
 
         /* Reload suspend pointer for result access */
-        x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+        x64_emit_load_jit_state(&ctx->buf, X64_SCRATCH_REG);
         x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
                    (int32_t) XM_JIT_STATE_SUSPEND_PTR_OFFSET);
 
