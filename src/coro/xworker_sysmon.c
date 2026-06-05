@@ -409,7 +409,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     if (!worker || !coro || count <= 0)
         return;
 
-    XrSelectWait *sw = coro->select_wait;
+    XrSelectWait *sw = xr_coro_select_wait(coro);
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
     int limit = count < sw->case_count ? count : sw->case_count;
 
@@ -481,7 +481,7 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
         XrSelectCase *next = sc->next;
         XrCoroutine *coro = sc->owner;
         XR_DCHECK(coro != NULL, "wake_select: NULL owner on select case");
-        XrSelectWait *sw = coro->select_wait;
+        XrSelectWait *sw = xr_coro_select_wait(coro);
 
         if (sw && !atomic_load(&sw->triggered)) {
             // CAS to prevent duplicate wake from another channel
@@ -551,7 +551,7 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
     if (!worker || !coro)
         return;
 
-    XrSelectWait *sw = coro->select_wait;
+    XrSelectWait *sw = xr_coro_select_wait(coro);
     if (!sw)
         return;
 

@@ -123,6 +123,23 @@ bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling) {
     return true;
 }
 
+XrSelectWait *xr_coro_select_wait(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return NULL;
+    XrSelectWait *sw = &coro->ext->select_storage.wait;
+    return atomic_load_explicit(&sw->active, memory_order_acquire) ? sw : NULL;
+}
+
+void xr_coro_clear_select_wait(XrCoroutine *coro) {
+    XrSelectWait *sw = xr_coro_select_wait(coro);
+    if (!sw)
+        return;
+    atomic_store_explicit(&sw->active, false, memory_order_release);
+    sw->case_count = 0;
+    sw->cases = NULL;
+    sw->timer_channel = NULL;
+}
+
 // ========== Memory Sync Helper Functions ==========
 
 // Reset vm_ctx execution state (stack/frames pointers already set during allocation)
@@ -1052,7 +1069,6 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         coro_wait_state_reset(coro->ext);
         coro_select_storage_reset(coro->ext);
         coro_clear_scope_membership(coro);
-        coro->select_wait = NULL;
         // Add to pool
         coro->next = worker->p.local_free_list;
         worker->p.local_free_list = coro;
@@ -1305,7 +1321,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->send_value = xr_null();
     coro->recv_slot = NULL;
     coro->recv_slot_ref = xr_slot_none();
-    coro->select_wait = NULL;
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
     coro_clear_scope_membership(coro);
