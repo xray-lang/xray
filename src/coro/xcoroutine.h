@@ -417,8 +417,6 @@ struct XrCoroutine {
     XrValue send_value;
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
-    int recv_slot_offset;
-    int64_t channel_deadline;
     struct XrSelectWait *select_wait;
     int select_ready_case;
 
