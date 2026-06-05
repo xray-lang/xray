@@ -126,6 +126,18 @@ static inline bool vm_ensure_call_stack(XrVMContext *vm_ctx, int needed_slots, X
     return true;
 }
 
+static inline bool vm_rebind_after_native_call(XrVMContext *vm_ctx, int base_offset,
+                                               int frame_index, XrValue **base_inout,
+                                               XrBcCallFrame **frame_inout) {
+    if (!vm_ctx || !base_inout || !frame_inout)
+        return false;
+    if (frame_index < 0 || frame_index >= vm_ctx->frame_count)
+        return false;
+    *base_inout = vm_ctx->stack + base_offset;
+    *frame_inout = &vm_ctx->frames[frame_index];
+    return true;
+}
+
 /* ========== Unified Frame Push API ==========
  *
  * Single entry point for pushing a new bytecode call frame from external

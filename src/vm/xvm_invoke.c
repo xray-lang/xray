@@ -504,7 +504,11 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
 
         // Primitive constructor (Map, Array, etc.)
         if (ctor != NULL && ctor->type == XMETHOD_PRIMITIVE && ctor->as.primitive != NULL) {
+            int base_offset = (int) (base - vm_ctx->stack);
+            int frame_index = (int) (frame - vm_ctx->frames);
             XrValue result = ctor->as.primitive(isolate, inst_val, &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+                return XR_DISP_FATAL;
             base[a] = result;
             return XR_DISP_NEXT;
         }
@@ -542,7 +546,11 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
         }
 
         if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
+            int base_offset = (int) (base - vm_ctx->stack);
+            int frame_index = (int) (frame - vm_ctx->frames);
             XrValue result = method->as.primitive(isolate, base[a + 1], &base[a + 2], nargs);
+            if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+                return XR_DISP_FATAL;
             base[a] = result;
             /* Check if the builtin raised an exception (e.g. Json.stringify
              * on non-serializable types calls xr_vm_unwind_with_trace). */
@@ -651,7 +659,11 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
     // in-place and does not need to know about subclass fields.
     if (method->type == XMETHOD_PRIMITIVE && method->as.primitive != NULL) {
         int arg_base = is_ctor_call ? 1 : (a + 2);
+        int base_offset = (int) (base - vm_ctx->stack);
+        int frame_index = (int) (frame - vm_ctx->frames);
         XrValue result = method->as.primitive(isolate, this_val, &base[arg_base], nargs);
+        if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+            return XR_DISP_FATAL;
         if (!XR_IS_NULL(result)) {
             base[a] = result;
         }

@@ -8,9 +8,10 @@
  * xcoro_pool.h - Coroutine structure pool
  *
  * KEY CONCEPT:
- *   Pre-allocate coroutine structs to avoid malloc on each creation.
- *   - Pre-allocated coroutine struct array, no malloc overhead
- *   - Free list manages released coroutine slots
+ *   Pool scheduler-owned coroutine shells without assuming a VM backend.
+ *   - Pre-allocated coroutine shell array
+ *   - VM state and VM stacks are attached lazily by the VM backend
+ *   - Free list manages released coroutine shells
  *   - Thread-safe access support
  */
 
@@ -33,12 +34,12 @@ struct XrVmCoroState;
 #define XR_CORO_POOL_GROW_SIZE 4096          // Growth size per expansion
 #define XR_CORO_POOL_MAX_SIZE (1024 * 1024)  // Max pool size
 
-// VM stack and bytecode frames embedded in arena (zero malloc per coroutine)
+// Initial VM stack and bytecode frame sizes used by lazy VM backend allocation.
 #define XR_CORO_POOL_STACK_SLOTS 64  // Initial stack slots per coroutine
 #define XR_CORO_POOL_FRAME_SLOTS 4   // Initial frame slots per coroutine
 
 // gc_flags bit definitions (coroutine pool markers)
-#define XR_CORO_GC_SLAB_STACK 0x0001      // VM stack and frames from slab (not malloc'd)
+#define XR_CORO_GC_SLAB_STACK 0x0001      // VM stack is embedded in a pool block
 #define XR_CORO_GC_FROM_POOL 0x0002       // Struct allocated from pool block
 #define XR_CORO_GC_RECYCLABLE 0x0004      // Fire-and-forget, eligible for deferred recycle
 #define XR_CORO_GC_RECYCLED_CLEAN 0x0008  // Recycled with thorough field reset (skip memset)
@@ -48,13 +49,10 @@ struct XrVmCoroState;
 // ========== Pool Block ==========
 
 // XrCoroPoolBlock - Pool memory block
-// Each block contains coroutine structs plus embedded VM stack and frame memory.
-// Layout: [XrCoroutine array][VM stack and frame slab]
+// Each block contains coroutine shells only. Backend state is attached lazily so
+// AOT/native coroutine shells do not inherit VM stack costs.
 typedef struct XrCoroPoolBlock {
-    struct XrCoroutine *coros;  // Coroutine array
-    struct XrVmCoroState *vm_states;
-    char *slab;                    // VM stack and frame slab memory
-    size_t slab_entry_size;        // Size of each VM stack and frame entry
+    struct XrCoroutine *coros;     // Coroutine array
     size_t capacity;               // Number of coroutines
     uint32_t base_idx;             // Global alloc_idx base for this block
     struct XrCoroPoolBlock *next;  // Next block
@@ -123,41 +121,25 @@ XR_FUNC void xr_coro_pool_stats(XrCoroStructPool *pool, uint64_t *total_alloc, u
 // Print pool statistics
 XR_FUNC void xr_coro_pool_print_stats(XrCoroStructPool *pool);
 
-/* ========== Slab Init Helper ========== */
+/* ========== Pool Slot Init Helper ========== */
 
 /*
- * Initialize coroutine vm_ctx fields from a pool block's slab.
- * Eliminates repeated slab setup code across xcoro_pool.c and xworker.c.
+ * Initialize a fresh coroutine shell from a pool block slot.
+ * Backend state remains NULL until a backend-specific creator attaches it.
  */
 #include "xcoroutine.h"
 #include "xexec_frame.h"
-static inline void xr_coro_init_from_slab(struct XrCoroutine *coro, XrCoroPoolBlock *block,
-                                          uint32_t local_idx) {
-    XrVmCoroState *vm_state = block->vm_states ? &block->vm_states[local_idx] : NULL;
-    XR_DCHECK(vm_state != NULL, "coro_init_from_slab: missing VM state");
-    coro->backend = xr_coro_vm_backend_vtable();
-    coro->backend_state = vm_state;
-    XrVMContext *vm_ctx = &vm_state->ctx;
-    vm_ctx->handlers = vm_ctx->handler_inline;
-    vm_ctx->handler_capacity = XR_HANDLER_INLINE_CAP;
+static inline void xr_coro_init_from_pool_slot(struct XrCoroutine *coro, XrCoroPoolBlock *block,
+                                               uint32_t local_idx) {
+    (void) block;
+    (void) local_idx;
+    XR_DCHECK(coro != NULL, "coro_init_from_pool_slot: NULL coro");
+    coro->backend = NULL;
+    coro->backend_state = NULL;
     coro->coro_gc = NULL;
     coro->ext = NULL;
     coro->jit_state = NULL;
-    if (block->slab) {
-        char *entry = block->slab + local_idx * block->slab_entry_size;
-        size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
-        vm_ctx->stack = (XrValue *) entry;
-        vm_ctx->stack_capacity = XR_CORO_POOL_STACK_SLOTS;
-        vm_ctx->frames = (XrBcCallFrame *) (entry + stack_bytes);
-        vm_ctx->frame_capacity = XR_CORO_POOL_FRAME_SLOTS;
-        coro->gc_flags = XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL;
-    } else {
-        vm_ctx->stack = NULL;
-        vm_ctx->stack_capacity = 0;
-        vm_ctx->frames = NULL;
-        vm_ctx->frame_capacity = 0;
-        coro->gc_flags = XR_CORO_GC_FROM_POOL;
-    }
+    coro->gc_flags = XR_CORO_GC_FROM_POOL;
 }
 
 #endif  // XCORO_POOL_H

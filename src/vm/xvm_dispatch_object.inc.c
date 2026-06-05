@@ -513,10 +513,14 @@ vmcase(OP_GETPROP) {
         savepc();
         XrDispatchAction _cr =
             vm_getprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, base, a, b, frame, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
+        if (_cr == XR_DISP_FATAL)
+            return XR_VM_RUNTIME_ERROR;
         if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
@@ -545,10 +549,14 @@ getprop_instance:;
     {
         XrDispatchAction _cr =
             vm_getprop_instance_getter(isolate, vm_ctx, inst, obj, prop_symbol, base, a, frame, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
+        if (_cr == XR_DISP_FATAL)
+            return XR_VM_RUNTIME_ERROR;
         if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
@@ -648,10 +656,14 @@ vmcase(OP_SETPROP) {
         savepc();
         XrDispatchAction _cr =
             vm_setprop_type_dispatch(isolate, vm_ctx, obj, prop_symbol, value, base, a, frame, pc);
-        if (_cr == XR_DISP_NEXT)
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
+        if (_cr == XR_DISP_FATAL)
+            return XR_VM_RUNTIME_ERROR;
         if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;
@@ -701,8 +713,14 @@ vmcase(OP_SETPROP) {
     {
         XrDispatchAction _cr = vm_setprop_instance_setter(isolate, vm_ctx, inst_s, obj, prop_symbol,
                                                           value, base, c, frame, pc);
+        if (_cr == XR_DISP_NEXT) {
+            VM_REBIND_AFTER_NATIVE_CALL();
+            vmbreak;
+        }
         if (_cr == XR_DISP_RESTART)
             goto startfunc;
+        if (_cr == XR_DISP_FATAL)
+            return XR_VM_RUNTIME_ERROR;
         if (_cr == XR_DISP_RAISE) {
             if (!xr_vm_is_catch_reachable(isolate))
                 return XR_VM_RUNTIME_ERROR;

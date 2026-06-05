@@ -31,6 +31,20 @@
 
 /* ========== Lifecycle API ========== */
 
+static void sysheap_gc_pool_drain(XrSystemHeap *heap) {
+    XR_DCHECK(heap != NULL, "sysheap_gc_pool_drain: NULL heap");
+    xr_mutex_lock(&heap->gc_pool_mu);
+    struct XrCoroGC *gc = heap->gc_pool_head;
+    while (gc) {
+        struct XrCoroGC *next = *(struct XrCoroGC **) gc;
+        xr_free(gc);
+        gc = next;
+    }
+    heap->gc_pool_head = NULL;
+    heap->gc_pool_count = 0;
+    xr_mutex_unlock(&heap->gc_pool_mu);
+}
+
 bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     /* Public init API: caller-side error rather than assertion so a NULL
      * heap turns into a clean failure instead of an abort in release. */
@@ -80,27 +94,18 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
     if (!heap || !heap->initialized)
         return;
 
-    // Drain XrCoroGC L2 pool: every recycled struct still owned by the
-    // pool must be returned to malloc. Walk the linked stack stored in
-    // the first sizeof(void*) bytes of each free struct.
-    xr_mutex_lock(&heap->gc_pool_mu);
-    struct XrCoroGC *gc = heap->gc_pool_head;
-    while (gc) {
-        struct XrCoroGC *next = *(struct XrCoroGC **) gc;
-        xr_free(gc);
-        gc = next;
-    }
-    heap->gc_pool_head = NULL;
-    heap->gc_pool_count = 0;
-    xr_mutex_unlock(&heap->gc_pool_mu);
-    xr_mutex_destroy(&heap->gc_pool_mu);
-
     // Destroy coroutine pool
     if (heap->coro_pool) {
         xr_coro_pool_destroy(heap->coro_pool);
         xr_free(heap->coro_pool);
         heap->coro_pool = NULL;
     }
+
+    // Drain XrCoroGC L2 pool after coroutine pool teardown. Coroutine
+    // finalizers may recycle GC structs back into this pool while their
+    // shells are being released.
+    sysheap_gc_pool_drain(heap);
+    xr_mutex_destroy(&heap->gc_pool_mu);
 
     // Destroy class arena
     xr_arena_destroy(&heap->class_arena);
