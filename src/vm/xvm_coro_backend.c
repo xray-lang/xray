@@ -25,6 +25,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../base/xlog.h"
+#include "xvm_internal.h"
 #include "xvm_coro_state.h"
 #include "xvm_resume.h"
 #include "xvm_worker_state.h"
