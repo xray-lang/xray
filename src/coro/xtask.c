@@ -475,6 +475,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
 
     int idx = atomic_load_explicit((_Atomic int *) &task->waiter_index, memory_order_acquire);
     atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
+    XrCoroWaitState *wait_state = xr_coro_wait_state(waiter);
 
     switch (idx) {
         case -1: {
@@ -491,7 +492,9 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             /* Scope child completion: decrement count, wake parent when all done.
              * Scope error handling (linked/supervisor) is done in xr_coro_wake_waiter
              * BEFORE delegating here — parent_scope is already cleared at this point. */
-            int remaining = atomic_fetch_sub(&waiter->wait_count, 1) - 1;
+            if (!wait_state)
+                break;
+            int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0 && xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                 xr_coro_ready(X, waiter, true);
             }
@@ -499,30 +502,34 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
         }
         case -3: {
             // await any: wake on first completion
+            if (!wait_state)
+                break;
             bool expected = false;
-            if (atomic_compare_exchange_strong(&waiter->any_done, &expected, true)) {
+            if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                 waiter->result = task->result;
                 if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                     xr_coro_ready(X, waiter, true);
                 }
             }
-            atomic_fetch_sub(&waiter->wait_count, 1);
+            atomic_fetch_sub(&wait_state->wait_count, 1);
             break;
         }
         case -4: {
             // await anySuccess: wake only on first success
+            if (!wait_state)
+                break;
             bool is_success = XR_IS_NULL(task->error);
             if (is_success) {
                 bool expected = false;
-                if (atomic_compare_exchange_strong(&waiter->any_done, &expected, true)) {
+                if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                     waiter->result = task->result;
                     if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                         xr_coro_ready(X, waiter, true);
                     }
                 }
             }
-            int remaining = atomic_fetch_sub(&waiter->wait_count, 1) - 1;
-            if (remaining == 0 && !atomic_load(&waiter->any_done)) {
+            int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
+            if (remaining == 0 && !atomic_load(&wait_state->any_done)) {
                 waiter->result = xr_null();
                 if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                     xr_coro_ready(X, waiter, true);
@@ -532,7 +539,9 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
         }
         default: {
             // await all (idx >= 0): wake when all children are done.
-            int remaining = atomic_fetch_sub(&waiter->wait_count, 1) - 1;
+            if (!wait_state)
+                break;
+            int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0 && xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
                 xr_coro_ready(X, waiter, true);
             }

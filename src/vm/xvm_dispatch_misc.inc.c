@@ -153,8 +153,11 @@ vmcase(OP_SCOPE_ENTER) {
     // Enter structured concurrency scope
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
     if (current) {
-        atomic_store(&current->wait_count, 0);
-        atomic_store(&current->any_done, false);
+        XrCoroWaitState *wait = xr_coro_ensure_wait_state(current);
+        if (!wait)
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "scope: out of memory");
+        atomic_store(&wait->wait_count, 0);
+        atomic_store(&wait->any_done, false);
     }
 
     // Create scope context — per-coroutine tracking

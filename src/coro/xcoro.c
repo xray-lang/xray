@@ -481,6 +481,14 @@ static void coro_select_storage_free(XrCoroExt *ext) {
     memset(&ext->select_storage, 0, sizeof(ext->select_storage));
 }
 
+static void coro_wait_state_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    atomic_store_explicit(&ext->wait.await_task, NULL, memory_order_relaxed);
+    atomic_store_explicit(&ext->wait.wait_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
+}
+
 static void coro_clear_scope_membership(XrCoroutine *coro) {
     if (!coro || !coro->ext)
         return;
@@ -560,6 +568,7 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
             coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
             coro->ext->timer_wheel_owner = -1;
             atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
+            coro_wait_state_reset(coro->ext);
             coro_select_storage_reset(coro->ext);
         }
     } else {
@@ -575,9 +584,6 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         // Fresh allocation: all atomic fields need explicit init
         atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
         atomic_store_explicit(&coro->affinity_p, 0, memory_order_relaxed);
-        atomic_store_explicit(&coro->wait_count, 0, memory_order_relaxed);
-        atomic_store_explicit(&coro->any_done, false, memory_order_relaxed);
-        atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
     }
     // Clean path: recycle_local already zeroed all atomic fields via atomic_store
 
@@ -1043,6 +1049,7 @@ void xr_coro_release_resources(XrCoroutine *coro) {
         // drop them here rather than handing back stale state.
         xr_vm_ctx_free_ic_tables(xr_coro_vm_ctx(coro));
         // ext->io_buf: keep alive for reuse across coro lifetimes (free only on full destroy)
+        coro_wait_state_reset(coro->ext);
         coro_select_storage_reset(coro->ext);
         coro_clear_scope_membership(coro);
         coro->select_wait = NULL;
@@ -1299,6 +1306,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->recv_slot = NULL;
     coro->recv_slot_ref = xr_slot_none();
     coro->select_wait = NULL;
+    coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
     coro_clear_scope_membership(coro);
     coro->pending_spawn = NULL;
@@ -1309,9 +1317,6 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
     atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
     atomic_store_explicit(&coro->affinity_p, 0, memory_order_relaxed);
-    atomic_store_explicit(&coro->wait_count, 0, memory_order_relaxed);
-    atomic_store_explicit(&coro->any_done, false, memory_order_relaxed);
-    atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
     // timer fields live in ext; reset happens in coro_init_common dirty path
     // Mark as "clean" — coro_init_common can skip memset
     coro->gc_flags |= XR_CORO_GC_RECYCLED_CLEAN;

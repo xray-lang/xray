@@ -641,7 +641,9 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
     // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
     // NOT propagate the result — do it here to avoid stale register reads.
     if (resume_reason != XR_RESUME_CHANNEL && resume_reason != XR_RESUME_CHANNEL_CLOSED) {
-        XrTask *await_task = atomic_load_explicit(&coro->await_task, memory_order_acquire);
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        XrTask *await_task =
+            wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
         if (await_task) {
             uint8_t tstate = atomic_load_explicit(&await_task->state, memory_order_acquire);
             XrValue res = xr_null();
@@ -650,7 +652,7 @@ static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *
             }
             jit_state->suspend->result = res.i;
             jit_state->suspend->result_tag = res.tag;
-            atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
+            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
         }
     }
 

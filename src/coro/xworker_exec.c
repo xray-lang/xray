@@ -24,7 +24,8 @@
 static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *coro) {
     int wr = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
     if (wr == (XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT)) {
-        XrTask *task = atomic_load_explicit(&coro->await_task, memory_order_acquire);
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
         if (task) {
             int astate = atomic_load_explicit(&task->await_state, memory_order_acquire);
             if (astate == XR_AWAIT_RESOLVED) {
@@ -33,7 +34,8 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             }
         }
     } else if (wr == (XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT)) {
-        if (atomic_load(&coro->wait_count) == 0) {
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        if (!wait || atomic_load(&wait->wait_count) == 0) {
             xr_coro_ready(runtime->isolate, coro, true);
             return true;
         }
@@ -44,7 +46,8 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             return true;
         }
     } else if (wr == (XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT)) {
-        if (atomic_load(&coro->any_done) || atomic_load(&coro->wait_count) == 0) {
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        if (!wait || atomic_load(&wait->any_done) || atomic_load(&wait->wait_count) == 0) {
             xr_coro_ready(runtime->isolate, coro, true);
             return true;
         }

@@ -321,7 +321,9 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
             atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
                                   memory_order_relaxed);
         }
-        atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        if (wait)
+            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
         return block_result(XR_CORO_BLOCK_TIMEOUT, xr_null(), false);
     }
 
@@ -329,7 +331,9 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
         atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_RESOLVED) {
         coro_cancel_owned_timer(coro);
         atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
-        atomic_store_explicit(&coro->await_task, NULL, memory_order_relaxed);
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        if (wait)
+            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
         return block_result(XR_CORO_BLOCK_READY, task->result, true);
     }
 
@@ -358,7 +362,11 @@ static bool await_store_result(XrayIsolate *isolate, XrCoroutine *coro, XrTask *
 }
 
 static XrCoroBlockResult coro_arm_await_wait(XrCoroutine *coro, XrTask *task, int64_t timeout_ms) {
-    atomic_store_explicit(&coro->await_task, task, memory_order_release);
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    atomic_store_explicit(&wait->await_task, task, memory_order_release);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
     if (timeout_ms > 0) {
         coro_arm_timeout(coro, timeout_ms);
@@ -461,14 +469,18 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     if (all_done)
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 
-    atomic_store(&coro->wait_count, 1);
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    atomic_store(&wait->wait_count, 1);
 
     for (int j = 0; j < count; j++) {
         XrValue cv = xr_array_get(tasks, j);
         if (!xr_value_is_task(cv))
             continue;
 
-        atomic_fetch_add(&coro->wait_count, 1);
+        atomic_fetch_add(&wait->wait_count, 1);
         XrTask *task = xr_value_to_task(cv);
         atomic_store_explicit((_Atomic int *) &task->waiter_index, j, memory_order_relaxed);
         atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
@@ -476,11 +488,11 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
             XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter,
                                                            NULL, memory_order_acq_rel);
             if (waiter == coro)
-                atomic_fetch_sub(&coro->wait_count, 1);
+                atomic_fetch_sub(&wait->wait_count, 1);
         }
     }
 
-    int remaining = atomic_fetch_sub(&coro->wait_count, 1) - 1;
+    int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
     if (remaining == 0)
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 
@@ -514,8 +526,12 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     if (task_count == 0 || (success_only && done_count == task_count))
         return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
 
-    atomic_store(&coro->any_done, false);
-    atomic_store(&coro->wait_count, 1);
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
+    atomic_store(&wait->any_done, false);
+    atomic_store(&wait->wait_count, 1);
 
     int waiter_index = success_only ? -4 : -3;
     for (int j = 0; j < count; j++) {
@@ -523,7 +539,7 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
         if (!xr_value_is_task(cv))
             continue;
 
-        atomic_fetch_add(&coro->wait_count, 1);
+        atomic_fetch_add(&wait->wait_count, 1);
         XrTask *task = xr_value_to_task(cv);
         atomic_store_explicit((_Atomic int *) &task->waiter_index, waiter_index,
                               memory_order_relaxed);
@@ -534,16 +550,16 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
             if (waiter == coro) {
                 if (!success_only || XR_IS_NULL(task->error)) {
                     bool expected = false;
-                    if (atomic_compare_exchange_strong(&coro->any_done, &expected, true))
+                    if (atomic_compare_exchange_strong(&wait->any_done, &expected, true))
                         coro->result = task->result;
                 }
-                atomic_fetch_sub(&coro->wait_count, 1);
+                atomic_fetch_sub(&wait->wait_count, 1);
             }
         }
     }
 
-    int remaining = atomic_fetch_sub(&coro->wait_count, 1) - 1;
-    if (atomic_load(&coro->any_done))
+    int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
+    if (atomic_load(&wait->any_done))
         return block_result(XR_CORO_BLOCK_READY, coro->result, true);
     if (success_only && remaining == 0)
         return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
@@ -762,7 +778,10 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
         xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
-    atomic_store(&coro->wait_count, 0);
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+    atomic_store(&wait->wait_count, 0);
 
     if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
         XrValue err = scope->first_error;
