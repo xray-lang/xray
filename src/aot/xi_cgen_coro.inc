@@ -114,6 +114,19 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
     fprintf(out, ";\n");
 }
 
+static void emit_assign_coro_param_from_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
+    XrRep rep = cg_rep(f->params[index]);
+    fprintf(out, "    f->p%u = ", index);
+    if (rep == XR_REP_I64) {
+        fprintf(out, "XR_TO_INT(p%u)", index);
+    } else if (rep == XR_REP_F64) {
+        fprintf(out, "XR_TO_FLOAT(p%u)", index);
+    } else {
+        fprintf(out, "p%u", index);
+    }
+    fprintf(out, ";\n");
+}
+
 static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix,
                                const XiValue *v) {
     (void) ctx;
@@ -190,7 +203,7 @@ static void emit_coro_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " {\n");
     fprintf(out, "    uint32_t state;\n");
     for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "    XrValue p%u;\n", i);
+        fprintf(out, "    %s p%u;\n", ctype_str(cg_rep(f->params[i])), i);
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
@@ -268,7 +281,7 @@ static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, " *)xr_aot_frame_alloc(sizeof(*f));\n");
     fprintf(out, "    if (!f)\n        return NULL;\n");
     for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "    f->p%u = p%u;\n", i, i);
+        emit_assign_coro_param_from_xrvalue(out, f, i);
     fprintf(out, "    return f;\n");
     fprintf(out, "}\n\n");
 }
@@ -297,6 +310,15 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    return xr_aot_yielded();\n");
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
+        return;
+    }
+
+    if (v->op == XI_PARAM) {
+        if (cg_coro_value_has_storage(f, v)) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = p%u;\n", (unsigned) v->aux_int);
+        }
         return;
     }
 
@@ -529,6 +551,17 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
+        return;
+    }
+
+    if (v->op == XI_UNBOX && v->nargs >= 1 && cg_rep(v->args[0]) != XR_REP_TAGGED) {
+        if (cg_coro_value_has_storage(f, v)) {
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = ");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ";\n");
+        }
         return;
     }
 
@@ -837,6 +870,8 @@ static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc 
                                         const char *helper, bool with_visitor) {
     (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_rep(f->params[i]) != XR_REP_TAGGED)
+            continue;
         fprintf(out, "    %s(", helper);
         if (with_visitor)
             fprintf(out, "visitor, ");
