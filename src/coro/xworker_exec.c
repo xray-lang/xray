@@ -329,8 +329,14 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     // can steal them. Children that block (channel I/O) go to blocked queue
     // and are not stealable — preserving cache locality for channel patterns.
     if (result.kind == XR_CORO_RUN_SPAWN_CHILD) {
-        XrCoroutine *child = result.child ? result.child : coro->pending_spawn;
-        coro->pending_spawn = NULL;
+        XrCoroutine *pending = xr_coro_take_pending_spawn(coro);
+        XrCoroutine *child = result.child ? result.child : pending;
+        XR_DCHECK(!result.child || !pending || result.child == pending,
+                  "spawn child result does not match pending child");
+        if (!child) {
+            result = xr_coro_run_error(XR_NULL_VAL, false);
+            goto normal_result_path;
+        }
         if (!worker_should_inline_spawn_child(worker, coro, child)) {
             xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
             xr_worker_push(worker, child);

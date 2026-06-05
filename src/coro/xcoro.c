@@ -415,7 +415,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     // Bootstrap-specific: mark as main coroutine
     coro->flags |= XR_CORO_FLG_MAIN;
     coro_vm_entry_reset_no_free(xr_coro_maybe_vm_state(coro));
-    coro->pending_spawn = NULL;
+    (void) xr_coro_set_pending_spawn(coro, NULL);
 
     return coro;
 }
@@ -526,6 +526,30 @@ static void coro_channel_wait_reset(XrCoroExt *ext) {
     ext->wait_bucket_owner = -1;
     ext->wait_send = false;
     ext->send_value = xr_null();
+    ext->pending_spawn = NULL;
+}
+
+bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child) {
+    if (!coro)
+        return false;
+    if (!child) {
+        if (coro->ext)
+            coro->ext->pending_spawn = NULL;
+        return true;
+    }
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    ext->pending_spawn = child;
+    return true;
+}
+
+XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return NULL;
+    XrCoroutine *child = coro->ext->pending_spawn;
+    coro->ext->pending_spawn = NULL;
+    return child;
 }
 
 static void coro_clear_scope_membership(XrCoroutine *coro) {
@@ -1340,7 +1364,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
     coro_clear_scope_membership(coro);
-    coro->pending_spawn = NULL;
+    (void) xr_coro_set_pending_spawn(coro, NULL);
     // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
     // are reset in coro_init_common dirty path; ext pointer preserved for io_buf reuse
     xr_coro_clear_debug_identity(coro);

@@ -308,6 +308,7 @@ typedef struct XrCoroExt {
     _Atomic(void *) wait_channel;
     bool wait_send;
     XrValue send_value;
+    struct XrCoroutine *pending_spawn;
 
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
@@ -419,9 +420,6 @@ struct XrCoroutine {
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
-
-    /* === Continuation Stealing === */
-    struct XrCoroutine *pending_spawn;
 
     /* === Per-Coroutine Scope Tracking === */
     struct XrScopeContext *current_scope;
@@ -759,6 +757,8 @@ XR_FUNC XrCoroutine *xr_coro_scope_sibling(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_scope_sibling(XrCoroutine *coro, XrCoroutine *sibling);
 XR_FUNC XrSelectWait *xr_coro_select_wait(XrCoroutine *coro);
 XR_FUNC void xr_coro_clear_select_wait(XrCoroutine *coro);
+XR_FUNC bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child);
+XR_FUNC XrCoroutine *xr_coro_take_pending_spawn(XrCoroutine *coro);
 
 // Scheduler
 XR_FUNC void xr_sched_init(XrCoroState *sched);

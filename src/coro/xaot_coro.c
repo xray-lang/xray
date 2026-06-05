@@ -254,11 +254,17 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
 
     XrRuntime *runtime = (XrRuntime *) ctx->isolate->vm.runtime;
     XrCoroutine *parent = ctx->coro;
+    if (parent && !xr_coro_set_pending_spawn(parent, child)) {
+        xr_coro_destroy(child);
+        return result;
+    }
+
     XrScopeContext *scope = parent ? parent->current_scope : NULL;
     if (!scope && runtime)
         scope = runtime->current_scope;
     if (scope && parent) {
         if (!xr_coro_set_parent_scope(child, scope)) {
+            (void) xr_coro_set_pending_spawn(parent, NULL);
             xr_coro_destroy(child);
             return result;
         }
@@ -266,6 +272,7 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
         }
         if (!xr_coro_set_scope_sibling(child, scope->first_child)) {
             atomic_store_explicit(&scope->child_lock, false, memory_order_release);
+            (void) xr_coro_set_pending_spawn(parent, NULL);
             xr_coro_destroy(child);
             return result;
         }
@@ -283,8 +290,6 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     result.child = child;
     if (!parent && runtime) {
         xr_runtime_spawn(runtime, child);
-    } else if (parent) {
-        parent->pending_spawn = child;
     }
     return result;
 }

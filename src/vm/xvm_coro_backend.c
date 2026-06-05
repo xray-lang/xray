@@ -126,7 +126,7 @@ static XrCoroRunResult worker_run_result_from_vm(XrCoroutine *coro, XrVMResult r
         case XR_VM_YIELD:
             return xr_coro_run_result(XR_CORO_RUN_YIELD);
         case XR_VM_GO_CHILD:
-            return xr_coro_run_spawn_child(coro ? coro->pending_spawn : NULL);
+            return xr_coro_run_spawn_child(xr_coro_take_pending_spawn(coro));
         case XR_VM_CANCELLED:
             return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
         case XR_VM_DEBUG_BREAK:

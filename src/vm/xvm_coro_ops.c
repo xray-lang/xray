@@ -673,6 +673,11 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     if (fire_and_forget)
         coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
+    if (parent && !xr_coro_set_pending_spawn(parent, coro)) {
+        xr_coro_destroy(coro);
+        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to record spawned coroutine");
+    }
+
     // Scope tracking: link coro to scope
     {
         XrScopeContext *_scope = parent ? parent->current_scope : NULL;
@@ -680,6 +685,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
             _scope = runtime->current_scope;
         if (_scope && parent) {
             if (!xr_coro_set_parent_scope(coro, _scope)) {
+                (void) xr_coro_set_pending_spawn(parent, NULL);
+                xr_coro_destroy(coro);
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
             }
             // Protect child list prepend with the scope spinlock
@@ -687,6 +694,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
             }
             if (!xr_coro_set_scope_sibling(coro, _scope->first_child)) {
                 atomic_store_explicit(&_scope->child_lock, false, memory_order_release);
+                (void) xr_coro_set_pending_spawn(parent, NULL);
+                xr_coro_destroy(coro);
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to attach coroutine to scope");
             }
             _scope->first_child = coro;
@@ -723,7 +732,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         return XR_DISP_NEXT;
     }
 
-    parent->pending_spawn = coro;
     return XR_DISP_GO_CHILD;
 }
 
