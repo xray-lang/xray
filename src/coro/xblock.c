@@ -672,7 +672,7 @@ static bool coro_select_recv_case_ready(XrChannel *ch) {
         return false;
 
     bool ready = false;
-    xr_amutex_lock(&ch->lock);
+    xr_channel_lock_observed(ch);
     ready = ch->buf_count > 0 || ch->sendq.first != NULL;
     xr_amutex_unlock(&ch->lock);
     return ready;
