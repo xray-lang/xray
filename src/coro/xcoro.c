@@ -220,6 +220,54 @@ static void coro_release_backend_state(XrCoroutine *coro, bool destroy) {
     }
 }
 
+static XrCoroRunResult native_backend_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                             const XrCoroRunContext *run_ctx) {
+    (void) event;
+    (void) run_ctx;
+    if (!coro || !coro->entry.native.func)
+        return xr_coro_run_error(XR_NULL_VAL, false);
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED))
+        return xr_coro_run_result(XR_CORO_RUN_CANCELLED);
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        return xr_coro_run_done(coro->result);
+
+    uint32_t flags = xr_coro_flags_load(coro);
+    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
+    atomic_store_explicit(&coro->flags,
+                          (flags & ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
+                              XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
+                          memory_order_release);
+
+    coro->entry.native.func(coro->entry.native.arg);
+    coro->result = xr_null();
+    return xr_coro_run_done(coro->result);
+}
+
+static const char *native_backend_debug_name(const XrCoroutine *coro) {
+    (void) coro;
+    return "native";
+}
+
+static void native_backend_debug_snapshot(const XrCoroutine *coro, XrCoroDebugSnapshot *snapshot) {
+    (void) coro;
+    if (!snapshot)
+        return;
+    snapshot->backend_name = "native";
+    snapshot->function_name = "native";
+    snapshot->frame_count = 0;
+    snapshot->in_c_frame = 0;
+}
+
+static const XrCoroBackendVTable native_backend_vtable = {
+    .kind = XR_CORO_BACKEND_NATIVE,
+    .resume = native_backend_resume,
+    .trace_roots = NULL,
+    .release = NULL,
+    .destroy = NULL,
+    .debug_name = native_backend_debug_name,
+    .debug_snapshot = native_backend_debug_snapshot,
+};
+
 // Create bootstrap main coroutine (no closure, no scheduler)
 // Called during isolate init before any script execution.
 // Provides coro_gc so all init-phase allocations go through coro heap.
@@ -793,53 +841,15 @@ XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
 // For simple callbacks without I/O wait
 XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *arg,
                                    const char *name) {
-    XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
+    if (!X || !func)
         return NULL;
-    }
 
-    // Allocate: try pool first, then system heap
-    XrCoroutine *coro = NULL;
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (runtime) {
-        coro = xr_coro_pool_get(runtime);
-    }
-    if (!coro) {
-        if (X->sys_heap) {
-            coro = xr_sysheap_alloc_coro(X->sys_heap);
-            if (!coro)
-                return NULL;
-            coro->coro_gc = NULL;
-        } else {
-            coro = (XrCoroutine *) xr_malloc(sizeof(XrCoroutine));
-            if (coro) {
-                memset(coro, 0, sizeof(XrCoroutine));
-                coro->gc.type = XR_TCOROUTINE;
-            }
-            if (!coro)
-                return NULL;
-            if (!coro_ensure_vm_state(coro)) {
-                coro_discard_uninitialized(coro);
-                return NULL;
-            }
-            xr_coro_vm_ctx(coro)->stack = NULL;
-            xr_coro_vm_ctx(coro)->frames = NULL;
-            coro->coro_gc = NULL;
-        }
-    }
-    if (!coro_ensure_vm_state(coro)) {
-        coro_discard_uninitialized(coro);
+    XrCoroutine *coro = xr_coro_create_empty(X, name, false);
+    if (!coro)
         return NULL;
-    }
 
-    // Common initialization (flags, field resets, timer, GC, ID; no stack/frames)
-    if (!coro_init_common(coro, X, name, false)) {
-        xr_coro_free(coro);
-        coro_discard_uninitialized(coro);
-        return NULL;
-    }
-
-    // Native-specific: entry type
+    coro->backend = &native_backend_vtable;
+    coro->backend_state = NULL;
     coro->entry_type = XR_CORO_ENTRY_NATIVE;
     coro->entry.native.func = func;
     coro->entry.native.arg = arg;

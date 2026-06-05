@@ -827,18 +827,6 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
         ctx->isolate = isolate;
     }
 
-    // Native coroutine: execute simple C callback (not Yieldable).
-    if (coro->entry_type == XR_CORO_ENTRY_NATIVE && coro->entry.native.func) {
-        xr_coro_flags_clear(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED);
-        xr_coro_flags_set(coro, XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
-        ctx->current_coro = coro;
-        coro->entry.native.func(coro->entry.native.arg);
-        coro->result = xr_null();
-        xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
-        ctx->current_coro = NULL;
-        return XR_VM_OK;
-    }
-
     // Cfunc (after isolate check): same as fast path.
     if (coro->entry_type == XR_CORO_ENTRY_CFUNC && coro->entry.cfunc) {
         return run_cfunc_coro(worker, coro, isolate);
