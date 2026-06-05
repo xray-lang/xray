@@ -167,20 +167,118 @@ typedef struct XrChannel {
     void *dist;        // Opaque pointer to cluster dist context (NULL = local)
     const char *name;  // Named Channel identifier (NULL = anonymous)
 
-    /* === Waiter Worker Mask (ownership-safe wake routing) ===
-     * Bit i is set when worker i has at least one coroutine blocked on this
-     * channel (normal send/recv or select).  Used by xr_runtime_wake_channel()
-     * to dispatch wake commands only to relevant workers.
+    /* === Waiter Worker Masks (ownership-safe wake routing) ===
+     * Bit i in waiter_worker_mask is set when worker i has at least one
+     * coroutine blocked on this channel.  Directional masks are hints used to
+     * avoid waking a worker that only has waiters for the opposite operation.
+     *
+     * sender_waiter_worker_mask: workers with blocked senders.
+     * receiver_waiter_worker_mask: workers with blocked receivers.
+     * select_waiter_worker_mask: workers with select cases on this channel.
+     *
      * Bits are set under ch->lock when a coroutine blocks; cleared lazily
      * by the owning worker after wake_one/wake_all finds no more waiters.
      * False positives (stale set bit) are harmless; false negatives are
      * prevented by always setting under lock before the coro is visible to
      * the wake path.  Supports up to 64 workers (XR_MAX_WORKERS). */
     _Atomic(uint64_t) waiter_worker_mask;
+    _Atomic(uint64_t) sender_waiter_worker_mask;
+    _Atomic(uint64_t) receiver_waiter_worker_mask;
+    _Atomic(uint64_t) select_waiter_worker_mask;
 
     /* === Owner Isolate (for dist hook dispatch + stats) === */
     struct XrayIsolate *isolate;  // Set at xr_channel_new
 } XrChannel;
+
+static inline uint64_t xr_channel_worker_bit(int worker_id) {
+    if (worker_id < 0 || worker_id >= 64)
+        return 0;
+    return (uint64_t) 1ull << worker_id;
+}
+
+static inline void xr_channel_note_waiter(XrChannel *ch, int worker_id, bool wait_send) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+
+    atomic_fetch_or_explicit(&ch->waiter_worker_mask, bit, memory_order_release);
+    _Atomic(uint64_t) *dir_mask =
+        wait_send ? &ch->sender_waiter_worker_mask : &ch->receiver_waiter_worker_mask;
+    atomic_fetch_or_explicit(dir_mask, bit, memory_order_release);
+}
+
+static inline void xr_channel_note_select_waiter(XrChannel *ch, int worker_id) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+
+    atomic_fetch_or_explicit(&ch->waiter_worker_mask, bit, memory_order_release);
+    atomic_fetch_or_explicit(&ch->select_waiter_worker_mask, bit, memory_order_release);
+}
+
+static inline void xr_channel_clear_waiter_bit(XrChannel *ch, int worker_id) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+
+    uint64_t clear = ~bit;
+    atomic_fetch_and_explicit(&ch->waiter_worker_mask, clear, memory_order_release);
+    atomic_fetch_and_explicit(&ch->sender_waiter_worker_mask, clear, memory_order_release);
+    atomic_fetch_and_explicit(&ch->receiver_waiter_worker_mask, clear, memory_order_release);
+    atomic_fetch_and_explicit(&ch->select_waiter_worker_mask, clear, memory_order_release);
+}
+
+static inline void xr_channel_clear_all_waiter_masks(XrChannel *ch) {
+    if (!ch)
+        return;
+    atomic_store_explicit(&ch->waiter_worker_mask, 0, memory_order_relaxed);
+    atomic_store_explicit(&ch->sender_waiter_worker_mask, 0, memory_order_relaxed);
+    atomic_store_explicit(&ch->receiver_waiter_worker_mask, 0, memory_order_relaxed);
+    atomic_store_explicit(&ch->select_waiter_worker_mask, 0, memory_order_relaxed);
+}
+
+static inline void xr_channel_clear_sender_waiter_bit(XrChannel *ch, int worker_id) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+    atomic_fetch_and_explicit(&ch->sender_waiter_worker_mask, ~bit, memory_order_release);
+}
+
+static inline void xr_channel_clear_receiver_waiter_bit(XrChannel *ch, int worker_id) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+    atomic_fetch_and_explicit(&ch->receiver_waiter_worker_mask, ~bit, memory_order_release);
+}
+
+static inline void xr_channel_clear_select_waiter_bit(XrChannel *ch, int worker_id) {
+    uint64_t bit = xr_channel_worker_bit(worker_id);
+    if (!ch || bit == 0)
+        return;
+    atomic_fetch_and_explicit(&ch->select_waiter_worker_mask, ~bit, memory_order_release);
+}
+
+static inline uint64_t xr_channel_any_waiter_mask(XrChannel *ch) {
+    if (!ch)
+        return 0;
+    return atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire);
+}
+
+static inline uint64_t xr_channel_select_waiter_mask(XrChannel *ch) {
+    if (!ch)
+        return 0;
+    return atomic_load_explicit(&ch->select_waiter_worker_mask, memory_order_acquire);
+}
+
+static inline uint64_t xr_channel_preferred_wake_mask(XrChannel *ch, bool wake_sender) {
+    if (!ch)
+        return 0;
+    _Atomic(uint64_t) *dir_mask =
+        wake_sender ? &ch->sender_waiter_worker_mask : &ch->receiver_waiter_worker_mask;
+    uint64_t mask = atomic_load_explicit(dir_mask, memory_order_acquire);
+    mask |= atomic_load_explicit(&ch->select_waiter_worker_mask, memory_order_acquire);
+    return mask;
+}
 
 /* ========== Channel API ========== */
 

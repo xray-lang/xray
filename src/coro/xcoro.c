@@ -1534,7 +1534,25 @@ XrCoroutine *xr_sched_dequeue(XrCoroState *sched) {
 //   - Local worker: direct wake via xr_worker_wake_one / xr_worker_wake_select
 //   - Remote workers: dispatch command via MPSC chan_wake_queue
 //   - Never directly access remote worker's blocked buckets or run queues
-//   - Uses channel waiter_worker_mask to skip workers with no waiters
+//   - Uses channel waiter masks to skip workers with no relevant waiters
+
+static bool runtime_dispatch_channel_wake_to_first(XrRuntime *runtime, uint64_t mask, void *channel,
+                                                   bool wake_sender, bool is_close) {
+    if (!runtime || !channel)
+        return false;
+
+    while (mask) {
+        int wid = __builtin_ctzll(mask);
+        mask &= mask - 1;
+        if (wid >= runtime->worker_count)
+            continue;
+
+        xr_worker_dispatch_chan_wake(runtime, wid, channel, wake_sender, is_close);
+        return true;
+    }
+
+    return false;
+}
 
 XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_sender) {
     if (!X || !channel)
@@ -1559,22 +1577,18 @@ XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_se
 
     // Step 2: Remote workers — dispatch via command queue (mask-guided)
     XrChannel *ch = (XrChannel *) channel;
-    uint64_t mask = atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire);
+    uint64_t any_mask = xr_channel_any_waiter_mask(ch);
+    uint64_t preferred_mask = xr_channel_preferred_wake_mask(ch, wake_sender);
+    uint64_t mask = preferred_mask ? preferred_mask : any_mask;
+    uint64_t local_bit = xr_channel_worker_bit(current_id);
     // Clear local worker bit (already handled)
-    if (current_id >= 0)
-        mask &= ~((uint64_t) 1 << current_id);
+    mask &= ~local_bit;
 
-    while (mask) {
-        int wid = __builtin_ctzll(mask);
-        mask &= mask - 1;  // Clear lowest set bit
-        if (wid >= runtime->worker_count)
-            continue;
-
-        xr_worker_dispatch_chan_wake(runtime, wid, channel, wake_sender, false);
-        // One readiness event should wake one remote waiter.  If this worker
-        // later finds only a stale mask bit, it clears that bit and forwards
-        // the wake to the next candidate.
-        break;
+    if (!runtime_dispatch_channel_wake_to_first(runtime, mask, channel, wake_sender, false) &&
+        preferred_mask != 0) {
+        uint64_t fallback_mask = any_mask & ~preferred_mask & ~local_bit;
+        (void) runtime_dispatch_channel_wake_to_first(runtime, fallback_mask, channel, wake_sender,
+                                                      false);
     }
 
     // Synchronous return is only possible for local wake.  Remote wakes
@@ -1611,21 +1625,19 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
 
     // Remote workers: dispatch close commands via mask
     XrChannel *ch = (XrChannel *) channel;
-    uint64_t mask = atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire);
-    if (current_id >= 0)
-        mask &= ~((uint64_t) 1 << current_id);
-
+    uint64_t mask = xr_channel_any_waiter_mask(ch);
+    mask &= ~xr_channel_worker_bit(current_id);
     while (mask) {
         int wid = __builtin_ctzll(mask);
         mask &= mask - 1;
         if (wid >= runtime->worker_count)
-            break;
+            continue;
 
         xr_worker_dispatch_chan_wake(runtime, wid, channel, false, true);
     }
 
     // Clear the mask — channel is closed, no future waiters expected.
-    atomic_store_explicit(&ch->waiter_worker_mask, 0, memory_order_relaxed);
+    xr_channel_clear_all_waiter_masks(ch);
 }
 
 // ========== Deadlock Diagnosis ==========

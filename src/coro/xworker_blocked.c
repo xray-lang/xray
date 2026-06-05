@@ -81,9 +81,31 @@ void worker_clear_channel_waiter_mask(XrWorker *worker, void *channel) {
     if (!worker || !channel)
         return;
     XrChannel *ch = (XrChannel *) channel;
-    uint64_t bit = xr_runtime_worker_bit(worker->p.id);
-    if (bit != 0) {
-        atomic_fetch_and_explicit(&ch->waiter_worker_mask, ~bit, memory_order_release);
+    XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
+    if (!bucket || bucket_is_empty(bucket)) {
+        xr_channel_clear_waiter_bit(ch, worker->p.id);
+        return;
+    }
+
+    uint64_t bit = xr_channel_worker_bit(worker->p.id);
+    if (bit == 0)
+        return;
+
+    atomic_fetch_or_explicit(&ch->waiter_worker_mask, bit, memory_order_release);
+    if (bucket->send_head) {
+        atomic_fetch_or_explicit(&ch->sender_waiter_worker_mask, bit, memory_order_release);
+    } else {
+        xr_channel_clear_sender_waiter_bit(ch, worker->p.id);
+    }
+    if (bucket->recv_head) {
+        atomic_fetch_or_explicit(&ch->receiver_waiter_worker_mask, bit, memory_order_release);
+    } else {
+        xr_channel_clear_receiver_waiter_bit(ch, worker->p.id);
+    }
+    if (bucket->select_head) {
+        atomic_fetch_or_explicit(&ch->select_waiter_worker_mask, bit, memory_order_release);
+    } else {
+        xr_channel_clear_select_waiter_bit(ch, worker->p.id);
     }
 }
 
