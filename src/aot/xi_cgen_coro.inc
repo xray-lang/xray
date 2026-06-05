@@ -705,20 +705,50 @@ static const XiFunc *cg_resolve_static_call_target(XiCgenCtx *ctx, const XiFunc 
     return NULL;
 }
 
+static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, int depth);
+
 static const XiFunc *cg_coro_direct_suspend_call_target(XiCgenCtx *ctx, const XiFunc *current,
                                                         const XiValue *v) {
     if (!v || v->op != XI_CALL || v->nargs < 1)
         return NULL;
     const XiFunc *target = cg_resolve_static_call_target(ctx, current, v->args[0]);
-    return target && cg_func_needs_aot_coro(target) ? target : NULL;
+    return target && cg_func_needs_aot_coro_ctx_depth(ctx, target, 0) ? target : NULL;
+}
+
+static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, int depth) {
+    if (cg_func_needs_aot_coro(f))
+        return true;
+    if (!ctx || !f || depth >= 8)
+        return false;
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_CALL || v->nargs < 1)
+                continue;
+            const XiFunc *target = cg_resolve_static_call_target(ctx, f, v->args[0]);
+            if (!target || target == f)
+                continue;
+            if (cg_func_needs_aot_coro_ctx_depth(ctx, target, depth + 1))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f) {
+    return cg_func_needs_aot_coro_ctx_depth(ctx, f, 0);
 }
 
 static bool cg_func_frame_needs_cl(const XiFunc *f) {
     return f && f->ncaptures > 0;
 }
 
-static bool cg_func_can_emit_sync_go_wrapper(const XiFunc *f) {
-    return f && !cg_func_needs_aot_coro(f);
+static bool cg_func_can_emit_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f) {
+    return f && !cg_func_needs_aot_coro_ctx(ctx, f);
 }
 
 static void emit_aot_frame_new_params(FILE *out, const XiFunc *f) {
@@ -1129,8 +1159,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             return;
         }
         const XiFunc *target = cg_resolve_go_target(ctx, f, v->args[0]);
-        bool target_is_coro = target && cg_func_needs_aot_coro(target);
-        bool target_is_sync_go = target && cg_func_can_emit_sync_go_wrapper(target);
+        bool target_is_coro = target && cg_func_needs_aot_coro_ctx(ctx, target);
+        bool target_is_sync_go = target && cg_func_can_emit_sync_go_wrapper_ctx(ctx, target);
         if (!target || (!target_is_coro && !target_is_sync_go)) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT go target\n");

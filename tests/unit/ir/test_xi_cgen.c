@@ -486,7 +486,7 @@ TEST(cgen_suspendable_wrapper_aborts) {
     xi_func_free(ir);
 }
 
-TEST(cgen_sync_call_to_suspendable_aborts) {
+TEST(cgen_direct_suspend_call_propagates_cps) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
                       "    return n + 1\n"
@@ -499,13 +499,16 @@ TEST(cgen_sync_call_to_suspendable_aborts) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(had_error && "sync call to suspendable AOT function must be rejected");
-    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
-           "rejected sync call should emit hard-fail expression only");
+    assert(!had_error && "static direct suspend calls should CPS-propagate to the caller");
+    assert(contains(code, "call_frame_") &&
+           "caller frame should own the child suspend frame while blocked");
+    assert(contains(code, "_aot_resume") && "direct suspend call should use AOT resume entries");
+    assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
+           "suspendable functions must keep hard-failing sync wrappers");
     assert(!contains(code, "unsupported AOT sync call") &&
            "diagnostics should go to stderr, not generated C comments");
 
-    printf("  Generated rejected sync call %zu bytes of C code\n", strlen(code));
+    printf("  Generated direct suspend call %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1206,7 +1209,7 @@ int main(void) {
     run_cgen_for_loop();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_suspendable_wrapper_aborts();
-    run_cgen_sync_call_to_suspendable_aborts();
+    run_cgen_direct_suspend_call_propagates_cps();
     run_cgen_suspendable_dependency_init_fails_fast();
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
