@@ -813,6 +813,22 @@ static void worker_wait_steal_delay(XrWorker *worker, XrRuntime *runtime, int64_
     xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, (uint32_t) delay_ms * 1000u);
 }
 
+static void worker_record_direct_steal_dispatch(XrWorker *worker, XrCoroutine *coro, int64_t now) {
+    if (!worker || !coro)
+        return;
+    worker->p.stats.steal_direct_dispatch_count++;
+    if (coro->submit_time <= 0)
+        return;
+    int64_t wait_ms = now - coro->submit_time;
+    if (wait_ms <= 0)
+        return;
+    uint64_t wait = (uint64_t) wait_ms;
+    worker->p.stats.runnable_wait_ms += wait;
+    if (wait > worker->p.stats.runnable_wait_max_ms) {
+        worker->p.stats.runnable_wait_max_ms = wait;
+    }
+}
+
 static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len,
                                          int priority) {
     if (!worker || !runtime || victim_len <= 0)
@@ -955,15 +971,25 @@ static XrCoroutine *worker_try_steal(XrWorker *worker, XrRuntime *runtime,
                 goto done;
             if (victim_id >= 0) {
                 XrWorker *victim = &runtime->workers[victim_id];
-                int stolen = xr_runq_steal(&victim->p.runq[p], &worker->p.runq[p], 50);
+                XrCoroutine *direct = NULL;
+                int stolen =
+                    xr_runq_steal_direct(&victim->p.runq[p], &worker->p.runq[p], 50, &direct);
                 if (stolen > 0) {
                     xr_proc_local_runq_dec(&victim->p, stolen);
-                    xr_proc_local_runq_inc(&worker->p, stolen);
+                    int queued = direct ? stolen - 1 : stolen;
+                    if (queued > 0) {
+                        xr_proc_local_runq_inc(&worker->p, queued);
+                    }
                     worker->p.stats.stolen_count += stolen;
                     worker->p.stats.steal_success_count++;
                     xr_worker_refresh_runq_masks(victim);
                     xr_worker_refresh_runq_masks(worker);
-                    coro = xr_worker_pop(worker);
+                    if (direct) {
+                        worker_record_direct_steal_dispatch(worker, direct, steal_now);
+                        coro = direct;
+                    } else {
+                        coro = xr_worker_pop(worker);
+                    }
                 } else {
                     xr_worker_refresh_runq_masks(victim);
                 }

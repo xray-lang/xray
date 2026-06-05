@@ -615,6 +615,23 @@ XrCoroutine *xr_runq_dequeue(XrRunQueue *rq) {
     return c;
 }
 
+static void runq_push_stolen(XrRunQueue *dst, XrCoroutine *coro) {
+    XR_DCHECK(dst != NULL, "runq_push_stolen: NULL dst");
+    XR_DCHECK(coro != NULL, "runq_push_stolen: NULL coro");
+    XR_DCHECK(coro->sched_link == NULL, "runq_push_stolen: linked stolen coro");
+
+    if (xr_steal_queue_push(&dst->deque, coro))
+        return;
+
+    coro->sched_link = NULL;
+    if (dst->overflow_last)
+        dst->overflow_last->sched_link = coro;
+    else
+        dst->overflow_first = coro;
+    dst->overflow_last = coro;
+    dst->overflow_len++;
+}
+
 // Work stealing via CAS (no mutex needed)
 // Steal count: min(victim_len / 2, 32)
 int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
@@ -637,18 +654,43 @@ int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
         // invariant so any future regression (e.g. sched_link aliasing via
         // MPSC inbox or delay list) surfaces immediately in debug builds.
         XR_DCHECK(c->sched_link == NULL, "runq_steal: stolen coro sched_link must be NULL");
-        if (!xr_steal_queue_push(&dst->deque, c)) {
-            // Destination full: put back via overflow
-            c->sched_link = NULL;
-            if (dst->overflow_last)
-                dst->overflow_last->sched_link = c;
-            else
-                dst->overflow_first = c;
-            dst->overflow_last = c;
-            dst->overflow_len++;
-        }
+        runq_push_stolen(dst, c);
         stolen++;
     }
+    return stolen;
+}
+
+int xr_runq_steal_direct(XrRunQueue *src, XrRunQueue *dst, int max_steal,
+                         XrCoroutine **out_direct) {
+    if (out_direct)
+        *out_direct = NULL;
+
+    int src_len = xr_steal_queue_size(&src->deque);
+    int actual_max = src_len / 2;
+    if (actual_max > 32)
+        actual_max = 32;
+    if (actual_max > max_steal)
+        actual_max = max_steal;
+    if (actual_max <= 0)
+        actual_max = 1;
+
+    XrCoroutine *direct = NULL;
+    int stolen = 0;
+    for (int i = 0; i < actual_max; i++) {
+        XrCoroutine *c = xr_steal_queue_steal(&src->deque);
+        if (!c)
+            break;
+        XR_DCHECK(c->sched_link == NULL, "runq_steal_direct: stolen coro sched_link must be NULL");
+        if (direct)
+            runq_push_stolen(dst, direct);
+        direct = c;
+        stolen++;
+    }
+
+    if (out_direct)
+        *out_direct = direct;
+    else if (direct)
+        runq_push_stolen(dst, direct);
     return stolen;
 }
 
