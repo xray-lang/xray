@@ -197,7 +197,6 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
 
     coro->backend = &aot_backend_vtable;
     coro->backend_state = state;
-    coro->entry_type = XR_CORO_ENTRY_NATIVE;
     return coro;
 }
 

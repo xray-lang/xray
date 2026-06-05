@@ -179,6 +179,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             uint16_t saved_gc_flags =
                 coro->gc_flags &
                 (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
+            xr_coro_clear_vm_entry_state(coro);
             memset(coro, 0, sizeof(XrCoroutine));
             if (saved_vm_state) {
                 coro->backend = xr_coro_vm_backend_vtable();
@@ -246,6 +247,7 @@ void xr_coro_struct_pool_free(XrCoroStructPool *pool, XrCoroutine *coro) {
 
     // Check if from pool via gc_flags bit (O(1) instead of block list traversal)
     bool from_pool = (coro->gc_flags & XR_CORO_GC_FROM_POOL) != 0;
+    xr_coro_clear_vm_entry_state(coro);
 
     if (from_pool) {
         // Lock-free Treiber push.
