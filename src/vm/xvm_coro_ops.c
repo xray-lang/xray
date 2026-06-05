@@ -754,6 +754,20 @@ static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
     return discard_result ? xr_null() : res;
 }
 
+static inline void vm_task_detach_completed_executor(XrTask *task) {
+    if (!task)
+        return;
+    uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
+    if (tstate != XR_TASK_COMPLETED)
+        return;
+
+    XrCoroutine *exec = task->coro;
+    if (exec) {
+        task->coro = NULL;
+        exec->task = NULL;
+    }
+}
+
 XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                   XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
@@ -768,8 +782,24 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
 
         // Fast path: task already completed — works for re-await too
         XrCoroutine *current = vm_get_coro(vm_ctx);
+        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
+        if (current) {
+            XrCoroBlockResult resumed = xr_coro_await_task_resume_slot(
+                isolate, current, task, result_slot, discard_result != 0);
+            if (resumed.kind == XR_CORO_BLOCK_READY) {
+                vm_task_detach_completed_executor(task);
+                return XR_DISP_NEXT;
+            }
+            if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
+                return XR_DISP_NEXT;
+            }
+            if (resumed.kind == XR_CORO_BLOCK_ERROR) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to resume");
+            }
+        }
+
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
-        if (tstate == XR_TASK_COMPLETED) {
+        if (!current && tstate == XR_TASK_COMPLETED) {
             base[a] = vm_task_consume_result(isolate, task, current, discard_result);
             return XR_DISP_NEXT;
         }
@@ -785,19 +815,23 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         }
 
         if (current) {
-            XrCoroBlockResult await_result = xr_coro_await_task(current, task, -1);
+            vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
+            XrCoroBlockResult await_result = xr_coro_await_task_slot(
+                isolate, current, task, result_slot, -1, discard_result != 0);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 frame->pc = pc - 1;
                 return XR_DISP_BLOCKED;
             }
             if (await_result.kind == XR_CORO_BLOCK_READY) {
-                base[a] = vm_task_consume_result(isolate, task, current, discard_result);
+                vm_task_detach_completed_executor(task);
                 return XR_DISP_NEXT;
             }
-            if (await_result.kind == XR_CORO_BLOCK_CLOSED) {
-                base[a] = xr_null();
+            if (await_result.kind == XR_CORO_BLOCK_CLOSED ||
+                await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
+                await_result.kind == XR_CORO_BLOCK_NO_CORO) {
                 return XR_DISP_NEXT;
             }
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to block");
         }
 
         // Main thread: spin wait
@@ -852,23 +886,29 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
     // Task path
     if (xr_value_is_task(await_val)) {
         XrTask *task = xr_value_to_task(await_val);
+        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
+        if (caller) {
+            XrCoroBlockResult resumed =
+                xr_coro_await_task_resume_slot(isolate, caller, task, result_slot, false);
+            if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
+                return XR_DISP_NEXT;
+            }
+            if (resumed.kind == XR_CORO_BLOCK_READY) {
+                vm_task_detach_completed_executor(task);
+                return XR_DISP_NEXT;
+            }
+            if (resumed.kind == XR_CORO_BLOCK_ERROR) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to resume");
+            }
+        }
+
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
-        if (tstate == XR_TASK_COMPLETED) {
+        if (!caller && tstate == XR_TASK_COMPLETED) {
             base[a] = vm_task_consume_result(isolate, task, caller, 0);
             return XR_DISP_NEXT;
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
             base[a] = xr_null();
-            return XR_DISP_NEXT;
-        }
-
-        XrCoroBlockResult resumed = xr_coro_await_task_resume(caller, task);
-        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
-            base[a] = xr_null();
-            return XR_DISP_NEXT;
-        }
-        if (resumed.kind == XR_CORO_BLOCK_READY) {
-            base[a] = vm_task_consume_result(isolate, task, caller, 0);
             return XR_DISP_NEXT;
         }
 
@@ -878,21 +918,22 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
 
         XrCoroutine *current = vm_get_coro(vm_ctx);
         if (current && rt) {
-            XrCoroBlockResult await_result = xr_coro_await_task(current, task, timeout_ms);
+            XrCoroBlockResult await_result =
+                xr_coro_await_task_slot(isolate, current, task, result_slot, timeout_ms, false);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 frame->pc = pc - 1;
                 return XR_DISP_BLOCKED;
             }
             if (await_result.kind == XR_CORO_BLOCK_READY) {
-                base[a] = vm_task_consume_result(isolate, task, caller, 0);
+                vm_task_detach_completed_executor(task);
                 return XR_DISP_NEXT;
             }
             if (await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
                 await_result.kind == XR_CORO_BLOCK_CLOSED ||
                 await_result.kind == XR_CORO_BLOCK_NO_CORO) {
-                base[a] = xr_null();
                 return XR_DISP_NEXT;
             }
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to block");
         }
 
         // Main thread: synchronous wait

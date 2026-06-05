@@ -3,10 +3,17 @@
 ** 作者：xingleixu@gmail.com
 */
 
+import time
+
 // 快速完成的任务
 
 fn fast_task() -> int {
     return 42
+}
+
+fn slow_task() -> int {
+    time.sleep(50)
+    return 7
 }
 
 @test
@@ -30,5 +37,11 @@ fn test_await_timeout() {
     await task3  // 先等待完成
     let result3 = await(timeout: 100) task3  // 再用超时等待已完成的任务
     print("  result:", result3)
-}
 
+    // 测试4：超时返回 null
+    print("test4: timeout returns null")
+    let task4 = go slow_task()
+    let result4 = await(timeout: 1) task4
+    print("  result:", result4)
+    await task4
+}
