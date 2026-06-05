@@ -29,6 +29,7 @@
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/coro/xnetpoll.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_coro_api.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xarray.h"
 #include "../../src/runtime/object/xjson.h"
@@ -48,14 +49,9 @@
 
 /* ========== External Declarations ========== */
 
-extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
-extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                   XrValue *),
-                                            XrValue *args, int argc, const char *name);
 
 /* ========== Pre-built Error Responses ========== */
 

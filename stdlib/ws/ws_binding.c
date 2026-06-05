@@ -22,6 +22,7 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_coro_api.h"
 #include "../../src/runtime/object/xstring.h"
 #include "../../src/runtime/object/xjson.h"
 #include "../../src/runtime/object/xmap.h"
@@ -1106,12 +1107,6 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws, const char *
 
 #define WS_UPGRADE_BUF_SIZE 4096
 #define WS_HTTP_BACKLOG 1024
-
-extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
-extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                   XrValue *),
-                                            XrValue *args, int argc, const char *name);
 
 /* ========== Pure C Echo Server (ws.echoServe) — Stackless ========== */
 

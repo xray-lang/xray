@@ -17,8 +17,8 @@
 #include "cluster.h"
 #include "../crypto/crypto.h"
 #include "../../src/coro/xchannel.h"
+#include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_internal.h"
-#include "../../src/vm/xvm_internal.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_random.h"
 #include "../../src/os/os_time.h"
@@ -34,10 +34,6 @@
 extern int xr_socket_read(struct XrayIsolate *X, int fd, char *buf, size_t len);
 extern void xr_socket_set_read_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
 extern void xr_socket_set_write_timeout(struct XrayIsolate *X, int fd, int timeout_ms);
-
-// xr_coro_create_native is not declared in any header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
-                                                 void *arg, const char *name);
 
 /* ========== Time Utility ========== */
 

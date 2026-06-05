@@ -36,7 +36,7 @@
 #include "../runtime/object/xbigint.h"
 #include "../runtime/symbol/xsymbol_table.h"
 #include "../base/xglobal_indices.h"
-#include "../coro/xcoroutine.h"
+#include "xvm_coro_api.h"
 
 #include <stdio.h>
 #include <stdarg.h>
@@ -362,20 +362,7 @@ XR_FUNC bool vm_numeric_greater_equal(XrValue left, XrValue right);
 /* ========== VM Execution Loop (in xvm.c) ========== */
 XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 
-/* ========== VM Coroutine ========== */
-// VM Coroutine API
-XR_FUNC XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X);
-XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
-XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure);
-XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
-XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
-                                               int arg_count, const char *name, const char *file,
-                                               int line);
-XR_FUNC XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                             XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                    XrValue *),
-                                             XrValue *args, int argc, const char *name);
-
+/* ========== Coroutine Scheduler ========== */
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 XR_FUNC void xr_sched_enqueue(XrCoroState *sched, XrCoroutine *coro);

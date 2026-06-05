@@ -32,8 +32,10 @@
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/coro/xnetpoll.h"
-#include "../../src/vm/xvm_internal.h"
+#include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_coro_api.h"
 #include "../../src/runtime/symbol/xsymbol_table.h"
+#include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/xisolate_api.h"
 #include "../../src/os/os_time.h"
 
@@ -49,10 +51,6 @@ extern XrIOTryResult xr_socket_read_try(struct XrayIsolate *X, int fd, char *buf
 extern XrIOTryResult xr_socket_write_try(struct XrayIsolate *X, int fd, const char *data,
                                          size_t len);
 extern void xr_socket_close(struct XrayIsolate *X, int fd);
-extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                   XrValue *),
-                                            XrValue *args, int argc, const char *name);
 
 #include <stdlib.h>
 #include <errno.h>

@@ -15,7 +15,6 @@
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
 #include "xcoro_flags.h"
-#include "xexec_frame.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
