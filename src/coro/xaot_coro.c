@@ -9,14 +9,17 @@
  */
 
 #include "xaot_coro.h"
+#include "xaot_await.h"
 
 #include <stdatomic.h>
+#include <stdint.h>
 
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/object/xarray.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_internal.h"
 #include "xblock.h"
@@ -30,6 +33,18 @@ typedef struct XrAotCoroState {
     const XrAotCoroDesc *desc;
     void *frame;
 } XrAotCoroState;
+
+enum {
+    XR_AOT_VALUE_TAG_ARRAY = 15,
+};
+
+typedef struct XrAotArrayView {
+    int64_t len;
+    int64_t cap;
+    void *data;
+    uint8_t elem_type;
+    uint8_t elem_size;
+} XrAotArrayView;
 
 static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     if (!coro || !coro->backend_state)
@@ -215,6 +230,112 @@ static void aot_recycle_completed_executor(XrTask *task) {
     } else {
         xr_coro_destroy(exec);
     }
+}
+
+static XrAotResult aot_store_slot_result(XrSlotRef out_slot, XrValue value) {
+    if (!xr_slot_store_value(out_slot, value))
+        return xr_aot_error(XR_NULL_VAL, false);
+    return xr_aot_done(value);
+}
+
+static XrArray *aot_tasks_array_from_value(const XrAotContext *ctx, XrValue tasks_value) {
+    if (!ctx || !ctx->coro)
+        return NULL;
+    if (xr_value_is_array(tasks_value))
+        return xr_value_to_array(tasks_value);
+    if (tasks_value.tag != XR_AOT_VALUE_TAG_ARRAY || !tasks_value.ptr)
+        return NULL;
+
+    XrAotArrayView *view = (XrAotArrayView *) tasks_value.ptr;
+    if (view->len < 0 || view->len > INT32_MAX)
+        return NULL;
+    if (view->elem_type >= XR_ELEM_COUNT)
+        return NULL;
+
+    XrArray *tasks = xr_array_with_capacity(ctx->coro, (int) view->len);
+    if (!tasks)
+        return NULL;
+
+    for (int64_t i = 0; i < view->len; i++) {
+        XrValue item = XR_NULL_VAL;
+        if (view->data)
+            item = xr_typed_get(view->data, (int32_t) i, view->elem_type);
+        xr_array_push(tasks, item);
+    }
+    return tasks;
+}
+
+static bool aot_all_tasks_done(XrArray *tasks) {
+    int count = xr_array_size(tasks);
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        if (!xr_task_is_done(xr_value_to_task(cv)))
+            return false;
+    }
+    return true;
+}
+
+static XrValue aot_collect_await_all_results(const XrAotContext *ctx, XrArray *tasks) {
+    if (!ctx || !ctx->coro || !tasks)
+        return XR_NULL_VAL;
+
+    int count = xr_array_size(tasks);
+    XrArray *results = xr_array_with_capacity(ctx->coro, count);
+    if (!results)
+        return XR_NULL_VAL;
+
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        XrValue value = XR_NULL_VAL;
+        if (xr_value_is_task(cv)) {
+            XrTask *task = xr_value_to_task(cv);
+            value = xr_coro_await_result_value(ctx->isolate, ctx->coro, task, false);
+        }
+        xr_array_push(results, value);
+    }
+    return xr_value_from_array(results);
+}
+
+static XrAotResult aot_await_all_ready_result(const XrAotContext *ctx, XrArray *tasks,
+                                              XrSlotRef out_slot) {
+    XrValue results = aot_collect_await_all_results(ctx, tasks);
+    return aot_store_slot_result(out_slot, results);
+}
+
+static XrAotResult aot_await_any_ready_result(const XrAotContext *ctx, XrArray *tasks,
+                                              XrSlotRef out_slot, bool success_only,
+                                              bool *found_pending) {
+    int count = xr_array_size(tasks);
+    int done_count = 0;
+    int task_count = 0;
+    if (found_pending)
+        *found_pending = false;
+
+    for (int j = 0; j < count; j++) {
+        XrValue cv = xr_array_get(tasks, j);
+        if (!xr_value_is_task(cv))
+            continue;
+        task_count++;
+
+        XrTask *task = xr_value_to_task(cv);
+        if (!xr_task_is_done(task)) {
+            if (found_pending)
+                *found_pending = true;
+            continue;
+        }
+
+        done_count++;
+        if (!success_only || XR_IS_NULL(task->error)) {
+            XrValue value = xr_coro_await_result_value(ctx->isolate, ctx->coro, task, false);
+            return aot_store_slot_result(out_slot, value);
+        }
+    }
+
+    if (task_count == 0 || (success_only && done_count == task_count))
+        return aot_store_slot_result(out_slot, XR_NULL_VAL);
+    return xr_aot_result(XR_AOT_RUN_BLOCKED);
 }
 
 XrValue xr_aot_run_main(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) {
@@ -405,6 +526,76 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot
     if (block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_CLOSED)
         return xr_aot_result(XR_AOT_RUN_DONE);
     return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_await_all_tasks(const XrAotContext *ctx, XrValue tasks_value,
+                                   XrSlotRef out_slot) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrArray *tasks = aot_tasks_array_from_value(ctx, tasks_value);
+    if (!tasks)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    if (aot_all_tasks_done(tasks))
+        return aot_await_all_ready_result(ctx, tasks, out_slot);
+
+    XrCoroBlockResult block = xr_coro_await_all_tasks(ctx->coro, tasks);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_await_all_ready_result(ctx, tasks, out_slot);
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_await_all_tasks_resume(const XrAotContext *ctx, XrValue tasks_value,
+                                          XrSlotRef out_slot) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrArray *tasks = aot_tasks_array_from_value(ctx, tasks_value);
+    if (!tasks)
+        return xr_aot_error(XR_NULL_VAL, false);
+    if (aot_all_tasks_done(tasks))
+        return aot_await_all_ready_result(ctx, tasks, out_slot);
+
+    XrCoroBlockResult block = xr_coro_await_all_tasks(ctx->coro, tasks);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_await_all_ready_result(ctx, tasks, out_slot);
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_await_any_task(const XrAotContext *ctx, XrValue tasks_value, XrSlotRef out_slot,
+                                  bool success_only) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrArray *tasks = aot_tasks_array_from_value(ctx, tasks_value);
+    if (!tasks)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    bool found_pending = false;
+    XrAotResult ready =
+        aot_await_any_ready_result(ctx, tasks, out_slot, success_only, &found_pending);
+    if (ready.kind != XR_AOT_RUN_BLOCKED)
+        return ready;
+    if (!found_pending)
+        return aot_store_slot_result(out_slot, XR_NULL_VAL);
+
+    XrCoroBlockResult block = xr_coro_await_any_task(ctx->coro, tasks, success_only);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_store_slot_result(out_slot, block.value);
+    return xr_aot_error(XR_NULL_VAL, false);
+}
+
+XrAotResult xr_aot_await_any_task_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+    return aot_store_slot_result(out_slot, ctx->coro->result);
 }
 
 XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {

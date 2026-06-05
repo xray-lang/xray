@@ -916,6 +916,69 @@ TEST(cgen_coro_recv_slot_is_traced_as_frame_root) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_await_all_uses_aggregate_bridge) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n * n\n"
+                      "}\n"
+                      "let t1 = go worker(2)\n"
+                      "let t2 = go worker(3)\n"
+                      "let results = await all [t1, t2]\n"
+                      "print(results[0] + results[1])\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await all should generate");
+    assert(contains(code, "xr_aot_await_all_tasks(ctx,") &&
+           "await all must use the aggregate AOT bridge");
+    assert(contains(code, "xr_aot_await_all_tasks_resume(ctx,") &&
+           "await all resume must use the aggregate AOT bridge");
+    assert(contains(code, "xrt_value_clone_for_coro(") &&
+           "await all task arrays must survive suspension");
+    assert(contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "await all runtime result arrays must be converted back to AOT arrays");
+
+    printf("  Generated await all aggregate bridge %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
+    const char *src = "fn delayed(ch: Channel<int>, n: int) -> int {\n"
+                      "    ch.recv()\n"
+                      "    return n\n"
+                      "}\n"
+                      "let ch1 = new Channel<int>(0)\n"
+                      "let ch2 = new Channel<int>(1)\n"
+                      "let t1 = go delayed(ch1, 1)\n"
+                      "let t2 = go delayed(ch2, 2)\n"
+                      "ch2.send(9)\n"
+                      "let first = await any [t1, t2]\n"
+                      "print(first)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT await any should generate");
+    assert(contains(code, "xr_aot_await_any_task(ctx,") &&
+           "await any must use the aggregate AOT bridge");
+    assert(contains(code, "xr_aot_await_any_task_resume(ctx,") &&
+           "await any resume must use the aggregate AOT bridge");
+    assert(contains(code, "xr_slot_aot_frame_offset") &&
+           "scalar await any results should use a typed frame slot");
+
+    printf("  Generated await any aggregate bridge %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -949,6 +1012,8 @@ int main(void) {
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
+    run_cgen_coro_await_all_uses_aggregate_bridge();
+    run_cgen_coro_await_any_uses_typed_aggregate_bridge();
 
     teardown();
 

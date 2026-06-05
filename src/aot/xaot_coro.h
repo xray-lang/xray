@@ -13,6 +13,7 @@
 
 #include "xrt_coll.h"
 #include "../runtime/gc/xgc_header.h"
+#include "../coro/xaot_await.h"
 #include "../coro/xaot_coro.h"
 
 typedef struct XrAotRuntimeStringView {
