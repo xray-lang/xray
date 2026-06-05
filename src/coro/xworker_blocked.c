@@ -111,27 +111,27 @@ void worker_blocked_bucket_reclaim_if_empty(XrWorker *worker, XrBlockedBucket *b
 }
 
 static void bucket_clear_coro_links(XrCoroutine *coro) {
-    coro->wait_link = NULL;
-    coro->wait_prev = NULL;
-    coro->wait_bucket = NULL;
-    coro->wait_bucket_owner = -1;
+    coro->ext->wait_link = NULL;
+    coro->ext->wait_prev = NULL;
+    coro->ext->wait_bucket = NULL;
+    coro->ext->wait_bucket_owner = -1;
 }
 
 static void bucket_append_coro(XrWorker *worker, XrBlockedBucket *bucket, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "bucket_append_coro: NULL worker");
     XR_DCHECK(bucket != NULL, "bucket_append_coro: NULL bucket");
     XR_DCHECK(coro != NULL, "bucket_append_coro: NULL coro");
-    XR_DCHECK(coro->wait_bucket == NULL, "bucket_append_coro: coro already linked");
+    XR_DCHECK(coro->ext->wait_bucket == NULL, "bucket_append_coro: coro already linked");
 
-    XrCoroutine **head = coro->wait_send ? &bucket->send_head : &bucket->recv_head;
-    XrCoroutine **tail = coro->wait_send ? &bucket->send_tail : &bucket->recv_tail;
+    XrCoroutine **head = coro->ext->wait_send ? &bucket->send_head : &bucket->recv_head;
+    XrCoroutine **tail = coro->ext->wait_send ? &bucket->send_tail : &bucket->recv_tail;
 
-    coro->wait_link = NULL;
-    coro->wait_prev = *tail;
-    coro->wait_bucket = bucket;
-    coro->wait_bucket_owner = worker->p.id;
+    coro->ext->wait_link = NULL;
+    coro->ext->wait_prev = *tail;
+    coro->ext->wait_bucket = bucket;
+    coro->ext->wait_bucket_owner = worker->p.id;
     if (*tail) {
-        (*tail)->wait_link = coro;
+        (*tail)->ext->wait_link = coro;
     } else {
         *head = coro;
     }
@@ -142,19 +142,19 @@ static void bucket_unlink_coro(XrBlockedBucket *bucket, XrCoroutine *coro) {
     XR_DCHECK(bucket != NULL, "bucket_unlink_coro: NULL bucket");
     XR_DCHECK(coro != NULL, "bucket_unlink_coro: NULL coro");
 
-    XrCoroutine **head = coro->wait_send ? &bucket->send_head : &bucket->recv_head;
-    XrCoroutine **tail = coro->wait_send ? &bucket->send_tail : &bucket->recv_tail;
+    XrCoroutine **head = coro->ext->wait_send ? &bucket->send_head : &bucket->recv_head;
+    XrCoroutine **tail = coro->ext->wait_send ? &bucket->send_tail : &bucket->recv_tail;
 
-    if (coro->wait_prev) {
-        coro->wait_prev->wait_link = coro->wait_link;
+    if (coro->ext->wait_prev) {
+        coro->ext->wait_prev->ext->wait_link = coro->ext->wait_link;
     } else if (*head == coro) {
-        *head = coro->wait_link;
+        *head = coro->ext->wait_link;
     }
 
-    if (coro->wait_link) {
-        coro->wait_link->wait_prev = coro->wait_prev;
+    if (coro->ext->wait_link) {
+        coro->ext->wait_link->ext->wait_prev = coro->ext->wait_prev;
     } else if (*tail == coro) {
-        *tail = coro->wait_prev;
+        *tail = coro->ext->wait_prev;
     }
 
     bucket_clear_coro_links(coro);
@@ -170,10 +170,10 @@ static XrCoroutine *bucket_pop_coro(XrBlockedBucket *bucket, bool wake_sender) {
 }
 
 static bool worker_blocked_bucket_remove_coro(XrWorker *worker, XrCoroutine *coro) {
-    XrBlockedBucket *bucket = coro ? coro->wait_bucket : NULL;
+    XrBlockedBucket *bucket = coro ? coro->ext->wait_bucket : NULL;
     if (!bucket)
         return false;
-    if (coro->wait_bucket_owner != worker->p.id)
+    if (coro->ext->wait_bucket_owner != worker->p.id)
         return false;
     bucket_unlink_coro(bucket, coro);
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
@@ -249,7 +249,7 @@ void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
     worker->p.blocked_tail = coro;
 
     // If has Channel, add to hash table using the worker-owned wait links.
-    void *wch = atomic_load_explicit(&coro->wait_channel, memory_order_acquire);
+    void *wch = atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire);
     if (wch) {
         XrBlockedBucket *bucket = worker_blocked_bucket_find_or_create(worker, wch);
         if (bucket) {
@@ -294,7 +294,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     }
 
     // Clear blocked info
-    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+    atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
 
     // Cancel timer (sendTimeout/recvTimeout scenario)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
@@ -339,7 +339,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     }
 
     // Clear blocked info, but don't enqueue (caller responsible)
-    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+    atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
     // Reclaim the bucket if this was the last waiter on the channel.
@@ -363,12 +363,12 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     // Wake all senders
     XrCoroutine *coro = bucket->send_head;
     while (coro) {
-        XrCoroutine *next = coro->wait_link;
+        XrCoroutine *next = coro->ext->wait_link;
         if (worker_blocked_list_remove(worker, coro)) {
             worker->p.blocked_count--;
         }
 
-        atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
         if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
@@ -388,12 +388,12 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     // Wake all receivers
     coro = bucket->recv_head;
     while (coro) {
-        XrCoroutine *next = coro->wait_link;
+        XrCoroutine *next = coro->ext->wait_link;
         if (worker_blocked_list_remove(worker, coro)) {
             worker->p.blocked_count--;
         }
 
-        atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
         if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);

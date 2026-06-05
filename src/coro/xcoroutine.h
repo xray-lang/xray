@@ -298,6 +298,17 @@ typedef struct XrCoroExt {
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
 
+    struct XrCoroutine *chan_wait_next;
+    struct XrCoroutine *chan_wait_prev;
+    XrWaitQueue *chan_wait_queue;
+    struct XrCoroutine *wait_link;
+    struct XrCoroutine *wait_prev;
+    XrBlockedBucket *wait_bucket;
+    int wait_bucket_owner;
+    _Atomic(void *) wait_channel;
+    bool wait_send;
+    XrValue send_value;
+
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
     _Atomic bool timer_active;
@@ -408,22 +419,6 @@ struct XrCoroutine {
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
-
-    /* === Channel Blocking === */
-    struct XrCoroutine *chan_wait_next;
-    struct XrCoroutine *chan_wait_prev;
-    XrWaitQueue *chan_wait_queue;
-    struct XrCoroutine *wait_link;  // worker blocked-bucket next link
-    struct XrCoroutine *wait_prev;  // worker blocked-bucket prev link
-    XrBlockedBucket *wait_bucket;
-    int wait_bucket_owner;
-    /* The channel this coro is blocked on. Written by the blocker (under the
-     * channel lock) and cleared by whichever waker claims the wake, which may
-     * run on a different worker; also read lock-free by GC root marking and
-     * blocked-list routing. Atomic to keep all of those races well-defined. */
-    _Atomic(void *) wait_channel;
-    bool wait_send;
-    XrValue send_value;
 
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;

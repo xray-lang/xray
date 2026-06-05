@@ -129,7 +129,8 @@ bool xr_coro_store_recv_value(XrCoroutine *coro, XrValue value) {
 static void coro_finish_resume(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_finish_resume: NULL coro");
     xr_coro_resume_store(coro, XR_RESUME_OK);
-    atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+    if (coro->ext)
+        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
 }
 
 static void coro_arm_timeout(XrCoroutine *coro, int64_t timeout_ms) {
@@ -219,6 +220,9 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         xr_slot_store_value(result_slot, xr_bool(false));
         return block_result(XR_CORO_BLOCK_TIMEOUT, xr_null(), false);
     }
+
+    if (coro && !xr_coro_ensure_ext(coro))
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
     XrChanResult chan_result = xr_channel_send(ch, value, coro);
     if (chan_result == XR_CHAN_OK) {

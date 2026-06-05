@@ -204,7 +204,7 @@ void worker_drain_inbox(XrWorker *worker) {
     while (list) {
         XrCoroutine *next = list->sched_link;
         list->sched_link = NULL;
-        if (list->wait_bucket && list->wait_bucket_owner == worker->p.id) {
+        if (list->ext && list->ext->wait_bucket && list->ext->wait_bucket_owner == worker->p.id) {
             xr_worker_unblock(worker, list);
         }
         xr_worker_push(worker, list);
@@ -420,12 +420,13 @@ static void worker_sleep_timeout_callback(void *arg) {
         xr_worker_unblock_select(worker, coro);
     } else {
         // Check if waiting on channel (sendTimeout/recvTimeout)
-        XrChannel *ch =
-            (XrChannel *) atomic_load_explicit(&coro->wait_channel, memory_order_acquire);
+        XrChannel *ch = (coro->ext) ? (XrChannel *) atomic_load_explicit(&coro->ext->wait_channel,
+                                                                         memory_order_acquire)
+                                    : NULL;
         if (ch) {
             // Remove from channel wait queue
             xr_channel_remove_waiter(ch, coro);
-            atomic_store_explicit(&coro->wait_channel, NULL, memory_order_relaxed);
+            atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         }
         // Remove from blocked queue (unified via xr_worker_unblock)
         xr_worker_unblock(worker, coro);

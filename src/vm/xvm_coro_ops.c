@@ -266,9 +266,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 xr_map_set(info, VM_INTERN_KEY("result"), coro->result);
             }
             if (flags & XR_CORO_FLG_BLOCKED) {
-                const char *reason = atomic_load_explicit(&coro->wait_channel, memory_order_acquire)
-                                         ? "channel"
-                                         : "await";
+                void *wait_channel =
+                    coro->ext ? atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire)
+                              : NULL;
+                const char *reason = wait_channel ? "channel" : "await";
                 xr_map_set(info, VM_INTERN_KEY("blockedOn"),
                            xr_string_value(xr_string_intern(isolate, reason, strlen(reason), 0)));
             }
@@ -309,9 +310,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                     (strcmp(entries[i].state, "blocked") == 0) ? "BLOCKED" : "READY";
                 const char *block_reason = "-";
                 if (strcmp(entries[i].state, "blocked") == 0) {
-                    block_reason = atomic_load_explicit(&coro->wait_channel, memory_order_acquire)
-                                       ? "channel"
-                                       : "await";
+                    void *wait_channel = coro->ext ? atomic_load_explicit(&coro->ext->wait_channel,
+                                                                          memory_order_acquire)
+                                                   : NULL;
+                    block_reason = wait_channel ? "channel" : "await";
                 }
 
                 const char *name = xr_coro_name(coro);
