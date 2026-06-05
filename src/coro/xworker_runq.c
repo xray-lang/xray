@@ -22,6 +22,10 @@
 #include "../base/xchecks.h"
 
 #define XR_LIFO_INJECT_BACKLOG_THRESHOLD XR_INJECT_POP_BATCH
+/* Number of oldest local ready coroutines moved to global inject when the
+ * owner deque is full. Mirrors the proven runqputslow shape: keep the fresh
+ * wake local, share older work in one batch. */
+#define XR_RUNQ_SPILL_BATCH (XR_LOCAL_QUEUE_SIZE / 2)
 
 typedef enum XrLifoGateDecision {
     XR_LIFO_GATE_ALLOW,
@@ -42,6 +46,8 @@ static int normalize_coro_priority(int priority) {
 
 static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, int priority,
                                           bool count_spill);
+static void injectq_push_batch_internal(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last,
+                                        int count, int priority, bool prepare_items);
 
 static int runq_index_for_priority(int priority) {
     return normalize_coro_priority(priority);
@@ -63,6 +69,39 @@ static XrCoroutine *runq_pop_overflow(XrRunQueue *rq) {
     rq->overflow_len--;
     coro->sched_link = NULL;
     return coro;
+}
+
+static void runq_batch_append(XrCoroutine **first, XrCoroutine **last, XrCoroutine *coro) {
+    XR_DCHECK(first != NULL, "runq_batch_append: NULL first");
+    XR_DCHECK(last != NULL, "runq_batch_append: NULL last");
+    XR_DCHECK(coro != NULL, "runq_batch_append: NULL coro");
+
+    coro->sched_link = NULL;
+    if (*last) {
+        (*last)->sched_link = coro;
+    } else {
+        *first = coro;
+    }
+    *last = coro;
+}
+
+static int runq_spill_oldest_batch(XrRunQueue *rq, int max_count, XrCoroutine **out_first,
+                                   XrCoroutine **out_last) {
+    XR_DCHECK(rq != NULL, "runq_spill_oldest_batch: NULL runq");
+    XR_DCHECK(out_first != NULL, "runq_spill_oldest_batch: NULL first");
+    XR_DCHECK(out_last != NULL, "runq_spill_oldest_batch: NULL last");
+
+    *out_first = NULL;
+    *out_last = NULL;
+    int count = 0;
+    while (count < max_count) {
+        XrCoroutine *coro = xr_steal_queue_steal(&rq->deque);
+        if (!coro)
+            break;
+        runq_batch_append(out_first, out_last, coro);
+        count++;
+    }
+    return count;
 }
 
 static XrCoroutine *runq_oldest_candidate(XrRunQueue *rq) {
@@ -344,6 +383,35 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, i
         xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, runq_idx, true);
         return true;
     }
+
+    XrCoroutine *spill_first = NULL;
+    XrCoroutine *spill_last = NULL;
+    int spill_count = runq_spill_oldest_batch(&worker->p.runq[runq_idx], XR_RUNQ_SPILL_BATCH,
+                                              &spill_first, &spill_last);
+    if (spill_count > 0) {
+        xr_proc_local_runq_dec(&worker->p, spill_count);
+        if (xr_steal_queue_push(&worker->p.runq[runq_idx].deque, coro)) {
+            if (count_spill) {
+                xr_sched_metric_add(runtime, &runtime->sched_stats.inject_spill_count,
+                                    (uint64_t) spill_count);
+            }
+            injectq_push_batch_internal(runtime, spill_first, spill_last, spill_count, priority,
+                                        false);
+            xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, runq_idx, true);
+            return true;
+        }
+
+        runq_batch_append(&spill_first, &spill_last, coro);
+        if (count_spill) {
+            xr_sched_metric_add(runtime, &runtime->sched_stats.inject_spill_count,
+                                (uint64_t) (spill_count + 1));
+        }
+        injectq_push_batch_internal(runtime, spill_first, spill_last, spill_count + 1, priority,
+                                    false);
+        xr_worker_refresh_runq_masks(worker);
+        return false;
+    }
+
     if (count_spill) {
         xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_spill_count);
     }
@@ -392,8 +460,8 @@ void xr_injectq_destroy(XrRuntime *runtime) {
     atomic_store_explicit(&runtime->nonempty_inject_mask, 0, memory_order_relaxed);
 }
 
-void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last, int count,
-                           int priority) {
+static void injectq_push_batch_internal(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last,
+                                        int count, int priority, bool prepare_items) {
     if (!runtime || !first)
         return;
 
@@ -403,7 +471,9 @@ void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *
     int actual_count = 0;
     while (cur && (count <= 0 || actual_count < count)) {
         XrCoroutine *next = cur->sched_link;
-        prepare_scheduled_coro(cur, priority);
+        if (prepare_items) {
+            prepare_scheduled_coro(cur, priority);
+        }
         actual_last = cur;
         actual_count++;
         if (cur == last)
@@ -428,7 +498,13 @@ void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *
     xr_mutex_unlock(&q->lock);
 
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_push_count, (uint64_t) actual_count);
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_push_batch_count);
     wake_idle_workers(runtime, actual_count);
+}
+
+void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last, int count,
+                           int priority) {
+    injectq_push_batch_internal(runtime, first, last, count, priority, true);
 }
 
 void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro) {
@@ -465,6 +541,7 @@ XrCoroutine *xr_injectq_pop_one(XrRuntime *runtime, int priority) {
         return NULL;
     coro->sched_link = NULL;
     xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_count);
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_batch_count);
     return coro;
 }
 
@@ -511,6 +588,7 @@ int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int
     }
     if (count > 0) {
         xr_worker_refresh_runq_masks(worker);
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_batch_count);
     }
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_pop_count, (uint64_t) count);
     return count;

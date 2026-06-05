@@ -1074,7 +1074,7 @@ void *worker_loop(void *arg) {
             if (inject_mask != 0 &&
                 (high_inject || ((sched_sample & 3u) == 0 &&
                                  xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH))) {
-                worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
+                worker_pull_inject(worker, XR_INJECT_POP_BATCH);
             }
 
             // Fast path: local queue first.
