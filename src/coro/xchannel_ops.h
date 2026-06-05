@@ -13,10 +13,8 @@
  * bugs where one path diverges from another (missing deep copy, missing
  * ok flag, missing unbuffered rendezvous, etc.).
  *
- * Blocking send/recv cannot be fully unified because the yield/suspend
- * mechanism differs between VM (frame-save) and JIT (CPS suspend).
- * However, pre-yield send value preparation IS unified via
- * xr_chan_prepare_send.
+ * Blocking send/recv use the backend-neutral helpers in xblock.h.
+ * This header stays focused on value movement and non-blocking fast paths.
  */
 
 #ifndef XCHANNEL_OPS_H
