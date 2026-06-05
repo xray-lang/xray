@@ -365,12 +365,11 @@ XrAotResult xr_aot_select_block(const XrAotContext *ctx, const XrValue *channel_
     return xr_aot_error(block.value, block.ok);
 }
 
-XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrValue *out_value,
+XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrSlotRef out_slot,
                               bool discard_result) {
     if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
         return xr_aot_error(XR_NULL_VAL, false);
     XrTask *task = xr_value_to_task(task_value);
-    XrSlotRef out_slot = out_value ? xr_slot_xvalue_ptr(out_value) : xr_slot_none();
     XrCoroBlockResult block =
         xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, out_slot, -1, discard_result);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
@@ -379,15 +378,12 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrVal
         aot_recycle_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }
-    if (block.kind == XR_CORO_BLOCK_CLOSED) {
-        if (out_value)
-            *out_value = XR_NULL_VAL;
+    if (block.kind == XR_CORO_BLOCK_CLOSED)
         return xr_aot_result(XR_AOT_RUN_DONE);
-    }
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
-XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue *out_value,
+XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                      bool discard_result) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
@@ -395,7 +391,6 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue *out_value
     XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
     if (!task)
         return xr_aot_error(XR_NULL_VAL, false);
-    XrSlotRef out_slot = out_value ? xr_slot_xvalue_ptr(out_value) : xr_slot_none();
     XrCoroBlockResult block =
         xr_coro_await_task_resume_slot(ctx->isolate, ctx->coro, task, out_slot, discard_result);
     if (block.kind == XR_CORO_BLOCK_NOT_RESUMED)
@@ -407,11 +402,8 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrValue *out_value
         aot_recycle_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }
-    if (block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_CLOSED) {
-        if (out_value)
-            *out_value = XR_NULL_VAL;
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_CLOSED)
         return xr_aot_result(XR_AOT_RUN_DONE);
-    }
     return xr_aot_error(XR_NULL_VAL, false);
 }
 

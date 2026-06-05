@@ -763,7 +763,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await should generate");
     assert(contains(code, "xr_aot_await_task(ctx,") && "await must use the AOT bridge");
-    assert(contains(code, "xr_aot_await_task_resume(ctx, &") &&
+    assert(contains(code, "xr_aot_await_task_resume(ctx, xr_slot_xvalue_ptr(&") &&
            "await resume must recover the task from coroutine wait state");
     assert(!contains(code, "xr_aot_await_task_resume(ctx, v") &&
            "await resume must not keep the task operand in the AOT frame");
@@ -771,6 +771,52 @@ TEST(cgen_coro_await_clones_tagged_result) {
            "tagged await results must be cloned at the coroutine boundary");
 
     printf("  Generated await result clone %zu bytes of C code\n", strlen(code));
+    free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_scalar_await_uses_typed_slot) {
+    const char *src = "fn worker() -> int {\n"
+                      "    yield\n"
+                      "    return 41\n"
+                      "}\n"
+                      "fn main_plus() -> int {\n"
+                      "    let task = go worker()\n"
+                      "    let v = await task\n"
+                      "    return v + 1\n"
+                      "}\n"
+                      "let task = go main_plus()\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scalar await should generate");
+
+    const char *frame = strstr(code, "typedef struct test_main_plus_");
+    assert(frame != NULL && "main_plus coroutine frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_main_plus_");
+    assert(frame_end != NULL && "main_plus coroutine frame should close");
+    assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
+           "scalar await should reserve an unboxed frame slot");
+
+    const char *resume = strstr(code, "static XrAotResult test_main_plus_");
+    const char *trace = resume ? strstr(resume, "static void test_main_plus_") : NULL;
+    assert(resume != NULL && trace != NULL && "main_plus resume function should be emitted");
+    assert(count_between(resume, trace, "xr_aot_await_task(ctx,") == 1 &&
+           "initial scalar await should use the slot bridge");
+    assert(count_between(resume, trace, "xr_aot_await_task_resume(ctx,") == 1 &&
+           "resumed scalar await should use the slot bridge");
+    assert(count_between(resume, trace, "xr_slot_aot_frame_offset") == 2 &&
+           "scalar await should pass a typed frame slot on start and resume");
+    assert(count_between(resume, trace, "XR_TO_INT(v") == 0 &&
+           "typed await should not unbox a tagged await value after resume");
+
+    printf("  Generated scalar await slot %zu bytes of C code\n", strlen(code));
     free(code);
     xi_func_free(ir);
 }
@@ -899,6 +945,7 @@ int main(void) {
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_await_clones_tagged_result();
+    run_cgen_coro_scalar_await_uses_typed_slot();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
