@@ -1167,7 +1167,9 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 fprintf(out, ")");
             } else {
                 /* Indirect call (fully dynamic, not yet supported) */
-                fprintf(out, "XR_NULL_VAL /* TODO: indirect call */");
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT indirect call\n");
+                fprintf(out, "XR_NULL_VAL");
             }
             break;
         }
@@ -1478,6 +1480,15 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             uint16_t nargs = (uint16_t) (v->nargs - 1);
 
             if (mfunc) {
+                if (cg_func_needs_aot_coro(mfunc)) {
+                    ctx->error = true;
+                    fprintf(stderr,
+                            "[xi_cgen] ERROR: unsupported AOT sync method call to suspendable "
+                            "function '%s'\n",
+                            mfunc->name ? mfunc->name : "?");
+                    fprintf(out, "XR_NULL_VAL");
+                    break;
+                }
                 /* Direct class method call: NULL _cl, receiver is first visible param */
                 emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
                 fprintf(out, "(NULL");
@@ -1507,7 +1518,10 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     emit_vref(out, v->args[2]);
                     fprintf(out, ")");
                 } else {
-                    fprintf(out, "XR_NULL_VAL /* TODO: method %d args */", nargs);
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method call with %u args\n",
+                            (unsigned) nargs);
+                    fprintf(out, "XR_NULL_VAL");
                 }
             }
             break;
