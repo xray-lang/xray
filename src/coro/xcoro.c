@@ -1562,13 +1562,13 @@ XrCoroutine *xr_runtime_wake_channel(XrayIsolate *X, void *channel, bool wake_se
         int wid = __builtin_ctzll(mask);
         mask &= mask - 1;  // Clear lowest set bit
         if (wid >= runtime->worker_count)
-            break;
+            continue;
 
         xr_worker_dispatch_chan_wake(runtime, wid, channel, wake_sender, false);
-        // Only need to wake one waiter; remote worker will handle locally.
-        // We can't know synchronously if the remote wake succeeded, so
-        // we dispatch to all masked workers.  In practice, at most one
-        // worker will find a waiter and the rest are fast no-ops.
+        // One readiness event should wake one remote waiter.  If this worker
+        // later finds only a stale mask bit, it clears that bit and forwards
+        // the wake to the next candidate.
+        break;
     }
 
     // Synchronous return is only possible for local wake.  Remote wakes

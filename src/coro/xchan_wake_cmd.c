@@ -343,6 +343,15 @@ static bool worker_channel_has_waiter(XrWorker *worker, void *channel) {
     return bucket && (bucket->send_head || bucket->recv_head || bucket->select_head);
 }
 
+static void worker_forward_chan_wakes(void *channel, bool wake_sender, int count) {
+    if (!channel || count <= 0)
+        return;
+    XrChannel *ch = (XrChannel *) channel;
+    for (int i = 0; i < count; i++) {
+        (void) xr_runtime_wake_channel(ch->isolate, channel, wake_sender);
+    }
+}
+
 static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool wake_sender,
                                            bool is_close, int count) {
     XrRuntime *runtime = worker->p.runtime;
@@ -366,6 +375,7 @@ static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool
         if (!coro) {
             worker_clear_channel_waiter_mask(worker, channel);
             xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_stale_count);
+            worker_forward_chan_wakes(channel, wake_sender, count - i);
             break;
         }
     }
