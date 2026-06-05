@@ -979,9 +979,12 @@ void *worker_loop(void *arg) {
             if (sched_sample % (2 * runtime->worker_count) == 0) {
                 worker_drain_inbox(worker);
             }
-            if ((sched_sample & 3u) == 0 &&
-                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0 &&
-                xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH) {
+            uint32_t inject_mask =
+                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
+            bool high_inject = (inject_mask & ((uint32_t) 1u << CORO_PRIORITY_HIGH)) != 0;
+            if (inject_mask != 0 &&
+                (high_inject || ((sched_sample & 3u) == 0 &&
+                                 xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH))) {
                 worker_pull_inject(worker, XR_FAST_DISPATCH_INJECT_BATCH);
             }
 
