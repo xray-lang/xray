@@ -97,8 +97,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                             coro->reductions -= 100;
                             if (coro->reductions <= 0) {
                                 coro->reductions = XR_CORO_REDUCTIONS;
-                                // JIT try-mode: can't recurse, bail out
-                                if (xr_coro_jit_try_mode(coro))
+                                // Backend try-mode cannot recurse through continuation frames.
+                                if (xr_coro_backend_in_try_mode(coro))
                                     return XR_CFUNC_WOULD_BLOCK;
                                 if (!yield_setup_continuation(X, coro, cont, user_data))
                                     return XR_CFUNC_ERROR;
@@ -110,8 +110,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                     }
 
                     if (old == XR_PD_NIL) {
-                        // JIT try-mode: IO not ready, return without side effects
-                        if (xr_coro_jit_try_mode(coro))
+                        // Backend try-mode must not install a real wait state.
+                        if (xr_coro_backend_in_try_mode(coro))
                             return XR_CFUNC_WOULD_BLOCK;
                         // Actually yielding — set up frame now
                         if (!yield_setup_continuation(X, coro, cont, user_data))
@@ -141,8 +141,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
             }
         }
     } else if (timeout_ms >= 0) {
-        // JIT try-mode: timeout always requires yield
-        if (xr_coro_jit_try_mode(coro))
+        // Backend try-mode cannot complete a timer wait inline.
+        if (xr_coro_backend_in_try_mode(coro))
             return XR_CFUNC_WOULD_BLOCK;
         // Pure timeout (no fd): set up frame + register timer in timer wheel
         if (!yield_setup_continuation(X, coro, cont, user_data))
@@ -181,8 +181,8 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
         return XR_CFUNC_ERROR;
     }
 
-    // JIT try-mode: voluntary yield cannot complete inline
-    if (xr_coro_jit_try_mode(coro)) {
+    // Backend try-mode cannot complete a voluntary yield inline.
+    if (xr_coro_backend_in_try_mode(coro)) {
         return XR_CFUNC_WOULD_BLOCK;
     }
 

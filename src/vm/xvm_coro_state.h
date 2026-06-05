@@ -18,6 +18,8 @@
 #include "../coro/xcoroutine.h"
 #include "../jit/xjit_coro_state.h"
 
+typedef struct XrVmCoroState XrVmCoroState;
+
 typedef enum {
     XR_CORO_ENTRY_CLOSURE,
     XR_CORO_ENTRY_NATIVE,
@@ -42,6 +44,10 @@ struct XrVmCoroState {
     int arg_count;
     XrValue inline_args[4];
 };
+
+XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
+XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
+XR_FUNC bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled);
 
 static inline XrVmCoroState *xr_coro_maybe_vm_state(XrCoroutine *coro) {
     if (!xr_coro_backend_is_vm(coro))
