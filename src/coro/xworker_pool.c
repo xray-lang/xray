@@ -175,7 +175,6 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     xr_coro_clear_vm_entry_state(coro);
     coro->result = xr_null();
     coro->error = xr_null();
-    coro->await_results = NULL;
     atomic_store(&coro->flags, 0);
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
 

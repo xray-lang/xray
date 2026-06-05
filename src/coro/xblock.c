@@ -463,7 +463,6 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     if (all_done)
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
 
-    coro->await_results = NULL;
     atomic_store(&coro->wait_count, 1);
 
     for (int j = 0; j < count; j++) {
