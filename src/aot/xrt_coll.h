@@ -384,8 +384,9 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             XrValue dstv = xrt_map_new(src->cap);
             xrt_map_t *dst = (xrt_map_t *) dstv.ptr;
             for (int64_t i = 0; i < src->len; i++) {
-                XrValue cloned = xrt_value_clone_for_coro(src->entries[i].val);
-                xrt_map_set(dst, src->entries[i].key, cloned);
+                XrValue cloned_key = xrt_value_clone_for_coro(src->entries[i].key);
+                XrValue cloned_val = xrt_value_clone_for_coro(src->entries[i].val);
+                xrt_map_set(dst, cloned_key, cloned_val);
             }
             return dstv;
         }
