@@ -352,10 +352,9 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Reset yield_streak: yields during spawn loop don't count
         // toward compute-bound pressure detection.
         p->yield_streak = 0;
-        // Clear jit_ctx: parent exited JIT (OP_GO returns from interpreter).
-        // Prevents GC from scanning stale jit_scratch (child will overwrite it).
-        // Re-set by xr_coro_run_on_worker when parent resumes.
-        xr_coro_clear_jit_scratch(coro);
+        // Detach worker-local backend state before running the child.
+        // Re-bound by xr_coro_run_on_worker when the parent resumes.
+        xr_coro_detach_worker_state(coro);
         if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {

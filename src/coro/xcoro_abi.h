@@ -101,6 +101,8 @@ typedef struct XrCoroBackendVTable {
                                     bool need_storage, bool is_clean);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
+    void (*on_safepoint)(XrCoroutine *coro);
+    void (*detach_worker_state)(XrCoroutine *coro);
     bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
                                      void *user_data);
     bool (*has_continuation)(const XrCoroutine *coro);

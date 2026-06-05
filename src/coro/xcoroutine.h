@@ -348,11 +348,11 @@ XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
 XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
-XR_FUNC void xr_coro_bump_jit_heartbeat(XrCoroutine *coro);
-XR_FUNC void xr_coro_clear_jit_scratch(XrCoroutine *coro);
 XR_FUNC bool xr_coro_jit_try_mode(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled);
 XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
+XR_FUNC void xr_coro_backend_on_safepoint(XrCoroutine *coro);
+XR_FUNC void xr_coro_detach_worker_state(XrCoroutine *coro);
 
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub

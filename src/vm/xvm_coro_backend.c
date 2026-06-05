@@ -56,6 +56,8 @@ static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X
                                                bool need_storage, bool is_clean);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
+static void vm_backend_on_safepoint(XrCoroutine *coro);
+static void vm_backend_detach_worker_state(XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
@@ -72,6 +74,8 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .prepare_execution_state = vm_backend_prepare_execution_state,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
+    .on_safepoint = vm_backend_on_safepoint,
+    .detach_worker_state = vm_backend_detach_worker_state,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
     .call_closure = vm_backend_call_closure,
@@ -287,14 +291,14 @@ XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
     return jit_state->scratch ? jit_state : NULL;
 }
 
-void xr_coro_bump_jit_heartbeat(XrCoroutine *coro) {
+static void vm_backend_on_safepoint(XrCoroutine *coro) {
     XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (jit_state && jit_state->scratch && jit_state->scratch->heartbeat_ptr) {
         atomic_fetch_add_explicit(jit_state->scratch->heartbeat_ptr, 1, memory_order_relaxed);
     }
 }
 
-void xr_coro_clear_jit_scratch(XrCoroutine *coro) {
+static void vm_backend_detach_worker_state(XrCoroutine *coro) {
     XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (jit_state) {
         jit_state->scratch = NULL;

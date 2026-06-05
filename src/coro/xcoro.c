@@ -51,16 +51,25 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     // Reset reductions for next safepoint interval
     coro->reductions = XR_CORO_REDUCTIONS;
 
-    // Bump worker heartbeat so sysmon doesn't misdetect long-running
-    // JIT code as stuck (JIT stays inside run_on_worker across many
-    // C helper calls like go/await without returning to worker loop)
-    xr_coro_bump_jit_heartbeat(coro);
+    xr_coro_backend_on_safepoint(coro);
 
     // Cancel check: watchdog sets this via xr_runtime_force_stop
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         return 1;
     }
     return 0;
+}
+
+void xr_coro_backend_on_safepoint(XrCoroutine *coro) {
+    if (!coro || !coro->backend || !coro->backend->on_safepoint)
+        return;
+    coro->backend->on_safepoint(coro);
+}
+
+void xr_coro_detach_worker_state(XrCoroutine *coro) {
+    if (!coro || !coro->backend || !coro->backend->detach_worker_state)
+        return;
+    coro->backend->detach_worker_state(coro);
 }
 
 // Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
