@@ -14,8 +14,7 @@
  *   - vm_collect_all_coros / vm_coro_ctrl
  *   - vm_get_coro (helper)
  *   - vm_go
- *   - vm_await_recycle_coro / vm_task_consume_result /
- *     vm_await_read_result (helpers)
+ *   - vm_task_consume_result (helper)
  *   - vm_await / vm_await_timeout / vm_await_all / vm_await_any
  */
 
@@ -39,7 +38,6 @@
 #include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
-#include "../coro/xdeep_copy.h"
 
 /* ========== Helper: Collect all coroutines from all workers ========== */
 
@@ -726,18 +724,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 
 #define AWAIT_TIMEOUT_SPINS 100000000
 
-/* Recycle completed coro back to pool after await consumes result.
- * Uses recycle_local (thorough reset + pool addition) to prevent
- * memory leak from pool-allocated coros that GC cannot reclaim. */
-static inline void vm_await_recycle_coro(XrCoroutine *coro) {
-    XrWorker *w = xr_current_worker();
-    if (w && xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
-        xr_coro_recycle_local(w, coro);
-    } else {
-        xr_coro_release_heap(coro);
-    }
-}
-
 /* Read task->result with deep copy to dst_coro's heap, then detach executor.
  * After this call, task->result points to the copied value (safe for re-await). */
 static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
@@ -753,20 +739,6 @@ static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
         exec->task = NULL;
     }
     return discard_result ? xr_null() : res;
-}
-
-// Read coro->result with deep copy if needed
-static inline XrValue vm_await_read_result(XrayIsolate *isolate, XrCoroutine *coro,
-                                           XrCoroutine *current, int discard_result) {
-    if (discard_result)
-        return xr_null();
-    if (!XR_IS_PTR(coro->result))
-        return coro->result;
-    int copy_count = 0;
-    XrValue v = xr_deep_copy_to_coro_counted(isolate, coro->result, current, &copy_count);
-    if (current && copy_count > 0)
-        current->reductions -= copy_count * 10;
-    return v;
 }
 
 XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
