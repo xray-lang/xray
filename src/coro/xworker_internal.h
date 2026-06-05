@@ -27,7 +27,6 @@
 #include "xbalance.h"
 #include "xtimer_wheel.h"
 #include "xyieldable.h"
-#include "xresume.h"
 #include "../runtime/object/xexception.h"
 #include "../runtime/xray_debug.h"
 #include "xcoro_registry.h"

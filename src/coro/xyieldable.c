@@ -21,7 +21,6 @@
 #include "../runtime/xvm_call.h"  // XrVMResult
 #include "xnetpoll.h"
 #include "../runtime/xray_debug.h"
-#include "xresume.h"
 #include "xexec_frame.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/gc/xcoro_gc.h"
