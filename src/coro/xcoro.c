@@ -147,16 +147,6 @@ void xr_coro_clear_select_wait(XrCoroutine *coro) {
     sw->timer_channel = NULL;
 }
 
-// Upgrade coroutine heap (for main coroutine)
-// Replace small heap with large heap for deep recursion
-bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size) {
-    if (!coro)
-        return false;
-    // Arena GC: arena grows automatically, no explicit upgrade needed
-    (void) size;
-    return true;
-}
-
 // ========== Coroutine Creation and Destruction ==========
 
 // Forward declaration (defined after bootstrap)
@@ -312,8 +302,8 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     return coro;
 }
 
-// Setup bootstrap main_coro for script execution (called from xr_execute)
-// Upgrades the bootstrap coro with closure and proto, ready for VM run.
+// Setup bootstrap main_coro for script execution.
+// Binds the entry closure and syncs backend state for VM execution.
 void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     XR_DCHECK(coro != NULL, "coro_setup_main: NULL coro");
     XR_DCHECK(X != NULL, "coro_setup_main: NULL isolate");
@@ -321,7 +311,6 @@ void xr_coro_setup_main(XrCoroutine *coro, XrayIsolate *X, XrClosure *closure) {
     bool bound = xr_coro_bind_vm_closure_entry(coro, X, closure, NULL, 0, false);
     XR_CHECK(bound, "coro_setup_main: failed to bind VM closure");
     (void) xr_coro_set_source(coro, closure->proto ? closure->proto->source_file : NULL, 0);
-    xr_coro_upgrade_heap(coro, 0);
     xr_coro_sync_vm_ctx(coro, X);
 }
 
