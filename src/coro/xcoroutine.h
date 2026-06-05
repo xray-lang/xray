@@ -349,6 +349,7 @@ typedef struct XrJitCoroState {
     uint32_t suspend_id;
     uint32_t suspend_smap_id;
     XrJitSuspendState *suspend;
+    bool try_mode;
 } XrJitCoroState;
 
 struct XrCoroutine {
@@ -424,7 +425,6 @@ struct XrCoroutine {
 
     /* === Resume State (extended) === */
     int16_t pending_result_slot;
-    bool jit_try_mode;  // JIT try-mode: yieldable should return WOULD_BLOCK instead of blocking
 
     /* === Continuation Stealing === */
     struct XrCoroutine *pending_spawn;
@@ -605,6 +605,22 @@ static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
         return state;
     }
     return coro->jit_state;
+}
+
+static inline bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
+    return coro && coro->jit_state && coro->jit_state->try_mode;
+}
+
+static inline bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
+    if (!coro)
+        return false;
+    if (!enabled && !coro->jit_state)
+        return true;
+    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : coro->jit_state;
+    if (!state)
+        return false;
+    state->try_mode = enabled;
+    return true;
 }
 
 // Check if coroutine should yield (for JIT loop back-edges)
