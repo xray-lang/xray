@@ -9,11 +9,11 @@ fn report(label: string, ch: Channel<string>) -> string {
 }
 
 let t1 = go compute(3)
-Coro.setPriority(t1, 0)
+Coro.setPriority(t1, Coro.LOW)
 print(await t1)
 
 let ch = new Channel<string>(1)
 let t2 = go(priority: Coro.LOW) report("L", ch)
-Coro.setPriority(t2, 2)
+Coro.setPriority(t2, Coro.HIGH)
 print(await t2)
 ch.close()

@@ -739,7 +739,7 @@ TEST(cgen_coro_set_priority_uses_aot_bridge) {
                       "    return n * n\n"
                       "}\n"
                       "let task = go compute(3)\n"
-                      "Coro.setPriority(task, 2)\n"
+                      "Coro.setPriority(task, Coro.HIGH)\n"
                       "print(await task)\n";
 
     XiFunc *ir = compile_to_ir(src);
