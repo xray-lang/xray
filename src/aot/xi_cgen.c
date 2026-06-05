@@ -632,7 +632,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         const char *op_name = xi_op_name(v->op);
         fprintf(stderr, "[xi_cgen] ERROR: unsupported coroutine Xi op %s\n", op_name);
         emit_codegen_abort_expr(out);
-        fprintf(out, " /* unsupported coroutine Xi op %s */", op_name);
         ctx->error = true;
         return;
     }

@@ -419,6 +419,8 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     assert(had_error && "AOT cgen must reject unsupported coroutine Xi ops");
     assert(!contains(code, "XR_NULL_VAL /* ERROR: unsupported coroutine Xi op") &&
            "unsupported coroutine ops must not emit silent null placeholders");
+    assert(!contains(code, "unsupported coroutine Xi op") &&
+           "unsupported coroutine diagnostics should not be emitted into generated C");
     printf("  Generated rejected %zu bytes of C code\n", strlen(code));
     free(code);
     xi_func_free(ir);
