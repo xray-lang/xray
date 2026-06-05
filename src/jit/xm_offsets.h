@@ -27,7 +27,8 @@
 
 #define XM_CORO_REDUCTIONS_OFFSET offsetof(XrCoroutine, reductions)
 #define XM_CORO_GC_OFFSET offsetof(XrCoroutine, coro_gc)
-#define XM_CORO_JIT_STATE_OFFSET offsetof(XrCoroutine, jit_state)
+#define XM_CORO_BACKEND_STATE_OFFSET offsetof(XrCoroutine, backend_state)
+#define XM_VM_STATE_JIT_STATE_OFFSET offsetof(XrVmCoroState, jit_state)
 
 /* ========== XrJitCoroState fields ========== */
 
@@ -159,8 +160,10 @@
 _Static_assert(offsetof(XrCoroutine, reductions) == XM_CORO_REDUCTIONS_OFFSET,
                "reductions offset mismatch");
 _Static_assert(offsetof(XrCoroutine, coro_gc) == XM_CORO_GC_OFFSET, "coro_gc offset mismatch");
-_Static_assert(offsetof(XrCoroutine, jit_state) == XM_CORO_JIT_STATE_OFFSET,
-               "jit_state offset mismatch");
+_Static_assert(offsetof(XrCoroutine, backend_state) == XM_CORO_BACKEND_STATE_OFFSET,
+               "backend_state offset mismatch");
+_Static_assert(offsetof(XrVmCoroState, jit_state) == XM_VM_STATE_JIT_STATE_OFFSET,
+               "VM jit_state offset mismatch");
 _Static_assert(sizeof(XrValue) == XM_XRVALUE_SIZE, "XrValue size mismatch");
 _Static_assert(offsetof(XrValue, tag) == XM_XRVALUE_TAG_OFFSET, "XrValue.tag offset mismatch");
 _Static_assert(sizeof(XrGCHeader) == XM_GC_HEADER_SIZE, "GCHeader size mismatch");

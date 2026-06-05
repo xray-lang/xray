@@ -175,7 +175,6 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             // Zero struct (next pointer may be dirty) while keeping cold JIT
             // state allocated for reuse.
             XrVmCoroState *saved_vm_state = xr_coro_maybe_vm_state(coro);
-            XrJitCoroState *saved_jit_state = coro->jit_state;
             uint16_t saved_gc_flags =
                 coro->gc_flags &
                 (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL | XR_CORO_GC_VM_STATE_OWNED);
@@ -185,7 +184,6 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
                 coro->backend = xr_coro_vm_backend_vtable();
                 coro->backend_state = saved_vm_state;
             }
-            coro->jit_state = saved_jit_state;
             xr_coro_reset_jit_state(coro);
             coro->gc_flags = saved_gc_flags;
             return coro;

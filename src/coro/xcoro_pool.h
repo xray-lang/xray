@@ -138,7 +138,6 @@ static inline void xr_coro_init_from_pool_slot(struct XrCoroutine *coro, XrCoroP
     coro->backend_state = NULL;
     coro->coro_gc = NULL;
     coro->ext = NULL;
-    coro->jit_state = NULL;
     coro->gc_flags = XR_CORO_GC_FROM_POOL;
 }
 

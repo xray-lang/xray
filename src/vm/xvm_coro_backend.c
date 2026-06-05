@@ -675,7 +675,7 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 
     XrVMResult result;
 
-    XrJitCoroState *jit_state = coro->jit_state;
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
     if (XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry && jit_state->scratch) {
         XrValue jit_result;
         int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
@@ -764,8 +764,9 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
         return XR_VM_RUNTIME_ERROR;
     XrVMContext *coro_ctx = &vm_state->ctx;
 
-    if (coro->jit_state) {
-        coro->jit_state->scratch = &worker->p.jit_scratch;
+    XrJitCoroState *bound_jit_state = xr_coro_peek_jit_state(coro);
+    if (bound_jit_state) {
+        bound_jit_state->scratch = &worker->p.jit_scratch;
     }
     worker->p.jit_scratch.heartbeat_ptr = &worker->m->heartbeat;
 
@@ -789,7 +790,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
 
         // JIT channel resume: propagate recv_slot → jit_suspend.result,
         // then re-enter compiled code directly (no detour via run_resume_path).
-        XrJitCoroState *jit_state = coro->jit_state;
+        XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
         if (!select_resume && XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry &&
             jit_state->scratch) {
             XrValue jit_result;

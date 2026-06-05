@@ -209,6 +209,11 @@ typedef struct {
     XmPostCallTracker post_call_tracker;
 } Rv64CodegenCtx;
 
+static inline void rv64_emit_load_jit_state(Rv64CodegenCtx *ctx, Rv64Reg dst) {
+    rv64_buf_emit(&ctx->buf, rv64_ld(dst, RV64_CORO_REG, (int32_t) XM_CORO_BACKEND_STATE_OFFSET));
+    rv64_buf_emit(&ctx->buf, rv64_ld(dst, dst, (int32_t) XM_VM_STATE_JIT_STATE_OFFSET));
+}
+
 /* ========== Register Mapping ========== */
 
 /* Get the RISC-V GP hardware register assigned to a vreg reference */

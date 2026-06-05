@@ -350,7 +350,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
 
     /* Load jit_ctx through the coroutine JIT state. */
-    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_JIT_CTX_REG);
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
     /* Save stack_map_ptr from jit_ctx into frame for GC and smap restoration
@@ -486,7 +486,7 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_CORO_REG, X64_ABI_ARG1);
 
     /* Load jit_ctx pointer through the coroutine JIT state. */
-    x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_CORO_REG, (int32_t) XM_CORO_JIT_STATE_OFFSET);
+    x64_emit_load_jit_state(&ctx->buf, X64_JIT_CTX_REG);
     x64_mov_rm(&ctx->buf, X64_JIT_CTX_REG, X64_JIT_CTX_REG, (int32_t) XM_JIT_STATE_SCRATCH_OFFSET);
 
     /* Save stack_map_ptr from jit_ctx into frame */

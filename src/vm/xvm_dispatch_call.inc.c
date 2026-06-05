@@ -376,8 +376,9 @@ op_call_closure:
                         ai++;
                     }
                 }
-                if (_aot_coro && _aot_coro->jit_state && _aot_coro->jit_state->scratch)
-                    _aot_coro->jit_state->scratch->call_closure = closure;
+                XrJitCoroState *_aot_jit_state = xr_coro_peek_jit_state(_aot_coro);
+                if (_aot_jit_state && _aot_jit_state->scratch)
+                    _aot_jit_state->scratch->call_closure = closure;
                 int64_t ret = ((AotThunkFn) proto->jit_entry)((intptr_t) _aot_coro, raw_args);
                 uint8_t rtype = proto->return_type_info
                                     ? xr_type_to_slot_type(proto->return_type_info)
