@@ -16,8 +16,8 @@
  *   - Parent-child + CompletionNode provides the foundation for
  *     linked go / monitored go / scope blocks
  *   - 6-state machine tracks Completing/Cancelling for children wait
- *   - Simple state setters (complete/fail/cancel) remain for backward compat
- *     with current xworker.c paths; try_complete/finalize for structured paths
+ *   - Direct state setters serve executor completion paths; try_complete
+ *     and finalize serve structured paths that wait for children
  *
  * RELATED MODULES:
  *   - xtask.h: struct definition + inline helpers
@@ -66,7 +66,7 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     /* Runtime-managed: the executor keeps the task alive via coro->task;
      * the compiler's per-coroutine RC must not free it. dup/drop become
      * no-ops so a compiler-inserted drop can never free a task the executor
-     * still holds. See docs/design/706. */
+     * still holds. */
     XR_OBJ_SET_FLAG(&task->gc, XR_OBJ_MANAGED);
 
     task->result = xr_null();

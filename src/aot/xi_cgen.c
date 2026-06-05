@@ -2458,17 +2458,11 @@ XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     ctx->shared_name = "xrt_shared";
 }
 
-XR_FUNC void xi_cgen_main(FILE *out, XiModule **modules, int n, int entry_index) {
+XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
+    XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
     XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
     XR_DCHECK(n > 0, "xi_cgen_main: no modules");
     XR_DCHECK(entry_index >= 0 && entry_index < n, "xi_cgen_main: bad entry_index");
-
-    /* xi_cgen_main needs a temporary ctx solely for emit_fname.
-     * The fname_counter must be consistent with per-module emission,
-     * but each module already assigned cgen_id during xi_cgen_module,
-     * so emit_fname just reuses the cached id (no counter bump). */
-    XiCgenCtx tmp_ctx;
-    memset(&tmp_ctx, 0, sizeof(tmp_ctx));
 
     bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
                          cg_func_needs_aot_coro(modules[entry_index]->init);
@@ -2490,21 +2484,25 @@ XR_FUNC void xi_cgen_main(FILE *out, XiModule **modules, int n, int entry_index)
             continue;
         if (m == entry_index && entry_is_coro) {
             fprintf(out, "    void *_entry_frame = ");
-            emit_fname_suffix(&tmp_ctx, out, modules[m]->name ? modules[m]->name : "mod",
+            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_frame_new");
             fprintf(out, "();\n");
             fprintf(out, "    xr_aot_run_main(X, &");
-            emit_fname_suffix(&tmp_ctx, out, modules[m]->name ? modules[m]->name : "mod",
+            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
                               modules[m]->init, "_aot_desc");
             fprintf(out, ", _entry_frame);\n");
         } else {
             if (cg_func_needs_aot_coro(modules[m]->init)) {
-                fprintf(out, "    /* coroutine dependency init is unsupported */\n");
+                fprintf(stderr,
+                        "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
+                        "be the entry module\n",
+                        modules[m]->name ? modules[m]->name : "mod");
+                ctx->error = true;
+                fprintf(out, "    return 1;\n");
                 continue;
             }
             fprintf(out, "    ");
-            emit_fname(&tmp_ctx, out, modules[m]->name ? modules[m]->name : "mod",
-                       modules[m]->init);
+            emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
             fprintf(out, "(NULL);\n");
         }
     }

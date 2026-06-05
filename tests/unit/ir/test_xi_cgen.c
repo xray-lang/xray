@@ -477,6 +477,54 @@ TEST(cgen_sync_call_to_suspendable_aborts) {
     xi_func_free(ir);
 }
 
+TEST(cgen_suspendable_dependency_init_fails_fast) {
+    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 101, .frozen = true};
+
+    XiFunc *dep = xi_func_new("init", &stub_unit);
+    XiFunc *entry = xi_func_new("init", &stub_unit);
+    assert(dep != NULL && entry != NULL);
+
+    XiBlock *dep_entry = xi_block_new(dep);
+    XiBlock *main_entry = xi_block_new(entry);
+    assert(dep_entry != NULL && main_entry != NULL);
+
+    XiValue *yield = xi_value_new(dep, dep_entry, XI_YIELD, &stub_unit, 0);
+    assert(yield != NULL);
+    yield->flags |= XI_FLAG_SIDE_EFFECT;
+    xi_block_set_return(dep_entry, NULL);
+    xi_block_set_return(main_entry, NULL);
+
+    XiModule *dep_mod = xi_module_new("dep.xr", "dep", dep);
+    XiModule *entry_mod = xi_module_new("main.xr", "main", entry);
+    assert(dep_mod != NULL && entry_mod != NULL);
+    XiModule *modules[] = {dep_mod, entry_mod};
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    assert(ctx != NULL);
+
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    assert(mem != NULL);
+    xi_cgen_main(ctx, mem, modules, 2, 1);
+    int rc = xr_close_memstream(mem, &buf, &bufsz);
+    assert(rc == 0);
+
+    assert(xi_cgen_has_error(ctx) && "suspendable dependency init must fail C generation");
+    assert(contains(buf, "return 1;") && "generated main should hard-fail if emitted");
+    assert(!contains(buf, "unsupported") && "generated C must not contain unsupported comments");
+    assert(!contains(buf, "coroutine dependency init") &&
+           "dependency diagnostics should stay out of generated C comments");
+
+    printf("  Generated rejected multi-module main %zu bytes of C code\n", strlen(buf));
+    free(buf);
+    xi_cgen_ctx_free(ctx);
+    xi_module_free(dep_mod);
+    xi_module_free(entry_mod);
+    xi_func_free(dep);
+    xi_func_free(entry);
+}
+
 TEST(cgen_coro_frame_params_use_typed_storage) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
@@ -794,6 +842,7 @@ int main(void) {
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_sync_call_to_suspendable_aborts();
+    run_cgen_suspendable_dependency_init_fails_fast();
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
     run_cgen_runtime_managed_types_skip_arc();
