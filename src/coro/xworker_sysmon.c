@@ -353,11 +353,11 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     return 0;
 }
 
-// xr_debug_resume_vm - Resume VM execution after debug break
+// xr_debug_resume_coro - Resume coroutine execution after debug break
 //
 // Called by DAP server to resume execution after hitting a breakpoint.
 // Returns 0 if stopped again (breakpoint/step), 1 if program ended.
-int xr_debug_resume_vm(XrayIsolate *X, XrCoroutine *coro) {
+int xr_debug_resume_coro(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return -1;
 
