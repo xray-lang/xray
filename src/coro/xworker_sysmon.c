@@ -440,7 +440,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
         // Set waiter mask bit for this worker on the channel
         XrChannel *ch = (XrChannel *) channel;
         atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << worker->p.id,
-                                 memory_order_relaxed);
+                                 memory_order_release);
     }
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)

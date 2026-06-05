@@ -130,7 +130,8 @@ typedef enum {
     XR_CHAN_SPSC,
     XR_CHAN_MPSC,
     XR_CHAN_MPMC,
-    XR_CHAN_RENDEZVOUS
+    XR_CHAN_RENDEZVOUS,
+    XR_CHAN_WORK_QUEUE
 } XrChannelKind;
 
 typedef struct XrChannel {
@@ -143,6 +144,8 @@ typedef struct XrChannel {
     uint32_t send_idx;   // Next write position
     uint32_t recv_idx;   // Next read position
     XrChannelKind kind;  // Runtime specialization hint, never part of user semantics
+    uint64_t producer_worker_mask;
+    uint64_t consumer_worker_mask;
 
     /* === Wait Queues === */
     XrWaitQueue sendq;  // Blocked senders

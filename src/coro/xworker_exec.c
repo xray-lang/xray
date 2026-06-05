@@ -188,6 +188,40 @@ static XrCoroRunResult vm_backend_resume(XrCoroutine *coro, const XrCoroEvent *e
     return worker_run_result_from_vm(coro, result);
 }
 
+static int worker_coro_priority(XrCoroutine *coro) {
+    if (!coro)
+        return CORO_PRIORITY_NORMAL;
+    int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
+    if (priority < CORO_PRIORITY_LOW)
+        return CORO_PRIORITY_LOW;
+    if (priority > CORO_PRIORITY_HIGH)
+        return CORO_PRIORITY_HIGH;
+    return priority;
+}
+
+static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
+                                             XrCoroutine *child) {
+    int parent_priority = worker_coro_priority(parent);
+    int child_priority = worker_coro_priority(child);
+    if (child_priority < parent_priority)
+        return false;
+
+    if (child_priority >= CORO_PRIORITY_HIGH)
+        return true;
+
+    XrRuntime *runtime = worker ? worker->p.runtime : NULL;
+    if (!runtime)
+        return true;
+
+    uint32_t high_inject_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
+    if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
+         high_inject_bit) != 0) {
+        return false;
+    }
+    return atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH],
+                                memory_order_acquire) == 0;
+}
+
 /*
  * Unified BLOCKED post-processing (R5).
  *
@@ -394,6 +428,12 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     if (result.kind == XR_CORO_RUN_SPAWN_CHILD) {
         XrCoroutine *child = result.child ? result.child : coro->pending_spawn;
         coro->pending_spawn = NULL;
+        if (!worker_should_inline_spawn_child(worker, coro, child)) {
+            xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
+            xr_worker_push(worker, child);
+            p->yield_streak = 0;
+            goto exec_fast;
+        }
         xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
         // Ensure worker threads are started (lazy init).
         // Without this, JIT-compiled children that never yield

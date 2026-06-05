@@ -153,6 +153,10 @@ static bool worker_has_effective_high_work(XrWorker *worker, int64_t now) {
     if (!runtime)
         return false;
     uint32_t high_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
+    if (atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH], memory_order_acquire) !=
+        0) {
+        return true;
+    }
     return (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
             high_bit) != 0;
 }
