@@ -638,6 +638,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_steal_success = 0, total_steal_backoff = 0, total_local_pop = 0;
     uint64_t total_steal_no_candidate = 0, total_steal_fresh_reject = 0;
     uint64_t total_steal_candidate_scan = 0, total_steal_throttle_wait = 0;
+    uint64_t total_steal_direct = 0;
     uint64_t total_inject_pull = 0;
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
@@ -681,6 +682,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_steal_fresh_reject += p->stats.steal_fresh_reject_count;
         total_steal_candidate_scan += p->stats.steal_candidate_scan_count;
         total_steal_throttle_wait += p->stats.steal_throttle_wait_count;
+        total_steal_direct += p->stats.steal_direct_dispatch_count;
         total_yield += p->stats.yielded_count;
         total_cont += p->stats.cont_steal_count;
         total_lifo_hit += p->stats.lifo_hit_count;
@@ -718,26 +720,27 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_timer, (unsigned long long) total_burst,
             (unsigned long long) total_blocked);
 
-    uint64_t ready_dispatches = total_local_pop + total_lifo_hit;
+    uint64_t ready_dispatches = total_local_pop + total_lifo_hit + total_steal_direct;
     uint64_t lifo_gate_total =
         total_lifo_gate_budget + total_lifo_gate_backlog + total_lifo_gate_priority;
     fprintf(stderr,
-            "Dispatch mix: local_runq=%llu lifo=%llu lifo_share=%.2f%% inject_pull=%llu "
-            "stolen_items=%llu cont_steal=%llu\n",
+            "Dispatch mix: local_runq=%llu lifo=%llu steal_direct=%llu lifo_share=%.2f%% "
+            "inject_pull=%llu stolen_items=%llu cont_steal=%llu\n",
             (unsigned long long) total_local_pop, (unsigned long long) total_lifo_hit,
+            (unsigned long long) total_steal_direct,
             stats_percent_u64(total_lifo_hit, ready_dispatches),
             (unsigned long long) total_inject_pull, (unsigned long long) total_steal,
             (unsigned long long) total_cont);
     fprintf(stderr,
             "Steal: attempts=%llu success=%llu success_ratio=%.2f%% stolen_items=%llu "
-            "items_per_success=%.2f skipped=%llu backoff=%llu no_candidate=%llu "
-            "fresh_reject=%llu candidate_scans=%llu throttle_wait=%llu scans_per_attempt=%.2f "
-            "defer_ratio=%.2f%% skip_ratio=%.2f%%\n",
+            "items_per_success=%.2f direct_dispatch=%llu skipped=%llu backoff=%llu "
+            "no_candidate=%llu fresh_reject=%llu candidate_scans=%llu throttle_wait=%llu "
+            "scans_per_attempt=%.2f defer_ratio=%.2f%% skip_ratio=%.2f%%\n",
             (unsigned long long) total_steal_try, (unsigned long long) total_steal_success,
             stats_percent_u64(total_steal_success, total_steal_try),
             (unsigned long long) total_steal, stats_ratio_u64(total_steal, total_steal_success),
-            (unsigned long long) total_steal_skip, (unsigned long long) total_steal_backoff,
-            (unsigned long long) total_steal_no_candidate,
+            (unsigned long long) total_steal_direct, (unsigned long long) total_steal_skip,
+            (unsigned long long) total_steal_backoff, (unsigned long long) total_steal_no_candidate,
             (unsigned long long) total_steal_fresh_reject,
             (unsigned long long) total_steal_candidate_scan,
             (unsigned long long) total_steal_throttle_wait,
