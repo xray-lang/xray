@@ -695,6 +695,10 @@ static void emit_codegen_abort_expr(FILE *out) {
     fprintf(out, "(abort(), XR_NULL_VAL)");
 }
 
+static void emit_codegen_abort_aot_result(FILE *out) {
+    fprintf(out, "    return (abort(), xr_aot_error(XR_NULL_VAL, false));\n");
+}
+
 /* Emit the RHS expression for a single value. */
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
@@ -1272,7 +1276,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 /* Indirect call (fully dynamic, not yet supported) */
                 ctx->error = true;
                 fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT indirect call\n");
-                fprintf(out, "XR_NULL_VAL");
+                emit_codegen_abort_expr(out);
             }
             break;
         }
@@ -1662,7 +1666,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     ctx->error = true;
                     fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method call with %u args\n",
                             (unsigned) nargs);
-                    fprintf(out, "XR_NULL_VAL");
+                    emit_codegen_abort_expr(out);
                 }
             }
             break;
@@ -1941,7 +1945,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             } else {
                 /* Hard fail: unrecognized builtin in AOT codegen. */
                 fprintf(stderr, "[xi_cgen] ERROR: unknown builtin '%s'\n", bn);
-                fprintf(out, "XR_NULL_VAL /* ERROR: unknown builtin '%s' */", bn);
+                emit_codegen_abort_expr(out);
                 ctx->error = true;
             }
             break;
@@ -2032,7 +2036,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         default:
             fprintf(stderr, "[xi_cgen] ERROR: unsupported Xi op %s (%d)\n", xi_op_name(v->op),
                     v->op);
-            fprintf(out, "XR_NULL_VAL /* ERROR: unsupported Xi op %s */", xi_op_name(v->op));
+            emit_codegen_abort_expr(out);
             ctx->error = true;
             break;
     }
