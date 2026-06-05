@@ -81,7 +81,8 @@ typedef enum {
     XR_CFUNC_YIELD,
     XR_CFUNC_BLOCKED,
     XR_CFUNC_ERROR,
-    XR_CFUNC_CALL_CLOSURE  // closure frame pushed, execute it
+    XR_CFUNC_CALL_CLOSURE,  // closure frame pushed, execute it
+    XR_CFUNC_WOULD_BLOCK    // JIT try-mode: would block, no side effects
 } XrCFuncResult;
 #define XR_CFUNC_RESULT_DEFINED
 #endif

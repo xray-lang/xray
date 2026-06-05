@@ -849,6 +849,9 @@ handle_closure_pending: {
             // Another closure pushed, execute it
             goto startfunc;
 
+        case XR_CFUNC_WOULD_BLOCK:
+            return XR_VM_RUNTIME_ERROR;
+
         case XR_CFUNC_ERROR:
             return XR_VM_RUNTIME_ERROR;
     }
