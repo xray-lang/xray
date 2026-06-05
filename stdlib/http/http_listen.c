@@ -52,10 +52,10 @@ extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
 extern struct XrCoroutine *xr_current_coro(XrayIsolate *X);
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);
-extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
-                                         XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                XrValue *),
-                                         XrValue *args, int argc, const char *name);
+extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                                   XrValue *),
+                                            XrValue *args, int argc, const char *name);
 
 /* ========== Pre-built Error Responses ========== */
 
@@ -1259,7 +1259,7 @@ static XrCFuncResult http_listen_cont(XrayIsolate *X, int status, XrValue resume
 
         // Spawn stackless connection coroutine
         XrValue conn_args[2] = {xr_int(client_fd), XR_FROM_PTR(ctx)};
-        XrCoroutine *coro = xr_coro_create_cfunc(X, http_conn_init, conn_args, 2, "http.conn");
+        XrCoroutine *coro = xr_coro_create_vm_cfunc(X, http_conn_init, conn_args, 2, "http.conn");
         if (coro) {
             xr_coro_spawn(X, coro);
         } else {
@@ -1329,7 +1329,7 @@ XrCFuncResult xr_http_listen_impl(XrayIsolate *X, XrValue *args, int nargs, XrVa
     // Spawn stackless accept loop coroutine
     XrValue listen_args[2] = {xr_int(listen_fd), XR_FROM_PTR(ctx)};
     XrCoroutine *listen_coro =
-        xr_coro_create_cfunc(X, http_listen_init, listen_args, 2, "http.listen");
+        xr_coro_create_vm_cfunc(X, http_listen_init, listen_args, 2, "http.listen");
     if (!listen_coro) {
         xr_closesocket(listen_fd);
         *result = xr_bool(false);

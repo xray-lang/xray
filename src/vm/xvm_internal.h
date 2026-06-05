@@ -366,8 +366,9 @@ XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 // Type definitions moved to runtime/coroutine/xcoroutine.h
 
 // VM Coroutine API
-XR_FUNC XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args,
-                                    int arg_count, const char *name, const char *file, int line);
+XR_FUNC XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
+                                               int arg_count, const char *name, const char *file,
+                                               int line);
 
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);

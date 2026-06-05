@@ -1108,10 +1108,10 @@ static XrValue ws_wrap_server_conn(XrayIsolate *X, XrWebSocket *ws, const char *
 #define WS_HTTP_BACKLOG 1024
 
 extern void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);
-extern XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
-                                         XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                XrValue *),
-                                         XrValue *args, int argc, const char *name);
+extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                                   XrValue *),
+                                            XrValue *args, int argc, const char *name);
 
 /* ========== Pure C Echo Server (ws.echoServe) — Stackless ========== */
 
@@ -1581,7 +1581,7 @@ static XrCFuncResult ws_serve_listen_cont(XrayIsolate *X, int status, XrValue re
 
         // Spawn stackless connection coroutine
         XrValue conn_args[2] = {xr_int(client_fd), ctx->handler_val};
-        XrCoroutine *coro = xr_coro_create_cfunc(X, ws_conn_init, conn_args, 2, "ws.conn");
+        XrCoroutine *coro = xr_coro_create_vm_cfunc(X, ws_conn_init, conn_args, 2, "ws.conn");
         if (coro) {
             xr_coro_spawn(X, coro);
         } else {
@@ -1670,7 +1670,7 @@ static XrCFuncResult ws_echo_listen_cont(XrayIsolate *X, int status, XrValue res
 
         // Spawn stackless echo connection coroutine
         XrValue conn_args[1] = {xr_int(client_fd)};
-        XrCoroutine *coro = xr_coro_create_cfunc(X, ws_echo_conn_init, conn_args, 1, "ws.echo");
+        XrCoroutine *coro = xr_coro_create_vm_cfunc(X, ws_echo_conn_init, conn_args, 1, "ws.echo");
         if (coro) {
             xr_coro_spawn(X, coro);
         } else {
@@ -1726,7 +1726,7 @@ static XrCFuncResult ws_echo_serve_yieldable(XrayIsolate *X, XrValue *args, int 
     // Spawn stackless accept loop coroutine
     XrValue listen_args[1] = {xr_int(listen_fd)};
     XrCoroutine *listen_coro =
-        xr_coro_create_cfunc(X, ws_echo_listen_init, listen_args, 1, "ws.echo.listen");
+        xr_coro_create_vm_cfunc(X, ws_echo_listen_init, listen_args, 1, "ws.echo.listen");
     if (!listen_coro) {
         xr_closesocket(listen_fd);
         ctx->listen_fd = -1;
@@ -1794,7 +1794,7 @@ static XrCFuncResult ws_serve_yieldable(XrayIsolate *X, XrValue *args, int argc,
     // Spawn stackless accept loop coroutine
     XrValue listen_args[2] = {xr_int(listen_fd), args[1]};
     XrCoroutine *listen_coro =
-        xr_coro_create_cfunc(X, ws_serve_listen_init, listen_args, 2, "ws.listen");
+        xr_coro_create_vm_cfunc(X, ws_serve_listen_init, listen_args, 2, "ws.listen");
     if (!listen_coro) {
         xr_closesocket(listen_fd);
         ctx->listen_fd = -1;

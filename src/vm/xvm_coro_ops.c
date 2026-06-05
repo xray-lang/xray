@@ -645,7 +645,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
     // Debug source metadata is populated lazily for named coroutines.
-    XrCoroutine *coro = xr_coro_create(isolate, closure, args, c, coro_name, NULL, 0);
+    XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c, coro_name, NULL, 0);
     if (!coro) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }

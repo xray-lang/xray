@@ -574,14 +574,15 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
     return true;
 }
 
-// Create VM coroutine (GC managed)
+// Create VM closure coroutine (GC managed)
 // Optimization: try to get stack and frames from pool
-XrCoroutine *xr_coro_create(XrayIsolate *X, XrClosure *closure, XrValue *args, int arg_count,
-                            const char *name, const char *file, int line) {
-    XR_DCHECK(X != NULL, "coro_create: NULL isolate");
-    XR_DCHECK(closure != NULL, "coro_create: NULL closure");
-    XR_DCHECK(arg_count >= 0, "coro_create: negative arg_count");
-    XR_DCHECK(arg_count == 0 || args != NULL, "coro_create: NULL args with count > 0");
+XrCoroutine *xr_coro_create_vm_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
+                                       int arg_count, const char *name, const char *file,
+                                       int line) {
+    XR_DCHECK(X != NULL, "coro_create_vm_closure: NULL isolate");
+    XR_DCHECK(closure != NULL, "coro_create_vm_closure: NULL closure");
+    XR_DCHECK(arg_count >= 0, "coro_create_vm_closure: negative arg_count");
+    XR_DCHECK(arg_count == 0 || args != NULL, "coro_create_vm_closure: NULL args with count > 0");
     // Check coroutine limit
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
@@ -678,12 +679,13 @@ XrCoroutine *xr_coro_create_empty(XrayIsolate *X, const char *name) {
     return coro;
 }
 
-// Create C function coroutine (supports Yieldable I/O)
+// Create VM C function coroutine (supports Yieldable I/O)
 // Unlike native coroutine, has stack and frames, supports internal Yieldable C calls
 // Used for HTTP connection handling and other I/O wait scenarios
-XrCoroutine *xr_coro_create_cfunc(XrayIsolate *X,
-                                  XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int, XrValue *),
-                                  XrValue *args, int argc, const char *name) {
+XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
+                                     XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
+                                                            XrValue *),
+                                     XrValue *args, int argc, const char *name) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
     if (sched && sched->coro_count >= XR_MAX_COROUTINES) {
         return NULL;
