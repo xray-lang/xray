@@ -577,8 +577,14 @@ void xr_timer_queue_cancel(XrTimerWheel *target_tw, XrTWheelTimer *timer, XrCoro
 
     // Step 2: Allocate cancel node (try per-worker freelist first)
     XrCanceledTimerNode *node = xr_cancel_node_alloc();
-    if (!node)
+    if (!node) {
+        if (target_tw->runtime) {
+            xr_sched_metric_inc(
+                target_tw->runtime,
+                &target_tw->runtime->sched_stats.timer_cancel_node_alloc_fail_count);
+        }
         return;  // Out of memory, zombie will be cleaned up when slot is processed
+    }
 
     node->next = NULL;
     node->timer = timer;
@@ -605,6 +611,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
     XrTimerCancelQueue *cq = &tw->canceled_queue;
     XrCanceledTimerNode *head, *next;
     int count = 0;
+    int drained = 0;
 
     // Fast path: check if queue is empty
     head = atomic_load_explicit(&cq->head, memory_order_acquire);
@@ -643,6 +650,7 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
 
         // Advance head (dequeue)
         atomic_store_explicit(&cq->head, next, memory_order_release);
+        drained++;
 
         // Recycle the old head (return to per-worker freelist, not xr_free)
         if (head != &cq->stub) {
@@ -650,6 +658,13 @@ int xr_timer_process_canceled_queue(XrTimerWheel *tw) {
         }
     }
 
+    if (drained > 0 && tw->runtime) {
+        xr_sched_metric_inc(tw->runtime, &tw->runtime->sched_stats.timer_cancel_drain_batch_count);
+        xr_sched_metric_add(tw->runtime, &tw->runtime->sched_stats.timer_cancel_drain_node_count,
+                            (uint64_t) drained);
+        xr_sched_metric_max(tw->runtime, &tw->runtime->sched_stats.timer_cancel_drain_max_count,
+                            (uint64_t) drained);
+    }
     if (count > 0 && tw->runtime) {
         xr_sched_metric_add(tw->runtime, &tw->runtime->sched_stats.timer_cancel_process_count,
                             (uint64_t) count);
@@ -672,6 +687,10 @@ XrCanceledTimerNode *xr_cancel_node_alloc(void) {
         node->next = NULL;
         node->timer = NULL;
         node->coro = NULL;
+        if (w->p.runtime) {
+            xr_sched_metric_inc(w->p.runtime,
+                                &w->p.runtime->sched_stats.timer_cancel_node_reuse_count);
+        }
         return node;
     }
     XrCanceledTimerNode *node = (XrCanceledTimerNode *) xr_malloc(sizeof(XrCanceledTimerNode));
@@ -679,6 +698,10 @@ XrCanceledTimerNode *xr_cancel_node_alloc(void) {
         node->next = NULL;
         node->timer = NULL;
         node->coro = NULL;
+        if (w && w->p.runtime) {
+            xr_sched_metric_inc(w->p.runtime,
+                                &w->p.runtime->sched_stats.timer_cancel_node_malloc_count);
+        }
     }
     return node;
 }
@@ -693,7 +716,15 @@ void xr_cancel_node_free(XrCanceledTimerNode *node) {
         node->coro = NULL;
         w->p.cancel_node_free = node;
         w->p.cancel_node_free_count++;
+        if (w->p.runtime) {
+            xr_sched_metric_inc(w->p.runtime,
+                                &w->p.runtime->sched_stats.timer_cancel_node_free_cache_count);
+        }
         return;
+    }
+    if (w && w->p.runtime) {
+        xr_sched_metric_inc(w->p.runtime,
+                            &w->p.runtime->sched_stats.timer_cancel_node_free_heap_count);
     }
     xr_free(node);
 }
