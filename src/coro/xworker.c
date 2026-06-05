@@ -624,6 +624,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_exec = 0, total_steal = 0, total_steal_try = 0, total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
+    uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
         fprintf(stderr,
@@ -653,6 +654,11 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_unpark += p->stats.unpark_count;
         total_timer += p->stats.timer_bump_count;
         total_burst += p->stats.timer_burst_count;
+        total_wait_ms += p->stats.runnable_wait_ms;
+        if (p->stats.runnable_wait_max_ms > max_wait_ms) {
+            max_wait_ms = p->stats.runnable_wait_max_ms;
+        }
+        total_prio_boost += p->stats.priority_boost_count;
     }
     fprintf(stderr,
             "%-8s %10llu %10llu %10llu %10llu %10llu %9llu %10llu %9llu %8llu %8llu "
@@ -663,6 +669,9 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_lifo_flush, (unsigned long long) total_inbox,
             (unsigned long long) total_park, (unsigned long long) total_unpark,
             (unsigned long long) total_timer, (unsigned long long) total_burst);
+    fprintf(stderr, "Runnable wait: total_ms=%llu max_ms=%llu priority_boost=%llu\n",
+            (unsigned long long) total_wait_ms, (unsigned long long) max_wait_ms,
+            (unsigned long long) total_prio_boost);
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
     fprintf(stderr,
