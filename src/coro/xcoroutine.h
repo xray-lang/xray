@@ -660,32 +660,26 @@ XR_FUNC int xr_coro_gc_safepoint(XrCoroutine *coro);
 XR_FUNC void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child);
 XR_FUNC void xr_jit_barrier_back(XrCoroutine *coro, void *container);
 
-/* ========== Helper Structures ========== */
-
-/* ========== Memory Sync Helpers ========== */
-
 XR_FUNC void xr_coro_sync_vm_ctx(XrCoroutine *coro, struct XrayIsolate *X);
 XR_FUNC bool xr_coro_upgrade_heap(XrCoroutine *coro, size_t size);
 XR_FUNC void xr_coro_clear_vm_entry_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_vm_entry_no_free(XrCoroutine *coro);
+XR_FUNC bool xr_coro_bind_vm_closure_entry(XrCoroutine *coro, struct XrayIsolate *X,
+                                           XrClosure *closure, XrValue *args, int arg_count,
+                                           bool copy_args);
+XR_FUNC bool xr_coro_bind_vm_cfunc_entry(XrCoroutine *coro,
+                                         XrCFuncResult (*cfunc)(struct XrayIsolate *, XrValue *,
+                                                                int, XrValue *),
+                                         XrValue *args, int arg_count);
 
 /* ========== Bootstrap Main Coroutine ========== */
 
-// Create minimal coro during isolate init (before any script execution)
 XR_FUNC XrCoroutine *xr_coro_create_bootstrap(struct XrayIsolate *X);
-// Upgrade bootstrap coro with closure for script execution
 XR_FUNC void xr_coro_setup_main(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
-// Reset main_coro for sequential re-execution (test runner, REPL)
-// Resets VM backend context, result/error fields, and sets new closure.
-// Caller then calls xr_main_thread_run() which handles flag reset.
 XR_FUNC void xr_coro_reset_for_call(XrCoroutine *coro, struct XrayIsolate *X, XrClosure *closure);
-
-// Native-stackful coroutine creation was removed; use xr_coro_create_cfunc instead.
 
 /* ========== VM Stack Growth ========== */
 
-// Grow coroutine VM stack and/or frame array.
-// Pure stack management — no GC interaction.
 XR_FUNC bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots);
 
 /* ========== Scope Context ==========
