@@ -360,7 +360,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         goto exec_fast;
     }
 
-    // BLOCKED fast re-dispatch: skip full handle_vm_result/reductions tracking
+    // BLOCKED fast re-dispatch: skip full result handling/reductions tracking
     // for maximum throughput. Optimal for serial message chains (pingpong, ring).
     // BLOCKED flag already set by the active backend.
     if (result.kind == XR_CORO_RUN_BLOCKED && fast_dispatch_budget > 1) {
@@ -392,7 +392,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
                   "fast_dispatch: LIFO slot contains DONE coroutine");
         atomic_store_explicit(&m->current_coro, next, memory_order_relaxed);
         coro = next;
-        goto exec_fast;  // Skip active_coros, reductions, full handle_vm_result
+        goto exec_fast;  // Skip active_coros, reductions, full result handling
     }
 
 normal_result_path:
@@ -404,7 +404,7 @@ normal_result_path:
     atomic_store_explicit(&m->current_coro, NULL, memory_order_relaxed);
     p->stats.executed_count++;
 
-    // Race guard: when VM returns BLOCKED after channel_recv/send, the coro
+    // Race guard: when a backend returns BLOCKED after channel_recv/send, the coro
     // has already been added to channel waitq (spinlock released). Another
     // thread may have woken it and started executing it on a different worker.
     // In that case we must NOT touch any coro fields — the coro is "gone".
