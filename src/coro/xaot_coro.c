@@ -366,7 +366,6 @@ XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value) {
         return XR_NULL_VAL;
     XrChannel *ch = xr_value_to_channel(channel_value);
     xr_channel_close(ch);
-    xr_runtime_wake_channel_all(ctx->isolate, ch);
     return XR_NULL_VAL;
 }
 

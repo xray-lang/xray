@@ -273,9 +273,6 @@ vmcase(OP_CHAN_CLOSE) {
 
     // Close Channel
     xr_channel_close(ch);
-
-    // Wake all waiting coroutines
-    xr_runtime_wake_channel_all(isolate, ch);
     vmbreak;
 }
 
