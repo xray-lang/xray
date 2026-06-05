@@ -30,6 +30,9 @@
 #include "xvm_resume.h"
 #include "xvm_worker_state.h"
 
+#define XR_VM_CORO_INIT_STACK_SLOTS 64
+#define XR_VM_CORO_INIT_FRAME_SLOTS 4
+
 // ========== Forward Declarations ==========
 
 static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
@@ -177,7 +180,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
     state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
     coro->backend = xr_coro_vm_backend_vtable();
     coro->backend_state = state;
-    coro->gc_flags |= XR_CORO_GC_VM_STATE_OWNED;
+    coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;
     return true;
 }
 
@@ -374,28 +377,22 @@ static void vm_coro_free_jit_state(XrCoroutine *coro) {
 }
 
 static bool vm_backend_alloc_stack_frames(XrCoroutine *coro, XrVMContext *ctx, XrWorker *worker) {
+    (void) worker;
     if (!coro || !ctx)
         return false;
     if (ctx->stack)
         return true;
 
-    size_t stack_bytes = sizeof(XrValue) * XR_CORO_POOL_STACK_SLOTS;
-    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_CORO_POOL_FRAME_SLOTS;
-    char *block = NULL;
-    if (worker && worker->p.stack_slab_free) {
-        block = (char *) worker->p.stack_slab_free;
-        worker->p.stack_slab_free = *(void **) block;
-        worker->p.stack_slab_count--;
-    } else {
-        block = (char *) xr_malloc(stack_bytes + frames_bytes);
-    }
+    size_t stack_bytes = sizeof(XrValue) * XR_VM_CORO_INIT_STACK_SLOTS;
+    size_t frames_bytes = sizeof(XrBcCallFrame) * XR_VM_CORO_INIT_FRAME_SLOTS;
+    char *block = (char *) xr_malloc(stack_bytes + frames_bytes);
     if (!block)
         return false;
 
     ctx->stack = (XrValue *) block;
-    ctx->stack_capacity = XR_CORO_POOL_STACK_SLOTS;
+    ctx->stack_capacity = XR_VM_CORO_INIT_STACK_SLOTS;
     ctx->frames = (XrBcCallFrame *) (block + stack_bytes);
-    ctx->frame_capacity = XR_CORO_POOL_FRAME_SLOTS;
+    ctx->frame_capacity = XR_VM_CORO_INIT_FRAME_SLOTS;
     memset(block, 0, stack_bytes + frames_bytes);
     return true;
 }
@@ -452,17 +449,11 @@ static void vm_backend_free_stack_frames(XrCoroutine *coro, XrVMContext *ctx) {
     if (!coro || !ctx)
         return;
     if (ctx->stack) {
-        if (coro->gc_flags & XR_CORO_GC_SLAB_STACK) {
-            if (ctx->stack_capacity != XR_CORO_POOL_STACK_SLOTS) {
-                xr_free(ctx->stack);
-            }
-        } else {
-            char *stack_end = (char *) ctx->stack + sizeof(XrValue) * ctx->stack_capacity;
-            bool combined = (ctx->frames && (char *) ctx->frames == stack_end);
-            xr_free(ctx->stack);
-            if (!combined && ctx->frames) {
-                xr_free(ctx->frames);
-            }
+        char *stack_end = (char *) ctx->stack + sizeof(XrValue) * ctx->stack_capacity;
+        bool combined = (ctx->frames && (char *) ctx->frames == stack_end);
+        xr_free(ctx->stack);
+        if (!combined && ctx->frames) {
+            xr_free(ctx->frames);
         }
         ctx->stack = NULL;
         ctx->frames = NULL;
@@ -658,11 +649,11 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_coro_free_jit_state(coro);
     vm_backend_clear_entry_state(coro);
 
-    if (coro->gc_flags & XR_CORO_GC_VM_STATE_OWNED) {
+    if (coro->gc_flags & XR_CORO_GC_BACKEND_STATE_OWNED) {
         xr_free(state);
         coro->backend_state = NULL;
         coro->backend = NULL;
-        coro->gc_flags &= ~XR_CORO_GC_VM_STATE_OWNED;
+        coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
     }
 }
 
@@ -681,7 +672,6 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
 
     char *stack_end = (char *) ctx->stack + sizeof(XrValue) * ctx->stack_capacity;
     bool combined = ((char *) ctx->frames == stack_end);
-    bool slab_stack = (coro->gc_flags & XR_CORO_GC_SLAB_STACK) != 0;
 
     if (combined) {
         XrValue *new_stack = (XrValue *) xr_malloc(sizeof(XrValue) * new_capacity);
@@ -698,49 +688,26 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
         }
         memcpy(new_frames, ctx->frames, sizeof(XrBcCallFrame) * ctx->frame_count);
 
-        if (!slab_stack)
-            xr_free(ctx->stack);
+        xr_free(ctx->stack);
         ctx->stack = new_stack;
         ctx->stack_capacity = new_capacity;
         ctx->frames = new_frames;
-        coro->gc_flags &= ~XR_CORO_GC_SLAB_STACK;
     } else {
-        if (slab_stack) {
-            XrValue *new_stack = (XrValue *) xr_malloc(sizeof(XrValue) * new_capacity);
-            if (!new_stack)
-                return false;
-            memcpy(new_stack, ctx->stack, sizeof(XrValue) * ctx->stack_capacity);
-            memset(new_stack + ctx->stack_capacity, 0, sizeof(XrValue) * extra_slots);
-            ctx->stack = new_stack;
-            ctx->stack_capacity = new_capacity;
-            coro->gc_flags &= ~XR_CORO_GC_SLAB_STACK;
-        } else {
-            XrValue *new_stack = (XrValue *) xr_realloc(ctx->stack, sizeof(XrValue) * new_capacity);
-            if (!new_stack)
-                return false;
-            memset(new_stack + ctx->stack_capacity, 0, sizeof(XrValue) * extra_slots);
-            ctx->stack = new_stack;
-            ctx->stack_capacity = new_capacity;
-        }
+        XrValue *new_stack = (XrValue *) xr_realloc(ctx->stack, sizeof(XrValue) * new_capacity);
+        if (!new_stack)
+            return false;
+        memset(new_stack + ctx->stack_capacity, 0, sizeof(XrValue) * extra_slots);
+        ctx->stack = new_stack;
+        ctx->stack_capacity = new_capacity;
     }
 
     if (ctx->frame_count + 8 >= ctx->frame_capacity) {
         int new_frame_cap = ctx->frame_capacity * 2;
-        bool frames_in_slab = slab_stack && !combined;
-        if (frames_in_slab) {
-            XrBcCallFrame *new_frames =
-                (XrBcCallFrame *) xr_malloc(sizeof(XrBcCallFrame) * new_frame_cap);
-            if (!new_frames)
-                return false;
-            memcpy(new_frames, ctx->frames, sizeof(XrBcCallFrame) * ctx->frame_count);
-            ctx->frames = new_frames;
-        } else {
-            XrBcCallFrame *new_frames =
-                (XrBcCallFrame *) xr_realloc(ctx->frames, sizeof(XrBcCallFrame) * new_frame_cap);
-            if (!new_frames)
-                return false;
-            ctx->frames = new_frames;
-        }
+        XrBcCallFrame *new_frames =
+            (XrBcCallFrame *) xr_realloc(ctx->frames, sizeof(XrBcCallFrame) * new_frame_cap);
+        if (!new_frames)
+            return false;
+        ctx->frames = new_frames;
         ctx->frame_capacity = new_frame_cap;
     }
 

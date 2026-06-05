@@ -32,17 +32,12 @@ struct XrCoroutine;
 #define XR_CORO_POOL_GROW_SIZE 4096          // Growth size per expansion
 #define XR_CORO_POOL_MAX_SIZE (1024 * 1024)  // Max pool size
 
-// Initial VM stack and bytecode frame sizes used by lazy VM backend allocation.
-#define XR_CORO_POOL_STACK_SLOTS 64  // Initial stack slots per coroutine
-#define XR_CORO_POOL_FRAME_SLOTS 4   // Initial frame slots per coroutine
-
 // gc_flags bit definitions (coroutine pool markers)
-#define XR_CORO_GC_SLAB_STACK 0x0001      // VM stack is embedded in a pool block
-#define XR_CORO_GC_FROM_POOL 0x0002       // Struct allocated from pool block
-#define XR_CORO_GC_RECYCLABLE 0x0004      // Fire-and-forget, eligible for deferred recycle
-#define XR_CORO_GC_RECYCLED_CLEAN 0x0008  // Recycled with thorough field reset (skip memset)
-#define XR_CORO_GC_VM_STATE_OWNED 0x0010  // VM state allocated separately from pool block
-#define XR_CORO_GC_LIGHTWEIGHT 0x0020     // Struct allocated without VM backend state/slab
+#define XR_CORO_GC_FROM_POOL 0x0002            // Struct allocated from pool block
+#define XR_CORO_GC_RECYCLABLE 0x0004           // Fire-and-forget, eligible for deferred recycle
+#define XR_CORO_GC_RECYCLED_CLEAN 0x0008       // Recycled with thorough field reset (skip memset)
+#define XR_CORO_GC_BACKEND_STATE_OWNED 0x0010  // Backend state is owned by the coroutine shell
+#define XR_CORO_GC_LIGHTWEIGHT 0x0020          // Struct allocated without pool ownership
 
 // ========== Pool Block ==========
 

@@ -497,8 +497,8 @@ static bool coro_init_common(XrCoroutine *coro, XrayIsolate *X, const char *name
         void *saved_backend_state = coro->backend_state;
         struct XrCoroGC *saved_coro_gc = coro->coro_gc;
         uint16_t saved_pool_bits =
-            coro->gc_flags & (XR_CORO_GC_SLAB_STACK | XR_CORO_GC_FROM_POOL |
-                              XR_CORO_GC_VM_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
+            coro->gc_flags &
+            (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
         XrCoroExt *saved_ext = coro->ext;
 
         memset((char *) coro + offsetof(XrCoroutine, flags), 0,
