@@ -603,6 +603,9 @@ XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
 XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_reset_jit_state(XrCoroutine *coro);
 XR_FUNC void xr_coro_free_jit_state(XrCoroutine *coro);
+XR_FUNC void xr_coro_bump_jit_heartbeat(XrCoroutine *coro);
+XR_FUNC void xr_coro_clear_jit_scratch(XrCoroutine *coro);
+XR_FUNC bool xr_coro_jit_try_mode(const XrCoroutine *coro);
 XR_FUNC bool xr_coro_ensure_vm_state(XrCoroutine *coro);
 
 static inline XrJitCoroState *xr_coro_peek_jit_state(XrCoroutine *coro) {
@@ -619,11 +622,6 @@ static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
         return state;
     }
     return jit_state;
-}
-
-static inline bool xr_coro_jit_try_mode(const XrCoroutine *coro) {
-    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
-    return state && state->jit_state && state->jit_state->try_mode;
 }
 
 static inline bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {

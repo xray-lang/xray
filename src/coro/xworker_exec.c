@@ -355,10 +355,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Clear jit_ctx: parent exited JIT (OP_GO returns from interpreter).
         // Prevents GC from scanning stale jit_scratch (child will overwrite it).
         // Re-set by xr_coro_run_on_worker when parent resumes.
-        XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-        if (jit_state) {
-            jit_state->scratch = NULL;
-        }
+        xr_coro_clear_jit_scratch(coro);
         if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {
