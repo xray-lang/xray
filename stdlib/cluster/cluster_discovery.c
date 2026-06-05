@@ -30,6 +30,7 @@
 #include "cluster_node.h"
 #include "../net/io.h"
 #include "../../src/base/xhash.h"
+#include "../../src/coro/xcoroutine.h"
 #include "../../src/os/os_time.h"
 
 #include "../../src/os/os_net.h"
@@ -41,11 +42,6 @@
 // than pulling xsocket.h directly; link-time signature checking
 // against xsocket.c keeps them in sync.
 extern int xr_socket_wait_readable(struct XrayIsolate *X, int fd, int timeout_ms);
-
-// xr_coro_create_native is not declared in any public header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
-                                                 void *arg, const char *name);
-extern void xr_coro_spawn(struct XrayIsolate *X, struct XrCoroutine *coro);
 
 /* ========== Announce Packet ========== */
 

@@ -26,7 +26,6 @@
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/value/xvalue.h"
 #include "../../src/vm/xvm.h"
-#include "../../src/vm/xvm_internal.h"
 #include "../../src/base/xhash.h"
 #include "../../src/base/xchecks.h"
 #include "../../src/os/os_time.h"
@@ -36,10 +35,6 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-
-// xr_coro_create_native is not declared in any public header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
-                                                 void *arg, const char *name);
 
 // Forward-declarations for the two xsocket entry points used by
 // the cluster transport. Pulling xsocket.h directly would expand

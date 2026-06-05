@@ -31,6 +31,7 @@
 // NOTE: WebSocket moved to separate 'ws' module
 #include "../../src/module/xmodule.h"
 #include "../../src/vm/xvm.h"
+#include "../../src/vm/xvm_coro_api.h"
 #include "../../src/coro/xyieldable.h"
 #include "../../src/coro/xworker.h"
 #include "../../src/coro/xsocket.h"
@@ -47,12 +48,6 @@
 #include "../../src/os/os_net.h"
 
 /* ========== External Declarations ========== */
-
-// C function coroutine creation (supports Yieldable I/O)
-extern XrCoroutine *xr_coro_create_vm_cfunc(XrayIsolate *X,
-                                            XrCFuncResult (*cfunc)(XrayIsolate *, XrValue *, int,
-                                                                   XrValue *),
-                                            XrValue *args, int argc, const char *name);
 
 extern XrValue xr_string_value(XrString *str);
 extern XrString *xr_string_intern(XrayIsolate *X, const char *str, size_t len, uint32_t hash);

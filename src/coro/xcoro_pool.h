@@ -126,7 +126,6 @@ XR_FUNC void xr_coro_pool_print_stats(XrCoroStructPool *pool);
  * Backend state remains NULL until a backend-specific creator attaches it.
  */
 #include "xcoroutine.h"
-#include "xexec_frame.h"
 static inline void xr_coro_init_from_pool_slot(struct XrCoroutine *coro, XrCoroPoolBlock *block,
                                                uint32_t local_idx) {
     (void) block;

@@ -20,14 +20,9 @@
 #include "../../src/coro/xcoroutine.h"
 #include "../../src/runtime/xisolate_internal.h"
 #include "../../src/runtime/object/xstring.h"
-#include "../../src/vm/xvm_internal.h"
 
 #include <stdlib.h>
 #include <string.h>
-
-// xr_coro_create_native is not declared in any public header
-extern struct XrCoroutine *xr_coro_create_native(struct XrayIsolate *X, void (*func)(void *),
-                                                 void *arg, const char *name);
 
 /* ========== Node Monitor (CSP-style) ========== */
 
