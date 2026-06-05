@@ -414,7 +414,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     int limit = count < sw->case_count ? count : sw->case_count;
 
     // Link each case into its channel's bucket select queue.
-    // Also set waiter_worker_mask on each channel for wake routing.
+    // Also set select waiter masks on each channel for wake routing.
     for (int i = 0; i < limit; i++) {
         void *channel = channels ? channels[i] : sw->cases[i].channel;
         if (!channel)
@@ -437,10 +437,8 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
         }
         bucket->select_tail = sc;
 
-        // Set waiter mask bit for this worker on the channel
         XrChannel *ch = (XrChannel *) channel;
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << worker->p.id,
-                                 memory_order_release);
+        xr_channel_note_select_waiter(ch, worker->p.id);
     }
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)
@@ -487,9 +485,7 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
             // CAS to prevent duplicate wake from another channel
             bool expected = false;
             if (atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {
-                // Determine case index from pointer arithmetic
-                int case_idx = (int) (sc - sw->cases);
-                XR_DCHECK(case_idx >= 0 && case_idx < sw->case_count,
+                XR_DCHECK(sc >= sw->cases && sc < sw->cases + sw->case_count,
                           "wake_select: case index out of range");
                 // Remove from all bucket queues + blocked list
                 xr_worker_unblock_select(worker, coro);
@@ -540,6 +536,7 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
     target->prev = NULL;
     target->next = NULL;
     target->bucket = NULL;
+    worker_clear_channel_waiter_mask(worker, target->channel);
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 }
 

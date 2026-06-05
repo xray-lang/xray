@@ -438,7 +438,7 @@ static void channel_wake_select_waiter(XrChannel *ch) {
 static void channel_wake_select_waiter_if_present(XrChannel *ch) {
     if (!ch)
         return;
-    if (atomic_load_explicit(&ch->waiter_worker_mask, memory_order_acquire) == 0) {
+    if (xr_channel_select_waiter_mask(ch) == 0) {
         XrWorker *worker = xr_current_worker();
         XrRuntime *runtime = worker ? worker->p.runtime : NULL;
         if (runtime) {
@@ -885,8 +885,7 @@ send_locked:
     XrWorker *w = xr_current_worker();
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
-                                 memory_order_release);
+        xr_channel_note_waiter(ch, w->p.id, true);
     }
     xr_waitq_enqueue(&ch->sendq, coro);
 
@@ -967,8 +966,7 @@ recv_locked:
     XrWorker *w = xr_current_worker();
     if (w) {
         atomic_store_explicit(&coro->affinity_p, w->p.id, memory_order_relaxed);
-        atomic_fetch_or_explicit(&ch->waiter_worker_mask, (uint64_t) 1 << w->p.id,
-                                 memory_order_release);
+        xr_channel_note_waiter(ch, w->p.id, false);
     }
     xr_waitq_enqueue(&ch->recvq, coro);
 
