@@ -43,6 +43,25 @@
 
 // VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_dispatch_helpers.h
 
+static XrValue vm_coro_name_value(XrayIsolate *isolate, const XrCoroutine *coro) {
+    const char *name = xr_coro_name(coro);
+    if (!name)
+        return xr_null();
+    XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
+    return s ? xr_string_value(s) : xr_null();
+}
+
+static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const XrCoroutine *coro) {
+    const char *source_file = xr_coro_source_file(coro);
+    if (!source_file)
+        return;
+    char source_buf[XR_MAX_PROPERTY_NAME_LEN];
+    snprintf(source_buf, sizeof(source_buf), "%s:%d", source_file, xr_coro_source_line(coro));
+    XrString *source = xr_string_intern(isolate, source_buf, strlen(source_buf), 0);
+    if (source)
+        xr_map_set(info, VM_INTERN_KEY("source"), xr_string_value(source));
+}
+
 // Collect coroutines from all workers into a flat array for diagnostic sub-ops.
 // Returns the number of entries written. Best-effort snapshot (not atomic).
 int vm_collect_all_coros(XrayIsolate *isolate, VmCoroEntry *out, int max_out) {
@@ -186,20 +205,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
                 XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
                 xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-                xr_map_set(info, VM_INTERN_KEY("name"),
-                           coro->name ? xr_string_value(xr_string_intern(isolate, coro->name,
-                                                                         strlen(coro->name), 0))
-                                      : xr_null());
+                xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
                 xr_map_set(info, VM_INTERN_KEY("state"),
                            xr_string_value(xr_string_intern(isolate, st, strlen(st), 0)));
-                if (coro->source_file) {
-                    char source_buf[XR_MAX_PROPERTY_NAME_LEN];
-                    snprintf(source_buf, sizeof(source_buf), "%s:%d", coro->source_file,
-                             coro->source_line);
-                    xr_map_set(info, VM_INTERN_KEY("source"),
-                               xr_string_value(
-                                   xr_string_intern(isolate, source_buf, strlen(source_buf), 0)));
-                }
+                vm_coro_set_source_field(isolate, info, coro);
                 xr_array_push(result, xr_value_from_map(info));
                 count++;
             }
@@ -221,10 +230,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             uint32_t flags = xr_coro_flags_load(coro);
 
             xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-            xr_map_set(info, VM_INTERN_KEY("name"),
-                       coro->name ? xr_string_value(xr_string_intern(isolate, coro->name,
-                                                                     strlen(coro->name), 0))
-                                  : xr_null());
+            xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
 
             const char *state_str = "unknown";
             if (flags & XR_CORO_FLG_DONE)
@@ -241,14 +247,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             xr_map_set(info, VM_INTERN_KEY("priority"), xr_int(xr_coro_get_priority(flags)));
             xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
 
-            if (coro->source_file) {
-                char source_buf[XR_MAX_PROPERTY_NAME_LEN];
-                snprintf(source_buf, sizeof(source_buf), "%s:%d", coro->source_file,
-                         coro->source_line);
-                xr_map_set(
-                    info, VM_INTERN_KEY("source"),
-                    xr_string_value(xr_string_intern(isolate, source_buf, strlen(source_buf), 0)));
-            }
+            vm_coro_set_source_field(isolate, info, coro);
 
             struct XrMap *coro_locals = (coro->ext) ? coro->ext->locals : NULL;
             if (coro_locals) {
@@ -313,15 +312,18 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                        : "await";
                 }
 
-                const char *name = coro->name ? coro->name : "(anonymous)";
+                const char *name = xr_coro_name(coro);
+                name = name ? name : "(anonymous)";
                 char name_buf[15];
                 snprintf(name_buf, sizeof(name_buf), "%.14s", name);
 
                 char source_buf[20] = "-";
-                if (coro->source_file) {
-                    const char *fname = strrchr(coro->source_file, '/');
-                    fname = fname ? fname + 1 : coro->source_file;
-                    snprintf(source_buf, sizeof(source_buf), "%.12s:%d", fname, coro->source_line);
+                const char *source_file = xr_coro_source_file(coro);
+                if (source_file) {
+                    const char *fname = strrchr(source_file, '/');
+                    fname = fname ? fname + 1 : source_file;
+                    snprintf(source_buf, sizeof(source_buf), "%.12s:%d", fname,
+                             xr_coro_source_line(coro));
                 }
 
                 printf("│ %-4d │ %-14s │ %-7s │ %-15s │ %-19s │\n", coro->id, name_buf, state_upper,
@@ -416,24 +418,14 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 XrCoroutine *coro = entries[j].coro;
                 XrMap *info = xr_map_new(vm_get_coro(vm_ctx));
                 xr_map_set(info, VM_INTERN_KEY("id"), xr_int(coro->id));
-                xr_map_set(info, VM_INTERN_KEY("name"),
-                           coro->name ? xr_string_value(xr_string_intern(isolate, coro->name,
-                                                                         strlen(coro->name), 0))
-                                      : xr_null());
+                xr_map_set(info, VM_INTERN_KEY("name"), vm_coro_name_value(isolate, coro));
                 xr_map_set(info, VM_INTERN_KEY("state"),
                            xr_string_value(xr_string_intern(isolate, entries[j].state,
                                                             strlen(entries[j].state), 0)));
                 xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
                 xr_map_set(info, VM_INTERN_KEY("priority"),
                            xr_int(xr_coro_get_priority(xr_coro_flags_load(coro))));
-                if (coro->source_file) {
-                    char source_buf[XR_MAX_PROPERTY_NAME_LEN];
-                    snprintf(source_buf, sizeof(source_buf), "%s:%d", coro->source_file,
-                             coro->source_line);
-                    xr_map_set(info, VM_INTERN_KEY("source"),
-                               xr_string_value(
-                                   xr_string_intern(isolate, source_buf, strlen(source_buf), 0)));
-                }
+                vm_coro_set_source_field(isolate, info, coro);
                 xr_array_push(result, xr_value_from_map(info));
             }
 
@@ -464,7 +456,9 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 const char *key_str;
                 char prio_str[16];
                 if (group_by == 0) {
-                    key_str = coro->name ? coro->name : "(anonymous)";
+                    key_str = xr_coro_name(coro);
+                    if (!key_str)
+                        key_str = "(anonymous)";
                 } else if (group_by == 1) {
                     key_str = entries[i].state;
                 } else {
@@ -573,9 +567,10 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
         case CORO_CTRL_SELF: {
             XrCoroutine *current = vm_get_coro(vm_ctx);
-            if (current && current->name) {
-                size_t len = strlen(current->name);
-                XrString *s = xr_string_intern(isolate, current->name, len, 0);
+            const char *name = xr_coro_name(current);
+            if (name) {
+                size_t len = strlen(name);
+                XrString *s = xr_string_intern(isolate, name, len, 0);
                 base[a] = s ? xr_string_value(s) : xr_null();
             } else {
                 base[a] = xr_null();
@@ -645,7 +640,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         next_inst = *pc;
     }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
-    // Defer source_file/source_line to lazy access (coro->spawn_file/spawn_line)
+    // Debug source metadata is populated lazily for named coroutines.
     XrCoroutine *coro = xr_coro_create(isolate, closure, args, c, coro_name, NULL, 0);
     if (!coro) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");

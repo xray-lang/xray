@@ -28,7 +28,7 @@
 
 #define SCHED_TRACE_CORO(worker, coro, event)                                                      \
     fprintf(stderr, "[SCHED W%d] %s: coro=%p name=%s flags=0x%x\n", (worker)->p.id, (event),       \
-            (void *) (coro), ((coro) && (coro)->name) ? (coro)->name : "?",                        \
+            (void *) (coro), xr_coro_name(coro) ? xr_coro_name(coro) : "?",                        \
             (coro) ? xr_coro_flags_load(coro) : 0)
 
 #define SCHED_TRACE_IO(worker, fd, coro, event)                                                    \

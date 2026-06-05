@@ -118,18 +118,19 @@ static void sysmon_check(XrRuntime *runtime) {
             if (!runtime->sysmon_state[i].warned && elapsed_us >= XR_SYSMON_WARN_US) {
                 runtime->sysmon_state[i].warned = true;
                 XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
+                const char *coro_name = xr_coro_name(coro);
                 xr_log_warning("sysmon",
                                "Worker %d stuck for %lldms"
                                " (coroutine: %s, hb=%llu)",
                                i, (long long) (elapsed_us / 1000),
-                               (coro && coro->name) ? coro->name : "unknown",
-                               (unsigned long long) hb);
+                               coro_name ? coro_name : "unknown", (unsigned long long) hb);
             }
 
             // === Level 3 (5s): mark coroutine for cancellation ===
             if (elapsed_us >= XR_SYSMON_CANCEL_US) {
                 XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
                 if (coro && !xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
+                    const char *coro_name = xr_coro_name(coro);
                     xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
                     XrCoroDebugSnapshot snap = {
                         .backend_name = "unknown",
@@ -150,7 +151,7 @@ static void sysmon_check(XrRuntime *runtime) {
                                    "(backend=%s, frame: %s, c=%d, fc=%d, reds=%d, "
                                    "flags=0x%x)",
                                    i, (long long) (elapsed_us / 1000), coro->id,
-                                   coro->name ? coro->name : "unknown",
+                                   coro_name ? coro_name : "unknown",
                                    snap.backend_name ? snap.backend_name : "unknown",
                                    snap.function_name ? snap.function_name : "?", snap.in_c_frame,
                                    snap.frame_count, coro->reductions, xr_coro_flags_load(coro));

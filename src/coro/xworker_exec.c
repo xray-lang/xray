@@ -185,7 +185,8 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             }
 
             // Inline fast path: skip extern calls for anonymous coros without monitors
-            if (__builtin_expect(coro->name != NULL || (coro->ext && coro->ext->watched_by), 0)) {
+            if (__builtin_expect(xr_coro_name(coro) != NULL || (coro->ext && coro->ext->watched_by),
+                                 0)) {
                 XrCoroState *_s = (XrCoroState *) runtime->isolate->vm.coro_state;
                 xr_coro_notify_monitors(runtime->isolate, _s ? _s->coro_registry : NULL, coro,
                                         "normal");
