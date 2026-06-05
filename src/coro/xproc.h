@@ -342,11 +342,6 @@ XR_FUNC void xr_acquirep(struct XrMachine *m, XrProc *p);
 XR_FUNC XrProc *xr_releasep(struct XrMachine *m);
 XR_FUNC void xr_handoffp(XrProc *p);
 
-/* ========== P Run Queue Operations ========== */
-
-XR_FUNC XrCoroutine *xr_proc_pop(XrProc *p);
-XR_FUNC void xr_proc_push(XrProc *p, XrCoroutine *coro);
-
 static inline int xr_proc_total_queue_len(XrProc *p) {
     int total = 0;
     for (int i = 0; i < XR_RUNQ_COUNT; i++) {

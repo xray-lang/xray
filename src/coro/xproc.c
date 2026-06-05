@@ -145,44 +145,6 @@ void xr_handoffp(XrProc *p) {
     xr_startm(p, false);
 }
 
-// ========== P Run Queue Operations ==========
-
-XrCoroutine *xr_proc_pop(XrProc *p) {
-    if (!p)
-        return NULL;
-
-    for (int priority = CORO_PRIORITY_HIGH; priority >= CORO_PRIORITY_LOW; priority--) {
-        XrRunQueue *rq = &p->runq[priority];
-        XrCoroutine *coro = xr_steal_queue_pop(&rq->deque);
-        if (coro)
-            return coro;
-        coro = rq->overflow_first;
-        if (!coro)
-            continue;
-        rq->overflow_first = coro->sched_link;
-        if (!rq->overflow_first)
-            rq->overflow_last = NULL;
-        rq->overflow_len--;
-        coro->sched_link = NULL;
-        return coro;
-    }
-    return NULL;
-}
-
-void xr_proc_push(XrProc *p, XrCoroutine *coro) {
-    if (!p || !coro)
-        return;
-
-    int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (priority < 0)
-        priority = 0;
-    if (priority >= XR_CORO_PRIORITY_COUNT)
-        priority = XR_CORO_PRIORITY_COUNT - 1;
-
-    coro->schedule_count = 1;
-    xr_runq_enqueue(&p->runq[priority], coro);
-}
-
 // ========== Idle P Management ==========
 
 // Idle P list is a lock-free Treiber stack.
