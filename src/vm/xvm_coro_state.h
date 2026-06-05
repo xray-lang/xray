@@ -16,6 +16,7 @@
 #define XVM_CORO_STATE_H
 
 #include "../coro/xcoroutine.h"
+#include "../jit/xjit_coro_state.h"
 
 typedef enum {
     XR_CORO_ENTRY_CLOSURE,

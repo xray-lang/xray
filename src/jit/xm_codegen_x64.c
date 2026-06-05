@@ -37,7 +37,7 @@
 #include "xm_metadata_verify.h"
 #include "xm_offsets.h"
 #include "xm_jit_runtime.h"
-#include "../coro/xcoroutine.h" /* XM_SUSPEND_SPILL_MAX */
+#include "xjit_coro_state.h" /* XM_SUSPEND_SPILL_MAX */
 #include <string.h>
 
 /* Forward declarations for helpers (defined after emit_xm_ins).

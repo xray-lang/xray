@@ -33,6 +33,7 @@
 #include "xm_codegen.h"
 #include "xm_codegen_internal.h"
 #include "xm_verify_post_call.h"
+#include "xjit_coro_state.h"
 #include "xm_riscv64.h"
 #include "xm_jit.h"
 #include "xm_regalloc.h"

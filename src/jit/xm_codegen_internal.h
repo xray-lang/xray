@@ -21,6 +21,7 @@
 #include "xm_target.h"
 #include "xm_jit_runtime.h"
 #include "xm_offsets.h"
+#include "xjit_coro_state.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
