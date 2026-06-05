@@ -303,6 +303,9 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
 XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                       XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                       XrInstruction *pc);
+XR_FUNC XrDispatchAction vm_time_dispatch(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
+                                          XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                          XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                          XrInstruction *pc);
