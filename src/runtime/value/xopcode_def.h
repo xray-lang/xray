@@ -281,9 +281,6 @@
     _(CHAN_RECV_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].recv(timeout: R[C])")                  \
     _(CHAN_CLOSE, FMT_A, KOP_A_USE, "R[A].close()")                                                \
     _(CHAN_IS_CLOSED, FMT_AB, KOP_AB_UNARY, "R[A] = R[B].isClosed()")                              \
-    _(SELECT_START, FMT_NONE, KOP_NONE, "select start")                                            \
-    _(SELECT_CASE, FMT_ABC, KOP_SPECIAL, "case A=type, B=channel, C=value")                        \
-    _(SELECT_END, FMT_NONE, KOP_NONE, "select end")                                                \
     _(DEFER, FMT_AB, KOP_AB_BASE_LIT, "defer R[A](args R[A+1..A+B-1])")                            \
     _(BYTES_NEW, FMT_AB, KOP_AB_NEW_LIT, "R[A] = Bytes(B args)")                                   \
     _(SCOPE_ENTER, FMT_A, KOP_A_LIT, "enter scope, A=mode(0=wait,1=linked,2=supervisor)")          \
