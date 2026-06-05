@@ -317,7 +317,9 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     runtime->async_pool = (XrAsyncPool *) xr_calloc(1, sizeof(XrAsyncPool));
     if (runtime->async_pool) {
         int async_threads = env_int_clamped("XRAY_ASYNC_THREADS", XR_ASYNC_THREAD_COUNT, 1, 64);
-        xr_async_pool_init(runtime->async_pool, runtime, async_threads);
+        int async_queue_limit =
+            env_int_clamped("XRAY_ASYNC_QUEUE_LIMIT", XR_ASYNC_QUEUE_LIMIT, 1, 1 << 20);
+        xr_async_pool_init(runtime->async_pool, runtime, async_threads, async_queue_limit);
     }
 
     // initialize load balancing module
@@ -706,14 +708,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         XrAsyncPool *pool = runtime->async_pool;
         fprintf(
             stderr,
-            "Async: threads=%d live=%d queue=%d max_queue=%d in_flight=%d submit=%llu "
-            "complete=%llu\n",
+            "Async: threads=%d live=%d queue=%d limit=%d max_queue=%d in_flight=%d "
+            "submit=%llu complete=%llu reject=%llu\n",
             pool->thread_count, atomic_load_explicit(&pool->live_threads, memory_order_relaxed),
-            atomic_load_explicit(&pool->queue_depth, memory_order_relaxed),
+            atomic_load_explicit(&pool->queue_depth, memory_order_relaxed), pool->queue_limit,
             atomic_load_explicit(&pool->max_queue_depth, memory_order_relaxed),
             atomic_load_explicit(&pool->in_flight, memory_order_relaxed),
             (unsigned long long) atomic_load_explicit(&pool->submit_count, memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&pool->complete_count, memory_order_relaxed));
+            (unsigned long long) atomic_load_explicit(&pool->complete_count, memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&pool->reject_count, memory_order_relaxed));
     }
     {
         int inject_len = 0;

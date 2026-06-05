@@ -8,7 +8,8 @@
  * xasync.h - Async thread pool definitions
  *
  * KEY CONCEPT:
- *   Fixed async threads for blocking ops, per-Worker completion queues.
+ *   Bounded async threads for blocking ops, bounded submission queue,
+ *   per-Worker completion queues.
  *   Use cases: File I/O, DNS lookup, blocking syscalls.
  */
 
@@ -34,6 +35,11 @@
 #define XR_ASYNC_STACK_SIZE (128 * 1024)
 #endif
 
+// Async submission queue cap. Queue-full is reported as backpressure.
+#ifndef XR_ASYNC_QUEUE_LIMIT
+#define XR_ASYNC_QUEUE_LIMIT 4096
+#endif
+
 // ========== Async Task ==========
 
 typedef struct XrAsyncJob {
@@ -46,6 +52,7 @@ typedef struct XrAsyncJob {
     // Task function
     void (*invoke)(void *data);  // Execute in async thread
     void *data;
+    void (*destroy_data)(void *data);
 
     // Execution result
     XrValue result;
@@ -78,6 +85,7 @@ typedef struct XrAsyncPool {
     bool running;
 
     // Task queue
+    int queue_limit;
     XrAsyncJob *queue_head;
     XrAsyncJob *queue_tail;
     _Atomic int queue_depth;
@@ -86,6 +94,7 @@ typedef struct XrAsyncPool {
     _Atomic int live_threads;
     _Atomic uint64_t submit_count;
     _Atomic uint64_t complete_count;
+    _Atomic uint64_t reject_count;
     xr_mutex_t queue_mutex;
     xr_cond_t queue_cond;
 
@@ -99,7 +108,8 @@ typedef struct XrAsyncPool {
 // ========== API ==========
 
 // Initialize async thread pool (data structures only, no threads)
-XR_FUNC void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count);
+XR_FUNC void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count,
+                                int queue_limit);
 
 // Create async threads (called lazily on first spawn)
 XR_FUNC void xr_async_pool_start_threads(XrAsyncPool *pool);
@@ -107,8 +117,9 @@ XR_FUNC void xr_async_pool_start_threads(XrAsyncPool *pool);
 // Destroy async thread pool
 XR_FUNC void xr_async_pool_destroy(XrAsyncPool *pool);
 
-// Submit async task (coroutine suspended until completion)
-XR_FUNC void xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job);
+// Submit async task (coroutine suspended until completion). Returns false
+// when the pool is shut down or the bounded queue is full.
+XR_FUNC bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job);
 
 // Check completion queue, wake coroutines (called in Worker loop)
 XR_FUNC int xr_async_check_ready(XrAsyncPool *pool, int worker_id);

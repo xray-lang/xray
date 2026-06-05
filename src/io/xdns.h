@@ -82,9 +82,9 @@ XR_FUNC int xr_dns_resolve_all(struct XrayIsolate *X, const char *hostname, XrSo
 
 /* Coroutine-friendly resolve. Cache hit returns immediately; cache
  * miss submits the resolution to runtime->async_pool and the caller
- * is expected to suspend on the resulting XrAsyncJob. Returns true
- * if either path made progress, false if no async_pool was available
- * and synchronous fallback also failed. */
+ * is expected to suspend and retry after the cache is warmed. Without
+ * an async pool, this falls back to synchronous resolution for
+ * bootstrap callers. Queue saturation returns false as backpressure. */
 XR_FUNC bool xr_dns_resolve_async(struct XrayIsolate *X, struct XrCoroutine *coro, int worker_id,
                                   const char *hostname, XrSockAddr *addr, XrAddrFamily family);
 

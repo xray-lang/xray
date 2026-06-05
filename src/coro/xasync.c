@@ -8,7 +8,7 @@
  * xasync.c - Async thread pool implementation
  *
  * KEY CONCEPT:
- *   Fixed async thread count, lock-free task queue,
+ *   Bounded async thread count, bounded task queue,
  *   per-Worker completion queues.
  */
 
@@ -24,7 +24,7 @@
 // ========== Internal Function Declarations ==========
 
 static void *async_thread_main(void *arg);
-static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job);
+static bool async_queue_try_push(XrAsyncPool *pool, XrAsyncJob *job);
 static XrAsyncJob *async_queue_pop(XrAsyncPool *pool);
 static void ready_queue_push(XrAsyncReadyQueue *q, XrAsyncJob *job);
 static XrAsyncJob *ready_queue_pop(XrAsyncReadyQueue *q);
@@ -90,11 +90,17 @@ static void *async_thread_main(void *arg) {
 
 // ========== Task Queue Operations ==========
 
-// Enqueue task
-static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
+// Enqueue task. Returns false if the queue is closed or at capacity.
+static bool async_queue_try_push(XrAsyncPool *pool, XrAsyncJob *job) {
     job->next = NULL;
 
     xr_mutex_lock(&pool->queue_mutex);
+
+    int depth = atomic_load_explicit(&pool->queue_depth, memory_order_relaxed);
+    if (!pool->running || depth >= pool->queue_limit) {
+        xr_mutex_unlock(&pool->queue_mutex);
+        return false;
+    }
 
     if (pool->queue_tail) {
         pool->queue_tail->next = job;
@@ -102,13 +108,14 @@ static void async_queue_push(XrAsyncPool *pool, XrAsyncJob *job) {
         pool->queue_head = job;
     }
     pool->queue_tail = job;
-    int depth = atomic_fetch_add_explicit(&pool->queue_depth, 1, memory_order_relaxed) + 1;
-    async_update_max_depth(pool, depth);
+    int new_depth = atomic_fetch_add_explicit(&pool->queue_depth, 1, memory_order_relaxed) + 1;
+    async_update_max_depth(pool, new_depth);
 
     // Wake one waiting async thread
     xr_cond_signal(&pool->queue_cond);
 
     xr_mutex_unlock(&pool->queue_mutex);
+    return true;
 }
 
 // Dequeue task (blocking wait).
@@ -177,7 +184,8 @@ static XrAsyncJob *ready_queue_drain_all(XrAsyncReadyQueue *q) {
 // ========== Public API ==========
 
 // Initialize async thread pool (data structures only, no threads created)
-void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count) {
+void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count,
+                        int queue_limit) {
     XR_DCHECK(runtime != NULL, "async_pool_init: NULL runtime");
     if (!pool)
         return;
@@ -186,6 +194,7 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
 
     pool->runtime = runtime;
     pool->thread_count = (thread_count > 0) ? thread_count : XR_ASYNC_THREAD_COUNT;
+    pool->queue_limit = (queue_limit > 0) ? queue_limit : XR_ASYNC_QUEUE_LIMIT;
 
     // Limit thread count
     if (pool->thread_count > 64) {
@@ -201,6 +210,7 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
     atomic_store_explicit(&pool->live_threads, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->submit_count, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->complete_count, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->reject_count, 0, memory_order_relaxed);
     xr_mutex_init(&pool->queue_mutex);
     xr_cond_init(&pool->queue_cond);
 
@@ -289,18 +299,30 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
 
 // Submit async task
 // Coroutine will be suspended until task completes
-void xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
+bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
     if (!pool || !job)
-        return;
+        return false;
 
-    // Mark coroutine as blocked
+    uint8_t prev_state = XR_CORO_STATE_NONE;
+
+    // Mark before enqueue so a very fast completion cannot race ahead
+    // of the blocked state and leave the coroutine asleep.
     if (job->coro) {
+        prev_state = atomic_load_explicit(&job->coro->coro_state, memory_order_acquire);
         xr_coro_flags_set(job->coro, XR_CORO_FLG_BLOCKED);
     }
 
-    // Submit to task queue
+    if (!async_queue_try_push(pool, job)) {
+        if (job->coro) {
+            atomic_store_explicit(&job->coro->coro_state, prev_state, memory_order_release);
+            xr_coro_flags_clear(job->coro, XR_CORO_FLG_BLOCKED);
+        }
+        atomic_fetch_add_explicit(&pool->reject_count, 1, memory_order_relaxed);
+        return false;
+    }
+
     atomic_fetch_add_explicit(&pool->submit_count, 1, memory_order_relaxed);
-    async_queue_push(pool, job);
+    return true;
 }
 
 // Check completion queue, wake coroutines
@@ -361,6 +383,7 @@ XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id, void (*
     job->worker_id = worker_id;
     job->invoke = invoke;
     job->data = data;
+    job->destroy_data = NULL;
     job->result = XR_NULL_VAL;
     job->error = 0;
 
@@ -370,6 +393,10 @@ XrAsyncJob *xr_async_job_create(struct XrCoroutine *coro, int worker_id, void (*
 // Free async task
 void xr_async_job_free(XrAsyncJob *job) {
     if (job) {
+        if (job->destroy_data && job->data) {
+            job->destroy_data(job->data);
+            job->data = NULL;
+        }
         xr_free(job);
     }
 }
