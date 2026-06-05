@@ -33,6 +33,7 @@
 #include "xsteal_queue.h"
 #include "xmpsc_queue.h"
 #include "xcoroutine.h"
+#include "xjit_scratch.h"
 #include "xnetpoll.h"           // XrLocalPoll
 #include "../base/xplatform.h"  // XR_CACHE_LINE
 

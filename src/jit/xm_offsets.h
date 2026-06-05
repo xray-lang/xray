@@ -22,6 +22,7 @@
 
 #include <stddef.h>
 #include "../coro/xcoroutine.h"
+#include "../coro/xjit_scratch.h"
 #include "xjit_coro_state.h"
 #include "../vm/xvm_coro_state.h"
 
