@@ -36,9 +36,6 @@ typedef struct XrCoroBackendOps {
                                int arg_count, bool copy_args);
     bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
                              int arg_count);
-    void (*on_safepoint)(XrCoroutine *coro);
-    void (*detach_worker_state)(XrCoroutine *coro);
-    bool (*is_try_mode)(const XrCoroutine *coro);
     bool (*setup_yield_continuation)(XrayIsolate *X, XrCoroutine *coro, void *continuation,
                                      void *user_data);
     bool (*has_continuation)(const XrCoroutine *coro);

@@ -254,6 +254,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_EQ_INT(vm_backend->kind, XR_CORO_BACKEND_VM);
     ASSERT_NOT_NULL(vm_backend->prepare_recycle);
     ASSERT_NOT_NULL(vm_backend->reset_reusable);
+    ASSERT_NOT_NULL(vm_backend->on_safepoint);
+    ASSERT_NOT_NULL(vm_backend->detach_worker_state);
+    ASSERT_NOT_NULL(vm_backend->is_try_mode);
 
     XrayIsolate isolate;
     memset(&isolate, 0, sizeof(isolate));
@@ -263,6 +266,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(native);
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(native, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(native));
+    xr_coro_backend_on_safepoint(native);
+    xr_coro_detach_worker_state(native);
+    ASSERT_FALSE(xr_coro_backend_in_try_mode(native));
     xr_coro_destroy(native);
 
     int release_count = 0;
@@ -273,6 +279,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(aot);
     ASSERT_FALSE(xr_coro_backend_prepare_recycle(aot, NULL));
     ASSERT_FALSE(xr_coro_backend_reset_reusable(aot));
+    xr_coro_backend_on_safepoint(aot);
+    xr_coro_detach_worker_state(aot);
+    ASSERT_FALSE(xr_coro_backend_in_try_mode(aot));
     xr_coro_destroy(aot);
     ASSERT_EQ_INT(release_count, 1);
 }
