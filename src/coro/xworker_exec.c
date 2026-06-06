@@ -406,6 +406,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Queued and inline children both need worker threads visible before
         // the current worker continues the parent.
         xr_runtime_ensure_workers(p->runtime);
+        p->stats.spawned_count++;
         if (!inline_child) {
             xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
             xr_worker_push(worker, child);

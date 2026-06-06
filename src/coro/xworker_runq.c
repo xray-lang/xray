@@ -186,21 +186,6 @@ static bool priority_budget_has_credit(XrPriorityBudget *budget) {
     return false;
 }
 
-static void worker_record_runnable_wait(XrWorker *worker, XrCoroutine *coro, int64_t now) {
-    if (!worker || !coro)
-        return;
-    if (coro->submit_time <= 0)
-        return;
-    int64_t wait_ms = now - coro->submit_time;
-    if (wait_ms <= 0)
-        return;
-    uint64_t wait = (uint64_t) wait_ms;
-    worker->p.stats.runnable_wait_ms += wait;
-    if (wait > worker->p.stats.runnable_wait_max_ms) {
-        worker->p.stats.runnable_wait_max_ms = wait;
-    }
-}
-
 void xr_worker_refresh_runq_masks(XrWorker *worker) {
     if (!worker || !worker->p.runtime)
         return;
@@ -348,7 +333,7 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
         if (consume_poll_budget)
             worker->p.lifo_polls++;
-        worker_record_runnable_wait(worker, lifo, xr_monotonic_ticks());
+        xr_proc_stats_record_runnable_wait(&worker->p.stats, lifo, xr_monotonic_ticks());
         xr_proc_local_runq_dec(&worker->p, 1);
         worker->p.stats.lifo_hit_count++;
         xr_worker_refresh_runq_masks(worker);
@@ -386,7 +371,7 @@ static XrCoroutine *worker_pop_weighted(XrWorker *worker) {
                 continue;
             budget->credit[effective]--;
             worker->p.stats.local_runq_pop_count++;
-            worker_record_runnable_wait(worker, coro, now);
+            xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, now);
             if (effective > actual) {
                 worker->p.stats.priority_boost_count++;
             }

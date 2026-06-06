@@ -98,6 +98,30 @@ static double stats_percent_u64(uint64_t numerator, uint64_t denominator) {
     return 100.0 * stats_ratio_u64(numerator, denominator);
 }
 
+static uint64_t runnable_wait_bucket_upper_ms(int bucket) {
+    if (bucket <= 0)
+        return 1;
+    if (bucket >= XR_RUNNABLE_WAIT_BUCKET_COUNT - 1)
+        return (uint64_t) 1ull << (XR_RUNNABLE_WAIT_BUCKET_COUNT - 1);
+    return (uint64_t) 1ull << bucket;
+}
+
+static uint64_t runnable_wait_percentile_ms(const uint64_t *buckets, uint64_t total,
+                                            uint32_t percentile) {
+    if (!buckets || total == 0)
+        return 0;
+    uint64_t target = (total * percentile + 99u) / 100u;
+    if (target == 0)
+        target = 1;
+    uint64_t seen = 0;
+    for (int i = 0; i < XR_RUNNABLE_WAIT_BUCKET_COUNT; i++) {
+        seen += buckets[i];
+        if (seen >= target)
+            return runnable_wait_bucket_upper_ms(i);
+    }
+    return runnable_wait_bucket_upper_ms(XR_RUNNABLE_WAIT_BUCKET_COUNT - 1);
+}
+
 // Get current thread's Worker
 XrWorker *xr_current_worker(void) {
     return tls_current_worker;
@@ -661,6 +685,8 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_fast_dispatch_empty = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
+    uint64_t wait_buckets[XR_RUNNABLE_WAIT_BUCKET_COUNT] = {0};
+    uint64_t wait_sample_count = 0;
     uint64_t total_blocked = 0;
     for (int i = 0; i < runtime->worker_count; i++) {
         XrProc *p = &runtime->workers[i].p;
@@ -715,6 +741,10 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         if (p->stats.runnable_wait_max_ms > max_wait_ms) {
             max_wait_ms = p->stats.runnable_wait_max_ms;
         }
+        for (int bi = 0; bi < XR_RUNNABLE_WAIT_BUCKET_COUNT; bi++) {
+            wait_buckets[bi] += p->stats.runnable_wait_buckets[bi];
+            wait_sample_count += p->stats.runnable_wait_buckets[bi];
+        }
         total_prio_boost += p->stats.priority_boost_count;
         if (p->blocked_count > 0) {
             total_blocked += (uint64_t) p->blocked_count;
@@ -761,9 +791,12 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             stats_percent_u64(total_steal_backoff, total_steal_try + total_steal_backoff),
             stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
     fprintf(stderr,
-            "Runnable wait: total_ms=%llu avg_ms=%.3f max_ms=%llu dispatches=%llu "
-            "priority_boost=%llu\n",
+            "Runnable wait: total_ms=%llu avg_ms=%.3f p50_ms=%llu p95_ms=%llu p99_ms=%llu "
+            "max_ms=%llu dispatches=%llu priority_boost=%llu\n",
             (unsigned long long) total_wait_ms, stats_ratio_u64(total_wait_ms, ready_dispatches),
+            (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 50),
+            (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 95),
+            (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 99),
             (unsigned long long) max_wait_ms, (unsigned long long) ready_dispatches,
             (unsigned long long) total_prio_boost);
     fprintf(

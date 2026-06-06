@@ -918,16 +918,7 @@ static void worker_record_direct_steal_dispatch(XrWorker *worker, XrCoroutine *c
     if (!worker || !coro)
         return;
     worker->p.stats.steal_direct_dispatch_count++;
-    if (coro->submit_time <= 0)
-        return;
-    int64_t wait_ms = now - coro->submit_time;
-    if (wait_ms <= 0)
-        return;
-    uint64_t wait = (uint64_t) wait_ms;
-    worker->p.stats.runnable_wait_ms += wait;
-    if (wait > worker->p.stats.runnable_wait_max_ms) {
-        worker->p.stats.runnable_wait_max_ms = wait;
-    }
+    xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, now);
 }
 
 static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len,
