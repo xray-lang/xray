@@ -88,6 +88,8 @@ typedef struct XrChanWakeCmdQueue {
 
 /* ========== Per-P Statistics (cache-line aligned) ========== */
 
+#define XR_RUNNABLE_WAIT_BUCKET_COUNT 16
+
 // XrProcStats — owner-written per-Worker counters, aggregated by
 // xr_runtime_print_stats and coro leak detection.
 //
@@ -132,8 +134,36 @@ typedef struct XrProcStats {
     uint64_t timer_burst_count;     // Timer batches that required more passes
     uint64_t runnable_wait_ms;      // Accumulated ready-queue wait before dispatch
     uint64_t runnable_wait_max_ms;  // Max ready-queue wait observed by this worker
+    uint64_t runnable_wait_buckets[XR_RUNNABLE_WAIT_BUCKET_COUNT];
     uint64_t priority_boost_count;  // Dispatches selected by aging boost
 } XrProcStats;
+
+static inline int xr_runnable_wait_bucket(uint64_t wait_ms) {
+    int bucket = 0;
+    uint64_t limit = 1;
+    while (bucket + 1 < XR_RUNNABLE_WAIT_BUCKET_COUNT && wait_ms > limit) {
+        limit <<= 1;
+        bucket++;
+    }
+    return bucket;
+}
+
+static inline void xr_proc_stats_record_runnable_wait(XrProcStats *stats, XrCoroutine *coro,
+                                                      int64_t now) {
+    if (!stats || !coro)
+        return;
+    if (coro->submit_time <= 0)
+        return;
+    int64_t wait_ms = now - coro->submit_time;
+    if (wait_ms <= 0)
+        return;
+    uint64_t wait = (uint64_t) wait_ms;
+    stats->runnable_wait_ms += wait;
+    if (wait > stats->runnable_wait_max_ms) {
+        stats->runnable_wait_max_ms = wait;
+    }
+    stats->runnable_wait_buckets[xr_runnable_wait_bucket(wait)]++;
+}
 
 /* ========== Run Queue (Chase-Lev deque + overflow) ========== */
 
