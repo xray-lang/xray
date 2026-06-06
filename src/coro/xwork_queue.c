@@ -143,6 +143,18 @@ static XrRuntime *work_queue_runtime(XrWorkQueue *q) {
     return (XrRuntime *) q->isolate->vm.runtime;
 }
 
+static XrRuntime *work_queue_stats_runtime(XrWorkQueue *q) {
+    XrRuntime *runtime = work_queue_runtime(q);
+    return xr_sched_stats_enabled(runtime) ? runtime : NULL;
+}
+
+#define WORK_QUEUE_METRIC_INC(q, field)                                                            \
+    do {                                                                                           \
+        XrRuntime *_rt = work_queue_stats_runtime((q));                                            \
+        if (_rt)                                                                                   \
+            xr_sched_metric_inc(_rt, &_rt->sched_stats.field);                                     \
+    } while (0)
+
 static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) {
     XR_DCHECK(q != NULL, "work_queue_waiter_enqueue_locked: NULL queue");
     XR_DCHECK(coro != NULL, "work_queue_waiter_enqueue_locked: NULL coro");
@@ -159,6 +171,7 @@ static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) 
     }
     q->wait_last = coro;
     atomic_fetch_add_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    WORK_QUEUE_METRIC_INC(q, work_queue_block_count);
     return true;
 }
 
@@ -193,6 +206,7 @@ static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
     if (!xr_coro_claim_wake(coro))
         return false;
 
+    WORK_QUEUE_METRIC_INC(q, work_queue_wake_count);
     xr_coro_resume_store(coro, XR_RESUME_OK);
     int target_id = xr_coro_wake_target_id(coro);
     if (target_id < 0 || target_id >= runtime->worker_count)
@@ -241,7 +255,8 @@ static void work_queue_wake_all(XrWorkQueue *q) {
             list->ext->wait_link = NULL;
             list->ext->wait_prev = NULL;
         }
-        (void) work_queue_ready_waiter(q, list);
+        if (work_queue_ready_waiter(q, list))
+            WORK_QUEUE_METRIC_INC(q, work_queue_close_wake_count);
         list = next;
     }
 }
@@ -273,6 +288,7 @@ static XrValue work_queue_try_pop_raw(XrWorkQueue *q, int64_t worker_hint, bool 
     }
 
     *ok = false;
+    WORK_QUEUE_METRIC_INC(q, work_queue_pop_empty_count);
     return xr_null();
 }
 
@@ -344,8 +360,10 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
             atomic_fetch_add_explicit(&q->length, 1, memory_order_release);
     }
     xr_amutex_unlock(&shard->lock);
-    if (ok)
+    if (ok) {
+        WORK_QUEUE_METRIC_INC(q, work_queue_push_count);
         work_queue_wake_one(q);
+    }
     return ok;
 }
 
@@ -356,8 +374,14 @@ static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool o
     xr_amutex_lock(&shard->lock);
     ok = own_shard ? shard_pop_tail(shard, out) : shard_pop_head(shard, out);
     xr_amutex_unlock(&shard->lock);
-    if (ok)
+    if (ok) {
         atomic_fetch_sub_explicit(&q->length, 1, memory_order_release);
+        if (own_shard) {
+            WORK_QUEUE_METRIC_INC(q, work_queue_pop_local_count);
+        } else {
+            WORK_QUEUE_METRIC_INC(q, work_queue_pop_steal_count);
+        }
+    }
     return ok;
 }
 
@@ -374,6 +398,7 @@ XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hin
 void xr_work_queue_close(XrWorkQueue *q) {
     if (!q)
         return;
+    WORK_QUEUE_METRIC_INC(q, work_queue_close_count);
     atomic_store_explicit(&q->closed, true, memory_order_release);
     work_queue_wake_all(q);
 }
@@ -554,3 +579,5 @@ void xr_work_queue_register_native_type(XrayIsolate *isolate) {
     };
     xr_register_native_type(isolate, &info);
 }
+
+#undef WORK_QUEUE_METRIC_INC

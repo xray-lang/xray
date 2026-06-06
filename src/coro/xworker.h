@@ -125,6 +125,14 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t inject_spill_count;
     _Atomic uint64_t inject_push_batch_count;
     _Atomic uint64_t inject_pop_batch_count;
+    _Atomic uint64_t work_queue_push_count;
+    _Atomic uint64_t work_queue_pop_local_count;
+    _Atomic uint64_t work_queue_pop_steal_count;
+    _Atomic uint64_t work_queue_pop_empty_count;
+    _Atomic uint64_t work_queue_block_count;
+    _Atomic uint64_t work_queue_wake_count;
+    _Atomic uint64_t work_queue_close_count;
+    _Atomic uint64_t work_queue_close_wake_count;
     _Atomic uint64_t handoff_reuse_count;
     _Atomic uint64_t handoff_create_count;
     _Atomic uint64_t handoff_cap_hit_count;
