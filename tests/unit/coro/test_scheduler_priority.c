@@ -280,6 +280,35 @@ TEST(coro_ready_without_current_worker_routes_to_inbox) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(blocked_transition_helper_synchronizes_state_shadow_bits) {
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
+
+    ASSERT_TRUE(xr_coro_try_transition_to_blocked(&coro));
+    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_BLOCKED);
+    uint32_t raw_flags = atomic_load(&coro.flags);
+    ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_READY) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_RUNNING) != 0);
+
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_BLOCKED);
+
+    ASSERT_TRUE(xr_coro_try_transition_to_blocked(&coro));
+    raw_flags = atomic_load(&coro.flags);
+    ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_READY) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_RUNNING) != 0);
+
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_READY);
+
+    ASSERT_FALSE(xr_coro_try_transition_to_blocked(&coro));
+    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_READY);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Priority");
@@ -289,5 +318,6 @@ RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_high_work);
 RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
+RUN_TEST(blocked_transition_helper_synchronizes_state_shadow_bits);
 
 TEST_MAIN_END()

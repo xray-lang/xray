@@ -225,8 +225,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
         }
         case XR_CORO_RUN_YIELD:
             xr_coro_resume_store(coro, XR_RESUME_OK);
-            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
-            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+            xr_coro_transition_to_ready(coro);
             xr_worker_push(worker, coro);
             worker->p.stats.yielded_count++;
             worker->p.yield_streak++;
@@ -240,7 +239,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             break;
 
         case XR_CORO_RUN_DEBUG_BREAK:
-            xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED);
+            (void) xr_coro_try_transition_to_blocked(coro);
             if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
                 atomic_store(&runtime->running, false);
                 return true;

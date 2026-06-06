@@ -1088,15 +1088,8 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
     } else if (result == XR_VM_BLOCKED) {
         // Channel blocks: BLOCKED already set inside xr_channel_recv/send
         // under lock.  Non-channel blocks (await,
-        // timer): coro is still RUNNING.  CAS handles both correctly.
-        uint8_t _exp = XR_CORO_STATE_RUNNING;
-        if (atomic_compare_exchange_strong_explicit(&coro->coro_state, &_exp, XR_CORO_STATE_BLOCKED,
-                                                    memory_order_release, memory_order_relaxed)) {
-            atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_RUNNING,
-                                      memory_order_relaxed);
-            atomic_fetch_or_explicit(&coro->flags, (uint32_t) XR_CORO_FLG_BLOCKED,
-                                     memory_order_release);
-        }
+        // timer): coro is still RUNNING. The shared helper handles both.
+        (void) xr_coro_try_transition_to_blocked(coro);
     } else if (result == XR_VM_YIELD) {
         xr_coro_transition_to_ready(coro);
     }
@@ -1214,28 +1207,18 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         return result;
     }
     if (result == XR_VM_DEBUG_BREAK) {
-        xr_coro_flags_clear(coro, XR_CORO_FLG_RUNNING);
-        xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED);
+        (void) xr_coro_try_transition_to_blocked(coro);
         // Don't clear current_coro — caller handles debug break.
         ctx->current_coro = NULL;
         return result;
     }
     if (result == XR_VM_BLOCKED || result == XR_VM_YIELD) {
         if (result == XR_VM_YIELD) {
-            xr_coro_flags_clear(coro, XR_CORO_FLG_RUNNING);
-            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
+            xr_coro_transition_to_ready(coro);
         } else {
             // Channel blocks set BLOCKED under lock; await/timer leave RUNNING.
-            // CAS handles both: only swap if still RUNNING.
-            uint8_t _exp = XR_CORO_STATE_RUNNING;
-            if (atomic_compare_exchange_strong_explicit(&coro->coro_state, &_exp,
-                                                        XR_CORO_STATE_BLOCKED, memory_order_release,
-                                                        memory_order_relaxed)) {
-                atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_RUNNING,
-                                          memory_order_relaxed);
-                atomic_fetch_or_explicit(&coro->flags, (uint32_t) XR_CORO_FLG_BLOCKED,
-                                         memory_order_release);
-            }
+            // The shared helper handles both states without regressing READY.
+            (void) xr_coro_try_transition_to_blocked(coro);
         }
         if (result == XR_VM_BLOCKED && coro->ext &&
             atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
