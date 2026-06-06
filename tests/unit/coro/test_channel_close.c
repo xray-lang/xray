@@ -568,6 +568,122 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroExt sender_ext;
+    memset(&sender, 0, sizeof(sender));
+    memset(&sender_ext, 0, sizeof(sender_ext));
+    sender.id = 302;
+    sender.isolate = &f.isolate_storage;
+    sender.ext = &sender_ext;
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&sender.resume_status, XR_RESUME_OK);
+    atomic_store(&sender.affinity_p, 0);
+
+    XrValue send_ok = xr_null();
+    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(11),
+                                                  xr_slot_xvalue_ptr(&send_ok), -1);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_PTR(ch->sendq.first, &sender);
+    ASSERT_EQ_PTR(ch->sendq.last, &sender);
+
+    xr_worker_block(&f.worker, &sender);
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 1);
+    ASSERT_NOT_NULL(sender_ext.wait_bucket);
+
+    xr_coro_cancel(&sender);
+
+    ASSERT_NULL(ch->sendq.first);
+    ASSERT_NULL(ch->sendq.last);
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 0);
+    ASSERT_NULL(worker_blocked_bucket_find(&f.worker, ch));
+    ASSERT_NULL(sender_ext.chan_wait_queue);
+    ASSERT_NULL(sender_ext.chan_wait_next);
+    ASSERT_NULL(sender_ext.chan_wait_prev);
+    ASSERT_NULL(sender_ext.wait_bucket);
+    ASSERT_NULL(sender_ext.wait_link);
+    ASSERT_NULL(sender_ext.wait_prev);
+    ASSERT_NULL(atomic_load(&sender_ext.wait_channel));
+    ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_CANCELLED);
+    ASSERT_TRUE(xr_coro_flags_has(&sender, XR_CORO_FLG_DONE));
+    ASSERT_TRUE(xr_coro_flags_has(&sender, XR_CORO_FLG_CANCELLED));
+    ASSERT_FALSE(xr_coro_flags_has(&sender, XR_CORO_FLG_BLOCKED));
+
+    xr_channel_close(ch);
+    ASSERT_NULL(xr_worker_pop(&f.worker));
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
+TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
+    WakeRouteFixture f;
+    ASSERT_TRUE(wake_route_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroExt sender_ext;
+    memset(&sender, 0, sizeof(sender));
+    memset(&sender_ext, 0, sizeof(sender_ext));
+    sender.id = 303;
+    sender.isolate = &f.isolate_storage;
+    sender.ext = &sender_ext;
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&sender.resume_status, XR_RESUME_OK);
+    atomic_store(&sender.affinity_p, 1);
+
+    tls_current_worker = &f.workers[1];
+    tls_current_machine = &f.machines[1];
+    XrValue send_ok = xr_null();
+    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(12),
+                                                  xr_slot_xvalue_ptr(&send_ok), -1);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    xr_worker_block(&f.workers[1], &sender);
+    ASSERT_EQ_INT(f.workers[1].p.blocked_count, 1);
+    ASSERT_EQ_INT(sender_ext.wait_bucket_owner, 1);
+
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = &f.machines[0];
+    xr_coro_cancel(&sender);
+
+    ASSERT_NULL(ch->sendq.first);
+    ASSERT_NULL(ch->sendq.last);
+    ASSERT_EQ_INT(f.workers[1].p.blocked_count, 1);
+    ASSERT_NOT_NULL(sender_ext.wait_bucket);
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 1);
+
+    tls_current_worker = &f.workers[1];
+    tls_current_machine = &f.machines[1];
+    worker_drain_inbox(&f.workers[1]);
+
+    ASSERT_EQ_INT(f.workers[1].p.blocked_count, 0);
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 0);
+    ASSERT_NULL(worker_blocked_bucket_find(&f.workers[1], ch));
+    ASSERT_NULL(sender_ext.wait_bucket);
+    ASSERT_NULL(sender_ext.wait_link);
+    ASSERT_NULL(sender_ext.wait_prev);
+    ASSERT_NULL(xr_worker_pop(&f.workers[1]));
+    ASSERT_TRUE(xr_coro_flags_has(&sender, XR_CORO_FLG_DONE));
+    ASSERT_TRUE(xr_coro_flags_has(&sender, XR_CORO_FLG_CANCELLED));
+
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = &f.machines[0];
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    wake_route_fixture_cleanup(&f);
+}
+
 TEST(await_wait_token_tracks_register_resolve_and_resume) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -875,6 +991,8 @@ RUN_TEST(channel_wake_command_batches_ready_waiters);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
+RUN_TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues);
+RUN_TEST(channel_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);
 RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);

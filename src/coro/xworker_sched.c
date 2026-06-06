@@ -233,6 +233,11 @@ void worker_drain_inbox(XrWorker *worker) {
         if (list->ext && list->ext->wait_bucket && list->ext->wait_bucket_owner == worker->p.id) {
             xr_worker_unblock(worker, list);
         }
+        if (xr_coro_flags_has(list, XR_CORO_FLG_DONE)) {
+            list = next;
+            count++;
+            continue;
+        }
         if (ready_last) {
             ready_last->sched_link = list;
         } else {

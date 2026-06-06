@@ -318,10 +318,9 @@ static void coro_recv_slot_reset(XrCoroExt *ext) {
     ext->recv_slot_ref = xr_slot_none();
 }
 
-static void coro_channel_wait_reset(XrCoroExt *ext) {
+static void coro_channel_wait_links_reset(XrCoroExt *ext) {
     if (!ext)
         return;
-    xr_channel_wait_token_reset(&ext->chan_wait_token);
     atomic_store_explicit(&ext->wait_channel, NULL, memory_order_relaxed);
     ext->chan_wait_next = NULL;
     ext->chan_wait_prev = NULL;
@@ -333,6 +332,13 @@ static void coro_channel_wait_reset(XrCoroExt *ext) {
     ext->wait_send = false;
     ext->send_value = xr_null();
     ext->pending_spawn = NULL;
+}
+
+static void coro_channel_wait_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    xr_channel_wait_token_reset(&ext->chan_wait_token);
+    coro_channel_wait_links_reset(ext);
 }
 
 bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child) {
@@ -817,6 +823,40 @@ void xr_gc_destroy_coroutine(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     xr_coro_free((XrCoroutine *) obj);
 }
 
+static XrRuntime *coro_cancel_runtime(XrCoroutine *coro, XrWorker *current_worker) {
+    if (current_worker && current_worker->p.runtime)
+        return current_worker->p.runtime;
+    if (coro && coro->isolate)
+        return (XrRuntime *) coro->isolate->vm.runtime;
+    return NULL;
+}
+
+static bool coro_cancel_detach_channel_waiter(XrCoroutine *coro, XrWorker *current_worker) {
+    if (!coro || !coro->ext)
+        return true;
+
+    XrCoroExt *ext = coro->ext;
+    XrChannel *ch = (XrChannel *) atomic_load_explicit(&ext->wait_channel, memory_order_acquire);
+    if (ch)
+        xr_channel_remove_waiter(ch, coro);
+
+    bool has_owner_bucket = ext->wait_bucket != NULL;
+    if (!has_owner_bucket)
+        return true;
+
+    int owner_id = ext->wait_bucket_owner;
+    if (current_worker && current_worker->p.id == owner_id) {
+        xr_worker_unblock(current_worker, coro);
+        return true;
+    }
+
+    XrRuntime *runtime = coro_cancel_runtime(coro, current_worker);
+    if (runtime && owner_id >= 0 && owner_id < runtime->worker_count) {
+        xr_worker_inbox_enqueue(runtime, owner_id, coro);
+    }
+    return false;
+}
+
 // Cancel coroutine
 // Cancel logic:
 // 1. Cancel timer if sleeping (must happen before flags change)
@@ -842,6 +882,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
 
     // Clear blocked info
     if (coro->ext) {
+        bool channel_wait_detached = coro_cancel_detach_channel_waiter(coro, xr_current_worker());
         xr_task_cancel_await_waiters(coro);
         xr_await_wait_token_cancel(&coro->ext->wait.await_token);
         xr_multi_await_wait_token_cancel(&coro->ext->wait.multi_await_token);
@@ -849,7 +890,9 @@ void xr_coro_cancel(XrCoroutine *coro) {
         xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
         xr_work_queue_cancel_waiter(coro);
-        coro_channel_wait_reset(coro->ext);
+        xr_channel_wait_token_cancel(&coro->ext->chan_wait_token);
+        if (channel_wait_detached)
+            coro_channel_wait_links_reset(coro->ext);
     }
     coro->result = xr_null();
 }
