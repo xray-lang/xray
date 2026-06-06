@@ -279,6 +279,11 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
                 xr_value_from_class(isolate->core->jsonClass);
         }
 
+        if (isolate->native_type_classes[XR_TWORKQUEUE]) {
+            isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
+                xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
+        }
+
         // process/__file__/__dir__ indices 5/6/7, user global variables start from
         // XR_USER_GLOBALS_START
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)

@@ -164,6 +164,7 @@ XR_FUNC bool xr_value_is_enum_value(XrValue v);
 #define XR_IS_TASK(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TTASK)
 #define XR_IS_CHANNEL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCHANNEL)
 #define XR_IS_COROPOOL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROPOOL)
+#define XR_IS_WORKQUEUE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TWORKQUEUE)
 /* Range is no longer a dedicated GC type; use xr_value_is_range(iso, v)
  * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)

@@ -1,6 +1,6 @@
-// Sharded work queue benchmark.
-// This benchmark compares sharded task queues against a single shared Channel
-// used as a task queue.
+// Native sharded work queue benchmark.
+// WorkQueue stores tasks; wake_ch only wakes sleepers until WorkQueue gains a
+// yieldable blocking pop operation.
 
 import time
 
@@ -12,45 +12,15 @@ if (process.args.length > 0) {
 if (process.args.length > 1) {
     TASKS = int(process.args[1]) ?? TASKS
 }
-
-class WorkQueue<T> {
-    shards: Array<Channel<T>>
-    worker_count: int
-
-    constructor(count: int, capacity: int) {
-        this.worker_count = count
-        this.shards = []
-        for (let i = 0; i < count; i++) {
-            let ch: Channel<T> = Channel(capacity)
-            this.shards.push(ch)
-        }
-    }
-
-    push(value: T, shard: int) {
-        let idx = shard % this.worker_count
-        this.shards[idx].send(value)
-    }
-
-    pop(worker_id: int) -> T? {
-        for (let i = 0; i < this.worker_count; i++) {
-            let idx = (worker_id + i) % this.worker_count
-            let (value, ok) = this.shards[idx].tryRecv()
-            if (ok) {
-                return value
-            }
-        }
-        let own = worker_id % this.worker_count
-        return this.shards[own].recv()
-    }
-
-    close() {
-        for (ch in this.shards) {
-            ch.close()
-        }
-    }
+if (WORKERS < 1) {
+    WORKERS = 1
+}
+if (TASKS < 0) {
+    TASKS = 0
 }
 
-shared const work_queue = new WorkQueue<int>(WORKERS, 1024)
+shared const work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
+shared const wake_ch = Channel(1024)
 
 print("=== Work Queue Pool 测试 ===")
 print("Worker数:", WORKERS)
@@ -81,19 +51,30 @@ fn expected_total(count: int) -> int {
 fn worker(id: int) -> int {
     let processed = 0
     while (true) {
-        let task = work_queue.pop(id)
-        if (task == null) { break }
-        result_ch.send(fib(task % 20))
-        processed++
+        let (task, ok) = work_queue.tryPop(id)
+        if (ok) {
+            let task_id = task ?? 0
+            result_ch.send(fib(task_id % 20))
+            processed++
+        } else if (work_queue.isClosed) {
+            break
+        } else {
+            wake_ch.recv()
+        }
     }
     return processed
 }
 
 fn submit_tasks(count: int) {
     for (let i = 0; i < count; i++) {
-        work_queue.push(i, i)
+        assert_true(work_queue.push(i, i))
+        wake_ch.send(1)
     }
     work_queue.close()
+    for (let i = 0; i < WORKERS; i++) {
+        wake_ch.send(1)
+    }
+    wake_ch.close()
 }
 
 let start = time.monotonic()

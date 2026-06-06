@@ -27,6 +27,7 @@
 #include "../xisolate_api.h"
 #include "../xisolate_internal.h"
 #include "../../coro/xcoroutine.h"
+#include "../../coro/xwork_queue.h"
 #include "../../coro/xworker.h"
 #include "../../coro/xdeep_copy.h"  // Per-type deep_copy / to_shared hooks
 #include <stdlib.h>
@@ -72,6 +73,9 @@ const XrTypeOps g_type_ops[XGC_MAX_TYPES] = {
 
     // Atomic — system-heap shared object (refcounted). No side resources.
     [XR_TATOMIC] = {0},
+
+    // WorkQueue — system-heap shared object with per-shard buffers.
+    [XR_TWORKQUEUE] = {.destroy = xr_gc_destroy_work_queue},
 
     // Other GC types: have destroy responsibilities, but are deliberately
     // not transferable across coroutines (the dispatchers return the raw

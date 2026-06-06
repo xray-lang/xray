@@ -42,6 +42,7 @@ XrCopyKind xr_value_copy_kind(XrValue value) {
             return XR_COPY_SHARED;
         case XR_TCHANNEL:
         case XR_TATOMIC:
+        case XR_TWORKQUEUE:
             return XR_COPY_SHARED_REF;
         case XR_TARRAY:
         case XR_TMAP:

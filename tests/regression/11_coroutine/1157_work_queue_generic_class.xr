@@ -1,7 +1,7 @@
-// Test: generic WorkQueue-style class can initialize Array<Channel<T>>
+// Test: generic queue-style class can initialize Array<Channel<T>>
 // Expected: prints "ok"
 
-class WorkQueue<T> {
+class GenericQueue<T> {
     shards: Array<Channel<T>>
     workers: int
 
@@ -39,7 +39,7 @@ class WorkQueue<T> {
 
 @test
 fn test_work_queue_generic_class() {
-    let q = new WorkQueue<int>(4, 8)
+    let q = new GenericQueue<int>(4, 8)
     q.push(10, 0)
     q.push(20, 1)
     q.push(30, 2)

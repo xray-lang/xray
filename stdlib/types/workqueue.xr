@@ -1,0 +1,11 @@
+// Built-in WorkQueue<T> type; implemented by the runtime.
+
+@native
+class WorkQueue<T> {
+    length: int
+    shardCount: int
+    isClosed: bool
+    push(value: T, shard?: int) -> bool
+    tryPop(workerId?: int): (T?, bool)
+    close()
+}
