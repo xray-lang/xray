@@ -1178,10 +1178,7 @@ send_locked:
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
     coro->ext->send_value = value;  // Save value to send
-    // caller pre-saved frame state before this call,
-    // so it is safe to set BLOCKED here under the channel lock.  The coro
-    // becomes wakeable only after we enqueue + unlock below.
-    xr_coro_transition_to_blocked(coro);
+    (void) xr_coro_publish_locked_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
     if (w) {
@@ -1267,9 +1264,7 @@ recv_locked:
     channel_note_participant_locked(ch, coro, false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = false;
-    // recv_slot is owned by the backend-neutral block helper.
-    // see send path comment for rationale.
-    xr_coro_transition_to_blocked(coro);
+    (void) xr_coro_publish_locked_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
     if (w) {

@@ -74,6 +74,16 @@ XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, stru
 XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struct XrArray *tasks,
                                                  bool success_only);
 
+/* Runtime wait queues call this while holding the queue lock after wait
+ * metadata is installed. The waiter becomes externally wakeable only after
+ * the caller links it into the queue and releases that lock. */
+XR_FUNC bool xr_coro_publish_locked_block(struct XrCoroutine *coro);
+
+/* Backends call this after their continuation/frame state is quiescent and
+ * before returning XR_CORO_RUN_BLOCKED to the scheduler. Channel helpers may
+ * already publish BLOCKED under a channel lock; other wait helpers leave the
+ * coroutine RUNNING until the backend reaches this boundary. */
+XR_FUNC bool xr_coro_finalize_blocked_suspend(struct XrCoroutine *coro);
 XR_FUNC void xr_coro_finish_backend_resume_tokens(struct XrCoroutine *coro, int resume_status);
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
 XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,

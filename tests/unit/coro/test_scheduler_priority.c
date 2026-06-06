@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "base/xconstants.h"
+#include "coro/xblock.h"
 #include "coro/xscheduler_policy.h"
 #include "coro/xworker_internal.h"
 #include "runtime/gc/xsystem_heap.h"
@@ -403,6 +404,56 @@ TEST(blocked_transition_helper_synchronizes_state_shadow_bits) {
     ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_READY);
 }
 
+TEST(blocked_suspend_finalize_accepts_backend_and_channel_block_states) {
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    atomic_store(&coro.flags, XR_CORO_FLG_RUNNING | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
+
+    ASSERT_TRUE(xr_coro_finalize_blocked_suspend(&coro));
+    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_BLOCKED);
+    uint32_t raw_flags = atomic_load(&coro.flags);
+    ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_READY) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_RUNNING) != 0);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(raw_flags), XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
+
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_WAIT_CHANNEL_RECV |
+                                  XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_BLOCKED);
+
+    ASSERT_TRUE(xr_coro_finalize_blocked_suspend(&coro));
+    raw_flags = atomic_load(&coro.flags);
+    ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_READY) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_RUNNING) != 0);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(raw_flags),
+                  XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
+
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_READY);
+
+    ASSERT_FALSE(xr_coro_finalize_blocked_suspend(&coro));
+    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_READY);
+}
+
+TEST(locked_block_publish_synchronizes_state_shadow_bits) {
+    XrCoroutine coro;
+    memset(&coro, 0, sizeof(coro));
+    atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_WAIT_CHANNEL_SEND |
+                                  XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
+
+    ASSERT_TRUE(xr_coro_publish_locked_block(&coro));
+    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_BLOCKED);
+    uint32_t raw_flags = atomic_load(&coro.flags);
+    ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_READY) != 0);
+    ASSERT_FALSE((raw_flags & XR_CORO_FLG_RUNNING) != 0);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(raw_flags),
+                  XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Priority");
@@ -414,5 +465,7 @@ RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_high_work);
 RUN_TEST(steal_uses_effective_priority_for_aged_remote_work);
 RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
 RUN_TEST(blocked_transition_helper_synchronizes_state_shadow_bits);
+RUN_TEST(blocked_suspend_finalize_accepts_backend_and_channel_block_states);
+RUN_TEST(locked_block_publish_synchronizes_state_shadow_bits);
 
 TEST_MAIN_END()

@@ -1086,10 +1086,7 @@ static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolat
         coro->result = coro_ctx->stack[0];
         xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
     } else if (result == XR_VM_BLOCKED) {
-        // Channel blocks: BLOCKED already set inside xr_channel_recv/send
-        // under lock.  Non-channel blocks (await,
-        // timer): coro is still RUNNING. The shared helper handles both.
-        (void) xr_coro_try_transition_to_blocked(coro);
+        (void) xr_coro_finalize_blocked_suspend(coro);
     } else if (result == XR_VM_YIELD) {
         xr_coro_transition_to_ready(coro);
     }
@@ -1216,9 +1213,7 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
         if (result == XR_VM_YIELD) {
             xr_coro_transition_to_ready(coro);
         } else {
-            // Channel blocks set BLOCKED under lock; await/timer leave RUNNING.
-            // The shared helper handles both states without regressing READY.
-            (void) xr_coro_try_transition_to_blocked(coro);
+            (void) xr_coro_finalize_blocked_suspend(coro);
         }
         if (result == XR_VM_BLOCKED && coro->ext &&
             atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {

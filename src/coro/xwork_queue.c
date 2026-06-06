@@ -22,6 +22,7 @@
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xshared.h"
 #include "../vm/xvm.h"
+#include "xblock.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
 #include "xworker.h"
@@ -630,7 +631,7 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     XrWorker *worker_state = xr_current_worker();
     if (worker_state)
         atomic_store_explicit(&coro->affinity_p, worker_state->p.id, memory_order_relaxed);
-    xr_coro_transition_to_blocked(coro);
+    (void) xr_coro_publish_locked_block(coro);
     if (!work_queue_waiter_enqueue_locked(q, coro)) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
