@@ -259,14 +259,7 @@ static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const c
     return false;
 }
 
-static bool cg_is_time_sleep_call(const XiFunc *f, const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs != 2)
-        return false;
-    const char *method = (const char *) v->aux;
-    if (!method || strcmp(method, "sleep") != 0)
-        return false;
-    return cg_value_is_module_import(f, v->args[0], "time");
-}
+#include "xi_cgen_time_helpers.inc"
 
 static bool cg_value_needs_aot_coro(const XiFunc *f, const XiValue *v) {
     if (!v)
@@ -1116,13 +1109,13 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 }
                 /* GT/GE: swap operands → xrt_lt(b,a) / xrt_le(b,a) */
                 if (v->op == XI_GT || v->op == XI_GE) {
-                    emit_vref(out, v->args[1]);
+                    emit_boxed_value_ref(out, v->args[1]);
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[0]);
+                    emit_boxed_value_ref(out, v->args[0]);
                 } else {
-                    emit_vref(out, v->args[0]);
+                    emit_boxed_value_ref(out, v->args[0]);
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[1]);
+                    emit_boxed_value_ref(out, v->args[1]);
                 }
                 fprintf(out, ")");
             } else {
@@ -1264,17 +1257,58 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
 
         /* Convert */
-        case XI_CONVERT:
+        case XI_CONVERT: {
+            XrRep dst_rep = cg_rep(v);
+            XrRep src_rep = cg_rep(v->args[0]);
             if (v->type->kind == XR_KIND_FLOAT) {
-                fprintf(out, "(double)");
-                emit_vref(out, v->args[0]);
+                if (dst_rep == XR_REP_TAGGED) {
+                    fprintf(out, "xrt_to_float(");
+                    emit_boxed_value_ref(out, v->args[0]);
+                    fprintf(out, ")");
+                } else if (src_rep == XR_REP_TAGGED) {
+                    fprintf(out, "XR_TO_FLOAT(xrt_to_float(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, "))");
+                } else {
+                    fprintf(out, "(double)");
+                    emit_vref(out, v->args[0]);
+                }
             } else if (v->type->kind == XR_KIND_INT) {
-                fprintf(out, "(int64_t)");
-                emit_vref(out, v->args[0]);
+                if (dst_rep == XR_REP_TAGGED) {
+                    fprintf(out, "xrt_to_int(");
+                    emit_boxed_value_ref(out, v->args[0]);
+                    fprintf(out, ")");
+                } else if (src_rep == XR_REP_TAGGED) {
+                    fprintf(out, "XR_TO_INT(xrt_to_int(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, "))");
+                } else {
+                    fprintf(out, "(int64_t)");
+                    emit_vref(out, v->args[0]);
+                }
+            } else if (v->type->kind == XR_KIND_STRING) {
+                fprintf(out, "xrt_to_string(");
+                emit_boxed_value_ref(out, v->args[0]);
+                fprintf(out, ")");
+            } else if (v->type->kind == XR_KIND_BOOL) {
+                if (dst_rep == XR_REP_TAGGED) {
+                    fprintf(out, "xrt_to_bool(");
+                    emit_boxed_value_ref(out, v->args[0]);
+                    fprintf(out, ")");
+                } else if (src_rep == XR_REP_TAGGED) {
+                    fprintf(out, "XR_TO_INT(xrt_to_bool(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, "))");
+                } else {
+                    fprintf(out, "(");
+                    emit_vref(out, v->args[0]);
+                    fprintf(out, " != 0)");
+                }
             } else {
                 emit_vref(out, v->args[0]);
             }
             break;
+        }
 
         /* Function call: args[0]=callee, args[1..n]=params */
         case XI_CALL: {
@@ -1693,6 +1727,25 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
             const XiFunc *mfunc = NULL;
             const char *method_prefix = NULL;
+            const char *time_helper = cg_time_module_helper(f, v);
+
+            if (cg_is_time_module_call(f, v)) {
+                if (!time_helper) {
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
+                            method ? method : "?");
+                    emit_codegen_abort_expr(out);
+                    break;
+                }
+                if (cg_rep(v) == XR_REP_I64)
+                    fprintf(out, "XR_TO_INT(");
+                else if (cg_rep(v) == XR_REP_F64)
+                    fprintf(out, "XR_TO_FLOAT(");
+                fprintf(out, "%s()", time_helper);
+                if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+                    fprintf(out, ")");
+                break;
+            }
 
             if (is_super && ctx->module) {
                 /* super call: find which class owns the current method,
@@ -2114,9 +2167,14 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 }
             }
             if (!found) {
-                fprintf(out, "XR_NULL_VAL /* unresolved import: %s.%s */",
-                        ref && ref->module_path ? ref->module_path : "?",
-                        ref && ref->member_name ? ref->member_name : "?");
+                if (ref && ref->module_path && !ref->member_name &&
+                    strcmp(ref->module_path, "time") == 0) {
+                    fprintf(out, "XR_NULL_VAL /* builtin module: time */");
+                } else {
+                    fprintf(out, "XR_NULL_VAL /* unresolved import: %s.%s */",
+                            ref && ref->module_path ? ref->module_path : "?",
+                            ref && ref->member_name ? ref->member_name : "?");
+                }
             }
             break;
         }
@@ -2818,7 +2876,7 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
     bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
                          cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
 
-    fprintf(out, "int main(void) {\n");
+    fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_bump_enabled = 1;\n");
     fprintf(out, "    xrt_arc_init();\n");
     if (entry_is_coro) {
@@ -2829,6 +2887,11 @@ XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, 
         fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
         fprintf(out, "    if (!X) return 1;\n");
         fprintf(out, "    xr_multicore_init(X, 0);\n");
+        fprintf(out, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
+                     "argc > 1 ? argv + 1 : NULL);\n");
+    } else {
+        fprintf(out, "    (void) argc;\n");
+        fprintf(out, "    (void) argv;\n");
     }
     for (int m = 0; m < n; m++) {
         if (!modules[m] || !modules[m]->init)
@@ -2899,7 +2962,7 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     xi_cgen_func(ctx, out, main_func, prefix);
 
     /* Entry point */
-    fprintf(out, "int main(void) {\n");
+    fprintf(out, "int main(int argc, char **argv) {\n");
     fprintf(out, "    xrt_bump_enabled = 1;\n");
     fprintf(out, "    xrt_arc_init();\n");
     if (cg_func_needs_aot_coro_ctx(ctx, main_func)) {
@@ -2910,6 +2973,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
         fprintf(out, "    if (!X) return 1;\n");
         fprintf(out, "    xr_multicore_init(X, 0);\n");
+        fprintf(out, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
+                     "argc > 1 ? argv + 1 : NULL);\n");
         fprintf(out, "    void *_entry_frame = ");
         emit_fname_suffix(ctx, out, prefix, main_func, "_aot_frame_new");
         fprintf(out, "();\n");
@@ -2919,6 +2984,8 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
         fprintf(out, "    xr_multicore_destroy(X);\n");
         fprintf(out, "    xray_isolate_delete(X);\n");
     } else {
+        fprintf(out, "    (void) argc;\n");
+        fprintf(out, "    (void) argv;\n");
         fprintf(out, "    ");
         emit_fname(ctx, out, prefix, main_func);
         fprintf(out, "(NULL);\n");

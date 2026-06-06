@@ -120,9 +120,9 @@ void xr_core_init(XrayIsolate *X) {
     // Process class with fields
     {
         XrClassBuilder *builder = xr_class_builder_new(X, "Process", X->core->objectClass);
-        xr_class_builder_add_field(builder, "file", 0);
-        xr_class_builder_add_field(builder, "args", 0);
-        xr_class_builder_add_field(builder, "dir", 0);
+        xr_class_builder_add_field(builder, "file", PROCESS_FIELD_FILE);
+        xr_class_builder_add_field(builder, "args", PROCESS_FIELD_ARGS);
+        xr_class_builder_add_field(builder, "dir", PROCESS_FIELD_DIR);
         X->core->processClass = xr_class_builder_finalize(builder);
     }
 

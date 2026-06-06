@@ -49,6 +49,9 @@
 # 同时采集调度器统计指标
 ./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --sched-stats --json docs/bench/coro-sched.json
 
+# 增加 xray AOT 对照；AOT 编译失败会记录为 build-fail，不计作运行速度
+./scripts/run_coro_benchmark.sh --aot --tests pingpong,parallel_sum --args "100000"
+
 # 只跑部分场景
 ./scripts/run_coro_benchmark.sh --tests producer_consumer,select_multiplex,thundering_herd
 ```
@@ -63,6 +66,9 @@ cd tests/coro_benchmark/spawn && go run spawn.go
 
 # 同时设置 Go 的 GOMAXPROCS 与 xray 的 XRAY_WORKERS
 ./scripts/run_coro_benchmark.sh --all --workers 1,2,4,8 --json docs/bench/coro-xray-go.json
+
+# 同时运行 xray VM、xray AOT 和 Go
+./scripts/run_coro_benchmark.sh --all-backends --workers 1,2,4,8 --json docs/bench/coro-all-backends.json
 ```
 
 ## 测试参数

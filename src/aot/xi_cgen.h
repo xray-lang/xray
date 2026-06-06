@@ -62,7 +62,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, struct XiModule **mo
  * bodies.  Does NOT emit #includes or main(). */
 XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, struct XiModule *module);
 
-/* Emit int main(void) calling module inits in topo order. */
+/* Emit main() calling module inits in topo order. */
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int n,
                           int entry_index);
 

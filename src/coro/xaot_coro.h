@@ -120,6 +120,14 @@ XR_FUNC void *xr_aot_frame_alloc(size_t size);
 XR_FUNC void xr_aot_frame_free(void *frame);
 XR_FUNC void xr_aot_trace_frame_value(void *visitor, XrValue value);
 XR_FUNC void xr_aot_release_frame_value(struct XrCoroGC *gc, XrValue value);
+XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
+XR_FUNC XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index,
+                                          const char *field);
+XR_FUNC XrValue xr_aot_time_now(void);
+XR_FUNC XrValue xr_aot_time_monotonic(void);
+XR_FUNC XrValue xr_aot_time_nanos(void);
+XR_FUNC XrValue xr_aot_time_micros(void);
+XR_FUNC XrValue xr_aot_time_clock(void);
 
 XR_FUNC struct XrCoroutine *xr_coro_create_aot(struct XrayIsolate *X, const XrAotCoroDesc *desc,
                                                void *frame, const char *name);

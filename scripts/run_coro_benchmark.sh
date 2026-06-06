@@ -24,6 +24,7 @@ fi
 
 RUN_GO=false
 RUN_XRAY=true
+RUN_XRAY_AOT=false
 JSON_OUTPUT=""
 WORKERS_LIST=""
 TEST_FILTER=""
@@ -51,12 +52,15 @@ TESTS=(
 
 usage() {
     cat <<EOF
-Usage: $0 [--go] [--xray-only] [--all] [--json FILE] [--workers LIST] [--tests LIST] [--args ARGS] [--sched-stats] [--xray-bin PATH]
+Usage: $0 [--go] [--aot] [--xray-only] [--aot-only] [--all] [--all-backends] [--json FILE] [--workers LIST] [--tests LIST] [--args ARGS] [--sched-stats] [--xray-bin PATH]
 
 Options:
   --go              Run Go benchmarks in addition to xray.
+  --aot             Run xray AOT benchmarks in addition to xray.
   --xray-only       Run only xray benchmarks (default).
+  --aot-only        Run only xray AOT benchmarks.
   --all             Run xray and Go benchmarks.
+  --all-backends    Run xray, xray AOT, and Go benchmarks.
   --json FILE       Also write machine-readable results as JSON.
   --workers LIST    Comma-separated worker counts, e.g. 1,2,4,8.
   --tests LIST      Comma-separated benchmark names.
@@ -73,14 +77,32 @@ while [[ $# -gt 0 ]]; do
             RUN_GO=true
             shift
             ;;
+        --aot)
+            RUN_XRAY_AOT=true
+            shift
+            ;;
         --xray-only)
             RUN_GO=false
             RUN_XRAY=true
+            RUN_XRAY_AOT=false
+            shift
+            ;;
+        --aot-only)
+            RUN_GO=false
+            RUN_XRAY=false
+            RUN_XRAY_AOT=true
             shift
             ;;
         --all)
             RUN_GO=true
             RUN_XRAY=true
+            RUN_XRAY_AOT=false
+            shift
+            ;;
+        --all-backends)
+            RUN_GO=true
+            RUN_XRAY=true
+            RUN_XRAY_AOT=true
             shift
             ;;
         --json)
@@ -153,7 +175,7 @@ else
     WORKERS=("")
 fi
 
-if $RUN_XRAY && [ ! -f "$XRAY_BIN" ]; then
+if { $RUN_XRAY || $RUN_XRAY_AOT; } && [ ! -f "$XRAY_BIN" ]; then
     echo -e "${RED}错误: xray 未编译或路径不存在: $XRAY_BIN${NC}" >&2
     exit 1
 fi
@@ -421,6 +443,35 @@ run_one() {
             "${xray_cmd[@]}" > "$out_file" 2>&1
         fi
         exit_code=$?
+    elif [ "$runtime" = "xray-aot" ]; then
+        local xr_file="$test_dir/$test_name.xr"
+        if [ ! -f "$xr_file" ]; then
+            set -e
+            record_result "$test_name" "$runtime" "$workers" "missing" 127 0 "" "" ""
+            echo -e "${YELLOW}跳过: $xr_file 不存在${NC}"
+            return
+        fi
+        local aot_bin="$TMP_DIR/${test_name}_${workers:-default}_aot"
+        local build_log="$TMP_DIR/${test_name}_${workers:-default}_aot_build.log"
+        if ! "$XRAY_BIN" build --native "$xr_file" -o "$aot_bin" > "$build_log" 2>&1; then
+            set -e
+            end_ms=$(now_ms)
+            wall_ms=$((end_ms - start_ms))
+            cat "$build_log"
+            record_result "$test_name" "$runtime" "$workers" "build-fail" 125 "$wall_ms" "" "" ""
+            echo -e "${RED}${runtime} 构建失败${NC}"
+            return
+        fi
+        if [ "$ENABLE_SCHED_STATS" = true ] && [ -n "$workers" ]; then
+            XRAY_WORKERS="$workers" XRAY_SCHED_STATS=1 "$aot_bin" "${bench_args[@]}" > "$out_file" 2>&1
+        elif [ "$ENABLE_SCHED_STATS" = true ]; then
+            XRAY_SCHED_STATS=1 "$aot_bin" "${bench_args[@]}" > "$out_file" 2>&1
+        elif [ -n "$workers" ]; then
+            XRAY_WORKERS="$workers" "$aot_bin" "${bench_args[@]}" > "$out_file" 2>&1
+        else
+            "$aot_bin" "${bench_args[@]}" > "$out_file" 2>&1
+        fi
+        exit_code=$?
     else
         local go_file="$test_dir/$test_name.go"
         if [ ! -f "$go_file" ]; then
@@ -454,7 +505,8 @@ run_one() {
 
     reported_time_ms=$(extract_first_number "时间:|Time:" "$out_file")
     throughput=$(extract_first_number "吞吐量:|throughput|Throughput" "$out_file")
-    if [ "$runtime" = "xray" ] && [ "$ENABLE_SCHED_STATS" = true ]; then
+    if { [ "$runtime" = "xray" ] || [ "$runtime" = "xray-aot" ]; } &&
+        [ "$ENABLE_SCHED_STATS" = true ]; then
         metrics=$(collect_sched_metrics "$out_file")
     else
         metrics=""
@@ -479,6 +531,7 @@ write_json_results() {
         json_words_array "$BENCH_ARGS"
         printf ',\n'
         printf '  "run_xray": %s,\n' "$RUN_XRAY"
+        printf '  "run_xray_aot": %s,\n' "$RUN_XRAY_AOT"
         printf '  "run_go": %s,\n' "$RUN_GO"
         printf '  "sched_stats": %s,\n' "$ENABLE_SCHED_STATS"
         printf '  "workers": '
@@ -555,6 +608,9 @@ echo "=========================================="
 echo "  xray vs Go 协程性能对比测试"
 echo "=========================================="
 echo "xray: $XRAY_BIN"
+if $RUN_XRAY_AOT; then
+    echo "xray AOT: enabled"
+fi
 if [ -n "$WORKERS_LIST" ]; then
     echo "workers: $WORKERS_LIST"
 fi
@@ -578,6 +634,18 @@ for test in "${TESTS[@]}"; do
                 echo -e "${YELLOW}[xray]${NC}"
             fi
             run_one "$test" "xray" "$workers"
+            echo ""
+        done
+    fi
+
+    if $RUN_XRAY_AOT; then
+        for workers in "${WORKERS[@]}"; do
+            if [ -n "$workers" ]; then
+                echo -e "${YELLOW}[xray AOT workers=$workers]${NC}"
+            else
+                echo -e "${YELLOW}[xray AOT]${NC}"
+            fi
+            run_one "$test" "xray-aot" "$workers"
             echo ""
         done
     fi

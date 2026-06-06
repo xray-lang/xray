@@ -1,0 +1,11 @@
+import time
+
+fn monotonic_ok() -> bool {
+    let before = time.monotonic()
+    yield
+    let after = time.monotonic()
+    return after >= before
+}
+
+let task = go monotonic_ok()
+print(await task)

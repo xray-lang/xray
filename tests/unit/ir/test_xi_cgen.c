@@ -182,8 +182,8 @@ TEST(cgen_simple_arith) {
 
     /* Should contain xrt_println or xrt_print */
     assert(contains(code, "xrt_print") && "should call xrt_print");
-    /* Should have a main function */
-    assert(contains(code, "int main(void)") && "should have main()");
+    /* Should have a main function that accepts script arguments. */
+    assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
 

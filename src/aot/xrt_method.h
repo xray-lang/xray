@@ -92,6 +92,64 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     return xr_box_str("[object]");
 }
 
+static XrValue xrt_to_int(XrValue val) {
+    if (XR_IS_INT(val))
+        return val;
+    if (XR_IS_FLOAT(val))
+        return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
+    if (XR_IS_STR(val)) {
+        const char *p = (const char *) val.ptr;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+            p++;
+        char *end = NULL;
+        long long n = strtoll(p, &end, 10);
+        return end == p ? XR_NULL_VAL : XR_FROM_INT((int64_t) n);
+    }
+    if (XR_IS_BOOL(val))
+        return XR_FROM_INT(val.i != 0 ? 1 : 0);
+    return XR_NULL_VAL;
+}
+
+static XrValue xrt_to_float(XrValue val) {
+    if (XR_IS_FLOAT(val))
+        return val;
+    if (XR_IS_INT(val))
+        return XR_FROM_FLOAT((double) XR_TO_INT(val));
+    if (XR_IS_STR(val)) {
+        const char *p = (const char *) val.ptr;
+        while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
+            p++;
+        char *end = NULL;
+        double n = strtod(p, &end);
+        return end == p ? XR_NULL_VAL : XR_FROM_FLOAT(n);
+    }
+    if (XR_IS_BOOL(val))
+        return XR_FROM_FLOAT(val.i != 0 ? 1.0 : 0.0);
+    return XR_NULL_VAL;
+}
+
+static XrValue xrt_to_string(XrValue val) {
+    return XR_IS_STR(val) ? val : xrt_tostring(val, 0);
+}
+
+static XrValue xrt_to_bool(XrValue val) {
+    if (XR_IS_BOOL(val))
+        return val;
+    if (XR_IS_NULL(val))
+        return XR_FALSE_VAL;
+    if (XR_IS_INT(val))
+        return XR_FROM_BOOL(XR_TO_INT(val) != 0);
+    if (XR_IS_FLOAT(val))
+        return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
+    if (XR_IS_STR(val))
+        return XR_FROM_BOOL(((const char *) val.ptr)[0] != '\0');
+    if (val.tag == XR_TAG_ARRAY)
+        return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->len > 0);
+    if (val.tag == XR_TAG_MAP)
+        return XR_FROM_BOOL(((xrt_map_t *) val.ptr)->len > 0);
+    return XR_TRUE_VAL;
+}
+
 /* =========================================================================
  * Fixed-arity method dispatch (no varargs, inlinable by C compiler)
  *

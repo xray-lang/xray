@@ -17,7 +17,11 @@
 #include <string.h>
 
 #include "../base/xchecks.h"
+#include "../base/xconstants.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
+#include "../runtime/class/xclass_system.h"
+#include "../runtime/class/xinstance.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/gc/xsystem_heap.h"
@@ -26,6 +30,7 @@
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_internal.h"
+#include "../os/os_time.h"
 #include "xblock.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
@@ -189,6 +194,55 @@ void xr_aot_release_frame_value(XrCoroGC *gc, XrValue value) {
     if (!gc || !XR_IS_PTR(value))
         return;
     xr_gc_release_value(gc, value);
+}
+
+XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
+    if (!ctx || !ctx->isolate || index < 0 || index >= XR_GLOBALS_MAX)
+        return XR_NULL_VAL;
+    return ctx->isolate->vm.builtins[index];
+}
+
+XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const char *field) {
+    if (!field)
+        return XR_NULL_VAL;
+    if (index != XR_GLOBAL_VAR_PROCESS)
+        return XR_NULL_VAL;
+
+    XrValue process = xr_aot_get_builtin(ctx, index);
+    if (!XR_IS_INSTANCE(process))
+        return XR_NULL_VAL;
+
+    int field_index = -1;
+    if (strcmp(field, "file") == 0) {
+        field_index = PROCESS_FIELD_FILE;
+    } else if (strcmp(field, "args") == 0) {
+        field_index = PROCESS_FIELD_ARGS;
+    } else if (strcmp(field, "dir") == 0) {
+        field_index = PROCESS_FIELD_DIR;
+    }
+    if (field_index < 0)
+        return XR_NULL_VAL;
+    return xr_instance_get_field_by_index((XrInstance *) process.ptr, field_index);
+}
+
+XrValue xr_aot_time_now(void) {
+    return XR_FROM_INT((int64_t) (xr_time_realtime_ns() / 1000000ULL));
+}
+
+XrValue xr_aot_time_monotonic(void) {
+    return XR_FROM_INT((int64_t) (xr_time_monotonic_ns() / 1000000ULL));
+}
+
+XrValue xr_aot_time_nanos(void) {
+    return XR_FROM_INT((int64_t) xr_time_monotonic_ns());
+}
+
+XrValue xr_aot_time_micros(void) {
+    return XR_FROM_INT((int64_t) (xr_time_monotonic_ns() / 1000ULL));
+}
+
+XrValue xr_aot_time_clock(void) {
+    return XR_FROM_INT((int64_t) (xr_time_process_cpu_ns() / 1000000ULL));
 }
 
 XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame,
