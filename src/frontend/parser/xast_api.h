@@ -344,9 +344,9 @@ XR_FUNC AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **fiel
                                    XrTypeRef **field_types, bool *field_optional, int field_count,
                                    int line);
 
-// Create go expression node (supports name, priority, and link mode)
-XR_FUNC AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode *priority,
-                                uint8_t link_mode, int line);
+// Create go expression node (supports name and link mode)
+XR_FUNC AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, uint8_t link_mode,
+                                int line);
 
 // Create await expression node
 XR_FUNC AstNode *xr_ast_await_expr(XrayIsolate *X, AstNode *expr, AstNode *timeout, bool is_any,

@@ -117,12 +117,11 @@ typedef struct XrProcStats {
     uint64_t cont_steal_count;             // Continuations stolen (owner as stealer)
     uint64_t completed_count;              // Coros that finished
     uint64_t spawned_count;                // Coros spawned by this worker
-    uint64_t local_runq_pop_count;         // Coros consumed from priority queues
+    uint64_t local_runq_pop_count;         // Coros consumed from the local run queue
     uint64_t lifo_hit_count;               // Coros consumed from the run-next slot
     uint64_t lifo_flush_count;             // Run-next occupants forced back to queues
     uint64_t lifo_gate_budget_count;
     uint64_t lifo_gate_backlog_count;
-    uint64_t lifo_gate_priority_count;
     uint64_t fast_dispatch_count;
     uint64_t fast_dispatch_budget_stop_count;
     uint64_t fast_dispatch_empty_count;
@@ -143,7 +142,6 @@ typedef struct XrProcStats {
     uint64_t runnable_wait_ms;      // Accumulated ready-queue wait before dispatch
     uint64_t runnable_wait_max_ms;  // Max ready-queue wait observed by this worker
     uint64_t runnable_wait_buckets[XR_RUNNABLE_WAIT_BUCKET_COUNT];
-    uint64_t priority_boost_count;  // Dispatches selected by aging boost
 } XrProcStats;
 
 static inline int xr_runnable_wait_bucket(uint64_t wait_ms) {
@@ -194,35 +192,6 @@ static inline int xr_runq_len(XrRunQueue *rq) {
     return xr_steal_queue_size(&rq->deque) + rq->overflow_len;
 }
 
-/* ========== Priority Budget ========== */
-
-typedef struct XrPriorityBudget {
-    int credit[XR_CORO_PRIORITY_COUNT];
-    int weight[XR_CORO_PRIORITY_COUNT];
-    int cursor;
-} XrPriorityBudget;
-
-static inline void xr_priority_budget_init(XrPriorityBudget *budget) {
-    if (!budget)
-        return;
-    budget->weight[CORO_PRIORITY_LOW] = XR_PRIO_WEIGHT_LOW;
-    budget->weight[CORO_PRIORITY_NORMAL] = XR_PRIO_WEIGHT_NORMAL;
-    budget->weight[CORO_PRIORITY_HIGH] = XR_PRIO_WEIGHT_HIGH;
-    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
-        budget->credit[i] = budget->weight[i];
-    }
-    budget->cursor = CORO_PRIORITY_HIGH;
-}
-
-static inline void xr_priority_budget_refill(XrPriorityBudget *budget) {
-    if (!budget)
-        return;
-    for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
-        budget->credit[i] = budget->weight[i];
-    }
-    budget->cursor = CORO_PRIORITY_HIGH;
-}
-
 /* ========== P Status ========== */
 
 typedef enum {
@@ -240,14 +209,11 @@ typedef struct XrProc {
     int id;
     _Atomic uint32_t status;  // XrProcStatus
 
-    /* === Run Queues === */
-    XrRunQueue runq[XR_RUNQ_COUNT];
-    XrPriorityBudget prio_budget;
+    /* === Run Queue === */
+    XrRunQueue runq;
 
     /* === LIFO Slot (locality optimization) === */
     _Atomic(XrCoroutine *) lifo_slot;
-    int lifo_slot_prio;  // Cached priority of lifo_slot occupant (avoids atomic flags load on
-                         // eviction)
     int lifo_polls;
 
     /* === Per-P Timer Wheel === */
@@ -265,8 +231,8 @@ typedef struct XrProc {
 
     /* === Load Balancing === */
     int check_balance_reds;
-    int runq_reds[XR_RUNQ_COUNT];
-    int runq_max_len[XR_RUNQ_COUNT];
+    int runq_reds;
+    int runq_max_len;
 
     /* === Local Coroutine Cache Pool === */
     XrCoroutine *local_free_list;
@@ -393,11 +359,7 @@ XR_FUNC XrProc *xr_releasep(struct XrMachine *m);
 XR_FUNC void xr_handoffp(XrProc *p);
 
 static inline int xr_proc_total_queue_len(XrProc *p) {
-    int total = 0;
-    for (int i = 0; i < XR_RUNQ_COUNT; i++) {
-        total += xr_runq_len(&p->runq[i]);
-    }
-    return total;
+    return p ? xr_runq_len(&p->runq) : 0;
 }
 
 /* ========== Idle P Management ========== */

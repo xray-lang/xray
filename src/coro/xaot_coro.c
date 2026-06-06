@@ -417,7 +417,7 @@ XrValue xr_aot_run_main(XrayIsolate *X, const XrAotCoroDesc *desc, void *frame) 
 }
 
 XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc, void *frame,
-                              int priority, int link_mode, bool fire_and_forget, const char *name) {
+                              int link_mode, bool fire_and_forget, const char *name) {
     XrAotSpawnResult result;
     result.task_value = XR_NULL_VAL;
     result.child = NULL;
@@ -428,8 +428,6 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     XrCoroutine *child = xr_coro_create_aot(ctx->isolate, desc, frame, name);
     if (!child)
         return result;
-    if (priority != CORO_PRIORITY_NORMAL)
-        xr_coro_set_priority(child, priority);
 
     XrTask *task = xr_task_create(ctx->coro, child);
     if (!task) {
@@ -481,30 +479,6 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
         xr_runtime_spawn(runtime, child);
     }
     return result;
-}
-
-XrValue xr_aot_coro_set_priority(const XrAotContext *ctx, XrValue target_value,
-                                 XrValue priority_value) {
-    (void) ctx;
-    XrCoroutine *coro = NULL;
-    if (xr_value_is_task(target_value)) {
-        XrTask *task = xr_value_to_task(target_value);
-        coro = task ? task->coro : NULL;
-    } else if (xr_value_is_coro(target_value)) {
-        coro = xr_value_to_coro(target_value);
-    }
-    if (!coro)
-        return XR_NULL_VAL;
-
-    XrCoroPriority new_prio = CORO_PRIORITY_NORMAL;
-    if (XR_IS_INT(priority_value)) {
-        int prio_int = (int) XR_TO_INT(priority_value);
-        if (prio_int >= 0 && prio_int < XR_CORO_PRIORITY_COUNT)
-            new_prio = (XrCoroPriority) prio_int;
-    }
-
-    xr_coro_set_priority(coro, new_prio);
-    return XR_NULL_VAL;
 }
 
 XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds) {

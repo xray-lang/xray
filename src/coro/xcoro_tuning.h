@@ -70,10 +70,9 @@
  * in spawn/yield bursts. */
 #define XR_SCHED_TIME_CACHE_BUDGET 32
 
-/* Max coroutines pulled from each global inject priority queue during a
- * normal scheduler poll. Larger batches reduce mutex traffic under external
- * spawn bursts; smaller batches keep per-worker queues from monopolizing
- * global work. */
+/* Max coroutines pulled from the global inject queue during a normal scheduler
+ * poll. Larger batches reduce mutex traffic under external spawn bursts;
+ * smaller batches keep per-worker queues from monopolizing global work. */
 #define XR_INJECT_POP_BATCH 32
 
 /* Smaller inject pull used inside blocked fast-dispatch. This keeps tight
@@ -81,20 +80,19 @@
  * destroying the locality benefit of the fast path. */
 #define XR_FAST_DISPATCH_INJECT_BATCH 4
 
-/* Local ready-queue depth at which normal/low-priority spawn stops using
- * child-first inline execution on multi-worker runtimes. This keeps fan-out
- * bursts visible to stealing workers while preserving cache locality for
- * short spawn chains. */
+/* Local ready-queue depth at which spawn stops using child-first inline
+ * execution on multi-worker runtimes. This keeps fan-out bursts visible to
+ * stealing workers while preserving cache locality for short spawn chains. */
 #define XR_SPAWN_INLINE_LOCAL_BACKLOG 16
 
-/* Global inject backlog at which normal/low-priority spawn stops using
- * child-first inline execution. A batch-sized threshold avoids reacting to
- * isolated external wakes while still draining sustained global work. */
+/* Global inject backlog at which spawn stops using child-first inline
+ * execution. A batch-sized threshold avoids reacting to isolated external
+ * wakes while still draining sustained global work. */
 #define XR_SPAWN_INLINE_GLOBAL_BACKLOG XR_INJECT_POP_BATCH
 
-/* Consecutive normal-priority child-first spawns before one child is queued
- * locally for stealing. Lower values expose fan-out sooner; higher values
- * preserve DFS locality for short chains. */
+/* Consecutive child-first spawns before one child is queued locally for
+ * stealing. Lower values expose fan-out sooner; higher values preserve DFS
+ * locality for short chains. */
 #define XR_SPAWN_SHARE_INTERVAL 16
 
 /* Maximum queued spawn-sharing backlog per worker. The effective limit is

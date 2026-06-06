@@ -669,8 +669,6 @@ static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
         case AST_GO_EXPR:
             n->as.go_expr.expr = xr_ast_clone_ctx(node->as.go_expr.expr, map, mc, clone_ctx);
             n->as.go_expr.name = clone_str(node->as.go_expr.name);
-            n->as.go_expr.priority =
-                xr_ast_clone_ctx(node->as.go_expr.priority, map, mc, clone_ctx);
             n->as.go_expr.link_mode = node->as.go_expr.link_mode;
             break;
         case AST_AWAIT_EXPR:

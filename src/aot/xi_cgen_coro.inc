@@ -173,9 +173,9 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
         return false;
     if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
-    if (v->op == XI_CORO_OP &&
-        (v->aux_int == XI_CORO_SUB_SET_PRIORITY || v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
-         v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL))
+    if (v->op == XI_CORO_OP && (v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
+                                v->aux_int == XI_CORO_SUB_UNLOCK_THREAD ||
+                                v->aux_int == XI_CORO_SUB_SET_LOCAL))
         return false;
     if (cg_is_void_like(v))
         return false;
@@ -1307,9 +1307,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        int priority = (((int) v->aux_int >> 8) & 0xff) - 1;
-        if (priority < 0)
-            priority = 1;
         int link_mode = (int) v->aux_int & 0xff;
         bool fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
         int sid = ++(*state_id);
@@ -1321,7 +1318,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ");\n");
         fprintf(out, "    XrAotSpawnResult _spawn_%u = xr_aot_spawn(ctx, &", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_desc");
-        fprintf(out, ", _child_frame_%u, %d, %d, %s, \"%s\");\n", v->id, priority, link_mode,
+        fprintf(out, ", _child_frame_%u, %d, %s, \"%s\");\n", v->id, link_mode,
                 fire_and_forget ? "true" : "false", target->name ? target->name : "aot");
         fprintf(out, "    ");
         emit_vref(out, v);
@@ -1530,20 +1527,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     }
 
     if (v->op == XI_CORO_OP) {
-        if (v->aux_int == XI_CORO_SUB_SET_PRIORITY) {
-            if (v->nargs < 2) {
-                ctx->error = true;
-                fprintf(stderr, "[xi_cgen] ERROR: AOT Coro.setPriority missing arguments\n");
-                emit_codegen_abort_aot_result(out);
-                return;
-            }
-            fprintf(out, "    (void)xr_aot_coro_set_priority(ctx, ");
-            emit_boxed_vref(out, v->args[0]);
-            fprintf(out, ", ");
-            emit_boxed_vref(out, v->args[1]);
-            fprintf(out, ");\n");
-            return;
-        }
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT coroutine Xi op %s\n", xi_op_name(v->op));
         emit_codegen_abort_aot_result(out);

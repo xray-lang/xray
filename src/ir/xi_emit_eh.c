@@ -16,7 +16,6 @@
 /* ========== Exception Handling ========== */
 
 #define XI_GO_AUX_LINK_MASK 0xff
-#define XI_GO_AUX_PRIORITY_SHIFT 8
 
 /* Throw */
 XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
@@ -215,12 +214,6 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->flags & XI_FLAG_FIRE_AND_FORGET)
         c_field |= 0x80;
     emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, c_field));
-
-    /* NOP A=2: priority annotation (read by vm_go) */
-    int priority = (((int) v->aux_int >> XI_GO_AUX_PRIORITY_SHIFT) & 0xff) - 1;
-    if (priority >= 0) {
-        emit_inst(ctx, CREATE_ABx(OP_NOP, 2, priority));
-    }
 
     /* NOP A=3: link_mode annotation (read by vm_go) */
     int link_mode = (int) v->aux_int & XI_GO_AUX_LINK_MASK;
@@ -425,16 +418,6 @@ XR_FUNC void xi_emit_coro_op(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             if (ctx->status != XI_EMIT_OK)
                 return;
             emit_inst(ctx, CREATE_ABC(OP_GET_LOCAL, dst, key, 0));
-            return;
-        }
-        case XI_CORO_SUB_SET_PRIORITY: {
-            /* Coro.setPriority(task, prio) → OP_SET_PRIORITY A=task B=prio */
-            XR_DCHECK(v->nargs >= 2, "emit coro_op: setPriority needs 2 args");
-            uint8_t task = reg_of(ctx, v->args[0]);
-            uint8_t prio = reg_of(ctx, v->args[1]);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            emit_inst(ctx, CREATE_ABC(OP_SET_PRIORITY, task, prio, 0));
             return;
         }
         case XI_CORO_SUB_LOCK_THREAD: {

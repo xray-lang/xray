@@ -10,7 +10,6 @@
  * KEY CONCEPT:
  *   - XrCoroutine: scheduler-owned coroutine shell plus backend payload
  *   - VM/JIT/AOT execution state lives behind backend_state
- *   - 3-level priority scheduling (LOW/NORMAL/HIGH)
  *   - Reduction-based fair scheduling
  *
  * SCHEDULING INVARIANTS:
@@ -78,13 +77,6 @@ struct XrCoroMonitor;
 struct XrCoroRegistry;
 typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
-/* ========== Coroutine Priority ========== */
-
-typedef enum {
-    CORO_PRIORITY_LOW = 0,
-    CORO_PRIORITY_NORMAL = 1,
-    CORO_PRIORITY_HIGH = 2
-} XrCoroPriority;
 
 /* ========== XrCoroExt - Cold fields allocated on demand ========== */
 

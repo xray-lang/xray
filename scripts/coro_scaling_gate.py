@@ -50,7 +50,6 @@ DEFAULT_TESTS = [
     "chameneos",
     "dining_philosophers",
     "starvation",
-    "priority_latency",
 ]
 
 SCHED_METRIC_PREFIXES = (
@@ -244,10 +243,6 @@ def cardinality_args(test: str, n: int) -> tuple[str, ...]:
         return (str(philosophers), str(meals))
     if test == "starvation":
         return (str(n), "2000")
-    if test == "priority_latency":
-        low_tasks = min(max(1, n), 10000)
-        probes = min(100, max(1, n // 100))
-        return (str(low_tasks), str(probes), "100")
     if test == "blocking_storm":
         return (str(n), "10")
     return (str(n),)

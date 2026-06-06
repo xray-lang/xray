@@ -47,7 +47,7 @@
 
 ### `repro_win11_coro_burn.sh`
 
-四个 May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 cancel / 1109 await_any / 1127 priority / 1128 yield。每场景跑 N 次（默认 5，匹配 `nightly.yml`），在 `tests/tmp/win11_coro/failures.log` 收集失败 tail。
+May 2026 在 Windows 上暴露 `STATUS_HEAP_CORRUPTION` 的协程场景：1115 cancel / 1109 await_any / 1128 yield。每场景跑 N 次（默认 5，匹配 `nightly.yml`），在 `tests/tmp/win11_coro/failures.log` 收集失败 tail。
 
 可在非 Windows 平台运行——相关 race 是堆破坏而非真正 Windows-only 行为，Linux / macOS 在 ASan/MSan 下也可能暴露相同根因。
 

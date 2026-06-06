@@ -26,7 +26,7 @@
 #include <stdbool.h>
 #include "../runtime/gc/xgc_internal.h"  // XrLocalAlloc
 #include "xnetpoll.h"                    // XrNetpoll
-#include "xproc.h"                       // XrProc, XrRunQueue, XR_RUNQ_COUNT
+#include "xproc.h"                       // XrProc, XrRunQueue
 #include "xmachine.h"                    // XrMachine
 #include "xbalance.h"                    // XrMigrationPath
 #include "xcoro_abi.h"                   // XrCoroRunResult
@@ -204,12 +204,12 @@ typedef struct XrRuntime {
     XrSchedGlobalStats sched_stats;
 
     /* === Global Injection Queue === */
-    XrInjectQueue injectq[XR_CORO_PRIORITY_COUNT];
-    _Atomic uint32_t nonempty_inject_mask;
+    XrInjectQueue injectq;
+    _Atomic bool injectq_nonempty;
 
     /* === Scheduler Hint Bitsets === */
-    _Atomic uint64_t nonempty_p_mask[XR_CORO_PRIORITY_COUNT];
-    _Atomic uint64_t stealable_p_mask[XR_CORO_PRIORITY_COUNT];
+    _Atomic uint64_t nonempty_p_mask;
+    _Atomic uint64_t stealable_p_mask;
     _Atomic uint64_t timer_p_mask;
     _Atomic uint64_t idle_p_mask;
     _Atomic int searching_count;
@@ -253,18 +253,17 @@ static inline void xr_runtime_set_mask_bit(_Atomic uint64_t *mask, int worker_id
     }
 }
 
-static inline void xr_runtime_set_runq_nonempty(XrRuntime *runtime, int worker_id, int priority,
-                                                bool nonempty) {
-    if (!runtime || priority < 0 || priority >= XR_CORO_PRIORITY_COUNT)
+static inline void xr_runtime_set_runq_nonempty(XrRuntime *runtime, int worker_id, bool nonempty) {
+    if (!runtime)
         return;
-    xr_runtime_set_mask_bit(&runtime->nonempty_p_mask[priority], worker_id, nonempty);
+    xr_runtime_set_mask_bit(&runtime->nonempty_p_mask, worker_id, nonempty);
 }
 
-static inline void xr_runtime_set_runq_stealable(XrRuntime *runtime, int worker_id, int priority,
+static inline void xr_runtime_set_runq_stealable(XrRuntime *runtime, int worker_id,
                                                  bool stealable) {
-    if (!runtime || priority < 0 || priority >= XR_CORO_PRIORITY_COUNT)
+    if (!runtime)
         return;
-    xr_runtime_set_mask_bit(&runtime->stealable_p_mask[priority], worker_id, stealable);
+    xr_runtime_set_mask_bit(&runtime->stealable_p_mask, worker_id, stealable);
 }
 
 static inline void xr_runtime_set_timer_pending(XrRuntime *runtime, int worker_id, bool pending) {

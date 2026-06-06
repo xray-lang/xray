@@ -11,7 +11,7 @@
  *   State is split into two fields for lock-free transitions:
  *   - coro_state (uint8_t atomic): mutually exclusive READY/RUNNING/BLOCKED/DONE
  *     State transitions use atomic_store (O(1), no CAS loop).
- *   - flags (uint32_t atomic): priority + wait_reason + mark flags
+ *   - flags (uint32_t atomic): wait_reason + mark flags
  *     Marks use atomic OR/AND (no CAS contention with state transitions).
  *
  *   The flags field also shadows state bits for snapshot-style reads.
@@ -33,13 +33,12 @@
  *
  * FLAGS FIELD BIT LAYOUT (uint32_t atomic — marks + shadow):
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
- *   | 31-23 |  22   | 21-20 | 19-16 | 15-12 | 11-8  |  7-4  |  1-0  |
+ *   | 31-23 |  22   | 21-20 | 19-16 | 15-12 | 11-8  |  7-4  |  3-0  |
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
- *   | resv  | SLAB  | marks | marks | marks |shadow | wait  | prio  |
+ *   | resv  | SLAB  | marks | marks | marks |shadow | wait  | resv  |
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
  *
- *   bits 0-1:   Priority (LOW=0, NORMAL=1, HIGH=2)
- *   bits 2-3:   Reserved
+ *   bits 0-3:   Reserved
  *   bits 4-7:   Wait reason (NONE, CHANNEL_SEND, CHANNEL_RECV, AWAIT, ...)
  *   bits 8-11:  State shadow (READY/RUNNING/BLOCKED/DONE)
  *               NOTE: shadow only, authoritative source is coro_state
@@ -71,15 +70,6 @@
 #define XR_CORO_STATE_RUNNING 2
 #define XR_CORO_STATE_BLOCKED 3
 #define XR_CORO_STATE_DONE 4
-
-/* ========== Priority Encoding (flags bits 0-1) ========== */
-
-#define XR_CORO_PRIO_SHIFT 0
-#define XR_CORO_PRIO_MASK (0x3 << XR_CORO_PRIO_SHIFT)
-
-#define XR_CORO_PRIO_LOW 0
-#define XR_CORO_PRIO_NORMAL 1
-#define XR_CORO_PRIO_HIGH 2
 
 /* ========== Wait Reason Encoding (flags bits 4-7) ========== */
 
@@ -339,9 +329,8 @@ static inline bool xr_coro_claim_wake_impl(_Atomic uint32_t *flags_ptr,
  * every other bit. A CAS loop is required because a plain
  * load -> set_field -> atomic_store sequence would clobber concurrent
  * single-bit updates from other threads (e.g. sysmon raising
- * CANCEL_REQUESTED, or a state shadow update). Used for the priority and
- * wait-reason sub-fields, which a running coroutine rewrites while sysmon
- * may be touching the same flags word.
+ * CANCEL_REQUESTED, or a state shadow update). Used for wait-reason updates
+ * while sysmon may be touching the same flags word.
  */
 static inline void xr_coro_flags_update_field(_Atomic uint32_t *flags_ptr, uint32_t mask,
                                               uint32_t value) {
@@ -352,21 +341,6 @@ static inline void xr_coro_flags_update_field(_Atomic uint32_t *flags_ptr, uint3
     } while (!atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_release,
                                                     memory_order_relaxed));
 }
-
-/* ========== Priority Operations ========== */
-
-static inline int xr_coro_get_priority(uint32_t flags) {
-    return (flags & XR_CORO_PRIO_MASK) >> XR_CORO_PRIO_SHIFT;
-}
-
-static inline uint32_t xr_coro_set_priority_flags(uint32_t flags, int prio) {
-    return (flags & ~XR_CORO_PRIO_MASK) | ((prio << XR_CORO_PRIO_SHIFT) & XR_CORO_PRIO_MASK);
-}
-
-/* Atomically set the priority sub-field (bits 0-1) only. */
-#define xr_coro_set_priority(coro, prio)                                                           \
-    xr_coro_flags_update_field(&(coro)->flags, XR_CORO_PRIO_MASK,                                  \
-                               ((uint32_t) (prio) << XR_CORO_PRIO_SHIFT))
 
 /* ========== Wait Reason Operations ========== */
 
@@ -400,9 +374,8 @@ static inline uint32_t xr_coro_set_wait_reason_flags(uint32_t flags, int reason)
 
 /* ========== Init ========== */
 
-static inline uint32_t xr_coro_init_flags(int priority, bool is_main) {
+static inline uint32_t xr_coro_init_flags(bool is_main) {
     uint32_t flags = XR_CORO_FLG_READY;
-    flags |= (priority << XR_CORO_PRIO_SHIFT) & XR_CORO_PRIO_MASK;
     if (is_main) {
         flags |= XR_CORO_FLG_MAIN;
     }

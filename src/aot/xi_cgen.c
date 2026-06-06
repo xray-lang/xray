@@ -80,8 +80,7 @@ static bool cg_is_void_like(const XiValue *v) {
         case XI_RELEASE:
             return true;
         case XI_CORO_OP:
-            return v->aux_int == XI_CORO_SUB_SET_PRIORITY ||
-                   v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
+            return v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
                    v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL;
         case XI_CALL_BUILTIN:
             if (v->aux) {

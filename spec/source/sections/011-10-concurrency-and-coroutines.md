@@ -30,7 +30,6 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
-           | 'priority' ':' (IntegerLiteral | 'Coro.LOW' | 'Coro.NORMAL' | 'Coro.HIGH')
 ```
 
 `go` 是**表达式**，返回 `Task<T>` 句柄。三种形式都合法：
@@ -49,8 +48,8 @@ let t3 = go {
     return compute()
 }
 
-// 创建期优先级提示：0=LOW, 1=NORMAL, 2=HIGH
-let urgent = go(priority: Coro.HIGH) worker(1, channel)
+// 可选调试名称
+let named = go(name: "worker-1") worker(1, channel)
 ```
 
 **move 在参数位置**：跨协程转移所有权通过参数前缀 `move` 实现，**不是** `go` 的选项：
@@ -65,7 +64,7 @@ let task = go fn(d: Json) -> int {
 **语义**：
 - 每个 `go` 表达式都返回一个 `Task<T>`，其中 `T` 是被调函数的返回类型；返回 `()` 的函数对应 `Task<null>`。
 - 协程在闲置 worker 线程中调度（M:N）。
-- `go(priority: ...)` 在协程创建前设置调度提示；priority 是 soft hint，不是硬实时保证。
+- `go(name: ...)` 只设置调试名称，不影响调度顺序。
 - 协程内**未捕获**异常存在 `Task` 中，由 `await` 时重抛。
 - 普通局部变量（非 `shared`、非 `move`）传给 `go` 时**自动深拷贝**；`shared const` 零拷贝共享；`shared let` 必须 `move`。
 
@@ -428,7 +427,6 @@ Coroutines are distributed across multiple worker threads by default; the runtim
 GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
-           | 'priority' ':' (IntegerLiteral | 'Coro.LOW' | 'Coro.NORMAL' | 'Coro.HIGH')
 ```
 
 `go` is an **expression** returning a `Task<T>` handle. Three forms are valid:
@@ -447,8 +445,8 @@ let t3 = go {
     return compute()
 }
 
-// Creation-time priority hint: 0=LOW, 1=NORMAL, 2=HIGH
-let urgent = go(priority: Coro.HIGH) worker(1, channel)
+// Optional debugging name
+let named = go(name: "worker-1") worker(1, channel)
 ```
 
 **`move` lives in argument position**: cross-coroutine ownership transfer goes through the argument prefix `move`, **not** through a `go` option:
@@ -463,7 +461,7 @@ let task = go fn(d: Json) -> int {
 **Semantics**:
 - Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
 - Coroutines are scheduled on idle worker threads (M:N).
-- `go(priority: ...)` sets the scheduling hint before the coroutine is created; priority is a soft hint, not a hard real-time guarantee.
+- `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
 

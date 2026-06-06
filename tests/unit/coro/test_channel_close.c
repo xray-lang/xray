@@ -179,7 +179,7 @@ static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     coro->isolate = isolate;
     coro->ext = ext;
     uint32_t wait_flag = wait_send ? XR_CORO_WAIT_CHANNEL_SEND : XR_CORO_WAIT_CHANNEL_RECV;
-    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | wait_flag | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | wait_flag);
     atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
@@ -197,7 +197,7 @@ static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, Xray
     coro->id = id;
     coro->isolate = isolate;
     coro->ext = ext;
-    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_IO | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_IO);
     atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
@@ -212,7 +212,7 @@ static void init_select_recv_coro(XrCoroutine *coro, XrCoroExt *ext, int id, Xra
     coro->id = id;
     coro->isolate = isolate;
     coro->ext = ext;
-    atomic_store(&coro->flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED);
     atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
@@ -241,7 +241,7 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     memset(&coro, 0, sizeof(coro));
     coro.id = 7;
     coro.isolate = &f.isolate_storage;
-    atomic_store(&coro.flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.flags, XR_CORO_WAIT_SELECT | XR_CORO_FLG_BLOCKED);
     atomic_store(&coro.coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro.resume_status, XR_RESUME_OK);
     atomic_store(&coro.affinity_p, 0);
@@ -347,7 +347,7 @@ TEST(select_block_rechecks_already_closed_channel) {
     coro.id = 8;
     coro.isolate = &f.isolate_storage;
     coro.ext = &ext;
-    atomic_store(&coro.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&coro.resume_status, XR_RESUME_OK);
     atomic_store(&coro.affinity_p, 0);
@@ -384,7 +384,7 @@ TEST(select_waiter_cancel_unlinks_worker_buckets) {
     waiter.id = 13;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 0);
@@ -592,7 +592,7 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     sender.id = 301;
     sender.isolate = &f.isolate_storage;
     sender.ext = &sender_ext;
-    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -633,7 +633,7 @@ TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
     sender.id = 302;
     sender.isolate = &f.isolate_storage;
     sender.ext = &sender_ext;
-    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -646,7 +646,7 @@ TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
     memset(&receiver, 0, sizeof(receiver));
     receiver.id = 303;
     receiver.isolate = &f.isolate_storage;
-    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -677,7 +677,7 @@ TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
     receiver.id = 304;
     receiver.isolate = &f.isolate_storage;
     receiver.ext = &receiver_ext;
-    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&receiver.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&receiver.resume_status, XR_RESUME_OK);
     atomic_store(&receiver.affinity_p, 0);
@@ -731,7 +731,7 @@ TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     sender.id = 302;
     sender.isolate = &f.isolate_storage;
     sender.ext = &sender_ext;
-    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -787,7 +787,7 @@ TEST(channel_waiter_cancel_routes_foreign_owner_detach) {
     sender.id = 303;
     sender.isolate = &f.isolate_storage;
     sender.ext = &sender_ext;
-    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 1);
@@ -847,7 +847,7 @@ TEST(select_waiter_cancel_routes_foreign_owner_detach) {
     waiter.id = 304;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 1);
@@ -906,7 +906,7 @@ TEST(await_wait_token_tracks_register_resolve_and_resume) {
     waiter.id = 401;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 0);
@@ -969,8 +969,8 @@ TEST(single_task_await_wakes_multiple_waiters) {
     second_waiter.isolate = &f.isolate_storage;
     first_waiter.ext = &first_ext;
     second_waiter.ext = &second_ext;
-    atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
-    atomic_store(&second_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING);
+    atomic_store(&second_waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&first_waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&second_waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&first_waiter.resume_status, XR_RESUME_OK);
@@ -1030,7 +1030,7 @@ TEST(single_task_await_legacy_and_node_wake_claim_once) {
     waiter.id = 424;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 0);
@@ -1075,7 +1075,7 @@ TEST(single_task_await_timeout_unlinks_waiter_node) {
     waiter.id = 423;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 0);
@@ -1115,7 +1115,7 @@ TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
     sender.id = 501;
     sender.isolate = &f.isolate_storage;
     sender.ext = &sender_ext;
-    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
@@ -1130,8 +1130,7 @@ TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
                   XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
     ASSERT_TRUE(atomic_load(&sender_ext.timer_active));
 
-    atomic_store(&sender.flags,
-                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_CHANNEL_SEND | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_CHANNEL_SEND);
     atomic_store(&sender.coro_state, XR_CORO_STATE_BLOCKED);
     xr_worker_block(&f.worker, &sender);
 
@@ -1166,7 +1165,7 @@ TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
     waiter.id = 502;
     waiter.isolate = &f.isolate_storage;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
     atomic_store(&waiter.affinity_p, 0);
@@ -1204,7 +1203,7 @@ TEST(backend_resume_finishes_sleep_timer_token) {
     memset(&sleeper, 0, sizeof(sleeper));
     memset(&sleeper_ext, 0, sizeof(sleeper_ext));
     sleeper.ext = &sleeper_ext;
-    atomic_store(&sleeper.flags, XR_CORO_FLG_READY | XR_CORO_WAIT_SLEEP | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sleeper.flags, XR_CORO_FLG_READY | XR_CORO_WAIT_SLEEP);
     atomic_store(&sleeper.resume_status, XR_RESUME_TIMEOUT);
 
     xr_timer_wait_token_prepare(&sleeper_ext.wait.timer_token, 0,
@@ -1225,7 +1224,7 @@ TEST(multi_await_token_clears_pending_waiters_on_await_any_ready) {
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 601;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
 
@@ -1261,7 +1260,7 @@ TEST(multi_await_token_cancels_registered_task_waiters) {
     memset(&waiter_ext, 0, sizeof(waiter_ext));
     waiter.id = 602;
     waiter.ext = &waiter_ext;
-    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&waiter.resume_status, XR_RESUME_OK);
 
@@ -1322,8 +1321,8 @@ TEST(multi_await_node_list_wakes_overlapping_any_waiters) {
     second_waiter.isolate = &f.isolate_storage;
     first_waiter.ext = &first_ext;
     second_waiter.ext = &second_ext;
-    atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
-    atomic_store(&second_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING);
+    atomic_store(&second_waiter.flags, XR_CORO_FLG_RUNNING);
     atomic_store(&first_waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&second_waiter.coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&first_waiter.resume_status, XR_RESUME_OK);
@@ -1345,10 +1344,8 @@ TEST(multi_await_node_list_wakes_overlapping_any_waiters) {
     ASSERT_NOT_NULL(shared.await_waiters);
     ASSERT_NOT_NULL(shared.await_waiters->next);
 
-    atomic_store(&first_waiter.flags,
-                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY | XR_CORO_PRIO_NORMAL);
-    atomic_store(&second_waiter.flags,
-                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY | XR_CORO_PRIO_NORMAL);
+    atomic_store(&first_waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY);
+    atomic_store(&second_waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY);
     atomic_store(&first_waiter.coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&second_waiter.coro_state, XR_CORO_STATE_BLOCKED);
     shared.result = xr_int(88);

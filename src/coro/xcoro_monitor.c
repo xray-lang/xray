@@ -75,9 +75,7 @@ static void print_stats(XrayIsolate *X) {
     for (int wi = 0; wi < runtime->worker_count; wi++) {
         XrWorker *w = &runtime->workers[wi];
         blocked_count += w->p.blocked_count;
-        for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-            ready_count += xr_runq_len(&w->p.runq[p]);
-        }
+        ready_count += xr_runq_len(&w->p.runq);
     }
 
     int total = ready_count + blocked_count + active_count;
@@ -98,7 +96,7 @@ static void print_top_coros(XrayIsolate *X, int limit) {
            "                                                              ║\n",
            limit);
     printf("║ ────────────────────────────────────────────────────────────────────── ║\n");
-    printf("║   ID   │ Status  │ Priority │ Reductions                                   ║\n");
+    printf("║   ID   │ Status  │ Reductions                                             ║\n");
     printf("║ ────────────────────────────────────────────────────────────────────── ║\n");
 
     int shown = 0;
@@ -107,25 +105,21 @@ static void print_top_coros(XrayIsolate *X, int limit) {
     // Iterate all workers' run queues
     for (int wi = 0; wi < runtime->worker_count && shown < limit; wi++) {
         XrWorker *w = &runtime->workers[wi];
-        for (int p = 0; p < XR_RUNQ_COUNT && shown < limit; p++) {
-            int n = xr_steal_queue_snapshot(&w->p.runq[p].deque, snap_buf,
-                                            (limit - shown < 256) ? (limit - shown) : 256);
-            for (int i = 0; i < n && shown < limit; i++) {
-                XrCoroutine *coro = snap_buf[i];
-                printf("║   %-5d │ " ANSI_YELLOW "READY" ANSI_RESET
-                       "   │ P%-5d │ %-10lld                             ║\n",
-                       coro->id, xr_coro_get_priority(xr_coro_flags_load(coro)),
-                       (long long) coro->reductions);
-                shown++;
-            }
+        int n = xr_steal_queue_snapshot(&w->p.runq.deque, snap_buf,
+                                        (limit - shown < 256) ? (limit - shown) : 256);
+        for (int i = 0; i < n && shown < limit; i++) {
+            XrCoroutine *coro = snap_buf[i];
+            printf("║   %-5d │ " ANSI_YELLOW "READY" ANSI_RESET
+                   "   │ %-10lld                                         ║\n",
+                   coro->id, (long long) coro->reductions);
+            shown++;
         }
         // Blocked coroutines
         XrCoroutine *bc = w->p.blocked_head;
         while (bc && shown < limit) {
             printf("║   %-5d │ " ANSI_RED "BLOCKED" ANSI_RESET
-                   " │ P%-5d │ %-10lld                             ║\n",
-                   bc->id, xr_coro_get_priority(xr_coro_flags_load(bc)),
-                   (long long) bc->reductions);
+                   " │ %-10lld                                         ║\n",
+                   bc->id, (long long) bc->reductions);
             shown++;
             bc = bc->next;
         }

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 #
-# repro_win11_coro_burn.sh - burn-in driver for the four Windows
+# repro_win11_coro_burn.sh - burn-in driver for Windows
 # coroutine regressions that exposed STATUS_HEAP_CORRUPTION in
-# May 2026 (1115 cancel, 1109 await_any, 1127 priority, 1128 yield).
+# May 2026 (1115 cancel, 1109 await_any, 1128 yield).
 #
 # Usage: scripts/repro_win11_coro_burn.sh [N]
 #
@@ -52,14 +52,13 @@ if [ ! -x "$XRAY_BIN" ]; then
     exit 2
 fi
 
-# The four scenarios that surfaced STATUS_HEAP_CORRUPTION on Windows
+# The scenarios that surfaced STATUS_HEAP_CORRUPTION on Windows
 # during the May 2026 11-bug burn-in. The bug class is heap
 # corruption on coroutine teardown, exercised by cancel / await_any /
-# priority scheduling / explicit yield.
+# explicit yield.
 cases=(
     "${PROJECT_ROOT}/tests/regression/11_coroutine/1115_cancel.xr"
     "${PROJECT_ROOT}/tests/regression/11_coroutine/1109_await_any.xr"
-    "${PROJECT_ROOT}/tests/regression/11_coroutine/1127_coro_priority.xr"
     "${PROJECT_ROOT}/tests/regression/11_coroutine/1128_yield.xr"
 )
 

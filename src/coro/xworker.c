@@ -142,11 +142,8 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     worker->m = &runtime->machines[id];
     xr_machine_init(worker->m, id, runtime);
 
-    // Initialize Chase-Lev deque run queues
-    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-        xr_runq_init(&worker->p.runq[p]);
-    }
-    xr_priority_budget_init(&worker->p.prio_budget);
+    // Initialize Chase-Lev deque run queue
+    xr_runq_init(&worker->p.runq);
     atomic_store_explicit(&worker->p.local_runq_len, 0, memory_order_relaxed);
 
     // Initialize LIFO slot
@@ -182,10 +179,8 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     worker->p.blocked_count = 0;
 
     // Initialize run queue statistics
-    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-        worker->p.runq_reds[p] = 0;
-        worker->p.runq_max_len[p] = 0;
-    }
+    worker->p.runq_reds = 0;
+    worker->p.runq_max_len = 0;
 
     // Create backend worker storage, if the active backend needs one.
     worker->p.backend_worker_storage = NULL;
@@ -293,10 +288,8 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->spinning_count, 0);
     atomic_store(&runtime->wake_spinner, 0);
     atomic_store(&runtime->needspinning, 0);
-    for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
-        atomic_store(&runtime->nonempty_p_mask[pi], 0);
-        atomic_store(&runtime->stealable_p_mask[pi], 0);
-    }
+    atomic_store(&runtime->nonempty_p_mask, 0);
+    atomic_store(&runtime->stealable_p_mask, 0);
     atomic_store(&runtime->timer_p_mask, 0);
     atomic_store(&runtime->idle_p_mask, 0);
     atomic_store(&runtime->searching_count, 0);
@@ -680,7 +673,6 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_yield = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
-    uint64_t total_lifo_gate_priority = 0;
     uint64_t total_fast_dispatch = 0, total_fast_dispatch_budget_stop = 0;
     uint64_t total_fast_dispatch_empty = 0;
     uint64_t total_pool_deferred_recycle = 0, total_pool_local_get = 0;
@@ -689,7 +681,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_pool_local_put = 0, total_pool_global_return = 0;
     uint64_t total_pool_local_free = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
-    uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
+    uint64_t total_wait_ms = 0, max_wait_ms = 0;
     uint64_t wait_buckets[XR_RUNNABLE_WAIT_BUCKET_COUNT] = {0};
     uint64_t wait_sample_count = 0;
     uint64_t total_blocked = 0;
@@ -733,7 +725,6 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_lifo_flush += p->stats.lifo_flush_count;
         total_lifo_gate_budget += p->stats.lifo_gate_budget_count;
         total_lifo_gate_backlog += p->stats.lifo_gate_backlog_count;
-        total_lifo_gate_priority += p->stats.lifo_gate_priority_count;
         total_fast_dispatch += p->stats.fast_dispatch_count;
         total_fast_dispatch_budget_stop += p->stats.fast_dispatch_budget_stop_count;
         total_fast_dispatch_empty += p->stats.fast_dispatch_empty_count;
@@ -759,7 +750,6 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             wait_buckets[bi] += p->stats.runnable_wait_buckets[bi];
             wait_sample_count += p->stats.runnable_wait_buckets[bi];
         }
-        total_prio_boost += p->stats.priority_boost_count;
         if (p->blocked_count > 0) {
             total_blocked += (uint64_t) p->blocked_count;
         }
@@ -778,8 +768,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_blocked);
 
     uint64_t ready_dispatches = total_local_pop + total_lifo_hit + total_steal_direct;
-    uint64_t lifo_gate_total =
-        total_lifo_gate_budget + total_lifo_gate_backlog + total_lifo_gate_priority;
+    uint64_t lifo_gate_total = total_lifo_gate_budget + total_lifo_gate_backlog;
     fprintf(stderr,
             "Dispatch mix: local_runq=%llu lifo=%llu steal_direct=%llu lifo_share=%.2f%% "
             "inject_pull=%llu stolen_items=%llu cont_steal=%llu\n",
@@ -806,18 +795,16 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
     fprintf(stderr,
             "Runnable wait: total_ms=%llu avg_ms=%.3f p50_ms=%llu p95_ms=%llu p99_ms=%llu "
-            "max_ms=%llu dispatches=%llu priority_boost=%llu\n",
+            "max_ms=%llu dispatches=%llu\n",
             (unsigned long long) total_wait_ms, stats_ratio_u64(total_wait_ms, ready_dispatches),
             (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 50),
             (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 95),
             (unsigned long long) runnable_wait_percentile_ms(wait_buckets, wait_sample_count, 99),
-            (unsigned long long) max_wait_ms, (unsigned long long) ready_dispatches,
-            (unsigned long long) total_prio_boost);
-    fprintf(
-        stderr, "LIFO gate: total=%llu budget=%llu backlog=%llu priority=%llu gate_ratio=%.2f%%\n",
-        (unsigned long long) lifo_gate_total, (unsigned long long) total_lifo_gate_budget,
-        (unsigned long long) total_lifo_gate_backlog, (unsigned long long) total_lifo_gate_priority,
-        stats_percent_u64(lifo_gate_total, lifo_gate_total + total_lifo_hit));
+            (unsigned long long) max_wait_ms, (unsigned long long) ready_dispatches);
+    fprintf(stderr, "LIFO gate: total=%llu budget=%llu backlog=%llu gate_ratio=%.2f%%\n",
+            (unsigned long long) lifo_gate_total, (unsigned long long) total_lifo_gate_budget,
+            (unsigned long long) total_lifo_gate_backlog,
+            stats_percent_u64(lifo_gate_total, lifo_gate_total + total_lifo_hit));
     fprintf(stderr, "Fast dispatch: hits=%llu budget_stop=%llu empty=%llu hit_share=%.2f%%\n",
             (unsigned long long) total_fast_dispatch,
             (unsigned long long) total_fast_dispatch_budget_stop,
@@ -1009,10 +996,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) atomic_load_explicit(&pool->reject_count, memory_order_relaxed));
     }
     {
-        int inject_len = 0;
-        for (int pi = 0; pi < XR_CORO_PRIORITY_COUNT; pi++) {
-            inject_len += atomic_load_explicit(&runtime->injectq[pi].len, memory_order_relaxed);
-        }
+        int inject_len = atomic_load_explicit(&runtime->injectq.len, memory_order_relaxed);
         uint64_t inject_push = xr_sched_metric_load(&s->inject_push_count);
         uint64_t inject_pop = xr_sched_metric_load(&s->inject_pop_count);
         uint64_t inject_spill = xr_sched_metric_load(&s->inject_spill_count);
@@ -1022,11 +1006,11 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         long long pull_pop_delta = (long long) total_inject_pull - (long long) inject_pop;
         fprintf(stderr,
                 "Inject: push=%llu pop=%llu spill=%llu push_batches=%llu pop_batches=%llu len=%d "
-                "mask=0x%x\n",
+                "nonempty=%d\n",
                 (unsigned long long) inject_push, (unsigned long long) inject_pop,
                 (unsigned long long) inject_spill, (unsigned long long) inject_push_batches,
                 (unsigned long long) inject_pop_batches, inject_len,
-                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_relaxed));
+                atomic_load_explicit(&runtime->injectq_nonempty, memory_order_relaxed) ? 1 : 0);
         fprintf(stderr,
                 "Inject diagnostics: pop_push_ratio=%.2f%% spill_ratio=%.2f%% pending_est=%lld "
                 "worker_pull=%llu pull_pop_delta=%lld push_items_per_batch=%.2f "
@@ -1037,23 +1021,12 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 stats_ratio_u64(inject_push, inject_push_batches),
                 stats_ratio_u64(inject_pop, inject_pop_batches));
     }
-    fprintf(stderr,
-            "Masks: runq=[0x%llx,0x%llx,0x%llx] stealable=[0x%llx,0x%llx,0x%llx] "
-            "timer=0x%llx idle=0x%llx searching=%d\n",
-            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[0],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[1],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask[2],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[0],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[1],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask[2],
-                                                      memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
-            (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
-            atomic_load_explicit(&runtime->searching_count, memory_order_relaxed));
+    fprintf(
+        stderr, "Masks: runq=0x%llx stealable=0x%llx timer=0x%llx idle=0x%llx searching=%d\n",
+        (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask, memory_order_relaxed),
+        (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask, memory_order_relaxed),
+        (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
+        (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
+        atomic_load_explicit(&runtime->searching_count, memory_order_relaxed));
     fprintf(stderr, "===========================\n\n");
 }

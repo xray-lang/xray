@@ -47,7 +47,6 @@ TESTS=(
     "timeout_storm"
     "sleep_storm"
     "cancel_storm"
-    "priority_latency"
 )
 
 usage() {
@@ -350,11 +349,9 @@ collect_sched_metrics() {
     metrics+=("$(metric_pair runnable_wait_p99_ms "$(extract_kv_metric "Runnable wait:" "p99_ms" "$file")")")
     metrics+=("$(metric_pair runnable_wait_max_ms "$(extract_kv_metric "Runnable wait:" "max_ms" "$file")")")
     metrics+=("$(metric_pair runnable_wait_dispatches "$(extract_kv_metric "Runnable wait:" "dispatches" "$file")")")
-    metrics+=("$(metric_pair priority_boost "$(extract_kv_metric "Runnable wait:" "priority_boost" "$file")")")
     metrics+=("$(metric_pair lifo_gate_total "$(extract_kv_metric "LIFO gate:" "total" "$file")")")
     metrics+=("$(metric_pair lifo_gate_budget "$(extract_kv_metric "LIFO gate:" "budget" "$file")")")
     metrics+=("$(metric_pair lifo_gate_backlog "$(extract_kv_metric "LIFO gate:" "backlog" "$file")")")
-    metrics+=("$(metric_pair lifo_gate_priority "$(extract_kv_metric "LIFO gate:" "priority" "$file")")")
     metrics+=("$(metric_pair lifo_gate_ratio "$(extract_kv_metric "LIFO gate:" "gate_ratio" "$file")")")
     metrics+=("$(metric_pair fast_dispatch_hits "$(extract_kv_metric "Fast dispatch:" "hits" "$file")")")
     metrics+=("$(metric_pair fast_dispatch_budget_stop "$(extract_kv_metric "Fast dispatch:" "budget_stop" "$file")")")

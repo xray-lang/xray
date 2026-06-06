@@ -281,8 +281,6 @@ static int count_unresolved_vars(AstNode *node) {
             break;
         case AST_GO_EXPR:
             count += count_unresolved_vars(node->as.go_expr.expr);
-            if (node->as.go_expr.priority)
-                count += count_unresolved_vars(node->as.go_expr.priority);
             break;
         case AST_AWAIT_EXPR:
             count += count_unresolved_vars(node->as.await_expr.expr);

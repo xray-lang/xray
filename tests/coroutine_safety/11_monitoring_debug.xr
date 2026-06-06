@@ -125,10 +125,10 @@ fn test_coro_error_capture() {
     print("✓ 协程错误捕获测试通过")
 }
 
-// 测试6：协程优先级（如果支持）
-fn test_coro_priority() {
+// 测试6：命名协程批量完成
+fn test_coro_named_batch() {
     let results = new Channel(10)
-    fn task(id, priority) {
+    fn task(id, label) {
         // 模拟工作
         let sum = 0
         for (let i = 0; i < 1000; i++) {
@@ -137,11 +137,11 @@ fn test_coro_priority() {
         results.send(id)
         return sum
     }
-    // 启动不同"优先级"的任务（通过名称标识）
-    let low = go(name: "low-priority") task(1, 0)
-    let normal = go(name: "normal-priority") task(2, 1)
-    let high = go(name: "high-priority") task(3, 2)
-    await all [low, normal, high]
+    // 启动多个带调试名称的任务
+    let first = go(name: "worker-first") task(1, "first")
+    let second = go(name: "worker-second") task(2, "second")
+    let third = go(name: "worker-third") task(3, "third")
+    await all [first, second, third]
     // 收集完成顺序
     let order = []
     for (let i = 0; i < 3; i++) {
@@ -152,7 +152,7 @@ fn test_coro_priority() {
     }
     print("完成顺序:", order)
     assert_eq(order.length, 3)
-    print("✓ 协程优先级测试通过")
+    print("✓ 命名协程批量完成测试通过")
 }
 
 // 测试7：协程链式调用
@@ -229,7 +229,7 @@ test_coro_cancel_status()
 test_coro_naming()
 test_batch_status_query()
 test_coro_error_capture()
-test_coro_priority()
+test_coro_named_batch()
 test_coro_chain()
 test_execution_trace()
 print("
