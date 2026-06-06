@@ -616,7 +616,7 @@ static void select_case_remove_from_bucket(XrWorker *worker, XrSelectCase *targe
     worker_blocked_bucket_reclaim_if_empty(worker, bucket);
 }
 
-static void worker_cancel_select_timer_if_not_fired(XrCoroutine *coro) {
+static void worker_cancel_select_timer_if_not_fired(XrWorker *worker, XrCoroutine *coro) {
     if (!coro || !coro->ext ||
         !atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         return;
@@ -624,8 +624,7 @@ static void worker_cancel_select_timer_if_not_fired(XrCoroutine *coro) {
     int state = atomic_load_explicit(&coro->ext->wait.timer_token.state, memory_order_acquire);
     if (state == XR_TIMER_WAIT_FIRED)
         return;
-    xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
-    atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+    xr_worker_cancel_timer(worker, coro);
 }
 
 // xr_worker_unblock_select - Remove select coroutine from ALL Channel wait queues
@@ -664,7 +663,7 @@ void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro) {
         }
     }
 
-    worker_cancel_select_timer_if_not_fired(coro);
+    worker_cancel_select_timer_if_not_fired(worker, coro);
 
     // Cleanup list pointers
     coro->next = NULL;
