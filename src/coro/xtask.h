@@ -45,6 +45,7 @@
 #include <stdbool.h>
 #include "../runtime/gc/xgc_header.h"
 #include "../runtime/value/xvalue.h"
+#include "xwait_state.h"
 
 /* ========== Forward Declarations ========== */
 
@@ -167,12 +168,18 @@ typedef struct XrTask {
     // halted mutators and are therefore safe with plain relaxed loads.
     _Atomic(struct XrCompletionNode *) on_completion;  //  8B
 
-    // Await coordination (single CAS protocol, mirrors old coro->await_state)
-    _Atomic int await_state;     //  4B: NONE / WAITING / RESOLVED
-    int waiter_index;            //  4B: -1=single, -2=scope, -3=any, >=0=all[idx]
-    struct XrCoroutine *waiter;  //  8B: coro waiting on this task
+    // Await coordination state shared by single and aggregate await paths.
+    _Atomic int await_state;  //  4B: NONE / WAITING / RESOLVED
+
+    // Aggregate await coordination for await_all / await_any.
+    int waiter_index;            //  4B: -3=any, -4=anySuccess, >=0=all[idx]
+    struct XrCoroutine *waiter;  //  8B: aggregate waiter coroutine
+
+    // Single await waiters. Multiple coroutines may await the same Task.
+    _Atomic bool await_lock;
+    XrTaskAwaitNode *await_waiters;
 } XrTask;
-// ~112B total
+// ~128B total
 
 /* ========== Task Lifecycle API ========== */
 
@@ -225,6 +232,8 @@ XR_FUNC void xr_task_add_completion(struct XrTask *task, struct XrCompletionNode
 XR_FUNC void xr_task_wake_waiter(struct XrayIsolate *X, struct XrTask *task);
 
 // Clear coroutine-owned await registrations from pending tasks.
+XR_FUNC bool xr_task_register_await_waiter(struct XrTask *task, struct XrCoroutine *waiter,
+                                           XrAwaitWaitToken *token, int waiter_index);
 XR_FUNC void xr_task_unregister_await_waiters(struct XrCoroutine *waiter);
 XR_FUNC void xr_task_finish_await_waiters(struct XrCoroutine *waiter);
 XR_FUNC void xr_task_cancel_await_waiters(struct XrCoroutine *waiter);

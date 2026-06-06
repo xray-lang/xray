@@ -336,14 +336,7 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
         XrCoroWaitState *wait = xr_coro_wait_state(coro);
         if (wait)
             xr_await_wait_token_timeout(&wait->await_token);
-        if (task) {
-            atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
-                                  memory_order_relaxed);
-            int expected = XR_AWAIT_WAITING;
-            (void) atomic_compare_exchange_strong_explicit(&task->await_state, &expected,
-                                                           XR_AWAIT_NONE, memory_order_acq_rel,
-                                                           memory_order_acquire);
-        }
+        xr_task_unregister_await_waiters(coro);
         if (wait) {
             atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
             xr_await_wait_token_finish(&wait->await_token);
@@ -354,7 +347,6 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
     if (task &&
         atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_RESOLVED) {
         coro_cancel_owned_timer(coro);
-        atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
         XrCoroWaitState *wait = xr_coro_wait_state(coro);
         if (wait) {
             atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
@@ -362,6 +354,20 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
             xr_timer_wait_token_finish(&wait->timer_token);
         }
         return block_result(XR_CORO_BLOCK_READY, task->result, true);
+    }
+
+    if (task && xr_task_is_done(task)) {
+        coro_cancel_owned_timer(coro);
+        XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        if (wait) {
+            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
+            xr_await_wait_token_finish(&wait->await_token);
+            xr_timer_wait_token_finish(&wait->timer_token);
+        }
+        if (atomic_load_explicit(&task->state, memory_order_acquire) == XR_TASK_COMPLETED) {
+            return block_result(XR_CORO_BLOCK_READY, task->result, true);
+        }
+        return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
 
     return block_result(XR_CORO_BLOCK_NOT_RESUMED, xr_null(), false);
@@ -406,25 +412,16 @@ static XrCoroBlockResult coro_register_single_await(XrCoroutine *coro, XrTask *t
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
     xr_await_wait_token_prepare(&wait->await_token, task, -1);
-    atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
-
-    int expected = XR_AWAIT_NONE;
-    if (atomic_compare_exchange_strong_explicit(&task->await_state, &expected, XR_AWAIT_WAITING,
-                                                memory_order_acq_rel, memory_order_acquire)) {
+    if (xr_task_register_await_waiter(task, coro, &wait->await_token, -1)) {
         return coro_arm_await_wait(coro, task, wait, timeout_ms);
     }
 
-    if (expected == XR_AWAIT_WAITING) {
-        return coro_arm_await_wait(coro, task, wait, timeout_ms);
-    }
-
-    XR_CHECK(expected == XR_AWAIT_RESOLVED, "await: unexpected await state");
-    atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL, memory_order_relaxed);
-    atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
     atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
     xr_await_wait_token_finish(&wait->await_token);
-    return block_result(XR_CORO_BLOCK_READY, task->result, true);
+    if (atomic_load_explicit(&task->state, memory_order_acquire) == XR_TASK_COMPLETED) {
+        return block_result(XR_CORO_BLOCK_READY, task->result, true);
+    }
+    return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
 }
 
 XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCoroutine *coro,

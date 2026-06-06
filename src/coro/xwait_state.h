@@ -46,9 +46,17 @@ typedef enum {
     XR_AWAIT_WAIT_TIMED_OUT,
 } XrAwaitWaitTokenState;
 
+typedef struct XrTaskAwaitNode {
+    struct XrTaskAwaitNode *next;
+    XrCoroutine *waiter;
+    int waiter_index;
+    bool linked;
+} XrTaskAwaitNode;
+
 typedef struct XrAwaitWaitToken {
     _Atomic int state;
     _Atomic(XrTask *) task;
+    XrTaskAwaitNode node;
     int waiter_index;
     uint32_t sequence;
 } XrAwaitWaitToken;
@@ -58,6 +66,10 @@ static inline void xr_await_wait_token_reset(XrAwaitWaitToken *token) {
         return;
     atomic_store_explicit(&token->state, XR_AWAIT_WAIT_IDLE, memory_order_relaxed);
     atomic_store_explicit(&token->task, NULL, memory_order_relaxed);
+    token->node.next = NULL;
+    token->node.waiter = NULL;
+    token->node.waiter_index = -1;
+    token->node.linked = false;
     token->waiter_index = -1;
 }
 
@@ -67,6 +79,10 @@ static inline void xr_await_wait_token_prepare(XrAwaitWaitToken *token, XrTask *
         return;
     token->sequence++;
     token->waiter_index = waiter_index;
+    token->node.next = NULL;
+    token->node.waiter = NULL;
+    token->node.waiter_index = waiter_index;
+    token->node.linked = false;
     atomic_store_explicit(&token->task, task, memory_order_relaxed);
     atomic_store_explicit(&token->state, XR_AWAIT_WAIT_REGISTERING, memory_order_release);
 }

@@ -49,6 +49,15 @@ static inline void child_lock_release(_Atomic bool *lock) {
     atomic_store_explicit(lock, false, memory_order_release);
 }
 
+static inline void await_lock_acquire(_Atomic bool *lock) {
+    while (atomic_exchange_explicit(lock, true, memory_order_acquire)) {
+    }
+}
+
+static inline void await_lock_release(_Atomic bool *lock) {
+    atomic_store_explicit(lock, false, memory_order_release);
+}
+
 /* ========== Task Creation ========== */
 
 XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
@@ -87,6 +96,8 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     atomic_store_explicit(&task->await_state, XR_AWAIT_NONE, memory_order_relaxed);
     task->waiter_index = -1;
     task->waiter = NULL;
+    atomic_init(&task->await_lock, false);
+    task->await_waiters = NULL;
 
     executor->task = task;
     return task;
@@ -456,6 +467,30 @@ void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
 
 /* ========== Await Wake (replaces xr_coro_wake_waiter for Task path) ========== */
 
+XR_FUNC bool xr_task_register_await_waiter(XrTask *task, XrCoroutine *waiter,
+                                           XrAwaitWaitToken *token, int waiter_index) {
+    if (!task || !waiter || !token)
+        return false;
+
+    XrTaskAwaitNode *node = &token->node;
+    node->waiter = waiter;
+    node->waiter_index = waiter_index;
+
+    await_lock_acquire(&task->await_lock);
+    if (xr_task_is_done(task)) {
+        node->waiter = NULL;
+        await_lock_release(&task->await_lock);
+        return false;
+    }
+
+    atomic_store_explicit(&task->await_state, XR_AWAIT_WAITING, memory_order_release);
+    node->next = task->await_waiters;
+    node->linked = true;
+    task->await_waiters = node;
+    await_lock_release(&task->await_lock);
+    return true;
+}
+
 static void task_clear_waiter_if_matches(XrTask *task, XrCoroutine *waiter) {
     if (!task || !waiter)
         return;
@@ -468,6 +503,36 @@ static void task_clear_waiter_if_matches(XrTask *task, XrCoroutine *waiter) {
         (void) atomic_compare_exchange_strong_explicit(&task->await_state, &waiting, XR_AWAIT_NONE,
                                                        memory_order_acq_rel, memory_order_acquire);
     }
+}
+
+static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waiter,
+                                                XrAwaitWaitToken *token) {
+    if (!task || !waiter || !token)
+        return;
+
+    XrTaskAwaitNode *node = &token->node;
+    await_lock_acquire(&task->await_lock);
+    if (node->linked) {
+        XrTaskAwaitNode **pp = &task->await_waiters;
+        while (*pp) {
+            if (*pp == node) {
+                *pp = node->next;
+                break;
+            }
+            pp = &(*pp)->next;
+        }
+    }
+    node->next = NULL;
+    node->waiter = NULL;
+    node->linked = false;
+    XrCoroutine *legacy_waiter =
+        atomic_load_explicit((_Atomic(XrCoroutine *) *) &task->waiter, memory_order_acquire);
+    if (!task->await_waiters && legacy_waiter == NULL) {
+        int waiting = XR_AWAIT_WAITING;
+        (void) atomic_compare_exchange_strong_explicit(&task->await_state, &waiting, XR_AWAIT_NONE,
+                                                       memory_order_acq_rel, memory_order_acquire);
+    }
+    await_lock_release(&task->await_lock);
 }
 
 static void task_unregister_multi_await_waiters(XrCoroutine *waiter, XrCoroWaitState *wait_state) {
@@ -491,8 +556,10 @@ void xr_task_unregister_await_waiters(XrCoroutine *waiter) {
         return;
 
     XrTask *single = atomic_exchange_explicit(&wait_state->await_task, NULL, memory_order_acq_rel);
-    if (single)
+    if (single) {
+        task_unregister_single_await_waiter(single, waiter, &wait_state->await_token);
         task_clear_waiter_if_matches(single, waiter);
+    }
 
     task_unregister_multi_await_waiters(waiter, wait_state);
 }
@@ -531,6 +598,27 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
      * await registration's CAS(NONE->WAITING) fails and reads result. */
     int old_await =
         atomic_exchange_explicit(&task->await_state, XR_AWAIT_RESOLVED, memory_order_acq_rel);
+
+    await_lock_acquire(&task->await_lock);
+    XrTaskAwaitNode *node = task->await_waiters;
+    task->await_waiters = NULL;
+    while (node) {
+        XrTaskAwaitNode *next = node->next;
+        node->next = NULL;
+        node->linked = false;
+        XrCoroutine *waiter = node->waiter;
+        node->waiter = NULL;
+        if (waiter) {
+            XrCoroWaitState *wait_state = xr_coro_wait_state(waiter);
+            if (wait_state)
+                xr_await_wait_token_resolve(&wait_state->await_token);
+            if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                xr_coro_ready(X, waiter, true);
+            }
+        }
+        node = next;
+    }
+    await_lock_release(&task->await_lock);
 
     // Atomically claim waiter pointer, prevent duplicate processing
     XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter, NULL,
