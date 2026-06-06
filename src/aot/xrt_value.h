@@ -160,6 +160,18 @@ static inline double xr_value_to_f64_coerce(XrValue v) {
  * String helpers
  * ========================================================================= */
 
+static inline int xrt_format_float(char *buf, size_t bufsz, double value) {
+    int len = snprintf(buf, bufsz, "%.15g", value);
+    if (len >= 0 && !strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E') &&
+        len + 2 < (int) bufsz) {
+        buf[len] = '.';
+        buf[len + 1] = '0';
+        buf[len + 2] = '\0';
+        len += 2;
+    }
+    return len;
+}
+
 static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
     switch (v.tag) {
         case XR_TAG_STR:
@@ -169,7 +181,7 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
             snprintf(buf, bufsz, "%lld", (long long) v.i);
             return buf;
         case XR_TAG_F64:
-            snprintf(buf, bufsz, "%g", v.f);
+            xrt_format_float(buf, bufsz, v.f);
             return buf;
         case XR_TAG_BOOL:
             return v.i ? "true" : "false";

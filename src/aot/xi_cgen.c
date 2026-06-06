@@ -738,6 +738,25 @@ static void emit_vref(FILE *out, const XiValue *v) {
         fprintf(out, "v%u", v->id);
 }
 
+static void emit_str_concat_expr(FILE *out, const XiValue *v) {
+    if (!v || v->nargs == 0) {
+        fprintf(out, "xr_box_str(\"\")");
+        return;
+    }
+    if (v->nargs == 1) {
+        emit_vref(out, v->args[0]);
+        return;
+    }
+    for (uint16_t i = 1; i < v->nargs; i++)
+        fprintf(out, "xrt_add(");
+    emit_vref(out, v->args[0]);
+    for (uint16_t i = 1; i < v->nargs; i++) {
+        fprintf(out, ", ");
+        emit_vref(out, v->args[i]);
+        fprintf(out, ")");
+    }
+}
+
 /* Write a phi variable reference: phi<id> */
 static void emit_phi_ref(FILE *out, const XiPhi *phi) {
     fprintf(out, "phi%u", phi->value.id);
@@ -1986,20 +2005,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 if (add_space)
                     fprintf(out, ")");
             } else if (strcmp(bn, "str_concat") == 0) {
-                if (v->nargs == 2) {
-                    fprintf(out, "xrt_add(");
-                    emit_vref(out, v->args[0]);
-                    fprintf(out, ", ");
-                    emit_vref(out, v->args[1]);
-                    fprintf(out, ")");
-                } else {
-                    fprintf(out, "xrt_str_concat(%u", v->nargs);
-                    for (uint16_t i = 0; i < v->nargs; i++) {
-                        fprintf(out, ", ");
-                        emit_vref(out, v->args[i]);
-                    }
-                    fprintf(out, ")");
-                }
+                emit_str_concat_expr(out, v);
             } else if (strcmp(bn, "array_new") == 0) {
                 int64_t cap =
                     (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 4;

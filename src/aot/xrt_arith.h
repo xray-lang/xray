@@ -140,9 +140,12 @@ static inline void xrt_print(XrValue v) {
         case XR_TAG_I64:
             printf("%lld", (long long) v.i);
             break;
-        case XR_TAG_F64:
-            printf("%g", v.f);
+        case XR_TAG_F64: {
+            char buf[64];
+            xrt_format_float(buf, sizeof(buf), v.f);
+            fputs(buf, stdout);
             break;
+        }
         case XR_TAG_BOOL:
             printf("%s", v.i ? "true" : "false");
             break;
