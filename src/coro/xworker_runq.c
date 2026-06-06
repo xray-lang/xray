@@ -53,9 +53,20 @@ static int runq_index_for_priority(int priority) {
     return normalize_coro_priority(priority);
 }
 
-static void prepare_scheduled_coro(XrCoroutine *coro, int priority) {
+static int64_t worker_schedule_time(XrWorker *worker) {
+    if (!worker)
+        return xr_monotonic_ticks();
+    if (worker->p.sched_time_budget == 0 || worker->p.sched_time_cache <= 0) {
+        worker->p.sched_time_cache = xr_monotonic_ticks();
+        worker->p.sched_time_budget = XR_SCHED_TIME_CACHE_BUDGET;
+    }
+    worker->p.sched_time_budget--;
+    return worker->p.sched_time_cache;
+}
+
+static void prepare_scheduled_coro(XrWorker *worker, XrCoroutine *coro, int priority) {
     (void) priority;
-    coro->submit_time = xr_monotonic_ticks();
+    coro->submit_time = worker_schedule_time(worker);
     coro->schedule_count = 1;
 }
 
@@ -369,7 +380,7 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, i
     XR_DCHECK(worker != NULL, "enqueue_runq_or_inject: NULL worker");
     XR_DCHECK(coro != NULL, "enqueue_runq_or_inject: NULL coro");
     priority = normalize_coro_priority(priority);
-    prepare_scheduled_coro(coro, priority);
+    prepare_scheduled_coro(worker, coro, priority);
 
     int runq_idx = runq_index_for_priority(priority);
     if (xr_steal_queue_push(&worker->p.runq[runq_idx].deque, coro)) {
@@ -472,7 +483,7 @@ static void injectq_push_batch_internal(XrRuntime *runtime, XrCoroutine *first, 
     while (cur && (count <= 0 || actual_count < count)) {
         XrCoroutine *next = cur->sched_link;
         if (prepare_items) {
-            prepare_scheduled_coro(cur, priority);
+            prepare_scheduled_coro(NULL, cur, priority);
         }
         actual_last = cur;
         actual_count++;
@@ -722,7 +733,7 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
     if (xr_current_worker() == worker) {
         XrCoroutine *prev = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
         int new_prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-        prepare_scheduled_coro(coro, new_prio);
+        prepare_scheduled_coro(worker, coro, new_prio);
         atomic_store_explicit(&worker->p.lifo_slot, coro, memory_order_relaxed);
         int prev_prio =
             prev ? xr_coro_get_priority(xr_coro_flags_load(prev)) : worker->p.lifo_slot_prio;
