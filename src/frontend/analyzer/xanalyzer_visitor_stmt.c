@@ -158,14 +158,14 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
 
     links->type = var_type;
 
-    /* Atomic<T> must be declared as `shared const`. The container itself
-     * is immutable; only the inner value is atomically mutable. */
-    if (var_type && xr_type_is_named_class(var_type, "Atomic")) {
+    /* Shared mutable runtime primitives require an immutable binding. */
+    if (var_type && (xr_type_is_named_class(var_type, "Atomic") ||
+                     xr_type_is_named_class(var_type, "WorkQueue"))) {
         if (!sym->is_shared || !sym->is_const) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                       XR_ERR_ANALYZE_TYPE_MISMATCH,
-                                       "Atomic<T> must be declared as 'shared const'", &loc);
+            xa_analyzer_add_diagnostic(
+                ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                "shared runtime primitive must be declared as 'shared const'", &loc);
         }
     }
 

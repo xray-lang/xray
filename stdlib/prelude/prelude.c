@@ -190,6 +190,10 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     /* Atomic native type class (registered by xr_core_init). */
     if (isolate->native_type_classes[XR_TATOMIC])
         bind_class_global(isolate, XR_GLOBAL_VAR_ATOMIC, isolate->native_type_classes[XR_TATOMIC]);
+    if (isolate->native_type_classes[XR_TWORKQUEUE]) {
+        bind_class_global(isolate, XR_GLOBAL_VAR_WORKQUEUE,
+                          isolate->native_type_classes[XR_TWORKQUEUE]);
+    }
 }
 
 /* ========== Module loader ========== */

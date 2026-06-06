@@ -272,6 +272,7 @@ static const NativeTypeMapping type_mappings[] = {
     {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
     {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
     {"DateTime", XR_TID_DATETIME, "DateTime"},
+    {"WorkQueue", XR_TID_WORKQUEUE, TYPE_NAME_WORKQUEUE},
 };
 
 #define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -412,6 +413,7 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_BIGINT, XR_TINSTANCE},
     {XR_TID_STRINGBUILDER, XR_TINSTANCE},
     {XR_TID_CHANNEL, XR_TCHANNEL},
+    {XR_TID_WORKQUEUE, XR_TWORKQUEUE},
     {XR_TID_REGEX, XR_TINSTANCE},
     {XR_TID_EXCEPTION, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},

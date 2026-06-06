@@ -80,10 +80,11 @@ typedef enum {
     XR_TCOROUTINE,
     XR_TCHANNEL,
     XR_TCOROPOOL,
-    XR_TBLOB,    // Raw byte buffer on Immix heap (no traverse/destroy)
-    XR_TCELL,    // Single-slot mutable capture cell (32B)
-    XR_TTASK,    // Lightweight GC-managed coroutine handle (Task/Executor separation)
-    XR_TATOMIC,  // Atomic<T> shared primitive wrapper (lock-free, system heap)
+    XR_TBLOB,       // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TCELL,       // Single-slot mutable capture cell (32B)
+    XR_TTASK,       // Lightweight GC-managed coroutine handle (Task/Executor separation)
+    XR_TATOMIC,     // Atomic<T> shared primitive wrapper (lock-free, system heap)
+    XR_TWORKQUEUE,  // WorkQueue<T> shared sharded queue (system heap)
 } XrObjType;
 
 /* ========== Unified Object Header (16 bytes) ========== */
@@ -174,7 +175,7 @@ typedef struct XrGCHeader XrObjHeader;
  * not insert dup/drop for such objects. */
 static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
     return t == XR_TCHANNEL || t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL ||
-           t == XR_TATOMIC;
+           t == XR_TATOMIC || t == XR_TWORKQUEUE;
 }
 
 /* ========== RC dup/drop Primitives ==========
@@ -260,8 +261,9 @@ static inline const char *xr_obj_type_name(XrObjType type) {
                                   "blob",
                                   "cell",
                                   TYPE_NAME_TASK,
-                                  TYPE_NAME_ATOMIC};
-    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TATOMIC + 1,
+                                  TYPE_NAME_ATOMIC,
+                                  TYPE_NAME_WORKQUEUE};
+    _Static_assert(sizeof(names) / sizeof(names[0]) == XR_TWORKQUEUE + 1,
                    "xr_obj_type_name: names array out of sync with XrObjType enum");
     if (type < sizeof(names) / sizeof(names[0])) {
         return names[type];

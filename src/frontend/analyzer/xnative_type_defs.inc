@@ -22,13 +22,15 @@ static const char xr_native_def_json[] = "// Built-in Json type — implementati
 
 static const char xr_native_def_map[] = "// Built-in Map<K, V> type — implementation in src/runtime/object/xmap_methods.c\n\n@native\nclass Map<K, V> {\n    length: int\n    get(key: K) -> V?\n    set(key: K, value: V)\n    has(key: K) -> bool\n    delete(key: K) -> bool\n    clear()\n    keys() -> Array<K>\n    values() -> Array<V>\n    entries() -> Array<(K, V)>\n    forEach(fn: (key: K, value: V) -> ())\n    // Iteration protocol — iterator() yields each key K (used by\n    // single-variable `for (k in m)`); entriesIterator() yields each\n    // (key, value) tuple (used by `for (k, v in m)`).\n    iterator() -> Iterator<K>\n    entriesIterator() -> Iterator<(K, V)>\n}\n";
 
-static const char xr_native_def_regex[] = "// Built-in Regex type — implementation in stdlib/regex/regex_methods.c\n\n@native\nclass Regex {\n    test(text: string) -> bool\n    find(text: string) -> string?\n    findAll(text: string) -> Array<string>\n    replace(text: string, replacement: string) -> string\n    split(text: string) -> Array<string>\n}\n";
+static const char xr_native_def_regex[] = "// Built-in Regex type — implementation in stdlib/regex/xregex_binding.c\n\n@native\nclass RegexMatch {\n    start: int\n    end: int\n    text: string\n    groups: Array<string>\n}\n\n@native\nclass Regex {\n    test(text: string) -> bool\n    find(text: string) -> RegexMatch?\n    findText(text: string) -> string?\n    findGroup(text: string, index: int) -> string?\n    findAll(text: string) -> Array<RegexMatch>\n    replace(text: string, replacement: string) -> string\n    split(text: string) -> Array<string>\n}\n";
 
 static const char xr_native_def_set[] = "// Built-in Set<T> type — implementation in src/runtime/object/xset_methods.c\n\n@native\nclass Set<T> {\n    length: int\n    add(value: T)\n    has(value: T) -> bool\n    delete(value: T) -> bool\n    clear()\n    values() -> Array<T>\n    forEach(fn: (value: T) -> ())\n    // Iteration protocol — yields each element T (used by for-in).\n    iterator() -> Iterator<T>\n}\n";
 
 static const char xr_native_def_string[] = "// Built-in string type — implementation in src/runtime/object/xstring_methods.c\n\n@native\nclass string {\n    length: int\n    charAt(index: int) -> string\n    charCodeAt(index: int) -> int\n    concat(...strings: string) -> string\n    includes(search: string) -> bool\n    indexOf(search: string, start?: int) -> int\n    lastIndexOf(search: string) -> int\n    slice(start: int, end?: int) -> string\n    substring(start: int, end?: int) -> string\n    substr(start: int, length?: int) -> string\n    toLowerCase() -> string\n    toUpperCase() -> string\n    trim() -> string\n    trimStart() -> string\n    trimEnd() -> string\n    split(separator: string, limit?: int) -> Array<string>\n    replace(search: string, replacement: string) -> string\n    replaceAll(search: string, replacement: string) -> string\n    repeat(count: int) -> string\n    startsWith(search: string) -> bool\n    endsWith(search: string) -> bool\n    padStart(length: int, pad?: string) -> string\n    padEnd(length: int, pad?: string) -> string\n    match(pattern: string) -> Array<string>?\n    // Iteration protocol — iterator() yields each character, while\n    // entriesIterator() yields (charIndex, character) tuples. Both\n    // are used by for-in lowering and may be called directly.\n    iterator() -> Iterator<string>\n    entriesIterator() -> Iterator<(int, string)>\n    entries() -> Array<(int, string)>\n}\n";
 
 static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: int\n    append(value: Json) -> StringBuilder\n    toString() -> string\n    clear() -> StringBuilder\n}\n";
+
+static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n    length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> bool\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("array", xr_native_def_array) \
@@ -45,5 +47,6 @@ static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder typ
     X("regex", xr_native_def_regex) \
     X("set", xr_native_def_set) \
     X("string", xr_native_def_string) \
-    X("stringbuilder", xr_native_def_stringbuilder)
+    X("stringbuilder", xr_native_def_stringbuilder) \
+    X("workqueue", xr_native_def_workqueue)
 

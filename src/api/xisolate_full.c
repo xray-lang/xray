@@ -148,6 +148,9 @@ static int isolate_init_full(XrayIsolate *isolate) {
         if (isolate->core->jsonClass)
             isolate->vm.builtins[XR_GLOBAL_VAR_JSON] =
                 xr_value_from_class(isolate->core->jsonClass);
+        if (isolate->native_type_classes[XR_TWORKQUEUE])
+            isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
+                xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }

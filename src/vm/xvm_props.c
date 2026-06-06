@@ -41,6 +41,7 @@
 #include "../coro/xworker.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xwork_queue.h"
 #include "../runtime/object/xexception.h"
 #include <stdatomic.h>
 
@@ -366,6 +367,22 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             base[a] = xr_int((xr_Integer) ch->buf_size);
         } else if (prop_symbol == SYMBOL_IS_CLOSED) {
             base[a] = xr_bool(xr_channel_is_closed(ch));
+        } else {
+            base[a] = xr_null();
+        }
+        return XR_DISP_NEXT;
+    }
+
+    if (xr_value_is_work_queue(obj)) {
+        XrWorkQueue *q = xr_value_to_work_queue(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_LENGTH) {
+            base[a] = xr_int((xr_Integer) xr_work_queue_length(q));
+        } else if (prop_symbol == SYMBOL_IS_CLOSED) {
+            base[a] = xr_bool(xr_work_queue_is_closed(q));
+        } else if (prop_name && strcmp(prop_name, "shardCount") == 0) {
+            base[a] = xr_int((xr_Integer) q->shard_count);
         } else {
             base[a] = xr_null();
         }

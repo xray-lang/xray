@@ -60,6 +60,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_COROUTINE;
     if (xr_type_is_named_class(type, "Atomic"))
         return XR_TID_ATOMIC;
+    if (xr_type_is_named_class(type, "WorkQueue"))
+        return XR_TID_WORKQUEUE;
     if (xr_type_is_named_class(type, "DateTime"))
         return XR_TID_DATETIME;
     return XR_TID_NULL;

@@ -2065,7 +2065,7 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    // Check: cannot move Channel or Atomic (thread-safe shared types)
+    // Check: cannot move thread-safe shared runtime primitives.
     if (var_type && var_type->kind == XR_KIND_CHANNEL) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "cannot move Channel (thread-safe, shared by reference)", &loc);
@@ -2073,6 +2073,11 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (var_type && xr_type_is_named_class(var_type, "Atomic")) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "cannot move Atomic (thread-safe, shared by reference)", &loc);
+    }
+    if (var_type && xr_type_is_named_class(var_type, "WorkQueue")) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "cannot move WorkQueue (thread-safe, shared by reference)",
+                                   &loc);
     }
 
     // Check: cannot move value types (no heap object to transfer)
