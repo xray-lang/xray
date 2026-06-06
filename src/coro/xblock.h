@@ -39,6 +39,11 @@ typedef struct {
     bool ok;
 } XrCoroBlockResult;
 
+typedef struct {
+    uint8_t previous_state;
+    bool active;
+} XrCoroBlockSnapshot;
+
 XR_FUNC bool xr_slot_store_value(XrSlotRef slot, XrValue value);
 XR_FUNC bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value);
 XR_FUNC XrValue *xr_slot_value_address(XrSlotRef slot);
@@ -74,10 +79,17 @@ XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, stru
 XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struct XrArray *tasks,
                                                  bool success_only);
 
-/* Runtime wait queues call this while holding the queue lock after wait
- * metadata is installed. The waiter becomes externally wakeable only after
- * the caller links it into the queue and releases that lock. */
-XR_FUNC bool xr_coro_publish_locked_block(struct XrCoroutine *coro);
+/* Runtime wait queues call this after wait metadata is installed and before
+ * the waiter becomes externally wakeable. The caller must own the queue by
+ * lock or by single-worker ownership until linking is complete. */
+XR_FUNC bool xr_coro_publish_wait_block(struct XrCoroutine *coro);
+
+/* Submission paths use this when a coroutine must become BLOCKED before an
+ * enqueue that can still fail. Rollback restores only state/shadow bits and
+ * preserves concurrent non-state flag updates. */
+XR_FUNC XrCoroBlockSnapshot xr_coro_begin_reversible_block(struct XrCoroutine *coro);
+XR_FUNC void xr_coro_rollback_reversible_block(struct XrCoroutine *coro,
+                                               XrCoroBlockSnapshot snapshot);
 
 /* Backends call this after their continuation/frame state is quiescent and
  * before returning XR_CORO_RUN_BLOCKED to the scheduler. Channel helpers may

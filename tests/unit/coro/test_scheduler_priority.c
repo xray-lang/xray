@@ -437,14 +437,14 @@ TEST(blocked_suspend_finalize_accepts_backend_and_channel_block_states) {
     ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_READY);
 }
 
-TEST(locked_block_publish_synchronizes_state_shadow_bits) {
+TEST(wait_block_publish_synchronizes_state_shadow_bits) {
     XrCoroutine coro;
     memset(&coro, 0, sizeof(coro));
     atomic_store(&coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING | XR_CORO_WAIT_CHANNEL_SEND |
                                   XR_CORO_PRIO_NORMAL);
     atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
 
-    ASSERT_TRUE(xr_coro_publish_locked_block(&coro));
+    ASSERT_TRUE(xr_coro_publish_wait_block(&coro));
     ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_BLOCKED);
     uint32_t raw_flags = atomic_load(&coro.flags);
     ASSERT_TRUE((raw_flags & XR_CORO_FLG_BLOCKED) != 0);
@@ -466,6 +466,6 @@ RUN_TEST(steal_uses_effective_priority_for_aged_remote_work);
 RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
 RUN_TEST(blocked_transition_helper_synchronizes_state_shadow_bits);
 RUN_TEST(blocked_suspend_finalize_accepts_backend_and_channel_block_states);
-RUN_TEST(locked_block_publish_synchronizes_state_shadow_bits);
+RUN_TEST(wait_block_publish_synchronizes_state_shadow_bits);
 
 TEST_MAIN_END()

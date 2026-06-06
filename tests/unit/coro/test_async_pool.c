@@ -31,7 +31,7 @@ TEST(async_submit_rejects_when_queue_full) {
 
     memset(&runtime, 0, sizeof(runtime));
     memset(&rejected_coro, 0, sizeof(rejected_coro));
-    atomic_store(&rejected_coro.flags, 0);
+    atomic_store(&rejected_coro.flags, XR_CORO_FLG_READY | XR_CORO_FLG_CANCEL_REQUESTED);
     atomic_store(&rejected_coro.coro_state, XR_CORO_STATE_READY);
     atomic_init(&destroy_count, 0);
 
@@ -47,6 +47,9 @@ TEST(async_submit_rejects_when_queue_full) {
     second->destroy_data = count_destroy;
     ASSERT_FALSE(xr_async_submit(&pool, second));
     ASSERT_FALSE(xr_coro_flags_has(&rejected_coro, XR_CORO_FLG_BLOCKED));
+    ASSERT_TRUE(xr_coro_flags_has(&rejected_coro, XR_CORO_FLG_READY));
+    ASSERT_TRUE(xr_coro_flags_has(&rejected_coro, XR_CORO_FLG_CANCEL_REQUESTED));
+    ASSERT_EQ_INT(atomic_load(&rejected_coro.coro_state), XR_CORO_STATE_READY);
 
     ASSERT_EQ_INT(atomic_load_explicit(&pool.queue_depth, memory_order_relaxed), 1);
     ASSERT_EQ_INT(atomic_load_explicit(&pool.max_queue_depth, memory_order_relaxed), 1);

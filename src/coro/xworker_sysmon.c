@@ -17,6 +17,7 @@
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "../base/xlog.h"
+#include "xblock.h"
 #include "xjit_hooks.h"
 
 /* Arm guard pages for all running workers so JIT back-edges trigger safepoints.
@@ -457,7 +458,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
 
     // Set coroutine state
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
-    xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING, XR_CORO_FLG_BLOCKED);
+    (void) xr_coro_publish_wait_block(coro);
 }
 
 static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, void *channel,

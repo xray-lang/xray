@@ -13,6 +13,7 @@
  */
 
 #include "xasync.h"
+#include "xblock.h"
 #include "xworker.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -303,19 +304,17 @@ bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
     if (!pool || !job)
         return false;
 
-    uint8_t prev_state = XR_CORO_STATE_NONE;
+    XrCoroBlockSnapshot block_snapshot = {0};
 
     // Mark before enqueue so a very fast completion cannot race ahead
     // of the blocked state and leave the coroutine asleep.
     if (job->coro) {
-        prev_state = atomic_load_explicit(&job->coro->coro_state, memory_order_acquire);
-        xr_coro_flags_set(job->coro, XR_CORO_FLG_BLOCKED);
+        block_snapshot = xr_coro_begin_reversible_block(job->coro);
     }
 
     if (!async_queue_try_push(pool, job)) {
         if (job->coro) {
-            atomic_store_explicit(&job->coro->coro_state, prev_state, memory_order_release);
-            xr_coro_flags_clear(job->coro, XR_CORO_FLG_BLOCKED);
+            xr_coro_rollback_reversible_block(job->coro, block_snapshot);
         }
         atomic_fetch_add_explicit(&pool->reject_count, 1, memory_order_relaxed);
         return false;

@@ -631,7 +631,7 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     XrWorker *worker_state = xr_current_worker();
     if (worker_state)
         atomic_store_explicit(&coro->affinity_p, worker_state->p.id, memory_order_relaxed);
-    (void) xr_coro_publish_locked_block(coro);
+    (void) xr_coro_publish_wait_block(coro);
     if (!work_queue_waiter_enqueue_locked(q, coro)) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
