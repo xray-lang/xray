@@ -1205,6 +1205,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_vref(out, v->args[0]);
             fprintf(out, ");\n");
         }
+        fprintf(out, "    f->state = %d;\n", sid);
         if (await_all) {
             fprintf(out, "    XrAotResult _await_%u = xr_aot_await_all_tasks(ctx, ", v->id);
         } else if (await_any) {
@@ -1228,14 +1229,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ", false);\n");
         }
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _await_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _await_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    f->state = %d;\n", sid);
         if (await_all) {
             fprintf(out, "    _await_%u = xr_aot_await_all_tasks_resume(ctx, ", v->id);
             emit_vref(out, v->args[0]);
@@ -1253,8 +1256,11 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
         fprintf(out, "        return _await_%u;\n", v->id);
-        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_await_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _await_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if ((await_all || await_any) && cg_coro_value_has_storage(f, v) &&
             cg_rep(v) == XR_REP_TAGGED) {
@@ -1444,6 +1450,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     if (v->op == XI_SCOPE_EXIT) {
         int sid = ++(*state_id);
         fprintf(out, "    XrValue _scope_exit_value_%u = XR_NULL_VAL;\n", v->id);
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ", v->id,
                 (unsigned) v->aux_int);
         if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
@@ -1454,14 +1461,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, ");\n");
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    _scope_exit_%u = xr_aot_scope_exit(ctx, %u, ", v->id,
                 (unsigned) v->aux_int);
         if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
@@ -1472,11 +1481,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         }
         fprintf(out, ");\n");
         fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_scope_exit_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _scope_exit_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "S%d_DONE:;\n", sid);
         if (cg_coro_value_has_storage(f, v) && cg_rep(v) == XR_REP_TAGGED) {
             fprintf(out, "    ");
