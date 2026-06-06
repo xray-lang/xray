@@ -109,6 +109,19 @@ static int worker_coro_priority(XrCoroutine *coro) {
     return priority;
 }
 
+static bool worker_high_priority_work_visible(XrRuntime *runtime) {
+    if (!runtime)
+        return false;
+
+    uint32_t high_inject_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
+    if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
+         high_inject_bit) != 0) {
+        return true;
+    }
+    return atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH],
+                                memory_order_acquire) != 0;
+}
+
 static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
                                              XrCoroutine *child) {
     int parent_priority = worker_coro_priority(parent);
@@ -123,13 +136,7 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
     if (!runtime)
         return true;
 
-    uint32_t high_inject_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
-    if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
-         high_inject_bit) != 0) {
-        return false;
-    }
-    return atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH],
-                                memory_order_acquire) == 0;
+    return !worker_high_priority_work_visible(runtime);
 }
 
 static bool worker_should_keep_parent_local(XrCoroutine *parent, XrCoroutine *child) {
@@ -307,6 +314,20 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
     return false;
 }
 
+static XrCoroutine *worker_pop_parent_continuation(XrWorker *worker) {
+    XrCoroutine *parent = xr_steal_queue_pop(&worker->p.cont_deque);
+    if (!parent)
+        return NULL;
+
+    xr_worker_refresh_runq_masks(worker);
+    if (worker_coro_priority(parent) < CORO_PRIORITY_HIGH &&
+        worker_high_priority_work_visible(worker->p.runtime)) {
+        xr_worker_push(worker, parent);
+        return NULL;
+    }
+    return parent;
+}
+
 // Execute a coroutine with continuation stealing support.
 // Handles the push-parent/exec-child/pop-parent loop.
 // Also implements BLOCKED fast re-dispatch: when a coro blocks on channel
@@ -476,9 +497,8 @@ normal_result_path:
 pop_continuation:
     // Pop parent continuation (LIFO)
     {
-        XrCoroutine *parent = xr_steal_queue_pop(&p->cont_deque);
+        XrCoroutine *parent = worker_pop_parent_continuation(worker);
         if (parent) {
-            xr_worker_refresh_runq_masks(worker);
             coro = parent;
             goto cont_exec;
         }
