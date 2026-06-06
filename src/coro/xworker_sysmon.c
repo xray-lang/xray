@@ -446,6 +446,7 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
         xr_sched_metric_add(worker->p.runtime,
                             &worker->p.runtime->sched_stats.select_register_count, registered);
     }
+    xr_select_wait_commit(sw);
 
     // Add to Worker's linear blocked queue (for sysmon / timer traversal)
     worker_blocked_list_add(worker, coro);
@@ -494,6 +495,7 @@ XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, 
                 XR_DCHECK(sc >= sw->cases && sc < sw->cases + sw->case_count,
                           "wake_select: case index out of range");
                 int case_index = (int) (sc - sw->cases);
+                xr_select_wait_resolve(sw);
                 atomic_store_explicit(&sw->selected_index, case_index, memory_order_release);
                 atomic_store_explicit(&sw->selected_status, resume_status, memory_order_release);
                 if (worker->p.runtime) {
