@@ -294,6 +294,7 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 #define CG_MAX_SHARED 512
 #define CG_MAX_METHODS 256
 #define CG_MAX_IMPORTS 256
+#define CG_MAX_SYNC_GO_TARGETS 512
 
 typedef struct {
     const char *class_name; /* owning class (e.g. "Rect") */
@@ -333,6 +334,8 @@ struct XiCgenCtx {
     int all_nmodules;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
     XiCgenCoroFrameStats coro_frame_stats;
+    const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
+    int nsync_go_targets;
 };
 
 #include "xi_cgen_ctx_impl.inc"
@@ -2662,7 +2665,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     fprintf(out, "}\n\n");
 
-    if (cg_func_can_emit_sync_go_wrapper_ctx(ctx, f))
+    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f))
         emit_sync_go_wrapper(ctx, out, f, prefix);
 }
 
@@ -2684,12 +2687,12 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     fprintf(out, ");\n");
 
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
-    bool can_sync_go = !needs_aot_coro && cg_func_can_emit_sync_go_wrapper_ctx(ctx, f);
-    if (needs_aot_coro || can_sync_go) {
+    bool needs_sync_go = !needs_aot_coro && cg_func_needs_sync_go_wrapper_ctx(ctx, f);
+    if (needs_aot_coro || needs_sync_go) {
         fprintf(out, "static void *");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_params(out, f, can_sync_go);
+        emit_aot_frame_new_params(out, f, needs_sync_go);
         fprintf(out, ");\n");
         fprintf(out, "static XrAotResult ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
@@ -2813,6 +2816,8 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
              * freed implicitly at process exit (short-lived AOT tool). */
         }
     }
+
+    cg_prepare_sync_go_targets_for_modules(ctx, modules, nmodules);
 }
 
 /* ========== Multi-module API ========== */
@@ -2935,6 +2940,9 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
 
     /* Reset function name counter for each compilation unit */
     ctx->fname_counter = 0;
+
+    XiModule *single_module[1] = {module};
+    cg_prepare_sync_go_targets_for_modules(ctx, single_module, 1);
 
     /* Initialize from module metadata (no IR scanning) */
     cg_init_from_module(ctx, module);
