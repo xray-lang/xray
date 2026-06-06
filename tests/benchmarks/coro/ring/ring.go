@@ -67,8 +67,11 @@ func main() {
 	elapsed := time.Since(start)
 	elapsedMs := float64(elapsed) / float64(time.Millisecond)
 	totalMessages := int64(N * M)
+	expected := N * M
 
 	fmt.Println("最终结果:", result)
+	fmt.Println("预期:", expected)
+	fmt.Println("正确:", result == expected)
 	fmt.Println("总消息数:", totalMessages)
 	fmt.Printf("总时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {

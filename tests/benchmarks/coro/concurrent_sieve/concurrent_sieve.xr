@@ -84,6 +84,8 @@ let elapsed = time.monotonic() - start
 print("找到素数:", count)
 print("最大素数:", primes[primes.length - 1])
 print("管道级数:", count)
+print("预期:", N)
+print("正确:", count == N)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("速度:", int(count * 1000 / elapsed), "primes/sec")

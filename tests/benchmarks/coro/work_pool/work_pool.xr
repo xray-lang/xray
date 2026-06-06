@@ -33,6 +33,14 @@ fn fib(n: int) -> int {
     return b
 }
 
+fn expected_checksum(count: int) -> int {
+    let total = 0
+    for (let i = 0; i < count; i++) {
+        total = total + fib(i % 20)
+    }
+    return total
+}
+
 // Worker: 从任务队列取任务，执行后发送结果
 fn worker(id: int) -> int {
     let processed = 0
@@ -82,8 +90,11 @@ for (w in workers) {
 
 let elapsed = time.monotonic() - start
 result_ch.close()
+let expected = expected_checksum(TASKS)
 
 print("结果校验和:", total)
+print("预期:", expected)
+print("正确:", total == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")

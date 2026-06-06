@@ -75,7 +75,10 @@ for (let i = 0; i < CONSUMERS; i++) {
 }
 let elapsed = time.monotonic() - start
 done_ch.close()
+let expected = ITEMS
 print("消费总数:", total_consumed)
+print("预期:", expected)
+print("正确:", total_consumed == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(total_consumed * 1000 / elapsed), "items/sec")

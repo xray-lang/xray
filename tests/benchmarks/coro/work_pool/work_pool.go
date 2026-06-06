@@ -24,6 +24,14 @@ func fib(n int) int {
 	return b
 }
 
+func expectedChecksum(count int) int {
+	total := 0
+	for i := 0; i < count; i++ {
+		total += fib(i % 20)
+	}
+	return total
+}
+
 func main() {
 	WORKERS := 8
 	TASKS := 100000
@@ -42,8 +50,8 @@ func main() {
 	fmt.Println("Worker数:", WORKERS)
 	fmt.Println("任务总数:", TASKS)
 
-	taskCh := make(chan int, 100)
-	resultCh := make(chan int, 100)
+	taskCh := make(chan int, 1000)
+	resultCh := make(chan int, 1000)
 	workerLoads := make([]int64, WORKERS)
 
 	start := time.Now()
@@ -81,8 +89,11 @@ func main() {
 	close(resultCh)
 	elapsed := time.Since(start)
 	elapsedMs := float64(elapsed) / float64(time.Millisecond)
+	expected := expectedChecksum(TASKS)
 
 	fmt.Println("结果校验和:", total)
+	fmt.Println("预期:", expected)
+	fmt.Println("正确:", total == expected)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("吞吐量:", int(float64(TASKS)/elapsed.Seconds()), "tasks/sec")

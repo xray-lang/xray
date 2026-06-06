@@ -19,7 +19,7 @@
 //                reallymarkobject dereferenced and stamped 0x04 over
 //                neighbouring live chain links.
 //             -> Bug #11 (2e1dacc): conservative stack scan of
-//                coro->vm_ctx.stack tagged JIT-frame XrValue slots as
+//                xr_coro_vm_ctx(coro)->stack tagged JIT-frame XrValue slots as
 //                live PTRs, but the JIT never writes vm_ctx.stack, so
 //                those triplets were stale leftovers from earlier
 //                interpreter activations and the ptr no longer aimed

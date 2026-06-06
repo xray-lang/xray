@@ -44,17 +44,19 @@ for (let r = 0; r < ROUNDS; r++) {
     }
 
     // 等待所有协程完成
-    let round_sum = 0
     for (t in tasks) {
-        round_sum = round_sum + (await t)
+        await t
     }
     signal_ch.close()
     total_woken = total_woken + N
 }
 
 let elapsed = time.monotonic() - start
+let expected = N * ROUNDS
 
 print("总唤醒数:", total_woken)
+print("预期:", expected)
+print("正确:", total_woken == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(total_woken * 1000 / elapsed), "wakeups/sec")

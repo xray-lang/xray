@@ -25,7 +25,6 @@ fn producer(ch: Channel<int>, id: int, count: int) {
     for (let i = 0; i < count; i++) {
         ch.send(id * 1000000 + i)
     }
-    ch.close()
 }
 
 let start = time.monotonic()
@@ -56,9 +55,15 @@ await t0
 await t1
 await t2
 await t3
+ch0.close()
+ch1.close()
+ch2.close()
+ch3.close()
 
 let elapsed = time.monotonic() - start
 print("接收总数:", received)
+print("预期:", TOTAL)
+print("正确:", received == TOTAL)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(received * 1000 / elapsed), "msg/sec")

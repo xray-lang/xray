@@ -12,6 +12,9 @@ if (process.args.length > 0) {
 if (process.args.length > 1) {
     N_CHAMENEOS = int(process.args[1]) ?? N_CHAMENEOS
 }
+if (N_CHAMENEOS < 2) {
+    N_CHAMENEOS = 2
+}
 
 print("=== Chameneos-Redux 测试 ===")
 print("会合次数:", N_MEETINGS)
@@ -29,13 +32,14 @@ fn complement(c1: int, c2: int) -> int {
     return c1
 }
 
-// Meeting place: first chameneo sends its color, gets partner's color back
-// Uses two channels to coordinate pairing
-shared const request_ch = Channel(1)   // chameneo sends: [id, color]
+// Meeting place: first chameneo sends its color, gets partner's color back.
+// The request channel can hold one pending request per participant so the
+// broker can stop everyone without depending on close waking blocked senders.
+shared const request_ch = Channel(N_CHAMENEOS)   // chameneo sends: [id, color, reply]
 shared const done_ch = Channel(100)    // report results
 
 // Broker: pairs up chameneos for N meetings
-fn broker(meetings: int) {
+fn broker(meetings: int, participants: int) {
     for (let i = 0; i < meetings; i++) {
         let first = request_ch.recv()
         let second = request_ch.recv()
@@ -44,15 +48,14 @@ fn broker(meetings: int) {
         first[2].send(second[1])
         second[2].send(first[1])
     }
-    // Signal done: close request channel so pending sends fail,
-    // then drain any already-buffered requests and close their
-    // reply channels so those chameneos' recv() returns null.
-    request_ch.close()
-    while (true) {
-        let (stale, ok) = request_ch.tryRecv()
-        if (!ok) { break }
-        stale[2].close()
+
+    // Ask every participant to stop after it submits its next request.
+    for (let i = 0; i < participants; i++) {
+        let req = request_ch.recv()
+        if (req == null) { break }
+        req[2].send(-1)
     }
+    request_ch.close()
 }
 
 // Chameneo: repeatedly meet at the broker
@@ -67,8 +70,8 @@ fn chameneo(id: int, initial_color: int) {
         } catch (e) {
             break  // channel closed by broker
         }
-        let partner_color = reply_ch.recv()
-        if (partner_color == null) { break }
+        let partner_color = int(reply_ch.recv()) ?? -1
+        if (partner_color < 0) { break }
         color = complement(color, partner_color)
         meetings++
     }
@@ -82,7 +85,7 @@ fn chameneo(id: int, initial_color: int) {
 let start = time.monotonic()
 
 // Start broker
-let broker_task = go broker(N_MEETINGS)
+let broker_task = go broker(N_MEETINGS, N_CHAMENEOS)
 
 // Start chameneos with rotating initial colors
 let tasks: Array<Task> = []
@@ -106,6 +109,7 @@ done_ch.close()
 
 print("总会合次数:", total_meetings)
 print("预期会合次数:", N_MEETINGS * 2)
+print("正确:", total_meetings == N_MEETINGS * 2)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(total_meetings * 1000 / elapsed), "meetings/sec")

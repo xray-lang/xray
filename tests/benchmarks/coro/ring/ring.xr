@@ -50,7 +50,10 @@ for (ch in channels) {
     ch.close()
 }
 let total_messages = N * M
+let expected = N * M
 print("最终结果:", result)
+print("预期:", expected)
+print("正确:", result == expected)
 print("总消息数:", total_messages)
 print("总时间:", elapsed, "ms")
 if (elapsed > 0) {

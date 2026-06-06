@@ -91,8 +91,11 @@ func main() {
 
 	elapsed := time.Since(start)
 	elapsedMs := float64(elapsed) / float64(time.Millisecond)
+	expected := int64(ITEMS)
 
 	fmt.Println("消费总数:", totalConsumed)
+	fmt.Println("预期:", expected)
+	fmt.Println("正确:", totalConsumed == expected)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("吞吐量:", int(float64(totalConsumed)/elapsed.Seconds()), "items/sec")
