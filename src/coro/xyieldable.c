@@ -17,7 +17,6 @@
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "xcoroutine.h"
-#include "xcoro_backend_ops.h"
 #include "xworker.h"
 #include "xnetpoll.h"
 #include "xexec_frame.h"
@@ -44,10 +43,10 @@ static int64_t get_time_us(void) {
 
 static inline bool yield_setup_continuation(XrayIsolate *X, XrCoroutine *coro, XrContinuation cont,
                                             void *user_data) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->setup_yield_continuation)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->setup_yield_continuation)
         return false;
-    return ops->setup_yield_continuation(X, coro, (void *) cont, user_data);
+    return backend->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
 static bool yield_prepare_io_wait(XrCoroutine *coro, int fd, int events, int64_t timeout_ms) {
@@ -242,11 +241,11 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
 
 // xr_coro_has_continuation - Check if coroutine has pending continuation
 bool xr_coro_has_continuation(XrCoroutine *coro) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->has_continuation) {
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->has_continuation) {
         return false;
     }
-    return ops->has_continuation(coro);
+    return backend->has_continuation(coro);
 }
 
 // ========== Call Closure from C Layer ==========
@@ -272,9 +271,9 @@ XrCFuncResult xr_call_closure(XrayIsolate *X, XrClosure *closure, XrValue *args,
     if (!coro)
         return XR_CFUNC_ERROR;
 
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->call_closure)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->call_closure)
         return XR_CFUNC_ERROR;
-    return (XrCFuncResult) ops->call_closure(X, coro, closure, args, nargs, (void *) on_complete,
-                                             user_ctx, result);
+    return backend->call_closure(X, coro, closure, args, nargs, (void *) on_complete, user_ctx,
+                                 result);
 }

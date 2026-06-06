@@ -12,6 +12,7 @@
 #include "coro/xaot_coro.h"
 #include "coro/xcoro_pool.h"
 #include "coro/xcoroutine.h"
+#include "coro/xyieldable.h"
 #include "runtime/xisolate_internal.h"
 #include <stdatomic.h>
 #include <string.h>
@@ -257,6 +258,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(vm_backend->on_safepoint);
     ASSERT_NOT_NULL(vm_backend->detach_worker_state);
     ASSERT_NOT_NULL(vm_backend->is_try_mode);
+    ASSERT_NOT_NULL(vm_backend->setup_yield_continuation);
+    ASSERT_NOT_NULL(vm_backend->has_continuation);
+    ASSERT_NOT_NULL(vm_backend->call_closure);
 
     XrayIsolate isolate;
     memset(&isolate, 0, sizeof(isolate));
@@ -269,6 +273,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     xr_coro_backend_on_safepoint(native);
     xr_coro_detach_worker_state(native);
     ASSERT_FALSE(xr_coro_backend_in_try_mode(native));
+    ASSERT_FALSE(xr_coro_has_continuation(native));
+    ASSERT_NULL(native->backend->setup_yield_continuation);
+    ASSERT_NULL(native->backend->call_closure);
     xr_coro_destroy(native);
 
     int release_count = 0;
@@ -282,6 +289,9 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     xr_coro_backend_on_safepoint(aot);
     xr_coro_detach_worker_state(aot);
     ASSERT_FALSE(xr_coro_backend_in_try_mode(aot));
+    ASSERT_FALSE(xr_coro_has_continuation(aot));
+    ASSERT_NULL(aot->backend->setup_yield_continuation);
+    ASSERT_NULL(aot->backend->call_closure);
     xr_coro_destroy(aot);
     ASSERT_EQ_INT(release_count, 1);
 }
