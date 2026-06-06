@@ -37,6 +37,9 @@
 
 // ========== Descriptor Cache Pool ==========
 
+static bool netpoll_timer_node_reclaimable(const XrTWheelTimer *timer);
+static bool netpoll_pd_reclaimable(const XrPollDesc *pd);
+
 // Initialize cache pool (lock-free, no mutex needed)
 static void poll_cache_init(XrPollCache *cache) {
     XR_DCHECK(cache != NULL, "poll_cache_init: NULL cache");
@@ -775,10 +778,14 @@ void xr_netpoll_close(XrNetpoll *np, XrPollDesc *pd) {
             if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE) {
                 xr_twheel_cancel_timer(tw, &pd->rt_storage);
                 pd->rrun = false;
+                if (!netpoll_timer_node_reclaimable(&pd->rt_storage))
+                    can_free_pd = false;
             }
             if (pd->wt_storage.slot != XR_TW_SLOT_INACTIVE) {
                 xr_twheel_cancel_timer(tw, &pd->wt_storage);
                 pd->wrun = false;
+                if (!netpoll_timer_node_reclaimable(&pd->wt_storage))
+                    can_free_pd = false;
             }
         } else {
             if (pd->rt_storage.slot != XR_TW_SLOT_INACTIVE &&
@@ -862,6 +869,21 @@ void xr_netpoll_break(XrNetpoll *np) {
 
 bool xr_netpoll_any_waiters(XrNetpoll *np) {
     return atomic_load(&np->waiters) > 0;
+}
+
+static bool netpoll_timer_node_reclaimable(const XrTWheelTimer *timer) {
+    if (!timer)
+        return true;
+    if (timer->slot != XR_TW_SLOT_INACTIVE)
+        return false;
+    return atomic_load_explicit(&timer->state, memory_order_acquire) != XR_TIMER_STATE_ZOMBIE;
+}
+
+static bool netpoll_pd_reclaimable(const XrPollDesc *pd) {
+    if (!pd)
+        return true;
+    return netpoll_timer_node_reclaimable(&pd->rt_storage) &&
+           netpoll_timer_node_reclaimable(&pd->wt_storage);
 }
 
 // Wait for I/O ready
@@ -1197,11 +1219,30 @@ void xr_netpoll_drain_deferred(XrNetpoll *np, XrProc *p) {
     // Atomic swap to get entire list (O(1))
     void *head = atomic_exchange_explicit(&p->deferred_free_head, NULL, memory_order_acquire);
 
-    // Walk list and free each PollDesc
+    // Walk list and free only PollDesc objects whose embedded timer nodes
+    // are fully detached from the owner wheel. Local cancellation can mark a
+    // timer zombie while a bump is walking the slot; recycling the descriptor
+    // before that walk finishes corrupts the wheel's intrusive links.
+    XrPollDesc *retry = NULL;
     XrPollDesc *pd = (XrPollDesc *) head;
     while (pd) {
         XrPollDesc *next = pd->link;
-        xr_poll_cache_free(&np->cache, pd);
+        if (netpoll_pd_reclaimable(pd)) {
+            xr_poll_cache_free(&np->cache, pd);
+        } else {
+            pd->link = retry;
+            retry = pd;
+        }
         pd = next;
+    }
+
+    while (retry) {
+        XrPollDesc *next = retry->link;
+        void *old_head = atomic_load_explicit(&p->deferred_free_head, memory_order_relaxed);
+        do {
+            retry->link = (XrPollDesc *) old_head;
+        } while (!atomic_compare_exchange_weak_explicit(
+            &p->deferred_free_head, &old_head, retry, memory_order_release, memory_order_relaxed));
+        retry = next;
     }
 }

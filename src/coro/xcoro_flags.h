@@ -273,13 +273,35 @@ static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr, _Atomic u
     xr_coro_flags_swap((coro), XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED, XR_CORO_FLG_RUNNING)
 
 #define xr_coro_transition_to_ready(coro)                                                          \
-    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_READY)
+    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING | XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
 
 #define xr_coro_transition_to_blocked(coro)                                                        \
-    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING, XR_CORO_FLG_BLOCKED)
+    xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY, XR_CORO_FLG_BLOCKED)
 
 #define xr_coro_transition_wake(coro)                                                              \
     xr_coro_flags_swap((coro), XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
+
+static inline bool xr_coro_try_transition_to_blocked_impl(_Atomic uint32_t *flags_ptr,
+                                                          _Atomic uint8_t *state_ptr) {
+    uint8_t expected = XR_CORO_STATE_RUNNING;
+    if (atomic_compare_exchange_strong_explicit(state_ptr, &expected, XR_CORO_STATE_BLOCKED,
+                                                memory_order_release, memory_order_relaxed)) {
+        atomic_fetch_and_explicit(flags_ptr, ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING),
+                                  memory_order_relaxed);
+        atomic_fetch_or_explicit(flags_ptr, (uint32_t) XR_CORO_FLG_BLOCKED, memory_order_release);
+        return true;
+    }
+    if (expected == XR_CORO_STATE_BLOCKED) {
+        atomic_fetch_and_explicit(flags_ptr, ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING),
+                                  memory_order_relaxed);
+        atomic_fetch_or_explicit(flags_ptr, (uint32_t) XR_CORO_FLG_BLOCKED, memory_order_release);
+        return true;
+    }
+    return false;
+}
+
+#define xr_coro_try_transition_to_blocked(coro)                                                    \
+    xr_coro_try_transition_to_blocked_impl(&(coro)->flags, &(coro)->coro_state)
 
 /* ========== Unified Wake Claim ==========
  *

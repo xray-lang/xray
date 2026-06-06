@@ -114,14 +114,7 @@ static void aot_mark_running(XrCoroutine *coro) {
 }
 
 static void aot_mark_blocked(XrCoroutine *coro) {
-    uint8_t expected = XR_CORO_STATE_RUNNING;
-    if (atomic_compare_exchange_strong_explicit(&coro->coro_state, &expected, XR_CORO_STATE_BLOCKED,
-                                                memory_order_release, memory_order_relaxed)) {
-        atomic_fetch_and_explicit(&coro->flags, ~(uint32_t) XR_CORO_FLG_RUNNING,
-                                  memory_order_relaxed);
-        atomic_fetch_or_explicit(&coro->flags, (uint32_t) XR_CORO_FLG_BLOCKED,
-                                 memory_order_release);
-    }
+    (void) xr_coro_try_transition_to_blocked(coro);
 }
 
 static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
