@@ -45,6 +45,7 @@ typedef struct XrMethodBuildItem {
     XrMethodType method_type;  // CLOSURE/PRIMITIVE/GETTER/SETTER/OPERATOR
     union {
         XrPrimitiveMethodFn primitive;
+        XrYieldablePrimitiveMethodFn yieldable_primitive;
         XrClosure *closure;
     } impl;
     int param_count;

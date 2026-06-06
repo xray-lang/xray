@@ -1,6 +1,4 @@
 // Native sharded work queue benchmark.
-// WorkQueue stores tasks; wake_ch only wakes sleepers until WorkQueue gains a
-// yieldable blocking pop operation.
 
 import time
 
@@ -20,7 +18,6 @@ if (TASKS < 0) {
 }
 
 shared const work_queue: WorkQueue<int> = WorkQueue<int>(WORKERS, 1024)
-shared const wake_ch = Channel(1024)
 
 print("=== Work Queue Pool 测试 ===")
 print("Worker数:", WORKERS)
@@ -51,16 +48,13 @@ fn expected_total(count: int) -> int {
 fn worker(id: int) -> int {
     let processed = 0
     while (true) {
-        let (task, ok) = work_queue.tryPop(id)
-        if (ok) {
-            let task_id = task ?? 0
-            result_ch.send(fib(task_id % 20))
-            processed++
-        } else if (work_queue.isClosed) {
+        let task = work_queue.pop(id)
+        if (task == null) {
             break
-        } else {
-            wake_ch.recv()
         }
+        let task_id = task ?? 0
+        result_ch.send(fib(task_id % 20))
+        processed++
     }
     return processed
 }
@@ -68,13 +62,8 @@ fn worker(id: int) -> int {
 fn submit_tasks(count: int) {
     for (let i = 0; i < count; i++) {
         assert_true(work_queue.push(i, i))
-        wake_ch.send(1)
     }
     work_queue.close()
-    for (let i = 0; i < WORKERS; i++) {
-        wake_ch.send(1)
-    }
-    wake_ch.close()
 }
 
 let start = time.monotonic()

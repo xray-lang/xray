@@ -50,9 +50,14 @@ XrClass *xr_register_native_type(XrayIsolate *isolate, const XrNativeTypeInfo *i
     if (info->methods) {
         for (int i = 0; info->methods[i].name != NULL; i++) {
             const XrNativeMethod *m = &info->methods[i];
-            xr_class_builder_add_method(builder, m->name, m->func, m->arity,
-                                        0  // flags: instance method
-            );
+            xr_class_builder_add_method(builder, m->name, m->func, m->arity, 0);
+        }
+    }
+
+    if (info->yieldable_methods) {
+        for (int i = 0; info->yieldable_methods[i].name != NULL; i++) {
+            const XrNativeYieldableMethod *m = &info->yieldable_methods[i];
+            xr_class_builder_add_yieldable_method(builder, m->name, m->func, m->arity, 0);
         }
     }
 
@@ -73,6 +78,14 @@ XrClass *xr_register_native_type(XrayIsolate *isolate, const XrNativeTypeInfo *i
         for (int i = 0; info->static_methods[i].name != NULL; i++) {
             const XrNativeMethod *s = &info->static_methods[i];
             xr_class_builder_add_method(builder, s->name, s->func, s->arity, XMETHOD_FLAG_STATIC);
+        }
+    }
+
+    if (info->yieldable_static_methods) {
+        for (int i = 0; info->yieldable_static_methods[i].name != NULL; i++) {
+            const XrNativeYieldableMethod *s = &info->yieldable_static_methods[i];
+            xr_class_builder_add_yieldable_method(builder, s->name, s->func, s->arity,
+                                                  XMETHOD_FLAG_STATIC);
         }
     }
 

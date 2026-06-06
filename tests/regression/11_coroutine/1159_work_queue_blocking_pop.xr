@@ -1,0 +1,25 @@
+// Regression: WorkQueue.pop blocks a coroutine and resumes it when a task arrives.
+
+import time
+
+shared const q: WorkQueue<int> = WorkQueue<int>(2, 2)
+
+fn delayed_push(value: int) -> int {
+    assert_true(q.push(value, 0))
+    return value
+}
+
+@test
+fn test_work_queue_blocking_pop() {
+    let consumer = go {
+        let value = q.pop(0)
+        return value ?? -1
+    }
+    time.sleep(1)
+    let producer = go delayed_push(42)
+    assert_eq(await producer, 42)
+    assert_eq(await consumer, 42)
+
+    q.close()
+    assert_eq(q.pop(0), null)
+}

@@ -19,10 +19,13 @@
 #include "../runtime/object/xnative_type.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/xisolate_internal.h"
 #include "../runtime/xshared.h"
 #include "../vm/xvm.h"
 #include "xchannel_ops.h"
 #include "xcoroutine.h"
+#include "xworker.h"
+#include "xyieldable.h"
 
 #define XR_WORK_QUEUE_DEFAULT_SHARDS 1u
 #define XR_WORK_QUEUE_DEFAULT_CAPACITY 64u
@@ -134,6 +137,145 @@ static bool shard_pop_head(XrWorkQueueShard *shard, XrValue *out) {
     return true;
 }
 
+static XrRuntime *work_queue_runtime(XrWorkQueue *q) {
+    if (!q || !q->isolate)
+        return NULL;
+    return (XrRuntime *) q->isolate->vm.runtime;
+}
+
+static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) {
+    XR_DCHECK(q != NULL, "work_queue_waiter_enqueue_locked: NULL queue");
+    XR_DCHECK(coro != NULL, "work_queue_waiter_enqueue_locked: NULL coro");
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+
+    ext->wait_link = NULL;
+    ext->wait_prev = q->wait_last;
+    if (q->wait_last) {
+        q->wait_last->ext->wait_link = coro;
+    } else {
+        q->wait_first = coro;
+    }
+    q->wait_last = coro;
+    atomic_fetch_add_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    return true;
+}
+
+static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool own_shard,
+                                      XrValue *out);
+
+static XrCoroutine *work_queue_waiter_pop_locked(XrWorkQueue *q) {
+    XR_DCHECK(q != NULL, "work_queue_waiter_pop_locked: NULL queue");
+    XrCoroutine *coro = q->wait_first;
+    if (!coro)
+        return NULL;
+
+    XrCoroutine *next = coro->ext ? coro->ext->wait_link : NULL;
+    q->wait_first = next;
+    if (next) {
+        next->ext->wait_prev = NULL;
+    } else {
+        q->wait_last = NULL;
+    }
+    if (coro->ext) {
+        coro->ext->wait_link = NULL;
+        coro->ext->wait_prev = NULL;
+    }
+    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    return coro;
+}
+
+static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
+    XrRuntime *runtime = work_queue_runtime(q);
+    if (!runtime || !coro)
+        return false;
+    if (!xr_coro_claim_wake(coro))
+        return false;
+
+    xr_coro_resume_store(coro, XR_RESUME_OK);
+    int target_id = xr_coro_wake_target_id(coro);
+    if (target_id < 0 || target_id >= runtime->worker_count)
+        target_id = 0;
+
+    XrWorker *current = xr_current_worker();
+    if (current && current->p.runtime == runtime && target_id == current->p.id) {
+        xr_worker_push_lifo(current, coro);
+        xr_runtime_wake_idle_worker(runtime);
+        return true;
+    }
+
+    xr_worker_inbox_enqueue(runtime, target_id, coro);
+    if (atomic_load_explicit(&runtime->spinning_count, memory_order_relaxed) == 0)
+        xr_runtime_wake_idle_worker(runtime);
+    return true;
+}
+
+static void work_queue_wake_one(XrWorkQueue *q) {
+    if (!q)
+        return;
+    for (;;) {
+        xr_amutex_lock(&q->wait_lock);
+        XrCoroutine *coro = work_queue_waiter_pop_locked(q);
+        xr_amutex_unlock(&q->wait_lock);
+        if (!coro)
+            return;
+        if (work_queue_ready_waiter(q, coro))
+            return;
+    }
+}
+
+static void work_queue_wake_all(XrWorkQueue *q) {
+    if (!q)
+        return;
+    xr_amutex_lock(&q->wait_lock);
+    XrCoroutine *list = q->wait_first;
+    q->wait_first = NULL;
+    q->wait_last = NULL;
+    atomic_store_explicit(&q->waiter_count, 0, memory_order_relaxed);
+    xr_amutex_unlock(&q->wait_lock);
+
+    while (list) {
+        XrCoroutine *next = list->ext ? list->ext->wait_link : NULL;
+        if (list->ext) {
+            list->ext->wait_link = NULL;
+            list->ext->wait_prev = NULL;
+        }
+        (void) work_queue_ready_waiter(q, list);
+        list = next;
+    }
+}
+
+static XrValue work_queue_try_pop_raw(XrWorkQueue *q, int64_t worker_hint, bool *ok) {
+    XR_DCHECK(q != NULL, "work_queue_try_pop_raw: NULL queue");
+    XR_DCHECK(ok != NULL, "work_queue_try_pop_raw: NULL ok");
+
+    uint32_t shard_count = q->shard_count;
+    uint32_t owner;
+    if (worker_hint >= 0) {
+        owner = (uint32_t) ((uint64_t) worker_hint % shard_count);
+    } else {
+        owner = atomic_fetch_add_explicit(&q->next_shard, 1, memory_order_relaxed) % shard_count;
+    }
+
+    XrValue value = xr_null();
+    if (work_queue_pop_from_shard(q, owner, true, &value)) {
+        *ok = true;
+        return value;
+    }
+
+    for (uint32_t i = 1; i < shard_count; i++) {
+        uint32_t idx = (owner + i) % shard_count;
+        if (work_queue_pop_from_shard(q, idx, false, &value)) {
+            *ok = true;
+            return value;
+        }
+    }
+
+    *ok = false;
+    return xr_null();
+}
+
 XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t shard_capacity) {
     if (!X || !xr_isolate_get_sys_heap(X))
         return NULL;
@@ -158,7 +300,11 @@ XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t sh
     q->initial_capacity = shard_capacity;
     atomic_store_explicit(&q->next_shard, 0, memory_order_relaxed);
     atomic_store_explicit(&q->length, 0, memory_order_relaxed);
+    atomic_store_explicit(&q->waiter_count, 0, memory_order_relaxed);
     atomic_store_explicit(&q->closed, false, memory_order_relaxed);
+    xr_amutex_init(&q->wait_lock);
+    q->wait_first = NULL;
+    q->wait_last = NULL;
     q->isolate = X;
 
     for (uint32_t i = 0; i < shard_count; i++) {
@@ -198,6 +344,8 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
             atomic_fetch_add_explicit(&q->length, 1, memory_order_release);
     }
     xr_amutex_unlock(&shard->lock);
+    if (ok)
+        work_queue_wake_one(q);
     return ok;
 }
 
@@ -217,29 +365,9 @@ XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hin
     XR_DCHECK(q != NULL, "xr_work_queue_try_pop: NULL queue");
     XR_DCHECK(ok != NULL, "xr_work_queue_try_pop: NULL ok");
 
-    uint32_t shard_count = q->shard_count;
-    uint32_t owner;
-    if (worker_hint >= 0) {
-        owner = (uint32_t) ((uint64_t) worker_hint % shard_count);
-    } else {
-        owner = atomic_fetch_add_explicit(&q->next_shard, 1, memory_order_relaxed) % shard_count;
-    }
-
-    XrValue value = xr_null();
-    if (work_queue_pop_from_shard(q, owner, true, &value)) {
-        *ok = true;
+    XrValue value = work_queue_try_pop_raw(q, worker_hint, ok);
+    if (*ok)
         return xr_chan_copy_recv(X, value, xr_current_coro(X));
-    }
-
-    for (uint32_t i = 1; i < shard_count; i++) {
-        uint32_t idx = (owner + i) % shard_count;
-        if (work_queue_pop_from_shard(q, idx, false, &value)) {
-            *ok = true;
-            return xr_chan_copy_recv(X, value, xr_current_coro(X));
-        }
-    }
-
-    *ok = false;
     return xr_null();
 }
 
@@ -247,6 +375,7 @@ void xr_work_queue_close(XrWorkQueue *q) {
     if (!q)
         return;
     atomic_store_explicit(&q->closed, true, memory_order_release);
+    work_queue_wake_all(q);
 }
 
 bool xr_work_queue_is_closed(XrWorkQueue *q) {
@@ -291,6 +420,57 @@ static XrValue m_try_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     xr_tuple_set(tuple, 0, value);
     xr_tuple_set(tuple, 1, xr_bool(ok));
     return xr_value_from_tuple(tuple);
+}
+
+static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
+                            XrValue *result) {
+    XrWorkQueue *q = xr_value_to_work_queue(self);
+    XR_DCHECK(q != NULL, "WorkQueue.pop: NULL queue");
+    XR_DCHECK(result != NULL, "WorkQueue.pop: NULL result");
+    int64_t worker = -1;
+    if (nargs >= 1 && XR_IS_INT(args[0]))
+        worker = XR_TO_INT(args[0]);
+
+    XrCoroutine *coro = xr_current_coro(isolate);
+    bool ok = false;
+    XrValue value = xr_work_queue_try_pop(isolate, q, worker, &ok);
+    if (ok) {
+        *result = value;
+        return XR_CFUNC_DONE;
+    }
+    if (xr_work_queue_is_closed(q)) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+    if (!coro || xr_coro_backend_in_try_mode(coro))
+        return coro ? XR_CFUNC_WOULD_BLOCK : XR_CFUNC_ERROR;
+    if (!xr_coro_ensure_ext(coro))
+        return XR_CFUNC_ERROR;
+
+    xr_amutex_lock(&q->wait_lock);
+    value = work_queue_try_pop_raw(q, worker, &ok);
+    if (ok) {
+        xr_amutex_unlock(&q->wait_lock);
+        *result = xr_chan_copy_recv(isolate, value, coro);
+        return XR_CFUNC_DONE;
+    }
+    if (xr_work_queue_is_closed(q)) {
+        xr_amutex_unlock(&q->wait_lock);
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
+
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_WORKQUEUE >> XR_CORO_WAIT_SHIFT);
+    XrWorker *worker_state = xr_current_worker();
+    if (worker_state)
+        atomic_store_explicit(&coro->affinity_p, worker_state->p.id, memory_order_relaxed);
+    xr_coro_transition_to_blocked(coro);
+    if (!work_queue_waiter_enqueue_locked(q, coro)) {
+        xr_amutex_unlock(&q->wait_lock);
+        return XR_CFUNC_ERROR;
+    }
+    xr_amutex_unlock(&q->wait_lock);
+    return XR_CFUNC_BLOCKED;
 }
 
 static XrValue m_close(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs) {
@@ -350,6 +530,10 @@ void xr_work_queue_register_native_type(XrayIsolate *isolate) {
         {"close", m_close, 0},
         {NULL, NULL, 0},
     };
+    static const XrNativeYieldableMethod work_queue_yieldable_methods[] = {
+        {"pop", ym_pop, 0},
+        {NULL, NULL, 0},
+    };
     static const XrNativeMethod work_queue_getters[] = {
         {"length", g_length, 0},
         {"shardCount", g_shard_count, 0},
@@ -364,6 +548,7 @@ void xr_work_queue_register_native_type(XrayIsolate *isolate) {
         .name = "WorkQueue",
         .gc_type = XR_TWORKQUEUE,
         .methods = (XrNativeMethod *) work_queue_methods,
+        .yieldable_methods = (XrNativeYieldableMethod *) work_queue_yieldable_methods,
         .getters = (XrNativeMethod *) work_queue_getters,
         .static_methods = (XrNativeMethod *) work_queue_statics,
     };

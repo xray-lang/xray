@@ -414,6 +414,9 @@ static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is
         case XMETHOD_PRIMITIVE:
             method->as.primitive = item->impl.primitive;
             break;
+        case XMETHOD_YIELDABLE_PRIMITIVE:
+            method->as.yieldable_primitive = item->impl.yieldable_primitive;
+            break;
         case XMETHOD_CLOSURE:
         case XMETHOD_GETTER:
         case XMETHOD_SETTER:

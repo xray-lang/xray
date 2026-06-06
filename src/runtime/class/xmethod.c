@@ -30,6 +30,8 @@ const char *xr_method_type_name(XrMethodType type) {
             return "Closure";
         case XMETHOD_PRIMITIVE:
             return "Primitive";
+        case XMETHOD_YIELDABLE_PRIMITIVE:
+            return "YieldablePrimitive";
         case XMETHOD_GETTER:
             return "Getter";
         case XMETHOD_SETTER:

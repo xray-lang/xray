@@ -44,6 +44,10 @@ XR_FUNC int xr_class_builder_add_field(XrClassBuilder *builder, const char *name
 XR_FUNC int xr_class_builder_add_method(XrClassBuilder *builder, const char *name,
                                         XrPrimitiveMethodFn impl, int param_count, uint32_t flags);
 
+XR_FUNC int xr_class_builder_add_yieldable_method(XrClassBuilder *builder, const char *name,
+                                                  XrYieldablePrimitiveMethodFn impl,
+                                                  int param_count, uint32_t flags);
+
 // Add method with closure (for descriptor path)
 XR_FUNC int xr_class_builder_add_method_closure(XrClassBuilder *builder, const char *name,
                                                 XrClosure *closure, XrMethodType method_type,
