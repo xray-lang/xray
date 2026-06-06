@@ -1,0 +1,40 @@
+// 测试同一个 pending Task 可被多个协程同时 await
+
+import time
+
+fn delayed_value() -> int {
+    time.sleep(80)
+    return 7
+}
+
+fn await_and_report(id: int, task: Task, ready: Channel<int>, out: Channel<int>) {
+    ready.send(id)
+    let value = await task
+    out.send(id * 100 + value)
+}
+
+@test
+fn test_multiple_task_awaiters() {
+    const ready = new Channel<int>(2)
+    const out = new Channel<int>(2)
+    let task = go delayed_value()
+    let a = go await_and_report(1, task, ready, out)
+    let b = go await_and_report(2, task, ready, out)
+
+    ready.recv()
+    ready.recv()
+
+    let first = out.recv()
+    let second = out.recv()
+    print(first + second)
+
+    await a
+    await b
+    ready.close()
+    out.close()
+    print("done")
+}
+
+// 期望输出：
+// 314
+// done
