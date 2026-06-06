@@ -64,6 +64,12 @@
  * coroutines when A and B bounce through a channel for ms-scale bursts. */
 #define XR_FAST_DISPATCH_BUDGET 64
 
+/* Number of local enqueue timestamps that may share one monotonic clock read.
+ * Submit time is used as a millisecond-scale scheduling hint for aging,
+ * freshness, and diagnostics; exact per-coro clock reads only add contention
+ * in spawn/yield bursts. */
+#define XR_SCHED_TIME_CACHE_BUDGET 32
+
 /* Max coroutines pulled from each global inject priority queue during a
  * normal scheduler poll. Larger batches reduce mutex traffic under external
  * spawn bursts; smaller batches keep per-worker queues from monopolizing

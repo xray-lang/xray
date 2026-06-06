@@ -287,6 +287,10 @@ typedef struct XrProc {
     /* === Adaptive Poll Skip (I/O load feedback) === */
     uint32_t io_poll_ewma;  // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
 
+    /* === Scheduler Timestamp Cache === */
+    int64_t sched_time_cache;    // Cached monotonic ms for local enqueue timestamps
+    uint32_t sched_time_budget;  // Remaining local enqueues allowed to reuse the cache
+
     /* === Per-Worker Active Coro Counter (replaces global atomic active_coros) === */
     int local_active_coros;
 
