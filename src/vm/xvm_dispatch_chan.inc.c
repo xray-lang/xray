@@ -41,6 +41,7 @@ vmcase(OP_CHAN_NEW_CAP) {
     /* R[A] = Channel(R[B]) - create Channel with runtime capacity. */
     int a = GETARG_A(i);
     int b = GETARG_B(i);
+    int elem_tid = GETARG_C(i);
 
     uint32_t buffer_size = 0;
     if (XR_IS_INT(R(b))) {
@@ -53,6 +54,7 @@ vmcase(OP_CHAN_NEW_CAP) {
     if (!ch) {
         VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Channel creation failed");
     }
+    ch->elem_tid = (uint8_t) elem_tid;
 
     R(a) = xr_value_from_channel(ch);
     vmbreak;
