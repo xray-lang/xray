@@ -275,10 +275,12 @@ void xray_isolate_set_script_info(XrayIsolate *isolate, const char *script_file,
     if (isolate->core && isolate->core->processClass) {
         XrInstance *process = xr_instance_new(isolate, isolate->core->processClass);
         if (process) {
-            xr_instance_set_field_fast(process, 0,
+            xr_instance_set_field_fast(process, PROCESS_FIELD_FILE,
                                        main_str ? xr_string_value(main_str) : xr_null());
-            xr_instance_set_field_fast(process, 1, xr_value_from_array(args_array));
-            xr_instance_set_field_fast(process, 2, dir_str ? xr_string_value(dir_str) : xr_null());
+            xr_instance_set_field_fast(process, PROCESS_FIELD_ARGS,
+                                       xr_value_from_array(args_array));
+            xr_instance_set_field_fast(process, PROCESS_FIELD_DIR,
+                                       dir_str ? xr_string_value(dir_str) : xr_null());
 
             isolate->vm.builtins[XR_GLOBAL_VAR_PROCESS] = xr_value_from_instance(process);
         }

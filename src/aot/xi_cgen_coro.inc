@@ -203,6 +203,11 @@ static const XiValue *cg_coro_release_origin(const XiValue *v) {
     return cur;
 }
 
+static const XiValue *cg_coro_builtin_origin(const XiValue *v) {
+    const XiValue *origin = cg_coro_release_origin(v);
+    return origin && origin->op == XI_GET_BUILTIN ? origin : NULL;
+}
+
 static bool cg_coro_value_from_runtime_bridge(const XiValue *v) {
     const XiValue *origin = cg_coro_release_origin(v);
     if (!origin)
@@ -219,8 +224,11 @@ static bool cg_coro_value_from_runtime_bridge(const XiValue *v) {
         case XI_SELECT_BLOCK:
         case XI_CHAN_NEW:
         case XI_TUPLE_GET:
+        case XI_GET_BUILTIN:
             return true;
         case XI_LOAD_FIELD:
+            if (origin->nargs >= 1 && cg_coro_builtin_origin(origin->args[0]))
+                return true;
             return origin->nargs >= 1 && cg_value_type_is_task(origin->args[0]);
         case XI_CALL_METHOD:
             return origin->nargs >= 1 && (cg_value_type_is_channel(origin->args[0]) ||
@@ -1622,6 +1630,26 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
+    if (v->op == XI_LOAD_FIELD && v->nargs >= 1) {
+        const XiValue *builtin = cg_coro_builtin_origin(v->args[0]);
+        const char *field = (const char *) v->aux;
+        if (builtin && field) {
+            fprintf(out, "    XrValue _builtin_field_%u = xr_aot_load_builtin_field(ctx, %d, "
+                         "\"%s\");\n",
+                    v->id, (int) builtin->aux_int, field);
+            if (cg_rep(v) == XR_REP_TAGGED)
+                fprintf(out,
+                        "    _builtin_field_%u = xr_aot_bridge_value_to_xrt(_builtin_field_%u);\n",
+                        v->id, v->id);
+            if (cg_coro_value_has_storage(f, v)) {
+                char tmp[32];
+                snprintf(tmp, sizeof(tmp), "_builtin_field_%u", v->id);
+                emit_assign_from_xrvalue_temp(out, v, tmp);
+            }
+            return;
+        }
+    }
+
     if (v->op == XI_LOAD_FIELD && v->nargs >= 1 && cg_value_type_is_task(v->args[0])) {
         const char *field = (const char *) v->aux;
         const char *helper = cg_task_field_helper(field);
@@ -1894,6 +1922,19 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         ctx->error = true;
         fprintf(stderr, "[xi_cgen] ERROR: inlined struct inside AOT coroutine is unsupported\n");
         emit_codegen_abort_aot_result(out);
+        return;
+    }
+
+    if (v->op == XI_GET_BUILTIN) {
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[64];
+            snprintf(tmp, sizeof(tmp), "_builtin_value_%u", v->id);
+            fprintf(out, "    XrValue %s = xr_aot_get_builtin(ctx, %d);\n", tmp,
+                    (int) v->aux_int);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        } else {
+            fprintf(out, "    (void) xr_aot_get_builtin(ctx, %d);\n", (int) v->aux_int);
+        }
         return;
     }
 

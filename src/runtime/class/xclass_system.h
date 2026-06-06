@@ -108,6 +108,11 @@ XR_FUNC struct XrClass *xr_get_or_create_tuple_class(XrayIsolate *X, uint16_t ar
 #define EXCEPTION_FIELD_CODE 3
 #define EXCEPTION_FIELD_DATA 4
 
+/* Process field indices — must match xr_core_init() and script-info setup. */
+#define PROCESS_FIELD_FILE 0
+#define PROCESS_FIELD_ARGS 1
+#define PROCESS_FIELD_DIR 2
+
 /* ========== Lifecycle ========== */
 
 XR_FUNC void xr_core_init(XrayIsolate *X);

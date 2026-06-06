@@ -1,0 +1,7 @@
+fn count_args() -> int {
+    yield
+    return process.args.length
+}
+
+let task = go count_args()
+print(await task)
