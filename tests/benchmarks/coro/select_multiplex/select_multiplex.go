@@ -9,6 +9,7 @@ import (
 	"os"
 	"reflect"
 	"strconv"
+	"sync"
 	"time"
 )
 
@@ -16,7 +17,6 @@ func producer(ch chan<- int, id int, count int) {
 	for i := 0; i < count; i++ {
 		ch <- id*1000000 + i
 	}
-	close(ch)
 }
 
 func main() {
@@ -36,36 +36,43 @@ func main() {
 	start := time.Now()
 
 	channels := make([]chan int, PRODUCERS)
+	var wg sync.WaitGroup
 	for i := 0; i < PRODUCERS; i++ {
 		channels[i] = make(chan int, 10)
-		go producer(channels[i], i, MSGS)
+		wg.Add(1)
+		go func(ch chan int, id int) {
+			defer wg.Done()
+			producer(ch, id, MSGS)
+		}(channels[i], i)
 	}
 
 	// Use reflect.Select for dynamic number of channels
 	totalReceived := 0
-	active := PRODUCERS
+	expected := PRODUCERS * MSGS
 
 	cases := make([]reflect.SelectCase, PRODUCERS)
 	for i := range channels {
 		cases[i] = reflect.SelectCase{Dir: reflect.SelectRecv, Chan: reflect.ValueOf(channels[i])}
 	}
 
-	for active > 0 {
-		chosen, value, ok := reflect.Select(cases)
-		if ok {
-			_ = value.Int()
-			totalReceived++
-		} else {
-			// Channel closed, remove it
-			cases[chosen] = cases[active-1]
-			cases = cases[:active-1]
-			active--
+	for totalReceived < expected {
+		_, value, ok := reflect.Select(cases)
+		if !ok {
+			continue
 		}
+		_ = value.Int()
+		totalReceived++
+	}
+	wg.Wait()
+	for _, ch := range channels {
+		close(ch)
 	}
 
 	elapsed := time.Since(start)
 	elapsedMs := float64(elapsed) / float64(time.Millisecond)
 	fmt.Println("接收总数:", totalReceived)
+	fmt.Println("预期:", expected)
+	fmt.Println("正确:", totalReceived == expected)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("吞吐量:", int(float64(totalReceived)/elapsed.Seconds()), "msg/sec")

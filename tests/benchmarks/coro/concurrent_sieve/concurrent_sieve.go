@@ -79,6 +79,8 @@ func main() {
 	fmt.Println("找到素数:", count)
 	fmt.Println("最大素数:", primes[len(primes)-1])
 	fmt.Println("管道级数:", count)
+	fmt.Println("预期:", N)
+	fmt.Println("正确:", count == N)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("速度:", int(float64(count)/elapsed.Seconds()), "primes/sec")

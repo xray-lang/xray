@@ -15,6 +15,7 @@ import (
 type Color int
 
 const (
+	Stop   Color = -1
 	Blue   Color = 0
 	Red    Color = 1
 	Yellow Color = 2
@@ -47,42 +48,21 @@ type MeetRequest struct {
 	reply chan Color
 }
 
-// broker: pairs up chameneos for N meetings, then signals done
-// Mirrors xray: broker closes request_ch, then drains stale requests
-func broker(requestCh chan MeetRequest, meetings int) {
+// broker: pairs up chameneos for N meetings, then signals done.
+// The request channel can hold one pending request per participant so the
+// broker can stop everyone without depending on close waking blocked senders.
+func broker(requestCh chan MeetRequest, meetings, participants int) {
 	for i := 0; i < meetings; i++ {
 		first := <-requestCh
 		second := <-requestCh
 		first.reply <- second.color
 		second.reply <- first.color
 	}
-	// Close requestCh so chameneo's send will panic (caught by recover)
-	close(requestCh)
-	// Drain any already-buffered requests and close their reply channels
-	// so those chameneos' recv() returns zero-value + !ok
-	for {
-		select {
-		case req, ok := <-requestCh:
-			if !ok {
-				return
-			}
-			close(req.reply)
-		default:
-			return
-		}
+	for i := 0; i < participants; i++ {
+		req := <-requestCh
+		req.reply <- Stop
 	}
-}
-
-// safeSend attempts to send on requestCh; returns false if channel is closed
-// Mirrors xray: try { request_ch.send(...) } catch (e) { break }
-func safeSend(requestCh chan<- MeetRequest, req MeetRequest) (ok bool) {
-	defer func() {
-		if recover() != nil {
-			ok = false
-		}
-	}()
-	requestCh <- req
-	return true
+	close(requestCh)
 }
 
 func chameneo(id int, initialColor Color, requestCh chan<- MeetRequest, wg *sync.WaitGroup, results chan<- int) {
@@ -92,11 +72,9 @@ func chameneo(id int, initialColor Color, requestCh chan<- MeetRequest, wg *sync
 	reply := make(chan Color, 1)
 
 	for {
-		if !safeSend(requestCh, MeetRequest{id: id, color: color, reply: reply}) {
-			break // channel closed by broker
-		}
-		partnerColor, ok := <-reply
-		if !ok {
+		requestCh <- MeetRequest{id: id, color: color, reply: reply}
+		partnerColor := <-reply
+		if partnerColor == Stop {
 			break
 		}
 		color = complement(color, partnerColor)
@@ -119,6 +97,9 @@ func main() {
 			nChameneos = n
 		}
 	}
+	if nChameneos < 2 {
+		nChameneos = 2
+	}
 
 	fmt.Println("=== Chameneos-Redux 测试 ===")
 	fmt.Println("会合次数:", nMeetings)
@@ -126,7 +107,7 @@ func main() {
 
 	start := time.Now()
 
-	requestCh := make(chan MeetRequest, 1)
+	requestCh := make(chan MeetRequest, nChameneos)
 	results := make(chan int, nChameneos)
 
 	var wg sync.WaitGroup
@@ -135,7 +116,7 @@ func main() {
 		go chameneo(i, Color(i%3), requestCh, &wg, results)
 	}
 
-	broker(requestCh, nMeetings)
+	broker(requestCh, nMeetings, nChameneos)
 	wg.Wait()
 
 	totalMeetings := 0
@@ -149,6 +130,7 @@ func main() {
 
 	fmt.Println("总会合次数:", totalMeetings)
 	fmt.Println("预期会合次数:", nMeetings*2)
+	fmt.Println("正确:", totalMeetings == nMeetings*2)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("吞吐量:", int(float64(totalMeetings)/elapsed.Seconds()), "meetings/sec")

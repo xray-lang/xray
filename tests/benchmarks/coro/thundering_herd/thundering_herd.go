@@ -60,8 +60,11 @@ func main() {
 
 	elapsed := time.Since(start)
 	elapsedMs := float64(elapsed) / float64(time.Millisecond)
+	expected := N * ROUNDS
 
 	fmt.Println("总唤醒数:", totalWoken)
+	fmt.Println("预期:", expected)
+	fmt.Println("正确:", totalWoken == expected)
 	fmt.Printf("时间: %.3f ms\n", elapsedMs)
 	if elapsed > 0 {
 		fmt.Println("吞吐量:", int(float64(totalWoken)/elapsed.Seconds()), "wakeups/sec")
