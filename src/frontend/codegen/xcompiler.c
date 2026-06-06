@@ -92,7 +92,7 @@ XR_FUNC XrProto *xr_compile(XrCompilerContext *ctx, AstNode *ast) {
     }
 
     /* Monomorphization: clone generic functions/structs for each concrete type */
-    xa_mono_pass(ast);
+    xa_mono_pass(ast, ctx->X);
 
     /* Post-mono: re-analyze monomorphized declarations for struct layouts */
     if (ctx->analyzer) {

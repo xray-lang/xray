@@ -22,6 +22,7 @@
 #include "../../base/xlog.h"
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xtype.h"
+#include "../../runtime/xisolate_api.h"
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
 #include "xtype_ref_resolve.h"
@@ -191,12 +192,26 @@ static char *clone_str(const char *s) {
     return s ? xr_strdup(s) : NULL;
 }
 
-static AstNode **clone_node_array(AstNode **arr, int count, XrMonoTypeMap *map, int map_count) {
+typedef struct {
+    XrayIsolate *isolate;
+} XrAstCloneCtx;
+
+static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
+                                 XrAstCloneCtx *clone_ctx);
+
+static uint32_t clone_node_id(const AstNode *node, XrAstCloneCtx *clone_ctx) {
+    if (clone_ctx && clone_ctx->isolate)
+        return xr_isolate_next_ast_node_id(clone_ctx->isolate);
+    return node ? node->node_id : 0;
+}
+
+static AstNode **clone_node_array(AstNode **arr, int count, XrMonoTypeMap *map, int map_count,
+                                  XrAstCloneCtx *clone_ctx) {
     if (!arr || count <= 0)
         return NULL;
     AstNode **result = (AstNode **) xr_calloc(count, sizeof(AstNode *));
     for (int i = 0; i < count; i++) {
-        result[i] = xr_ast_clone(arr[i], map, map_count);
+        result[i] = xr_ast_clone_ctx(arr[i], map, map_count, clone_ctx);
     }
     return result;
 }
@@ -217,7 +232,8 @@ static XrTypeRef **clone_tref_array(XrTypeRef **arr, int count, XrMonoTypeMap *m
     return result;
 }
 
-static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap *map, int mc) {
+static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap *map, int mc,
+                                  XrAstCloneCtx *clone_ctx) {
     if (!params || count <= 0)
         return NULL;
     XrParamNode **result = (XrParamNode **) xr_calloc(count, sizeof(XrParamNode *));
@@ -226,7 +242,7 @@ static XrParamNode **clone_params(XrParamNode **params, int count, XrMonoTypeMap
         *p = *params[i];
         p->name = clone_str(params[i]->name);
         p->type = sub_tref(params[i]->type, map, mc);
-        p->default_value = xr_ast_clone(params[i]->default_value, map, mc);
+        p->default_value = xr_ast_clone_ctx(params[i]->default_value, map, mc, clone_ctx);
         // pattern clone omitted (not used in generic contexts)
         result[i] = p;
     }
@@ -243,13 +259,15 @@ static char **clone_str_array(char **arr, int count) {
     return result;
 }
 
-AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
+static AstNode *xr_ast_clone_ctx(AstNode *node, XrMonoTypeMap *map, int mc,
+                                 XrAstCloneCtx *clone_ctx) {
     XR_DCHECK(map != NULL || mc == 0, "xr_ast_clone: map is NULL with non-zero mc");
     if (!node)
         return NULL;
 
     AstNode *n = (AstNode *) xr_calloc(1, sizeof(AstNode));
     n->type = node->type;
+    n->node_id = clone_node_id(node, clone_ctx);
     n->line = node->line;
     n->column = node->column;
     n->leading_comments = NULL;   // Comments not needed for mono clones
@@ -305,43 +323,44 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         case AST_BINARY_AND:
         case AST_BINARY_OR:
         case AST_NULLISH_COALESCE:
-            n->as.binary.left = xr_ast_clone(node->as.binary.left, map, mc);
-            n->as.binary.right = xr_ast_clone(node->as.binary.right, map, mc);
+            n->as.binary.left = xr_ast_clone_ctx(node->as.binary.left, map, mc, clone_ctx);
+            n->as.binary.right = xr_ast_clone_ctx(node->as.binary.right, map, mc, clone_ctx);
             break;
         case AST_UNARY_NEG:
         case AST_UNARY_NOT:
         case AST_UNARY_BNOT:
-            n->as.unary.operand = xr_ast_clone(node->as.unary.operand, map, mc);
+            n->as.unary.operand = xr_ast_clone_ctx(node->as.unary.operand, map, mc, clone_ctx);
             break;
 
         // === Grouping / Expr stmt ===
         case AST_GROUPING:
-            n->as.grouping = xr_ast_clone(node->as.grouping, map, mc);
+            n->as.grouping = xr_ast_clone_ctx(node->as.grouping, map, mc, clone_ctx);
             break;
         case AST_EXPR_STMT:
-            n->as.expr_stmt = xr_ast_clone(node->as.expr_stmt, map, mc);
+            n->as.expr_stmt = xr_ast_clone_ctx(node->as.expr_stmt, map, mc, clone_ctx);
             break;
 
         // === Print ===
         case AST_PRINT_STMT:
             n->as.print_stmt.expr_count = node->as.print_stmt.expr_count;
-            n->as.print_stmt.exprs = clone_node_array(node->as.print_stmt.exprs,
-                                                      node->as.print_stmt.expr_count, map, mc);
+            n->as.print_stmt.exprs = clone_node_array(
+                node->as.print_stmt.exprs, node->as.print_stmt.expr_count, map, mc, clone_ctx);
             break;
 
         // === Block ===
         case AST_BLOCK:
             n->as.block.count = node->as.block.count;
             n->as.block.capacity = node->as.block.count;
-            n->as.block.statements =
-                clone_node_array(node->as.block.statements, node->as.block.count, map, mc);
+            n->as.block.statements = clone_node_array(node->as.block.statements,
+                                                      node->as.block.count, map, mc, clone_ctx);
             break;
 
         // === Variable ===
         case AST_VAR_DECL:
         case AST_CONST_DECL:
             n->as.var_decl.name = clone_str(node->as.var_decl.name);
-            n->as.var_decl.initializer = xr_ast_clone(node->as.var_decl.initializer, map, mc);
+            n->as.var_decl.initializer =
+                xr_ast_clone_ctx(node->as.var_decl.initializer, map, mc, clone_ctx);
             n->as.var_decl.is_const = node->as.var_decl.is_const;
             n->as.var_decl.storage_mode = node->as.var_decl.storage_mode;
             n->as.var_decl.type_annotation = sub_tref(node->as.var_decl.type_annotation, map, mc);
@@ -351,15 +370,16 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
         case AST_ASSIGNMENT:
             n->as.assignment.name = clone_str(node->as.assignment.name);
-            n->as.assignment.value = xr_ast_clone(node->as.assignment.value, map, mc);
+            n->as.assignment.value =
+                xr_ast_clone_ctx(node->as.assignment.value, map, mc, clone_ctx);
             break;
         case AST_COMPOUND_ASSIGNMENT:
             n->as.compound_assignment.name = clone_str(node->as.compound_assignment.name);
             n->as.compound_assignment.op = node->as.compound_assignment.op;
             n->as.compound_assignment.value =
-                xr_ast_clone(node->as.compound_assignment.value, map, mc);
+                xr_ast_clone_ctx(node->as.compound_assignment.value, map, mc, clone_ctx);
             n->as.compound_assignment.object =
-                xr_ast_clone(node->as.compound_assignment.object, map, mc);
+                xr_ast_clone_ctx(node->as.compound_assignment.object, map, mc, clone_ctx);
             break;
         case AST_INC:
         case AST_DEC:
@@ -368,27 +388,36 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
 
         // === Control flow ===
         case AST_IF_STMT:
-            n->as.if_stmt.condition = xr_ast_clone(node->as.if_stmt.condition, map, mc);
-            n->as.if_stmt.then_branch = xr_ast_clone(node->as.if_stmt.then_branch, map, mc);
-            n->as.if_stmt.else_branch = xr_ast_clone(node->as.if_stmt.else_branch, map, mc);
+            n->as.if_stmt.condition =
+                xr_ast_clone_ctx(node->as.if_stmt.condition, map, mc, clone_ctx);
+            n->as.if_stmt.then_branch =
+                xr_ast_clone_ctx(node->as.if_stmt.then_branch, map, mc, clone_ctx);
+            n->as.if_stmt.else_branch =
+                xr_ast_clone_ctx(node->as.if_stmt.else_branch, map, mc, clone_ctx);
             break;
         case AST_WHILE_STMT:
-            n->as.while_stmt.condition = xr_ast_clone(node->as.while_stmt.condition, map, mc);
-            n->as.while_stmt.body = xr_ast_clone(node->as.while_stmt.body, map, mc);
+            n->as.while_stmt.condition =
+                xr_ast_clone_ctx(node->as.while_stmt.condition, map, mc, clone_ctx);
+            n->as.while_stmt.body = xr_ast_clone_ctx(node->as.while_stmt.body, map, mc, clone_ctx);
             break;
         case AST_FOR_STMT:
-            n->as.for_stmt.initializer = xr_ast_clone(node->as.for_stmt.initializer, map, mc);
-            n->as.for_stmt.condition = xr_ast_clone(node->as.for_stmt.condition, map, mc);
-            n->as.for_stmt.increment = xr_ast_clone(node->as.for_stmt.increment, map, mc);
-            n->as.for_stmt.body = xr_ast_clone(node->as.for_stmt.body, map, mc);
+            n->as.for_stmt.initializer =
+                xr_ast_clone_ctx(node->as.for_stmt.initializer, map, mc, clone_ctx);
+            n->as.for_stmt.condition =
+                xr_ast_clone_ctx(node->as.for_stmt.condition, map, mc, clone_ctx);
+            n->as.for_stmt.increment =
+                xr_ast_clone_ctx(node->as.for_stmt.increment, map, mc, clone_ctx);
+            n->as.for_stmt.body = xr_ast_clone_ctx(node->as.for_stmt.body, map, mc, clone_ctx);
             break;
         case AST_FOR_IN_STMT:
             n->as.for_in_stmt.item_name = clone_str(node->as.for_in_stmt.item_name);
             n->as.for_in_stmt.value_name = clone_str(node->as.for_in_stmt.value_name);
             n->as.for_in_stmt.is_keyvalue = node->as.for_in_stmt.is_keyvalue;
             n->as.for_in_stmt.item_type = sub_tref(node->as.for_in_stmt.item_type, map, mc);
-            n->as.for_in_stmt.collection = xr_ast_clone(node->as.for_in_stmt.collection, map, mc);
-            n->as.for_in_stmt.body = xr_ast_clone(node->as.for_in_stmt.body, map, mc);
+            n->as.for_in_stmt.collection =
+                xr_ast_clone_ctx(node->as.for_in_stmt.collection, map, mc, clone_ctx);
+            n->as.for_in_stmt.body =
+                xr_ast_clone_ctx(node->as.for_in_stmt.body, map, mc, clone_ctx);
             break;
         case AST_BREAK_STMT:
         case AST_CONTINUE_STMT:
@@ -400,11 +429,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             FunctionDeclNode *src = &node->as.function_decl;
             FunctionDeclNode *dst = &n->as.function_decl;
             dst->name = clone_str(src->name);
-            dst->params = clone_params(src->params, src->param_count, map, mc);
+            dst->params = clone_params(src->params, src->param_count, map, mc, clone_ctx);
             dst->param_count = src->param_count;
             dst->required_count = src->required_count;
             dst->return_type = sub_tref(src->return_type, map, mc);
-            dst->body = xr_ast_clone(src->body, map, mc);
+            dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_generator = src->is_generator;
             dst->attributes = NULL;  // Attributes not cloned for mono
             dst->attr_count = 0;
@@ -415,10 +444,11 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
 
         // === Call ===
         case AST_CALL_EXPR:
-            n->as.call_expr.callee = xr_ast_clone(node->as.call_expr.callee, map, mc);
+            n->as.call_expr.callee =
+                xr_ast_clone_ctx(node->as.call_expr.callee, map, mc, clone_ctx);
             n->as.call_expr.arg_count = node->as.call_expr.arg_count;
-            n->as.call_expr.arguments = clone_node_array(node->as.call_expr.arguments,
-                                                         node->as.call_expr.arg_count, map, mc);
+            n->as.call_expr.arguments = clone_node_array(
+                node->as.call_expr.arguments, node->as.call_expr.arg_count, map, mc, clone_ctx);
             n->as.call_expr.type_args = clone_tref_array(
                 node->as.call_expr.type_args, node->as.call_expr.type_arg_count, map, mc);
             n->as.call_expr.type_arg_count = node->as.call_expr.type_arg_count;
@@ -427,16 +457,16 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         // === Return / Yield ===
         case AST_RETURN_STMT:
             n->as.return_stmt.value_count = node->as.return_stmt.value_count;
-            n->as.return_stmt.values = clone_node_array(node->as.return_stmt.values,
-                                                        node->as.return_stmt.value_count, map, mc);
+            n->as.return_stmt.values = clone_node_array(
+                node->as.return_stmt.values, node->as.return_stmt.value_count, map, mc, clone_ctx);
             break;
         // === Type check ===
         case AST_IS_EXPR:
-            n->as.is_expr.expr = xr_ast_clone(node->as.is_expr.expr, map, mc);
+            n->as.is_expr.expr = xr_ast_clone_ctx(node->as.is_expr.expr, map, mc, clone_ctx);
             n->as.is_expr.type = sub_tref(node->as.is_expr.type, map, mc);
             break;
         case AST_AS_EXPR:
-            n->as.as_expr.expr = xr_ast_clone(node->as.as_expr.expr, map, mc);
+            n->as.as_expr.expr = xr_ast_clone_ctx(node->as.as_expr.expr, map, mc, clone_ctx);
             n->as.as_expr.type = sub_tref(node->as.as_expr.type, map, mc);
             n->as.as_expr.is_safe = node->as.as_expr.is_safe;
             break;
@@ -444,49 +474,54 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         // === Array / Index / Slice ===
         case AST_ARRAY_LITERAL:
             n->as.array_literal.count = node->as.array_literal.count;
-            n->as.array_literal.elements = clone_node_array(node->as.array_literal.elements,
-                                                            node->as.array_literal.count, map, mc);
+            n->as.array_literal.elements = clone_node_array(
+                node->as.array_literal.elements, node->as.array_literal.count, map, mc, clone_ctx);
             break;
         case AST_INDEX_GET:
-            n->as.index_get.array = xr_ast_clone(node->as.index_get.array, map, mc);
-            n->as.index_get.index = xr_ast_clone(node->as.index_get.index, map, mc);
+            n->as.index_get.array = xr_ast_clone_ctx(node->as.index_get.array, map, mc, clone_ctx);
+            n->as.index_get.index = xr_ast_clone_ctx(node->as.index_get.index, map, mc, clone_ctx);
             break;
         case AST_INDEX_SET:
-            n->as.index_set.array = xr_ast_clone(node->as.index_set.array, map, mc);
-            n->as.index_set.index = xr_ast_clone(node->as.index_set.index, map, mc);
-            n->as.index_set.value = xr_ast_clone(node->as.index_set.value, map, mc);
+            n->as.index_set.array = xr_ast_clone_ctx(node->as.index_set.array, map, mc, clone_ctx);
+            n->as.index_set.index = xr_ast_clone_ctx(node->as.index_set.index, map, mc, clone_ctx);
+            n->as.index_set.value = xr_ast_clone_ctx(node->as.index_set.value, map, mc, clone_ctx);
             break;
         case AST_SLICE_EXPR:
-            n->as.slice_expr.source = xr_ast_clone(node->as.slice_expr.source, map, mc);
-            n->as.slice_expr.start = xr_ast_clone(node->as.slice_expr.start, map, mc);
-            n->as.slice_expr.end = xr_ast_clone(node->as.slice_expr.end, map, mc);
+            n->as.slice_expr.source =
+                xr_ast_clone_ctx(node->as.slice_expr.source, map, mc, clone_ctx);
+            n->as.slice_expr.start =
+                xr_ast_clone_ctx(node->as.slice_expr.start, map, mc, clone_ctx);
+            n->as.slice_expr.end = xr_ast_clone_ctx(node->as.slice_expr.end, map, mc, clone_ctx);
             break;
 
         // === Member access ===
         case AST_MEMBER_ACCESS:
-            n->as.member_access.object = xr_ast_clone(node->as.member_access.object, map, mc);
+            n->as.member_access.object =
+                xr_ast_clone_ctx(node->as.member_access.object, map, mc, clone_ctx);
             n->as.member_access.name = clone_str(node->as.member_access.name);
             break;
         case AST_MEMBER_SET:
-            n->as.member_set.object = xr_ast_clone(node->as.member_set.object, map, mc);
+            n->as.member_set.object =
+                xr_ast_clone_ctx(node->as.member_set.object, map, mc, clone_ctx);
             n->as.member_set.member = clone_str(node->as.member_set.member);
-            n->as.member_set.value = xr_ast_clone(node->as.member_set.value, map, mc);
+            n->as.member_set.value =
+                xr_ast_clone_ctx(node->as.member_set.value, map, mc, clone_ctx);
             break;
 
         // === Template string ===
         case AST_TEMPLATE_STRING:
             n->as.template_str.part_count = node->as.template_str.part_count;
-            n->as.template_str.parts = clone_node_array(node->as.template_str.parts,
-                                                        node->as.template_str.part_count, map, mc);
+            n->as.template_str.parts = clone_node_array(
+                node->as.template_str.parts, node->as.template_str.part_count, map, mc, clone_ctx);
             break;
 
         // === Object / Map / Set literals ===
         case AST_OBJECT_LITERAL:
             n->as.object_literal.count = node->as.object_literal.count;
-            n->as.object_literal.keys = clone_node_array(node->as.object_literal.keys,
-                                                         node->as.object_literal.count, map, mc);
-            n->as.object_literal.values = clone_node_array(node->as.object_literal.values,
-                                                           node->as.object_literal.count, map, mc);
+            n->as.object_literal.keys = clone_node_array(
+                node->as.object_literal.keys, node->as.object_literal.count, map, mc, clone_ctx);
+            n->as.object_literal.values = clone_node_array(
+                node->as.object_literal.values, node->as.object_literal.count, map, mc, clone_ctx);
             if (node->as.object_literal.computed) {
                 n->as.object_literal.computed =
                     (bool *) xr_calloc(node->as.object_literal.count, sizeof(bool));
@@ -496,44 +531,49 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
         case AST_MAP_LITERAL:
             n->as.map_literal.count = node->as.map_literal.count;
-            n->as.map_literal.keys =
-                clone_node_array(node->as.map_literal.keys, node->as.map_literal.count, map, mc);
-            n->as.map_literal.values =
-                clone_node_array(node->as.map_literal.values, node->as.map_literal.count, map, mc);
+            n->as.map_literal.keys = clone_node_array(
+                node->as.map_literal.keys, node->as.map_literal.count, map, mc, clone_ctx);
+            n->as.map_literal.values = clone_node_array(
+                node->as.map_literal.values, node->as.map_literal.count, map, mc, clone_ctx);
             break;
         case AST_SET_LITERAL:
             n->as.set_literal.count = node->as.set_literal.count;
-            n->as.set_literal.elements = clone_node_array(node->as.set_literal.elements,
-                                                          node->as.set_literal.count, map, mc);
+            n->as.set_literal.elements = clone_node_array(
+                node->as.set_literal.elements, node->as.set_literal.count, map, mc, clone_ctx);
             break;
 
         // === Ternary / Range ===
         case AST_TERNARY:
-            n->as.ternary.condition = xr_ast_clone(node->as.ternary.condition, map, mc);
-            n->as.ternary.true_expr = xr_ast_clone(node->as.ternary.true_expr, map, mc);
-            n->as.ternary.false_expr = xr_ast_clone(node->as.ternary.false_expr, map, mc);
+            n->as.ternary.condition =
+                xr_ast_clone_ctx(node->as.ternary.condition, map, mc, clone_ctx);
+            n->as.ternary.true_expr =
+                xr_ast_clone_ctx(node->as.ternary.true_expr, map, mc, clone_ctx);
+            n->as.ternary.false_expr =
+                xr_ast_clone_ctx(node->as.ternary.false_expr, map, mc, clone_ctx);
             break;
         case AST_RANGE:
-            n->as.range.start = xr_ast_clone(node->as.range.start, map, mc);
-            n->as.range.end = xr_ast_clone(node->as.range.end, map, mc);
+            n->as.range.start = xr_ast_clone_ctx(node->as.range.start, map, mc, clone_ctx);
+            n->as.range.end = xr_ast_clone_ctx(node->as.range.end, map, mc, clone_ctx);
             break;
 
         // === Optional chain / Force unwrap ===
         case AST_OPTIONAL_CHAIN:
-            n->as.optional_chain.object = xr_ast_clone(node->as.optional_chain.object, map, mc);
+            n->as.optional_chain.object =
+                xr_ast_clone_ctx(node->as.optional_chain.object, map, mc, clone_ctx);
             n->as.optional_chain.name = clone_str(node->as.optional_chain.name);
-            n->as.optional_chain.index = xr_ast_clone(node->as.optional_chain.index, map, mc);
+            n->as.optional_chain.index =
+                xr_ast_clone_ctx(node->as.optional_chain.index, map, mc, clone_ctx);
             n->as.optional_chain.chain_type = node->as.optional_chain.chain_type;
             break;
         case AST_FORCE_UNWRAP:
-            n->as.unary.operand = xr_ast_clone(node->as.unary.operand, map, mc);
+            n->as.unary.operand = xr_ast_clone_ctx(node->as.unary.operand, map, mc, clone_ctx);
             break;
 
         // === Try-catch / Throw ===
         case AST_TRY_CATCH: {
             TryCatchNode *src_tc = &node->as.try_catch;
             TryCatchNode *dst_tc = &n->as.try_catch;
-            dst_tc->try_body = xr_ast_clone(src_tc->try_body, map, mc);
+            dst_tc->try_body = xr_ast_clone_ctx(src_tc->try_body, map, mc, clone_ctx);
             dst_tc->catch_count = src_tc->catch_count;
             dst_tc->catch_clauses = NULL;
             if (src_tc->catch_count > 0) {
@@ -548,7 +588,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
                     dc->var_line = sc->var_line;
                     dc->var_column = sc->var_column;
                     dc->type = sub_tref(sc->type, map, mc);
-                    dc->body = xr_ast_clone(sc->body, map, mc);
+                    dc->body = xr_ast_clone_ctx(sc->body, map, mc, clone_ctx);
                     dc->symbol_id = 0;
                     dst_tc->catch_clauses[ci] = dc;
                 }
@@ -556,7 +596,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
         }
         case AST_THROW_STMT:
-            n->as.throw_stmt.expression = xr_ast_clone(node->as.throw_stmt.expression, map, mc);
+            n->as.throw_stmt.expression =
+                xr_ast_clone_ctx(node->as.throw_stmt.expression, map, mc, clone_ctx);
             break;
 
         // === new expression ===
@@ -564,8 +605,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             n->as.new_expr.module_name = clone_str(node->as.new_expr.module_name);
             n->as.new_expr.class_name = clone_str(node->as.new_expr.class_name);
             n->as.new_expr.arg_count = node->as.new_expr.arg_count;
-            n->as.new_expr.arguments =
-                clone_node_array(node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc);
+            n->as.new_expr.arguments = clone_node_array(
+                node->as.new_expr.arguments, node->as.new_expr.arg_count, map, mc, clone_ctx);
             n->as.new_expr.type_args = clone_tref_array(node->as.new_expr.type_args,
                                                         node->as.new_expr.type_arg_count, map, mc);
             n->as.new_expr.type_arg_count = node->as.new_expr.type_arg_count;
@@ -577,42 +618,46 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
         case AST_SUPER_CALL:
             n->as.super_call.method_name = clone_str(node->as.super_call.method_name);
             n->as.super_call.arg_count = node->as.super_call.arg_count;
-            n->as.super_call.arguments = clone_node_array(node->as.super_call.arguments,
-                                                          node->as.super_call.arg_count, map, mc);
+            n->as.super_call.arguments = clone_node_array(
+                node->as.super_call.arguments, node->as.super_call.arg_count, map, mc, clone_ctx);
             break;
 
         // === Match expression ===
         case AST_MATCH_EXPR:
-            n->as.match_expr.expr = xr_ast_clone(node->as.match_expr.expr, map, mc);
+            n->as.match_expr.expr = xr_ast_clone_ctx(node->as.match_expr.expr, map, mc, clone_ctx);
             n->as.match_expr.arm_count = node->as.match_expr.arm_count;
-            n->as.match_expr.arms =
-                clone_node_array(node->as.match_expr.arms, node->as.match_expr.arm_count, map, mc);
+            n->as.match_expr.arms = clone_node_array(
+                node->as.match_expr.arms, node->as.match_expr.arm_count, map, mc, clone_ctx);
             break;
         case AST_MATCH_ARM:
-            n->as.match_arm.pattern = xr_ast_clone(node->as.match_arm.pattern, map, mc);
-            n->as.match_arm.guard = xr_ast_clone(node->as.match_arm.guard, map, mc);
-            n->as.match_arm.body = xr_ast_clone(node->as.match_arm.body, map, mc);
+            n->as.match_arm.pattern =
+                xr_ast_clone_ctx(node->as.match_arm.pattern, map, mc, clone_ctx);
+            n->as.match_arm.guard = xr_ast_clone_ctx(node->as.match_arm.guard, map, mc, clone_ctx);
+            n->as.match_arm.body = xr_ast_clone_ctx(node->as.match_arm.body, map, mc, clone_ctx);
             break;
 
         // === Pattern nodes ===
         case AST_PATTERN_LITERAL:
-            n->as.pattern_literal.value = xr_ast_clone(node->as.pattern_literal.value, map, mc);
+            n->as.pattern_literal.value =
+                xr_ast_clone_ctx(node->as.pattern_literal.value, map, mc, clone_ctx);
             break;
         case AST_PATTERN_RANGE:
-            n->as.pattern_range.start = xr_ast_clone(node->as.pattern_range.start, map, mc);
-            n->as.pattern_range.end = xr_ast_clone(node->as.pattern_range.end, map, mc);
+            n->as.pattern_range.start =
+                xr_ast_clone_ctx(node->as.pattern_range.start, map, mc, clone_ctx);
+            n->as.pattern_range.end =
+                xr_ast_clone_ctx(node->as.pattern_range.end, map, mc, clone_ctx);
             break;
         case AST_PATTERN_WILDCARD:
             break;
         case AST_PATTERN_MULTI:
             n->as.pattern_multi.count = node->as.pattern_multi.count;
-            n->as.pattern_multi.patterns = clone_node_array(node->as.pattern_multi.patterns,
-                                                            node->as.pattern_multi.count, map, mc);
+            n->as.pattern_multi.patterns = clone_node_array(
+                node->as.pattern_multi.patterns, node->as.pattern_multi.count, map, mc, clone_ctx);
             break;
         case AST_PATTERN_TUPLE:
             n->as.pattern_tuple.count = node->as.pattern_tuple.count;
-            n->as.pattern_tuple.patterns = clone_node_array(node->as.pattern_tuple.patterns,
-                                                            node->as.pattern_tuple.count, map, mc);
+            n->as.pattern_tuple.patterns = clone_node_array(
+                node->as.pattern_tuple.patterns, node->as.pattern_tuple.count, map, mc, clone_ctx);
             break;
         case AST_PATTERN_TYPE:
             n->as.pattern_type.type = node->as.pattern_type.type;
@@ -622,26 +667,30 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
 
         // === Coroutine nodes ===
         case AST_GO_EXPR:
-            n->as.go_expr.expr = xr_ast_clone(node->as.go_expr.expr, map, mc);
+            n->as.go_expr.expr = xr_ast_clone_ctx(node->as.go_expr.expr, map, mc, clone_ctx);
             n->as.go_expr.name = clone_str(node->as.go_expr.name);
-            n->as.go_expr.priority = xr_ast_clone(node->as.go_expr.priority, map, mc);
+            n->as.go_expr.priority =
+                xr_ast_clone_ctx(node->as.go_expr.priority, map, mc, clone_ctx);
             n->as.go_expr.link_mode = node->as.go_expr.link_mode;
             break;
         case AST_AWAIT_EXPR:
-            n->as.await_expr.expr = xr_ast_clone(node->as.await_expr.expr, map, mc);
-            n->as.await_expr.timeout = xr_ast_clone(node->as.await_expr.timeout, map, mc);
+            n->as.await_expr.expr = xr_ast_clone_ctx(node->as.await_expr.expr, map, mc, clone_ctx);
+            n->as.await_expr.timeout =
+                xr_ast_clone_ctx(node->as.await_expr.timeout, map, mc, clone_ctx);
             n->as.await_expr.is_any = node->as.await_expr.is_any;
             n->as.await_expr.is_all = node->as.await_expr.is_all;
             n->as.await_expr.is_any_success = node->as.await_expr.is_any_success;
             break;
         case AST_CHANNEL_NEW:
-            n->as.channel_new.buffer_size = xr_ast_clone(node->as.channel_new.buffer_size, map, mc);
+            n->as.channel_new.buffer_size =
+                xr_ast_clone_ctx(node->as.channel_new.buffer_size, map, mc, clone_ctx);
             break;
         case AST_DEFER_STMT:
-            n->as.defer_stmt.expr = xr_ast_clone(node->as.defer_stmt.expr, map, mc);
+            n->as.defer_stmt.expr = xr_ast_clone_ctx(node->as.defer_stmt.expr, map, mc, clone_ctx);
             break;
         case AST_SCOPE_BLOCK:
-            n->as.scope_block.body = xr_ast_clone(node->as.scope_block.body, map, mc);
+            n->as.scope_block.body =
+                xr_ast_clone_ctx(node->as.scope_block.body, map, mc, clone_ctx);
             n->as.scope_block.scope_mode = node->as.scope_block.scope_mode;
             break;
         case AST_YIELD_STMT:
@@ -655,11 +704,14 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
         case AST_ENUM_CONVERT:
             n->as.enum_convert.enum_name = clone_str(node->as.enum_convert.enum_name);
-            n->as.enum_convert.value_expr = xr_ast_clone(node->as.enum_convert.value_expr, map, mc);
+            n->as.enum_convert.value_expr =
+                xr_ast_clone_ctx(node->as.enum_convert.value_expr, map, mc, clone_ctx);
             break;
         case AST_ENUM_INDEX:
-            n->as.enum_index.collection = xr_ast_clone(node->as.enum_index.collection, map, mc);
-            n->as.enum_index.index_expr = xr_ast_clone(node->as.enum_index.index_expr, map, mc);
+            n->as.enum_index.collection =
+                xr_ast_clone_ctx(node->as.enum_index.collection, map, mc, clone_ctx);
+            n->as.enum_index.index_expr =
+                xr_ast_clone_ctx(node->as.enum_index.index_expr, map, mc, clone_ctx);
             break;
 
         // === Class/struct declaration (deep clone for mono) ===
@@ -675,9 +727,9 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->interface_count = src->interface_count;
             dst->interfaces = clone_tref_array(src->interfaces, src->interface_count, map, mc);
             dst->field_count = src->field_count;
-            dst->fields = clone_node_array(src->fields, src->field_count, map, mc);
+            dst->fields = clone_node_array(src->fields, src->field_count, map, mc, clone_ctx);
             dst->method_count = src->method_count;
-            dst->methods = clone_node_array(src->methods, src->method_count, map, mc);
+            dst->methods = clone_node_array(src->methods, src->method_count, map, mc, clone_ctx);
             dst->is_abstract = src->is_abstract;
             dst->is_final = src->is_final;
             dst->type_params = NULL;  // Cleared: mono version has no type params
@@ -694,7 +746,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->parameters = clone_str_array(src->parameters, src->param_count);
             dst->param_types = clone_tref_array(src->param_types, src->param_count, map, mc);
             dst->return_type = sub_tref(src->return_type, map, mc);
-            dst->body = xr_ast_clone(src->body, map, mc);
+            dst->body = xr_ast_clone_ctx(src->body, map, mc, clone_ctx);
             dst->is_constructor = src->is_constructor;
             dst->is_static = src->is_static;
             dst->is_private = src->is_private;
@@ -706,8 +758,10 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->is_operator = src->is_operator;
             dst->op_type = src->op_type;
             dst->base_arg_count = src->base_arg_count;
-            dst->base_args = clone_node_array(src->base_args, src->base_arg_count, map, mc);
-            dst->default_values = clone_node_array(src->default_values, src->param_count, map, mc);
+            dst->base_args =
+                clone_node_array(src->base_args, src->base_arg_count, map, mc, clone_ctx);
+            dst->default_values =
+                clone_node_array(src->default_values, src->param_count, map, mc, clone_ctx);
             dst->type_param_names = NULL;  // Cleared for mono
             dst->type_param_count = 0;
             break;
@@ -722,7 +776,7 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->is_private = src->is_private;
             dst->is_static = src->is_static;
             dst->is_final = src->is_final;
-            dst->initializer = xr_ast_clone(src->initializer, map, mc);
+            dst->initializer = xr_ast_clone_ctx(src->initializer, map, mc, clone_ctx);
             break;
         }
 
@@ -733,7 +787,8 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             dst->struct_name = clone_str(src->struct_name);
             dst->field_count = src->field_count;
             dst->field_names = clone_str_array(src->field_names, src->field_count);
-            dst->field_values = clone_node_array(src->field_values, src->field_count, map, mc);
+            dst->field_values =
+                clone_node_array(src->field_values, src->field_count, map, mc, clone_ctx);
             dst->type_args = clone_tref_array(src->type_args, src->type_arg_count, map, mc);
             dst->type_arg_count = src->type_arg_count;
             break;
@@ -761,6 +816,10 @@ AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
             break;
     }
     return n;
+}
+
+AstNode *xr_ast_clone(AstNode *node, XrMonoTypeMap *map, int mc) {
+    return xr_ast_clone_ctx(node, map, mc, NULL);
 }
 
 /* ========== Mono Collector ========== */
@@ -1439,11 +1498,12 @@ static void rewrite_call_sites(AstNode *node, XaGenericRegistry *registry,
 
 // Inject monomorphized function declarations into the program AST
 static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
-                              XaMonoCollector *collector) {
+                              XaMonoCollector *collector, XrayIsolate *isolate) {
     if (!root || root->type != AST_PROGRAM || collector->count == 0)
         return;
 
     ProgramNode *prog = &root->as.program;
+    XrAstCloneCtx clone_ctx = {.isolate = isolate};
 
     // prog->statements starts as arena-allocated (from xr_ast_program_add).
     // Once we copy it to the heap for growth, heap_owned becomes true and
@@ -1470,7 +1530,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
         }
 
         // Clone the generic function with type substitution
-        AstNode *cloned = xr_ast_clone(decl->node, map, map_count);
+        AstNode *cloned = xr_ast_clone_ctx(decl->node, map, map_count, &clone_ctx);
         xr_free(map);
 
         if (!cloned)
@@ -1573,7 +1633,7 @@ static void inject_mono_decls(AstNode *root, XaGenericRegistry *registry,
 
 /* ========== Public API ========== */
 
-void xa_mono_pass(AstNode *root) {
+void xa_mono_pass(AstNode *root, XrayIsolate *isolate) {
     if (!root || root->type != AST_PROGRAM)
         return;
 
@@ -1594,7 +1654,7 @@ void xa_mono_pass(AstNode *root) {
         goto cleanup;
 
     // Phase 3: Clone + substitute + inject monomorphized versions
-    inject_mono_decls(root, &registry, &collector);
+    inject_mono_decls(root, &registry, &collector, isolate);
 
     // Phase 4: Rewrite call sites to use mangled names
     rewrite_call_sites(root, &registry, &collector);
