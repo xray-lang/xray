@@ -123,6 +123,35 @@ static bool worker_high_priority_work_visible(XrRuntime *runtime) {
                                 memory_order_acquire) != 0;
 }
 
+static bool worker_global_spawn_backlog_visible(XrRuntime *runtime) {
+    if (!runtime)
+        return false;
+    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+        return true;
+
+    uint32_t mask = atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
+    if (mask == 0)
+        return false;
+
+    int pending = 0;
+    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
+        if ((mask & ((uint32_t) 1u << priority)) == 0)
+            continue;
+        pending += atomic_load_explicit(&runtime->injectq[priority].len, memory_order_relaxed);
+        if (pending >= XR_SPAWN_INLINE_GLOBAL_BACKLOG)
+            return true;
+    }
+    return false;
+}
+
+static bool worker_spawn_backlog_visible(XrWorker *worker, XrRuntime *runtime) {
+    if (!worker || !runtime || runtime->worker_count <= 1)
+        return false;
+    if (xr_proc_local_runq_len(&worker->p) >= XR_SPAWN_INLINE_LOCAL_BACKLOG)
+        return true;
+    return worker_global_spawn_backlog_visible(runtime);
+}
+
 static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
                                              XrCoroutine *child) {
     int parent_priority = worker_coro_priority(parent);
@@ -136,6 +165,9 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
     XrRuntime *runtime = worker ? worker->p.runtime : NULL;
     if (!runtime)
         return true;
+
+    if (worker_spawn_backlog_visible(worker, runtime))
+        return false;
 
     return !worker_high_priority_work_visible(runtime);
 }
@@ -370,18 +402,17 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             result = xr_coro_run_error(XR_NULL_VAL, false);
             goto normal_result_path;
         }
-        if (!worker_should_inline_spawn_child(worker, coro, child)) {
+        bool inline_child = worker_should_inline_spawn_child(worker, coro, child);
+        // Queued and inline children both need worker threads visible before
+        // the current worker continues the parent.
+        xr_runtime_ensure_workers(p->runtime);
+        if (!inline_child) {
             xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
             xr_worker_push(worker, child);
             p->yield_streak = 0;
             goto exec_fast;
         }
         xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
-        // Ensure worker threads are started (lazy init).
-        // Without this, JIT-compiled children that never yield
-        // won't trigger the yield_streak threshold that normally
-        // starts workers, leaving only Worker 0 active.
-        xr_runtime_ensure_workers(p->runtime);
         // Reset yield_streak: yields during spawn loop don't count
         // toward compute-bound pressure detection.
         p->yield_streak = 0;
