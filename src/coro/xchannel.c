@@ -904,6 +904,7 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
 
     // Cancel timer (sendTimeout/recvTimeout case)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
     }
 

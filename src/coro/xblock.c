@@ -131,6 +131,7 @@ static void coro_finish_resume(XrCoroutine *coro) {
     xr_coro_resume_store(coro, XR_RESUME_OK);
     if (coro->ext) {
         xr_channel_wait_token_finish(&coro->ext->chan_wait_token);
+        xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
     }
 }
@@ -240,6 +241,7 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
+        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
         if (timeout_ms > 0) {
             coro_arm_timeout(coro, timeout_ms);
         }
@@ -299,6 +301,7 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
+        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
         if (timeout_ms > 0) {
             coro_arm_timeout(coro, timeout_ms);
         }
@@ -320,6 +323,7 @@ static void coro_cancel_owned_timer(XrCoroutine *coro) {
         xr_worker_cancel_timer(worker, coro);
         return;
     }
+    xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
     atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
 }
 
@@ -355,6 +359,7 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
         if (wait) {
             atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
             xr_await_wait_token_finish(&wait->await_token);
+            xr_timer_wait_token_finish(&wait->timer_token);
         }
         return block_result(XR_CORO_BLOCK_READY, task->result, true);
     }
@@ -792,6 +797,7 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
 
     sw->timer_channel = timer_ch;
 
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
     coro_select_arm_timer(worker, coro, timer_ch);
     coro_select_notify_enter(isolate, sw);
 
