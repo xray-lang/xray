@@ -352,6 +352,26 @@ static void worker_forward_chan_wakes(void *channel, bool wake_sender, int count
     }
 }
 
+static void chan_ready_append(XrCoroutine **first, XrCoroutine **last, XrCoroutine *coro) {
+    if (!coro)
+        return;
+    coro->sched_link = NULL;
+    if (*last) {
+        (*last)->sched_link = coro;
+    } else {
+        *first = coro;
+    }
+    *last = coro;
+}
+
+static void chan_ready_flush(XrWorker *worker, XrCoroutine **first, XrCoroutine **last) {
+    if (!first || !last || !*first)
+        return;
+    (void) xr_worker_push_lifo_batch(worker, *first);
+    *first = NULL;
+    *last = NULL;
+}
+
 static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool wake_sender,
                                            bool is_close, int count) {
     XrRuntime *runtime = worker->p.runtime;
@@ -366,11 +386,18 @@ static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool
         return;
     }
 
+    XrCoroutine *ready_first = NULL;
+    XrCoroutine *ready_last = NULL;
     for (int i = 0; i < count; i++) {
-        XrCoroutine *coro = xr_worker_wake_one(worker, channel, wake_sender);
-        if (!coro) {
-            coro = xr_worker_wake_select(worker, channel);
+        XrCoroutine *ready = NULL;
+        bool consumed = xr_worker_wake_one_detached(worker, channel, wake_sender, &ready);
+        if (consumed) {
+            chan_ready_append(&ready_first, &ready_last, ready);
+            continue;
         }
+
+        chan_ready_flush(worker, &ready_first, &ready_last);
+        XrCoroutine *coro = xr_worker_wake_select(worker, channel);
         if (!coro) {
             worker_clear_channel_waiter_mask(worker, channel);
             xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_wake_cmd_stale_count);
@@ -380,6 +407,7 @@ static void worker_execute_chan_wake_batch(XrWorker *worker, void *channel, bool
             break;
         }
     }
+    chan_ready_flush(worker, &ready_first, &ready_last);
 }
 
 void xr_worker_drain_chan_wake_queue(XrWorker *worker) {
