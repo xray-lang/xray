@@ -232,6 +232,7 @@ op_call_cfunc:
             // Set to current frame before call
             ci->u.c.result_slot = (int16_t) (GETARG_A(i));
             ci->u.c.has_cfunc_result = false;
+            savepc();
 
             XrValue result;
             XrCFuncResult status = cfunc->as.yieldable(isolate, &R(a + 1), nargs, &result);
@@ -248,14 +249,12 @@ op_call_cfunc:
 
                 case XR_CFUNC_BLOCKED:
                     // Coroutine needs to block, save state and yield
-                    savepc();
                     XR_DBG_CORO("VM BLOCKED: result_slot=%d, frame_idx=%d", (int) (GETARG_A(i)),
                                 VM_FRAME_COUNT - 1);
                     return XR_VM_BLOCKED;
 
                 case XR_CFUNC_YIELD:
                     // Active yield, continue next time
-                    savepc();
                     return XR_VM_YIELD;
 
                 case XR_CFUNC_CALL_CLOSURE:
