@@ -72,21 +72,20 @@ invoke_dispatch:;
                 VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
             }
             savepc();
-            frame->pc = pc - 1;
-            frame->call_status |= XR_CALL_YIELDED;
+            vm_suspend_replay_yielded(frame, pc);
             XrCoroBlockResult _cr =
                 xr_coro_chan_send(isolate, _cur, ch, R(a + 2), xr_slot_none(), -1);
             if (_cr.kind == XR_CORO_BLOCK_READY) {
-                frame->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(frame);
                 R(a) = xr_null();
                 vmbreak;
             } else if (_cr.kind == XR_CORO_BLOCK_CLOSED) {
-                frame->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(frame);
                 VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
             } else if (_cr.kind == XR_CORO_BLOCK_BLOCKED) {
                 return XR_VM_BLOCKED;
             } else {
-                frame->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(frame);
             }
         }
 
@@ -104,17 +103,16 @@ invoke_dispatch:;
                 }
             }
             savepc();
-            frame->pc = pc - 1;
-            frame->call_status |= XR_CALL_YIELDED;
+            vm_suspend_replay_yielded(frame, pc);
             XrCoroBlockResult _cr =
                 xr_coro_chan_recv(isolate, _cur, ch, xr_slot_xvalue_ptr(&R(a)), xr_slot_none(), -1);
             if (_cr.kind == XR_CORO_BLOCK_READY || _cr.kind == XR_CORO_BLOCK_CLOSED) {
-                frame->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(frame);
                 vmbreak;
             } else if (_cr.kind == XR_CORO_BLOCK_BLOCKED) {
                 return XR_VM_BLOCKED;
             } else {
-                frame->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(frame);
             }
         }
 
@@ -326,19 +324,17 @@ invoke_dispatch:;
                 method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
             VM_REBIND_AFTER_NATIVE_CALL();
             if (status == XR_CFUNC_DONE) {
-                ci->call_status &= ~XR_CALL_YIELDED;
+                vm_suspend_clear_yielded(ci);
                 R(a) = result;
                 VM_BUILTIN_INVOKE_CHECK_EXC();
                 vmbreak;
             }
             if (status == XR_CFUNC_BLOCKED) {
-                ci->pc = pc - 1;
-                ci->call_status |= XR_CALL_YIELDED;
+                vm_suspend_replay_yielded(ci, pc);
                 return XR_VM_BLOCKED;
             }
             if (status == XR_CFUNC_YIELD) {
-                ci->pc = pc - 1;
-                ci->call_status |= XR_CALL_YIELDED;
+                vm_suspend_replay_yielded(ci, pc);
                 return XR_VM_YIELD;
             }
             return XR_VM_RUNTIME_ERROR;
@@ -498,19 +494,17 @@ vmcase(OP_INVOKE_DIRECT) {
             method->as.yieldable_primitive(isolate, R(a + 1), &R(a + 2), nargs, &result);
         VM_REBIND_AFTER_NATIVE_CALL();
         if (status == XR_CFUNC_DONE) {
-            ci->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(ci);
             R(a) = result;
             VM_BUILTIN_INVOKE_CHECK_EXC();
             vmbreak;
         }
         if (status == XR_CFUNC_BLOCKED) {
-            ci->pc = pc - 1;
-            ci->call_status |= XR_CALL_YIELDED;
+            vm_suspend_replay_yielded(ci, pc);
             return XR_VM_BLOCKED;
         }
         if (status == XR_CFUNC_YIELD) {
-            ci->pc = pc - 1;
-            ci->call_status |= XR_CALL_YIELDED;
+            vm_suspend_replay_yielded(ci, pc);
             return XR_VM_YIELD;
         }
         return XR_VM_RUNTIME_ERROR;

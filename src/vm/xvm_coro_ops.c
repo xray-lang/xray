@@ -805,8 +805,7 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             XrCoroBlockResult await_result = xr_coro_await_task_slot(
                 isolate, current, task, result_slot, -1, discard_result != 0);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
-                frame->pc = pc - 1;
-                return XR_DISP_BLOCKED;
+                return vm_suspend_block_replay(frame, pc);
             }
             if (await_result.kind == XR_CORO_BLOCK_READY) {
                 vm_task_detach_completed_executor(task);
@@ -899,7 +898,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
         }
 
         XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
-        frame->pc = pc;
+        vm_suspend_continue_from_next(frame, pc);
         vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
 
         XrCoroutine *current = vm_get_coro(vm_ctx);
@@ -907,8 +906,7 @@ XR_FUNC XrDispatchAction vm_await_timeout(XrayIsolate *isolate, XrVMContext *vm_
             XrCoroBlockResult await_result =
                 xr_coro_await_task_slot(isolate, current, task, result_slot, timeout_ms, false);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
-                frame->pc = pc - 1;
-                return XR_DISP_BLOCKED;
+                return vm_suspend_block_replay(frame, pc);
             }
             if (await_result.kind == XR_CORO_BLOCK_READY) {
                 vm_task_detach_completed_executor(task);
@@ -992,7 +990,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
         return XR_DISP_NEXT;
     }
 
-    frame->pc = pc - 1;
+    vm_suspend_replay_current(frame, pc);
     vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
 
     XrRuntime *rt = (XrRuntime *) isolate->vm.runtime;
@@ -1085,7 +1083,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     // Slow path: wait
     if (current) {
-        frame->pc = pc - 1;
+        vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult block = xr_coro_await_any_task(current, tasks, mode == 1);
         if (block.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_RESTART;

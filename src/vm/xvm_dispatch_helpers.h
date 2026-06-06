@@ -75,6 +75,50 @@ static inline XrCoroutine *vm_get_coro(XrVMContext *vm_ctx) {
     return w ? (XrCoroutine *) w->m->current_coro : NULL;
 }
 
+/* ========== VM Suspend Continuation Helpers ========== */
+
+static inline void vm_suspend_replay_current(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc - 1;
+}
+
+static inline void vm_suspend_continue_from_next(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    frame->pc = pc;
+}
+
+static inline void vm_suspend_replay_yielded(XrBcCallFrame *frame, XrInstruction *pc) {
+    if (!frame)
+        return;
+    vm_suspend_replay_current(frame, pc);
+    frame->call_status |= XR_CALL_YIELDED;
+}
+
+static inline void vm_suspend_clear_yielded(XrBcCallFrame *frame) {
+    if (!frame)
+        return;
+    frame->call_status &= ~XR_CALL_YIELDED;
+}
+
+static inline XrDispatchAction vm_suspend_block_replay(XrBcCallFrame *frame, XrInstruction *pc) {
+    vm_suspend_replay_current(frame, pc);
+    return XR_DISP_BLOCKED;
+}
+
+static inline XrDispatchAction vm_suspend_block_replay_yielded(XrBcCallFrame *frame,
+                                                               XrInstruction *pc) {
+    vm_suspend_replay_yielded(frame, pc);
+    return XR_DISP_BLOCKED;
+}
+
+static inline XrDispatchAction vm_suspend_yield_replay_yielded(XrBcCallFrame *frame,
+                                                               XrInstruction *pc) {
+    vm_suspend_replay_yielded(frame, pc);
+    return XR_DISP_YIELD;
+}
+
 /* ========== Stack Growth Helper for Dispatch Functions ========== */
 #include "../coro/xcoroutine.h"
 

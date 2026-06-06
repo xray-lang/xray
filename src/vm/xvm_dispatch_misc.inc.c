@@ -170,7 +170,7 @@ vmcase(OP_SCOPE_EXIT) {
     if (current) {
         XrCoroBlockResult scope_result = xr_coro_scope_exit(current, (uint8_t) scope_mode);
         if (scope_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc - 1;
+            vm_suspend_replay_current(frame, pc);
             return XR_VM_BLOCKED;
         }
         if (scope_result.kind == XR_CORO_BLOCK_NO_CORO) {
