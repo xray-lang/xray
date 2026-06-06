@@ -48,10 +48,21 @@ typedef enum {
 
 typedef struct XrTaskAwaitNode {
     struct XrTaskAwaitNode *next;
+    XrTask *task;
     XrCoroutine *waiter;
     int waiter_index;
     bool linked;
 } XrTaskAwaitNode;
+
+static inline void xr_task_await_node_reset(XrTaskAwaitNode *node) {
+    if (!node)
+        return;
+    node->next = NULL;
+    node->task = NULL;
+    node->waiter = NULL;
+    node->waiter_index = -1;
+    node->linked = false;
+}
 
 typedef struct XrAwaitWaitToken {
     _Atomic int state;
@@ -66,10 +77,7 @@ static inline void xr_await_wait_token_reset(XrAwaitWaitToken *token) {
         return;
     atomic_store_explicit(&token->state, XR_AWAIT_WAIT_IDLE, memory_order_relaxed);
     atomic_store_explicit(&token->task, NULL, memory_order_relaxed);
-    token->node.next = NULL;
-    token->node.waiter = NULL;
-    token->node.waiter_index = -1;
-    token->node.linked = false;
+    xr_task_await_node_reset(&token->node);
     token->waiter_index = -1;
 }
 
@@ -79,10 +87,8 @@ static inline void xr_await_wait_token_prepare(XrAwaitWaitToken *token, XrTask *
         return;
     token->sequence++;
     token->waiter_index = waiter_index;
-    token->node.next = NULL;
-    token->node.waiter = NULL;
+    xr_task_await_node_reset(&token->node);
     token->node.waiter_index = waiter_index;
-    token->node.linked = false;
     atomic_store_explicit(&token->task, task, memory_order_relaxed);
     atomic_store_explicit(&token->state, XR_AWAIT_WAIT_REGISTERING, memory_order_release);
 }
@@ -145,9 +151,16 @@ typedef enum {
     XR_MULTI_AWAIT_ANY_SUCCESS,
 } XrMultiAwaitMode;
 
+#define XR_MULTI_AWAIT_INLINE_TASKS 4
+
 typedef struct XrMultiAwaitWaitToken {
     _Atomic int state;
     _Atomic(XrArray *) tasks;
+    XrTaskAwaitNode inline_nodes[XR_MULTI_AWAIT_INLINE_TASKS];
+    XrTaskAwaitNode *heap_nodes;
+    XrTaskAwaitNode *nodes;
+    int heap_capacity;
+    int node_count;
     int mode;
     int task_count;
     uint32_t sequence;
@@ -156,8 +169,15 @@ typedef struct XrMultiAwaitWaitToken {
 static inline void xr_multi_await_wait_token_reset(XrMultiAwaitWaitToken *token) {
     if (!token)
         return;
+    XrTaskAwaitNode *nodes = token->nodes;
+    int node_count = token->node_count;
+    for (int i = 0; nodes && i < node_count; i++) {
+        xr_task_await_node_reset(&nodes[i]);
+    }
     atomic_store_explicit(&token->state, XR_MULTI_AWAIT_WAIT_IDLE, memory_order_relaxed);
     atomic_store_explicit(&token->tasks, NULL, memory_order_relaxed);
+    token->nodes = NULL;
+    token->node_count = 0;
     token->mode = XR_MULTI_AWAIT_NONE;
     token->task_count = 0;
 }

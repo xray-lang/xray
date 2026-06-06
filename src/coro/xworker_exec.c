@@ -252,7 +252,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_READY |
                                           XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);
             /* Task/Executor separation: mark task cancelled.
-             * Detach AFTER wake_waiter so task->waiter can be read. */
+             * Detach after wake dispatch so task completion waiters can be read. */
             if (coro->task) {
                 xr_task_cancel(coro->task);
             }
@@ -283,7 +283,7 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             }
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
             /* Task/Executor separation: mark task failed.
-             * Detach AFTER wake_waiter so task->waiter can be read. */
+             * Detach after wake dispatch so task completion waiters can be read. */
             if (coro->task) {
                 if (coro->task->link_mode == XR_LINK_LINKED && coro->task->parent) {
                     // linked go: propagate error to parent task
