@@ -43,6 +43,9 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
     } else if (wr == (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
         XrScopeContext *scope = coro->current_scope;
         if (!scope || atomic_load(&scope->count) == 0) {
+            XrCoroWaitState *wait = xr_coro_wait_state(coro);
+            if (wait)
+                xr_scope_wait_token_resolve(&wait->scope_token);
             xr_coro_ready(runtime->isolate, coro, true);
             return true;
         }

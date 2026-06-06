@@ -850,13 +850,19 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
     }
 
     if (atomic_load(&scope->count) > 0) {
+        XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+        if (!wait)
+            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+        xr_scope_wait_token_prepare(&wait->scope_token, scope);
         xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
+        xr_scope_wait_token_commit(&wait->scope_token);
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
     XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
     if (!wait)
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     atomic_store(&wait->wait_count, 0);
+    xr_scope_wait_token_finish(&wait->scope_token);
 
     if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
         XrValue err = scope->first_error;
