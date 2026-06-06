@@ -224,6 +224,11 @@ XR_FUNC void xr_task_add_completion(struct XrTask *task, struct XrCompletionNode
 // Wake the waiter registered on this task (replaces xr_coro_wake_waiter for Task path)
 XR_FUNC void xr_task_wake_waiter(struct XrayIsolate *X, struct XrTask *task);
 
+// Clear coroutine-owned await registrations from pending tasks.
+XR_FUNC void xr_task_unregister_await_waiters(struct XrCoroutine *waiter);
+XR_FUNC void xr_task_finish_await_waiters(struct XrCoroutine *waiter);
+XR_FUNC void xr_task_cancel_await_waiters(struct XrCoroutine *waiter);
+
 /* ========== Task State Helpers (inline) ========== */
 
 static inline bool xr_task_is_active(const struct XrTask *task) {

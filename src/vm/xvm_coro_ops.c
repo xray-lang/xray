@@ -976,6 +976,7 @@ XR_FUNC XrDispatchAction vm_await_all(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     if (all_done) {
+        xr_task_finish_await_waiters(caller);
         XrArray *results = xr_array_with_capacity(vm_get_coro(vm_ctx), count);
         results->length = count;
         XrValue *rdata = (XrValue *) results->data;
@@ -1069,6 +1070,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
             if (mode == 1)
                 done_count++;
             if (mode == 0 || XR_IS_NULL(t->error)) {
+                xr_task_finish_await_waiters(current);
                 base[a] = vm_task_consume_result(isolate, t, current, 0);
                 return XR_DISP_NEXT;
             }
@@ -1076,6 +1078,7 @@ XR_FUNC XrDispatchAction vm_await_any(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
 
     if (task_count == 0 || (mode == 1 && done_count == task_count)) {
+        xr_task_finish_await_waiters(current);
         base[a] = xr_null();
         return XR_DISP_NEXT;
     }

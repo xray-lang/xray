@@ -25,6 +25,7 @@
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrTask XrTask;
+typedef struct XrArray XrArray;
 typedef struct XrScopeContext XrScopeContext;
 typedef struct XrBlockedBucket XrBlockedBucket;
 
@@ -105,6 +106,89 @@ static inline void xr_await_wait_token_timeout(XrAwaitWaitToken *token) {
 
 static inline void xr_await_wait_token_finish(XrAwaitWaitToken *token) {
     xr_await_wait_token_reset(token);
+}
+
+/* ========== Multi Await Wait Token ==========
+ *
+ * await all / await any register one coroutine against many tasks.  The
+ * aggregate token gives cancellation and recycle paths an owner-side handle
+ * for unregistering the task waiters before the coroutine shell can be reused.
+ */
+typedef enum {
+    XR_MULTI_AWAIT_WAIT_IDLE = 0,
+    XR_MULTI_AWAIT_WAIT_REGISTERING,
+    XR_MULTI_AWAIT_WAIT_REGISTERED,
+    XR_MULTI_AWAIT_WAIT_RESOLVED,
+    XR_MULTI_AWAIT_WAIT_CANCELLED,
+} XrMultiAwaitWaitTokenState;
+
+typedef enum {
+    XR_MULTI_AWAIT_NONE = 0,
+    XR_MULTI_AWAIT_ALL,
+    XR_MULTI_AWAIT_ANY,
+    XR_MULTI_AWAIT_ANY_SUCCESS,
+} XrMultiAwaitMode;
+
+typedef struct XrMultiAwaitWaitToken {
+    _Atomic int state;
+    _Atomic(XrArray *) tasks;
+    int mode;
+    int task_count;
+    uint32_t sequence;
+} XrMultiAwaitWaitToken;
+
+static inline void xr_multi_await_wait_token_reset(XrMultiAwaitWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_MULTI_AWAIT_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->tasks, NULL, memory_order_relaxed);
+    token->mode = XR_MULTI_AWAIT_NONE;
+    token->task_count = 0;
+}
+
+static inline void xr_multi_await_wait_token_prepare(XrMultiAwaitWaitToken *token, XrArray *tasks,
+                                                     int mode, int task_count) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->tasks, tasks, memory_order_relaxed);
+    token->mode = mode;
+    token->task_count = task_count;
+    atomic_store_explicit(&token->state, XR_MULTI_AWAIT_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_multi_await_wait_token_commit(XrMultiAwaitWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_MULTI_AWAIT_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_MULTI_AWAIT_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_multi_await_wait_token_set_terminal(XrMultiAwaitWaitToken *token,
+                                                          int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_MULTI_AWAIT_WAIT_REGISTERING || state == XR_MULTI_AWAIT_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_multi_await_wait_token_resolve(XrMultiAwaitWaitToken *token) {
+    xr_multi_await_wait_token_set_terminal(token, XR_MULTI_AWAIT_WAIT_RESOLVED);
+}
+
+static inline void xr_multi_await_wait_token_cancel(XrMultiAwaitWaitToken *token) {
+    xr_multi_await_wait_token_set_terminal(token, XR_MULTI_AWAIT_WAIT_CANCELLED);
+}
+
+static inline void xr_multi_await_wait_token_finish(XrMultiAwaitWaitToken *token) {
+    xr_multi_await_wait_token_reset(token);
 }
 
 /* ========== Scope Wait Token ==========
@@ -424,6 +508,7 @@ typedef struct XrCoroWaitState {
     _Atomic int wait_count;
     _Atomic bool any_done;
     XrAwaitWaitToken await_token;
+    XrMultiAwaitWaitToken multi_await_token;
     XrScopeWaitToken scope_token;
     XrTimerWaitToken timer_token;
 } XrCoroWaitState;
