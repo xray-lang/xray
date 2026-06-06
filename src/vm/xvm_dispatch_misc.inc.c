@@ -168,11 +168,12 @@ vmcase(OP_SCOPE_EXIT) {
     XrCoroutine *current = (XrCoroutine *) VM_CURRENT_CORO;
 
     if (current) {
+        vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult scope_result = xr_coro_scope_exit(current, (uint8_t) scope_mode);
         if (scope_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            vm_suspend_replay_current(frame, pc);
             return XR_VM_BLOCKED;
         }
+        vm_suspend_continue_from_next(frame, pc);
         if (scope_result.kind == XR_CORO_BLOCK_NO_CORO) {
             vmbreak;
         }

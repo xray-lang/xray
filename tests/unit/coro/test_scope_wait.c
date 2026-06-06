@@ -107,9 +107,10 @@ TEST(scope_wait_token_tracks_block_wake_and_exit) {
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_REGISTERED);
     ASSERT_EQ_PTR(atomic_load(&owner_ext.wait.scope_token.scope), scope);
-
-    atomic_store(&owner.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_SCOPE | XR_CORO_PRIO_NORMAL);
-    atomic_store(&owner.coro_state, XR_CORO_STATE_BLOCKED);
+    ASSERT_TRUE(xr_coro_flags_has(&owner, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_INT(atomic_load(&owner.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(xr_coro_flags_load(&owner)),
+                  XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
     xr_coro_wake_waiter(&f.isolate_storage, &child);
 
     ASSERT_EQ_INT(atomic_load(&scope->count), 0);
@@ -127,7 +128,7 @@ TEST(scope_wait_token_tracks_block_wake_and_exit) {
     scope_fixture_cleanup(&f);
 }
 
-TEST(scope_wait_token_resolves_during_blocked_post_check) {
+TEST(scope_wait_token_resolves_after_published_block) {
     ScopeFixture f;
     ASSERT_TRUE(scope_fixture_init(&f));
 
@@ -149,15 +150,11 @@ TEST(scope_wait_token_resolves_during_blocked_post_check) {
     XrCoroBlockResult blocked = xr_coro_scope_exit(&owner, XR_SCOPE_WAIT);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_REGISTERED);
+    ASSERT_TRUE(xr_coro_flags_has(&owner, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_INT(atomic_load(&owner.coro_state), XR_CORO_STATE_BLOCKED);
 
     xr_coro_wake_waiter(&f.isolate_storage, &child);
     ASSERT_EQ_INT(atomic_load(&scope->count), 0);
-    ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_REGISTERED);
-    ASSERT_NULL(xr_worker_pop(&f.worker));
-
-    atomic_store(&owner.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_SCOPE | XR_CORO_PRIO_NORMAL);
-    atomic_store(&owner.coro_state, XR_CORO_STATE_BLOCKED);
-    ASSERT_TRUE(worker_process_blocked(&f.worker, &owner));
     ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_RESOLVED);
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &owner);
 
@@ -173,6 +170,6 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scope Wait");
 RUN_TEST(scope_wait_token_tracks_block_wake_and_exit);
-RUN_TEST(scope_wait_token_resolves_during_blocked_post_check);
+RUN_TEST(scope_wait_token_resolves_after_published_block);
 
 TEST_MAIN_END()

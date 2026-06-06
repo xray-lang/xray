@@ -168,6 +168,26 @@ static size_t count_between(const char *start, const char *end, const char *need
     return count;
 }
 
+static bool nonzero_state_precedes_call(const char *code, const char *call) {
+    const char *call_pos = strstr(code, call);
+    const char *last_state = NULL;
+    const char *p = code;
+    assert(code != NULL);
+    assert(call != NULL);
+    if (!call_pos)
+        return false;
+
+    while ((p = strstr(p, "f->state = ")) != NULL && p < call_pos) {
+        last_state = p;
+        p++;
+    }
+    if (!last_state)
+        return false;
+
+    const char *value = strstr(last_state, "= ");
+    return value && value[2] != '0';
+}
+
 /* ========== Tests ========== */
 
 TEST(cgen_simple_arith) {
@@ -953,6 +973,8 @@ TEST(cgen_coro_await_clones_tagged_result) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT await should generate");
     assert(contains(code, "xr_aot_await_task(ctx,") && "await must use the AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_await_task(ctx,") &&
+           "await must publish the AOT resume state before runtime blocking");
     assert(contains(code, "xr_aot_await_task_resume(ctx, xr_slot_xvalue_ptr(&") &&
            "await resume must recover the task from coroutine wait state");
     assert(!contains(code, "xr_aot_await_task_resume(ctx, v") &&
@@ -1159,6 +1181,8 @@ TEST(cgen_coro_await_all_uses_aggregate_bridge) {
     assert(!had_error && "AOT await all should generate");
     assert(contains(code, "xr_aot_await_all_tasks(ctx,") &&
            "await all must use the aggregate AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_await_all_tasks(ctx,") &&
+           "await all must publish the AOT resume state before runtime blocking");
     assert(contains(code, "xr_aot_await_all_tasks_resume(ctx,") &&
            "await all resume must use the aggregate AOT bridge");
     assert(contains(code, "xrt_value_clone_for_coro(") &&
@@ -1193,12 +1217,42 @@ TEST(cgen_coro_await_any_uses_typed_aggregate_bridge) {
     assert(!had_error && "AOT await any should generate");
     assert(contains(code, "xr_aot_await_any_task(ctx,") &&
            "await any must use the aggregate AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_await_any_task(ctx,") &&
+           "await any must publish the AOT resume state before runtime blocking");
     assert(contains(code, "xr_aot_await_any_task_resume(ctx,") &&
            "await any resume must use the aggregate AOT bridge");
     assert(contains(code, "xr_slot_aot_frame_offset") &&
            "scalar await any results should use a typed frame slot");
 
     printf("  Generated await any aggregate bridge %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_scope_exit_publishes_state_before_block) {
+    const char *src = "fn child(ch: Channel<int>) {\n"
+                      "    ch.recv()\n"
+                      "}\n"
+                      "fn scoped() {\n"
+                      "    let ch = new Channel<int>(0)\n"
+                      "    scope {\n"
+                      "        go child(ch)\n"
+                      "    }\n"
+                      "}\n"
+                      "scoped()\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scope exit should generate");
+    assert(contains(code, "xr_aot_scope_exit(ctx,") && "scope exit must use the AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_scope_exit(ctx,") &&
+           "scope exit must publish the AOT resume state before runtime blocking");
+
+    printf("  Generated scope exit state publication %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1306,6 +1360,7 @@ int main(void) {
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
     run_cgen_coro_await_all_uses_aggregate_bridge();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
+    run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_coro_task_status_uses_task_bridge();
 
     teardown();

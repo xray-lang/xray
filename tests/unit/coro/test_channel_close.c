@@ -884,9 +884,10 @@ TEST(await_wait_token_tracks_register_resolve_and_resume) {
     ASSERT_EQ_PTR(atomic_load(&waiter_ext.wait.await_task), &task);
     ASSERT_EQ_PTR(task.await_waiters, &waiter_ext.wait.await_token.node);
     ASSERT_EQ_PTR(waiter_ext.wait.await_token.node.waiter, &waiter);
-
-    atomic_store(&waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
-    atomic_store(&waiter.coro_state, XR_CORO_STATE_BLOCKED);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_INT(atomic_load(&waiter.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(xr_coro_flags_load(&waiter)),
+                  XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
 
     task.result = xr_int(9);
     atomic_store(&task.state, XR_TASK_COMPLETED);
@@ -943,13 +944,10 @@ TEST(single_task_await_wakes_multiple_waiters) {
     ASSERT_NOT_NULL(task.await_waiters);
     ASSERT_EQ_INT(atomic_load(&first_ext.wait.await_token.state), XR_AWAIT_WAIT_REGISTERED);
     ASSERT_EQ_INT(atomic_load(&second_ext.wait.await_token.state), XR_AWAIT_WAIT_REGISTERED);
-
-    atomic_store(&first_waiter.flags,
-                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
-    atomic_store(&second_waiter.flags,
-                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
-    atomic_store(&first_waiter.coro_state, XR_CORO_STATE_BLOCKED);
-    atomic_store(&second_waiter.coro_state, XR_CORO_STATE_BLOCKED);
+    ASSERT_TRUE(xr_coro_flags_has(&first_waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_TRUE(xr_coro_flags_has(&second_waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_INT(atomic_load(&first_waiter.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&second_waiter.coro_state), XR_CORO_STATE_BLOCKED);
     task.result = xr_int(77);
     atomic_store(&task.state, XR_TASK_COMPLETED);
     xr_task_wake_waiter(&f.isolate_storage, &task);
@@ -999,9 +997,8 @@ TEST(single_task_await_legacy_and_node_wake_claim_once) {
     XrCoroBlockResult blocked = xr_coro_await_task(&waiter, &task, -1);
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_PTR(task.await_waiters, &waiter_ext.wait.await_token.node);
-
-    atomic_store(&waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
-    atomic_store(&waiter.coro_state, XR_CORO_STATE_BLOCKED);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_INT(atomic_load(&waiter.coro_state), XR_CORO_STATE_BLOCKED);
 
     task.waiter = &waiter;
     task.waiter_index = -1;

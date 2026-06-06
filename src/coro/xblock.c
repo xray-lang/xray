@@ -30,6 +30,26 @@ static inline XrCoroBlockResult block_result(XrCoroBlockKind kind, XrValue value
     return result;
 }
 
+static bool coro_rollback_wait_block_if_unwoken(XrCoroutine *coro, XrCoroBlockSnapshot snapshot) {
+    if (!coro || !snapshot.active)
+        return false;
+
+    uint32_t restore_flag = xr_state_to_flag(snapshot.previous_state);
+    uint32_t old = atomic_load_explicit(&coro->flags, memory_order_acquire);
+    for (;;) {
+        if ((old & XR_CORO_FLG_BLOCKED) == 0)
+            return false;
+
+        uint32_t neu =
+            (old & ~(uint32_t) (XR_CORO_STATE_FLAG_MASK | XR_CORO_WAIT_MASK)) | restore_flag;
+        if (atomic_compare_exchange_weak_explicit(&coro->flags, &old, neu, memory_order_acq_rel,
+                                                  memory_order_acquire)) {
+            atomic_store_explicit(&coro->coro_state, snapshot.previous_state, memory_order_release);
+            return true;
+        }
+    }
+}
+
 XrValue *xr_slot_value_address(XrSlotRef slot) {
     switch (slot.kind) {
         case XR_SLOT_NONE:
@@ -392,15 +412,9 @@ static bool await_store_result(XrayIsolate *isolate, XrCoroutine *coro, XrTask *
     return xr_slot_store_value(result_slot, result);
 }
 
-static XrCoroBlockResult coro_arm_await_wait(XrCoroutine *coro, XrTask *task, XrCoroWaitState *wait,
-                                             int64_t timeout_ms) {
+static void coro_prepare_await_wait(XrCoroutine *coro, XrTask *task, XrCoroWaitState *wait) {
     atomic_store_explicit(&wait->await_task, task, memory_order_release);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT);
-    if (timeout_ms > 0) {
-        coro_arm_timeout(coro, timeout_ms);
-    }
-    xr_await_wait_token_commit(&wait->await_token);
-    return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
 static XrCoroBlockResult coro_register_single_await(XrCoroutine *coro, XrTask *task,
@@ -410,12 +424,20 @@ static XrCoroBlockResult coro_register_single_await(XrCoroutine *coro, XrTask *t
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
     xr_await_wait_token_prepare(&wait->await_token, task, -1);
+    coro_prepare_await_wait(coro, task, wait);
+    XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
+    if (timeout_ms > 0) {
+        coro_arm_timeout(coro, timeout_ms);
+    }
     if (xr_task_register_await_waiter(task, coro, &wait->await_token, -1)) {
-        return coro_arm_await_wait(coro, task, wait, timeout_ms);
+        xr_await_wait_token_commit(&wait->await_token);
+        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
 
+    coro_cancel_owned_timer(coro);
     atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
     xr_await_wait_token_finish(&wait->await_token);
+    (void) coro_rollback_wait_block_if_unwoken(coro, block_snapshot);
     if (atomic_load_explicit(&task->state, memory_order_acquire) == XR_TASK_COMPLETED) {
         return block_result(XR_CORO_BLOCK_READY, task->result, true);
     }
@@ -532,6 +554,8 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
 
     xr_multi_await_wait_token_prepare(&wait->multi_await_token, tasks, XR_MULTI_AWAIT_ALL, count);
     atomic_store(&wait->wait_count, 1);
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
+    XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
 
     for (int j = 0; j < count; j++) {
         XrValue cv = xr_array_get(tasks, j);
@@ -547,11 +571,13 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
     if (remaining == 0) {
         xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_READY))
+            return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
         xr_task_finish_await_waiters(coro);
+        (void) coro_rollback_wait_block_if_unwoken(coro, block_snapshot);
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
 
-    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
     xr_multi_await_wait_token_commit(&wait->multi_await_token);
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
@@ -595,6 +621,8 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
         success_only ? XR_MULTI_AWAIT_ANY_SUCCESS : XR_MULTI_AWAIT_ANY, count);
     atomic_store(&wait->any_done, false);
     atomic_store(&wait->wait_count, 1);
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
+    XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
 
     int waiter_index = success_only ? -4 : -3;
     for (int j = 0; j < count; j++) {
@@ -617,16 +645,21 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
     if (atomic_load(&wait->any_done)) {
         xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_READY))
+            return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
         xr_task_finish_await_waiters(coro);
+        (void) coro_rollback_wait_block_if_unwoken(coro, block_snapshot);
         return block_result(XR_CORO_BLOCK_READY, coro->result, true);
     }
     if (success_only && remaining == 0) {
         xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        if (xr_coro_flags_has(coro, XR_CORO_FLG_READY))
+            return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
         xr_task_finish_await_waiters(coro);
+        (void) coro_rollback_wait_block_if_unwoken(coro, block_snapshot);
         return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
     }
 
-    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
     xr_multi_await_wait_token_commit(&wait->multi_await_token);
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
@@ -937,6 +970,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
             return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
         xr_scope_wait_token_prepare(&wait->scope_token, scope);
         xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
+        (void) xr_coro_publish_wait_block(coro);
         xr_scope_wait_token_commit(&wait->scope_token);
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
