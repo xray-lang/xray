@@ -24,6 +24,7 @@
 #include "xslot_ref.h"
 
 typedef struct XrCoroutine XrCoroutine;
+typedef struct XrTask XrTask;
 typedef struct XrBlockedBucket XrBlockedBucket;
 
 /* ========== Await State Machine ========== */
@@ -33,6 +34,77 @@ typedef enum {
     XR_AWAIT_WAITING = 1,   // parent suspended, waiting for child
     XR_AWAIT_RESOLVED = 2,  // child completed, result in coro->result
 } XrAwaitState;
+
+typedef enum {
+    XR_AWAIT_WAIT_IDLE = 0,
+    XR_AWAIT_WAIT_REGISTERING,
+    XR_AWAIT_WAIT_REGISTERED,
+    XR_AWAIT_WAIT_RESOLVED,
+    XR_AWAIT_WAIT_CANCELLED,
+    XR_AWAIT_WAIT_TIMED_OUT,
+} XrAwaitWaitTokenState;
+
+typedef struct XrAwaitWaitToken {
+    _Atomic int state;
+    _Atomic(XrTask *) task;
+    int waiter_index;
+    uint32_t sequence;
+} XrAwaitWaitToken;
+
+static inline void xr_await_wait_token_reset(XrAwaitWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_AWAIT_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->task, NULL, memory_order_relaxed);
+    token->waiter_index = -1;
+}
+
+static inline void xr_await_wait_token_prepare(XrAwaitWaitToken *token, XrTask *task,
+                                               int waiter_index) {
+    if (!token)
+        return;
+    token->sequence++;
+    token->waiter_index = waiter_index;
+    atomic_store_explicit(&token->task, task, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_AWAIT_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_await_wait_token_commit(XrAwaitWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_AWAIT_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_AWAIT_WAIT_REGISTERED, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+static inline void xr_await_wait_token_set_terminal(XrAwaitWaitToken *token, int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_AWAIT_WAIT_REGISTERING || state == XR_AWAIT_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_await_wait_token_resolve(XrAwaitWaitToken *token) {
+    xr_await_wait_token_set_terminal(token, XR_AWAIT_WAIT_RESOLVED);
+}
+
+static inline void xr_await_wait_token_cancel(XrAwaitWaitToken *token) {
+    xr_await_wait_token_set_terminal(token, XR_AWAIT_WAIT_CANCELLED);
+}
+
+static inline void xr_await_wait_token_timeout(XrAwaitWaitToken *token) {
+    xr_await_wait_token_set_terminal(token, XR_AWAIT_WAIT_TIMED_OUT);
+}
+
+static inline void xr_await_wait_token_finish(XrAwaitWaitToken *token) {
+    xr_await_wait_token_reset(token);
+}
 
 /* ========== Channel Wait Token ==========
  *
@@ -206,6 +278,7 @@ typedef struct XrCoroWaitState {
     struct XrTask *_Atomic await_task;
     _Atomic int wait_count;
     _Atomic bool any_done;
+    XrAwaitWaitToken await_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {
