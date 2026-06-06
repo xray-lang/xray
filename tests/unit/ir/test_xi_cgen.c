@@ -101,7 +101,8 @@ static XiFunc *compile_to_ir(const char *source) {
 
 /* Generate C code for Xi IR into an xr_malloc-owned string.
  * Caller releases the returned string with xr_free(). */
-static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error) {
+static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_name, bool *had_error,
+                                              XiCgenCoroFrameStats *coro_stats) {
     assert(ir != NULL);
 
     /* Run select_rep to insert BOX/UNBOX */
@@ -132,6 +133,8 @@ static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *h
     assert(rc == 0);
     if (had_error)
         *had_error = xi_cgen_has_error(ctx);
+    if (coro_stats)
+        *coro_stats = xi_cgen_coro_frame_stats(ctx);
 
     xi_cgen_ctx_free(ctx);
     if (own_mod) {
@@ -140,6 +143,10 @@ static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *h
     }
 
     return buf;
+}
+
+static char *generate_c_with_status(XiFunc *ir, const char *module_name, bool *had_error) {
+    return generate_c_with_status_and_stats(ir, module_name, had_error, NULL);
 }
 
 static char *generate_c(XiFunc *ir, const char *module_name) {
@@ -898,6 +905,65 @@ TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
     xi_func_free(ir);
 }
 
+TEST(cgen_sync_functions_without_go_emit_no_aot_wrappers) {
+    const char *src = "fn helper(n: int) -> int {\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "print(helper(2))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    XiCgenCoroFrameStats stats = {0};
+    char *code = generate_c_with_status_and_stats(ir, "test", &had_error, &stats);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT sync-only program should generate");
+    assert(stats.coroutine_count == 0 &&
+           "sync-only programs should not report coroutine frame stats");
+    assert(!contains(code, "_aot_desc") && "unused sync functions should not emit AOT descs");
+    assert(!contains(code, "typedef struct test_helper_") &&
+           "unused sync functions should not emit sync-go frame structs");
+
+    printf("  Generated sync-only program without wrappers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
+    const char *src = "fn unused(n: int) -> int {\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "fn used(n: int) -> int {\n"
+                      "    return n * 2\n"
+                      "}\n"
+                      "let task = go used(3)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    XiCgenCoroFrameStats stats = {0};
+    char *code = generate_c_with_status_and_stats(ir, "test", &had_error, &stats);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT go of sync function should generate");
+    assert(stats.coroutine_count == 2 &&
+           "frame stats should count the main coroutine and the sync-go frame");
+    assert(stats.total_frame_bytes >= stats.max_frame_bytes &&
+           "frame stats should preserve aggregate frame bytes");
+    assert(contains(code, "XrValue _result = test_used_") &&
+           "go target should keep its sync-go wrapper");
+    assert(!contains(code, "XrValue _result = test_unused_") &&
+           "non-go sync functions must not emit sync-go wrappers");
+    assert(!contains(code, "typedef struct test_unused_") &&
+           "non-go sync functions must not emit sync-go frame structs");
+
+    printf("  Generated only needed sync-go wrappers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_set_priority_uses_aot_bridge) {
     const char *src = "fn compute(n: int) -> int {\n"
                       "    return n * n\n"
@@ -1469,6 +1535,8 @@ int main(void) {
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
+    run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
+    run_cgen_coro_sync_go_wrappers_only_for_go_targets();
     run_cgen_coro_set_priority_uses_aot_bridge();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();

@@ -735,6 +735,77 @@ static bool cg_func_can_emit_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f
     return f && !cg_func_needs_aot_coro_ctx(ctx, f);
 }
 
+static bool cg_sync_go_target_marked(const XiCgenCtx *ctx, const XiFunc *target) {
+    if (!ctx || !target)
+        return false;
+    for (int i = 0; i < ctx->nsync_go_targets; i++) {
+        if (ctx->sync_go_targets[i] == target)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_mark_sync_go_target(XiCgenCtx *ctx, const XiFunc *target) {
+    if (!ctx || !target)
+        return false;
+    if (cg_sync_go_target_marked(ctx, target))
+        return true;
+    if (ctx->nsync_go_targets >= CG_MAX_SYNC_GO_TARGETS) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: too many sync AOT go targets\n");
+        return false;
+    }
+    ctx->sync_go_targets[ctx->nsync_go_targets++] = target;
+    return true;
+}
+
+static bool cg_func_needs_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f) {
+    return cg_func_can_emit_sync_go_wrapper_ctx(ctx, f) && cg_sync_go_target_marked(ctx, f);
+}
+
+static void cg_collect_sync_go_targets_from_func(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return;
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_GO || v->nargs < 1)
+                continue;
+            CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, f, v->args[0]);
+            if (call.func && cg_func_can_emit_sync_go_wrapper_ctx(ctx, call.func))
+                (void) cg_mark_sync_go_target(ctx, call.func);
+        }
+    }
+
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        cg_collect_sync_go_targets_from_func(ctx, f->children[i]);
+}
+
+static void cg_reset_sync_go_targets(XiCgenCtx *ctx) {
+    if (!ctx)
+        return;
+    memset(ctx->sync_go_targets, 0, sizeof(ctx->sync_go_targets));
+    ctx->nsync_go_targets = 0;
+}
+
+static void cg_prepare_sync_go_targets_for_modules(XiCgenCtx *ctx, XiModule **modules, int n) {
+    if (!ctx || !modules || n <= 0)
+        return;
+    cg_reset_sync_go_targets(ctx);
+    for (int i = 0; i < n; i++) {
+        XiModule *module = modules[i];
+        if (!module || !module->init)
+            continue;
+        cg_init_from_module(ctx, module);
+        cg_register_imported_classes(ctx);
+        cg_collect_sync_go_targets_from_func(ctx, module->init);
+    }
+}
+
 static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params) {
     bool need_comma = false;
     if (cg_func_frame_needs_cl(f)) {
@@ -903,6 +974,16 @@ static uint32_t count_sync_go_frame_releases(const XiFunc *f) {
     return count;
 }
 
+static size_t estimate_sync_go_frame_size(const XiFunc *f) {
+    size_t size = 0;
+    size_t max_align = 1;
+    if (cg_func_frame_needs_cl(f))
+        cg_coro_layout_add(&size, &max_align, sizeof(void *), _Alignof(void *));
+    for (uint16_t i = 0; f && i < f->nparams; i++)
+        cg_coro_layout_add_rep(&size, &max_align, cg_rep(f->params[i]));
+    return cg_coro_align_up(size, max_align);
+}
+
 static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
     XrRep rep = cg_rep(f->params[index]);
     if (rep == XR_REP_I64) {
@@ -917,6 +998,7 @@ static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint
 static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     uint32_t root_count = count_sync_go_frame_roots(f);
     uint32_t release_count = count_sync_go_frame_releases(f);
+    record_coro_frame_stats(ctx, estimate_sync_go_frame_size(f), root_count, release_count);
 
     emit_sync_go_frame_type(ctx, out, f, prefix);
     emit_sync_go_frame_factory(ctx, out, f, prefix);
@@ -1200,7 +1282,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiFunc *target = go_call.func;
         const char *go_prefix = go_call.prefix ? go_call.prefix : prefix;
         bool target_is_coro = target && cg_func_needs_aot_coro_ctx(ctx, target);
-        bool target_is_sync_go = target && cg_func_can_emit_sync_go_wrapper_ctx(ctx, target);
+        bool target_is_sync_go = target && cg_func_needs_sync_go_wrapper_ctx(ctx, target);
         if (!target || (!target_is_coro && !target_is_sync_go)) {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT go target\n");
