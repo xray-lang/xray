@@ -683,6 +683,11 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_lifo_gate_priority = 0;
     uint64_t total_fast_dispatch = 0, total_fast_dispatch_budget_stop = 0;
     uint64_t total_fast_dispatch_empty = 0;
+    uint64_t total_pool_deferred_recycle = 0, total_pool_local_get = 0;
+    uint64_t total_pool_global_free_get = 0, total_pool_arena_cache_get = 0;
+    uint64_t total_pool_arena_batch_get = 0, total_pool_miss = 0;
+    uint64_t total_pool_local_put = 0, total_pool_global_return = 0;
+    uint64_t total_pool_local_free = 0;
     uint64_t total_park = 0, total_unpark = 0, total_timer = 0, total_burst = 0;
     uint64_t total_wait_ms = 0, max_wait_ms = 0, total_prio_boost = 0;
     uint64_t wait_buckets[XR_RUNNABLE_WAIT_BUCKET_COUNT] = {0};
@@ -732,6 +737,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_fast_dispatch += p->stats.fast_dispatch_count;
         total_fast_dispatch_budget_stop += p->stats.fast_dispatch_budget_stop_count;
         total_fast_dispatch_empty += p->stats.fast_dispatch_empty_count;
+        total_pool_deferred_recycle += p->stats.pool_deferred_recycle_count;
+        total_pool_local_get += p->stats.pool_local_get_count;
+        total_pool_global_free_get += p->stats.pool_global_free_get_count;
+        total_pool_arena_cache_get += p->stats.pool_arena_cache_get_count;
+        total_pool_arena_batch_get += p->stats.pool_arena_batch_get_count;
+        total_pool_miss += p->stats.pool_miss_count;
+        total_pool_local_put += p->stats.pool_local_put_count;
+        total_pool_global_return += p->stats.pool_global_return_count;
+        total_pool_local_free += (uint64_t) p->local_free_count;
         total_inbox += p->stats.inbox_drain_count;
         total_park += p->stats.park_count;
         total_unpark += p->stats.unpark_count;
@@ -809,6 +823,17 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_fast_dispatch_budget_stop,
             (unsigned long long) total_fast_dispatch_empty,
             stats_percent_u64(total_fast_dispatch, total_lifo_hit));
+    fprintf(
+        stderr,
+        "Coro pool: deferred_recycle=%llu local_get=%llu global_free_get=%llu "
+        "arena_cache_get=%llu arena_batch_get=%llu miss=%llu local_put=%llu "
+        "global_return=%llu local_free=%llu\n",
+        (unsigned long long) total_pool_deferred_recycle, (unsigned long long) total_pool_local_get,
+        (unsigned long long) total_pool_global_free_get,
+        (unsigned long long) total_pool_arena_cache_get,
+        (unsigned long long) total_pool_arena_batch_get, (unsigned long long) total_pool_miss,
+        (unsigned long long) total_pool_local_put, (unsigned long long) total_pool_global_return,
+        (unsigned long long) total_pool_local_free);
 
     XrSchedGlobalStats *s = &runtime->sched_stats;
     uint64_t wake_alloc = xr_sched_metric_load(&s->chan_wake_cmd_alloc_count);

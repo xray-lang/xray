@@ -42,6 +42,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
             XrCoroutine *_next = _pend->next;
             _pend->next = NULL;
             xr_coro_recycle_local(worker, _pend);
+            worker->p.stats.pool_deferred_recycle_count++;
             _pend = _next;
         }
     }
@@ -52,6 +53,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
         worker->p.local_free_list = coro->next;
         worker->p.local_free_count--;
         coro->next = NULL;
+        worker->p.stats.pool_local_get_count++;
         return coro;
     }
 
@@ -111,6 +113,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                 worker->p.local_free_list = coro->next;
                 worker->p.local_free_count--;
                 coro->next = NULL;
+                worker->p.stats.pool_global_free_get_count++;
                 return coro;
             }
         }
@@ -127,6 +130,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                 XrCoroutine *coro = &cached_block->coros[idx];
                 coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
                 xr_coro_init_from_pool_slot(coro, cached_block, idx);
+                worker->p.stats.pool_arena_cache_get_count++;
                 return coro;
             }
 
@@ -147,6 +151,7 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
                     XrCoroutine *coro = &block->coros[local_base];
                     coro->gc = (XrGCHeader) {.type = XR_TCOROUTINE};
                     xr_coro_init_from_pool_slot(coro, block, local_base);
+                    worker->p.stats.pool_arena_batch_get_count++;
                     return coro;
                 }
                 // Arena exhausted, invalidate cache
@@ -158,6 +163,8 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
     }
 
     // No available object, return NULL (caller allocates from global pool)
+    if (worker)
+        worker->p.stats.pool_miss_count++;
     return NULL;
 }
 
@@ -199,6 +206,7 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
         coro->next = worker->p.local_free_list;
         worker->p.local_free_list = coro;
         worker->p.local_free_count++;
+        worker->p.stats.pool_local_put_count++;
         return;
     }
 
@@ -232,6 +240,7 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
                 } while (!atomic_compare_exchange_weak_explicit(&pool->free_list, &head, batch_head,
                                                                 memory_order_release,
                                                                 memory_order_relaxed));
+                worker->p.stats.pool_global_return_count += (uint64_t) batch;
             }
         }
     }
@@ -240,4 +249,5 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     coro->next = worker->p.local_free_list;
     worker->p.local_free_list = coro;
     worker->p.local_free_count++;
+    worker->p.stats.pool_local_put_count++;
 }

@@ -59,6 +59,7 @@ SCHED_METRIC_PREFIXES = (
     "Runnable wait:",
     "LIFO gate:",
     "Fast dispatch:",
+    "Coro pool:",
     "Channel wake commands:",
     "Channel wake diagnostics:",
     "Channel hot path:",
