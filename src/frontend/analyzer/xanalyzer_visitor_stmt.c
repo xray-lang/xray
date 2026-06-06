@@ -16,6 +16,45 @@
 #include "xtype_ref_resolve.h"
 #include "../../base/xchecks.h"
 
+XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
+                                  XrType *value_type, const char *target_name,
+                                  const char *target_kind) {
+    if (!ctx || !node || !target_type || !value_type)
+        return;
+    if (XR_TYPE_IS_UNKNOWN(target_type) || XR_TYPE_IS_UNKNOWN(value_type))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    bool null_err =
+        xa_check_null_safety(ctx->analyzer, target_type, value_type, "Assignment", &loc);
+    bool type_mismatch = false;
+    if (XR_TYPE_IS_FUNCTION(target_type)) {
+        type_mismatch =
+            !XR_TYPE_IS_FUNCTION(value_type) || !xr_type_equals(target_type, value_type);
+    } else {
+        type_mismatch = !xa_typecheck_assignable(target_type, value_type);
+    }
+    if (null_err || !type_mismatch)
+        return;
+    if (!XR_TYPE_IS_FUNCTION(target_type) && xr_is_json_coercion(target_type, value_type))
+        return;
+
+    char msg[256];
+    if (target_name && target_kind) {
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to %s '%s' (type '%s')",
+                 xr_type_to_string(value_type), target_kind, target_name,
+                 xr_type_to_string(target_type));
+    } else if (target_name) {
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')",
+                 xr_type_to_string(value_type), target_name, xr_type_to_string(target_type));
+    } else {
+        snprintf(msg, sizeof(msg), "Type '%s' is not assignable to type '%s'",
+                 xr_type_to_string(value_type), xr_type_to_string(target_type));
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Statement Visitors
  * ============================================================================
@@ -242,30 +281,7 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    if (var_type && value_type && !XR_TYPE_IS_UNKNOWN(var_type) &&
-        !XR_TYPE_IS_UNKNOWN(value_type)) {
-        XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
-        // Check null safety first (null→T, T?→T)
-        bool null_err =
-            xa_check_null_safety(ctx->analyzer, var_type, value_type, "Assignment", &loc);
-        bool type_mismatch = false;
-        if (XR_TYPE_IS_FUNCTION(var_type)) {
-            type_mismatch =
-                !XR_TYPE_IS_FUNCTION(value_type) || !xr_type_equals(var_type, value_type);
-        } else {
-            type_mismatch = !xa_typecheck_assignable(var_type, value_type);
-        }
-        if (!null_err && type_mismatch) {
-            // Json→concrete type: allowed at compile time, runtime check inserted by codegen.
-            if (XR_TYPE_IS_FUNCTION(var_type) || !xr_is_json_coercion(var_type, value_type)) {
-                char msg[256];
-                snprintf(msg, sizeof(msg), "Type '%s' is not assignable to '%s' (type '%s')",
-                         xr_type_to_string(value_type), assign->name, xr_type_to_string(var_type));
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-            }
-        }
-    }
+    xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);
 
     // Update flow graph — but only if value type is known.
     // Recording unknown would downgrade a variable from its declared type.

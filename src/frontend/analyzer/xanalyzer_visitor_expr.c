@@ -1255,6 +1255,8 @@ XrType *xa_visit_new_expr(XaInferContext *ctx, AstNode *node) {
     // Fallback: create instance type with class name (new always produces instances)
     if (ne->class_name) {
         XrType *inst_type = xr_type_new_named_instance(ctx->analyzer->isolate, ne->class_name);
+        if (inst_type)
+            inst_type->instance.class_ref = class_info;
         // Propagate is_value_type from class declaration (struct)
         if (class_links && class_links->type && class_links->type->is_value_type) {
             inst_type->is_value_type = true;
