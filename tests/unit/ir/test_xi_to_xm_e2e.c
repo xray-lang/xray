@@ -30,7 +30,6 @@
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/coro/xcoroutine.h"
-#include "../../../src/coro/xcoro_backend_ops.h"
 #include "../../../src/vm/xvm_coro_state.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -62,8 +61,7 @@ static void env_init(void) {
     memset(&g_vm_state, 0, sizeof(g_vm_state));
     memset(&g_jit_state, 0, sizeof(g_jit_state));
     memset(&g_jit_ctx, 0, sizeof(g_jit_ctx));
-    xr_coro_attach_backend(&g_jit_coro, xr_coro_vm_backend_vtable(), &g_vm_state,
-                           xr_coro_vm_backend_ops());
+    xr_coro_attach_backend(&g_jit_coro, xr_coro_vm_backend_vtable(), &g_vm_state);
     g_vm_state.jit_state = &g_jit_state;
     g_jit_state.scratch = &g_jit_ctx;
     g_jit_ctx.safepoint_page = g_safepoint_page;

@@ -175,7 +175,6 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             // backend state allocated for reuse.
             const XrCoroBackendVTable *saved_backend = coro->backend;
             void *saved_backend_state = coro->backend_state;
-            const XrCoroBackendOps *saved_backend_ops = coro->backend_ops;
             uint16_t saved_gc_flags =
                 coro->gc_flags & (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED);
             (void) xr_coro_backend_reset_reusable(coro);
@@ -183,7 +182,6 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             if (saved_backend_state) {
                 coro->backend = saved_backend;
                 coro->backend_state = saved_backend_state;
-                coro->backend_ops = saved_backend_ops;
             }
             coro->gc_flags = saved_gc_flags;
             return coro;

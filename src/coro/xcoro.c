@@ -24,7 +24,6 @@
 #include "xworker.h"
 #include "xchannel.h"
 #include "xtimer_wheel.h"
-#include "xcoro_backend_ops.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xexception.h"
 #include "xcoro_registry.h"
@@ -80,10 +79,10 @@ bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
 }
 
 bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->reset_execution_state)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->reset_execution_state)
         return false;
-    ops->reset_execution_state(coro, X);
+    backend->reset_execution_state(coro, X);
     return true;
 }
 
@@ -195,7 +194,6 @@ static void native_backend_release(XrCoroutine *coro) {
     xr_free(coro->backend_state);
     coro->backend_state = NULL;
     coro->backend = NULL;
-    coro->backend_ops = NULL;
 }
 
 static void coro_release_backend_state(XrCoroutine *coro, bool destroy) {
@@ -259,6 +257,13 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .setup_yield_continuation = NULL,
     .has_continuation = NULL,
     .call_closure = NULL,
+    .ensure_state = NULL,
+    .prepare_execution_state = NULL,
+    .reset_execution_state = NULL,
+    .clear_entry_state = NULL,
+    .reset_entry_state_no_free = NULL,
+    .bind_closure_entry = NULL,
+    .bind_cfunc_entry = NULL,
     .release = native_backend_release,
     .destroy = native_backend_release,
     .debug_name = native_backend_debug_name,
@@ -360,8 +365,8 @@ static void coro_clear_scope_membership(XrCoroutine *coro) {
 
 bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, bool need_storage) {
     XrCoroState *sched = (XrCoroState *) X->vm.coro_state;
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (need_storage && (!ops || !ops->prepare_execution_state))
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (need_storage && (!backend || !backend->prepare_execution_state))
         return false;
 
     // Check if coro was recycled with thorough cleanup (XR_CORO_GC_RECYCLED_CLEAN).
@@ -377,7 +382,6 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
         // Save fields set by pool_get, memset the rest, then restore.
         const XrCoroBackendVTable *saved_backend = coro->backend;
         void *saved_backend_state = coro->backend_state;
-        const XrCoroBackendOps *saved_backend_ops = coro->backend_ops;
         struct XrCoroGC *saved_coro_gc = coro->coro_gc;
         uint16_t saved_pool_bits =
             coro->gc_flags &
@@ -389,7 +393,6 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
 
         coro->backend = saved_backend;
         coro->backend_state = saved_backend_state;
-        coro->backend_ops = saved_backend_ops;
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
@@ -454,9 +457,9 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     // Cache worker pointer (single TLS lookup for VM stack slab + ID allocation)
     XrWorker *w = xr_current_worker();
 
-    ops = xr_coro_backend_ops(coro);
-    if (ops && ops->prepare_execution_state) {
-        if (!ops->prepare_execution_state(coro, X, w, need_storage, is_clean))
+    backend = coro->backend;
+    if (backend && backend->prepare_execution_state) {
+        if (!backend->prepare_execution_state(coro, X, w, need_storage, is_clean))
             return false;
     } else if (need_storage) {
         return false;
@@ -523,7 +526,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
     state->func = func;
     state->arg = arg;
 
-    xr_coro_attach_backend(coro, &native_backend_vtable, state, NULL);
+    xr_coro_attach_backend(coro, &native_backend_vtable, state);
 
     return coro;
 }

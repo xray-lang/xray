@@ -80,7 +80,6 @@ static void aot_release_state(XrCoroutine *coro) {
     xr_free(state);
     coro->backend_state = NULL;
     coro->backend = NULL;
-    coro->backend_ops = NULL;
 }
 
 static const char *aot_backend_debug_name(const XrCoroutine *coro) {
@@ -176,6 +175,13 @@ static const XrCoroBackendVTable aot_backend_vtable = {
     .setup_yield_continuation = NULL,
     .has_continuation = NULL,
     .call_closure = NULL,
+    .ensure_state = NULL,
+    .prepare_execution_state = NULL,
+    .reset_execution_state = NULL,
+    .clear_entry_state = NULL,
+    .reset_entry_state_no_free = NULL,
+    .bind_closure_entry = NULL,
+    .bind_cfunc_entry = NULL,
     .release = aot_release_state,
     .destroy = aot_release_state,
     .debug_name = aot_backend_debug_name,
@@ -277,7 +283,7 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
         return NULL;
     }
 
-    xr_coro_attach_backend(coro, &aot_backend_vtable, state, NULL);
+    xr_coro_attach_backend(coro, &aot_backend_vtable, state);
     return coro;
 }
 

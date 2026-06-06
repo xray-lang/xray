@@ -15,7 +15,6 @@
 
 #include "../coro/xworker_internal.h"
 #include "../coro/xblock.h"
-#include "../coro/xcoro_backend_ops.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
@@ -95,13 +94,6 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
     .call_closure = vm_backend_call_closure,
-    .release = NULL,
-    .destroy = vm_backend_destroy,
-    .debug_name = vm_backend_debug_name,
-    .debug_snapshot = vm_backend_debug_snapshot,
-};
-
-static const XrCoroBackendOps vm_backend_ops = {
     .ensure_state = vm_backend_ensure_state,
     .prepare_execution_state = vm_backend_prepare_execution_state,
     .reset_execution_state = vm_backend_reset_execution_state,
@@ -109,14 +101,14 @@ static const XrCoroBackendOps vm_backend_ops = {
     .reset_entry_state_no_free = vm_backend_reset_entry_state_no_free,
     .bind_closure_entry = vm_backend_bind_closure_entry,
     .bind_cfunc_entry = vm_backend_bind_cfunc_entry,
+    .release = NULL,
+    .destroy = vm_backend_destroy,
+    .debug_name = vm_backend_debug_name,
+    .debug_snapshot = vm_backend_debug_snapshot,
 };
 
 const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
     return &vm_backend_vtable;
-}
-
-const XrCoroBackendOps *xr_coro_vm_backend_ops(void) {
-    return &vm_backend_ops;
 }
 
 static const char *vm_backend_debug_name(const XrCoroutine *coro) {
@@ -195,8 +187,6 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
 static bool vm_backend_ensure_state(XrCoroutine *coro) {
     if (!coro)
         return false;
-    if (coro->backend == &vm_backend_vtable)
-        coro->backend_ops = &vm_backend_ops;
     if (vm_state_for_coro(coro))
         return true;
     if (coro->backend && coro->backend != &vm_backend_vtable && coro->backend_state)
@@ -206,7 +196,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
         return false;
     state->ctx.handlers = state->ctx.handler_inline;
     state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
-    xr_coro_attach_backend(coro, xr_coro_vm_backend_vtable(), state, &vm_backend_ops);
+    xr_coro_attach_backend(coro, xr_coro_vm_backend_vtable(), state);
     coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;
     return true;
 }
@@ -832,7 +822,6 @@ static void vm_backend_destroy(XrCoroutine *coro) {
         xr_free(state);
         coro->backend_state = NULL;
         coro->backend = NULL;
-        coro->backend_ops = NULL;
         coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
     }
 }
