@@ -1,0 +1,52 @@
+// Test: generic WorkQueue-style class can initialize Array<Channel<T>>
+// Expected: prints "ok"
+
+class WorkQueue<T> {
+    shards: Array<Channel<T>>
+    workers: int
+
+    constructor(count: int, capacity: int) {
+        this.workers = count
+        this.shards = []
+        for (let i = 0; i < count; i++) {
+            let ch: Channel<T> = new Channel(capacity)
+            this.shards.push(ch)
+        }
+    }
+
+    push(value: T, shard: int) {
+        let idx = shard % this.workers
+        this.shards[idx].send(value)
+    }
+
+    tryPop(worker_id: int) -> T? {
+        for (let i = 0; i < this.workers; i++) {
+            let idx = (worker_id + i) % this.workers
+            let (value, ok) = this.shards[idx].tryRecv()
+            if (ok) {
+                return value
+            }
+        }
+        return null
+    }
+
+    close() {
+        for (ch in this.shards) {
+            ch.close()
+        }
+    }
+}
+
+@test
+fn test_work_queue_generic_class() {
+    let q = new WorkQueue<int>(4, 8)
+    q.push(10, 0)
+    q.push(20, 1)
+    q.push(30, 2)
+
+    assert_eq(q.tryPop(0), 10)
+    assert_eq(q.tryPop(1), 20)
+    assert_eq(q.tryPop(2), 30)
+    assert_eq(q.tryPop(3), null)
+    q.close()
+}

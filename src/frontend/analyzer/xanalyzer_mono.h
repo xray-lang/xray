@@ -24,6 +24,7 @@
 #include "../parser/xast_nodes.h"
 #include "../parser/xtype_ref.h"
 #include "../../runtime/value/xtype.h"
+#include "../../base/xforward_decl.h"
 #include "../../base/xdefs.h"
 
 #define XR_MONO_MAX_DEPTH 8
@@ -92,6 +93,6 @@ XR_FUNC const char *xa_mono_collector_add(XaMonoCollector *c, const char *generi
 // Collects generic declarations and instantiation sites, clones+substitutes
 // for each concrete type combination, injects into program, rewrites call sites.
 // Safe to call on programs with no generics (no-op).
-XR_FUNC void xa_mono_pass(AstNode *root);
+XR_FUNC void xa_mono_pass(AstNode *root, XrayIsolate *isolate);
 
 #endif  // XANALYZER_MONO_H
