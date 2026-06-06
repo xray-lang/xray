@@ -286,6 +286,28 @@ extract_kv_metric() {
     ' "$file"
 }
 
+extract_reported_time_ms() {
+    local file=$1
+    local value
+    value=$(extract_first_number "^总时间:|^Total time:|^Total Time:" "$file")
+    if [ -n "$value" ]; then
+        printf '%s\n' "$value"
+        return
+    fi
+    extract_first_number "^时间:|^Time:" "$file"
+}
+
+extract_reported_throughput() {
+    local file=$1
+    local value
+    value=$(extract_first_number "^吞吐量:|^throughput|^Throughput" "$file")
+    if [ -n "$value" ]; then
+        printf '%s\n' "$value"
+        return
+    fi
+    extract_first_number "^速度:|^Speed:" "$file"
+}
+
 metric_pair() {
     local name=$1
     local value=$2
@@ -503,8 +525,8 @@ run_one() {
         echo -e "${RED}${runtime} 测试失败: exit=$exit_code${NC}"
     fi
 
-    reported_time_ms=$(extract_first_number "时间:|Time:" "$out_file")
-    throughput=$(extract_first_number "吞吐量:|throughput|Throughput" "$out_file")
+    reported_time_ms=$(extract_reported_time_ms "$out_file")
+    throughput=$(extract_reported_throughput "$out_file")
     if { [ "$runtime" = "xray" ] || [ "$runtime" = "xray-aot" ]; } &&
         [ "$ENABLE_SCHED_STATS" = true ]; then
         metrics=$(collect_sched_metrics "$out_file")
