@@ -776,9 +776,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     if (current) {
         xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_close_local_worker_count);
         xr_worker_wake_all(current, channel);
-        while (xr_worker_wake_select_with_status(current, channel, XR_RESUME_CHANNEL_CLOSED)) {
-            // Keep waking until no more select waiters
-        }
+        (void) xr_worker_wake_select_all_with_status(current, channel, XR_RESUME_CHANNEL_CLOSED);
     }
 
     // Remote workers: dispatch close commands via mask

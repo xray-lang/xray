@@ -405,6 +405,8 @@ XR_FUNC void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **
 XR_FUNC XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel,
                                                        int resume_status);
 XR_FUNC XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel);
+XR_FUNC int xr_worker_wake_select_all_with_status(XrWorker *worker, void *channel,
+                                                  int resume_status);
 XR_FUNC void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC int xr_runtime_next_coro_id(XrRuntime *runtime);
 
