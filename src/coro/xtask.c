@@ -607,6 +607,16 @@ void xr_task_cancel_await_waiters(XrCoroutine *waiter) {
     xr_multi_await_wait_token_cancel(&wait_state->multi_await_token);
 }
 
+static void task_ready_waiter(XrayIsolate *X, XrCoroutine *waiter) {
+    if (!X || !waiter)
+        return;
+
+    /* xr_coro_ready owns the BLOCKED -> READY claim. Keeping the claim in one
+     * place prevents task completion, timeout, and cancellation races from
+     * growing independent "if still blocked" enqueue paths. */
+    xr_coro_ready(X, waiter, true);
+}
+
 static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *node) {
     if (!X || !task || !node)
         return;
@@ -622,9 +632,7 @@ static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *
         case -1: {
             if (wait_state)
                 xr_await_wait_token_resolve(&wait_state->await_token);
-            if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                xr_coro_ready(X, waiter, true);
-            }
+            task_ready_waiter(X, waiter);
             break;
         }
         case -3: {
@@ -634,9 +642,7 @@ static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *
             if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                 waiter->result = task->result;
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             atomic_fetch_sub(&wait_state->wait_count, 1);
             break;
@@ -650,18 +656,14 @@ static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *
                 if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                     waiter->result = task->result;
                     xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                    if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                        xr_coro_ready(X, waiter, true);
-                    }
+                    task_ready_waiter(X, waiter);
                 }
             }
             int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0 && !atomic_load(&wait_state->any_done)) {
                 waiter->result = xr_null();
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             break;
         }
@@ -671,9 +673,7 @@ static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *
             int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0) {
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             break;
         }
@@ -718,9 +718,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
                 xr_await_wait_token_resolve(&wait_state->await_token);
             if (old_await == XR_AWAIT_WAITING) {
                 atomic_thread_fence(memory_order_seq_cst);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             break;
         }
@@ -731,9 +729,8 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             if (!wait_state)
                 break;
             int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
-            if (remaining == 0 && xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                xr_coro_ready(X, waiter, true);
-            }
+            if (remaining == 0)
+                task_ready_waiter(X, waiter);
             break;
         }
         case -3: {
@@ -744,9 +741,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                 waiter->result = task->result;
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             atomic_fetch_sub(&wait_state->wait_count, 1);
             break;
@@ -761,18 +756,14 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
                 if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
                     waiter->result = task->result;
                     xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                    if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                        xr_coro_ready(X, waiter, true);
-                    }
+                    task_ready_waiter(X, waiter);
                 }
             }
             int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0 && !atomic_load(&wait_state->any_done)) {
                 waiter->result = xr_null();
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             break;
         }
@@ -783,9 +774,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
             if (remaining == 0) {
                 xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
-                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                    xr_coro_ready(X, waiter, true);
-                }
+                task_ready_waiter(X, waiter);
             }
             break;
         }
