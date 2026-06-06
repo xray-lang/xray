@@ -77,6 +77,7 @@ XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
 // LIFO gate shared by the scheduler and fast dispatch.
 XR_FUNC XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget);
+XR_FUNC int xr_worker_push_batch(XrWorker *worker, XrCoroutine *first);
 
 // Global injection queue (xworker_runq.c)
 XR_FUNC void xr_injectq_init(XrRuntime *runtime);

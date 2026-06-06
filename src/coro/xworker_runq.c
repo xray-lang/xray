@@ -780,3 +780,34 @@ void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
         wake_idle_worker(rt);
     }
 }
+
+int xr_worker_push_batch(XrWorker *worker, XrCoroutine *first) {
+    if (!worker || !first)
+        return 0;
+    XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
+              "worker_push_batch: cross-worker push detected (use inbox)");
+
+    int local_count = 0;
+    int total_count = 0;
+    XrCoroutine *coro = first;
+    while (coro) {
+        XrCoroutine *next = coro->sched_link;
+        coro->sched_link = NULL;
+        int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
+        if (worker_enqueue_runq_or_inject(worker, coro, priority, true)) {
+            local_count++;
+        }
+        total_count++;
+        coro = next;
+    }
+
+    if (local_count > 0) {
+        xr_proc_local_runq_inc(&worker->p, local_count);
+        xr_worker_refresh_runq_masks(worker);
+        XrRuntime *rt = worker->p.runtime;
+        if (rt && atomic_load_explicit(&rt->spinning_count, memory_order_relaxed) == 0) {
+            wake_idle_worker(rt);
+        }
+    }
+    return total_count;
+}
