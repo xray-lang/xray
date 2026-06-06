@@ -128,6 +128,7 @@ typedef struct XrCoroExt {
     struct XrCoroutine *wait_prev;
     XrBlockedBucket *wait_bucket;
     int wait_bucket_owner;
+    XrChannelWaitToken chan_wait_token;
     _Atomic(void *) wait_channel;
     bool wait_send;
     XrValue send_value;

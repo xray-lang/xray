@@ -129,8 +129,10 @@ bool xr_coro_store_recv_value(XrCoroutine *coro, XrValue value) {
 static void coro_finish_resume(XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_finish_resume: NULL coro");
     xr_coro_resume_store(coro, XR_RESUME_OK);
-    if (coro->ext)
+    if (coro->ext) {
+        xr_channel_wait_token_finish(&coro->ext->chan_wait_token);
         atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+    }
 }
 
 static void coro_arm_timeout(XrCoroutine *coro, int64_t timeout_ms) {

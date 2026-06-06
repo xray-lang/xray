@@ -439,6 +439,7 @@ static void worker_sleep_timeout_callback(void *arg) {
         if (ch) {
             // Remove from channel wait queue
             xr_channel_remove_waiter(ch, coro);
+            xr_channel_wait_token_timeout(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         }
         // Remove from blocked queue (unified via xr_worker_unblock)

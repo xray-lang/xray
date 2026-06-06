@@ -897,6 +897,8 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         return;
     }
 
+    if (coro->ext)
+        xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
     xr_coro_resume_store(coro, is_close ? XR_RESUME_CHANNEL_CLOSED : XR_RESUME_CHANNEL);
     atomic_store_explicit((_Atomic(void *) *) &coro->ext->wait_channel, NULL, memory_order_release);
 
@@ -1149,6 +1151,7 @@ send_locked:
     }
 
     // Set blocked state and join sendq
+    xr_channel_wait_token_prepare(&coro->ext->chan_wait_token, ch, true);
     channel_note_participant_locked(ch, coro, true);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
@@ -1164,6 +1167,7 @@ send_locked:
         xr_channel_note_waiter(ch, w->p.id, true);
     }
     xr_waitq_enqueue(&ch->sendq, coro);
+    xr_channel_wait_token_commit(&coro->ext->chan_wait_token);
     CHANNEL_METRIC_INC(ch, chan_send_block_count);
 
     xr_amutex_unlock(&ch->lock);
@@ -1237,6 +1241,7 @@ recv_locked:
     }
 
     // Set blocked state and join recvq
+    xr_channel_wait_token_prepare(&coro->ext->chan_wait_token, ch, false);
     channel_note_participant_locked(ch, coro, false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = false;
@@ -1250,6 +1255,7 @@ recv_locked:
         xr_channel_note_waiter(ch, w->p.id, false);
     }
     xr_waitq_enqueue(&ch->recvq, coro);
+    xr_channel_wait_token_commit(&coro->ext->chan_wait_token);
     CHANNEL_METRIC_INC(ch, chan_recv_block_count);
 
     xr_amutex_unlock(&ch->lock);
