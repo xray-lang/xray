@@ -669,15 +669,19 @@ static void coro_select_arm_timer(XrWorker *worker, XrCoroutine *coro, XrChannel
     }
 }
 
-static bool coro_select_recv_case_ready(XrChannel *ch) {
+static int coro_select_recv_case_status(XrChannel *ch) {
     if (!ch)
-        return false;
+        return XR_RESUME_OK;
 
-    bool ready = false;
     xr_channel_lock_observed(ch);
-    ready = ch->buf_count > 0 || ch->sendq.first != NULL;
+    bool ready = ch->buf_count > 0 || ch->sendq.first != NULL;
+    bool closed = !ready && atomic_load_explicit(&ch->closed, memory_order_relaxed);
     xr_amutex_unlock(&ch->lock);
-    return ready;
+    if (ready)
+        return XR_RESUME_CHANNEL;
+    if (closed)
+        return XR_RESUME_CHANNEL_CLOSED;
+    return XR_RESUME_OK;
 }
 
 static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro, XrSelectWait *sw) {
@@ -686,7 +690,8 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
 
     for (int ci = 0; ci < sw->case_count; ci++) {
         XrChannel *ch = (XrChannel *) sw->cases[ci].channel;
-        if (!coro_select_recv_case_ready(ch))
+        int status = coro_select_recv_case_status(ch);
+        if (status == XR_RESUME_OK)
             continue;
 
         bool expected = false;
@@ -694,7 +699,7 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
             return false;
 
         atomic_store_explicit(&sw->selected_index, ci, memory_order_release);
-        atomic_store_explicit(&sw->selected_status, XR_RESUME_CHANNEL, memory_order_release);
+        atomic_store_explicit(&sw->selected_status, status, memory_order_release);
         xr_worker_unblock_select(worker, coro);
         xr_coro_clear_select_wait(coro);
         xr_coro_resume_store(coro, XR_RESUME_OK);
