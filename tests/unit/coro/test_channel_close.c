@@ -273,11 +273,50 @@ TEST(channel_direction_masks_refresh_after_partial_wake) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+    f.runtime.sched_stats_enabled = true;
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 4);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine producer;
+    XrCoroutine consumer;
+    memset(&producer, 0, sizeof(producer));
+    memset(&consumer, 0, sizeof(consumer));
+    producer.id = 101;
+    consumer.id = 202;
+    producer.isolate = &f.isolate_storage;
+    consumer.isolate = &f.isolate_storage;
+
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(1), &producer), (int) XR_CHAN_OK);
+    XrValue out = xr_null();
+    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) XR_TO_INT(out), 1);
+
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(2), &producer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) XR_TO_INT(out), 2);
+
+    ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_kind_generic_op_count), 1);
+    ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_kind_spsc_op_count), 3);
+    ASSERT_EQ_INT(
+        (int) xr_sched_metric_load(&f.runtime.sched_stats.chan_worker_kind_generic_op_count), 1);
+    ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_worker_kind_spsc_op_count),
+                  3);
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel) + 4 * sizeof(XrValue));
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
 RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
+RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 
 TEST_MAIN_END()
