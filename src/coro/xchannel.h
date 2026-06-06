@@ -145,8 +145,13 @@ typedef struct XrChannel {
     uint32_t send_idx;   // Next write position
     uint32_t recv_idx;   // Next read position
     XrChannelKind kind;  // Runtime specialization hint, never part of user semantics
+    XrChannelKind worker_kind;
     uint64_t producer_worker_mask;
     uint64_t consumer_worker_mask;
+    int producer_coro_id;
+    int consumer_coro_id;
+    bool producer_coro_multi;
+    bool consumer_coro_multi;
 
     /* === Wait Queues === */
     XrWaitQueue sendq;  // Blocked senders
