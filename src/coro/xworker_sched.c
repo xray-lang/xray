@@ -207,15 +207,25 @@ static void try_immigrate(XrWorker *worker) {
 void worker_drain_inbox(XrWorker *worker) {
     XrCoroutine *list = xr_mpsc_drain(&worker->p.inbox);
     int count = 0;
+    XrCoroutine *ready_first = NULL;
+    XrCoroutine *ready_last = NULL;
     while (list) {
         XrCoroutine *next = list->sched_link;
         list->sched_link = NULL;
         if (list->ext && list->ext->wait_bucket && list->ext->wait_bucket_owner == worker->p.id) {
             xr_worker_unblock(worker, list);
         }
-        xr_worker_push(worker, list);
+        if (ready_last) {
+            ready_last->sched_link = list;
+        } else {
+            ready_first = list;
+        }
+        ready_last = list;
         list = next;
         count++;
+    }
+    if (ready_first) {
+        (void) xr_worker_push_batch(worker, ready_first);
     }
     if (count > 0 && worker->p.runtime) {
         worker->p.stats.inbox_drain_count++;
