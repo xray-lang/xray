@@ -28,19 +28,28 @@
 // Native method descriptor (array ends with {NULL, NULL, 0})
 typedef struct XrNativeMethod {
     const char *name;          // Method name
-    XrPrimitiveMethodFn func;  // C function pointer (iso, self, args, argc)
+    XrPrimitiveMethodFn func;  // C function pointer
     int arity;                 // Parameter count (excluding self, -1 for variadic)
 } XrNativeMethod;
+
+// Yieldable native method descriptor (array ends with {NULL, NULL, 0})
+typedef struct XrNativeYieldableMethod {
+    const char *name;                   // Method name
+    XrYieldablePrimitiveMethodFn func;  // Yieldable C function pointer
+    int arity;                          // Parameter count (excluding self)
+} XrNativeYieldableMethod;
 
 /* ========== Native Type Registration Info ========== */
 
 // Native type registration descriptor
 typedef struct XrNativeTypeInfo {
-    const char *name;                // Type name (e.g. "DateTime")
-    XrObjType gc_type;               // GC type ID (e.g. XR_TDATETIME)
-    XrNativeMethod *methods;         // Instance methods (NULL-terminated)
-    XrNativeMethod *getters;         // Property getters (NULL-terminated, optional)
-    XrNativeMethod *static_methods;  // Static methods (NULL-terminated, optional)
+    const char *name;                            // Type name (e.g. "DateTime")
+    XrObjType gc_type;                           // GC type ID (e.g. XR_TDATETIME)
+    XrNativeMethod *methods;                     // Instance methods (NULL-terminated)
+    XrNativeMethod *getters;                     // Property getters (NULL-terminated, optional)
+    XrNativeMethod *static_methods;              // Static methods (NULL-terminated, optional)
+    XrNativeYieldableMethod *yieldable_methods;  // Yieldable instance methods
+    XrNativeYieldableMethod *yieldable_static_methods;  // Yieldable static methods
 } XrNativeTypeInfo;
 
 /* ========== Type Mapping Table Capacity ========== */

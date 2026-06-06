@@ -238,6 +238,43 @@ int xr_class_builder_add_method(XrClassBuilder *builder, const char *name, XrPri
     return 0;
 }
 
+int xr_class_builder_add_yieldable_method(XrClassBuilder *builder, const char *name,
+                                          XrYieldablePrimitiveMethodFn impl, int param_count,
+                                          uint32_t flags) {
+    XR_DCHECK(builder != NULL, "add_yieldable_method: NULL builder");
+    ENSURE_NOT_FINALIZED(builder);
+
+    if (name == NULL) {
+        xr_log_warning("class", "add_yieldable_method: invalid arguments");
+        return -1;
+    }
+
+    if (xr_class_builder_has_method(builder, name)) {
+        xr_log_warning("class", "add_yieldable_method: duplicate method '%s'", name);
+        return -1;
+    }
+
+    if (builder->method_count >= builder->method_capacity) {
+        builder->methods = (XrMethodBuildItem *) resize_array(
+            builder->methods, &builder->method_capacity, sizeof(XrMethodBuildItem));
+        if (builder->methods == NULL)
+            return -1;
+    }
+
+    XrMethodBuildItem *item = &builder->methods[builder->method_count];
+    xr_builder_intern_name(builder, name, &item->symbol, &item->name);
+    item->method_type = XMETHOD_YIELDABLE_PRIMITIVE;
+    item->impl.yieldable_primitive = impl;
+    item->param_count = param_count;
+    item->flags = flags;
+    item->op_type = 0;
+
+    builder->method_count++;
+    XR_DCHECK(builder->method_count <= builder->method_capacity,
+              "add_yieldable_method: count > capacity");
+    return 0;
+}
+
 int xr_class_builder_add_method_closure(XrClassBuilder *builder, const char *name,
                                         XrClosure *closure, XrMethodType method_type,
                                         int param_count, uint32_t flags, uint8_t op_type) {

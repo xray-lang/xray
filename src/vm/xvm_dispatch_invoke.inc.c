@@ -319,6 +319,31 @@ invoke_dispatch:;
             vmbreak;
         }
 
+        if (method && method->type == XMETHOD_YIELDABLE_PRIMITIVE &&
+            method->as.yieldable_primitive) {
+            XrValue result = xr_null();
+            XrCFuncResult status =
+                method->as.yieldable_primitive(isolate, receiver, &R(a + 2), nargs, &result);
+            VM_REBIND_AFTER_NATIVE_CALL();
+            if (status == XR_CFUNC_DONE) {
+                ci->call_status &= ~XR_CALL_YIELDED;
+                R(a) = result;
+                VM_BUILTIN_INVOKE_CHECK_EXC();
+                vmbreak;
+            }
+            if (status == XR_CFUNC_BLOCKED) {
+                ci->pc = pc - 1;
+                ci->call_status |= XR_CALL_YIELDED;
+                return XR_VM_BLOCKED;
+            }
+            if (status == XR_CFUNC_YIELD) {
+                ci->pc = pc - 1;
+                ci->call_status |= XR_CALL_YIELDED;
+                return XR_VM_YIELD;
+            }
+            return XR_VM_RUNTIME_ERROR;
+        }
+
         /* Closure method: user-defined instance methods */
         if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
             XrClosure *closure = method->as.closure;
@@ -466,6 +491,29 @@ vmcase(OP_INVOKE_DIRECT) {
         R(a) = result;
         VM_BUILTIN_INVOKE_CHECK_EXC();
         vmbreak;
+    }
+    if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive) {
+        XrValue result = xr_null();
+        XrCFuncResult status =
+            method->as.yieldable_primitive(isolate, R(a + 1), &R(a + 2), nargs, &result);
+        VM_REBIND_AFTER_NATIVE_CALL();
+        if (status == XR_CFUNC_DONE) {
+            ci->call_status &= ~XR_CALL_YIELDED;
+            R(a) = result;
+            VM_BUILTIN_INVOKE_CHECK_EXC();
+            vmbreak;
+        }
+        if (status == XR_CFUNC_BLOCKED) {
+            ci->pc = pc - 1;
+            ci->call_status |= XR_CALL_YIELDED;
+            return XR_VM_BLOCKED;
+        }
+        if (status == XR_CFUNC_YIELD) {
+            ci->pc = pc - 1;
+            ci->call_status |= XR_CALL_YIELDED;
+            return XR_VM_YIELD;
+        }
+        return XR_VM_RUNTIME_ERROR;
     }
 
     XrClosure *closure = method->as.closure;

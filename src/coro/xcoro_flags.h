@@ -96,6 +96,7 @@
 #define XR_CORO_WAIT_SELECT (7 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_SCOPE (8 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_AWAIT_ANY (9 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_WORKQUEUE (10 << XR_CORO_WAIT_SHIFT)
 
 /* ========== State Flags (shadow bits 8-11, mark bits 12+) ========== */
 

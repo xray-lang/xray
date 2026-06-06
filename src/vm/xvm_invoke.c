@@ -45,6 +45,47 @@
 #include "../coro/xdeep_copy.h"
 #include "../runtime/class/xenum.h"
 
+static XrDispatchAction
+vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, XrMethod *method,
+                                   XrValue self, XrValue *args, int nargs, XrValue *base, int a,
+                                   XrBcCallFrame **frame_io, XrInstruction *pc) {
+    XrBcCallFrame *frame = frame_io ? *frame_io : NULL;
+    int base_offset = (int) (base - vm_ctx->stack);
+    int frame_index = frame ? (int) (frame - vm_ctx->frames) : -1;
+
+    XrValue result = xr_null();
+    XrCFuncResult status = method->as.yieldable_primitive(isolate, self, args, nargs, &result);
+    if (!vm_rebind_after_native_call(vm_ctx, base_offset, frame_index, &base, &frame))
+        return XR_DISP_FATAL;
+    if (frame_io)
+        *frame_io = frame;
+
+    switch (status) {
+        case XR_CFUNC_DONE:
+            if (frame)
+                frame->call_status &= ~XR_CALL_YIELDED;
+            base[a] = result;
+            return XR_DISP_NEXT;
+        case XR_CFUNC_BLOCKED:
+            if (frame) {
+                frame->pc = pc - 1;
+                frame->call_status |= XR_CALL_YIELDED;
+            }
+            return XR_DISP_BLOCKED;
+        case XR_CFUNC_YIELD:
+            if (frame) {
+                frame->pc = pc - 1;
+                frame->call_status |= XR_CALL_YIELDED;
+            }
+            return XR_DISP_YIELD;
+        case XR_CFUNC_ERROR:
+        case XR_CFUNC_WOULD_BLOCK:
+        case XR_CFUNC_CALL_CLOSURE:
+            return XR_DISP_FATAL;
+    }
+    return XR_DISP_FATAL;
+}
+
 /* ========== Dispatch: OP_INVOKE Channel Methods ========== */
 
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
@@ -558,6 +599,13 @@ XR_FUNC XrDispatchAction vm_invoke_class(XrayIsolate *isolate, XrVMContext *vm_c
                 return XR_DISP_RAISE;
             }
             return XR_DISP_NEXT;
+        } else if (method->type == XMETHOD_YIELDABLE_PRIMITIVE &&
+                   method->as.yieldable_primitive != NULL) {
+            XrDispatchAction action = vm_call_yieldable_primitive_method(
+                isolate, vm_ctx, method, base[a + 1], &base[a + 2], nargs, base, a, &frame, pc);
+            if (action == XR_DISP_NEXT && !XR_IS_NULL(vm_ctx->current_exception))
+                return XR_DISP_RAISE;
+            return action;
         } else if (method->type == XMETHOD_CLOSURE && method->as.closure != NULL) {
             XrClosure *closure = method->as.closure;
             XrProto *proto = closure->proto;
@@ -668,6 +716,11 @@ XR_FUNC XrDispatchAction vm_superinvoke(XrayIsolate *isolate, XrVMContext *vm_ct
             base[a] = result;
         }
         return XR_DISP_NEXT;
+    }
+    if (method->type == XMETHOD_YIELDABLE_PRIMITIVE && method->as.yieldable_primitive != NULL) {
+        int arg_base = is_ctor_call ? 1 : (a + 2);
+        return vm_call_yieldable_primitive_method(isolate, vm_ctx, method, this_val,
+                                                  &base[arg_base], nargs, base, a, &frame, pc);
     }
 
     if (method->type != XMETHOD_CLOSURE || method->as.closure == NULL) {

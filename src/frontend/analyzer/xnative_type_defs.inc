@@ -30,7 +30,7 @@ static const char xr_native_def_string[] = "// Built-in string type — implemen
 
 static const char xr_native_def_stringbuilder[] = "// Built-in StringBuilder type — implementation in src/runtime/object/xstringbuilder_builtins.c\n\n@native\nclass StringBuilder {\n    length: int\n    append(value: Json) -> StringBuilder\n    toString() -> string\n    clear() -> StringBuilder\n}\n";
 
-static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n    length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> bool\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
+static const char xr_native_def_workqueue[] = "// Built-in WorkQueue<T> type; implemented by the runtime.\n\n@native\nclass WorkQueue<T> {\n    length: int\n    shardCount: int\n    isClosed: bool\n    push(value: T, shard?: int) -> bool\n    pop(workerId?: int): T?\n    tryPop(workerId?: int): (T?, bool)\n    close()\n}\n";
 
 #define XR_NATIVE_TYPE_DEFS(X) \
     X("array", xr_native_def_array) \

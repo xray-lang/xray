@@ -25,6 +25,18 @@ typedef XrValue (*XrCFunctionPtr)(XrayIsolate *isolate, XrValue *args, int nargs
 #define XR_CFUNCTION_PTR_DEFINED
 #endif
 
+#ifndef XR_CFUNC_RESULT_DEFINED
+typedef enum {
+    XR_CFUNC_DONE = 0,
+    XR_CFUNC_YIELD,
+    XR_CFUNC_BLOCKED,
+    XR_CFUNC_ERROR,
+    XR_CFUNC_CALL_CLOSURE,
+    XR_CFUNC_WOULD_BLOCK
+} XrCFuncResult;
+#define XR_CFUNC_RESULT_DEFINED
+#endif
+
 /*
  * Calling convention for class primitive methods.
  *
@@ -41,10 +53,17 @@ typedef XrValue (*XrPrimitiveMethodFn)(XrayIsolate *isolate, XrValue self, XrVal
 #define XR_PRIMITIVE_METHOD_FN_DEFINED
 #endif
 
+#ifndef XR_YIELDABLE_PRIMITIVE_METHOD_FN_DEFINED
+typedef XrCFuncResult (*XrYieldablePrimitiveMethodFn)(XrayIsolate *isolate, XrValue self,
+                                                      XrValue *args, int argc, XrValue *result);
+#define XR_YIELDABLE_PRIMITIVE_METHOD_FN_DEFINED
+#endif
+
 typedef enum {
     XMETHOD_NONE,
     XMETHOD_CLOSURE,
     XMETHOD_PRIMITIVE,
+    XMETHOD_YIELDABLE_PRIMITIVE,
     XMETHOD_GETTER,
     XMETHOD_SETTER,
     XMETHOD_OPERATOR,
@@ -67,8 +86,9 @@ typedef struct XrMethod {
     XrMethodType type;
 
     union {
-        struct XrClosure *closure;      // CLOSURE/GETTER/SETTER/OPERATOR
-        XrPrimitiveMethodFn primitive;  // PRIMITIVE
+        struct XrClosure *closure;                         // CLOSURE/GETTER/SETTER/OPERATOR
+        XrPrimitiveMethodFn primitive;                     // PRIMITIVE
+        XrYieldablePrimitiveMethodFn yieldable_primitive;  // YIELDABLE_PRIMITIVE
     } as;
 
     uint8_t flags;

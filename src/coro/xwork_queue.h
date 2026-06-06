@@ -22,6 +22,7 @@
 
 struct XrayIsolate;
 struct XrCoroGC;
+struct XrCoroutine;
 
 typedef struct XrWorkQueueShard {
     XrAdaptiveMutex lock;
@@ -37,7 +38,11 @@ typedef struct XrWorkQueue {
     uint32_t initial_capacity;
     _Atomic(uint32_t) next_shard;
     _Atomic(uint64_t) length;
+    _Atomic(uint64_t) waiter_count;
     _Atomic(bool) closed;
+    XrAdaptiveMutex wait_lock;
+    struct XrCoroutine *wait_first;
+    struct XrCoroutine *wait_last;
     struct XrayIsolate *isolate;
     XrWorkQueueShard shards[];
 } XrWorkQueue;

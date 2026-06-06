@@ -6,6 +6,7 @@ class WorkQueue<T> {
     shardCount: int
     isClosed: bool
     push(value: T, shard?: int) -> bool
+    pop(workerId?: int): T?
     tryPop(workerId?: int): (T?, bool)
     close()
 }
