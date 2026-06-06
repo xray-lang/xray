@@ -25,6 +25,7 @@
 
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrTask XrTask;
+typedef struct XrScopeContext XrScopeContext;
 typedef struct XrBlockedBucket XrBlockedBucket;
 
 /* ========== Await State Machine ========== */
@@ -104,6 +105,75 @@ static inline void xr_await_wait_token_timeout(XrAwaitWaitToken *token) {
 
 static inline void xr_await_wait_token_finish(XrAwaitWaitToken *token) {
     xr_await_wait_token_reset(token);
+}
+
+/* ========== Scope Wait Token ==========
+ *
+ * Scope exit blocks the owner until all children complete.  The child side
+ * decrements XrScopeContext::count; this token records the owner-side wait
+ * lifecycle so scope wait follows the same explicit commit/terminal contract
+ * as await, channel and select waiters.
+ */
+typedef enum {
+    XR_SCOPE_WAIT_IDLE = 0,
+    XR_SCOPE_WAIT_REGISTERING,
+    XR_SCOPE_WAIT_REGISTERED,
+    XR_SCOPE_WAIT_RESOLVED,
+    XR_SCOPE_WAIT_CANCELLED,
+} XrScopeWaitTokenState;
+
+typedef struct XrScopeWaitToken {
+    _Atomic int state;
+    _Atomic(XrScopeContext *) scope;
+    uint32_t sequence;
+} XrScopeWaitToken;
+
+static inline void xr_scope_wait_token_reset(XrScopeWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_SCOPE_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->scope, NULL, memory_order_relaxed);
+}
+
+static inline void xr_scope_wait_token_prepare(XrScopeWaitToken *token, XrScopeContext *scope) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->scope, scope, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_SCOPE_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_scope_wait_token_commit(XrScopeWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_SCOPE_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_SCOPE_WAIT_REGISTERED, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+static inline void xr_scope_wait_token_set_terminal(XrScopeWaitToken *token, int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_SCOPE_WAIT_REGISTERING || state == XR_SCOPE_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_scope_wait_token_resolve(XrScopeWaitToken *token) {
+    xr_scope_wait_token_set_terminal(token, XR_SCOPE_WAIT_RESOLVED);
+}
+
+static inline void xr_scope_wait_token_cancel(XrScopeWaitToken *token) {
+    xr_scope_wait_token_set_terminal(token, XR_SCOPE_WAIT_CANCELLED);
+}
+
+static inline void xr_scope_wait_token_finish(XrScopeWaitToken *token) {
+    xr_scope_wait_token_reset(token);
 }
 
 /* ========== Channel Wait Token ==========
@@ -279,6 +349,7 @@ typedef struct XrCoroWaitState {
     _Atomic int wait_count;
     _Atomic bool any_done;
     XrAwaitWaitToken await_token;
+    XrScopeWaitToken scope_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {

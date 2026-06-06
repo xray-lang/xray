@@ -286,6 +286,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     atomic_store_explicit(&ext->wait.wait_count, 0, memory_order_relaxed);
     atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
     xr_await_wait_token_reset(&ext->wait.await_token);
+    xr_scope_wait_token_reset(&ext->wait.scope_token);
 }
 
 static void coro_recv_slot_reset(XrCoroExt *ext) {
@@ -826,7 +827,11 @@ void xr_coro_cancel(XrCoroutine *coro) {
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
-    coro_channel_wait_reset(coro->ext);
+    if (coro->ext) {
+        xr_await_wait_token_cancel(&coro->ext->wait.await_token);
+        xr_scope_wait_token_cancel(&coro->ext->wait.scope_token);
+        coro_channel_wait_reset(coro->ext);
+    }
     coro->result = xr_null();
 }
 
@@ -1103,6 +1108,9 @@ static void wake_waiter_finish_scope_completion(XrayIsolate *X, XrCoroutine *cor
     int remaining = atomic_fetch_sub(&scope->count, 1) - 1;
     xr_coro_set_parent_scope(coro, NULL);
     if (remaining == 0 && owner_waiting_scope) {
+        XrCoroWaitState *wait = xr_coro_wait_state(owner);
+        if (wait)
+            xr_scope_wait_token_resolve(&wait->scope_token);
         xr_coro_ready(X, owner, true);
     }
 }

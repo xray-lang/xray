@@ -245,6 +245,7 @@ add_xray_unit_test(test_steal_queue coro/test_steal_queue.c)
 add_xray_unit_test(test_async_pool coro/test_async_pool.c)
 add_xray_unit_test(test_handoff_budget coro/test_handoff_budget.c)
 add_xray_unit_test(test_channel_close coro/test_channel_close.c)
+add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
 add_xray_unit_test(test_native_backend coro/test_native_backend.c)
 
 # ============================================================================
