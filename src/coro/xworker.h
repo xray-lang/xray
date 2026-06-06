@@ -88,6 +88,10 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_lock_fast_count;
     _Atomic uint64_t chan_lock_contended_count;
     _Atomic uint64_t chan_lock_slow_count;
+    _Atomic uint64_t chan_lock_recheck_count;
+    _Atomic uint64_t chan_lock_spin_count;
+    _Atomic uint64_t chan_lock_yield_count;
+    _Atomic uint64_t chan_lock_sleep_count;
     _Atomic uint64_t chan_buffer_fast_try_count;
     _Atomic uint64_t chan_buffer_fast_hit_count;
     _Atomic uint64_t chan_buffer_fast_miss_count;

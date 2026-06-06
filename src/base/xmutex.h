@@ -57,6 +57,13 @@ typedef struct XrAdaptiveMutex {
     _Atomic(int) state;
 } XrAdaptiveMutex;
 
+typedef enum {
+    XR_AMUTEX_ACQUIRE_FAST = 0,
+    XR_AMUTEX_ACQUIRE_SPIN,
+    XR_AMUTEX_ACQUIRE_YIELD,
+    XR_AMUTEX_ACQUIRE_SLEEP,
+} XrAdaptiveMutexAcquireMode;
+
 static inline void xr_amutex_init(XrAdaptiveMutex *m) {
     atomic_store_explicit(&m->state, XR_AMUTEX_UNLOCKED, memory_order_relaxed);
 }
@@ -146,6 +153,55 @@ static inline void xr_amutex_lock(XrAdaptiveMutex *m) {
             return;
         }
         wait = XR_AMUTEX_SLEEPING;
+        xr_futex_wait(m, XR_AMUTEX_SLEEPING);
+    }
+}
+
+static inline XrAdaptiveMutexAcquireMode xr_amutex_lock_profiled(XrAdaptiveMutex *m) {
+    int expected = XR_AMUTEX_UNLOCKED;
+    if (atomic_compare_exchange_strong_explicit(&m->state, &expected, XR_AMUTEX_LOCKED,
+                                                memory_order_acquire, memory_order_relaxed)) {
+        return XR_AMUTEX_ACQUIRE_FAST;
+    }
+
+    int wait = XR_AMUTEX_LOCKED;
+    bool slept = false;
+
+    for (;;) {
+        for (int i = 0; i < XR_ACTIVE_SPIN; i++) {
+            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_AMUTEX_UNLOCKED) {
+                expected = XR_AMUTEX_UNLOCKED;
+                if (atomic_compare_exchange_weak_explicit(
+                        &m->state, &expected, wait, memory_order_acquire, memory_order_relaxed)) {
+                    return slept ? XR_AMUTEX_ACQUIRE_SLEEP : XR_AMUTEX_ACQUIRE_SPIN;
+                }
+            }
+            for (int j = 0; j < XR_ACTIVE_SPIN_CNT; j++) {
+                XR_CPU_PAUSE();
+            }
+        }
+
+        for (int i = 0; i < XR_PASSIVE_SPIN; i++) {
+            while (atomic_load_explicit(&m->state, memory_order_relaxed) == XR_AMUTEX_UNLOCKED) {
+                expected = XR_AMUTEX_UNLOCKED;
+                if (atomic_compare_exchange_weak_explicit(
+                        &m->state, &expected, wait, memory_order_acquire, memory_order_relaxed)) {
+                    return slept ? XR_AMUTEX_ACQUIRE_SLEEP : XR_AMUTEX_ACQUIRE_YIELD;
+                }
+            }
+#ifdef XR_OS_WINDOWS
+            SwitchToThread();
+#else
+            sched_yield();
+#endif
+        }
+
+        int v = atomic_exchange_explicit(&m->state, XR_AMUTEX_SLEEPING, memory_order_acquire);
+        if (v == XR_AMUTEX_UNLOCKED) {
+            return slept ? XR_AMUTEX_ACQUIRE_SLEEP : XR_AMUTEX_ACQUIRE_YIELD;
+        }
+        wait = XR_AMUTEX_SLEEPING;
+        slept = true;
         xr_futex_wait(m, XR_AMUTEX_SLEEPING);
     }
 }

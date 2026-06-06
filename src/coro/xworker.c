@@ -841,6 +841,10 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t chan_lock_fast = xr_sched_metric_load(&s->chan_lock_fast_count);
     uint64_t chan_lock_contended = xr_sched_metric_load(&s->chan_lock_contended_count);
     uint64_t chan_lock_slow = xr_sched_metric_load(&s->chan_lock_slow_count);
+    uint64_t chan_lock_recheck = xr_sched_metric_load(&s->chan_lock_recheck_count);
+    uint64_t chan_lock_spin = xr_sched_metric_load(&s->chan_lock_spin_count);
+    uint64_t chan_lock_yield = xr_sched_metric_load(&s->chan_lock_yield_count);
+    uint64_t chan_lock_sleep = xr_sched_metric_load(&s->chan_lock_sleep_count);
     uint64_t chan_buffer_fast_try = xr_sched_metric_load(&s->chan_buffer_fast_try_count);
     uint64_t chan_buffer_fast_hit = xr_sched_metric_load(&s->chan_buffer_fast_hit_count);
     uint64_t chan_buffer_fast_miss = xr_sched_metric_load(&s->chan_buffer_fast_miss_count);
@@ -852,6 +856,12 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) chan_lock_slow,
             stats_percent_u64(chan_lock_contended, chan_lock_fast + chan_lock_contended),
             stats_ratio_u64(chan_lock_slow, chan_lock_contended));
+    fprintf(stderr,
+            "Channel lock wait: recheck=%llu spin=%llu yield=%llu sleep=%llu "
+            "sleep_rate=%.2f%%\n",
+            (unsigned long long) chan_lock_recheck, (unsigned long long) chan_lock_spin,
+            (unsigned long long) chan_lock_yield, (unsigned long long) chan_lock_sleep,
+            stats_percent_u64(chan_lock_sleep, chan_lock_slow));
     fprintf(stderr,
             "Channel buffered fast path: try=%llu hit=%llu miss=%llu busy=%llu "
             "hit_rate=%.2f%% busy_rate=%.2f%% miss_rate=%.2f%%\n",
