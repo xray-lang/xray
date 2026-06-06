@@ -16,6 +16,7 @@
 #include "xyieldable.h"
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
+#include "xblock.h"
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "xnetpoll.h"
@@ -68,6 +69,13 @@ static void yield_commit_io_wait(XrCoroutine *coro) {
 static void yield_finish_io_wait(XrCoroutine *coro) {
     if (coro && coro->ext)
         xr_io_wait_token_finish(&coro->ext->wait.io_token);
+}
+
+static void yield_abort_io_wait(XrCoroutine *coro, XrCoroBlockSnapshot block_snapshot) {
+    yield_finish_io_wait(coro);
+    xr_coro_rollback_reversible_block(coro, block_snapshot);
+    if (coro)
+        xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
 }
 
 // ========== Public API ==========
@@ -139,9 +147,11 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                             return XR_CFUNC_ERROR;
                         // Actually yielding — set up frame now
                         if (!yield_setup_continuation(X, coro, cont, user_data)) {
-                            yield_finish_io_wait(coro);
+                            yield_abort_io_wait(coro, (XrCoroBlockSnapshot) {0});
                             return XR_CFUNC_ERROR;
                         }
+                        XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
+                        yield_commit_io_wait(coro);
 
                         // CAS NIL → coro (prevents overwriting concurrent READY)
                         if (atomic_compare_exchange_strong(gpp, &old, (uintptr_t) coro)) {
@@ -155,11 +165,10 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                                 xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode,
                                                         tw);
                             }
-                            yield_commit_io_wait(coro);
                             return XR_CFUNC_BLOCKED;
                         }
                         // CAS failed: state changed (likely READY), retry loop
-                        yield_finish_io_wait(coro);
+                        yield_abort_io_wait(coro, block_snapshot);
                         continue;
                     }
 
@@ -176,20 +185,21 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
         if (!yield_prepare_io_wait(coro, -1, 0, timeout_ms))
             return XR_CFUNC_ERROR;
         if (!yield_setup_continuation(X, coro, cont, user_data)) {
-            yield_finish_io_wait(coro);
+            yield_abort_io_wait(coro, (XrCoroBlockSnapshot) {0});
             return XR_CFUNC_ERROR;
         }
+        XrCoroBlockSnapshot block_snapshot = xr_coro_begin_reversible_block(coro);
         XrWorker *worker = xr_current_worker();
         if (worker) {
             xr_worker_add_sleep_timer(worker, coro, timeout_ms);
             if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
                 yield_commit_io_wait(coro);
             } else {
-                yield_finish_io_wait(coro);
+                yield_abort_io_wait(coro, block_snapshot);
                 return XR_CFUNC_ERROR;
             }
         } else {
-            yield_finish_io_wait(coro);
+            yield_abort_io_wait(coro, block_snapshot);
             return XR_CFUNC_ERROR;
         }
     }
