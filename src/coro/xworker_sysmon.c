@@ -456,8 +456,8 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     worker->p.select_waiter_count++;
 
     // Set coroutine state
-    xr_coro_flags_clear(coro, XR_CORO_FLG_READY);
-    xr_coro_flags_set(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_SELECT);
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
+    xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING, XR_CORO_FLG_BLOCKED);
 }
 
 static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, void *channel,
@@ -488,6 +488,10 @@ static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, vo
                 XR_DCHECK(sc >= sw->cases && sc < sw->cases + sw->case_count,
                           "wake_select: case index out of range");
                 int case_index = (int) (sc - sw->cases);
+                if (!xr_coro_claim_wake(coro)) {
+                    sc = next;
+                    continue;
+                }
                 xr_select_wait_resolve(sw);
                 atomic_store_explicit(&sw->selected_index, case_index, memory_order_release);
                 atomic_store_explicit(&sw->selected_status, resume_status, memory_order_release);
@@ -505,8 +509,6 @@ static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, vo
 
                 // Set wake state
                 xr_coro_resume_store(coro, resume_status);
-                xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-                xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
                 return coro;
             }
