@@ -872,7 +872,7 @@ static void finalize_capture_metadata(XiFunc *f) {
 
 /*
  * Build XiModule metadata directly from lowerer tracking data.
- * Constructs the exports table from export_names + shared_slot_funcs/classes
+ * Constructs the exports table from export_names + shared_slot metadata
  * without scanning IR instructions.  Also collects class data into
  * module->classes for AOT codegen.
  */
@@ -950,10 +950,12 @@ static void build_module_metadata(XiLower *l) {
         mod->nslots = nshared;
         mod->slot_funcs = (XiFunc **) xr_calloc(nshared, sizeof(XiFunc *));
         mod->slot_classes = (XiClassData **) xr_calloc(nshared, sizeof(XiClassData *));
-        if (mod->slot_funcs && mod->slot_classes) {
+        mod->slot_enums = (XiEnumData **) xr_calloc(nshared, sizeof(XiEnumData *));
+        if (mod->slot_funcs && mod->slot_classes && mod->slot_enums) {
             for (uint16_t s = 0; s < nshared; s++) {
                 mod->slot_funcs[s] = l->shared_slot_funcs[s];
                 mod->slot_classes[s] = l->shared_slot_classes[s];
+                mod->slot_enums[s] = l->shared_slot_enums[s];
             }
         }
     }

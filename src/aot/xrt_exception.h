@@ -55,9 +55,15 @@ typedef struct XrtExcFrame {
 
 #ifdef XRT_IMPL
 XrtExcFrame *xrt_exc_top = NULL;
+XrValue xrt_pending_error = {.tag = XR_TAG_NULL};
 #else
 extern XrtExcFrame *xrt_exc_top;
+extern XrValue xrt_pending_error;
 #endif
+
+static inline int xrt_has_pending_error(void) {
+    return !XR_IS_NULL(xrt_pending_error);
+}
 
 /* =========================================================================
  * xrt_throw - throw an exception value

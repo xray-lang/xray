@@ -39,6 +39,34 @@ typedef struct XiModuleExport {
     bool is_live_binding;      /* true for mutable export (re-assignable) */
 } XiModuleExport;
 
+typedef enum XiEnumLiteralKind {
+    XI_ENUM_LITERAL_NULL,
+    XI_ENUM_LITERAL_INT,
+    XI_ENUM_LITERAL_FLOAT,
+    XI_ENUM_LITERAL_BOOL,
+    XI_ENUM_LITERAL_STRING,
+} XiEnumLiteralKind;
+
+typedef struct XiEnumMemberData {
+    const char *name;
+    XiEnumLiteralKind value_kind;
+    int64_t int_value;
+    double float_value;
+    bool bool_value;
+    const char *string_value;
+    int payload_count;
+} XiEnumMemberData;
+
+typedef struct XiEnumData {
+    const char *name;
+    int base_type;
+    uint32_t member_count;
+    bool is_adt;
+    int max_payload;
+    void *runtime_type;
+    XiEnumMemberData *members;
+} XiEnumData;
+
 /* Per-module compilation unit: holds init function and explicit metadata.
  * All metadata is produced during lowering; no post-hoc IR scanning. */
 typedef struct XiModule {
@@ -53,9 +81,10 @@ typedef struct XiModule {
     uint16_t nexports;
     /* Shared-slot mappings: populated during lowering, consumed by C codegen.
      * Indexed by shared slot number (0..nslots-1).  NULL entries mean the
-     * slot holds a plain value (not a function or class). */
+     * slot holds a plain value with no specialized module metadata. */
     XiFunc **slot_funcs;        /* [nslots] shared slot -> XiFunc* */
     XiClassData **slot_classes; /* [nslots] shared slot -> XiClassData* */
+    XiEnumData **slot_enums;    /* [nslots] shared slot -> XiEnumData* */
     uint16_t nslots;            /* = init->nshared */
     /* Closure metadata for all closures in this module */
     XiClosureMeta **closure_metas; /* [nclosure_metas] */

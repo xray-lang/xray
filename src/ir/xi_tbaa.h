@@ -95,6 +95,9 @@ XR_FUNC bool xi_is_memory_store(uint16_t op);
 /* Returns true if the op accesses memory at all (load or store). */
 XR_FUNC bool xi_is_memory_op(uint16_t op);
 
+/* Annotates one value with the memory group implied by its op and aux data. */
+XR_FUNC void xi_tbaa_annotate_value(XiValue *v);
+
 /* ========== TBAA Annotation Pass ==========
  *
  * Runs over all values in a function and sets mem_group based on the op

@@ -701,9 +701,31 @@ static bool rewrite_function(SccpCtx *ctx) {
 
         /* Simplify IF blocks with constant condition to PLAIN */
         if (blk->kind == XI_BLOCK_IF && blk->control) {
+            bool edge0 = ctx->exec_edge[bi * 2];
+            bool edge1 = ctx->exec_edge[bi * 2 + 1];
+            if (edge0 != edge1) {
+                XiBlock *taken = edge0 ? blk->succs[0] : blk->succs[1];
+                XiBlock *dropped = edge0 ? blk->succs[1] : blk->succs[0];
+                if (dropped) {
+                    while (xi_cfg_remove_pred(dropped, blk)) {
+                    }
+                }
+                blk->kind = XI_BLOCK_PLAIN;
+                blk->succs[0] = taken;
+                blk->succs[1] = NULL;
+                blk->control = NULL;
+                any = true;
+                continue;
+            }
+
             SccpCell c = value_cell(ctx, blk->control);
             if (c.kind == SCCP_CONST_BOOL || c.kind == SCCP_CONST_INT) {
                 XiBlock *taken = (c.ival != 0) ? blk->succs[0] : blk->succs[1];
+                XiBlock *dropped = (c.ival != 0) ? blk->succs[1] : blk->succs[0];
+                if (dropped) {
+                    while (xi_cfg_remove_pred(dropped, blk)) {
+                    }
+                }
                 blk->kind = XI_BLOCK_PLAIN;
                 blk->succs[0] = taken;
                 blk->succs[1] = NULL;
@@ -816,17 +838,28 @@ XR_FUNC XiPassChange xi_opt_sccp(XiFunc *f) {
     bool any_rewrite = rewrite_function(&ctx);
 
     /* Remove unreachable blocks */
-    uint32_t write = 0;
     for (uint32_t i = 0; i < n; i++) {
-        if (ctx.reachable[i]) {
-            f->blocks[write] = f->blocks[i];
-            f->blocks[write]->id = write;
-            write++;
+        if (ctx.reachable[i])
+            continue;
+        XiBlock *dead = f->blocks[i];
+        if (!dead || dead == f->entry)
+            continue;
+        for (uint16_t s = 0; s < 2; s++) {
+            XiBlock *succ = dead->succs[s];
+            if (!succ)
+                continue;
+            while (xi_cfg_remove_pred(succ, dead)) {
+            }
         }
+        dead->kind = XI_BLOCK_UNREACHABLE;
+        dead->control = NULL;
+        dead->succs[0] = NULL;
+        dead->succs[1] = NULL;
     }
-    bool blocks_removed = (write < n);
-    f->nblocks = write;
-    f->next_block_id = write;
+    uint32_t removed = xi_cfg_compact_blocks(f);
+    bool blocks_removed = removed > 0;
+    if (blocks_removed)
+        xi_cfg_invalidate(f);
 
     /* Cleanup */
     xr_free(ctx.cells);

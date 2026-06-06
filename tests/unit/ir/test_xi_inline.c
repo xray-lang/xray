@@ -5,6 +5,8 @@
 
 #include "../../../src/ir/xi_opt_inline.h"
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_tbaa.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -153,6 +155,8 @@ static bool run_inline_multi_ret_arity(uint16_t nret) {
 
     XiPassChange chg = xi_opt_inline(caller);
     bool ok = chg.cfg_changed && chg.values_changed;
+    char errbuf[512];
+    ok = ok && xi_verify(caller, errbuf, sizeof(errbuf));
     for (uint16_t i = 0; ok && i < nret; i++) {
         ok = extracts[i]->op == XI_COPY && extracts[i]->nargs == 1 && extracts[i]->args[0] &&
              extracts[i]->args[0]->op == XI_CONST && extracts[i]->args[0]->aux_int == 10 + i;
@@ -309,9 +313,9 @@ TEST(large_caller_penalty) {
     ASSERT(b == -10);
 }
 
-/* ========== Test: throw penalty ========== */
+/* ========== Test: exception flow is not inlined ========== */
 
-TEST(throw_penalty) {
+TEST(throw_never_inline) {
     XiInlineCostModel cost = {
         .value_count = 28,
         .call_count = 0,
@@ -326,8 +330,7 @@ TEST(throw_penalty) {
         .caller_size = 50,
     };
     int b = xi_inline_benefit(&cost, &site);
-    /* base=30-28=2, -5(throw) = -3 */
-    ASSERT(b == -3);
+    ASSERT(b == -1000);
 }
 
 /* ========== Test: combined bonuses overcome borderline ========== */
@@ -405,6 +408,8 @@ TEST(inlines_multi_return_multiple_paths) {
 
     XiPassChange chg = xi_opt_inline(caller);
     ASSERT(chg.cfg_changed && chg.values_changed);
+    char errbuf[512];
+    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
     ASSERT(extract0->op == XI_COPY);
     ASSERT(extract1->op == XI_COPY);
     ASSERT(extract0->args[0] && extract0->args[0]->op == XI_PHI);
@@ -466,11 +471,43 @@ TEST(inlines_direct_multi_return_use_as_first_value) {
 
     XiPassChange chg = xi_opt_inline(caller);
     ASSERT(chg.cfg_changed && chg.values_changed);
+    char errbuf[512];
+    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
     ASSERT(sum->args[0] != call);
     ASSERT(sum->args[0] != NULL);
     ASSERT(sum->args[0]->op == XI_CONST);
     ASSERT(sum->args[0]->aux_int == 10);
     ASSERT(sum->args[1] == one);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+}
+
+TEST(inlines_unannotated_callee_under_tbaa_invariant) {
+    XiFunc *callee = make_func("shared_load_callee", &stub_int);
+    XiFunc *caller = make_func("shared_load_caller", &stub_int);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    XiValue *shared = xi_value_new(callee, callee->entry, XI_GET_SHARED, &stub_int, 0);
+    ASSERT(shared != NULL);
+    shared->aux_int = 0;
+    xi_block_set_return(callee->entry, shared);
+
+    XiValue *call = add_known_call(caller, callee);
+    ASSERT(call != NULL);
+    xi_block_set_return(caller->entry, call);
+    caller->invariant_mask |= XI_INV_TBAA_ANNOTATED;
+
+    XiPassChange chg = xi_opt_inline(caller);
+    ASSERT(chg.cfg_changed && chg.values_changed);
+    char errbuf[512];
+    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
+    ASSERT(caller->entry->succs[0] != NULL);
+    XiValue *cloned = caller->entry->succs[0]->values[0];
+    ASSERT(cloned != NULL);
+    ASSERT(cloned->op == XI_GET_SHARED);
+    ASSERT(cloned->mem_group == XI_MEM_SHARED);
 
     xi_func_free(caller);
     xi_func_free(callee);
@@ -488,7 +525,7 @@ int main(void) {
     run_loop_penalty();
     run_self_recursive_never_inline();
     run_large_caller_penalty();
-    run_throw_penalty();
+    run_throw_never_inline();
     run_combined_bonuses();
     run_budget_small_caller();
     run_budget_medium_caller();
@@ -499,6 +536,7 @@ int main(void) {
     run_inlines_multi_return_multiple_paths();
     run_rejects_multi_return_extract_out_of_range();
     run_inlines_direct_multi_return_use_as_first_value();
+    run_inlines_unannotated_callee_under_tbaa_invariant();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
