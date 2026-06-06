@@ -974,6 +974,52 @@ TEST(single_task_await_wakes_multiple_waiters) {
     close_fixture_cleanup(&f);
 }
 
+TEST(single_task_await_legacy_and_node_wake_claim_once) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    memset(&waiter, 0, sizeof(waiter));
+    memset(&waiter_ext, 0, sizeof(waiter_ext));
+    waiter.id = 424;
+    waiter.isolate = &f.isolate_storage;
+    waiter.ext = &waiter_ext;
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&waiter.affinity_p, 0);
+
+    XrTask task;
+    init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
+
+    XrCoroBlockResult blocked = xr_coro_await_task(&waiter, &task, -1);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_PTR(task.await_waiters, &waiter_ext.wait.await_token.node);
+
+    atomic_store(&waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_BLOCKED);
+
+    task.waiter = &waiter;
+    task.waiter_index = -1;
+    task.result = xr_int(33);
+    atomic_store(&task.state, XR_TASK_COMPLETED);
+    xr_task_wake_waiter(&f.isolate_storage, &task);
+
+    ASSERT_NULL(task.await_waiters);
+    ASSERT_NULL(task.waiter);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+    ASSERT_FALSE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
+    ASSERT_NULL(xr_worker_pop(&f.worker));
+
+    XrCoroBlockResult resumed = xr_coro_await_task_resume(&waiter, &task);
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
+    ASSERT_EQ_INT((int) XR_TO_INT(resumed.value), 33);
+
+    close_fixture_cleanup(&f);
+}
+
 TEST(single_task_await_timeout_unlinks_waiter_node) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -1367,6 +1413,7 @@ RUN_TEST(channel_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(select_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);
 RUN_TEST(single_task_await_wakes_multiple_waiters);
+RUN_TEST(single_task_await_legacy_and_node_wake_claim_once);
 RUN_TEST(single_task_await_timeout_unlinks_waiter_node);
 RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
