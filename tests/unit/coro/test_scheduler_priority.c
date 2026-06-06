@@ -10,6 +10,7 @@
 
 #include "../test_framework.h"
 #include "base/xconstants.h"
+#include "coro/xscheduler_policy.h"
 #include "coro/xworker_internal.h"
 #include "runtime/gc/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
@@ -62,6 +63,70 @@ static void scheduler_fixture_cleanup(SchedulerFixture *f) {
     if (f->worker_initialized) {
         xr_worker_destroy(&f->worker);
         f->worker_initialized = false;
+    }
+    if (f->inject_initialized) {
+        xr_injectq_destroy(&f->runtime);
+        f->inject_initialized = false;
+    }
+    tls_current_worker = f->saved_worker;
+    tls_current_machine = f->saved_machine;
+    if (f->sys_heap_initialized) {
+        xr_sysheap_destroy(&f->sys_heap);
+        f->sys_heap_initialized = false;
+    }
+}
+
+typedef struct StealFixture {
+    XrayIsolate isolate_storage;
+    XrSystemHeap sys_heap;
+    XrRuntime runtime;
+    XrWorker workers[2];
+    XrMachine machines[2];
+    XrWorker *saved_worker;
+    XrMachine *saved_machine;
+    bool sys_heap_initialized;
+    bool inject_initialized;
+    bool worker_initialized[2];
+} StealFixture;
+
+static bool steal_fixture_init(StealFixture *f) {
+    memset(f, 0, sizeof(*f));
+
+    if (!xr_sysheap_init(&f->sys_heap, NULL))
+        return false;
+    f->sys_heap_initialized = true;
+    f->isolate_storage.sys_heap = &f->sys_heap;
+
+    f->saved_worker = tls_current_worker;
+    f->saved_machine = tls_current_machine;
+
+    f->runtime.isolate = &f->isolate_storage;
+    f->runtime.worker_count = 2;
+    f->runtime.workers = f->workers;
+    f->runtime.machines = f->machines;
+    atomic_store(&f->runtime.running, true);
+    atomic_store(&f->runtime.threads_started, false);
+    xr_injectq_init(&f->runtime);
+    f->inject_initialized = true;
+
+    for (int i = 0; i < 2; i++) {
+        xr_worker_init(&f->workers[i], i, &f->runtime);
+        f->worker_initialized[i] = true;
+        f->workers[i].p.rng_state = (uint32_t) (0x12345678u + (uint32_t) i);
+    }
+
+    f->isolate_storage.vm.runtime = &f->runtime;
+    tls_current_worker = NULL;
+    tls_current_machine = NULL;
+    return true;
+}
+
+static void steal_fixture_cleanup(StealFixture *f) {
+    for (int i = 1; i >= 0; i--) {
+        if (f->worker_initialized[i]) {
+            xr_worker_destroy(&f->workers[i]);
+            f->worker_initialized[i] = false;
+        }
     }
     if (f->inject_initialized) {
         xr_injectq_destroy(&f->runtime);
@@ -250,6 +315,35 @@ TEST(aging_boosts_old_low_priority_work_before_fresh_high_work) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(steal_uses_effective_priority_for_aged_remote_work) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+
+    XrCoroutine old_low;
+    XrCoroutine fresh_high;
+    init_ready_coro(&old_low, 800, XR_CORO_PRIO_LOW, &f.isolate_storage);
+    init_ready_coro(&fresh_high, 801, XR_CORO_PRIO_HIGH, &f.isolate_storage);
+
+    xr_worker_push(&f.workers[0], &old_low);
+    xr_worker_push(&f.workers[0], &fresh_high);
+
+    int64_t now = xr_monotonic_ticks();
+    old_low.submit_time = now - (int64_t) (XR_PRIO_AGING_MS * XR_PRIO_AGING_MAX_BOOST + 1);
+    fresh_high.submit_time = now;
+    xr_worker_refresh_runq_masks(&f.workers[0]);
+
+    int64_t delay_hint = 0;
+    bool should_exit = false;
+    XrCoroutine *stolen = xr_worker_try_steal_once(&f.workers[1], &f.runtime, &f.runtime.running,
+                                                   &delay_hint, &should_exit);
+
+    ASSERT_FALSE(should_exit);
+    ASSERT_EQ_PTR(stolen, &old_low);
+    ASSERT_EQ_INT(delay_hint, 0);
+
+    steal_fixture_cleanup(&f);
+}
+
 TEST(coro_ready_without_current_worker_routes_to_inbox) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
@@ -317,6 +411,7 @@ RUN_TEST(parent_continuation_defers_to_visible_high_priority_work);
 RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_high_work);
+RUN_TEST(steal_uses_effective_priority_for_aged_remote_work);
 RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
 RUN_TEST(blocked_transition_helper_synchronizes_state_shadow_bits);
 

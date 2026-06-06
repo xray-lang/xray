@@ -20,6 +20,7 @@
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
+#include "xscheduler_policy.h"
 
 #define XR_LIFO_INJECT_BACKLOG_THRESHOLD XR_INJECT_POP_BATCH
 /* Number of oldest local ready coroutines moved to global inject when the
@@ -144,7 +145,7 @@ static XrCoroutine *runq_oldest_candidate(XrRunQueue *rq) {
                                                                      : deque_oldest;
 }
 
-static int effective_priority_for_coro(XrCoroutine *coro, int64_t now) {
+XR_FUNC int xr_sched_effective_priority_for_coro(XrCoroutine *coro, int64_t now) {
     if (!coro)
         return -1;
     int priority = normalize_coro_priority(xr_coro_get_priority(xr_coro_flags_load(coro)));
@@ -159,7 +160,7 @@ static int effective_priority_for_coro(XrCoroutine *coro, int64_t now) {
 }
 
 static int runq_effective_priority(XrRunQueue *rq, int64_t now) {
-    return effective_priority_for_coro(runq_oldest_candidate(rq), now);
+    return xr_sched_effective_priority_for_coro(runq_oldest_candidate(rq), now);
 }
 
 static XrCoroutine *runq_pop_selected(XrRunQueue *rq, bool oldest_first) {
