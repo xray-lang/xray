@@ -39,6 +39,9 @@
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
 
+#define VM_AWAIT_FLAG_DISCARD_RESULT 0x01
+#define VM_AWAIT_FLAG_ONE_SHOT_GO 0x02
+
 /* ========== Helper: Collect all coroutines from the runtime ========== */
 
 // VmCoroEntry and VM_CORO_COLLECT_MAX defined in xvm_dispatch_helpers.h
@@ -723,21 +726,38 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 
 #define AWAIT_TIMEOUT_SPINS 100000000
 
-/* Read task->result with deep copy to dst_coro's heap, then detach executor.
- * After this call, task->result points to the copied value (safe for re-await). */
+/* Read task->result with deep copy to dst_coro's heap. */
 static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
-                                             XrCoroutine *dst_coro, int discard_result) {
-    XrValue res = xr_coro_await_result_value(isolate, dst_coro, task, discard_result != 0);
-    /* Detach executor only — do NOT recycle.
-     * Task lives on executor's Immix heap; parent's tasks array still
-     * references it. Recycling frees the Immix block, causing
-     * use-after-free when parent's GC scans the dangling Task pointer. */
+                                             XrCoroutine *dst_coro, bool discard_result) {
+    XrValue res = xr_coro_await_result_value(isolate, dst_coro, task, discard_result);
+    return discard_result ? xr_null() : res;
+}
+
+static inline void vm_task_recycle_completed_executor(XrCoroutine *exec) {
+    if (!exec || !xr_coro_flags_has(exec, XR_CORO_FLG_DONE) ||
+        xr_coro_flags_has(exec, XR_CORO_FLG_MAIN)) {
+        return;
+    }
+
+    XrWorker *worker = xr_current_worker();
+    if (worker) {
+        xr_coro_recycle_local(worker, exec);
+    } else {
+        xr_coro_destroy(exec);
+    }
+}
+
+static inline void vm_task_finish_completed_executor(XrTask *task, bool one_shot) {
+    if (!task)
+        return;
+
     XrCoroutine *exec = task->coro;
     if (exec) {
         task->coro = NULL;
         exec->task = NULL;
+        if (one_shot)
+            vm_task_recycle_completed_executor(exec);
     }
-    return discard_result ? xr_null() : res;
 }
 
 static inline void vm_task_detach_completed_executor(XrTask *task) {
@@ -747,18 +767,16 @@ static inline void vm_task_detach_completed_executor(XrTask *task) {
     if (tstate != XR_TASK_COMPLETED)
         return;
 
-    XrCoroutine *exec = task->coro;
-    if (exec) {
-        task->coro = NULL;
-        exec->task = NULL;
-    }
+    vm_task_finish_completed_executor(task, false);
 }
 
 XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInstruction instr,
                                   XrValue *base, XrBcCallFrame *frame, XrInstruction *pc) {
     int a = GETARG_A(instr);
     int b = GETARG_B(instr);
-    int discard_result = GETARG_C(instr);
+    int await_flags = GETARG_C(instr);
+    bool discard_result = (await_flags & VM_AWAIT_FLAG_DISCARD_RESULT) != 0;
+    bool one_shot_go = (await_flags & VM_AWAIT_FLAG_ONE_SHOT_GO) != 0;
 
     XrValue task_val = base[b];
 
@@ -770,10 +788,12 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         XrCoroutine *current = vm_get_coro(vm_ctx);
         XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
         if (current) {
-            XrCoroBlockResult resumed = xr_coro_await_task_resume_slot(
-                isolate, current, task, result_slot, discard_result != 0);
+            XrCoroBlockResult resumed =
+                xr_coro_await_task_resume_slot(isolate, current, task, result_slot, discard_result);
             if (resumed.kind == XR_CORO_BLOCK_READY) {
-                vm_task_detach_completed_executor(task);
+                if (one_shot_go && a != b)
+                    base[b] = xr_null();
+                vm_task_finish_completed_executor(task, one_shot_go);
                 return XR_DISP_NEXT;
             }
             if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
@@ -787,10 +807,16 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (!current && tstate == XR_TASK_COMPLETED) {
             base[a] = vm_task_consume_result(isolate, task, current, discard_result);
+            if (one_shot_go && a != b)
+                base[b] = xr_null();
+            vm_task_finish_completed_executor(task, one_shot_go);
             return XR_DISP_NEXT;
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
             base[a] = xr_null();
+            if (one_shot_go && a != b)
+                base[b] = xr_null();
+            vm_task_finish_completed_executor(task, one_shot_go);
             return XR_DISP_NEXT;
         }
 
@@ -803,14 +829,16 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
         if (current) {
             vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
             vm_suspend_replay_current(frame, pc);
-            XrCoroBlockResult await_result = xr_coro_await_task_slot(
-                isolate, current, task, result_slot, -1, discard_result != 0);
+            XrCoroBlockResult await_result =
+                xr_coro_await_task_slot(isolate, current, task, result_slot, -1, discard_result);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
                 return XR_DISP_BLOCKED;
             }
             vm_suspend_continue_from_next(frame, pc);
             if (await_result.kind == XR_CORO_BLOCK_READY) {
-                vm_task_detach_completed_executor(task);
+                if (one_shot_go && a != b)
+                    base[b] = xr_null();
+                vm_task_finish_completed_executor(task, one_shot_go);
                 return XR_DISP_NEXT;
             }
             if (await_result.kind == XR_CORO_BLOCK_CLOSED ||
@@ -846,6 +874,9 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             }
         }
         base[a] = vm_task_consume_result(isolate, task, NULL, discard_result);
+        if (one_shot_go && a != b)
+            base[b] = xr_null();
+        vm_task_finish_completed_executor(task, one_shot_go);
         return XR_DISP_NEXT;
     }
 

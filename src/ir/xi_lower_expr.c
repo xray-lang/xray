@@ -1882,6 +1882,9 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     AwaitExprNode *aw = &node->as.await_expr;
+    bool direct_one_shot_go = aw->expr && aw->expr->type == AST_GO_EXPR &&
+                              aw->expr->as.go_expr.link_mode == 0 && !aw->timeout && !aw->is_any &&
+                              !aw->is_all && !aw->is_any_success;
     XiValue *task = xi_lower_expr(l, aw->expr);
     if (!task)
         return NULL;
@@ -1897,8 +1900,10 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
     v->args[0] = task;
     if (timeout)
         v->args[1] = timeout;
-    /* Encode await variant flags: is_any, is_all, is_any_success */
-    v->aux_int = (aw->is_any ? 1 : 0) | (aw->is_all ? 2 : 0) | (aw->is_any_success ? 4 : 0);
+    /* Encode await variant flags. */
+    v->aux_int = (aw->is_any ? XI_AWAIT_AUX_ANY : 0) | (aw->is_all ? XI_AWAIT_AUX_ALL : 0) |
+                 (aw->is_any_success ? XI_AWAIT_AUX_ANY_SUCCESS : 0) |
+                 (direct_one_shot_go ? XI_AWAIT_AUX_ONE_SHOT_GO : 0);
     v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
     v->line = (uint32_t) node->line;
     return v;

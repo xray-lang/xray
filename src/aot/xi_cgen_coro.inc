@@ -1345,9 +1345,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         int sid = ++(*state_id);
         const XiValue *await_slot_value = cg_coro_typed_await_unbox_user(f, v);
         int await_flags = (int) v->aux_int;
-        bool await_all = (await_flags & 2) != 0;
-        bool await_any_success = (await_flags & 4) != 0;
-        bool await_any = (await_flags & 1) != 0 || await_any_success;
+        bool await_all = (await_flags & XI_AWAIT_AUX_ALL) != 0;
+        bool await_any_success = (await_flags & XI_AWAIT_AUX_ANY_SUCCESS) != 0;
+        bool await_any = (await_flags & XI_AWAIT_AUX_ANY) != 0 || await_any_success;
         if (await_all || await_any) {
             fprintf(out, "    ");
             emit_vref(out, v->args[0]);

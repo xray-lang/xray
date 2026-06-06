@@ -619,10 +619,30 @@ TEST(go_await) {
     for (uint32_t i = 0; i < f->entry->nvalues; i++) {
         if (f->entry->values[i]->op == XI_GO)
             found_go = 1;
-        if (f->entry->values[i]->op == XI_AWAIT)
+        if (f->entry->values[i]->op == XI_AWAIT) {
             found_await = 1;
+            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0 &&
+                   "visible task await must not be one-shot");
+        }
     }
     assert(found_go && "should have GO op");
+    assert(found_await && "should have AWAIT op");
+    xi_func_free(f);
+}
+
+TEST(direct_await_go_one_shot) {
+    XiFunc *f = lower_source("fn work() -> int { return 42 }\n"
+                             "let r = await go work()\n"
+                             "print(r)\n");
+    assert(f != NULL);
+    int found_await = 0;
+    for (uint32_t i = 0; i < f->entry->nvalues; i++) {
+        if (f->entry->values[i]->op == XI_AWAIT) {
+            found_await = 1;
+            assert((f->entry->values[i]->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0 &&
+                   "direct await-go should be one-shot");
+        }
+    }
     assert(found_await && "should have AWAIT op");
     xi_func_free(f);
 }
@@ -879,6 +899,7 @@ int main(void) {
     run_multiple_functions();
     run_template_string();
     run_go_await();
+    run_direct_await_go_one_shot();
     run_defer_stmt();
     run_set_literal();
     run_is_expr();

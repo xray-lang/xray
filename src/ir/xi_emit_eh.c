@@ -239,9 +239,10 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
     int flags = (int) v->aux_int;
-    bool is_any = (flags & 1) != 0;
-    bool is_all = (flags & 2) != 0;
-    bool is_any_success = (flags & 4) != 0;
+    bool is_any = (flags & XI_AWAIT_AUX_ANY) != 0;
+    bool is_all = (flags & XI_AWAIT_AUX_ALL) != 0;
+    bool is_any_success = (flags & XI_AWAIT_AUX_ANY_SUCCESS) != 0;
+    bool one_shot_go = (flags & XI_AWAIT_AUX_ONE_SHOT_GO) != 0;
     if (is_any_success) {
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_ANY, dst, task, 1));
     } else if (is_any) {
@@ -254,7 +255,8 @@ XR_FUNC void xi_emit_await(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             return;
         emit_inst(ctx, CREATE_ABC(OP_AWAIT_TIMEOUT, dst, task, timeout));
     } else {
-        emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, 0));
+        uint8_t await_c = one_shot_go ? 0x02 : 0;
+        emit_inst(ctx, CREATE_ABC(OP_AWAIT, dst, task, await_c));
     }
 }
 
