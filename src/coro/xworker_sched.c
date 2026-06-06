@@ -671,12 +671,11 @@ static void worker_park(XrWorker *worker) {
             XrCoroutine *io_coro = ready.head;
             while (io_coro) {
                 XrCoroutine *next = io_coro->sched_link;
-                io_coro->sched_link = NULL;
                 xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
                 xr_coro_transition_wake(io_coro);
-                xr_worker_push_lifo(worker, io_coro);
                 io_coro = next;
             }
+            (void) xr_worker_push_lifo_batch(worker, ready.head);
             // Found IO work, abort park. M remains in idle_worker_list until
             // a later wake_idle_worker pops it — tolerable because the wake
             // is idempotent and in_idle_worker_list guards re-entry.
