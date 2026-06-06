@@ -387,29 +387,6 @@ bool xr_worker_wake_one_detached(XrWorker *worker, void *channel, bool wake_send
     return true;
 }
 
-// xr_worker_dequeue_blocked - Dequeue coroutine from blocked queue but don't enqueue to run queue
-// For rendezvous value passing: caller needs to process value first then manually enqueue
-XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wake_sender) {
-    if (!worker || !channel)
-        return NULL;
-
-    XrBlockedBucket *bucket = NULL;
-    XrCoroutine *coro = worker_pop_channel_waiter(worker, channel, wake_sender, &bucket);
-    if (!coro)
-        return NULL;
-
-    // Clear blocked info, but don't enqueue (caller responsible)
-    xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
-    atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-    worker_cancel_coro_timer_wait(coro);
-    xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
-
-    // Reclaim the bucket if this was the last waiter on the channel.
-    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
-
-    return coro;
-}
-
 // xr_worker_wake_all - Wake all coroutines waiting on specified Channel on current Worker
 // (lock-free) MUST only be called from the owning worker thread.
 void xr_worker_wake_all(XrWorker *worker, void *channel) {
