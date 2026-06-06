@@ -79,8 +79,8 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return xrt_str_concat(tmp, "");
     }
     if (slot_hint == 2 || val.tag == XR_TAG_F64) {
-        char tmp[32];
-        snprintf(tmp, sizeof(tmp), "%g", val.f);
+        char tmp[64];
+        xrt_format_float(tmp, sizeof(tmp), val.f);
         return xrt_str_concat(tmp, "");
     }
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC)
@@ -283,7 +283,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
 /* String 1-arg method dispatch (extracted to keep xrt_method_1 under 150 lines) */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
-    if (sym == XRT_SYM_CONTAINS && XR_IS_STR(arg0))
+    if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0))
         return XR_FROM_BOOL(strstr(s, (const char *) arg0.ptr) ? 1 : 0);
     if (sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0)) {
         const char *p = strstr(s, (const char *) arg0.ptr);
