@@ -583,10 +583,11 @@ int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int
 
     XrCoroutine *cur = first;
     int runq_idx = runq_index_for_priority(priority);
-    int64_t submit_time = worker_schedule_time(worker);
+    int64_t fallback_submit_time = worker_schedule_time(worker);
     while (cur) {
         XrCoroutine *next = cur->sched_link;
         cur->sched_link = NULL;
+        int64_t submit_time = cur->submit_time > 0 ? cur->submit_time : fallback_submit_time;
         runq_enqueue_at(&worker->p.runq[runq_idx], cur, submit_time);
         cur = next;
     }
