@@ -98,7 +98,7 @@ static inline bool channel_single_worker(uint64_t mask) {
     return mask != 0 && (mask & (mask - 1)) == 0;
 }
 
-static XrChannelKind channel_infer_kind(XrChannel *ch) {
+static XrChannelKind channel_infer_worker_kind(XrChannel *ch) {
     if (!ch)
         return XR_CHAN_GENERIC;
     if (ch->buf_size == 0)
@@ -112,19 +112,68 @@ static XrChannelKind channel_infer_kind(XrChannel *ch) {
         return XR_CHAN_SPSC;
     if (!channel_single_worker(producers) && channel_single_worker(consumers))
         return XR_CHAN_MPSC;
+    if (channel_single_worker(producers) && !channel_single_worker(consumers))
+        return XR_CHAN_WORK_QUEUE;
     return XR_CHAN_MPMC;
 }
 
 static inline bool channel_kind_observation_stable(XrChannelKind kind) {
-    return kind == XR_CHAN_MPMC || kind == XR_CHAN_RENDEZVOUS || kind == XR_CHAN_WORK_QUEUE;
+    return kind == XR_CHAN_MPMC || kind == XR_CHAN_RENDEZVOUS;
 }
 
-static void channel_note_worker_locked(XrChannel *ch, bool producer) {
-    if (!ch || channel_kind_observation_stable(ch->kind))
-        return;
+static XrChannelKind channel_infer_role_kind(XrChannel *ch) {
+    if (!ch)
+        return XR_CHAN_GENERIC;
+    if (ch->buf_size == 0)
+        return XR_CHAN_RENDEZVOUS;
 
-    XrWorker *worker = xr_current_worker();
-    if (!worker)
+    if (ch->producer_coro_id < 0 || ch->consumer_coro_id < 0)
+        return XR_CHAN_GENERIC;
+    if (!ch->producer_coro_multi && !ch->consumer_coro_multi)
+        return XR_CHAN_SPSC;
+    if (ch->producer_coro_multi && !ch->consumer_coro_multi)
+        return XR_CHAN_MPSC;
+    if (!ch->producer_coro_multi && ch->consumer_coro_multi)
+        return XR_CHAN_WORK_QUEUE;
+    return XR_CHAN_MPMC;
+}
+
+static void channel_record_kind_metric(XrRuntime *runtime, XrChannelKind kind, bool worker_kind) {
+    if (!runtime)
+        return;
+    XrSchedGlobalStats *stats = &runtime->sched_stats;
+    if (worker_kind) {
+        if (kind == XR_CHAN_SPSC) {
+            xr_sched_metric_inc(runtime, &stats->chan_worker_kind_spsc_count);
+        } else if (kind == XR_CHAN_MPSC) {
+            xr_sched_metric_inc(runtime, &stats->chan_worker_kind_mpsc_count);
+        } else if (kind == XR_CHAN_WORK_QUEUE) {
+            xr_sched_metric_inc(runtime, &stats->chan_worker_kind_work_queue_count);
+        } else if (kind == XR_CHAN_MPMC) {
+            xr_sched_metric_inc(runtime, &stats->chan_worker_kind_mpmc_count);
+        }
+        return;
+    }
+
+    if (kind == XR_CHAN_SPSC) {
+        xr_sched_metric_inc(runtime, &stats->chan_kind_spsc_count);
+    } else if (kind == XR_CHAN_MPSC) {
+        xr_sched_metric_inc(runtime, &stats->chan_kind_mpsc_count);
+    } else if (kind == XR_CHAN_WORK_QUEUE) {
+        xr_sched_metric_inc(runtime, &stats->chan_kind_work_queue_count);
+    } else if (kind == XR_CHAN_MPMC) {
+        xr_sched_metric_inc(runtime, &stats->chan_kind_mpmc_count);
+    }
+}
+
+static XrCoroutine *channel_current_coro_from_worker(XrWorker *worker) {
+    if (!worker || !worker->m)
+        return NULL;
+    return atomic_load_explicit(&worker->m->current_coro, memory_order_relaxed);
+}
+
+static void channel_note_worker_locked(XrChannel *ch, XrWorker *worker, bool producer) {
+    if (!ch || !worker || channel_kind_observation_stable(ch->worker_kind))
         return;
 
     uint64_t bit = xr_runtime_worker_bit(worker->p.id);
@@ -136,21 +185,53 @@ static void channel_note_worker_locked(XrChannel *ch, bool producer) {
         return;
 
     *mask |= bit;
-    XrChannelKind next = channel_infer_kind(ch);
+    XrChannelKind next = channel_infer_worker_kind(ch);
+    if (next == ch->worker_kind)
+        return;
+
+    ch->worker_kind = next;
+    channel_record_kind_metric(worker->p.runtime, next, true);
+}
+
+static bool channel_note_role_id_locked(XrChannel *ch, int coro_id, bool producer) {
+    if (!ch || coro_id < 0)
+        return false;
+
+    int *seen_id = producer ? &ch->producer_coro_id : &ch->consumer_coro_id;
+    bool *multi = producer ? &ch->producer_coro_multi : &ch->consumer_coro_multi;
+    if (*multi)
+        return false;
+    if (*seen_id < 0) {
+        *seen_id = coro_id;
+        return true;
+    }
+    if (*seen_id == coro_id)
+        return false;
+
+    *multi = true;
+    return true;
+}
+
+static void channel_note_participant_locked(XrChannel *ch, XrCoroutine *coro, bool producer) {
+    if (!ch)
+        return;
+
+    XrWorker *worker = xr_current_worker();
+    channel_note_worker_locked(ch, worker, producer);
+    if (channel_kind_observation_stable(ch->kind))
+        return;
+
+    if (!coro)
+        coro = channel_current_coro_from_worker(worker);
+    if (!channel_note_role_id_locked(ch, coro ? coro->id : -1, producer))
+        return;
+
+    XrChannelKind next = channel_infer_role_kind(ch);
     if (next == ch->kind)
         return;
 
     ch->kind = next;
-    XrRuntime *runtime = worker->p.runtime;
-    if (!runtime)
-        return;
-    if (next == XR_CHAN_SPSC) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_spsc_count);
-    } else if (next == XR_CHAN_MPSC) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_mpsc_count);
-    } else if (next == XR_CHAN_MPMC) {
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_kind_mpmc_count);
-    }
+    channel_record_kind_metric(worker ? worker->p.runtime : channel_stats_runtime(ch), next, false);
 }
 
 // Distributed channel hooks live on XrayIsolate::channel_dist_hooks.
@@ -320,6 +401,9 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
         ch->buf_size = buffer_size;
     }
     ch->kind = buffer_size == 0 ? XR_CHAN_RENDEZVOUS : XR_CHAN_GENERIC;
+    ch->worker_kind = ch->kind;
+    ch->producer_coro_id = -1;
+    ch->consumer_coro_id = -1;
     ch->isolate = X;
 
     atomic_fetch_add(&xr_isolate_get_sys_heap(X)->stats.channel_create_count, 1);
@@ -393,6 +477,9 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->send_idx = 0;
     ch->recv_idx = 0;
     ch->kind = XR_CHAN_GENERIC;
+    ch->worker_kind = XR_CHAN_GENERIC;
+    ch->producer_coro_id = -1;
+    ch->consumer_coro_id = -1;
 
     // Initialize state
     atomic_store_explicit(&ch->closed, false, memory_order_relaxed);
@@ -532,13 +619,13 @@ static void channel_clear_drained_direction_masks(XrChannel *ch, bool send_drain
 
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
-static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
+static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *producer) {
     XrCoroutine *receiver = xr_waitq_dequeue(&ch->recvq);
     if (!receiver)
         return false;
     CHANNEL_METRIC_INC(ch, chan_send_direct_count);
     CHANNEL_METRIC_INC(ch, chan_recvq_dequeue_count);
-    channel_note_worker_locked(ch, true);
+    channel_note_participant_locked(ch, producer, true);
     (void) xr_coro_store_recv_value(receiver, v);
     xr_amutex_unlock(&ch->lock);
     channel_wake_coro(receiver);
@@ -549,11 +636,11 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v) {
 // Handles both unbuffered (take sender's value) and full-buffered (rotate
 // buffer head out, push sender's value to tail) cases.
 // Returns true on success (lock released, *out assigned).
-static inline bool chan_direct_recv(XrChannel *ch, XrValue *out) {
+static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *consumer) {
     XrCoroutine *sender = xr_waitq_dequeue(&ch->sendq);
     if (!sender)
         return false;
-    channel_note_worker_locked(ch, false);
+    channel_note_participant_locked(ch, consumer, false);
     XrValue direct_val;
     if (ch->buf_size == 0) {
         direct_val = sender->ext->send_value;
@@ -620,10 +707,10 @@ bool xr_channel_notify_send(XrChannel *ch, XrValue value) {
     }
 
     // Direct transfer to a blocked receiver, or buffer push if space.
-    if (chan_direct_send(ch, value))
+    if (chan_direct_send(ch, value, NULL))
         return true;
     if (chan_buffer_push(ch, value)) {
-        channel_note_worker_locked(ch, true);
+        channel_note_participant_locked(ch, NULL, true);
         xr_amutex_unlock(&ch->lock);
         channel_wake_select_waiter_if_present(ch);
         return true;
@@ -654,10 +741,10 @@ bool xr_channel_try_send(XrChannel *ch, XrValue value) {
 
     // Direct transfer to waiting receiver (must be checked first, otherwise
     // blocked receivers are never woken by trySend).
-    if (chan_direct_send(ch, value))
+    if (chan_direct_send(ch, value, NULL))
         return true;
     if (chan_buffer_push(ch, value)) {
-        channel_note_worker_locked(ch, true);
+        channel_note_participant_locked(ch, NULL, true);
         xr_amutex_unlock(&ch->lock);
         channel_wake_select_waiter_if_present(ch);
         return true;
@@ -688,13 +775,12 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
     // buffered rotate). Must be checked first, otherwise blocked senders
     // are never woken by tryRecv.
     XrValue value;
-    if (chan_direct_recv(ch, &value)) {
-        channel_note_worker_locked(ch, false);
+    if (chan_direct_recv(ch, &value, NULL)) {
         *ok = true;
         return value;
     }
     if (chan_buffer_pop(ch, &value)) {
-        channel_note_worker_locked(ch, false);
+        channel_note_participant_locked(ch, NULL, false);
         xr_amutex_unlock(&ch->lock);
         *ok = true;
         return value;
@@ -938,7 +1024,7 @@ XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
             if (!atomic_load_explicit(&ch->closed, memory_order_relaxed) && !ch->recvq.first &&
                 chan_buffer_push(ch, value)) {
                 CHANNEL_METRIC_INC(ch, chan_buffer_fast_hit_count);
-                channel_note_worker_locked(ch, true);
+                channel_note_participant_locked(ch, coro, true);
                 xr_amutex_unlock(&ch->lock);
                 channel_wake_select_waiter_if_present(ch);
                 return XR_CHAN_OK;
@@ -961,10 +1047,10 @@ send_locked:
     }
 
     // Direct transfer to waiting receiver, or buffer push if space.
-    if (chan_direct_send(ch, value))
+    if (chan_direct_send(ch, value, coro))
         return XR_CHAN_OK;
     if (chan_buffer_push(ch, value)) {
-        channel_note_worker_locked(ch, true);
+        channel_note_participant_locked(ch, coro, true);
         xr_amutex_unlock(&ch->lock);
         channel_wake_select_waiter_if_present(ch);
         return XR_CHAN_OK;
@@ -981,6 +1067,7 @@ send_locked:
     }
 
     // Set blocked state and join sendq
+    channel_note_participant_locked(ch, coro, true);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
     coro->ext->send_value = value;  // Save value to send
@@ -1026,7 +1113,7 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
         if (channel_trylock_observed(ch)) {
             if (!ch->sendq.first && chan_buffer_pop(ch, out)) {
                 CHANNEL_METRIC_INC(ch, chan_buffer_fast_hit_count);
-                channel_note_worker_locked(ch, false);
+                channel_note_participant_locked(ch, coro, false);
                 xr_amutex_unlock(&ch->lock);
                 return XR_CHAN_OK;
             }
@@ -1042,10 +1129,10 @@ XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
 
 recv_locked:
     // Direct transfer from waiting sender, or buffer pop.
-    if (chan_direct_recv(ch, out))
+    if (chan_direct_recv(ch, out, coro))
         return XR_CHAN_OK;
     if (chan_buffer_pop(ch, out)) {
-        channel_note_worker_locked(ch, false);
+        channel_note_participant_locked(ch, coro, false);
         xr_amutex_unlock(&ch->lock);
         return XR_CHAN_OK;
     }
@@ -1068,6 +1155,7 @@ recv_locked:
     }
 
     // Set blocked state and join recvq
+    channel_note_participant_locked(ch, coro, false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = false;
     // recv_slot is owned by the backend-neutral block helper.
