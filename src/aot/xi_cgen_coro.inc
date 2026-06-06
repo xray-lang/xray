@@ -20,7 +20,7 @@ static const XiValue *cg_coro_box_scalar_source(const XiValue *v) {
 static bool cg_coro_is_channel_recv_value(const XiValue *v) {
     if (!v)
         return false;
-    if (v->op == XI_CHAN_RECV)
+    if (v->op == XI_CHAN_RECV || v->op == XI_CHAN_TRY_RECV)
         return true;
     if (v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
         return false;
@@ -396,6 +396,18 @@ static void emit_coro_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     fprintf(out, "xr_slot_aot_frame_offset(f, (uint32_t)((uint8_t *)&");
     emit_vref(out, slot_value);
     fprintf(out, " - (uint8_t *)f), %u)", (unsigned) cg_rep(slot_value));
+}
+
+static void emit_coro_native_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                      const char *prefix, const XiValue *v) {
+    (void) ctx;
+    (void) prefix;
+    const XiValue *slot_value = cg_coro_typed_recv_unbox_user(f, v);
+    if (!slot_value)
+        slot_value = v;
+    fprintf(out, "xr_slot_native_ptr(&");
+    emit_vref(out, slot_value);
+    fprintf(out, ", %u)", (unsigned) cg_rep(slot_value));
 }
 
 static void emit_coro_optional_slot_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -1760,13 +1772,23 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_codegen_abort_aot_result(out);
             return;
         }
-        fprintf(out, "    XrValue _chan_try_%u = xr_aot_chan_try_recv_value(ctx, ", v->id);
+        fprintf(out, "    bool _chan_try_ok_%u = xr_aot_chan_try_recv_slot(ctx, ", v->id);
         emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        if (cg_coro_value_has_storage(f, v) || cg_coro_typed_recv_unbox_user(f, v))
+            emit_coro_native_slot_ref(ctx, out, f, prefix, v);
+        else
+            fprintf(out, "xr_slot_none()");
         fprintf(out, ");\n");
+        return;
+    }
+
+    if (v->op == XI_ISNULL && v->nargs >= 1 && v->args[0] &&
+        v->args[0]->op == XI_CHAN_TRY_RECV) {
         if (cg_coro_value_has_storage(f, v)) {
-            char tmp[32];
-            snprintf(tmp, sizeof(tmp), "_chan_try_%u", v->id);
-            emit_assign_from_xrvalue_temp(out, v, tmp);
+            fprintf(out, "    ");
+            emit_vref(out, v);
+            fprintf(out, " = !_chan_try_ok_%u;\n", v->args[0]->id);
         }
         return;
     }

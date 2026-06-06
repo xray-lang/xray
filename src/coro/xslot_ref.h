@@ -29,6 +29,7 @@
 typedef enum {
     XR_SLOT_NONE = 0,
     XR_SLOT_XVALUE_PTR,
+    XR_SLOT_NATIVE_PTR,
     XR_SLOT_AOT_FRAME_OFFSET,
     XR_SLOT_JIT_SUSPEND
 } XrSlotKind;
@@ -47,6 +48,11 @@ static inline XrSlotRef xr_slot_none(void) {
 
 static inline XrSlotRef xr_slot_xvalue_ptr(XrValue *ptr) {
     XrSlotRef slot = {XR_SLOT_XVALUE_PTR, ptr, 0, XR_REP_TAGGED};
+    return slot;
+}
+
+static inline XrSlotRef xr_slot_native_ptr(void *ptr, uint16_t type_id) {
+    XrSlotRef slot = {XR_SLOT_NATIVE_PTR, ptr, 0, type_id};
     return slot;
 }
 

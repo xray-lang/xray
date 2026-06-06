@@ -1253,6 +1253,76 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_scalar_channel_try_recv_uses_native_slot) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 120, .frozen = true};
+    XrType channel_type = {.kind = XR_KIND_CHANNEL, .id = 121, .frozen = true};
+    channel_type.container.element_type = &int_type;
+
+    XiFunc *ir = xi_func_new("main", &int_type);
+    assert(ir != NULL);
+
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+
+    XiValue *cap = xi_const_int(ir, entry, 1, &int_type);
+    assert(cap != NULL);
+
+    XiValue *ch = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
+    assert(ch != NULL);
+    ch->args[0] = cap;
+    ch->flags |= XI_FLAG_SIDE_EFFECT;
+
+    XiValue *recv = xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &int_type, 1);
+    assert(recv != NULL);
+    recv->args[0] = ch;
+    recv->flags |= XI_FLAG_SIDE_EFFECT;
+
+    XiValue *unbox = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
+    assert(unbox != NULL);
+    unbox->args[0] = recv;
+    xi_block_set_return(entry, unbox);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT scalar channel tryRecv should generate");
+    assert(contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
+           "tryRecv must use the typed slot bridge");
+    assert(contains(code, "xr_slot_native_ptr(&v") &&
+           "tryRecv should write directly into an AOT native local slot");
+    assert(contains(code, ", 0));") && "int tryRecv slot should carry XR_REP_I64");
+    assert(!contains(code, "xr_aot_chan_try_recv_value(ctx,") &&
+           "scalar tryRecv must not allocate a temporary XrValue bridge result");
+
+    printf("  Generated scalar channel tryRecv slot %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_select_try_recv_uses_ready_bit) {
+    const char *src = "let ch = new Channel<int>(0)\n"
+                      "select {\n"
+                      "    value from ch -> { print(value) }\n"
+                      "    _ -> { print(0) }\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT select tryRecv should generate");
+    assert(contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
+           "select recv probe must use the AOT tryRecv slot bridge");
+    assert(contains(code, " = !_chan_try_ok_") &&
+           "select readiness must use the tryRecv ok bit instead of a null-value probe");
+
+    printf("  Generated select tryRecv ready bit %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_sleep_publishes_state_before_block) {
     const char *src = "import time\n"
                       "time.sleep(5)\n"
@@ -1546,6 +1616,8 @@ int main(void) {
     run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
+    run_cgen_coro_scalar_channel_try_recv_uses_native_slot();
+    run_cgen_coro_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
     run_cgen_coro_select_publishes_state_before_block();
     run_cgen_coro_channel_timeout_publishes_state_before_block();

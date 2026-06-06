@@ -165,6 +165,8 @@ static inline XrValue xr_aot_chan_try_send_f64(const XrAotContext *ctx, XrValue 
 }
 
 XR_FUNC XrValue xr_aot_chan_try_recv_value(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC bool xr_aot_chan_try_recv_slot(const XrAotContext *ctx, XrValue channel_value,
+                                       XrSlotRef out_slot);
 XR_FUNC XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
