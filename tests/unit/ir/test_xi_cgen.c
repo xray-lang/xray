@@ -598,6 +598,8 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
     assert(contains(code, "call_frame_") &&
            "caller frame should own the child suspend frame while blocked");
     assert(contains(code, "_aot_resume") && "direct suspend call should use AOT resume entries");
+    assert(nonzero_state_precedes_call(code, "_aot_resume(f->call_frame_") &&
+           "direct suspend calls must publish caller state before child resume");
     assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
            "suspendable functions must keep hard-failing sync wrappers");
     assert(!contains(code, "unsupported AOT sync call") &&
@@ -896,6 +898,8 @@ TEST(cgen_coro_channel_send_clones_value) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT channel send should generate");
     assert(contains(code, "xr_aot_chan_send(ctx,") && "channel send must use the AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send(ctx,") &&
+           "channel send must publish the AOT resume state before runtime blocking");
     assert(contains(code, "xr_aot_chan_send(ctx, ") &&
            contains(code, "xrt_value_clone_for_coro(") &&
            "channel send values must be cloned at the coroutine boundary");
@@ -918,6 +922,8 @@ TEST(cgen_coro_scalar_channel_send_skips_clone) {
     assert(!had_error && "AOT scalar channel send should generate");
     assert(contains(code, "xr_aot_chan_send_i64(ctx,") &&
            "scalar channel send must use the typed AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_i64(ctx,") &&
+           "scalar channel send must publish the AOT resume state before runtime blocking");
     assert(!contains(code, "xr_aot_chan_send(ctx,") &&
            "scalar channel send must not re-box at the generated call site");
     assert(count_between(code, code + strlen(code), "XR_FROM_INT(") == 1 &&
@@ -1081,6 +1087,8 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     assert(!had_error && "AOT channel recv should generate");
     assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
            "initial channel recv must register a backend-neutral slot");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "channel recv must publish the AOT resume state before runtime blocking");
     assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), false);") &&
            "channel recv resume must recover the slot from coroutine wait state");
     assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
@@ -1121,11 +1129,14 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
 
     const char *slot_ref = strstr(code, "xr_slot_aot_frame_offset");
     assert(slot_ref != NULL && "channel recv must create a backend-neutral slot ref");
-    assert(strstr(slot_ref, "), 0);\n    XrAotResult _chan_recv_") != NULL &&
-           "channel recv slot should use XR_REP_I64 for scalar-only consumers");
+    assert(strstr(slot_ref, "), 0);\n    f->state = ") != NULL &&
+           strstr(slot_ref, "XrAotResult _chan_recv_") != NULL &&
+           "channel recv slot should use XR_REP_I64 before publishing resume state");
 
     const char *recv_call = strstr(code, "xr_aot_chan_recv_slot(ctx,");
     assert(recv_call != NULL && "channel recv must use the AOT recv slot bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "scalar channel recv must publish the AOT resume state before runtime blocking");
 
     const char *resume = strstr(code, "static XrAotResult test_recv_plus_");
     const char *trace = resume ? strstr(resume, "static void test_recv_plus_") : NULL;
@@ -1134,6 +1145,77 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
            "typed recv should not unbox a tagged receive value after resume");
 
     printf("  Generated scalar channel recv slot %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_sleep_publishes_state_before_block) {
+    const char *src = "import time\n"
+                      "time.sleep(5)\n"
+                      "print(\"awake\")\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT sleep should generate");
+    assert(contains(code, "xr_aot_sleep(ctx,") && "sleep must use the AOT sleep bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_sleep(ctx,") &&
+           "sleep must publish the AOT resume state before runtime blocking");
+
+    printf("  Generated sleep state publication %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_select_publishes_state_before_block) {
+    const char *src = "let ch = new Channel<int>(0)\n"
+                      "select {\n"
+                      "    value from ch -> { print(value) }\n"
+                      "}\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT select should generate");
+    assert(contains(code, "xr_aot_select_block(ctx,") && "select must use the AOT bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_select_block(ctx,") &&
+           "select must publish the AOT resume state before runtime blocking");
+
+    printf("  Generated select state publication %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
+    const char *src = "let ch = new Channel<int>(0)\n"
+                      "let sent = ch.sendTimeout(7, 10)\n"
+                      "let (value, ok) = ch.recvTimeout(10)\n"
+                      "print(sent)\n"
+                      "print(ok)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT channel timeout ops should generate");
+    assert(contains(code, "xr_aot_chan_send_timeout") &&
+           "sendTimeout must use the AOT timeout bridge");
+    assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "recvTimeout must use the AOT recv slot bridge");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_timeout") &&
+           "sendTimeout must publish the AOT resume state before runtime blocking");
+    assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
+           "recvTimeout must publish the AOT resume state before runtime blocking");
+
+    printf("  Generated channel timeout state publication %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1357,6 +1439,9 @@ int main(void) {
     run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
+    run_cgen_coro_sleep_publishes_state_before_block();
+    run_cgen_coro_select_publishes_state_before_block();
+    run_cgen_coro_channel_timeout_publishes_state_before_block();
     run_cgen_coro_recv_slot_is_traced_as_frame_root();
     run_cgen_coro_await_all_uses_aggregate_bridge();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();

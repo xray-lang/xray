@@ -1304,6 +1304,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        if (!f->call_frame_%u)\n", v->id);
         fprintf(out, "            return xr_aot_error(XR_NULL_VAL, false);\n");
         fprintf(out, "    }\n");
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    _call_%u = ", v->id);
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_resume");
         fprintf(out, "(f->call_frame_%u, ctx);\n", v->id);
@@ -1324,6 +1325,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        goto S%d_DONE;\n", sid);
         fprintf(out, "    }\n");
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_ERROR || "
@@ -1333,12 +1335,12 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _call_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    return _call_%u;\n", v->id);
         fprintf(out, "S%d:;\n", sid);
-        fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    _call_%u = ", v->id);
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_resume");
         fprintf(out, "(f->call_frame_%u, ctx);\n", v->id);
@@ -1359,6 +1361,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             snprintf(tmp, sizeof(tmp), "_call_value_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        goto S%d_DONE;\n", sid);
         fprintf(out, "    }\n");
         fprintf(out, "    if (_call_%u.kind == XR_AOT_RUN_ERROR || "
@@ -1368,9 +1371,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_release");
         fprintf(out, "(f->call_frame_%u, NULL);\n", v->id);
         fprintf(out, "        f->call_frame_%u = NULL;\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _call_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    return _call_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
         return;
@@ -1399,15 +1402,18 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (cg_is_time_sleep_call_ctx(ctx, f, v)) {
         int sid = ++(*state_id);
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _sleep_%u = xr_aot_sleep(ctx, ", v->id);
         emit_int64_arg(out, v->args[1]);
         fprintf(out, ");\n");
         fprintf(out, "    if (_sleep_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _sleep_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_sleep_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_sleep_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _sleep_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
@@ -1541,16 +1547,19 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             emit_boxed_vref(out, v->args[i]);
             fprintf(out, ";\n");
         }
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out,
                 "    XrAotResult _select_%u = xr_aot_select_block(ctx, _select_channels_%u, "
                 "%u, %u);\n",
                 v->id, v->id, (unsigned) v->nargs, (unsigned) v->aux_int);
         fprintf(out, "    if (_select_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _select_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_select_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_select_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _select_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
@@ -1734,6 +1743,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const char *helper =
             cg_coro_typed_send_helper("xr_aot_chan_send_timeout", v->args[1], &send_arg);
         int sid = ++(*state_id);
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _chan_send_timeout_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
@@ -1744,11 +1754,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ");\n");
         fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_send_timeout_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _chan_send_timeout_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
@@ -1763,6 +1775,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
 
     if (cg_is_channel_method_call(v, "recvTimeout", 1)) {
         int sid = ++(*state_id);
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _chan_recv_timeout_%u = xr_aot_chan_recv_slot(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
@@ -1771,11 +1784,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         emit_int64_arg(out, v->args[1]);
         fprintf(out, ", true);\n");
         fprintf(out, "    if (_chan_recv_timeout_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_recv_timeout_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_chan_recv_timeout_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_chan_recv_timeout_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _chan_recv_timeout_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
@@ -1800,6 +1815,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         const XiValue *send_arg = NULL;
         const char *helper = cg_coro_typed_send_helper("xr_aot_chan_send", send_value, &send_arg);
         int sid = ++(*state_id);
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _chan_send_%u = %s(ctx, ", v->id, helper);
         emit_vref(out, channel);
         fprintf(out, ", ");
@@ -1808,11 +1824,13 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, ", xr_slot_none(), -1");
         fprintf(out, ");\n");
         fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_send_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_chan_send_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _chan_send_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
@@ -1841,15 +1859,18 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    XrSlotRef _chan_recv_slot_%u = ", v->id);
         emit_coro_slot_ref(ctx, out, f, prefix, v);
         fprintf(out, ";\n");
+        fprintf(out, "    f->state = %d;\n", sid);
         fprintf(out, "    XrAotResult _chan_recv_%u = xr_aot_chan_recv_slot(ctx, ", v->id);
         emit_vref(out, v->args[0]);
         fprintf(out, ", _chan_recv_slot_%u, -1, false);\n", v->id);
         fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_BLOCKED) {\n", v->id);
-        fprintf(out, "        f->state = %d;\n", sid);
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
         fprintf(out, "    }\n");
-        fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
+        fprintf(out, "    if (_chan_recv_%u.kind == XR_AOT_RUN_ERROR) {\n", v->id);
+        fprintf(out, "        f->state = 0;\n");
         fprintf(out, "        return _chan_recv_%u;\n", v->id);
+        fprintf(out, "    }\n");
+        fprintf(out, "    f->state = 0;\n");
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
