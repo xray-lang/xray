@@ -14,10 +14,9 @@
  * provided by the surrounding scope. CMake excludes *.inc.c
  * from the VM_SRC glob.
  *
- * Owns the spawn / await / yield family plus the coroutine
- * thread-affinity, coroutine-local, and priority opcodes that
- * sit alongside them. Heavy variants delegate to dispatch
- * helpers in xvm_coro_ops.c (vm_go / vm_await / ...).
+ * Owns the spawn / await / yield family plus coroutine thread-affinity and
+ * coroutine-local opcodes. Heavy variants delegate to dispatch helpers in
+ * xvm_coro_ops.c (vm_go / vm_await / ...).
  */
 
 vmcase(OP_GO) {
@@ -194,33 +193,6 @@ vmcase(OP_GET_LOCAL) {
     } else {
         R(a) = xr_null();
     }
-    vmbreak;
-}
-
-vmcase(OP_SET_PRIORITY) {
-    // Coro.setPriority(R[A], R[B])
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue task_val = R(a);
-    XrValue prio_val = R(b);
-    XrCoroutine *coro = NULL;
-    if (xr_value_is_task(task_val)) {
-        XrTask *_t = xr_value_to_task(task_val);
-        coro = _t->coro;
-    } else if (xr_value_is_coro(task_val)) {
-        coro = xr_value_to_coro(task_val);
-    }
-    if (!coro) {
-        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "setPriority: task or coroutine object required");
-    }
-    XrCoroPriority new_prio = CORO_PRIORITY_NORMAL;
-    if (XR_IS_INT(prio_val)) {
-        int prio_int = (int) XR_TO_INT(prio_val);
-        if (prio_int >= 0 && prio_int < XR_CORO_PRIORITY_COUNT) {
-            new_prio = (XrCoroPriority) prio_int;
-        }
-    }
-    xr_coro_set_priority(coro, new_prio);
     vmbreak;
 }
 

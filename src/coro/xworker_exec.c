@@ -115,49 +115,17 @@ static XrCoroEvent worker_event_from_coro(XrCoroutine *coro) {
     return event;
 }
 
-static int worker_coro_priority(XrCoroutine *coro) {
-    if (!coro)
-        return CORO_PRIORITY_NORMAL;
-    int priority = xr_coro_get_priority(xr_coro_flags_load(coro));
-    if (priority < CORO_PRIORITY_LOW)
-        return CORO_PRIORITY_LOW;
-    if (priority > CORO_PRIORITY_HIGH)
-        return CORO_PRIORITY_HIGH;
-    return priority;
-}
-
-static bool worker_high_priority_work_visible(XrRuntime *runtime) {
-    if (!runtime)
-        return false;
-
-    uint32_t high_inject_bit = (uint32_t) 1u << CORO_PRIORITY_HIGH;
-    if ((atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) &
-         high_inject_bit) != 0) {
-        return true;
-    }
-    return atomic_load_explicit(&runtime->nonempty_p_mask[CORO_PRIORITY_HIGH],
-                                memory_order_acquire) != 0;
-}
-
 static bool worker_global_spawn_backlog_visible(XrRuntime *runtime) {
     if (!runtime)
         return false;
     if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
         return true;
 
-    uint32_t mask = atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
-    if (mask == 0)
+    if (!atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return false;
 
-    int pending = 0;
-    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
-        if ((mask & ((uint32_t) 1u << priority)) == 0)
-            continue;
-        pending += atomic_load_explicit(&runtime->injectq[priority].len, memory_order_relaxed);
-        if (pending >= XR_SPAWN_INLINE_GLOBAL_BACKLOG)
-            return true;
-    }
-    return false;
+    int pending = atomic_load_explicit(&runtime->injectq.len, memory_order_relaxed);
+    return pending >= XR_SPAWN_INLINE_GLOBAL_BACKLOG;
 }
 
 static bool worker_spawn_backlog_visible(XrWorker *worker, XrRuntime *runtime) {
@@ -202,13 +170,8 @@ static bool worker_should_share_spawn_child(XrWorker *worker, XrRuntime *runtime
 
 static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
                                              XrCoroutine *child) {
-    int parent_priority = worker_coro_priority(parent);
-    int child_priority = worker_coro_priority(child);
-    if (child_priority < parent_priority)
-        return false;
-
-    if (child_priority >= CORO_PRIORITY_HIGH)
-        return true;
+    (void) parent;
+    (void) child;
 
     XrRuntime *runtime = worker ? worker->p.runtime : NULL;
     if (!runtime)
@@ -219,11 +182,7 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
     if (worker_should_share_spawn_child(worker, runtime))
         return false;
 
-    return !worker_high_priority_work_visible(runtime);
-}
-
-static bool worker_should_keep_parent_local(XrCoroutine *parent, XrCoroutine *child) {
-    return worker_coro_priority(child) > worker_coro_priority(parent);
+    return true;
 }
 
 /*
@@ -402,11 +361,6 @@ static XrCoroutine *worker_pop_parent_continuation(XrWorker *worker) {
         return NULL;
 
     xr_worker_refresh_runq_masks(worker);
-    if (worker_coro_priority(parent) < CORO_PRIORITY_HIGH &&
-        worker_high_priority_work_visible(worker->p.runtime)) {
-        xr_worker_push(worker, parent);
-        return NULL;
-    }
     return parent;
 }
 
@@ -452,16 +406,12 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             result = xr_coro_run_error(XR_NULL_VAL, false);
             goto normal_result_path;
         }
-        int child_priority = worker_coro_priority(child);
-        int parent_priority = worker_coro_priority(coro);
         bool inline_child = worker_should_inline_spawn_child(worker, coro, child);
         // Queued and inline children both need worker threads visible before
         // the current worker continues the parent.
         xr_runtime_ensure_workers(p->runtime);
         p->stats.spawned_count++;
-        if (!inline_child && child_priority < CORO_PRIORITY_HIGH &&
-            child_priority >= parent_priority && !worker_high_priority_work_visible(p->runtime) &&
-            worker_spawn_share_backlog_full(worker, p->runtime)) {
+        if (!inline_child && worker_spawn_share_backlog_full(worker, p->runtime)) {
             inline_child = true;
         }
         if (!inline_child) {
@@ -477,9 +427,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         // Detach worker-local backend state before running the child.
         // Re-bound by xr_coro_run_on_worker when the parent resumes.
         xr_coro_detach_worker_state(coro);
-        if (worker_should_keep_parent_local(coro, child)) {
-            xr_worker_push_lifo(worker, coro);
-        } else if (!xr_steal_queue_push(&p->cont_deque, coro)) {
+        if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {
             xr_worker_refresh_runq_masks(worker);
@@ -566,8 +514,7 @@ normal_result_path:
     int reds_used = XR_CORO_REDUCTIONS - coro->reductions;
     if (reds_used < 0)
         reds_used = XR_CORO_REDUCTIONS;
-    int prio = xr_coro_get_priority(xr_coro_flags_load(coro));
-    xr_worker_reductions_executed(worker, prio, reds_used);
+    xr_worker_reductions_executed(worker, reds_used);
 
     // Handle backend result
     worker_handle_run_result(worker, coro, result);

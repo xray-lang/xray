@@ -78,7 +78,7 @@ static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     coro->id = id;
     coro->isolate = isolate;
     coro->ext = ext;
-    atomic_store(&coro->flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->flags, XR_CORO_FLG_RUNNING);
     atomic_store(&coro->coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);

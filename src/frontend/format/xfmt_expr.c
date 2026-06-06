@@ -864,21 +864,11 @@ void xfmt_emit_expression(XrFmtContext *ctx, AstNode *node) {
             xfmt_write_indent(ctx);
             GoExprNode *go = &node->as.go_expr;
             xfmt_write_str(ctx, "go");
-            if (go->name || go->priority) {
+            if (go->name) {
                 xfmt_write_char(ctx, '(');
-                int has_prev = 0;
-                if (go->name) {
-                    xfmt_write_str(ctx, "name: \"");
-                    xfmt_write_str(ctx, go->name);
-                    xfmt_write_char(ctx, '"');
-                    has_prev = 1;
-                }
-                if (go->priority) {
-                    if (has_prev)
-                        xfmt_write_str(ctx, ", ");
-                    xfmt_write_str(ctx, "priority: ");
-                    xfmt_emit_expression(ctx, go->priority);
-                }
+                xfmt_write_str(ctx, "name: \"");
+                xfmt_write_str(ctx, go->name);
+                xfmt_write_char(ctx, '"');
                 xfmt_write_str(ctx, ") ");
             } else {
                 xfmt_write_space(ctx);

@@ -51,15 +51,13 @@ static int snapshot_append_steal_queue(XrCoroSnapshotEntry *out, int count, int 
 
 static int snapshot_append_worker_ready(XrCoroSnapshotEntry *out, int count, int max_out,
                                         XrWorker *worker, XrCoroutine **scratch, int scratch_cap) {
-    for (int p = 0; p < XR_RUNQ_COUNT && count < max_out; p++) {
-        XrRunQueue *rq = &worker->p.runq[p];
-        count = snapshot_append_steal_queue(out, count, max_out, &rq->deque, "ready", scratch,
-                                            scratch_cap);
-        XrCoroutine *ov = rq->overflow_first;
-        while (ov && count < max_out) {
-            count = snapshot_append(out, count, max_out, ov, "ready");
-            ov = ov->sched_link;
-        }
+    XrRunQueue *rq = &worker->p.runq;
+    count =
+        snapshot_append_steal_queue(out, count, max_out, &rq->deque, "ready", scratch, scratch_cap);
+    XrCoroutine *ov = rq->overflow_first;
+    while (ov && count < max_out) {
+        count = snapshot_append(out, count, max_out, ov, "ready");
+        ov = ov->sched_link;
     }
 
     XrCoroutine *lifo = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
@@ -91,16 +89,14 @@ static int snapshot_append_worker_running(XrCoroSnapshotEntry *out, int count, i
 
 static int snapshot_append_injectq(XrCoroSnapshotEntry *out, int count, int max_out,
                                    XrRuntime *runtime) {
-    for (int p = 0; p < XR_CORO_PRIORITY_COUNT && count < max_out; p++) {
-        XrInjectQueue *q = &runtime->injectq[p];
-        xr_mutex_lock(&q->lock);
-        XrCoroutine *cur = q->head;
-        while (cur && count < max_out) {
-            count = snapshot_append(out, count, max_out, cur, "ready");
-            cur = cur->sched_link;
-        }
-        xr_mutex_unlock(&q->lock);
+    XrInjectQueue *q = &runtime->injectq;
+    xr_mutex_lock(&q->lock);
+    XrCoroutine *cur = q->head;
+    while (cur && count < max_out) {
+        count = snapshot_append(out, count, max_out, cur, "ready");
+        cur = cur->sched_link;
     }
+    xr_mutex_unlock(&q->lock);
     return count;
 }
 

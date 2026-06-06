@@ -2012,14 +2012,13 @@ AstNode *xr_ast_type_alias(XrayIsolate *X, const char *name, char **field_names,
 /* ========== Coroutine AST Node Creation ========== */
 
 // Create go expression node
-// go fn() or go { block } or go(name: "xxx") fn() or go(priority: Coro.HIGH) fn()
+// go fn() or go { block } or go(name: "xxx") fn()
 // linked go fn() or monitored go fn()
-AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, AstNode *priority,
-                        uint8_t link_mode, int line) {
+AstNode *xr_ast_go_expr(XrayIsolate *X, AstNode *expr, const char *name, uint8_t link_mode,
+                        int line) {
     AstNode *node = alloc_node(X, AST_GO_EXPR, line);
     node->as.go_expr.expr = expr;
     node->as.go_expr.name = name;
-    node->as.go_expr.priority = priority;
     node->as.go_expr.link_mode = link_mode;
     return node;
 }

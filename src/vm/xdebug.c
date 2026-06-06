@@ -199,10 +199,6 @@ static int disasm_special(const char *name, XrProto *proto, XrInstruction inst, 
                 printf("\"");
             }
             printf("\n");
-        } else if (a == 2) {
-            // Coroutine priority
-            const char *prio = bx == 0 ? "LOW" : bx == 1 ? "NORMAL" : bx == 2 ? "HIGH" : "?";
-            printf("%-16s ; priority=%s(%d)\n", name, prio, bx);
         } else if (a == 3) {
             // Link mode
             const char *mode = bx == 1 ? "LINKED" : bx == 2 ? "MONITORED" : "?";

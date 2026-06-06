@@ -443,8 +443,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     }
 
     // Atomic fields
-    atomic_store_explicit(&coro->flags, XR_CORO_FLG_READY | XR_CORO_PRIO_NORMAL,
-                          memory_order_relaxed);
+    atomic_store_explicit(&coro->flags, XR_CORO_FLG_READY, memory_order_relaxed);
     atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_READY, memory_order_relaxed);
     if (!is_clean) {
         // Fresh allocation: all atomic fields need explicit init
@@ -1030,7 +1029,7 @@ XrCoroutine *xr_current_coro(XrayIsolate *X) {
 // xr_coro_ready - Wake coroutine
 //
 // Put coroutine into run queue
-// next=true puts into runnext for priority execution
+// next=true uses the run-next slot for locality.
 void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X || !gp)
         return;

@@ -676,8 +676,6 @@ static void canon_node(XrCanonCtx *ctx, AstNode *node) {
         /* ---- Coroutine / concurrency ---- */
         case AST_GO_EXPR:
             canon_node(ctx, node->as.go_expr.expr);
-            if (node->as.go_expr.priority)
-                canon_node(ctx, node->as.go_expr.priority);
             break;
 
         case AST_AWAIT_EXPR:

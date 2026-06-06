@@ -115,9 +115,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 for (int wi = 0; wi < runtime->worker_count; wi++) {
                     XrWorker *w = &runtime->workers[wi];
                     blocked_count += w->p.blocked_count;
-                    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-                        ready_count += xr_runq_len(&w->p.runq[p]);
-                    }
+                    ready_count += xr_runq_len(&w->p.runq);
                 }
             }
 
@@ -215,7 +213,6 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             xr_map_set(info, VM_INTERN_KEY("state"),
                        xr_string_value(xr_string_intern(isolate, state_str, strlen(state_str), 0)));
 
-            xr_map_set(info, VM_INTERN_KEY("priority"), xr_int(xr_coro_get_priority(flags)));
             xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
 
             vm_coro_set_source_field(isolate, info, coro);
@@ -412,8 +409,6 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                            xr_string_value(xr_string_intern(isolate, entries[j].state,
                                                             strlen(entries[j].state), 0)));
                 xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
-                xr_map_set(info, VM_INTERN_KEY("priority"),
-                           xr_int(xr_coro_get_priority(xr_coro_flags_load(coro))));
                 vm_coro_set_source_field(isolate, info, coro);
                 xr_array_push(result, xr_value_from_map(info));
             }
@@ -424,15 +419,13 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
         }
 
         case CORO_CTRL_GROUP_BY: {
-            int group_by = 0;  // 0=name, 1=state, 2=priority
+            int group_by = 0;  // 0=name, 1=state
 
             XrValue field_val = base[b];
             if (XR_IS_STRING(field_val)) {
                 XrString *s = (XrString *) XR_TO_PTR(field_val);
                 if (strcmp(s->data, "state") == 0)
                     group_by = 1;
-                else if (strcmp(s->data, "priority") == 0)
-                    group_by = 2;
             }
 
             VmCoroEntry *entries = xr_malloc(sizeof(VmCoroEntry) * VM_CORO_COLLECT_MAX);
@@ -447,17 +440,12 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             for (int i = 0; i < total; i++) {
                 XrCoroutine *coro = entries[i].coro;
                 const char *key_str;
-                char prio_str[16];
                 if (group_by == 0) {
                     key_str = xr_coro_name(coro);
                     if (!key_str)
                         key_str = "(anonymous)";
-                } else if (group_by == 1) {
-                    key_str = entries[i].state;
                 } else {
-                    snprintf(prio_str, sizeof(prio_str), "P%d",
-                             xr_coro_get_priority(xr_coro_flags_load(coro)));
-                    key_str = prio_str;
+                    key_str = entries[i].state;
                 }
                 XrValue key =
                     xr_string_value(xr_string_intern(isolate, key_str, strlen(key_str), 0));
@@ -609,7 +597,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 
     // Fast path: skip debug info computation, parse NOP annotations inline
     const char *coro_name = NULL;
-    int coro_priority = 1;
 
     XrInstruction next_inst = *pc;
     int link_mode = 0;
@@ -619,11 +606,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         XrValue name_val = PROTO_CONSTANT(frame->closure->proto, name_idx);
         if (XR_IS_STRING(name_val))
             coro_name = xr_value_to_string(isolate, name_val)->data;
-        pc++;
-        next_inst = *pc;
-    }
-    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 2) {
-        coro_priority = GETARG_Bx(next_inst);
         pc++;
         next_inst = *pc;
     }
@@ -639,9 +621,6 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create coroutine");
     }
 
-    if (coro_priority != 1) {
-        xr_coro_set_priority(coro, coro_priority);
-    }
     XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
     if (!runtime) {
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: Runtime not initialized");

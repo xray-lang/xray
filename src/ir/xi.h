@@ -403,8 +403,8 @@ typedef enum {
 
     /* Coro built-in module methods.
      * aux_int = XI_CORO_SUB_* sub-type, args = method arguments.
-     * Emits dedicated opcodes (OP_SET_LOCAL, OP_GET_LOCAL, OP_SET_PRIORITY,
-     * OP_LOCK_THREAD, OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
+     * Emits dedicated opcodes (OP_SET_LOCAL, OP_GET_LOCAL, OP_LOCK_THREAD,
+     * OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
 
     /* Speculative guard: deopt if runtime type ≠ expected type.
@@ -430,9 +430,8 @@ typedef enum {
 /* XI_CORO_OP sub-type constants (stored in aux_int) */
 #define XI_CORO_SUB_SET_LOCAL 0
 #define XI_CORO_SUB_GET_LOCAL 1
-#define XI_CORO_SUB_SET_PRIORITY 2
-#define XI_CORO_SUB_LOCK_THREAD 3
-#define XI_CORO_SUB_UNLOCK_THREAD 4
+#define XI_CORO_SUB_LOCK_THREAD 2
+#define XI_CORO_SUB_UNLOCK_THREAD 3
 /* Values >= XI_CORO_SUB_CTRL_BASE map to OP_CORO_CTRL with
  * sub-opcode = (aux_int - XI_CORO_SUB_CTRL_BASE), which corresponds
  * to the CORO_CTRL_* constants in xchunk.h. */

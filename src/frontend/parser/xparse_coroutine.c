@@ -20,8 +20,6 @@
  * go fn()                      - Start coroutine on any thread
  * go { block }                       - Anonymous closure coroutine
  * go(name: "xxx") fn()               - Named coroutine
- * go(priority: Coro.HIGH) fn()       - Specify priority (constant)
- * go(priority: 2) fn()               - Specify priority (number: 0=LOW, 1=NORMAL, 2=HIGH)
  *
  * Note: Thread binding uses Coro.lockThread() runtime API
  */
@@ -33,22 +31,20 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
     XR_DCHECK(parser != NULL, "parse_go_body: NULL parser");
     int line = parser->previous.line;  // go keyword already consumed
     char *name = NULL;                 // Coroutine name (optional, owned heap)
-    AstNode *priority = NULL;  // Priority expression (optional, Coro.LOW/NORMAL/HIGH or number)
 
-    // Check if has option parameters go(name: "xxx") or go(priority: Coro.HIGH)
+    // Check if has option parameters go(name: "xxx")
     if (xr_parser_check(parser, TK_LPAREN)) {
         xr_parser_advance(parser);  // Consume '('
 
         // Parse options, support multiple options separated by comma
         do {
             if (!xr_parser_check(parser, TK_NAME)) {
-                xr_parser_error_expected_name(parser, "expected option name (name or priority)");
+                xr_parser_error_expected_name(parser, "expected option name (name)");
                 goto fail;
             }
 
             Token opt_name = parser->current;
 
-            // Check if 'name' option
             if (opt_name.length == 4 && memcmp(opt_name.start, "name", 4) == 0) {
                 xr_parser_advance(parser);  // Consume 'name'
 
@@ -75,25 +71,8 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
                 memcpy(str_copy, str_token.start + 1, str_len);
                 str_copy[str_len] = '\0';
                 name = str_copy;
-            }
-            // Check if 'priority' option
-            else if (opt_name.length == 8 && memcmp(opt_name.start, "priority", 8) == 0) {
-                xr_parser_advance(parser);  // Consume 'priority'
-
-                if (!xr_parser_match(parser, TK_COLON)) {
-                    xr_parser_error(parser, "expected ':' after priority");
-                    goto fail;
-                }
-
-                // Parse priority expression (support Coro.LOW/NORMAL/HIGH or number)
-                priority = xr_parse_precedence(parser, PREC_UNARY);
-                if (!priority) {
-                    xr_parser_error(
-                        parser, "expected priority expression (Coro.LOW/NORMAL/HIGH or number)");
-                    goto fail;
-                }
             } else {
-                xr_parser_error(parser, "go(...) only supports name: and priority: options");
+                xr_parser_error(parser, "go(...) only supports name: option");
                 goto fail;
             }
         } while (xr_parser_match(parser, TK_COMMA));
@@ -113,7 +92,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         // Create anonymous function expression to wrap block
         AstNode *fn_expr = xr_ast_function_decl(parser->X, "", NULL, 0, body, line);
         fn_expr->type = AST_FUNCTION_EXPR;  // Mark as expression not declaration
-        return xr_ast_go_expr(parser->X, fn_expr, name, priority, link_mode, line);
+        return xr_ast_go_expr(parser->X, fn_expr, name, link_mode, line);
     }
 
     // go expr - parse function call expression
@@ -123,7 +102,7 @@ static AstNode *parse_go_body(Parser *parser, uint8_t link_mode) {
         goto fail;
     }
 
-    return xr_ast_go_expr(parser->X, expr, name, priority, link_mode, line);
+    return xr_ast_go_expr(parser->X, expr, name, link_mode, line);
 
 fail:
     return NULL;

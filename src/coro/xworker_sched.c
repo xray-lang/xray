@@ -191,31 +191,27 @@ void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutin
 
 // ========== Migration ==========
 
-// try_immigrate - Per-priority pull from high-load Worker
+// try_immigrate - Pull from a previously selected high-load worker.
 static void try_immigrate(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
+    XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
+    int source_id = mp->runq.target_worker;
+    if (source_id < 0 || source_id >= runtime->worker_count)
+        return;
 
-    for (int p = XR_RUNQ_COUNT - 1; p >= 0; p--) {
-        XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
-        int source_id = mp->prio[p].target_worker;
-        if (source_id < 0 || source_id >= runtime->worker_count)
-            continue;
+    if (xr_runq_len(&worker->p.runq) > 0)
+        return;
 
-        // Only immigrate if our queue for this priority is empty
-        if (xr_runq_len(&worker->p.runq[p]) > 0)
-            continue;
-
-        XrWorker *source = &runtime->workers[source_id];
-        if (xr_steal_queue_size(&source->p.runq[p].deque) <= 0)
-            continue;
-        int stolen = xr_runq_steal(&source->p.runq[p], &worker->p.runq[p], 50);
-        if (stolen > 0) {
-            xr_proc_local_runq_dec(&source->p, stolen);
-            xr_proc_local_runq_inc(&worker->p, stolen);
-            xr_worker_refresh_runq_masks(source);
-            xr_worker_refresh_runq_masks(worker);
-            mp->prio[p].target_worker = -1;
-        }
+    XrWorker *source = &runtime->workers[source_id];
+    if (xr_steal_queue_size(&source->p.runq.deque) <= 0)
+        return;
+    int stolen = xr_runq_steal(&source->p.runq, &worker->p.runq, 50);
+    if (stolen > 0) {
+        xr_proc_local_runq_dec(&source->p, stolen);
+        xr_proc_local_runq_inc(&worker->p, stolen);
+        xr_worker_refresh_runq_masks(source);
+        xr_worker_refresh_runq_masks(worker);
+        mp->runq.target_worker = -1;
     }
 }
 
@@ -263,23 +259,17 @@ void worker_drain_inbox(XrWorker *worker) {
     }
 }
 
-int worker_pull_inject(XrWorker *worker, int max_per_priority) {
-    if (!worker || max_per_priority <= 0)
+int worker_pull_inject(XrWorker *worker, int max_count) {
+    if (!worker || max_count <= 0)
         return 0;
     XrRuntime *runtime = worker->p.runtime;
     if (!runtime)
         return 0;
 
-    uint32_t mask = atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
-    if (mask == 0)
+    if (!atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return 0;
 
-    int total = 0;
-    for (int priority = XR_CORO_PRIORITY_COUNT - 1; priority >= 0; priority--) {
-        if ((mask & ((uint32_t) 1u << priority)) == 0)
-            continue;
-        total += xr_injectq_pop_batch(runtime, worker, priority, max_per_priority);
-    }
+    int total = xr_injectq_pop_batch(runtime, worker, max_count);
     if (total > 0) {
         worker->p.stats.inject_pull_count += (uint64_t) total;
     }
@@ -648,12 +638,10 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
 // work. Timers use timer_p_mask to shorten timed park instead of reporting
 // runnable work before their deadline.
 static bool runtime_has_work(XrRuntime *runtime) {
-    if (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0)
+    if (atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return true;
-    for (int priority = 0; priority < XR_CORO_PRIORITY_COUNT; priority++) {
-        if (atomic_load_explicit(&runtime->nonempty_p_mask[priority], memory_order_acquire) != 0)
-            return true;
-    }
+    if (atomic_load_explicit(&runtime->nonempty_p_mask, memory_order_acquire) != 0)
+        return true;
     if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
         return true;
     return false;
@@ -797,8 +785,8 @@ static void worker_bind_cpu(XrWorker *worker) {
 }
 
 // Run one round of housekeeping when local queue is empty: poll sources
-// (netpoll + async + timer), reductions-based balance check, and per-priority
-// migration. Returns false if runtime is shutting down.
+// (netpoll + async + timer), reductions-based balance check, and migration.
+// Returns false if runtime is shutting down.
 static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_skip_io,
                                 XrCoroutine **io_fast_out) {
     *io_fast_out = NULL;
@@ -814,17 +802,10 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_
         xr_check_balance(runtime, worker);
     }
 
-    bool need_emigrate = false;
-    bool need_immigrate = true;  // Local queue empty when we get here.
-    for (int pi = 0; pi < XR_RUNQ_COUNT; pi++) {
-        XrMigrationLimit *ml = &runtime->migration_paths[worker->p.id].prio[pi];
-        int len = xr_runq_len(&worker->p.runq[pi]);
-        if (len > 0)
-            need_immigrate = false;
-        if (len > ml->limit_here && ml->target_worker >= 0) {
-            need_emigrate = true;
-        }
-    }
+    XrMigrationLimit *ml = &runtime->migration_paths[worker->p.id].runq;
+    int len = xr_runq_len(&worker->p.runq);
+    bool need_emigrate = len > ml->limit_here && ml->target_worker >= 0;
+    bool need_immigrate = len == 0;
     if (need_emigrate) {
         int migrated = xr_try_emigrate(worker);
         if (migrated > 0) {
@@ -855,12 +836,7 @@ static bool worker_try_enter_search(XrRuntime *runtime) {
 }
 
 static uint64_t runtime_stealable_candidates(XrRuntime *runtime, uint64_t self_bit) {
-    uint64_t candidates = 0;
-    for (int p = 0; p < XR_RUNQ_COUNT; p++) {
-        candidates |=
-            atomic_load_explicit(&runtime->stealable_p_mask[p], memory_order_acquire) & ~self_bit;
-    }
-    return candidates;
+    return atomic_load_explicit(&runtime->stealable_p_mask, memory_order_acquire) & ~self_bit;
 }
 
 static uint64_t worker_valid_mask(int worker_count) {
@@ -873,13 +849,9 @@ static uint64_t worker_valid_mask(int worker_count) {
 
 static bool worker_steal_backoff_active(XrWorker *worker, XrRuntime *runtime, uint64_t self_bit,
                                         int64_t now, int64_t *out_delay_hint) {
+    (void) runtime;
+    (void) self_bit;
     if (worker->p.steal_backoff_until <= now)
-        return false;
-
-    uint64_t high_candidates =
-        atomic_load_explicit(&runtime->stealable_p_mask[CORO_PRIORITY_HIGH], memory_order_acquire) &
-        ~self_bit;
-    if (high_candidates != 0)
         return false;
 
     *out_delay_hint = worker->p.steal_backoff_until - now;
@@ -901,7 +873,7 @@ static void worker_update_steal_backoff(XrWorker *worker, bool found_work, int64
 static void worker_wait_steal_delay(XrWorker *worker, XrRuntime *runtime, int64_t delay_ms) {
     if (!worker || !runtime || delay_ms <= 0)
         return;
-    if (atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire) != 0)
+    if (atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return;
     if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
         return;
@@ -921,13 +893,10 @@ static void worker_record_direct_steal_dispatch(XrWorker *worker, XrCoroutine *c
     xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, now);
 }
 
-static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len,
-                                         int priority) {
+static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, int victim_len) {
     if (!worker || !runtime || victim_len <= 0)
         return 0;
-    if (priority >= CORO_PRIORITY_HIGH)
-        return 0;
-    int64_t min_freshness = priority == CORO_PRIORITY_NORMAL ? XR_STEAL_TIME_RESOLUTION_MS : 1;
+    int64_t min_freshness = XR_STEAL_TIME_RESOLUTION_MS;
     int idle_workers = atomic_load_explicit(&runtime->idle_worker_count, memory_order_relaxed);
     if (idle_workers * 2 >= runtime->worker_count)
         return min_freshness;
@@ -944,26 +913,20 @@ static int64_t worker_steal_freshness_ms(XrWorker *worker, XrRuntime *runtime, i
 
 typedef struct XrStealChoice {
     int worker_id;
-    int priority;
     int victim_len;
     int64_t submit_time;
-    bool boosted;
 } XrStealChoice;
 
 static void steal_choice_reset(XrStealChoice *choice) {
     choice->worker_id = -1;
-    choice->priority = -1;
     choice->victim_len = 0;
     choice->submit_time = 0;
-    choice->boosted = false;
 }
 
 static bool steal_choice_should_replace(const XrStealChoice *choice, int victim_len,
-                                        int64_t submit_time, bool boosted) {
+                                        int64_t submit_time) {
     if (choice->worker_id < 0)
         return true;
-    if (boosted != choice->boosted)
-        return boosted;
     if (victim_len > choice->victim_len)
         return true;
     if (victim_len == choice->victim_len && submit_time < choice->submit_time)
@@ -973,9 +936,8 @@ static bool steal_choice_should_replace(const XrStealChoice *choice, int victim_
 
 static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
                                          _Atomic bool *running_ptr, uint64_t candidates,
-                                         int actual_priority, int64_t steal_now,
-                                         int64_t *out_delay_hint, bool *should_exit,
-                                         XrStealChoice choices[XR_CORO_PRIORITY_COUNT]) {
+                                         int64_t steal_now, int64_t *out_delay_hint,
+                                         bool *should_exit, XrStealChoice *choice) {
     uint32_t start = xr_xorshift32(&worker->p.rng_state) % runtime->worker_count;
     uint64_t valid_candidates = candidates & worker_valid_mask(runtime->worker_count);
     uint64_t scan_rounds[2];
@@ -995,20 +957,15 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
             worker->p.stats.steal_candidate_scan_count++;
 
             XrWorker *victim = &runtime->workers[i];
-            int victim_len = xr_steal_queue_size(&victim->p.runq[actual_priority].deque);
+            int victim_len = xr_steal_queue_size(&victim->p.runq.deque);
             if (victim_len <= 0) {
                 xr_worker_refresh_runq_masks(victim);
                 continue;
             }
 
-            XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq[actual_priority].deque);
-            int effective = xr_sched_effective_priority_for_coro(oldest, steal_now);
-            if (effective < CORO_PRIORITY_LOW || effective > CORO_PRIORITY_HIGH) {
-                continue;
-            }
+            XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq.deque);
 
-            int64_t freshness =
-                worker_steal_freshness_ms(worker, runtime, victim_len, actual_priority);
+            int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len);
             if (oldest && freshness > 0) {
                 int64_t age = steal_now - oldest->submit_time;
                 if (age < freshness) {
@@ -1022,14 +979,10 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
             }
 
             int64_t submit_time = oldest ? oldest->submit_time : steal_now;
-            XrStealChoice *choice = &choices[effective];
-            bool boosted = effective > actual_priority;
-            if (steal_choice_should_replace(choice, victim_len, submit_time, boosted)) {
+            if (steal_choice_should_replace(choice, victim_len, submit_time)) {
                 choice->worker_id = i;
-                choice->priority = actual_priority;
                 choice->victim_len = victim_len;
                 choice->submit_time = submit_time;
-                choice->boosted = boosted;
             }
         }
     }
@@ -1086,66 +1039,48 @@ XR_FUNC XrCoroutine *xr_worker_try_steal_once(XrWorker *worker, XrRuntime *runti
     worker->p.stats.steal_attempt_count++;
     atomic_store(&worker->m->state, M_STEALING);
     XrCoroutine *coro = NULL;
+    uint64_t candidates = runtime_stealable_candidates(runtime, self_bit);
 
     for (int round = 0; round < 2 && !coro; round++) {
-        XrStealChoice choices[XR_CORO_PRIORITY_COUNT];
-        for (int i = 0; i < XR_CORO_PRIORITY_COUNT; i++) {
-            steal_choice_reset(&choices[i]);
-        }
-        uint64_t normal_candidates = 0;
+        XrStealChoice choice;
+        steal_choice_reset(&choice);
 
-        for (int p = XR_RUNQ_COUNT - 1; p >= 0; p--) {
-            uint64_t candidates =
-                atomic_load_explicit(&runtime->stealable_p_mask[p], memory_order_acquire) &
-                ~self_bit;
-            if (candidates == 0)
-                continue;
-            if (p == CORO_PRIORITY_NORMAL)
-                normal_candidates = candidates;
-
-            worker_scan_steal_candidates(worker, runtime, running_ptr, candidates, p, steal_now,
-                                         out_delay_hint, should_exit, choices);
+        if (candidates != 0) {
+            worker_scan_steal_candidates(worker, runtime, running_ptr, candidates, steal_now,
+                                         out_delay_hint, should_exit, &choice);
             if (*should_exit)
                 goto done;
         }
 
-        for (int effective = CORO_PRIORITY_HIGH; effective >= CORO_PRIORITY_LOW && !coro;
-             effective--) {
-            XrStealChoice *choice = &choices[effective];
-
-            if (*should_exit)
-                goto done;
-            if (choice->worker_id >= 0) {
-                XrWorker *victim = &runtime->workers[choice->worker_id];
-                XrCoroutine *direct = NULL;
-                int stolen = xr_runq_steal_direct(&victim->p.runq[choice->priority],
-                                                  &worker->p.runq[choice->priority], 50, &direct);
-                if (stolen > 0) {
-                    xr_proc_local_runq_dec(&victim->p, stolen);
-                    int queued = direct ? stolen - 1 : stolen;
-                    if (queued > 0) {
-                        xr_proc_local_runq_inc(&worker->p, queued);
-                    }
-                    worker->p.stats.stolen_count += stolen;
-                    worker->p.stats.steal_success_count++;
-                    xr_worker_refresh_runq_masks(victim);
-                    xr_worker_refresh_runq_masks(worker);
-                    if (direct) {
-                        worker_record_direct_steal_dispatch(worker, direct, steal_now);
-                        coro = direct;
-                    } else {
-                        coro = xr_worker_pop(worker);
-                    }
-                } else {
-                    xr_worker_refresh_runq_masks(victim);
+        if (choice.worker_id >= 0) {
+            XrWorker *victim = &runtime->workers[choice.worker_id];
+            XrCoroutine *direct = NULL;
+            int stolen = xr_runq_steal_direct(&victim->p.runq, &worker->p.runq, 50, &direct);
+            if (stolen > 0) {
+                xr_proc_local_runq_dec(&victim->p, stolen);
+                int queued = direct ? stolen - 1 : stolen;
+                if (queued > 0) {
+                    xr_proc_local_runq_inc(&worker->p, queued);
                 }
+                worker->p.stats.stolen_count += stolen;
+                worker->p.stats.steal_success_count++;
+                xr_worker_refresh_runq_masks(victim);
+                xr_worker_refresh_runq_masks(worker);
+                if (direct) {
+                    worker_record_direct_steal_dispatch(worker, direct, steal_now);
+                    coro = direct;
+                } else {
+                    coro = xr_worker_pop(worker);
+                }
+            } else {
+                xr_worker_refresh_runq_masks(victim);
             }
+        }
 
-            // Continuation deque: no freshness check. Critical for JIT
-            // parallelism when a parent waits behind a non-yielding child.
-            if (!coro && effective == CORO_PRIORITY_NORMAL && normal_candidates != 0) {
-                coro = worker_try_steal_continuation(worker, runtime, normal_candidates);
-            }
+        // Continuation deque: no freshness check. Critical for JIT
+        // parallelism when a parent waits behind a non-yielding child.
+        if (!coro && candidates != 0) {
+            coro = worker_try_steal_continuation(worker, runtime, candidates);
         }
     }
 done:
@@ -1243,12 +1178,10 @@ void *worker_loop(void *arg) {
             if (sched_sample % (2 * runtime->worker_count) == 0) {
                 worker_drain_inbox(worker);
             }
-            uint32_t inject_mask =
-                atomic_load_explicit(&runtime->nonempty_inject_mask, memory_order_acquire);
-            bool high_inject = (inject_mask & ((uint32_t) 1u << CORO_PRIORITY_HIGH)) != 0;
-            if (inject_mask != 0 &&
-                (high_inject || ((sched_sample & 3u) == 0 &&
-                                 xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH))) {
+            bool inject_nonempty =
+                atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire);
+            if (inject_nonempty && (sched_sample & 3u) == 0 &&
+                xr_proc_local_runq_len(&worker->p) < XR_INJECT_POP_BATCH) {
                 worker_pull_inject(worker, XR_INJECT_POP_BATCH);
             }
 

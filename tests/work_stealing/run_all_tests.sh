@@ -27,7 +27,6 @@ TESTS=(
     "02_fairness_test.xr"
     "03_burst_workload.xr"
     "04_mixed_workload.xr"
-    "05_priority_test.xr"
     "06_chain_spawn.xr"
     "07_producer_consumer.xr"
     "08_benchmark.xr"

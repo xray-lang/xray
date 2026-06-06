@@ -32,11 +32,8 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     atomic_store(&p->status, P_IDLE);
     atomic_store(&p->current_m, NULL);
 
-    // Initialize run queues
-    for (int i = 0; i < XR_RUNQ_COUNT; i++) {
-        xr_runq_init(&p->runq[i]);
-    }
-    xr_priority_budget_init(&p->prio_budget);
+    // Initialize run queue
+    xr_runq_init(&p->runq);
 
     // MPSC inbox
     xr_mpsc_init(&p->inbox);
@@ -50,10 +47,8 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
 
     // Load balancing
     p->check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
-    for (int i = 0; i < XR_RUNQ_COUNT; i++) {
-        p->runq_reds[i] = 0;
-        p->runq_max_len[i] = 0;
-    }
+    p->runq_reds = 0;
+    p->runq_max_len = 0;
 
     // Local coroutine pool
     p->local_free_list = NULL;
@@ -81,10 +76,8 @@ void xr_proc_destroy(XrProc *p) {
     if (!p)
         return;
 
-    // Destroy run queues
-    for (int i = 0; i < XR_RUNQ_COUNT; i++) {
-        xr_runq_destroy(&p->runq[i]);
-    }
+    // Destroy run queue
+    xr_runq_destroy(&p->runq);
 
     // Destroy timer wheel
     if (p->timer_wheel) {

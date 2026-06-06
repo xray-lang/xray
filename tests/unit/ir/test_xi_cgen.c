@@ -375,12 +375,12 @@ TEST(cgen_module_prefix_is_c_identifier) {
     assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
-    char *code = generate_c_with_status(ir, "1127_coro_priority", &had_error);
+    char *code = generate_c_with_status(ir, "1127_coro_numeric_prefix", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "numeric module prefixes should generate");
-    assert(contains(code, "static XrValue _1127_coro_priority_compute_") &&
+    assert(contains(code, "static XrValue _1127_coro_numeric_prefix_compute_") &&
            "numeric module prefixes must be emitted as legal C identifiers");
-    assert(!contains(code, "static XrValue 1127_coro_priority_compute_") &&
+    assert(!contains(code, "static XrValue 1127_coro_numeric_prefix_compute_") &&
            "numeric module prefixes must not be emitted raw");
 
     printf("  Generated numeric-prefix module %zu bytes of C code\n", strlen(code));
@@ -824,7 +824,7 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
                       "fn identity_copy(xs: Array<int>) -> Array<int> {\n"
                       "    return xs\n"
                       "}\n"
-                      "let high = go(priority: Coro.HIGH) compute(5)\n"
+                      "let high = go(name: \"compute\") compute(5)\n"
                       "print(await high)\n"
                       "let xs = [1, 2]\n"
                       "let copied = go mutate_copy(xs)\n"
@@ -960,31 +960,6 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
            "non-go sync functions must not emit sync-go frame structs");
 
     printf("  Generated only needed sync-go wrappers %zu bytes of C code\n", strlen(code));
-    xr_free(code);
-    xi_func_free(ir);
-}
-
-TEST(cgen_coro_set_priority_uses_aot_bridge) {
-    const char *src = "fn compute(n: int) -> int {\n"
-                      "    return n * n\n"
-                      "}\n"
-                      "let task = go compute(3)\n"
-                      "Coro.setPriority(task, Coro.HIGH)\n"
-                      "print(await task)\n";
-
-    XiFunc *ir = compile_to_ir(src);
-    assert(ir != NULL && "IR compilation failed");
-
-    bool had_error = false;
-    char *code = generate_c_with_status(ir, "test", &had_error);
-    assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT Coro.setPriority should generate");
-    assert(contains(code, "xr_aot_coro_set_priority(ctx,") &&
-           "Coro.setPriority must use the AOT coroutine runtime bridge");
-    assert(!contains(code, "unsupported AOT coroutine Xi op CORO_OP") &&
-           "Coro.setPriority must not fall through to unsupported CORO_OP emission");
-
-    printf("  Generated Coro.setPriority bridge %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1607,7 +1582,6 @@ int main(void) {
     run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
     run_cgen_sync_functions_without_go_emit_no_aot_wrappers();
     run_cgen_coro_sync_go_wrappers_only_for_go_targets();
-    run_cgen_coro_set_priority_uses_aot_bridge();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();

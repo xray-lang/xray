@@ -135,8 +135,8 @@ XR_FUNC struct XrCoroutine *xr_coro_create_aot(struct XrayIsolate *X, const XrAo
 XR_FUNC XrValue xr_aot_run_main(struct XrayIsolate *X, const XrAotCoroDesc *desc, void *frame);
 
 XR_FUNC XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc,
-                                      void *frame, int priority, int link_mode,
-                                      bool fire_and_forget, const char *name);
+                                      void *frame, int link_mode, bool fire_and_forget,
+                                      const char *name);
 
 XR_FUNC XrAotResult xr_aot_sleep(const XrAotContext *ctx, int64_t milliseconds);
 XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mode);

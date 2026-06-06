@@ -532,7 +532,6 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     {"groupBy", "(field: string): Json", "Group coroutines by field", true, true},
     {"setLocal", "(key: string, value: Json): ()", "Set coroutine-local storage", true, true},
     {"getLocal", "(key: string): Json", "Get coroutine-local storage", true, true},
-    {"setPriority", "(task: Json, priority: int): ()", "Set coroutine priority", true, true},
     {"lockThread", "(): ()", "Lock current thread", true, true},
     {"unlockThread", "(): ()", "Unlock current thread", true, true},
     {"dump", "(limit?: int): ()", "Dump coroutine state", true, true},

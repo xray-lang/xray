@@ -41,7 +41,6 @@ struct XrCoroutine;
 
 // ========== Migration Path Structures ==========
 
-// Per-priority migration limit
 typedef struct {
     int limit_here;     // Local queue threshold (emigrate if exceeded)
     int limit_other;    // Target queue threshold (immigrate if below)
@@ -51,16 +50,12 @@ typedef struct {
 // Worker migration path
 typedef struct {
     uint32_t flags;
-    XrMigrationLimit prio[XR_CORO_PRIORITY_COUNT];
+    XrMigrationLimit runq;
 } XrMigrationPath;
 
 // Migration flags
-#define XR_MIG_FLG_EMIGRATE_LOW (1 << 0)
-#define XR_MIG_FLG_EMIGRATE_NORMAL (1 << 1)
-#define XR_MIG_FLG_EMIGRATE_HIGH (1 << 2)
-#define XR_MIG_FLG_IMMIGRATE_LOW (1 << 4)
-#define XR_MIG_FLG_IMMIGRATE_NORMAL (1 << 5)
-#define XR_MIG_FLG_IMMIGRATE_HIGH (1 << 6)
+#define XR_MIG_FLG_EMIGRATE (1 << 0)
+#define XR_MIG_FLG_IMMIGRATE (1 << 1)
 #define XR_MIG_FLG_OUT_OF_WORK (1 << 8)
 
 // ========== Global Load Balance State ==========
@@ -88,9 +83,9 @@ XR_FUNC struct XrWorker *xr_choose_target_worker(struct XrRuntime *runtime, int 
 XR_FUNC void xr_balance_init(struct XrRuntime *runtime);
 
 // Record coroutine executed reductions
-XR_FUNC void xr_worker_reductions_executed(struct XrWorker *worker, int prio, int reds);
+XR_FUNC void xr_worker_reductions_executed(struct XrWorker *worker, int reds);
 
 // Get run queue statistics
-XR_FUNC void xr_runq_get_info(struct XrWorker *worker, int prio, int *len, int *reds);
+XR_FUNC void xr_runq_get_info(struct XrWorker *worker, int *len, int *reds);
 
 #endif  // XBALANCE_H

@@ -421,8 +421,6 @@ static void check_node(CoverageCtx *ctx, AstNode *node) {
 
         case AST_GO_EXPR:
             check_node(ctx, node->as.go_expr.expr);
-            if (node->as.go_expr.priority)
-                check_node(ctx, node->as.go_expr.priority);
             break;
 
         case AST_AWAIT_EXPR:

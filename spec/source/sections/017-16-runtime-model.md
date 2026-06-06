@@ -52,8 +52,7 @@ xray 值统一用 `xray_value_t` 表示。布局策略：
 - M:N 调度（M OS 线程 × N 协程）。
 - **work-stealing**：空闲 worker 从其他 worker 队列偷任务。
 - **协作式抢占**：协程在 safepoint 让出（非强制抢占）。
-- **优先级**：LOW/NORMAL/HIGH 使用加权 soft scheduling；调度器可通过 aging 临时提升等待过久的协程，防止低优先级长期饥饿，但不会修改用户可见 priority。
-- `Coro.setPriority(task, n)` 是运行中的调度提示；协程可能已经开始执行，最精确的初始优先级应使用 `go(priority: ...)`。
+- **公平性**：单一 runnable 队列配合本地 run-next、全局注入队列和 work-stealing；调度顺序不暴露用户级优先级。
 - **栈管理**：segmented stack 按需扩展。
 
 详见 `src/runtime/coro/`。
@@ -165,8 +164,7 @@ See `docs/rules/gc-memory.md` for details.
 - M:N scheduling (M OS threads × N coroutines).
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
-- **Priority**: LOW/NORMAL/HIGH use weighted soft scheduling; the scheduler may temporarily age long-waiting coroutines to prevent low-priority starvation, without changing user-visible priority.
-- `Coro.setPriority(task, n)` is a runtime scheduling hint; the coroutine may already have started, so precise initial priority should use `go(priority: ...)`.
+- **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
 - **Stack management**: segmented stacks grow on demand.
 
 See `src/runtime/coro/` for details.

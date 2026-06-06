@@ -71,7 +71,7 @@ XR_FUNC bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro);
 
 // Poll & inbox drain (xworker_sched.c) — shared with handoff
 XR_FUNC void worker_drain_inbox(XrWorker *worker);
-XR_FUNC int worker_pull_inject(XrWorker *worker, int max_per_priority);
+XR_FUNC int worker_pull_inject(XrWorker *worker, int max_count);
 // Returns a fast-path IO coroutine (affinity match, skip queue) or NULL.
 XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
@@ -85,8 +85,8 @@ XR_FUNC void xr_injectq_init(XrRuntime *runtime);
 XR_FUNC void xr_injectq_destroy(XrRuntime *runtime);
 XR_FUNC void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last,
-                                   int count, int priority);
-XR_FUNC int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int max_count);
+                                   int count);
+XR_FUNC int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int max_count);
 
 // Sysmon constants
 #define XR_SYSMON_WARN_US 100000

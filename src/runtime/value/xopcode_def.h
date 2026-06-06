@@ -268,7 +268,6 @@
     _(UNLOCK_THREAD, FMT_NONE, KOP_NONE, "Coro.unlockThread()")                                    \
     _(SET_LOCAL, FMT_AB, KOP_AB_INOUT_IN, "Coro.setLocal(R[A], R[B])")                             \
     _(GET_LOCAL, FMT_AB, KOP_AB_UNARY, "R[A] = Coro.getLocal(R[B])")                               \
-    _(SET_PRIORITY, FMT_AB, KOP_AB_INOUT_IN, "Coro.setPriority(R[A], R[B])")                       \
     _(CORO_CTRL, FMT_ABC, KOP_SPECIAL, "coro monitoring, C=sub_op")                                \
     _(CHAN_NEW, FMT_ABx, KOP_ABx_LIT, "R[A] = Channel(Bx) — buffer size")                          \
     _(CHAN_NEW_CAP, FMT_AB, KOP_AB_UNARY, "R[A] = Channel(R[B]) — dynamic buffer size")            \

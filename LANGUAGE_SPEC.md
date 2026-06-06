@@ -3429,7 +3429,6 @@ Coroutines are distributed across multiple worker threads by default; the runtim
 GoExpr   ::= 'go' GoOptions? (Block | CallExpr | LambdaExpr CallArgs?)
 GoOptions ::= '(' GoOption (',' GoOption)* ')'
 GoOption ::= 'name' ':' StringLiteral
-           | 'priority' ':' (IntegerLiteral | 'Coro.LOW' | 'Coro.NORMAL' | 'Coro.HIGH')
 ```
 
 `go` is an **expression** returning a `Task<T>` handle. Three forms are valid:
@@ -3448,8 +3447,8 @@ let t3 = go {
     return compute()
 }
 
-// Creation-time priority hint: 0=LOW, 1=NORMAL, 2=HIGH
-let urgent = go(priority: Coro.HIGH) worker(1, channel)
+// Optional debugging name
+let named = go(name: "worker-1") worker(1, channel)
 ```
 
 **`move` lives in argument position**: cross-coroutine ownership transfer goes through the argument prefix `move`, **not** through a `go` option:
@@ -3464,7 +3463,7 @@ let task = go fn(d: Json) -> int {
 **Semantics**:
 - Every `go` expression returns a `Task<T>`, where `T` is the callee's return type; functions returning `()` correspond to `Task<null>`.
 - Coroutines are scheduled on idle worker threads (M:N).
-- `go(priority: ...)` sets the scheduling hint before the coroutine is created; priority is a soft hint, not a hard real-time guarantee.
+- `go(name: ...)` only sets the debugging name and does not affect scheduling order.
 - Uncaught exceptions are stored in the `Task` and rethrown when `await` is called.
 - Plain locals (not `shared`, not `move`d) passed to `go` are **deep-copied automatically**; `shared const` is shared zero-copy; `shared let` must be `move`d.
 
@@ -4555,8 +4554,7 @@ See `docs/rules/gc-memory.md` for details.
 - M:N scheduling (M OS threads × N coroutines).
 - **work-stealing**: idle workers steal tasks from other workers' queues.
 - **Cooperative preemption**: coroutines yield at safepoints (no forced preemption).
-- **Priority**: LOW/NORMAL/HIGH use weighted soft scheduling; the scheduler may temporarily age long-waiting coroutines to prevent low-priority starvation, without changing user-visible priority.
-- `Coro.setPriority(task, n)` is a runtime scheduling hint; the coroutine may already have started, so precise initial priority should use `go(priority: ...)`.
+- **Fairness**: a single runnable queue works with local run-next, global injection, and work-stealing; scheduling order does not expose user-level priorities.
 - **Stack management**: segmented stacks grow on demand.
 
 See `src/runtime/coro/` for details.
