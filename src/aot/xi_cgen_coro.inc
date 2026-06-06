@@ -709,6 +709,8 @@ static bool cg_func_needs_aot_coro_ctx_depth(XiCgenCtx *ctx, const XiFunc *f, in
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
+            if (cg_is_time_sleep_call_ctx(ctx, f, v))
+                return true;
             if (!v || v->op != XI_CALL || v->nargs < 1)
                 continue;
             const XiFunc *target = cg_resolve_static_function_call(ctx, f, v->args[0]).func;
@@ -1389,7 +1391,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         return;
     }
 
-    if (cg_is_time_sleep_call(f, v)) {
+    if (cg_is_time_sleep_call_ctx(ctx, f, v)) {
         int sid = ++(*state_id);
         fprintf(out, "    XrAotResult _sleep_%u = xr_aot_sleep(ctx, ", v->id);
         emit_int64_arg(out, v->args[1]);
@@ -1408,6 +1410,24 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             fprintf(out, "    XrValue _sleep_value_%u = XR_NULL_VAL;\n", v->id);
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_sleep_value_%u", v->id);
+            emit_assign_from_xrvalue_temp(out, v, tmp);
+        }
+        return;
+    }
+
+    if (cg_is_time_module_call_ctx(ctx, f, v)) {
+        const char *time_helper = cg_time_module_helper_ctx(ctx, f, v);
+        if (!time_helper) {
+            ctx->error = true;
+            fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
+                    v->aux ? (const char *) v->aux : "?");
+            emit_codegen_abort_aot_result(out);
+            return;
+        }
+        fprintf(out, "    XrValue _time_method_%u = %s();\n", v->id, time_helper);
+        if (cg_coro_value_has_storage(f, v)) {
+            char tmp[32];
+            snprintf(tmp, sizeof(tmp), "_time_method_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
         }
         return;

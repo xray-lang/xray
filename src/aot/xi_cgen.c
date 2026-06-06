@@ -254,8 +254,12 @@ static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const c
         v = v->args[0];
     if (cg_import_ref_is_module(v, module_name))
         return true;
-    if (v && v->op == XI_GET_SHARED)
-        return cg_shared_slot_is_module_import(f, (int) v->aux_int, module_name);
+    if (v && v->op == XI_GET_SHARED) {
+        if (cg_shared_slot_is_module_import(f, (int) v->aux_int, module_name))
+            return true;
+        if (f && f->module && f->module->init != f)
+            return cg_shared_slot_is_module_import(f->module->init, (int) v->aux_int, module_name);
+    }
     return false;
 }
 
@@ -331,28 +335,8 @@ struct XiCgenCtx {
     XiCgenCoroFrameStats coro_frame_stats;
 };
 
-XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
-    XiCgenCtx *ctx = (XiCgenCtx *) xr_calloc(1, sizeof(XiCgenCtx));
-    if (!ctx)
-        return NULL;
-    ctx->shared_name = "xrt_shared";
-    return ctx;
-}
-
-XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
-    xr_free(ctx);
-}
-
-XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx) {
-    return ctx && ctx->error;
-}
-
-XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx) {
-    XiCgenCoroFrameStats stats = {0};
-    if (ctx)
-        stats = ctx->coro_frame_stats;
-    return stats;
-}
+#include "xi_cgen_ctx_impl.inc"
+#include "xi_cgen_time_ctx_helpers.inc"
 
 /* Find the constructor child XiFunc from a XiClassData descriptor.
  * Uses arena-safe XiClassMethod array (no AST dependency). */
@@ -1727,9 +1711,9 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
             const XiFunc *mfunc = NULL;
             const char *method_prefix = NULL;
-            const char *time_helper = cg_time_module_helper(f, v);
+            const char *time_helper = cg_time_module_helper_ctx(ctx, f, v);
 
-            if (cg_is_time_module_call(f, v)) {
+            if (cg_is_time_module_call_ctx(ctx, f, v)) {
                 if (!time_helper) {
                     ctx->error = true;
                     fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
@@ -1843,20 +1827,27 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 fprintf(out, ")");
             } else {
                 int sym = cg_method_sym(method);
+                if (sym < 0) {
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method '%s'\n",
+                            method ? method : "?");
+                    emit_codegen_abort_expr(out);
+                    break;
+                }
                 if (nargs == 0) {
                     fprintf(out, "xrt_method_0(");
                     emit_vref(out, v->args[0]);
-                    fprintf(out, ", %d)", sym >= 0 ? sym : 0);
+                    fprintf(out, ", %d)", sym);
                 } else if (nargs == 1) {
                     fprintf(out, "xrt_method_1(");
                     emit_vref(out, v->args[0]);
-                    fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
+                    fprintf(out, ", %d, ", sym);
                     emit_vref(out, v->args[1]);
                     fprintf(out, ")");
                 } else if (nargs == 2) {
                     fprintf(out, "xrt_method_2(");
                     emit_vref(out, v->args[0]);
-                    fprintf(out, ", %d, ", sym >= 0 ? sym : 0);
+                    fprintf(out, ", %d, ", sym);
                     emit_vref(out, v->args[1]);
                     fprintf(out, ", ");
                     emit_vref(out, v->args[2]);
@@ -2171,9 +2162,11 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     strcmp(ref->module_path, "time") == 0) {
                     fprintf(out, "XR_NULL_VAL /* builtin module: time */");
                 } else {
-                    fprintf(out, "XR_NULL_VAL /* unresolved import: %s.%s */",
+                    ctx->error = true;
+                    fprintf(stderr, "[xi_cgen] ERROR: unresolved AOT import '%s.%s'\n",
                             ref && ref->module_path ? ref->module_path : "?",
                             ref && ref->member_name ? ref->member_name : "?");
+                    emit_codegen_abort_expr(out);
                 }
             }
             break;
