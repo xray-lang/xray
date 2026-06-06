@@ -424,6 +424,32 @@ static XrCoroBlockResult coro_register_single_await(XrCoroutine *coro, XrTask *t
     return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
 }
 
+static XrTaskAwaitNode *coro_prepare_multi_await_nodes(XrMultiAwaitWaitToken *token,
+                                                       int task_count) {
+    if (!token || task_count < 0)
+        return NULL;
+
+    XrTaskAwaitNode *nodes = token->inline_nodes;
+    if (task_count > XR_MULTI_AWAIT_INLINE_TASKS) {
+        if (token->heap_capacity < task_count) {
+            XrTaskAwaitNode *new_nodes =
+                (XrTaskAwaitNode *) xr_malloc((size_t) task_count * sizeof(XrTaskAwaitNode));
+            if (!new_nodes)
+                return NULL;
+            if (token->heap_nodes)
+                xr_free(token->heap_nodes);
+            token->heap_nodes = new_nodes;
+            token->heap_capacity = task_count;
+        }
+        nodes = token->heap_nodes;
+    }
+
+    memset(nodes, 0, (size_t) task_count * sizeof(XrTaskAwaitNode));
+    token->nodes = nodes;
+    token->node_count = task_count;
+    return nodes;
+}
+
 XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCoroutine *coro,
                                                  XrTask *task, XrSlotRef result_slot,
                                                  bool discard_result) {
@@ -502,6 +528,10 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     if (!wait)
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
+    XrTaskAwaitNode *nodes = coro_prepare_multi_await_nodes(&wait->multi_await_token, count);
+    if (count > 0 && !nodes)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
     xr_multi_await_wait_token_prepare(&wait->multi_await_token, tasks, XR_MULTI_AWAIT_ALL, count);
     atomic_store(&wait->wait_count, 1);
 
@@ -512,14 +542,8 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
 
         atomic_fetch_add(&wait->wait_count, 1);
         XrTask *task = xr_value_to_task(cv);
-        atomic_store_explicit((_Atomic int *) &task->waiter_index, j, memory_order_relaxed);
-        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
-        if (xr_task_is_done(task)) {
-            XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter,
-                                                           NULL, memory_order_acq_rel);
-            if (waiter == coro)
-                atomic_fetch_sub(&wait->wait_count, 1);
-        }
+        if (!xr_task_register_await_node(task, coro, &nodes[j], j))
+            atomic_fetch_sub(&wait->wait_count, 1);
     }
 
     int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
@@ -564,6 +588,10 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     if (!wait)
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
+    XrTaskAwaitNode *nodes = coro_prepare_multi_await_nodes(&wait->multi_await_token, count);
+    if (count > 0 && !nodes)
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
+
     xr_multi_await_wait_token_prepare(
         &wait->multi_await_token, tasks,
         success_only ? XR_MULTI_AWAIT_ANY_SUCCESS : XR_MULTI_AWAIT_ANY, count);
@@ -578,20 +606,13 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
 
         atomic_fetch_add(&wait->wait_count, 1);
         XrTask *task = xr_value_to_task(cv);
-        atomic_store_explicit((_Atomic int *) &task->waiter_index, waiter_index,
-                              memory_order_relaxed);
-        atomic_store_explicit((_Atomic(XrCoroutine *) *) &task->waiter, coro, memory_order_release);
-        if (xr_task_is_done(task)) {
-            XrCoroutine *waiter = atomic_exchange_explicit((_Atomic(XrCoroutine *) *) &task->waiter,
-                                                           NULL, memory_order_acq_rel);
-            if (waiter == coro) {
-                if (!success_only || XR_IS_NULL(task->error)) {
-                    bool expected = false;
-                    if (atomic_compare_exchange_strong(&wait->any_done, &expected, true))
-                        coro->result = task->result;
-                }
-                atomic_fetch_sub(&wait->wait_count, 1);
+        if (!xr_task_register_await_node(task, coro, &nodes[j], waiter_index)) {
+            if (!success_only || XR_IS_NULL(task->error)) {
+                bool expected = false;
+                if (atomic_compare_exchange_strong(&wait->any_done, &expected, true))
+                    coro->result = task->result;
             }
+            atomic_fetch_sub(&wait->wait_count, 1);
         }
     }
 

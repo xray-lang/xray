@@ -467,18 +467,19 @@ void xr_task_add_completion(XrTask *task, XrCompletionNode *node) {
 
 /* ========== Await Wake (replaces xr_coro_wake_waiter for Task path) ========== */
 
-XR_FUNC bool xr_task_register_await_waiter(XrTask *task, XrCoroutine *waiter,
-                                           XrAwaitWaitToken *token, int waiter_index) {
-    if (!task || !waiter || !token)
+XR_FUNC bool xr_task_register_await_node(XrTask *task, XrCoroutine *waiter, XrTaskAwaitNode *node,
+                                         int waiter_index) {
+    if (!task || !waiter || !node)
         return false;
 
-    XrTaskAwaitNode *node = &token->node;
+    xr_task_await_node_reset(node);
+    node->task = task;
     node->waiter = waiter;
     node->waiter_index = waiter_index;
 
     await_lock_acquire(&task->await_lock);
     if (xr_task_is_done(task)) {
-        node->waiter = NULL;
+        xr_task_await_node_reset(node);
         await_lock_release(&task->await_lock);
         return false;
     }
@@ -491,26 +492,42 @@ XR_FUNC bool xr_task_register_await_waiter(XrTask *task, XrCoroutine *waiter,
     return true;
 }
 
+XR_FUNC bool xr_task_register_await_waiter(XrTask *task, XrCoroutine *waiter,
+                                           XrAwaitWaitToken *token, int waiter_index) {
+    if (!token)
+        return false;
+    return xr_task_register_await_node(task, waiter, &token->node, waiter_index);
+}
+
 static void task_clear_waiter_if_matches(XrTask *task, XrCoroutine *waiter) {
     if (!task || !waiter)
         return;
 
     XrCoroutine *expected = waiter;
+    await_lock_acquire(&task->await_lock);
     if (atomic_compare_exchange_strong_explicit((_Atomic(XrCoroutine *) *) &task->waiter, &expected,
                                                 NULL, memory_order_acq_rel, memory_order_acquire)) {
         atomic_store_explicit((_Atomic int *) &task->waiter_index, -1, memory_order_relaxed);
-        int waiting = XR_AWAIT_WAITING;
-        (void) atomic_compare_exchange_strong_explicit(&task->await_state, &waiting, XR_AWAIT_NONE,
-                                                       memory_order_acq_rel, memory_order_acquire);
+        if (!task->await_waiters) {
+            int waiting = XR_AWAIT_WAITING;
+            (void) atomic_compare_exchange_strong_explicit(&task->await_state, &waiting,
+                                                           XR_AWAIT_NONE, memory_order_acq_rel,
+                                                           memory_order_acquire);
+        }
     }
+    await_lock_release(&task->await_lock);
 }
 
-static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waiter,
-                                                XrAwaitWaitToken *token) {
-    if (!task || !waiter || !token)
+static void task_unregister_await_node(XrTask *task, XrTaskAwaitNode *node) {
+    if (!node)
         return;
+    if (!task)
+        task = node->task;
+    if (!task) {
+        xr_task_await_node_reset(node);
+        return;
+    }
 
-    XrTaskAwaitNode *node = &token->node;
     await_lock_acquire(&task->await_lock);
     if (node->linked) {
         XrTaskAwaitNode **pp = &task->await_waiters;
@@ -522,9 +539,7 @@ static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waite
             pp = &(*pp)->next;
         }
     }
-    node->next = NULL;
-    node->waiter = NULL;
-    node->linked = false;
+    xr_task_await_node_reset(node);
     XrCoroutine *legacy_waiter =
         atomic_load_explicit((_Atomic(XrCoroutine *) *) &task->waiter, memory_order_acquire);
     if (!task->await_waiters && legacy_waiter == NULL) {
@@ -535,18 +550,22 @@ static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waite
     await_lock_release(&task->await_lock);
 }
 
-static void task_unregister_multi_await_waiters(XrCoroutine *waiter, XrCoroWaitState *wait_state) {
-    XrArray *tasks =
-        atomic_exchange_explicit(&wait_state->multi_await_token.tasks, NULL, memory_order_acq_rel);
-    if (!tasks)
+static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waiter,
+                                                XrAwaitWaitToken *token) {
+    if (!task || !waiter || !token)
         return;
+    if (token->node.waiter == waiter || token->node.linked)
+        task_unregister_await_node(task, &token->node);
+}
 
-    int count = xr_array_size(tasks);
-    for (int i = 0; i < count; i++) {
-        XrValue value = xr_array_get(tasks, i);
-        if (xr_value_is_task(value)) {
-            task_clear_waiter_if_matches(xr_value_to_task(value), waiter);
-        }
+static void task_unregister_multi_await_waiters(XrCoroutine *waiter, XrCoroWaitState *wait_state) {
+    XrMultiAwaitWaitToken *token = &wait_state->multi_await_token;
+    (void) atomic_exchange_explicit(&token->tasks, NULL, memory_order_acq_rel);
+    XrTaskAwaitNode *nodes = token->nodes;
+    int node_count = token->node_count;
+    for (int i = 0; nodes && i < node_count; i++) {
+        if (nodes[i].waiter == waiter || nodes[i].linked)
+            task_unregister_await_node(nodes[i].task, &nodes[i]);
     }
 }
 
@@ -588,6 +607,79 @@ void xr_task_cancel_await_waiters(XrCoroutine *waiter) {
     xr_multi_await_wait_token_cancel(&wait_state->multi_await_token);
 }
 
+static void task_wake_await_node(XrayIsolate *X, XrTask *task, XrTaskAwaitNode *node) {
+    if (!X || !task || !node)
+        return;
+
+    XrCoroutine *waiter = node->waiter;
+    int idx = node->waiter_index;
+    xr_task_await_node_reset(node);
+    if (!waiter)
+        return;
+
+    XrCoroWaitState *wait_state = xr_coro_wait_state(waiter);
+    switch (idx) {
+        case -1: {
+            if (wait_state)
+                xr_await_wait_token_resolve(&wait_state->await_token);
+            if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                xr_coro_ready(X, waiter, true);
+            }
+            break;
+        }
+        case -3: {
+            if (!wait_state)
+                break;
+            bool expected = false;
+            if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
+                waiter->result = task->result;
+                xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
+                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                    xr_coro_ready(X, waiter, true);
+                }
+            }
+            atomic_fetch_sub(&wait_state->wait_count, 1);
+            break;
+        }
+        case -4: {
+            if (!wait_state)
+                break;
+            bool is_success = XR_IS_NULL(task->error);
+            if (is_success) {
+                bool expected = false;
+                if (atomic_compare_exchange_strong(&wait_state->any_done, &expected, true)) {
+                    waiter->result = task->result;
+                    xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
+                    if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                        xr_coro_ready(X, waiter, true);
+                    }
+                }
+            }
+            int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
+            if (remaining == 0 && !atomic_load(&wait_state->any_done)) {
+                waiter->result = xr_null();
+                xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
+                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                    xr_coro_ready(X, waiter, true);
+                }
+            }
+            break;
+        }
+        default: {
+            if (idx < 0 || !wait_state)
+                break;
+            int remaining = atomic_fetch_sub(&wait_state->wait_count, 1) - 1;
+            if (remaining == 0) {
+                xr_multi_await_wait_token_resolve(&wait_state->multi_await_token);
+                if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
+                    xr_coro_ready(X, waiter, true);
+                }
+            }
+            break;
+        }
+    }
+}
+
 void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
     if (!X || !task)
         return;
@@ -604,18 +696,7 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
     task->await_waiters = NULL;
     while (node) {
         XrTaskAwaitNode *next = node->next;
-        node->next = NULL;
-        node->linked = false;
-        XrCoroutine *waiter = node->waiter;
-        node->waiter = NULL;
-        if (waiter) {
-            XrCoroWaitState *wait_state = xr_coro_wait_state(waiter);
-            if (wait_state)
-                xr_await_wait_token_resolve(&wait_state->await_token);
-            if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {
-                xr_coro_ready(X, waiter, true);
-            }
-        }
+        task_wake_await_node(X, task, node);
         node = next;
     }
     await_lock_release(&task->await_lock);

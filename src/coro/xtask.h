@@ -171,9 +171,10 @@ typedef struct XrTask {
     // Await coordination state shared by single and aggregate await paths.
     _Atomic int await_state;  //  4B: NONE / WAITING / RESOLVED
 
-    // Aggregate await coordination for await_all / await_any.
-    int waiter_index;            //  4B: -3=any, -4=anySuccess, >=0=all[idx]
-    struct XrCoroutine *waiter;  //  8B: aggregate waiter coroutine
+    // Legacy aggregate slot kept for defensive cleanup; active await
+    // registrations live in coroutine-owned waiter nodes.
+    int waiter_index;            //  4B
+    struct XrCoroutine *waiter;  //  8B
 
     // Single await waiters. Multiple coroutines may await the same Task.
     _Atomic bool await_lock;
@@ -232,6 +233,8 @@ XR_FUNC void xr_task_add_completion(struct XrTask *task, struct XrCompletionNode
 XR_FUNC void xr_task_wake_waiter(struct XrayIsolate *X, struct XrTask *task);
 
 // Clear coroutine-owned await registrations from pending tasks.
+XR_FUNC bool xr_task_register_await_node(struct XrTask *task, struct XrCoroutine *waiter,
+                                         XrTaskAwaitNode *node, int waiter_index);
 XR_FUNC bool xr_task_register_await_waiter(struct XrTask *task, struct XrCoroutine *waiter,
                                            XrAwaitWaitToken *token, int waiter_index);
 XR_FUNC void xr_task_unregister_await_waiters(struct XrCoroutine *waiter);

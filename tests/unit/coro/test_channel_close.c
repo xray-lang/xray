@@ -1078,6 +1078,7 @@ TEST(multi_await_token_clears_pending_waiters_on_await_any_ready) {
     XrCoroBlockResult result = xr_coro_await_any_task(&waiter, &tasks, false);
     ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_EQ_INT((int) XR_TO_INT(result.value), 77);
+    ASSERT_NULL(pending.await_waiters);
     ASSERT_NULL(
         atomic_load_explicit((_Atomic(XrCoroutine *) *) &pending.waiter, memory_order_acquire));
     ASSERT_EQ_INT(atomic_load_explicit((_Atomic int *) &pending.waiter_index, memory_order_acquire),
@@ -1114,11 +1115,15 @@ TEST(multi_await_token_cancels_registered_task_waiters) {
     ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.multi_await_token.state),
                   XR_MULTI_AWAIT_WAIT_REGISTERED);
-    ASSERT_EQ_PTR(first.waiter, &waiter);
-    ASSERT_EQ_PTR(second.waiter, &waiter);
+    ASSERT_EQ_PTR(first.await_waiters, &waiter_ext.wait.multi_await_token.nodes[0]);
+    ASSERT_EQ_PTR(second.await_waiters, &waiter_ext.wait.multi_await_token.nodes[1]);
+    ASSERT_EQ_PTR(waiter_ext.wait.multi_await_token.nodes[0].waiter, &waiter);
+    ASSERT_EQ_PTR(waiter_ext.wait.multi_await_token.nodes[1].waiter, &waiter);
 
     xr_coro_cancel(&waiter);
 
+    ASSERT_NULL(first.await_waiters);
+    ASSERT_NULL(second.await_waiters);
     ASSERT_NULL(
         atomic_load_explicit((_Atomic(XrCoroutine *) *) &first.waiter, memory_order_acquire));
     ASSERT_NULL(
@@ -1133,6 +1138,78 @@ TEST(multi_await_token_cancels_registered_task_waiters) {
     ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.wait_count), 0);
 
     destroy_task_array(&tasks);
+}
+
+TEST(multi_await_node_list_wakes_overlapping_any_waiters) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine first_waiter;
+    XrCoroutine second_waiter;
+    XrCoroExt first_ext;
+    XrCoroExt second_ext;
+    memset(&first_waiter, 0, sizeof(first_waiter));
+    memset(&second_waiter, 0, sizeof(second_waiter));
+    memset(&first_ext, 0, sizeof(first_ext));
+    memset(&second_ext, 0, sizeof(second_ext));
+    first_waiter.id = 603;
+    second_waiter.id = 604;
+    first_waiter.isolate = &f.isolate_storage;
+    second_waiter.isolate = &f.isolate_storage;
+    first_waiter.ext = &first_ext;
+    second_waiter.ext = &second_ext;
+    atomic_store(&first_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&second_waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&first_waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&second_waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&first_waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&second_waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&first_waiter.affinity_p, 0);
+    atomic_store(&second_waiter.affinity_p, 0);
+
+    XrTask shared;
+    init_stack_task(&shared, XR_TASK_ACTIVE, xr_null(), xr_null());
+
+    XrArray tasks;
+    ASSERT_TRUE(init_task_array(&tasks, 1));
+    xr_array_push(&tasks, xr_value_from_task(&shared));
+
+    XrCoroBlockResult first_blocked = xr_coro_await_any_task(&first_waiter, &tasks, false);
+    XrCoroBlockResult second_blocked = xr_coro_await_any_task(&second_waiter, &tasks, false);
+    ASSERT_EQ_INT((int) first_blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT((int) second_blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_NOT_NULL(shared.await_waiters);
+    ASSERT_NOT_NULL(shared.await_waiters->next);
+
+    atomic_store(&first_waiter.flags,
+                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY | XR_CORO_PRIO_NORMAL);
+    atomic_store(&second_waiter.flags,
+                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT_ANY | XR_CORO_PRIO_NORMAL);
+    atomic_store(&first_waiter.coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&second_waiter.coro_state, XR_CORO_STATE_BLOCKED);
+    shared.result = xr_int(88);
+    atomic_store(&shared.state, XR_TASK_COMPLETED);
+    xr_task_wake_waiter(&f.isolate_storage, &shared);
+
+    ASSERT_NULL(shared.await_waiters);
+    ASSERT_EQ_INT(atomic_load(&first_ext.wait.multi_await_token.state),
+                  XR_MULTI_AWAIT_WAIT_RESOLVED);
+    ASSERT_EQ_INT(atomic_load(&second_ext.wait.multi_await_token.state),
+                  XR_MULTI_AWAIT_WAIT_RESOLVED);
+    ASSERT_EQ_INT(XR_TO_INT(first_waiter.result), 88);
+    ASSERT_EQ_INT(XR_TO_INT(second_waiter.result), 88);
+    ASSERT_TRUE(xr_coro_flags_has(&first_waiter, XR_CORO_FLG_READY));
+    ASSERT_TRUE(xr_coro_flags_has(&second_waiter, XR_CORO_FLG_READY));
+
+    XrCoroutine *popped_a = xr_worker_pop(&f.worker);
+    XrCoroutine *popped_b = xr_worker_pop(&f.worker);
+    ASSERT_TRUE((popped_a == &first_waiter && popped_b == &second_waiter) ||
+                (popped_a == &second_waiter && popped_b == &first_waiter));
+
+    xr_task_finish_await_waiters(&first_waiter);
+    xr_task_finish_await_waiters(&second_waiter);
+    destroy_task_array(&tasks);
+    close_fixture_cleanup(&f);
 }
 
 TEST(io_wait_token_tracks_netpoll_ready_and_cancel) {
@@ -1220,6 +1297,7 @@ RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
 RUN_TEST(multi_await_token_clears_pending_waiters_on_await_any_ready);
 RUN_TEST(multi_await_token_cancels_registered_task_waiters);
+RUN_TEST(multi_await_node_list_wakes_overlapping_any_waiters);
 RUN_TEST(io_wait_token_tracks_netpoll_ready_and_cancel);
 RUN_TEST(io_wait_token_tracks_netpoll_deadline_timeout);
 

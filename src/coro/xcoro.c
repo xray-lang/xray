@@ -311,6 +311,17 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     xr_work_queue_wait_token_reset(&ext->wait.work_queue_token);
 }
 
+static void coro_wait_state_free(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    coro_wait_state_reset(ext);
+    if (ext->wait.multi_await_token.heap_nodes) {
+        xr_free(ext->wait.multi_await_token.heap_nodes);
+    }
+    ext->wait.multi_await_token.heap_nodes = NULL;
+    ext->wait.multi_await_token.heap_capacity = 0;
+}
+
 static void coro_recv_slot_reset(XrCoroExt *ext) {
     if (!ext)
         return;
@@ -576,6 +587,7 @@ void xr_coro_free(XrCoroutine *coro) {
     if (coro->ext) {
         if (coro->ext->io_buf)
             xr_free(coro->ext->io_buf);
+        coro_wait_state_free(coro->ext);
         coro_select_storage_free(coro->ext);
         xr_free(coro->ext);
         coro->ext = NULL;
