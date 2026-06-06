@@ -92,6 +92,16 @@
  * isolated external wakes while still draining sustained global work. */
 #define XR_SPAWN_INLINE_GLOBAL_BACKLOG XR_INJECT_POP_BATCH
 
+/* Consecutive normal-priority child-first spawns before one child is queued
+ * locally for stealing. Lower values expose fan-out sooner; higher values
+ * preserve DFS locality for short chains. */
+#define XR_SPAWN_SHARE_INTERVAL 16
+
+/* Maximum queued spawn-sharing backlog per worker. The effective limit is
+ * clamped by the local queue capacity so sharing cannot force global spill
+ * under pure spawn bursts. */
+#define XR_SPAWN_SHARE_BACKLOG_PER_WORKER 4
+
 /* ========== Coroutine Pool ==========
  *
  * Subsystem-internal sizing lives in xcoro_pool.h
