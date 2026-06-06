@@ -56,6 +56,42 @@
 ./scripts/run_coro_benchmark.sh --tests producer_consumer,select_multiplex,thundering_herd
 ```
 
+### 扩展曲线门禁
+
+`run_coro_scaling_gate.sh` 用于阶段性性能门禁。它会预编译 Go benchmark，
+使用相同参数矩阵运行 Xray/Go/AOT，记录 repeated runs 的 median/min/max，
+并把正确性、wall time、reported time、RSS 与调度指标写入 JSON。
+
+```bash
+cmake -B build-release -DCMAKE_BUILD_TYPE=Release && cmake --build build-release -j8
+XRAY_BIN=build-release/xray scripts/run_coro_scaling_gate.sh \
+  --all --repeats 5 --workers 1,2,4,8,16 \
+  --tests spawn,pingpong,producer_consumer,pipeline \
+  --json /tmp/xray_coro_scaling.json \
+  --markdown /tmp/xray_coro_scaling.md
+```
+
+Go 对照必须运行已构建二进制，不能使用 `go run` 计时。Xray 参数必须走
+`xray run file.xr -- args...`，确保 benchmark 规模参数传给脚本而不是 CLI。
+
+## 等价性规则
+
+每个 benchmark 必须能证明自己完成了同等工作量，推荐输出以下机器可读字段：
+
+```text
+completed_ops: <int>
+expected_ops: <int>
+checksum: <int>
+correctness: true
+reported_time_ms: <float>
+```
+
+旧 benchmark 的中文输出仍会被 gate 兼容解析，例如 `正确: true`、
+`总会合次数/预期会合次数`、`成功取消: X / Y`、`短任务完成: X / Y`。
+新 benchmark 不应只打印局部阶段耗时；`reported_time_ms` 或 `总时间` 必须覆盖完整工作、
+等待子任务和清理路径。失败时必须非零退出或输出 `correctness: false`，不能吞掉错误后
+继续输出成功结果。
+
 ### Go 测试
 ```bash
 # 单个测试

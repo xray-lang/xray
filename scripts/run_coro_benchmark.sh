@@ -484,6 +484,7 @@ run_one() {
             echo -e "${RED}${runtime} 构建失败${NC}"
             return
         fi
+        start_ms=$(now_ms)
         if [ "$ENABLE_SCHED_STATS" = true ] && [ -n "$workers" ]; then
             XRAY_WORKERS="$workers" XRAY_SCHED_STATS=1 "$aot_bin" "${bench_args[@]}" > "$out_file" 2>&1
         elif [ "$ENABLE_SCHED_STATS" = true ]; then
@@ -502,10 +503,22 @@ run_one() {
             echo -e "${YELLOW}跳过: $go_file 不存在${NC}"
             return
         fi
-        local go_cmd=(go run "$test_name.go")
+        local go_bin="$TMP_DIR/${test_name}_${workers:-default}_go"
+        local build_log="$TMP_DIR/${test_name}_${workers:-default}_go_build.log"
+        if ! (cd "$test_dir" && go build -o "$go_bin" "$test_name.go") > "$build_log" 2>&1; then
+            set -e
+            end_ms=$(now_ms)
+            wall_ms=$((end_ms - start_ms))
+            cat "$build_log"
+            record_result "$test_name" "$runtime" "$workers" "build-fail" 125 "$wall_ms" "" "" ""
+            echo -e "${RED}${runtime} 构建失败${NC}"
+            return
+        fi
+        local go_cmd=("$go_bin")
         if [ ${#bench_args[@]} -gt 0 ]; then
             go_cmd+=("${bench_args[@]}")
         fi
+        start_ms=$(now_ms)
         if [ -n "$workers" ]; then
             (cd "$test_dir" && GOMAXPROCS="$workers" "${go_cmd[@]}") > "$out_file" 2>&1
         else
