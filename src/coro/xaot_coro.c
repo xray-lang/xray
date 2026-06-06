@@ -303,6 +303,8 @@ static XrValue aot_collect_await_all_results(const XrAotContext *ctx, XrArray *t
 
 static XrAotResult aot_await_all_ready_result(const XrAotContext *ctx, XrArray *tasks,
                                               XrSlotRef out_slot) {
+    if (ctx && ctx->coro)
+        xr_task_finish_await_waiters(ctx->coro);
     XrValue results = aot_collect_await_all_results(ctx, tasks);
     return aot_store_slot_result(out_slot, results);
 }
@@ -331,13 +333,18 @@ static XrAotResult aot_await_any_ready_result(const XrAotContext *ctx, XrArray *
 
         done_count++;
         if (!success_only || XR_IS_NULL(task->error)) {
+            if (ctx && ctx->coro)
+                xr_task_finish_await_waiters(ctx->coro);
             XrValue value = xr_coro_await_result_value(ctx->isolate, ctx->coro, task, false);
             return aot_store_slot_result(out_slot, value);
         }
     }
 
-    if (task_count == 0 || (success_only && done_count == task_count))
+    if (task_count == 0 || (success_only && done_count == task_count)) {
+        if (ctx && ctx->coro)
+            xr_task_finish_await_waiters(ctx->coro);
         return aot_store_slot_result(out_slot, XR_NULL_VAL);
+    }
     return xr_aot_result(XR_AOT_RUN_BLOCKED);
 }
 
@@ -685,6 +692,7 @@ XrAotResult xr_aot_await_any_task(const XrAotContext *ctx, XrValue tasks_value, 
 XrAotResult xr_aot_await_any_task_resume(const XrAotContext *ctx, XrSlotRef out_slot) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
+    xr_task_finish_await_waiters(ctx->coro);
     return aot_store_slot_result(out_slot, ctx->coro->result);
 }
 

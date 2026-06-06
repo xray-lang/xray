@@ -287,6 +287,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     atomic_store_explicit(&ext->wait.wait_count, 0, memory_order_relaxed);
     atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
     xr_await_wait_token_reset(&ext->wait.await_token);
+    xr_multi_await_wait_token_reset(&ext->wait.multi_await_token);
     xr_scope_wait_token_reset(&ext->wait.scope_token);
     xr_timer_wait_token_reset(&ext->wait.timer_token);
 }
@@ -539,6 +540,7 @@ void xr_coro_free(XrCoroutine *coro) {
     if (!coro)
         return;
 
+    xr_task_cancel_await_waiters(coro);
     coro_release_backend_state(coro, true);
 
     // Free GC context — atomic exchange to prevent double-free race
@@ -584,6 +586,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         xr_worker_cancel_timer(worker, coro);
         // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
     }
+    xr_task_cancel_await_waiters(coro);
 
     const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
     if (!ops || !ops->prepare_recycle) {
@@ -830,7 +833,9 @@ void xr_coro_cancel(XrCoroutine *coro) {
 
     // Clear blocked info
     if (coro->ext) {
+        xr_task_cancel_await_waiters(coro);
         xr_await_wait_token_cancel(&coro->ext->wait.await_token);
+        xr_multi_await_wait_token_cancel(&coro->ext->wait.multi_await_token);
         xr_scope_wait_token_cancel(&coro->ext->wait.scope_token);
         xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         coro_channel_wait_reset(coro->ext);

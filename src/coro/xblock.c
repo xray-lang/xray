@@ -505,6 +505,7 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     if (!wait)
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
+    xr_multi_await_wait_token_prepare(&wait->multi_await_token, tasks, XR_MULTI_AWAIT_ALL, count);
     atomic_store(&wait->wait_count, 1);
 
     for (int j = 0; j < count; j++) {
@@ -525,10 +526,14 @@ XrCoroBlockResult xr_coro_await_all_tasks(XrCoroutine *coro, XrArray *tasks) {
     }
 
     int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
-    if (remaining == 0)
+    if (remaining == 0) {
+        xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        xr_task_finish_await_waiters(coro);
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
 
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ALL >> XR_CORO_WAIT_SHIFT);
+    xr_multi_await_wait_token_commit(&wait->multi_await_token);
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
@@ -562,6 +567,9 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     if (!wait)
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
+    xr_multi_await_wait_token_prepare(
+        &wait->multi_await_token, tasks,
+        success_only ? XR_MULTI_AWAIT_ANY_SUCCESS : XR_MULTI_AWAIT_ANY, count);
     atomic_store(&wait->any_done, false);
     atomic_store(&wait->wait_count, 1);
 
@@ -591,12 +599,19 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     }
 
     int remaining = atomic_fetch_sub(&wait->wait_count, 1) - 1;
-    if (atomic_load(&wait->any_done))
+    if (atomic_load(&wait->any_done)) {
+        xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        xr_task_finish_await_waiters(coro);
         return block_result(XR_CORO_BLOCK_READY, coro->result, true);
-    if (success_only && remaining == 0)
+    }
+    if (success_only && remaining == 0) {
+        xr_multi_await_wait_token_resolve(&wait->multi_await_token);
+        xr_task_finish_await_waiters(coro);
         return block_result(XR_CORO_BLOCK_READY, xr_null(), false);
+    }
 
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_AWAIT_ANY >> XR_CORO_WAIT_SHIFT);
+    xr_multi_await_wait_token_commit(&wait->multi_await_token);
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
