@@ -27,7 +27,9 @@
  */
 
 #include "xi_opt_inline.h"
+#include "xi_cfg_edit.h"
 #include "xi_ic.h"
+#include "xi_tbaa.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include <string.h>
@@ -53,7 +55,9 @@ static XiInlineCostModel analyze_callee(const XiFunc *callee) {
             if (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
                 v->op == XI_CALL_BUILTIN)
                 m.call_count++;
-            if (v->op == XI_THROW)
+            if (v->op == XI_THROW || v->op == XI_ERR_SET || v->op == XI_ERR_RETURN ||
+                v->op == XI_ERR_CHECK || v->op == XI_ERR_CATCH || v->op == XI_TRY ||
+                v->op == XI_CATCH || v->op == XI_END_TRY || v->op == XI_DEFER)
                 m.has_throw = true;
         }
 
@@ -94,13 +98,15 @@ static bool all_args_are_const(const XiValue *call_val) {
  *   - call_count * 3                  (nested calls reduce benefit)
  *   - branch_count * 2                (complex control flow)
  *   - has_loop * 20                   (loop body expansion)
- *   - has_throw * 5                   (exception path pollution)
+ *   - exception/error flow            (requires call-boundary aware rewrites)
  *   - (caller_size > 300) * 15        (cap growth in large functions) */
 XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallSiteInfo *site) {
     XR_DCHECK(cost != NULL && site != NULL, "inline_benefit: NULL arg");
 
     if (cost->calls_self)
         return -1000; /* never inline recursion */
+    if (cost->has_throw)
+        return -1000; /* error flow and defers are call-boundary scoped */
 
     int score = (int) XI_INLINE_BASE_THRESHOLD - (int) cost->value_count;
 
@@ -122,8 +128,6 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
     score -= (int) cost->branch_count * 2;
     if (cost->has_loop)
         score -= 20;
-    if (cost->has_throw)
-        score -= 5;
     if (site->caller_size > 300)
         score -= 15;
 
@@ -162,9 +166,15 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
         return NULL;
 
     cloned->flags = src->flags;
+    cloned->var_id = src->var_id;
+    cloned->rep = src->rep;
+    cloned->escape = src->escape;
+    cloned->mem_group = src->mem_group;
     cloned->aux_int = src->aux_int;
     cloned->aux = src->aux;
     cloned->line = src->line;
+    if (caller->invariant_mask & XI_INV_TBAA_ANNOTATED)
+        xi_tbaa_annotate_value(cloned);
 
     /* Remap args */
     for (uint16_t a = 0; a < src->nargs; a++) {
@@ -243,6 +253,9 @@ static bool call_extracts_fit_result_shape(const XiFunc *caller, const XiValue *
 
 static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_idx,
                              XiValue *call_val, XiFunc *callee) {
+    if (callee->entry && callee->entry->npreds != 0)
+        return false;
+
     bool shape_multi_ret = false;
     uint16_t shape_elems = 0;
     if (!callee_result_shape(callee, &shape_multi_ret, &shape_elems))
@@ -277,6 +290,13 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     cont_blk->control = call_blk->control;
     cont_blk->succs[0] = call_blk->succs[0];
     cont_blk->succs[1] = call_blk->succs[1];
+    for (uint16_t s = 0; s < 2; s++) {
+        XiBlock *succ = cont_blk->succs[s];
+        if (!succ)
+            continue;
+        bool replaced = xi_cfg_replace_pred(succ, call_blk, cont_blk);
+        XR_DCHECK(replaced, "inline: successor missing call block predecessor");
+    }
 
     /* Move post-call values to continuation block. */
     uint32_t post_start = call_idx + 1;
@@ -413,8 +433,23 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     call_blk->control = NULL;
     call_blk->succs[0] = cloned_blks[0];
     call_blk->succs[1] = NULL;
+    xi_block_add_pred(cloned_blks[0], call_blk);
 
-    /* Set up cont_blk predecessors so phi nodes (if any) are well-formed. */
+    for (uint32_t bi = 0; bi < callee_nblk; bi++) {
+        XiBlock *src_blk = callee->blocks[bi];
+        XiBlock *dst_blk = cloned_blks[bi];
+        for (uint16_t p = 0; p < src_blk->npreds; p++) {
+            XiBlock *src_pred = src_blk->preds[p];
+            for (uint32_t t = 0; t < callee_nblk; t++) {
+                if (callee->blocks[t] == src_pred) {
+                    xi_block_add_pred(dst_blk, cloned_blks[t]);
+                    break;
+                }
+            }
+        }
+    }
+
+    /* Return blocks jump to the continuation, in the same order used by result phis. */
     for (uint32_t r = 0; r < nret; r++)
         xi_block_add_pred(cont_blk, ret_blocks[r]);
 

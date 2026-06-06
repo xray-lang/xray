@@ -100,6 +100,45 @@ static XrValue enum_eval_const(XiLower *l, AstNode *expr) {
     }
 }
 
+static void enum_member_data_set_int(XiEnumMemberData *dst, int64_t value) {
+    dst->value_kind = XI_ENUM_LITERAL_INT;
+    dst->int_value = value;
+}
+
+static void enum_member_data_set_literal(XiLower *l, XiEnumMemberData *dst, AstNode *expr,
+                                         int64_t fallback_int) {
+    if (!dst)
+        return;
+    if (!expr) {
+        enum_member_data_set_int(dst, fallback_int);
+        return;
+    }
+    switch (expr->type) {
+        case AST_LITERAL_INT:
+            enum_member_data_set_int(dst, expr->as.literal.raw_value.int_val);
+            break;
+        case AST_LITERAL_FLOAT:
+            dst->value_kind = XI_ENUM_LITERAL_FLOAT;
+            dst->float_value = expr->as.literal.raw_value.float_val;
+            break;
+        case AST_LITERAL_STRING:
+            dst->value_kind = XI_ENUM_LITERAL_STRING;
+            dst->string_value = arena_strdup(l->func, expr->as.literal.raw_value.string_val);
+            break;
+        case AST_LITERAL_TRUE:
+            dst->value_kind = XI_ENUM_LITERAL_BOOL;
+            dst->bool_value = true;
+            break;
+        case AST_LITERAL_FALSE:
+            dst->value_kind = XI_ENUM_LITERAL_BOOL;
+            dst->bool_value = false;
+            break;
+        default:
+            dst->value_kind = XI_ENUM_LITERAL_NULL;
+            break;
+    }
+}
+
 /* ========== Enum Declaration ========== */
 
 /* Lower AST_ENUM_DECL: create XrEnumType at compile time, store as
@@ -131,14 +170,38 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
 
     int detected_base = XR_TINT;
     int64_t auto_val = 0;
+    XiEnumData *enum_data = (XiEnumData *) xi_func_arena_alloc(l->func, sizeof(XiEnumData));
+    XiEnumMemberData *enum_members = NULL;
+    if (enum_data) {
+        memset(enum_data, 0, sizeof(*enum_data));
+        enum_members = (XiEnumMemberData *) xi_func_arena_alloc(
+            l->func, (uint32_t) (sizeof(XiEnumMemberData) * (size_t) n));
+        if (enum_members) {
+            memset(enum_members, 0, sizeof(XiEnumMemberData) * (size_t) n);
+            enum_data->name = arena_strdup(l->func, ed->name);
+            enum_data->member_count = (uint32_t) n;
+            enum_data->is_adt = is_adt;
+            enum_data->members = enum_members;
+        } else {
+            enum_data = NULL;
+        }
+    }
     for (int i = 0; i < n; i++) {
         EnumMemberNode *m = &ed->members[i]->as.enum_member;
         names[i] = strdup(m->name);
+        if (enum_members) {
+            enum_members[i].name = arena_strdup(l->func, m->name);
+            enum_members[i].payload_count = m->payload_count;
+        }
         if (is_adt) {
             /* ADT enum: all variants get tag index as backing value */
             values[i] = xr_int(i);
+            if (enum_members)
+                enum_member_data_set_int(&enum_members[i], i);
         } else if (m->value) {
             values[i] = enum_eval_const(l, m->value);
+            if (enum_members)
+                enum_member_data_set_literal(l, &enum_members[i], m->value, auto_val);
             if (XR_IS_INT(values[i])) {
                 auto_val = XR_TO_INT(values[i]) + 1;
             } else if (XR_IS_STRING(values[i])) {
@@ -150,6 +213,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             }
         } else {
             values[i] = xr_int(auto_val);
+            if (enum_members)
+                enum_member_data_set_int(&enum_members[i], auto_val);
             auto_val++;
         }
     }
@@ -171,6 +236,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             }
         }
         et->max_payload = max_pc;
+        if (enum_data)
+            enum_data->max_payload = max_pc;
 
         /* Set field_count on the enum class so xr_instance_new allocates
          * space for variant tag (field[0]) + payload (field[1..max_payload]).
@@ -181,6 +248,10 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
             // ADT enum identity is now tracked via builtin_kind
             et->enum_class->builtin_kind = XR_BK_ADT_ENUM;
         }
+    }
+    if (enum_data) {
+        enum_data->base_type = detected_base;
+        enum_data->runtime_type = et;
     }
 
     /* Store as XI_CONST with type_any (emitter handles via LOADK) */
@@ -200,6 +271,8 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         binding.name = l->vars[var_id].name;
         binding.type = l->type_any;
         xi_lower_emit_top_store(l, binding, cv);
+        if (binding.slot < XI_LOWER_MAX_VARS)
+            l->shared_slot_enums[binding.slot] = enum_data;
     }
 }
 

@@ -75,6 +75,7 @@ typedef struct XrValue {
 #define XR_TAG_STRBUF 17  /* AOT string builder */
 #define XR_TAG_CLOSURE 18 /* AOT closure */
 #define XR_TAG_STR_ARC 19 /* bump-allocated string */
+#define XR_TAG_CELL 20    /* AOT mutable closure cell */
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)

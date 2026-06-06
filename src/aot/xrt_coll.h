@@ -357,6 +357,32 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
 
+typedef struct xrt_cell {
+    XrValue value;
+} xrt_cell_t;
+
+static inline XrValue xrt_cell_new(XrValue value) {
+    xrt_cell_t *cell = (xrt_cell_t *) xrt_arc_alloc(sizeof(xrt_cell_t));
+    if (!cell) {
+        fprintf(stderr, "xrt_cell_new: out of memory\n");
+        abort();
+    }
+    cell->value = value;
+    return xr_mkptr(cell, XR_TAG_CELL);
+}
+
+static inline XrValue xrt_cell_get(XrValue cell_value) {
+    if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
+        return cell_value;
+    return ((xrt_cell_t *) cell_value.ptr)->value;
+}
+
+static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
+    if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
+        return;
+    ((xrt_cell_t *) cell_value.ptr)->value = value;
+}
+
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {
     switch (val.tag) {
         case XR_TAG_ARRAY: {

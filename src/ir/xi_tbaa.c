@@ -195,9 +195,8 @@ XR_FUNC bool xi_tbaa_may_alias(const XiValue *a, const XiValue *b) {
 
 /* ========== TBAA Annotation Pass ========== */
 
-/* Annotate a single value with its TBAA group. */
-static void annotate_value(XiValue *v) {
-    XR_DCHECK(v != NULL, "annotate_value: NULL value");
+XR_FUNC void xi_tbaa_annotate_value(XiValue *v) {
+    XR_DCHECK(v != NULL, "xi_tbaa_annotate_value: NULL value");
 
     XiMemGroup g = classify_op(v->op);
     if (g == XI_MEM_NONE) {
@@ -240,7 +239,7 @@ XR_FUNC XiPassChange xi_tbaa_annotate(XiFunc *f) {
             if (!v)
                 continue;
             uint8_t old = v->mem_group;
-            annotate_value(v);
+            xi_tbaa_annotate_value(v);
             if (v->mem_group != old)
                 any_change = true;
         }
