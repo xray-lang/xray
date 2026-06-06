@@ -229,6 +229,27 @@ TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(aging_boosts_old_low_priority_work_before_fresh_high_work) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    XrCoroutine high;
+    XrCoroutine low;
+    init_ready_coro(&high, 430, XR_CORO_PRIO_HIGH, &f.isolate_storage);
+    init_ready_coro(&low, 431, XR_CORO_PRIO_LOW, &f.isolate_storage);
+
+    xr_worker_push(&f.worker, &high);
+    xr_worker_push(&f.worker, &low);
+    low.submit_time =
+        xr_monotonic_ticks() - (int64_t) (XR_PRIO_AGING_MS * XR_PRIO_AGING_MAX_BOOST + 1);
+
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &low);
+    ASSERT_EQ_INT((int) f.worker.p.stats.priority_boost_count, 1);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &high);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(coro_ready_without_current_worker_routes_to_inbox) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
@@ -266,6 +287,7 @@ RUN_TEST(weighted_priority_budget_dispatches_without_starving_lower_queues);
 RUN_TEST(parent_continuation_defers_to_visible_high_priority_work);
 RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
+RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_high_work);
 RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
 
 TEST_MAIN_END()
