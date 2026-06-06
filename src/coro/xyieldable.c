@@ -49,6 +49,27 @@ static inline bool yield_setup_continuation(XrayIsolate *X, XrCoroutine *coro, X
     return ops->setup_yield_continuation(X, coro, (void *) cont, user_data);
 }
 
+static bool yield_prepare_io_wait(XrCoroutine *coro, int fd, int events, int64_t timeout_ms) {
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext)
+        return false;
+    XrWorker *worker = xr_current_worker();
+    int owner_id = worker ? worker->p.id : -1;
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT);
+    xr_io_wait_token_prepare(&ext->wait.io_token, fd, events, owner_id, timeout_ms);
+    return true;
+}
+
+static void yield_commit_io_wait(XrCoroutine *coro) {
+    if (coro && coro->ext)
+        xr_io_wait_token_commit(&coro->ext->wait.io_token);
+}
+
+static void yield_finish_io_wait(XrCoroutine *coro) {
+    if (coro && coro->ext)
+        xr_io_wait_token_finish(&coro->ext->wait.io_token);
+}
+
 // ========== Public API ==========
 
 // xr_yield_for_io - Wait for I/O event and yield (core function)
@@ -114,9 +135,13 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                         // Backend try-mode must not install a real wait state.
                         if (xr_coro_backend_in_try_mode(coro))
                             return XR_CFUNC_WOULD_BLOCK;
-                        // Actually yielding — set up frame now
-                        if (!yield_setup_continuation(X, coro, cont, user_data))
+                        if (!yield_prepare_io_wait(coro, fd, events, timeout_ms))
                             return XR_CFUNC_ERROR;
+                        // Actually yielding — set up frame now
+                        if (!yield_setup_continuation(X, coro, cont, user_data)) {
+                            yield_finish_io_wait(coro);
+                            return XR_CFUNC_ERROR;
+                        }
 
                         // CAS NIL → coro (prevents overwriting concurrent READY)
                         if (atomic_compare_exchange_strong(gpp, &old, (uintptr_t) coro)) {
@@ -130,9 +155,11 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                                 xr_netpoll_set_deadline(&runtime->netpoll, pd, deadline_ns, mode,
                                                         tw);
                             }
+                            yield_commit_io_wait(coro);
                             return XR_CFUNC_BLOCKED;
                         }
                         // CAS failed: state changed (likely READY), retry loop
+                        yield_finish_io_wait(coro);
                         continue;
                     }
 
@@ -146,11 +173,24 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
         if (xr_coro_backend_in_try_mode(coro))
             return XR_CFUNC_WOULD_BLOCK;
         // Pure timeout (no fd): set up frame + register timer in timer wheel
-        if (!yield_setup_continuation(X, coro, cont, user_data))
+        if (!yield_prepare_io_wait(coro, -1, 0, timeout_ms))
             return XR_CFUNC_ERROR;
+        if (!yield_setup_continuation(X, coro, cont, user_data)) {
+            yield_finish_io_wait(coro);
+            return XR_CFUNC_ERROR;
+        }
         XrWorker *worker = xr_current_worker();
         if (worker) {
             xr_worker_add_sleep_timer(worker, coro, timeout_ms);
+            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+                yield_commit_io_wait(coro);
+            } else {
+                yield_finish_io_wait(coro);
+                return XR_CFUNC_ERROR;
+            }
+        } else {
+            yield_finish_io_wait(coro);
+            return XR_CFUNC_ERROR;
         }
     }
 

@@ -267,11 +267,20 @@ struct XrCoroutine *xr_netpoll_unblock(XrPollDesc *pd, int mode, bool io_ready) 
                 xr_mutex_unlock(&pd->block_mu);
                 return NULL;
             } else if (old > XR_PD_WAIT) {
+                struct XrCoroutine *coro = (struct XrCoroutine *) old;
+                XrCoroWaitState *wait = xr_coro_wait_state(coro);
+                if (wait) {
+                    if (io_ready) {
+                        xr_io_wait_token_ready(&wait->io_token);
+                    } else {
+                        xr_io_wait_token_cancel(&wait->io_token);
+                    }
+                }
                 // Decrement yieldable I/O waiter count
                 if (pd->netpoll) {
                     atomic_fetch_sub(&pd->netpoll->waiters, 1);
                 }
-                return (struct XrCoroutine *) old;
+                return coro;
             }
             return NULL;
         }
@@ -942,6 +951,11 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
         // old is coroutine pointer, wake it
         if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
             XrCoroutine *coro = (XrCoroutine *) old;
+            XrCoroWaitState *wait = xr_coro_wait_state(coro);
+            if (wait)
+                xr_io_wait_token_timeout(&wait->io_token);
+            if (pd->netpoll)
+                atomic_fetch_sub(&pd->netpoll->waiters, 1);
             xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
 
             xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
