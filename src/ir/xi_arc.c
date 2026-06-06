@@ -45,6 +45,7 @@ static void rewrite_to_stack(XiValue *v) {
     XR_DCHECK(v->escape == XI_ESC_NONE, "rewrite_to_stack: not NO_ESCAPE");
     v->aux_int = (int32_t) v->op; /* save original op for codegen */
     v->op = XI_STACK_ALLOC;
+    v->flags |= XI_FLAG_SIDE_EFFECT;
 }
 
 XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {

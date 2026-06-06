@@ -351,6 +351,8 @@ static void test_stack_alloc_local_array(void) {
 
     ASSERT_EQ(arr->op, XI_STACK_ALLOC, "NO_ESCAPE array should become STACK_ALLOC");
     ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW, "STACK_ALLOC should preserve original op in aux_int");
+    ASSERT_EQ((arr->flags & XI_FLAG_SIDE_EFFECT) != 0, 1,
+              "STACK_ALLOC must carry side-effect flag");
     xi_func_free(f);
 }
 
