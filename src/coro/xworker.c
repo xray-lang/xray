@@ -888,6 +888,13 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_close_ready_wake_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_send_waiter_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_recv_waiter_count));
+    fprintf(stderr,
+            "Channel close fanout: deferred_send=%llu deferred_recv=%llu local_workers=%llu "
+            "remote_workers=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_deferred_send_waiter_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_deferred_recv_waiter_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_local_worker_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_close_remote_worker_count));
     fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
             (unsigned long long) xr_sched_metric_load(&s->handoff_create_count),
