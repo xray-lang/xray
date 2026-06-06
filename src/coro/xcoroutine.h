@@ -102,15 +102,6 @@ typedef struct XrCoroExt {
     struct XrMap *locals;              // Per-coroutine dynamic locals (debug/inspect)
     struct XrCoroMonitor *watched_by;  // Monitor list head (lifecycle watchers)
 
-    /* === I/O yield state (only set during Yieldable I/O or sleep) === */
-    struct {
-        int wait_fd;        // fd being waited on (-1 = no fd)
-        int wait_events;    // requested events (POLLIN/POLLOUT)
-        int result_events;  // events returned by netpoll
-        int64_t deadline;   // absolute deadline in microseconds (-1 = none)
-        bool timed_out;
-    } yield_info;
-
     /* === Thread-lock extras (only set when Coro.lockThread() is called) === */
     _Atomic int lock_count;  // lock nesting depth (0 = unlocked)
     int locked_worker;       // Worker ID that owns the lock (-1 = none)

@@ -95,8 +95,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
         return XR_CFUNC_ERROR;
 
     // Register with netpoll (single-direction, Go runtime netpoll design).
-    // ensure_ext / yield_info writes are DEFERRED to the actual-yield path
-    // so the IO-ready fast path pays zero overhead (Opt6).
+    // Wait tokens are prepared only on the actual-yield path so the IO-ready
+    // fast path avoids touching the coroutine extension.
     if (fd >= 0) {
         XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
         if (runtime) {
@@ -231,7 +231,7 @@ XrCFuncResult xr_yield(XrayIsolate *X, XrContinuation cont, void *user_data) {
         return XR_CFUNC_ERROR;
     }
 
-    // Voluntary yield: no IO wait info needed (yield_info is debug-only)
+    // Voluntary yield has no wait token because it is not externally woken.
     return XR_CFUNC_YIELD;
 }
 

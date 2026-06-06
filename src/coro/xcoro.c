@@ -385,11 +385,6 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
             coro->ext->locals = NULL;
             coro->ext->watched_by = NULL;
             coro_clear_scope_membership(coro);
-            coro->ext->yield_info.wait_fd = 0;
-            coro->ext->yield_info.wait_events = 0;
-            coro->ext->yield_info.result_events = 0;
-            coro->ext->yield_info.deadline = 0;
-            coro->ext->yield_info.timed_out = false;
             xr_coro_clear_debug_identity(coro);
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
@@ -625,7 +620,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro_select_storage_reset(coro->ext);
     coro_clear_scope_membership(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
-    // ext fields (yield_info, lock_count, locked_worker, locals, watched_by)
+    // ext fields (lock_count, locked_worker, locals, watched_by)
     // are reset in xr_coro_init_shell dirty path; ext pointer preserved for io_buf reuse
     xr_coro_clear_debug_identity(coro);
     atomic_store_explicit(&coro->flags, 0, memory_order_relaxed);
