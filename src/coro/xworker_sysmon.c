@@ -408,6 +408,8 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     if (!worker || !coro || count <= 0)
         return;
 
+    atomic_store_explicit(&coro->affinity_p, worker->p.id, memory_order_relaxed);
+
     XrSelectWait *sw = xr_coro_select_wait(coro);
     XR_DCHECK(sw != NULL, "block_select: coro has no select_wait");
     int limit = count < sw->case_count ? count : sw->case_count;

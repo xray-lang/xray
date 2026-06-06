@@ -234,6 +234,12 @@ void worker_drain_inbox(XrWorker *worker) {
             xr_worker_unblock(worker, list);
         }
         if (xr_coro_flags_has(list, XR_CORO_FLG_DONE)) {
+            XrSelectWait *sw = xr_coro_select_wait(list);
+            if (sw) {
+                xr_worker_unblock_select(worker, list);
+                xr_select_wait_cancel(sw);
+                xr_coro_clear_select_wait(list);
+            }
             list = next;
             count++;
             continue;
