@@ -229,6 +229,36 @@ TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(coro_ready_without_current_worker_routes_to_inbox) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    XrCoroutine blocked;
+    memset(&blocked, 0, sizeof(blocked));
+    blocked.id = 700;
+    blocked.isolate = &f.isolate_storage;
+    atomic_store(&blocked.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
+    atomic_store(&blocked.coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&blocked.resume_status, XR_RESUME_OK);
+    atomic_store(&blocked.affinity_p, 0);
+
+    tls_current_worker = NULL;
+    tls_current_machine = NULL;
+    xr_coro_ready(&f.isolate_storage, &blocked, true);
+
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 1);
+    ASSERT_TRUE(xr_coro_flags_has(&blocked, XR_CORO_FLG_READY));
+    ASSERT_FALSE(xr_coro_flags_has(&blocked, XR_CORO_FLG_BLOCKED));
+
+    tls_current_worker = &f.worker;
+    tls_current_machine = &f.machine;
+    worker_drain_inbox(&f.worker);
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 0);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &blocked);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Priority");
@@ -236,5 +266,6 @@ RUN_TEST(weighted_priority_budget_dispatches_without_starving_lower_queues);
 RUN_TEST(parent_continuation_defers_to_visible_high_priority_work);
 RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
+RUN_TEST(coro_ready_without_current_worker_routes_to_inbox);
 
 TEST_MAIN_END()

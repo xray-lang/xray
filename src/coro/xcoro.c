@@ -1034,17 +1034,20 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
     if (!X || !gp)
         return;
 
+    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
+        return;
+
+    XrWorker *worker = xr_current_worker();
+    if (worker && worker->p.runtime != runtime)
+        worker = NULL;
+
     // Atomically claim the BLOCKED -> READY transition; only the winner
     // enqueues. Prevents double-wake when multiple paths race on this coro.
     if (!xr_coro_claim_wake(gp)) {
         return;  // Already woken by another thread
     }
 
-    XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
-    if (!runtime)
-        return;
-
-    XrWorker *worker = xr_current_worker();
     if (worker && next) {
         // Thread-locked coro must go to locked worker, not current.
         if (xr_coro_is_thread_locked(gp) && gp->ext->locked_worker != worker->p.id) {
