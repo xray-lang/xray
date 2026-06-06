@@ -81,6 +81,17 @@
  * destroying the locality benefit of the fast path. */
 #define XR_FAST_DISPATCH_INJECT_BATCH 4
 
+/* Local ready-queue depth at which normal/low-priority spawn stops using
+ * child-first inline execution on multi-worker runtimes. This keeps fan-out
+ * bursts visible to stealing workers while preserving cache locality for
+ * short spawn chains. */
+#define XR_SPAWN_INLINE_LOCAL_BACKLOG 16
+
+/* Global inject backlog at which normal/low-priority spawn stops using
+ * child-first inline execution. A batch-sized threshold avoids reacting to
+ * isolated external wakes while still draining sustained global work. */
+#define XR_SPAWN_INLINE_GLOBAL_BACKLOG XR_INJECT_POP_BATCH
+
 /* ========== Coroutine Pool ==========
  *
  * Subsystem-internal sizing lives in xcoro_pool.h

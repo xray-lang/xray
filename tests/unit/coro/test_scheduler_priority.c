@@ -11,6 +11,7 @@
 #include "../test_framework.h"
 #include "base/xconstants.h"
 #include "coro/xblock.h"
+#include "coro/xcoro_tuning.h"
 #include "coro/xscheduler_policy.h"
 #include "coro/xworker_internal.h"
 #include "runtime/gc/xsystem_heap.h"
@@ -175,6 +176,39 @@ static const XrCoroBackendVTable fake_done_backend = {
     .resume = fake_done_resume,
 };
 
+typedef struct FakeSpawnRecord {
+    int *order;
+    int *count;
+    int marker;
+    int calls;
+    XrCoroutine *child;
+} FakeSpawnRecord;
+
+static XrCoroRunResult fake_spawn_then_done_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                                   const XrCoroRunContext *run_ctx) {
+    (void) event;
+    (void) run_ctx;
+    FakeSpawnRecord *record = (FakeSpawnRecord *) coro->backend_state;
+    if (record && record->calls == 0) {
+        record->calls++;
+        return xr_coro_run_spawn_child(record->child);
+    }
+    if (record) {
+        if (record->order && record->count) {
+            record->order[*record->count] = record->marker;
+            (*record->count)++;
+        }
+        record->calls++;
+    }
+    coro->result = xr_null();
+    return xr_coro_run_done(xr_null());
+}
+
+static const XrCoroBackendVTable fake_spawn_then_done_backend = {
+    .kind = XR_CORO_BACKEND_NATIVE,
+    .resume = fake_spawn_then_done_resume,
+};
+
 TEST(weighted_priority_budget_dispatches_without_starving_lower_queues) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
@@ -245,6 +279,101 @@ TEST(parent_continuation_defers_to_visible_high_priority_work) {
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &parent);
 
     scheduler_fixture_cleanup(&f);
+}
+
+TEST(spawn_child_defers_to_runq_when_local_backlog_visible) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    atomic_store(&f.runtime.threads_started, true);
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = &f.machines[0];
+
+    int order[2] = {0, 0};
+    int order_count = 0;
+    FakeRunRecord child_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 10,
+    };
+    FakeSpawnRecord parent_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 20,
+        .calls = 0,
+        .child = NULL,
+    };
+
+    XrCoroutine parent;
+    XrCoroutine child;
+    XrCoroutine backlog[XR_SPAWN_INLINE_LOCAL_BACKLOG];
+    init_ready_coro(&parent, 610, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    init_ready_coro(&child, 611, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    xr_coro_attach_backend(&parent, &fake_spawn_then_done_backend, &parent_record);
+    xr_coro_attach_backend(&child, &fake_done_backend, &child_record);
+    parent_record.child = &child;
+
+    for (int i = 0; i < XR_SPAWN_INLINE_LOCAL_BACKLOG; i++) {
+        init_ready_coro(&backlog[i], 620 + i, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+        xr_worker_push(&f.workers[0], &backlog[i]);
+    }
+    ASSERT_TRUE(xr_proc_local_runq_len(&f.workers[0].p) >= XR_SPAWN_INLINE_LOCAL_BACKLOG);
+
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(order_count, 1);
+    ASSERT_EQ_INT(order[0], 20);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.workers[0]), &child);
+    ASSERT_EQ_INT(order_count, 1);
+
+    steal_fixture_cleanup(&f);
+}
+
+TEST(spawn_child_defers_to_runq_when_global_inject_backlog_visible) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    atomic_store(&f.runtime.threads_started, true);
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = &f.machines[0];
+
+    int order[2] = {0, 0};
+    int order_count = 0;
+    FakeRunRecord child_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 10,
+    };
+    FakeSpawnRecord parent_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 20,
+        .calls = 0,
+        .child = NULL,
+    };
+
+    XrCoroutine parent;
+    XrCoroutine child;
+    XrCoroutine injected[XR_SPAWN_INLINE_GLOBAL_BACKLOG];
+    init_ready_coro(&parent, 660, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    init_ready_coro(&child, 661, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    xr_coro_attach_backend(&parent, &fake_spawn_then_done_backend, &parent_record);
+    xr_coro_attach_backend(&child, &fake_done_backend, &child_record);
+    parent_record.child = &child;
+
+    for (int i = 0; i < XR_SPAWN_INLINE_GLOBAL_BACKLOG; i++) {
+        init_ready_coro(&injected[i], 670 + i, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+        xr_injectq_push(&f.runtime, &injected[i]);
+    }
+    ASSERT_TRUE((atomic_load(&f.runtime.nonempty_inject_mask) &
+                 ((uint32_t) 1u << CORO_PRIORITY_NORMAL)) != 0);
+
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(order_count, 1);
+    ASSERT_EQ_INT(order[0], 20);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.workers[0]), &child);
+    ASSERT_EQ_INT(order_count, 1);
+
+    steal_fixture_cleanup(&f);
 }
 
 TEST(global_inject_preserves_runnable_age_for_priority_aging) {
@@ -459,6 +588,8 @@ TEST_MAIN_BEGIN()
 RUN_TEST_SUITE("Scheduler Priority");
 RUN_TEST(weighted_priority_budget_dispatches_without_starving_lower_queues);
 RUN_TEST(parent_continuation_defers_to_visible_high_priority_work);
+RUN_TEST(spawn_child_defers_to_runq_when_local_backlog_visible);
+RUN_TEST(spawn_child_defers_to_runq_when_global_inject_backlog_visible);
 RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_high_work);
