@@ -92,9 +92,9 @@ static XrDispatchAction vm_sleep_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
 
     XrCoroutine *coro = vm_get_coro(vm_ctx);
     if (coro) {
+        vm_suspend_continue_from_next(frame, pc);
         XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
         if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            vm_suspend_continue_from_next(frame, pc);
             return XR_DISP_BLOCKED;
         }
         if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
@@ -140,6 +140,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         result_slots[i] = xr_slot_xvalue_ptr(&base[base_reg + i]);
     }
 
+    vm_suspend_continue_from_next(frame, pc);
     XrCoroBlockResult result =
         xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, result_slots, case_count);
     if (result.kind == XR_CORO_BLOCK_ERROR) {
@@ -273,15 +274,18 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
             resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
+        vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
             xr_coro_chan_send(isolate, current, ch, value, result_slot, timeout_ms);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vm_suspend_continue_from_next(frame, pc);
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            return vm_suspend_block_replay(frame, pc);
+            return XR_DISP_BLOCKED;
         }
+        vm_suspend_continue_from_next(frame, pc);
         base[a] = xr_bool(false);
         return XR_DISP_NEXT;
     }
@@ -350,15 +354,18 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
             resumed.kind == XR_CORO_BLOCK_CLOSED) {
             return XR_DISP_NEXT;
         }
+        vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
             xr_coro_chan_recv(isolate, current, ch, value_slot, ok_slot, timeout_ms);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vm_suspend_continue_from_next(frame, pc);
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            return vm_suspend_block_replay(frame, pc);
+            return XR_DISP_BLOCKED;
         }
+        vm_suspend_continue_from_next(frame, pc);
         base[a] = xr_null();
         base[a + 1] = xr_bool(false);
         return XR_DISP_NEXT;
