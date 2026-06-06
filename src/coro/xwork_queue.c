@@ -199,6 +199,34 @@ static XrCoroutine *work_queue_waiter_pop_locked(XrWorkQueue *q) {
     return coro;
 }
 
+static bool work_queue_waiter_remove_locked(XrWorkQueue *q, XrCoroutine *coro) {
+    XR_DCHECK(q != NULL, "work_queue_waiter_remove_locked: NULL queue");
+    XR_DCHECK(coro != NULL, "work_queue_waiter_remove_locked: NULL coro");
+    if (!coro->ext)
+        return false;
+
+    XrCoroutine *prev = coro->ext->wait_prev;
+    XrCoroutine *next = coro->ext->wait_link;
+    if (prev) {
+        prev->ext->wait_link = next;
+    } else if (q->wait_first == coro) {
+        q->wait_first = next;
+    } else {
+        return false;
+    }
+
+    if (next) {
+        next->ext->wait_prev = prev;
+    } else {
+        q->wait_last = prev;
+    }
+
+    coro->ext->wait_link = NULL;
+    coro->ext->wait_prev = NULL;
+    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    return true;
+}
+
 typedef struct XrWorkQueueWakeBatch {
     XrCoroutine *first;
     XrCoroutine *last;
@@ -226,6 +254,9 @@ static bool work_queue_claim_waiter(XrWorkQueue *q, XrCoroutine *coro, XrRuntime
         return false;
 
     WORK_QUEUE_METRIC_INC(q, work_queue_wake_count);
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (wait)
+        xr_work_queue_wait_token_resolve(&wait->work_queue_token);
     xr_coro_resume_store(coro, XR_RESUME_OK);
     int target_id = xr_coro_wake_target_id(coro);
     if (target_id < 0 || target_id >= runtime->worker_count)
@@ -463,6 +494,24 @@ XrValue xr_work_queue_try_pop(XrayIsolate *X, XrWorkQueue *q, int64_t worker_hin
     return xr_null();
 }
 
+void xr_work_queue_cancel_waiter(XrCoroutine *coro) {
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (!wait)
+        return;
+    XrWorkQueue *q =
+        (XrWorkQueue *) atomic_load_explicit(&wait->work_queue_token.queue, memory_order_acquire);
+    if (!q) {
+        xr_work_queue_wait_token_cancel(&wait->work_queue_token);
+        return;
+    }
+
+    xr_amutex_lock(&q->wait_lock);
+    bool removed = work_queue_waiter_remove_locked(q, coro);
+    xr_amutex_unlock(&q->wait_lock);
+    if (removed)
+        xr_work_queue_wait_token_cancel(&wait->work_queue_token);
+}
+
 void xr_work_queue_close(XrWorkQueue *q) {
     if (!q)
         return;
@@ -515,6 +564,15 @@ static XrValue m_try_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int 
     return xr_value_from_tuple(tuple);
 }
 
+static void work_queue_finish_wait_if_current(XrCoroutine *coro, XrWorkQueue *q) {
+    XrCoroWaitState *wait = xr_coro_wait_state(coro);
+    if (!wait)
+        return;
+    void *current = atomic_load_explicit(&wait->work_queue_token.queue, memory_order_acquire);
+    if (current == q)
+        xr_work_queue_wait_token_finish(&wait->work_queue_token);
+}
+
 static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, int nargs,
                             XrValue *result) {
     XrWorkQueue *q = xr_value_to_work_queue(self);
@@ -528,27 +586,33 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     bool ok = false;
     XrValue value = xr_work_queue_try_pop(isolate, q, worker, &ok);
     if (ok) {
+        work_queue_finish_wait_if_current(coro, q);
         *result = value;
         return XR_CFUNC_DONE;
     }
     if (xr_work_queue_is_closed(q)) {
+        work_queue_finish_wait_if_current(coro, q);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
     if (!coro || xr_coro_backend_in_try_mode(coro))
         return coro ? XR_CFUNC_WOULD_BLOCK : XR_CFUNC_ERROR;
-    if (!xr_coro_ensure_ext(coro))
+    XrCoroWaitState *wait = xr_coro_ensure_wait_state(coro);
+    if (!wait)
         return XR_CFUNC_ERROR;
+    xr_work_queue_wait_token_prepare(&wait->work_queue_token, q);
 
     xr_amutex_lock(&q->wait_lock);
     value = work_queue_try_pop_raw(q, worker, &ok);
     if (ok) {
         xr_amutex_unlock(&q->wait_lock);
+        xr_work_queue_wait_token_finish(&wait->work_queue_token);
         *result = xr_chan_copy_recv(isolate, value, coro);
         return XR_CFUNC_DONE;
     }
     if (xr_work_queue_is_closed(q)) {
         xr_amutex_unlock(&q->wait_lock);
+        xr_work_queue_wait_token_finish(&wait->work_queue_token);
         *result = xr_null();
         return XR_CFUNC_DONE;
     }
@@ -560,8 +624,10 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     xr_coro_transition_to_blocked(coro);
     if (!work_queue_waiter_enqueue_locked(q, coro)) {
         xr_amutex_unlock(&q->wait_lock);
+        xr_work_queue_wait_token_finish(&wait->work_queue_token);
         return XR_CFUNC_ERROR;
     }
+    xr_work_queue_wait_token_commit(&wait->work_queue_token);
     xr_amutex_unlock(&q->wait_lock);
     return XR_CFUNC_BLOCKED;
 }

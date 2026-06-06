@@ -53,6 +53,7 @@ XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue v
                                 int64_t shard_hint);
 XR_FUNC XrValue xr_work_queue_try_pop(struct XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint,
                                       bool *ok);
+XR_FUNC void xr_work_queue_cancel_waiter(struct XrCoroutine *coro);
 XR_FUNC void xr_work_queue_close(XrWorkQueue *q);
 XR_FUNC bool xr_work_queue_is_closed(XrWorkQueue *q);
 XR_FUNC uint64_t xr_work_queue_length(XrWorkQueue *q);

@@ -247,6 +247,7 @@ add_xray_unit_test(test_handoff_budget coro/test_handoff_budget.c)
 add_xray_unit_test(test_scheduler_priority coro/test_scheduler_priority.c)
 add_xray_unit_test(test_channel_close coro/test_channel_close.c)
 add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
+add_xray_unit_test(test_work_queue_wait coro/test_work_queue_wait.c)
 add_xray_unit_test(test_native_backend coro/test_native_backend.c)
 
 # ============================================================================
