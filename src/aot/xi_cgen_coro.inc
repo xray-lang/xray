@@ -1311,6 +1311,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (priority < 0)
             priority = 1;
         int link_mode = (int) v->aux_int & 0xff;
+        bool fire_and_forget = (v->flags & XI_FLAG_FIRE_AND_FORGET) != 0;
         int sid = ++(*state_id);
         fprintf(out, "    void *_child_frame_%u = ", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_frame_new");
@@ -1320,8 +1321,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, ");\n");
         fprintf(out, "    XrAotSpawnResult _spawn_%u = xr_aot_spawn(ctx, &", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_desc");
-        fprintf(out, ", _child_frame_%u, %d, %d, false, \"%s\");\n", v->id, priority, link_mode,
-                target->name ? target->name : "aot");
+        fprintf(out, ", _child_frame_%u, %d, %d, %s, \"%s\");\n", v->id, priority, link_mode,
+                fire_and_forget ? "true" : "false", target->name ? target->name : "aot");
         fprintf(out, "    ");
         emit_vref(out, v);
         fprintf(out, " = _spawn_%u.task_value;\n", v->id);
