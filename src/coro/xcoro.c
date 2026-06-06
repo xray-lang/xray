@@ -857,6 +857,26 @@ static bool coro_cancel_detach_channel_waiter(XrCoroutine *coro, XrWorker *curre
     return false;
 }
 
+static bool coro_cancel_detach_select_waiter(XrCoroutine *coro, XrWorker *current_worker) {
+    XrSelectWait *sw = xr_coro_select_wait(coro);
+    if (!sw)
+        return true;
+
+    int owner_id = atomic_load_explicit(&coro->affinity_p, memory_order_acquire);
+    if (current_worker && current_worker->p.id == owner_id) {
+        xr_worker_unblock_select(current_worker, coro);
+        xr_select_wait_cancel(sw);
+        xr_coro_clear_select_wait(coro);
+        return true;
+    }
+
+    XrRuntime *runtime = coro_cancel_runtime(coro, current_worker);
+    if (runtime && owner_id >= 0 && owner_id < runtime->worker_count) {
+        xr_worker_inbox_enqueue(runtime, owner_id, coro);
+    }
+    return false;
+}
+
 // Cancel coroutine
 // Cancel logic:
 // 1. Cancel timer if sleeping (must happen before flags change)
@@ -882,7 +902,9 @@ void xr_coro_cancel(XrCoroutine *coro) {
 
     // Clear blocked info
     if (coro->ext) {
-        bool channel_wait_detached = coro_cancel_detach_channel_waiter(coro, xr_current_worker());
+        XrWorker *current_worker = xr_current_worker();
+        bool channel_wait_detached = coro_cancel_detach_channel_waiter(coro, current_worker);
+        (void) coro_cancel_detach_select_waiter(coro, current_worker);
         xr_task_cancel_await_waiters(coro);
         xr_await_wait_token_cancel(&coro->ext->wait.await_token);
         xr_multi_await_wait_token_cancel(&coro->ext->wait.multi_await_token);
