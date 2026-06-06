@@ -251,6 +251,8 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .kind = XR_CORO_BACKEND_NATIVE,
     .resume = native_backend_resume,
     .trace_roots = NULL,
+    .prepare_recycle = NULL,
+    .reset_reusable = NULL,
     .release = native_backend_release,
     .destroy = native_backend_release,
     .debug_name = native_backend_debug_name,
@@ -592,19 +594,13 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->ext)
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
 
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->prepare_recycle) {
-        xr_coro_destroy(coro);
-        return;
-    }
-
     // Reset GC context: finalize objects, bulk free Immix blocks, reset state.
     // Uses xr_coro_gc_reset which handles large objects and finalizers
     // correctly (the previous partial reset skipped those).
     if (coro->coro_gc) {
         xr_coro_gc_reset(coro->coro_gc, coro);
     }
-    if (!ops->prepare_recycle(coro, worker)) {
+    if (!xr_coro_backend_prepare_recycle(coro, worker)) {
         xr_coro_destroy(coro);
         return;
     }

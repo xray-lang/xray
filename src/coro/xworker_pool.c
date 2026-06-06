@@ -25,7 +25,6 @@
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
-#include "xcoro_backend_ops.h"
 
 // Get coroutine object from pool (per-Worker + batch steal)
 XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
@@ -167,14 +166,12 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     if (!runtime || !coro)
         return;
 
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->reset_reusable) {
+    if (!xr_coro_backend_reset_reusable(coro)) {
         xr_coro_destroy(coro);
         return;
     }
 
     // Reset coroutine state
-    ops->reset_reusable(coro);
     coro->result = xr_null();
     coro->error = xr_null();
     atomic_store(&coro->flags, 0);
