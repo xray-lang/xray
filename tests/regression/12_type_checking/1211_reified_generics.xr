@@ -73,6 +73,27 @@ fn test_reified_generics() {
     assert_eq(Reflect.typeOf(typed_set), "Set<string>")
     assert_eq(Reflect.typeOf(set), "Set")
 
+    // Channel typeOf
+    let typed_channel = new Channel<int>(1)
+    assert_eq(Reflect.elementType(typed_channel), "int")
+    assert_eq(Reflect.typeOf(typed_channel), "Channel<int>")
+    typed_channel.close()
+
+    let annotated_channel: Channel<string> = Channel(1)
+    assert_eq(Reflect.elementType(annotated_channel), "string")
+    assert_eq(Reflect.typeOf(annotated_channel), "Channel<string>")
+    annotated_channel.close()
+
+    let zero_channel = new Channel<bool>()
+    assert_eq(Reflect.elementType(zero_channel), "bool")
+    assert_eq(Reflect.typeOf(zero_channel), "Channel<bool>")
+    zero_channel.close()
+
+    let annotated_zero: Channel<float> = Channel()
+    assert_eq(Reflect.elementType(annotated_zero), "float")
+    assert_eq(Reflect.typeOf(annotated_zero), "Channel<float>")
+    annotated_zero.close()
+
     // Non-container typeOf
     assert_eq(Reflect.typeOf(42), "int")
     assert_eq(Reflect.typeOf(3.14), "float")
@@ -108,4 +129,3 @@ fn test_reified_generics() {
     let plain_pair = new Pair(1, 2)
     assert_eq(Reflect.typeOf(plain_pair), "Pair")
 }
-

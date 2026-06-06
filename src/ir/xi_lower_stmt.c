@@ -1607,6 +1607,9 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
             uint8_t tid = xr_type_to_tid(type->container.element_type);
             init_val->aux_int =
                 (int64_t) (((tid & 0x1F) << 2) | ((uint8_t) init_val->aux_int & 0x03));
+        } else if (init_val->op == XI_CHAN_NEW && type->kind == XR_KIND_CHANNEL &&
+                   type->container.element_type) {
+            init_val->aux_int = xr_type_to_tid(type->container.element_type);
         } else if (init_val->op == XI_MAP_NEW && XR_TYPE_IS_MAP(type)) {
             uint8_t flags = (uint8_t) (init_val->aux_int & 0x03);
             uint8_t value_tid = 0, key_kind = 0;

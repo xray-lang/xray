@@ -1713,12 +1713,20 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
         /* new Channel() / new Channel(bufferSize) */
         if (strcmp(cname, "Channel") == 0 && ne->arg_count <= 1) {
             XiValue *buf_size = ne->arg_count == 1 ? xi_lower_expr(l, ne->arguments[0]) : NULL;
+            uint8_t elem_tid = 0;
+            if (result_type && result_type->kind == XR_KIND_CHANNEL &&
+                result_type->container.element_type) {
+                elem_tid = xr_type_to_tid(result_type->container.element_type);
+                if (!buf_size)
+                    buf_size = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            }
             uint16_t nch = buf_size ? 1 : 0;
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CHAN_NEW, result_type, nch);
             if (!v)
                 return NULL;
             if (buf_size)
                 v->args[0] = buf_size;
+            v->aux_int = elem_tid;
             v->line = (uint32_t) node->line;
             return v;
         }
@@ -1899,14 +1907,22 @@ static XiValue *lower_await_expr(XiLower *l, AstNode *node) {
 static XiValue *lower_channel_new(XiLower *l, AstNode *node) {
     ChannelNewNode *ch = &node->as.channel_new;
     XiValue *buf_size = ch->buffer_size ? xi_lower_expr(l, ch->buffer_size) : NULL;
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    uint8_t elem_tid = 0;
+    if (result_type && result_type->kind == XR_KIND_CHANNEL &&
+        result_type->container.element_type) {
+        elem_tid = xr_type_to_tid(result_type->container.element_type);
+        if (!buf_size)
+            buf_size = xi_const_int(l->func, l->cur_block, 0, l->type_int);
+    }
     uint16_t nargs = buf_size ? 1 : 0;
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CHAN_NEW, result_type, nargs);
     if (!v)
         return NULL;
     if (buf_size)
         v->args[0] = buf_size;
+    v->aux_int = elem_tid;
     v->line = (uint32_t) node->line;
     return v;
 }
