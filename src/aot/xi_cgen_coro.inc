@@ -735,7 +735,7 @@ static bool cg_func_can_emit_sync_go_wrapper_ctx(XiCgenCtx *ctx, const XiFunc *f
     return f && !cg_func_needs_aot_coro_ctx(ctx, f);
 }
 
-static void emit_aot_frame_new_params(FILE *out, const XiFunc *f) {
+static void emit_aot_frame_new_params(FILE *out, const XiFunc *f, bool typed_params) {
     bool need_comma = false;
     if (cg_func_frame_needs_cl(f)) {
         fprintf(out, "xrt_closure_t *_cl");
@@ -744,7 +744,7 @@ static void emit_aot_frame_new_params(FILE *out, const XiFunc *f) {
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (need_comma)
             fprintf(out, ", ");
-        fprintf(out, "XrValue p%u", i);
+        fprintf(out, "%s p%u", typed_params ? ctype_str(cg_rep(f->params[i])) : "XrValue", i);
         need_comma = true;
     }
 }
@@ -798,8 +798,9 @@ static bool cg_aot_frame_new_can_supply_cl_arg(const XiFunc *current, const XiVa
 }
 
 static void emit_aot_frame_new_call_args(FILE *out, const XiFunc *current, const XiValue *callee,
-                                         const XiFunc *target, XiValue *const *args,
-                                         uint16_t arg_start, uint16_t nargs) {
+                                         const XiFunc *target, bool typed_params,
+                                         XiValue *const *args, uint16_t arg_start,
+                                         uint16_t nargs) {
     bool need_comma = false;
     if (cg_func_frame_needs_cl(target)) {
         emit_aot_frame_new_cl_arg(out, current, callee, target);
@@ -808,7 +809,27 @@ static void emit_aot_frame_new_call_args(FILE *out, const XiFunc *current, const
     for (uint16_t a = arg_start; a < nargs; a++) {
         if (need_comma)
             fprintf(out, ", ");
-        emit_coro_boundary_value(out, args[a]);
+        if (!typed_params || a - arg_start >= target->nparams) {
+            emit_coro_boundary_value(out, args[a]);
+        } else {
+            XrRep param_rep = cg_rep(target->params[a - arg_start]);
+            if (param_rep == XR_REP_I64) {
+                emit_int64_arg(out, args[a]);
+            } else if (param_rep == XR_REP_F64) {
+                if (cg_rep(args[a]) == XR_REP_F64) {
+                    emit_vref(out, args[a]);
+                } else if (cg_rep(args[a]) == XR_REP_I64) {
+                    fprintf(out, "(double)");
+                    emit_vref(out, args[a]);
+                } else {
+                    fprintf(out, "XR_TO_FLOAT(");
+                    emit_vref(out, args[a]);
+                    fprintf(out, ")");
+                }
+            } else {
+                emit_coro_boundary_value(out, args[a]);
+            }
+        }
         need_comma = true;
     }
 }
@@ -821,7 +842,7 @@ static void emit_sync_go_frame_type(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_closure_t *_cl;\n");
     for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, "    XrValue p%u;\n", i);
+        fprintf(out, "    %s p%u;\n", ctype_str(cg_rep(f->params[i])), i);
     fprintf(out, "} ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, ";\n\n");
@@ -832,7 +853,7 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
     fprintf(out, "static void *");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f);
+    emit_aot_frame_new_params(out, f, true);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -855,6 +876,22 @@ static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index) {
            cg_coro_type_needs_boundary_clone(f->params[index]->type);
 }
 
+static bool cg_sync_go_param_needs_trace(const XiFunc *f, uint16_t index) {
+    return f && index < f->nparams && f->params[index] &&
+           cg_rep(f->params[index]) == XR_REP_TAGGED;
+}
+
+static uint32_t count_sync_go_frame_roots(const XiFunc *f) {
+    if (!f)
+        return 0;
+    uint32_t count = 0;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_trace(f, i))
+            count++;
+    }
+    return count;
+}
+
 static uint32_t count_sync_go_frame_releases(const XiFunc *f) {
     if (!f)
         return 0;
@@ -866,7 +903,19 @@ static uint32_t count_sync_go_frame_releases(const XiFunc *f) {
     return count;
 }
 
+static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
+    XrRep rep = cg_rep(f->params[index]);
+    if (rep == XR_REP_I64) {
+        fprintf(out, "XR_FROM_INT(f->p%u)", index);
+    } else if (rep == XR_REP_F64) {
+        fprintf(out, "XR_FROM_FLOAT(f->p%u)", index);
+    } else {
+        fprintf(out, "f->p%u", index);
+    }
+}
+
 static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
+    uint32_t root_count = count_sync_go_frame_roots(f);
     uint32_t release_count = count_sync_go_frame_releases(f);
 
     emit_sync_go_frame_type(ctx, out, f, prefix);
@@ -888,8 +937,10 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "(f->_cl");
     else
         fprintf(out, "(NULL");
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, ", f->p%u", i);
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        fprintf(out, ", ");
+        emit_sync_go_frame_param_as_xrvalue(out, f, i);
+    }
     fprintf(out, ");\n");
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_sync_go_param_needs_release(f, i))
@@ -911,8 +962,11 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, " *)frame;\n");
     fprintf(out, "    if (!f)\n        return;\n");
-    for (uint16_t i = 0; i < f->nparams; i++)
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (!cg_sync_go_param_needs_trace(f, i))
+            continue;
         fprintf(out, "    xr_aot_trace_frame_value(visitor, f->p%u);\n", i);
+    }
     fprintf(out, "}\n\n");
 
     fprintf(out, "static void ");
@@ -941,7 +995,7 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "    .frame_size = sizeof(");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
     fprintf(out, "),\n");
-    fprintf(out, "    .root_count = %u,\n", (unsigned) f->nparams);
+    fprintf(out, "    .root_count = %u,\n", root_count);
     fprintf(out, "    .release_count = %u,\n", release_count);
     fprintf(out, "    .resume = ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
@@ -1072,7 +1126,7 @@ static void emit_coro_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
     fprintf(out, "static void *");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
     fprintf(out, "(");
-    emit_aot_frame_new_params(out, f);
+    emit_aot_frame_new_params(out, f, false);
     fprintf(out, ") {\n");
     fprintf(out, "    ");
     emit_fname_suffix(ctx, out, prefix, f, "_aot_frame");
@@ -1167,7 +1221,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    void *_child_frame_%u = ", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_call_args(out, f, v->args[0], target, v->args, 1, v->nargs);
+        emit_aot_frame_new_call_args(out, f, v->args[0], target, target_is_sync_go, v->args, 1,
+                                     v->nargs);
         fprintf(out, ");\n");
         fprintf(out, "    XrAotSpawnResult _spawn_%u = xr_aot_spawn(ctx, &", v->id);
         emit_fname_suffix(ctx, out, go_prefix, target, "_aot_desc");
@@ -1298,7 +1353,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "        f->call_frame_%u = ", v->id);
         emit_fname_suffix(ctx, out, direct_call_prefix, direct_call_target, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_call_args(out, f, v->args[0], direct_call_target, v->args, 1,
+        emit_aot_frame_new_call_args(out, f, v->args[0], direct_call_target, false, v->args, 1,
                                      v->nargs);
         fprintf(out, ");\n");
         fprintf(out, "        if (!f->call_frame_%u)\n", v->id);
