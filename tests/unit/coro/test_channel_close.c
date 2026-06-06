@@ -12,6 +12,7 @@
 #include "coro/xblock.h"
 #include "coro/xchannel.h"
 #include "coro/xcoroutine.h"
+#include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "coro/xyieldable.h"
 #include "runtime/gc/xsystem_heap.h"
@@ -393,6 +394,61 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     close_fixture_cleanup(&f);
 }
 
+TEST(await_wait_token_tracks_register_resolve_and_resume) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    XrTask task;
+    memset(&waiter, 0, sizeof(waiter));
+    memset(&waiter_ext, 0, sizeof(waiter_ext));
+    memset(&task, 0, sizeof(task));
+
+    waiter.id = 401;
+    waiter.isolate = &f.isolate_storage;
+    waiter.ext = &waiter_ext;
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&waiter.affinity_p, 0);
+
+    task.result = xr_null();
+    task.error = xr_null();
+    atomic_store(&task.state, XR_TASK_ACTIVE);
+    atomic_store(&task.await_state, XR_AWAIT_NONE);
+    task.waiter_index = -1;
+    task.waiter = NULL;
+
+    XrCoroBlockResult blocked = xr_coro_await_task(&waiter, &task, -1);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_REGISTERED);
+    ASSERT_EQ_PTR(atomic_load(&waiter_ext.wait.await_token.task), &task);
+    ASSERT_EQ_INT(waiter_ext.wait.await_token.waiter_index, -1);
+    ASSERT_EQ_PTR(atomic_load(&waiter_ext.wait.await_task), &task);
+    ASSERT_EQ_PTR(atomic_load((_Atomic(XrCoroutine *) *) &task.waiter), &waiter);
+
+    atomic_store(&waiter.flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_AWAIT | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_BLOCKED);
+
+    task.result = xr_int(9);
+    atomic_store(&task.state, XR_TASK_COMPLETED);
+    xr_task_wake_waiter(&f.isolate_storage, &task);
+
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_RESOLVED);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
+
+    XrCoroBlockResult resumed = xr_coro_await_task_resume(&waiter, &task);
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
+    ASSERT_EQ_INT((int) XR_TO_INT(resumed.value), 9);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_IDLE);
+    ASSERT_NULL(atomic_load(&waiter_ext.wait.await_token.task));
+    ASSERT_NULL(atomic_load(&waiter_ext.wait.await_task));
+
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
@@ -402,5 +458,6 @@ RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
+RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);
 
 TEST_MAIN_END()

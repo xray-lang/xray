@@ -29,6 +29,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
         if (task) {
             int astate = atomic_load_explicit(&task->await_state, memory_order_acquire);
             if (astate == XR_AWAIT_RESOLVED) {
+                xr_await_wait_token_resolve(&wait->await_token);
                 xr_coro_ready(runtime->isolate, coro, true);
                 return true;
             }

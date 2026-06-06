@@ -480,6 +480,8 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
     switch (idx) {
         case -1: {
             // Single await: wake waiter directly
+            if (wait_state)
+                xr_await_wait_token_resolve(&wait_state->await_token);
             if (old_await == XR_AWAIT_WAITING) {
                 atomic_thread_fence(memory_order_seq_cst);
                 if (xr_coro_flags_has(waiter, XR_CORO_FLG_BLOCKED)) {

@@ -285,6 +285,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     atomic_store_explicit(&ext->wait.await_task, NULL, memory_order_relaxed);
     atomic_store_explicit(&ext->wait.wait_count, 0, memory_order_relaxed);
     atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
+    xr_await_wait_token_reset(&ext->wait.await_token);
 }
 
 static void coro_recv_slot_reset(XrCoroExt *ext) {

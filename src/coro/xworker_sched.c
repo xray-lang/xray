@@ -433,6 +433,12 @@ static void worker_sleep_timeout_callback(void *arg) {
         // Remove from blocked queue
         xr_worker_unblock_select(worker, coro);
     } else {
+        int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
+        if (wait_reason == (XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT)) {
+            XrCoroWaitState *wait = xr_coro_wait_state(coro);
+            if (wait)
+                xr_await_wait_token_timeout(&wait->await_token);
+        }
         // Check if waiting on channel (sendTimeout/recvTimeout)
         XrChannel *ch = (coro->ext) ? (XrChannel *) atomic_load_explicit(&coro->ext->wait_channel,
                                                                          memory_order_acquire)
