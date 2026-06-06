@@ -403,6 +403,7 @@ static void worker_sleep_timeout_callback(void *arg) {
 
     // Check if coroutine already done (avoid waking completed coroutine)
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE)) {
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         return;
     }
@@ -415,6 +416,7 @@ static void worker_sleep_timeout_callback(void *arg) {
 
     // Check if runtime is running (avoid waking during exit)
     if (!atomic_load(&runtime->running)) {
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         return;
     }
@@ -425,14 +427,18 @@ static void worker_sleep_timeout_callback(void *arg) {
         bool expected = false;
         if (!atomic_compare_exchange_strong(&sw->triggered, &expected, true)) {
             // Already woken by another channel, ignore this timer
+            xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
             return;
         }
+        xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         xr_select_wait_timeout(sw);
         atomic_store_explicit(&sw->selected_index, -1, memory_order_release);
         atomic_store_explicit(&sw->selected_status, XR_RESUME_TIMEOUT, memory_order_release);
         // Remove from blocked queue
         xr_worker_unblock_select(worker, coro);
     } else {
+        xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
         if (wait_reason == (XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT)) {
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
@@ -496,19 +502,24 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
     // Increment sequence number (prevent stale notifications)
     atomic_fetch_add(&text->timer_seq, 1);
 
+    // Calculate timeout position
+    int64_t timeout_pos = xr_monotonic_ticks() + delay_ms;
+    int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
+    xr_timer_wait_token_prepare(&text->wait.timer_token, worker->p.id, wait_reason, timeout_pos);
+
     // Mark timer active and record ownership
     atomic_store_explicit(&text->timer_active, true, memory_order_relaxed);
     text->timer_wheel_owner = worker->p.id;  // Record which worker owns this timer
-
-    // Calculate timeout position
-    int64_t timeout_pos = xr_monotonic_ticks() + delay_ms;
 
     // Set timer (must be called from owner worker)
     XR_DBG_TIMER("Worker set_timer: tw=%p, timeout_pos=%lld, tw->pos=%lld, owner=%d", (void *) tw,
                  (long long) timeout_pos, (long long) tw->pos, worker->p.id);
     if (!xr_twheel_set_timer(tw, timer, worker_sleep_timeout_callback, coro, timeout_pos)) {
         atomic_store_explicit(&text->timer_active, false, memory_order_relaxed);
+        xr_timer_wait_token_finish(&text->wait.timer_token);
+        return;
     }
+    xr_timer_wait_token_commit(&text->wait.timer_token);
 }
 
 // Cancel timer - handles cross-worker case via async queue
@@ -530,12 +541,14 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
     // Get owner worker's timer wheel
     if (owner_id < 0 || owner_id >= runtime->worker_count) {
         // Invalid owner, just mark inactive
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         return;
     }
 
     XrTimerWheel *owner_tw = runtime->workers[owner_id].p.timer_wheel;
     if (!owner_tw) {
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         return;
     }
@@ -544,11 +557,13 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
     if (current_worker && current_worker->p.id == owner_id) {
         // Same worker: direct cancel (lock-free, no mutex needed)
         xr_twheel_cancel_timer(owner_tw, &coro->ext->timer);
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         XR_DBG_TIMER("Timer canceled locally: coro=%d, owner=%d", coro->id, owner_id);
     } else {
         // Cross-worker: push to owner's cancel stack.
         xr_timer_queue_cancel(owner_tw, &coro->ext->timer);
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
         XR_DBG_TIMER("Timer cancel queued: coro=%d, owner=%d, current=%d", coro->id, owner_id,
                      current_worker ? current_worker->p.id : -1);

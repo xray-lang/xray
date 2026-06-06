@@ -153,6 +153,7 @@ void xr_coro_clear_select_wait(XrCoroutine *coro) {
     sw->case_count = 0;
     sw->cases = NULL;
     sw->timer_channel = NULL;
+    xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
 }
 
 // ========== Coroutine Creation and Destruction ==========
@@ -287,6 +288,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     atomic_store_explicit(&ext->wait.any_done, false, memory_order_relaxed);
     xr_await_wait_token_reset(&ext->wait.await_token);
     xr_scope_wait_token_reset(&ext->wait.scope_token);
+    xr_timer_wait_token_reset(&ext->wait.timer_token);
 }
 
 static void coro_recv_slot_reset(XrCoroExt *ext) {
@@ -830,6 +832,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
     if (coro->ext) {
         xr_await_wait_token_cancel(&coro->ext->wait.await_token);
         xr_scope_wait_token_cancel(&coro->ext->wait.scope_token);
+        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         coro_channel_wait_reset(coro->ext);
     }
     coro->result = xr_null();

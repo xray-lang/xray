@@ -139,6 +139,15 @@ static void bucket_clear_coro_links(XrCoroutine *coro) {
     coro->ext->wait_bucket_owner = -1;
 }
 
+static void worker_cancel_coro_timer_wait(XrCoroutine *coro) {
+    if (!coro || !coro->ext ||
+        !atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+        return;
+    }
+    xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
+    atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+}
+
 static void bucket_append_coro(XrWorker *worker, XrBlockedBucket *bucket, XrCoroutine *coro) {
     XR_DCHECK(worker != NULL, "bucket_append_coro: NULL worker");
     XR_DCHECK(bucket != NULL, "bucket_append_coro: NULL bucket");
@@ -325,9 +334,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     if (xr_coro_claim_wake(coro)) {
         xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
         atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-        }
+        worker_cancel_coro_timer_wait(coro);
         xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
         xr_worker_push_lifo(worker, coro);
     }
@@ -362,6 +369,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     // Clear blocked info, but don't enqueue (caller responsible)
     xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
     atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+    worker_cancel_coro_timer_wait(coro);
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
     // Reclaim the bucket if this was the last waiter on the channel.
@@ -397,9 +405,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         if (xr_coro_claim_wake(coro)) {
             xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-                atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-            }
+            worker_cancel_coro_timer_wait(coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }
@@ -420,9 +426,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         if (xr_coro_claim_wake(coro)) {
             xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-                atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-            }
+            worker_cancel_coro_timer_wait(coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }

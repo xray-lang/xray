@@ -449,6 +449,103 @@ TEST(await_wait_token_tracks_register_resolve_and_resume) {
     close_fixture_cleanup(&f);
 }
 
+TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroExt sender_ext;
+    memset(&sender, 0, sizeof(sender));
+    memset(&sender_ext, 0, sizeof(sender_ext));
+    sender.id = 501;
+    sender.isolate = &f.isolate_storage;
+    sender.ext = &sender_ext;
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&sender.resume_status, XR_RESUME_OK);
+    atomic_store(&sender.affinity_p, 0);
+
+    XrValue send_ok = xr_null();
+    XrCoroBlockResult blocked = xr_coro_chan_send(&f.isolate_storage, &sender, ch, xr_int(7),
+                                                  xr_slot_xvalue_ptr(&send_ok), 1000);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_REGISTERED);
+    ASSERT_EQ_INT(sender_ext.wait.timer_token.owner_worker_id, 0);
+    ASSERT_EQ_INT(sender_ext.wait.timer_token.wait_reason,
+                  XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
+    ASSERT_TRUE(atomic_load(&sender_ext.timer_active));
+
+    atomic_store(&sender.flags,
+                 XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_CHANNEL_SEND | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_BLOCKED);
+    xr_worker_block(&f.worker, &sender);
+
+    xr_channel_close(ch);
+
+    ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_CANCELLED);
+    ASSERT_FALSE(atomic_load(&sender_ext.timer_active));
+    ASSERT_EQ_INT(xr_coro_resume_load(&sender), XR_RESUME_CHANNEL_CLOSED);
+
+    XrCoroBlockResult resumed = xr_coro_chan_send_resume(&sender, xr_slot_xvalue_ptr(&send_ok));
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
+    ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_IDLE);
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
+TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    XrChannel *timer_ch = xr_channel_new_timer(&f.isolate_storage, 1000);
+    ASSERT_NOT_NULL(ch);
+    ASSERT_NOT_NULL(timer_ch);
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    memset(&waiter, 0, sizeof(waiter));
+    memset(&waiter_ext, 0, sizeof(waiter_ext));
+    waiter.id = 502;
+    waiter.isolate = &f.isolate_storage;
+    waiter.ext = &waiter_ext;
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&waiter.affinity_p, 0);
+
+    XrValue channels[2] = {xr_value_from_channel(ch), xr_value_from_channel(timer_ch)};
+    XrCoroBlockResult blocked =
+        xr_coro_select_block(&f.isolate_storage, &waiter, channels, 2, NULL, 2);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.timer_token.state), XR_TIMER_WAIT_REGISTERED);
+    ASSERT_EQ_INT(waiter_ext.wait.timer_token.wait_reason,
+                  XR_CORO_WAIT_SELECT >> XR_CORO_WAIT_SHIFT);
+    ASSERT_TRUE(atomic_load(&waiter_ext.timer_active));
+
+    ASSERT_EQ_PTR(xr_worker_wake_select(&f.worker, ch), &waiter);
+
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.timer_token.state), XR_TIMER_WAIT_CANCELLED);
+    ASSERT_FALSE(atomic_load(&waiter_ext.timer_active));
+    ASSERT_TRUE(atomic_load(&waiter_ext.select_storage.wait.triggered));
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.select_storage.wait.selected_index), 0);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+
+    xr_coro_clear_select_wait(&waiter);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.timer_token.state), XR_TIMER_WAIT_IDLE);
+
+    xr_channel_destroy(timer_ch);
+    xr_sysheap_free_shared(timer_ch, sizeof(XrChannel) + sizeof(XrValue));
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
@@ -459,5 +556,7 @@ RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);
+RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
+RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
 
 TEST_MAIN_END()
