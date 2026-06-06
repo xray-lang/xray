@@ -757,6 +757,35 @@ static void emit_str_concat_expr(FILE *out, const XiValue *v) {
     }
 }
 
+static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiValue *v) {
+    if (v->aux) {
+        XiFunc *child = (XiFunc *) v->aux;
+        uint16_t ncap = child->ncaptures;
+        fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
+        emit_fname(ctx, out, prefix, child);
+        fprintf(out, ", %u).ptr; ", ncap);
+        for (uint16_t ci = 0; ci < ncap; ci++) {
+            XiCapture *cap = &child->captures[ci];
+            if (ci < v->nargs && v->args[ci]) {
+                fprintf(out, "_c->upvals[%u] = ", ci);
+                emit_vref(out, v->args[ci]);
+                fprintf(out, "; ");
+            } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
+                fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
+                        (unsigned) cap->index);
+            } else {
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
+                        cap->name ? cap->name : "?");
+                fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
+            }
+        }
+        fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
+    } else {
+        fprintf(out, "XR_NULL_VAL /* closure: unknown */");
+    }
+}
+
 /* Write a phi variable reference: phi<id> */
 static void emit_phi_ref(FILE *out, const XiPhi *phi) {
     fprintf(out, "phi%u", phi->value.id);
@@ -1436,32 +1465,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
          * Allocate xrt_closure_t with upvals[], initialize captured values
          * from the XI_CLOSURE_NEW args (populated by xi_lower from XiCapture). */
         case XI_CLOSURE_NEW:
-            if (v->aux) {
-                XiFunc *child = (XiFunc *) v->aux;
-                uint16_t ncap = child->ncaptures;
-                fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
-                emit_fname(ctx, out, prefix, child);
-                fprintf(out, ", %u).ptr; ", ncap);
-                for (uint16_t ci = 0; ci < ncap; ci++) {
-                    XiCapture *cap = &child->captures[ci];
-                    if (ci < v->nargs && v->args[ci]) {
-                        fprintf(out, "_c->upvals[%u] = ", ci);
-                        emit_vref(out, v->args[ci]);
-                        fprintf(out, "; ");
-                    } else if (cap->source == XI_CAPTURE_SRC_UPVAL) {
-                        fprintf(out, "_c->upvals[%u] = _cl ? _cl->upvals[%u] : XR_NULL_VAL; ", ci,
-                                (unsigned) cap->index);
-                    } else {
-                        ctx->error = true;
-                        fprintf(stderr, "[xi_cgen] ERROR: missing AOT closure capture '%s'\n",
-                                cap->name ? cap->name : "?");
-                        fprintf(out, "_c->upvals[%u] = XR_NULL_VAL; ", ci);
-                    }
-                }
-                fprintf(out, "xr_mkptr(_c, XR_TAG_CLOSURE); })");
-            } else {
-                fprintf(out, "XR_NULL_VAL /* closure: unknown */");
-            }
+            emit_closure_new_expr(ctx, out, prefix, v);
             break;
 
         /* Upvalue access: reads/writes from the hidden _cl parameter.
@@ -1887,9 +1891,12 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                                   ? v->args[0]->aux_int
                                   : 8;
                 fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+            } else if (orig_op == XI_STR_CONCAT) {
+                emit_str_concat_expr(out, v);
+            } else if (orig_op == XI_CLOSURE_NEW) {
+                emit_closure_new_expr(ctx, out, prefix, v);
             } else {
-                /* Unknown original op: fallback to XR_NULL_VAL */
-                fprintf(out, "XR_NULL_VAL /* STACK_ALLOC: unknown orig_op %d */", orig_op);
+                emit_codegen_abort_expr(out);
             }
             break;
         }
