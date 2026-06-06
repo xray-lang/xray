@@ -313,8 +313,10 @@ typedef enum {
     XR_CHAN_FULL  // pending request table saturated (backpressure)
 } XrChanResult;
 
-XR_FUNC XrChanResult xr_channel_send(XrChannel *ch, XrValue value, struct XrCoroutine *coro);
-XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCoroutine *coro);
+XR_FUNC XrChanResult xr_channel_send(XrChannel *ch, XrValue value, struct XrCoroutine *coro,
+                                     int64_t timeout_ms);
+XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCoroutine *coro,
+                                     int64_t timeout_ms);
 
 /* ========== Diagnostics ========== */
 

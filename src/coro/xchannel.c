@@ -57,6 +57,19 @@ static XrRuntime *channel_stats_runtime(XrChannel *ch) {
             xr_sched_metric_add(_rt, &_rt->sched_stats.field, (value));                            \
     } while (0)
 
+static void channel_arm_timeout_locked(XrChannel *ch, XrCoroutine *coro, int64_t timeout_ms) {
+    if (!coro || timeout_ms <= 0)
+        return;
+    XrWorker *worker = xr_current_worker();
+    if (!worker)
+        return;
+    xr_worker_add_sleep_timer(worker, coro, timeout_ms);
+    XrRuntime *runtime = ch && ch->isolate ? (XrRuntime *) ch->isolate->vm.runtime : NULL;
+    if (runtime) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.timeout_event_block_count);
+    }
+}
+
 XR_FUNC void xr_channel_lock_observed(XrChannel *ch) {
     XR_DCHECK(ch != NULL, "channel_lock_observed: NULL channel");
     XrRuntime *runtime = channel_stats_runtime(ch);
@@ -925,8 +938,12 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
 
     // Cancel timer (sendTimeout/recvTimeout case)
     if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
-        atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+        if (current) {
+            xr_worker_cancel_timer(current, coro);
+        } else {
+            xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+        }
     }
 
     xr_sched_metric_inc(runtime, is_close ? &runtime->sched_stats.chan_close_ready_wake_count
@@ -1108,7 +1125,7 @@ bool xr_channel_is_closed(XrChannel *ch) {
 // 3. If buffer has space: put in buffer
 // 4. Otherwise block: join sendq
 // Key: sender completes value transfer, receiver wakes with value ready
-XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro) {
+XrChanResult xr_channel_send(XrChannel *ch, XrValue value, XrCoroutine *coro, int64_t timeout_ms) {
     XR_DCHECK(ch != NULL, "channel is NULL");
 
     // Distributed channel: delegate to cluster hooks
@@ -1188,6 +1205,7 @@ send_locked:
     }
     xr_waitq_enqueue(&ch->sendq, coro);
     xr_channel_wait_token_commit(&coro->ext->chan_wait_token);
+    channel_arm_timeout_locked(ch, coro, timeout_ms);
     CHANNEL_METRIC_INC(ch, chan_send_block_count);
 
     xr_amutex_unlock(&ch->lock);
@@ -1202,7 +1220,7 @@ send_locked:
 // 3. If buffer has data: take from buffer
 // 4. Otherwise block: join recvq
 // Key: receiver completes value transfer, sender wakes with value taken
-XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro) {
+XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, XrCoroutine *coro, int64_t timeout_ms) {
     XR_DCHECK(ch != NULL, "channel is NULL");
     XR_DCHECK(out != NULL, "out pointer is NULL");
 
@@ -1275,6 +1293,7 @@ recv_locked:
     }
     xr_waitq_enqueue(&ch->recvq, coro);
     xr_channel_wait_token_commit(&coro->ext->chan_wait_token);
+    channel_arm_timeout_locked(ch, coro, timeout_ms);
     CHANNEL_METRIC_INC(ch, chan_recv_block_count);
 
     xr_amutex_unlock(&ch->lock);
