@@ -39,6 +39,61 @@ static int json_field_index_local(XrType *type, const char *name) {
     return -1;
 }
 
+static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
+                                          XaSymbolLinks **out_links) {
+    if (out_links)
+        *out_links = NULL;
+    if (!ctx || !ctx->analyzer || !type)
+        return NULL;
+    if (!XR_TYPE_IS_INSTANCE(type) && !XR_TYPE_IS_CLASS(type))
+        return NULL;
+
+    XrClassInfo *info = type->instance.class_ref;
+    const char *class_name = type->instance.class_name;
+    if (!class_name && info)
+        class_name = info->name;
+
+    XaSymbol *sym = NULL;
+    if (class_name) {
+        sym = xa_scope_lookup(ctx->analyzer->current_scope, class_name);
+        if (!sym)
+            sym = xa_scope_lookup(ctx->analyzer->global_scope, class_name);
+    }
+    if (sym && sym->kind == XA_SYM_CLASS) {
+        XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+        if (out_links)
+            *out_links = links;
+        if (!info && links)
+            info = links->class_info;
+    }
+    return info;
+}
+
+static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *type,
+                                                XaSymbolLinks *class_links,
+                                                XrType *field_type) {
+    if (!ctx || !ctx->analyzer || !type || !class_links || !field_type)
+        return field_type;
+    if (!XR_TYPE_IS_INSTANCE(type) || type->instance.type_arg_count <= 0 ||
+        !type->instance.type_args)
+        return field_type;
+
+    int param_count = xa_symbol_links_get_type_param_count(class_links);
+    if (param_count <= 0 || param_count != type->instance.type_arg_count)
+        return field_type;
+
+    const char **param_names = xr_malloc(sizeof(const char *) * (size_t) param_count);
+    if (!param_names)
+        return field_type;
+    for (int i = 0; i < param_count; i++)
+        param_names[i] = xa_symbol_links_get_type_param_name(class_links, i);
+
+    XrType *result = xr_type_substitute(ctx->analyzer->isolate, field_type, param_names,
+                                        type->instance.type_args, type->instance.type_arg_count);
+    xr_free(param_names);
+    return result ? result : field_type;
+}
+
 /*
  * Recursively convert XR_KIND_CLASS types whose class_name matches a declared
  * type parameter name into XR_KIND_TYPE_PARAM.  The parser has no knowledge of
@@ -1297,8 +1352,10 @@ XrType *xa_visit_infer_expr(XaInferContext *ctx, AstNode *node) {
                     XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, s->class_symbol);
                     bool is_struct = cl && cl->type && cl->type->is_value_type;
                     result = xr_type_new_named_instance(ctx->analyzer->isolate, cname);
-                    if (result)
+                    if (result) {
+                        result->instance.class_ref = cl ? cl->class_info : NULL;
                         result->is_value_type = is_struct;
+                    }
                 } else {
                     result = xr_type_new_unknown(NULL);
                 }
@@ -1490,40 +1547,27 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
 
             // Bidirectional inference: propagate field declared type to value
             XrType *saved_expected = ctx->expected_type;
+            XrType *member_type = NULL;
             if (ms->member) {
-                XaSymbol *class_sym = NULL;
-                // Case 1: this.field = expr — find class from scope chain
-                if (ms->object && ms->object->type == AST_THIS_EXPR) {
-                    XaScope *s = ctx->analyzer->current_scope;
-                    while (s) {
-                        if (s->class_symbol) {
-                            class_sym = s->class_symbol;
-                            break;
-                        }
-                        s = s->parent;
-                    }
-                }
-                // Case 2: obj.field = expr — find class from instance type
-                else if (XR_TYPE_IS_INSTANCE(obj_type) && obj_type->instance.class_name) {
-                    class_sym =
-                        xa_scope_lookup(ctx->analyzer->global_scope, obj_type->instance.class_name);
-                }
-                if (class_sym) {
-                    XaSymbolLinks *class_links = xa_analyzer_get_links(ctx->analyzer, class_sym);
-                    if (class_links && class_links->class_info) {
-                        XaSymbol *field =
-                            xa_class_info_lookup_member(class_links->class_info, ms->member);
-                        if (field) {
-                            XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
-                            if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type)) {
-                                ctx->expected_type = fl->type;
-                            }
+                XaSymbolLinks *class_links = NULL;
+                XrClassInfo *class_info = member_set_class_info(ctx, obj_type, &class_links);
+                if (class_info) {
+                    XaSymbol *field = xa_class_info_lookup_member(class_info, ms->member);
+                    if (field) {
+                        XaSymbolLinks *fl = xa_analyzer_get_links(ctx->analyzer, field);
+                        if (fl && fl->type && !XR_TYPE_IS_UNKNOWN(fl->type)) {
+                            member_type =
+                                member_set_substitute_field_type(ctx, obj_type, class_links,
+                                                                 fl->type);
+                            if (member_type && !XR_TYPE_IS_UNKNOWN(member_type))
+                                ctx->expected_type = member_type;
                         }
                     }
                 }
             }
-            xa_visit_infer_expr(ctx, ms->value);
+            XrType *value_type = xa_visit_infer_expr(ctx, ms->value);
             ctx->expected_type = saved_expected;
+            xa_assign_check_type(ctx, node, member_type, value_type, ms->member, "member");
             if (XR_TYPE_IS_JSON(obj_type) && obj_type->object.field_count > 0 && ms->member) {
                 int field_idx = json_field_index_local(obj_type, ms->member);
                 XrLocation loc = {

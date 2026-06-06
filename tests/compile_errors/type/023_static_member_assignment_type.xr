@@ -1,0 +1,5 @@
+class Counter {
+    static count: int = 0
+}
+
+Counter.count = "wrong"
