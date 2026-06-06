@@ -9,6 +9,7 @@
  */
 
 #include "../test_framework.h"
+#include "coro/xblock.h"
 #include "coro/xchannel.h"
 #include "coro/xcoroutine.h"
 #include "coro/xworker_internal.h"
@@ -151,6 +152,8 @@ static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
+    xr_channel_wait_token_prepare(&ext->chan_wait_token, ch, wait_send);
+    xr_channel_wait_token_commit(&ext->chan_wait_token);
     atomic_store_explicit(&ext->wait_channel, ch, memory_order_release);
     ext->wait_send = wait_send;
     ext->wait_bucket_owner = -1;
@@ -311,6 +314,44 @@ TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_wait_token_tracks_block_wake_and_resume) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroExt sender_ext;
+    memset(&sender, 0, sizeof(sender));
+    memset(&sender_ext, 0, sizeof(sender_ext));
+    sender.id = 301;
+    sender.isolate = &f.isolate_storage;
+    sender.ext = &sender_ext;
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&sender.resume_status, XR_RESUME_OK);
+    atomic_store(&sender.affinity_p, 0);
+
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(7), &sender), (int) XR_CHAN_BLOCK);
+    ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_REGISTERED);
+    ASSERT_EQ_PTR(atomic_load(&sender_ext.chan_wait_token.channel), ch);
+    ASSERT_TRUE(sender_ext.chan_wait_token.is_send);
+
+    xr_channel_close(ch);
+    ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_RESOLVED);
+    ASSERT_EQ_INT(xr_coro_resume_load(&sender), XR_RESUME_CHANNEL_CLOSED);
+
+    XrCoroBlockResult resumed = xr_coro_chan_send_resume(&sender, xr_slot_none());
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
+    ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_IDLE);
+    ASSERT_NULL(atomic_load(&sender_ext.chan_wait_token.channel));
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
@@ -318,5 +359,6 @@ RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
+RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 
 TEST_MAIN_END()

@@ -297,6 +297,7 @@ static void coro_recv_slot_reset(XrCoroExt *ext) {
 static void coro_channel_wait_reset(XrCoroExt *ext) {
     if (!ext)
         return;
+    xr_channel_wait_token_reset(&ext->chan_wait_token);
     atomic_store_explicit(&ext->wait_channel, NULL, memory_order_relaxed);
     ext->chan_wait_next = NULL;
     ext->chan_wait_prev = NULL;

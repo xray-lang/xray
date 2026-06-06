@@ -15,7 +15,7 @@
  *
  * INVARIANTS:
  *   - A coroutine may appear in at most one bucket's send/recv queue at
- *     a time (matches wait_channel + wait_send state).
+ *     a time (matches the channel wait token plus wait_channel/wait_send).
  *   - The linear list (blocked_head/blocked_tail, threaded via prev/next)
  *     contains every currently-blocked coro on this worker.
  *   - xr_worker_block/unblock are called only from the owner worker's
@@ -318,22 +318,17 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
         worker->p.blocked_count--;
     }
 
-    // Clear blocked info
-    atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-
-    // Cancel timer (sendTimeout/recvTimeout scenario)
-    if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-        atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-    }
-
-    // Critical: set resume status so instruction detects resume from Channel block
-    xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
-
     // Atomically claim BLOCKED->READY and enqueue to this Worker's LIFO slot
     // for locality. A racing cross-worker waker (channel_wake_coro_ex on the
     // close path) may have already claimed it; only the winner enqueues so the
     // coro is never double-pushed.
     if (xr_coro_claim_wake(coro)) {
+        xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
+        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+        }
+        xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
         xr_worker_push_lifo(worker, coro);
     }
 
@@ -365,6 +360,7 @@ XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wak
     }
 
     // Clear blocked info, but don't enqueue (caller responsible)
+    xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
     atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
 
@@ -394,15 +390,16 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
             worker->p.blocked_count--;
         }
 
-        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
-        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-        }
         // Claim the wake atomically: a racing waker (e.g. channel_wake_coro_ex
         // on the close path) may have already taken this coro BLOCKED->READY.
         // Only the claim winner enqueues, so the coro is never double-pushed.
         if (xr_coro_claim_wake(coro)) {
+            xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
+            atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+                atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+            }
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }
@@ -419,12 +416,13 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
             worker->p.blocked_count--;
         }
 
-        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         bucket_clear_coro_links(coro);
-        if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-        }
         if (xr_coro_claim_wake(coro)) {
+            xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
+            atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+            if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+                atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+            }
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             xr_worker_push(worker, coro);
         }

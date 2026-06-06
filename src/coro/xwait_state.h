@@ -34,6 +34,91 @@ typedef enum {
     XR_AWAIT_RESOLVED = 2,  // child completed, result in coro->result
 } XrAwaitState;
 
+/* ========== Channel Wait Token ==========
+ *
+ * A channel waiter has a short but race-sensitive lifecycle:
+ *
+ *   IDLE -> REGISTERING -> REGISTERED -> RESOLVED
+ *                                  \----> TIMED_OUT
+ *                                  \----> CANCELLED
+ *
+ * The channel lock serializes REGISTERING/REGISTERED with wait queue
+ * insertion.  Wake paths claim the coroutine with xr_coro_claim_wake(); this
+ * token records the waiter-side decision so specialized channel queues share
+ * the same commit/cancel contract without depending on ad hoc fields.
+ */
+typedef enum {
+    XR_CHAN_WAIT_IDLE = 0,
+    XR_CHAN_WAIT_REGISTERING,
+    XR_CHAN_WAIT_REGISTERED,
+    XR_CHAN_WAIT_RESOLVED,
+    XR_CHAN_WAIT_CANCELLED,
+    XR_CHAN_WAIT_TIMED_OUT,
+} XrChannelWaitTokenState;
+
+typedef struct XrChannelWaitToken {
+    _Atomic int state;
+    _Atomic(void *) channel;
+    bool is_send;
+    uint32_t sequence;
+} XrChannelWaitToken;
+
+static inline void xr_channel_wait_token_reset(XrChannelWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_CHAN_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->channel, NULL, memory_order_relaxed);
+    token->is_send = false;
+}
+
+static inline void xr_channel_wait_token_prepare(XrChannelWaitToken *token, void *channel,
+                                                 bool is_send) {
+    if (!token)
+        return;
+    token->sequence++;
+    token->is_send = is_send;
+    atomic_store_explicit(&token->channel, channel, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_CHAN_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_channel_wait_token_commit(XrChannelWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_CHAN_WAIT_REGISTERING;
+    if (atomic_compare_exchange_strong_explicit(&token->state, &expected, XR_CHAN_WAIT_REGISTERED,
+                                                memory_order_acq_rel, memory_order_acquire)) {
+        return;
+    }
+}
+
+static inline void xr_channel_wait_token_finish(XrChannelWaitToken *token) {
+    xr_channel_wait_token_reset(token);
+}
+
+static inline void xr_channel_wait_token_set_terminal(XrChannelWaitToken *token, int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_CHAN_WAIT_REGISTERING || state == XR_CHAN_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_channel_wait_token_resolve(XrChannelWaitToken *token) {
+    xr_channel_wait_token_set_terminal(token, XR_CHAN_WAIT_RESOLVED);
+}
+
+static inline void xr_channel_wait_token_cancel(XrChannelWaitToken *token) {
+    xr_channel_wait_token_set_terminal(token, XR_CHAN_WAIT_CANCELLED);
+}
+
+static inline void xr_channel_wait_token_timeout(XrChannelWaitToken *token) {
+    xr_channel_wait_token_set_terminal(token, XR_CHAN_WAIT_TIMED_OUT);
+}
+
 /* ========== Select Support ========== */
 
 #define XR_SELECT_INLINE_CASES 4
