@@ -631,13 +631,14 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     XrWorker *worker_state = xr_current_worker();
     if (worker_state)
         atomic_store_explicit(&coro->affinity_p, worker_state->p.id, memory_order_relaxed);
-    (void) xr_coro_publish_wait_block(coro);
     if (!work_queue_waiter_enqueue_locked(q, coro)) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
+        xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
         return XR_CFUNC_ERROR;
     }
     xr_work_queue_wait_token_commit(&wait->work_queue_token);
+    (void) xr_coro_publish_wait_block(coro);
     xr_amutex_unlock(&q->wait_lock);
     return XR_CFUNC_BLOCKED;
 }
