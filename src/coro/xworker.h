@@ -395,6 +395,8 @@ XR_FUNC void xr_chan_wake_queue_destroy(XrChanWakeCmdQueue *q);
 XR_FUNC void xr_worker_block(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sender);
+XR_FUNC bool xr_worker_wake_one_detached(XrWorker *worker, void *channel, bool wake_sender,
+                                         XrCoroutine **ready_out);
 XR_FUNC XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wake_sender);
 XR_FUNC void xr_worker_wake_all(XrWorker *worker, void *channel);
 

@@ -304,6 +304,36 @@ void xr_worker_unblock(XrWorker *worker, XrCoroutine *coro) {
     (void) worker_blocked_bucket_remove_coro(worker, coro);
 }
 
+static XrCoroutine *worker_pop_channel_waiter(XrWorker *worker, void *channel, bool wake_sender,
+                                              XrBlockedBucket **bucket_out) {
+    if (bucket_out) {
+        *bucket_out = NULL;
+    }
+    XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
+    if (!bucket)
+        return NULL;
+
+    XrCoroutine *coro = bucket_pop_coro(bucket, wake_sender);
+    if (!coro)
+        return NULL;
+    worker_clear_channel_waiter_mask(worker, channel);
+
+    if (worker_blocked_list_remove(worker, coro)) {
+        worker->p.blocked_count--;
+    }
+    if (bucket_out) {
+        *bucket_out = bucket;
+    }
+    return coro;
+}
+
+static void worker_prepare_channel_waiter_resume(XrCoroutine *coro, int resume_status) {
+    xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
+    atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+    worker_cancel_coro_timer_wait(coro);
+    xr_coro_resume_store(coro, resume_status);
+}
+
 // xr_worker_wake_one - Wake one coroutine waiting on specified Channel on current Worker
 // (lock-free) MUST only be called from the owning worker thread.
 XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sender) {
@@ -312,30 +342,17 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
               "wake_one: cross-worker call detected (use chan_wake_queue)");
 
-    XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket)
-        return NULL;
-
-    XrCoroutine *coro = bucket_pop_coro(bucket, wake_sender);
-
+    XrBlockedBucket *bucket = NULL;
+    XrCoroutine *coro = worker_pop_channel_waiter(worker, channel, wake_sender, &bucket);
     if (!coro)
         return NULL;
-    worker_clear_channel_waiter_mask(worker, channel);
-
-    // Remove from linear queue
-    if (worker_blocked_list_remove(worker, coro)) {
-        worker->p.blocked_count--;
-    }
 
     // Atomically claim BLOCKED->READY and enqueue to this Worker's LIFO slot
     // for locality. A racing cross-worker waker (channel_wake_coro_ex on the
     // close path) may have already claimed it; only the winner enqueues so the
     // coro is never double-pushed.
     if (xr_coro_claim_wake(coro)) {
-        xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
-        atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-        worker_cancel_coro_timer_wait(coro);
-        xr_coro_resume_store(coro, XR_RESUME_CHANNEL);
+        worker_prepare_channel_waiter_resume(coro, XR_RESUME_CHANNEL);
         xr_worker_push_lifo(worker, coro);
     }
 
@@ -345,26 +362,41 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     return coro;
 }
 
+bool xr_worker_wake_one_detached(XrWorker *worker, void *channel, bool wake_sender,
+                                 XrCoroutine **ready_out) {
+    if (ready_out) {
+        *ready_out = NULL;
+    }
+    if (!worker || !channel)
+        return false;
+    XR_DCHECK(xr_current_worker() == NULL || xr_current_worker() == worker,
+              "wake_one_detached: cross-worker call detected (use chan_wake_queue)");
+
+    XrBlockedBucket *bucket = NULL;
+    XrCoroutine *coro = worker_pop_channel_waiter(worker, channel, wake_sender, &bucket);
+    if (!coro)
+        return false;
+
+    if (xr_coro_claim_wake(coro)) {
+        worker_prepare_channel_waiter_resume(coro, XR_RESUME_CHANNEL);
+        if (ready_out) {
+            *ready_out = coro;
+        }
+    }
+    worker_blocked_bucket_reclaim_if_empty(worker, bucket);
+    return true;
+}
+
 // xr_worker_dequeue_blocked - Dequeue coroutine from blocked queue but don't enqueue to run queue
 // For rendezvous value passing: caller needs to process value first then manually enqueue
 XrCoroutine *xr_worker_dequeue_blocked(XrWorker *worker, void *channel, bool wake_sender) {
     if (!worker || !channel)
         return NULL;
 
-    XrBlockedBucket *bucket = worker_blocked_bucket_find(worker, channel);
-    if (!bucket)
-        return NULL;
-
-    XrCoroutine *coro = bucket_pop_coro(bucket, wake_sender);
-
+    XrBlockedBucket *bucket = NULL;
+    XrCoroutine *coro = worker_pop_channel_waiter(worker, channel, wake_sender, &bucket);
     if (!coro)
         return NULL;
-    worker_clear_channel_waiter_mask(worker, channel);
-
-    // Remove from linear queue
-    if (worker_blocked_list_remove(worker, coro)) {
-        worker->p.blocked_count--;
-    }
 
     // Clear blocked info, but don't enqueue (caller responsible)
     xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);

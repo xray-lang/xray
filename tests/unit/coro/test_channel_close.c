@@ -396,6 +396,61 @@ TEST(channel_ready_wake_dispatches_single_remote_worker) {
     wake_route_fixture_cleanup(&f);
 }
 
+TEST(channel_wake_command_batches_ready_waiters) {
+    WakeRouteFixture f;
+    ASSERT_TRUE(wake_route_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    enum {
+        WAITER_COUNT = 3
+    };
+    XrCoroutine coros[WAITER_COUNT];
+    XrCoroExt exts[WAITER_COUNT];
+    for (int i = 0; i < WAITER_COUNT; i++) {
+        init_blocked_channel_coro(&coros[i], &exts[i], 30 + i, &f.isolate_storage, ch, true);
+        xr_worker_block(&f.workers[1], &coros[i]);
+        xr_channel_note_waiter(ch, 1, true);
+    }
+    ASSERT_EQ_INT(f.workers[1].p.blocked_count, WAITER_COUNT);
+
+    for (int i = 0; i < WAITER_COUNT; i++) {
+        xr_worker_dispatch_chan_wake(&f.runtime, 1, ch, true, false);
+    }
+    ASSERT_TRUE(wake_queue_has_pending(&f.workers[1]));
+
+    tls_current_worker = &f.workers[1];
+    tls_current_machine = &f.machines[1];
+    xr_worker_drain_chan_wake_queue(&f.workers[1]);
+
+    ASSERT_EQ_INT(f.workers[1].p.blocked_count, 0);
+    ASSERT_NULL(worker_blocked_bucket_find(&f.workers[1], ch));
+    ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_wake_cmd_coalesce_count),
+                  WAITER_COUNT - 1);
+
+    bool popped[WAITER_COUNT] = {false};
+    for (int i = 0; i < WAITER_COUNT; i++) {
+        ASSERT_EQ_INT(xr_coro_resume_load(&coros[i]), XR_RESUME_CHANNEL);
+        ASSERT_TRUE(xr_coro_flags_has(&coros[i], XR_CORO_FLG_READY));
+        ASSERT_FALSE(xr_coro_flags_has(&coros[i], XR_CORO_FLG_BLOCKED));
+
+        XrCoroutine *ready = xr_worker_pop(&f.workers[1]);
+        ASSERT_NOT_NULL(ready);
+        int index = ready->id - 30;
+        ASSERT_TRUE(index >= 0 && index < WAITER_COUNT);
+        ASSERT_FALSE(popped[index]);
+        popped[index] = true;
+    }
+    ASSERT_NULL(xr_worker_pop(&f.workers[1]));
+
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = &f.machines[0];
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    wake_route_fixture_cleanup(&f);
+}
+
 TEST(channel_direction_masks_refresh_after_partial_wake) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -816,6 +871,7 @@ RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
 RUN_TEST(channel_close_batches_select_waiter_wakes);
 RUN_TEST(select_block_rechecks_already_closed_channel);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
+RUN_TEST(channel_wake_command_batches_ready_waiters);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
