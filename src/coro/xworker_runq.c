@@ -64,10 +64,14 @@ static int64_t worker_schedule_time(XrWorker *worker) {
     return worker->p.sched_time_cache;
 }
 
+static void prepare_scheduled_coro_at(XrCoroutine *coro, int64_t submit_time) {
+    coro->submit_time = submit_time;
+    coro->schedule_count = 1;
+}
+
 static void prepare_scheduled_coro(XrWorker *worker, XrCoroutine *coro, int priority) {
     (void) priority;
-    coro->submit_time = worker_schedule_time(worker);
-    coro->schedule_count = 1;
+    prepare_scheduled_coro_at(coro, worker_schedule_time(worker));
 }
 
 static XrCoroutine *runq_pop_overflow(XrRunQueue *rq) {
@@ -94,6 +98,20 @@ static void runq_batch_append(XrCoroutine **first, XrCoroutine **last, XrCorouti
         *first = coro;
     }
     *last = coro;
+}
+
+static void runq_enqueue_at(XrRunQueue *rq, XrCoroutine *coro, int64_t submit_time) {
+    coro->submit_time = submit_time;
+    if (!xr_steal_queue_push(&rq->deque, coro)) {
+        // Deque full: overflow to linked list (never discard)
+        coro->sched_link = NULL;
+        if (rq->overflow_last)
+            rq->overflow_last->sched_link = coro;
+        else
+            rq->overflow_first = coro;
+        rq->overflow_last = coro;
+        rq->overflow_len++;
+    }
 }
 
 static int runq_spill_oldest_batch(XrRunQueue *rq, int max_count, XrCoroutine **out_first,
@@ -480,10 +498,11 @@ static void injectq_push_batch_internal(XrRuntime *runtime, XrCoroutine *first, 
     XrCoroutine *cur = first;
     XrCoroutine *actual_last = NULL;
     int actual_count = 0;
+    int64_t submit_time = prepare_items ? xr_monotonic_ticks() : 0;
     while (cur && (count <= 0 || actual_count < count)) {
         XrCoroutine *next = cur->sched_link;
         if (prepare_items) {
-            prepare_scheduled_coro(NULL, cur, priority);
+            prepare_scheduled_coro_at(cur, submit_time);
         }
         actual_last = cur;
         actual_count++;
@@ -589,35 +608,28 @@ int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int
     }
     xr_mutex_unlock(&q->lock);
 
+    if (count <= 0)
+        return 0;
+
     XrCoroutine *cur = first;
+    int runq_idx = runq_index_for_priority(priority);
+    int64_t submit_time = worker_schedule_time(worker);
     while (cur) {
         XrCoroutine *next = cur->sched_link;
         cur->sched_link = NULL;
-        xr_runq_enqueue(&worker->p.runq[runq_index_for_priority(priority)], cur);
-        xr_proc_local_runq_inc(&worker->p, 1);
+        runq_enqueue_at(&worker->p.runq[runq_idx], cur, submit_time);
         cur = next;
     }
-    if (count > 0) {
-        xr_worker_refresh_runq_masks(worker);
-        xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_batch_count);
-    }
+    xr_proc_local_runq_inc(&worker->p, count);
+    xr_worker_refresh_runq_masks(worker);
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_batch_count);
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_pop_count, (uint64_t) count);
     return count;
 }
 
 // Enqueue: owner thread lock-free push, overflow to linked list if deque full
 void xr_runq_enqueue(XrRunQueue *rq, XrCoroutine *coro) {
-    coro->submit_time = xr_monotonic_ticks();
-    if (!xr_steal_queue_push(&rq->deque, coro)) {
-        // Deque full: overflow to linked list (never discard)
-        coro->sched_link = NULL;
-        if (rq->overflow_last)
-            rq->overflow_last->sched_link = coro;
-        else
-            rq->overflow_first = coro;
-        rq->overflow_last = coro;
-        rq->overflow_len++;
-    }
+    runq_enqueue_at(rq, coro, xr_monotonic_ticks());
 }
 
 // Dequeue: owner thread lock-free pop
