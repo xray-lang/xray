@@ -1054,6 +1054,26 @@ TEST(timer_wait_token_cancels_select_timer_on_channel_wake) {
     close_fixture_cleanup(&f);
 }
 
+TEST(backend_resume_finishes_sleep_timer_token) {
+    XrCoroutine sleeper;
+    XrCoroExt sleeper_ext;
+    memset(&sleeper, 0, sizeof(sleeper));
+    memset(&sleeper_ext, 0, sizeof(sleeper_ext));
+    sleeper.ext = &sleeper_ext;
+    atomic_store(&sleeper.flags, XR_CORO_FLG_READY | XR_CORO_WAIT_SLEEP | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sleeper.resume_status, XR_RESUME_TIMEOUT);
+
+    xr_timer_wait_token_prepare(&sleeper_ext.wait.timer_token, 0,
+                                XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT, 123);
+    xr_timer_wait_token_commit(&sleeper_ext.wait.timer_token);
+    xr_timer_wait_token_fire(&sleeper_ext.wait.timer_token);
+    ASSERT_EQ_INT(atomic_load(&sleeper_ext.wait.timer_token.state), XR_TIMER_WAIT_FIRED);
+
+    xr_coro_finish_backend_resume_tokens(&sleeper, xr_coro_resume_load(&sleeper));
+
+    ASSERT_EQ_INT(atomic_load(&sleeper_ext.wait.timer_token.state), XR_TIMER_WAIT_IDLE);
+}
+
 TEST(multi_await_token_clears_pending_waiters_on_await_any_ready) {
     XrCoroutine waiter;
     XrCoroExt waiter_ext;
@@ -1295,6 +1315,7 @@ RUN_TEST(single_task_await_wakes_multiple_waiters);
 RUN_TEST(single_task_await_timeout_unlinks_waiter_node);
 RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
+RUN_TEST(backend_resume_finishes_sleep_timer_token);
 RUN_TEST(multi_await_token_clears_pending_waiters_on_await_any_ready);
 RUN_TEST(multi_await_token_cancels_registered_task_waiters);
 RUN_TEST(multi_await_node_list_wakes_overlapping_any_waiters);

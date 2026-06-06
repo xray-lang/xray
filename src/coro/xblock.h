@@ -74,6 +74,7 @@ XR_FUNC XrCoroBlockResult xr_coro_await_all_tasks(struct XrCoroutine *coro, stru
 XR_FUNC XrCoroBlockResult xr_coro_await_any_task(struct XrCoroutine *coro, struct XrArray *tasks,
                                                  bool success_only);
 
+XR_FUNC void xr_coro_finish_backend_resume_tokens(struct XrCoroutine *coro, int resume_status);
 XR_FUNC XrCoroBlockResult xr_coro_sleep(struct XrCoroutine *coro, int64_t milliseconds);
 XR_FUNC XrCoroBlockResult xr_coro_select_block(struct XrayIsolate *isolate,
                                                struct XrCoroutine *coro,
