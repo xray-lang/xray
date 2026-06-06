@@ -860,6 +860,44 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_go_sync_scalar_wrapper_skips_param_roots) {
+    const char *src = "fn compute(n: int, flag: bool) -> int {\n"
+                      "    if (flag) { return n + 1 }\n"
+                      "    return n\n"
+                      "}\n"
+                      "let task = go compute(3, true)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT go of scalar sync functions should generate");
+
+    const char *frame = strstr(code, "typedef struct test_compute_");
+    assert(frame != NULL && "compute sync-go frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_compute_");
+    assert(frame_end != NULL && "compute sync-go frame should close");
+    assert(count_between(frame, frame_end, "int64_t p") == 2 &&
+           "scalar sync-go params should be stored unboxed in the frame");
+    assert(count_between(frame, frame_end, "XrValue p") == 0 &&
+           "scalar sync-go params should not use tagged frame storage");
+    assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
+           "scalar sync-go params must not be traced as roots");
+    assert(!contains(code, "xr_aot_trace_frame_value(visitor, f->p1)") &&
+           "scalar sync-go params must not be traced as roots");
+    assert(contains(code, ".root_count = 0,") &&
+           "scalar sync-go wrapper should report zero root slots");
+    assert(contains(code, ".release_count = 0,") &&
+           "scalar sync-go wrapper should report zero release slots");
+
+    printf("  Generated scalar sync-go wrapper %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_set_priority_uses_aot_bridge) {
     const char *src = "fn compute(n: int) -> int {\n"
                       "    return n * n\n"
@@ -1430,6 +1468,7 @@ int main(void) {
     run_cgen_coro_frame_release_uses_aot_arc();
     run_cgen_coro_go_clones_tagged_args();
     run_cgen_coro_go_sync_function_uses_wrapper_desc();
+    run_cgen_coro_go_sync_scalar_wrapper_skips_param_roots();
     run_cgen_coro_set_priority_uses_aot_bridge();
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();

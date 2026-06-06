@@ -2683,11 +2683,13 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ", XrValue p%u", i);
     fprintf(out, ");\n");
 
-    if (cg_func_needs_aot_coro_ctx(ctx, f) || cg_func_can_emit_sync_go_wrapper_ctx(ctx, f)) {
+    bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
+    bool can_sync_go = !needs_aot_coro && cg_func_can_emit_sync_go_wrapper_ctx(ctx, f);
+    if (needs_aot_coro || can_sync_go) {
         fprintf(out, "static void *");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_frame_new");
         fprintf(out, "(");
-        emit_aot_frame_new_params(out, f);
+        emit_aot_frame_new_params(out, f, can_sync_go);
         fprintf(out, ");\n");
         fprintf(out, "static XrAotResult ");
         emit_fname_suffix(ctx, out, prefix, f, "_aot_resume");
