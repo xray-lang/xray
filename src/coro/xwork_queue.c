@@ -143,6 +143,10 @@ static XrRuntime *work_queue_runtime(XrWorkQueue *q) {
     return (XrRuntime *) q->isolate->vm.runtime;
 }
 
+static bool work_queue_runtime_can_wake(XrRuntime *runtime) {
+    return runtime && runtime->workers && runtime->worker_count > 0;
+}
+
 static XrRuntime *work_queue_stats_runtime(XrWorkQueue *q) {
     XrRuntime *runtime = work_queue_runtime(q);
     return xr_sched_stats_enabled(runtime) ? runtime : NULL;
@@ -248,7 +252,7 @@ static void work_queue_wake_batch_append(XrWorkQueueWakeBatch *batch, XrCoroutin
 
 static bool work_queue_claim_waiter(XrWorkQueue *q, XrCoroutine *coro, XrRuntime *runtime,
                                     int *target_id_out) {
-    if (!runtime || !coro || !target_id_out)
+    if (!work_queue_runtime_can_wake(runtime) || !coro || !target_id_out)
         return false;
     if (!xr_coro_claim_wake(coro))
         return false;
@@ -287,6 +291,8 @@ static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
 static void work_queue_wake_one(XrWorkQueue *q) {
     if (!q)
         return;
+    if (!work_queue_runtime_can_wake(work_queue_runtime(q)))
+        return;
     for (;;) {
         xr_amutex_lock(&q->wait_lock);
         XrCoroutine *coro = work_queue_waiter_pop_locked(q);
@@ -301,6 +307,10 @@ static void work_queue_wake_one(XrWorkQueue *q) {
 static void work_queue_wake_all(XrWorkQueue *q) {
     if (!q)
         return;
+    XrRuntime *runtime = work_queue_runtime(q);
+    if (!work_queue_runtime_can_wake(runtime))
+        return;
+
     xr_amutex_lock(&q->wait_lock);
     XrCoroutine *list = q->wait_first;
     q->wait_first = NULL;
@@ -308,7 +318,6 @@ static void work_queue_wake_all(XrWorkQueue *q) {
     atomic_store_explicit(&q->waiter_count, 0, memory_order_relaxed);
     xr_amutex_unlock(&q->wait_lock);
 
-    XrRuntime *runtime = work_queue_runtime(q);
     XrWorker *current = xr_current_worker();
     bool current_matches = current && current->p.runtime == runtime;
     XrWorkQueueWakeBatch local_batch = {0};
