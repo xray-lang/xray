@@ -616,6 +616,60 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     close_fixture_cleanup(&f);
 }
 
+TEST(channel_notify_send_without_current_worker_routes_to_inbox) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine receiver;
+    XrCoroExt receiver_ext;
+    memset(&receiver, 0, sizeof(receiver));
+    memset(&receiver_ext, 0, sizeof(receiver_ext));
+    receiver.id = 304;
+    receiver.isolate = &f.isolate_storage;
+    receiver.ext = &receiver_ext;
+    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&receiver.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&receiver.resume_status, XR_RESUME_OK);
+    atomic_store(&receiver.affinity_p, 0);
+
+    XrValue recv_value = xr_null();
+    XrCoroBlockResult blocked = xr_coro_chan_recv(
+        &f.isolate_storage, &receiver, ch, xr_slot_xvalue_ptr(&recv_value), xr_slot_none(), -1);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_INT(atomic_load(&receiver_ext.chan_wait_token.state), XR_CHAN_WAIT_REGISTERED);
+    ASSERT_EQ_PTR(ch->recvq.first, &receiver);
+
+    tls_current_worker = NULL;
+    tls_current_machine = NULL;
+    ASSERT_TRUE(xr_channel_notify_send(ch, xr_int(44)));
+
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 1);
+    ASSERT_EQ_INT(xr_coro_resume_load(&receiver), XR_RESUME_CHANNEL);
+    ASSERT_EQ_INT(atomic_load(&receiver_ext.chan_wait_token.state), XR_CHAN_WAIT_RESOLVED);
+    ASSERT_NULL(atomic_load(&receiver_ext.wait_channel));
+    ASSERT_TRUE(xr_coro_flags_has(&receiver, XR_CORO_FLG_READY));
+    ASSERT_FALSE(xr_coro_flags_has(&receiver, XR_CORO_FLG_BLOCKED));
+
+    tls_current_worker = &f.worker;
+    tls_current_machine = &f.machine;
+    worker_drain_inbox(&f.worker);
+    ASSERT_EQ_INT((int) atomic_load(&f.runtime.total_inbox_len), 0);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &receiver);
+
+    XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
+        &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
+    ASSERT_EQ_INT((int) XR_TO_INT(recv_value), 44);
+    ASSERT_EQ_INT(atomic_load(&receiver_ext.chan_wait_token.state), XR_CHAN_WAIT_IDLE);
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -1307,6 +1361,7 @@ RUN_TEST(channel_wake_command_batches_ready_waiters);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
+RUN_TEST(channel_notify_send_without_current_worker_routes_to_inbox);
 RUN_TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues);
 RUN_TEST(channel_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(select_waiter_cancel_routes_foreign_owner_detach);
