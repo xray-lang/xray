@@ -30,6 +30,7 @@
 #include "xtask.h"
 #include "xcoro_pool.h"
 #include "xyieldable.h"
+#include "xwork_queue.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
 
@@ -307,6 +308,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     xr_scope_wait_token_reset(&ext->wait.scope_token);
     xr_timer_wait_token_reset(&ext->wait.timer_token);
     xr_io_wait_token_reset(&ext->wait.io_token);
+    xr_work_queue_wait_token_reset(&ext->wait.work_queue_token);
 }
 
 static void coro_recv_slot_reset(XrCoroExt *ext) {
@@ -846,6 +848,7 @@ void xr_coro_cancel(XrCoroutine *coro) {
         xr_scope_wait_token_cancel(&coro->ext->wait.scope_token);
         xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
+        xr_work_queue_cancel_waiter(coro);
         coro_channel_wait_reset(coro->ext);
     }
     coro->result = xr_null();

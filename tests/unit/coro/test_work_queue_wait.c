@@ -1,0 +1,89 @@
+/*
+ * xray - Lightweight typed scripting with native concurrency
+ * https://www.xray-lang.org
+ *
+ * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
+ * Licensed under the MIT License
+ *
+ * test_work_queue_wait.c - Unit tests for WorkQueue waiter lifecycle
+ */
+
+#include "../test_framework.h"
+#include "coro/xcoroutine.h"
+#include "coro/xwork_queue.h"
+#include "runtime/gc/xsystem_heap.h"
+#include "runtime/xisolate_internal.h"
+#include <stdatomic.h>
+#include <string.h>
+
+typedef struct WorkQueueFixture {
+    XrayIsolate isolate_storage;
+    XrSystemHeap sys_heap;
+    bool sys_heap_initialized;
+} WorkQueueFixture;
+
+static bool work_queue_fixture_init(WorkQueueFixture *f) {
+    memset(f, 0, sizeof(*f));
+    if (!xr_sysheap_init(&f->sys_heap, NULL))
+        return false;
+    f->sys_heap_initialized = true;
+    f->isolate_storage.sys_heap = &f->sys_heap;
+    return true;
+}
+
+static void work_queue_fixture_cleanup(WorkQueueFixture *f) {
+    if (f->sys_heap_initialized) {
+        xr_sysheap_destroy(&f->sys_heap);
+        f->sys_heap_initialized = false;
+    }
+}
+
+static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, XrayIsolate *isolate,
+                                         XrWorkQueue *q) {
+    memset(coro, 0, sizeof(*coro));
+    memset(ext, 0, sizeof(*ext));
+    coro->id = 700;
+    coro->isolate = isolate;
+    coro->ext = ext;
+    atomic_store(&coro->flags, XR_CORO_WAIT_WORKQUEUE | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&coro->affinity_p, 0);
+
+    xr_work_queue_wait_token_prepare(&ext->wait.work_queue_token, q);
+    xr_work_queue_wait_token_commit(&ext->wait.work_queue_token);
+}
+
+TEST(cancel_waiter_unlinks_coroutine_from_work_queue) {
+    WorkQueueFixture f;
+    ASSERT_TRUE(work_queue_fixture_init(&f));
+
+    XrWorkQueue *q = xr_work_queue_new(&f.isolate_storage, 1, 1);
+    ASSERT_NOT_NULL(q);
+
+    XrCoroutine coro;
+    XrCoroExt ext;
+    init_blocked_work_queue_coro(&coro, &ext, &f.isolate_storage, q);
+
+    q->wait_first = &coro;
+    q->wait_last = &coro;
+    atomic_store(&q->waiter_count, 1);
+
+    xr_work_queue_cancel_waiter(&coro);
+
+    ASSERT_NULL(q->wait_first);
+    ASSERT_NULL(q->wait_last);
+    ASSERT_NULL(ext.wait_link);
+    ASSERT_NULL(ext.wait_prev);
+    ASSERT_EQ_INT((int) atomic_load(&q->waiter_count), 0);
+    ASSERT_EQ_INT(atomic_load(&ext.wait.work_queue_token.state), XR_WORK_QUEUE_WAIT_CANCELLED);
+
+    xr_gc_destroy_work_queue(&q->gc, NULL);
+    work_queue_fixture_cleanup(&f);
+}
+
+TEST_MAIN_BEGIN()
+
+RUN_TEST_SUITE("WorkQueue Wait");
+RUN_TEST(cancel_waiter_unlinks_coroutine_from_work_queue);
+
+TEST_MAIN_END()

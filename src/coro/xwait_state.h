@@ -417,6 +417,75 @@ static inline void xr_io_wait_token_finish(XrIoWaitToken *token) {
     xr_io_wait_token_reset(token);
 }
 
+/* ========== Work Queue Wait Token ==========
+ *
+ * WorkQueue.pop uses a queue-owned waiter list. The coroutine-side token
+ * records that ownership so cancel/recycle paths can detach the waiter before
+ * the coroutine shell is reused.
+ */
+typedef enum {
+    XR_WORK_QUEUE_WAIT_IDLE = 0,
+    XR_WORK_QUEUE_WAIT_REGISTERING,
+    XR_WORK_QUEUE_WAIT_REGISTERED,
+    XR_WORK_QUEUE_WAIT_RESOLVED,
+    XR_WORK_QUEUE_WAIT_CANCELLED,
+} XrWorkQueueWaitTokenState;
+
+typedef struct XrWorkQueueWaitToken {
+    _Atomic int state;
+    _Atomic(void *) queue;
+    uint32_t sequence;
+} XrWorkQueueWaitToken;
+
+static inline void xr_work_queue_wait_token_reset(XrWorkQueueWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_WORK_QUEUE_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->queue, NULL, memory_order_relaxed);
+}
+
+static inline void xr_work_queue_wait_token_prepare(XrWorkQueueWaitToken *token, void *queue) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->queue, queue, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_WORK_QUEUE_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_work_queue_wait_token_commit(XrWorkQueueWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_WORK_QUEUE_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_WORK_QUEUE_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_work_queue_wait_token_set_terminal(XrWorkQueueWaitToken *token,
+                                                         int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_WORK_QUEUE_WAIT_REGISTERING || state == XR_WORK_QUEUE_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_work_queue_wait_token_resolve(XrWorkQueueWaitToken *token) {
+    xr_work_queue_wait_token_set_terminal(token, XR_WORK_QUEUE_WAIT_RESOLVED);
+}
+
+static inline void xr_work_queue_wait_token_cancel(XrWorkQueueWaitToken *token) {
+    xr_work_queue_wait_token_set_terminal(token, XR_WORK_QUEUE_WAIT_CANCELLED);
+}
+
+static inline void xr_work_queue_wait_token_finish(XrWorkQueueWaitToken *token) {
+    xr_work_queue_wait_token_reset(token);
+}
+
 /* ========== Channel Wait Token ==========
  *
  * A channel waiter has a short but race-sensitive lifecycle:
@@ -594,6 +663,7 @@ typedef struct XrCoroWaitState {
     XrScopeWaitToken scope_token;
     XrTimerWaitToken timer_token;
     XrIoWaitToken io_token;
+    XrWorkQueueWaitToken work_queue_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {
