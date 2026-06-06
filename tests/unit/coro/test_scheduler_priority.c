@@ -85,6 +85,30 @@ static void init_ready_coro(XrCoroutine *coro, int id, int priority, XrayIsolate
     atomic_store(&coro->affinity_p, 0);
 }
 
+typedef struct FakeRunRecord {
+    int *order;
+    int *count;
+    int marker;
+} FakeRunRecord;
+
+static XrCoroRunResult fake_done_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                        const XrCoroRunContext *run_ctx) {
+    (void) event;
+    (void) run_ctx;
+    FakeRunRecord *record = (FakeRunRecord *) coro->backend_state;
+    if (record && record->order && record->count) {
+        record->order[*record->count] = record->marker;
+        (*record->count)++;
+    }
+    coro->result = xr_null();
+    return xr_coro_run_done(xr_null());
+}
+
+static const XrCoroBackendVTable fake_done_backend = {
+    .kind = XR_CORO_BACKEND_NATIVE,
+    .resume = fake_done_resume,
+};
+
 TEST(weighted_priority_budget_dispatches_without_starving_lower_queues) {
     SchedulerFixture f;
     ASSERT_TRUE(scheduler_fixture_init(&f));
@@ -113,6 +137,46 @@ TEST(weighted_priority_budget_dispatches_without_starving_lower_queues) {
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &low);
     ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &high[0]);
     ASSERT_NULL(xr_worker_pop(&f.worker));
+
+    scheduler_fixture_cleanup(&f);
+}
+
+TEST(parent_continuation_defers_to_visible_high_priority_work) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    int order[2] = {0, 0};
+    int order_count = 0;
+    FakeRunRecord child_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 10,
+    };
+    FakeRunRecord parent_record = {
+        .order = order,
+        .count = &order_count,
+        .marker = 20,
+    };
+
+    XrCoroutine child;
+    XrCoroutine parent;
+    XrCoroutine high;
+    init_ready_coro(&child, 600, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    init_ready_coro(&parent, 601, XR_CORO_PRIO_NORMAL, &f.isolate_storage);
+    init_ready_coro(&high, 602, XR_CORO_PRIO_HIGH, &f.isolate_storage);
+    xr_coro_attach_backend(&child, &fake_done_backend, &child_record);
+    xr_coro_attach_backend(&parent, &fake_done_backend, &parent_record);
+
+    ASSERT_TRUE(xr_steal_queue_push(&f.worker.p.cont_deque, &parent));
+    xr_worker_push(&f.worker, &high);
+    xr_worker_refresh_runq_masks(&f.worker);
+
+    worker_exec_with_cont_stealing(&f.worker, &child);
+
+    ASSERT_EQ_INT(order_count, 1);
+    ASSERT_EQ_INT(order[0], 10);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &high);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &parent);
 
     scheduler_fixture_cleanup(&f);
 }
@@ -169,6 +233,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Priority");
 RUN_TEST(weighted_priority_budget_dispatches_without_starving_lower_queues);
+RUN_TEST(parent_continuation_defers_to_visible_high_priority_work);
 RUN_TEST(global_inject_preserves_runnable_age_for_priority_aging);
 RUN_TEST(aging_boosts_old_low_priority_work_before_fresh_normal_work);
 
