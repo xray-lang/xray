@@ -299,6 +299,9 @@ static void channel_note_participant_locked(XrChannel *ch, XrCoroutine *coro, bo
 
     XrWorker *worker = xr_current_worker();
     XrRuntime *runtime = worker ? worker->p.runtime : channel_stats_runtime(ch);
+    if (!xr_sched_stats_enabled(runtime))
+        return;
+
     channel_note_worker_locked(ch, worker, producer);
     if (channel_kind_observation_stable(ch->kind)) {
         channel_record_kind_op_metric(runtime, ch->kind, false);
