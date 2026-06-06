@@ -79,6 +79,8 @@ static void aot_release_state(XrCoroutine *coro) {
     aot_release_frame(state->desc, state->frame, coro ? coro->coro_gc : NULL);
     xr_free(state);
     coro->backend_state = NULL;
+    coro->backend = NULL;
+    coro->backend_ops = NULL;
 }
 
 static const char *aot_backend_debug_name(const XrCoroutine *coro) {
@@ -267,8 +269,7 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
         return NULL;
     }
 
-    coro->backend = &aot_backend_vtable;
-    coro->backend_state = state;
+    xr_coro_attach_backend(coro, &aot_backend_vtable, state, NULL);
     return coro;
 }
 

@@ -14,6 +14,7 @@
 #include "xcoro_pool.h"
 #include "../base/xchecks.h"
 #include "xcoroutine.h"
+#include "xcoro_backend_ops.h"
 #include "xcoro_flags.h"
 #include <stdlib.h>
 #include <string.h>
@@ -176,6 +177,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             const XrCoroBackendVTable *saved_backend = coro->backend;
             const XrCoroBackendOps *saved_ops = xr_coro_backend_ops(coro);
             void *saved_backend_state = coro->backend_state;
+            const XrCoroBackendOps *saved_backend_ops = coro->backend_ops;
             uint16_t saved_gc_flags =
                 coro->gc_flags & (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED);
             if (saved_ops && saved_ops->reset_reusable) {
@@ -185,6 +187,7 @@ XrCoroutine *xr_coro_pool_alloc(XrCoroStructPool *pool) {
             if (saved_backend_state) {
                 coro->backend = saved_backend;
                 coro->backend_state = saved_backend_state;
+                coro->backend_ops = saved_backend_ops;
             }
             coro->gc_flags = saved_gc_flags;
             return coro;

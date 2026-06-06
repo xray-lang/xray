@@ -128,6 +128,7 @@ static inline void xr_coro_init_from_pool_slot(struct XrCoroutine *coro, XrCoroP
     XR_DCHECK(coro != NULL, "coro_init_from_pool_slot: NULL coro");
     coro->backend = NULL;
     coro->backend_state = NULL;
+    coro->backend_ops = NULL;
     coro->coro_gc = NULL;
     coro->ext = NULL;
     coro->gc_flags = XR_CORO_GC_FROM_POOL;

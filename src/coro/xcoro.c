@@ -24,6 +24,7 @@
 #include "xworker.h"
 #include "xchannel.h"
 #include "xtimer_wheel.h"
+#include "xcoro_backend_ops.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xexception.h"
 #include "xcoro_registry.h"
@@ -193,6 +194,8 @@ static void native_backend_release(XrCoroutine *coro) {
         return;
     xr_free(coro->backend_state);
     coro->backend_state = NULL;
+    coro->backend = NULL;
+    coro->backend_ops = NULL;
 }
 
 static void coro_release_backend_state(XrCoroutine *coro, bool destroy) {
@@ -366,6 +369,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
         // Save fields set by pool_get, memset the rest, then restore.
         const XrCoroBackendVTable *saved_backend = coro->backend;
         void *saved_backend_state = coro->backend_state;
+        const XrCoroBackendOps *saved_backend_ops = coro->backend_ops;
         struct XrCoroGC *saved_coro_gc = coro->coro_gc;
         uint16_t saved_pool_bits =
             coro->gc_flags &
@@ -377,6 +381,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
 
         coro->backend = saved_backend;
         coro->backend_state = saved_backend_state;
+        coro->backend_ops = saved_backend_ops;
         coro->coro_gc = saved_coro_gc;
         coro->gc_flags = saved_pool_bits;
         coro->ext = saved_ext;
@@ -510,8 +515,7 @@ XrCoroutine *xr_coro_create_native(XrayIsolate *X, void (*func)(void *), void *a
     state->func = func;
     state->arg = arg;
 
-    coro->backend = &native_backend_vtable;
-    coro->backend_state = state;
+    xr_coro_attach_backend(coro, &native_backend_vtable, state, NULL);
 
     return coro;
 }
