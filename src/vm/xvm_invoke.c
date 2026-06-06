@@ -62,22 +62,13 @@ vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, Xr
 
     switch (status) {
         case XR_CFUNC_DONE:
-            if (frame)
-                frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             base[a] = result;
             return XR_DISP_NEXT;
         case XR_CFUNC_BLOCKED:
-            if (frame) {
-                frame->pc = pc - 1;
-                frame->call_status |= XR_CALL_YIELDED;
-            }
-            return XR_DISP_BLOCKED;
+            return vm_suspend_block_replay_yielded(frame, pc);
         case XR_CFUNC_YIELD:
-            if (frame) {
-                frame->pc = pc - 1;
-                frame->call_status |= XR_CALL_YIELDED;
-            }
-            return XR_DISP_YIELD;
+            return vm_suspend_yield_replay_yielded(frame, pc);
         case XR_CFUNC_ERROR:
         case XR_CFUNC_WOULD_BLOCK:
         case XR_CFUNC_CALL_CLOSURE:
@@ -126,21 +117,20 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             base[a] = xr_null();
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
         }
-        frame->pc = pc - 1;
-        frame->call_status |= XR_CALL_YIELDED;
+        vm_suspend_replay_yielded(frame, pc);
         XrCoroBlockResult result =
             xr_coro_chan_send(isolate, current, ch, base[a + 2], xr_slot_none(), -1);
         if (result.kind == XR_CORO_BLOCK_READY) {
-            frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             base[a] = xr_null();
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_CLOSED) {
-            frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         } else {
-            frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel send failed");
         }
     }
@@ -154,17 +144,16 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         if (resumed.kind == XR_CORO_BLOCK_READY) {
             return XR_DISP_NEXT;
         }
-        frame->pc = pc - 1;
-        frame->call_status |= XR_CALL_YIELDED;
+        vm_suspend_replay_yielded(frame, pc);
         XrCoroBlockResult result =
             xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), -1);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
-            frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         } else {
-            frame->call_status &= ~XR_CALL_YIELDED;
+            vm_suspend_clear_yielded(frame);
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel receive failed");
         }
     }
@@ -200,9 +189,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc - 1;
-            frame->call_status |= XR_CALL_YIELDED;
-            return XR_DISP_BLOCKED;
+            return vm_suspend_block_replay_yielded(frame, pc);
         }
         base[a] = xr_bool(false);
         return XR_DISP_NEXT;
@@ -248,9 +235,7 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
             VM_RECV_TUPLE_RESULT(xr_null(), false);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc - 1;
-            frame->call_status |= XR_CALL_YIELDED;
-            return XR_DISP_BLOCKED;
+            return vm_suspend_block_replay_yielded(frame, pc);
         }
         VM_RECV_TUPLE_RESULT(xr_null(), false);
         return XR_DISP_NEXT;

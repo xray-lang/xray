@@ -94,7 +94,7 @@ static XrDispatchAction vm_sleep_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
     if (coro) {
         XrCoroBlockResult sleep_result = xr_coro_sleep(coro, milliseconds);
         if (sleep_result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc;
+            vm_suspend_continue_from_next(frame, pc);
             return XR_DISP_BLOCKED;
         }
         if (sleep_result.kind == XR_CORO_BLOCK_ERROR) {
@@ -146,7 +146,7 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
     if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-        frame->pc = pc;
+        vm_suspend_continue_from_next(frame, pc);
         return XR_DISP_BLOCKED;
     }
     return XR_DISP_NEXT;
@@ -177,23 +177,22 @@ XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    frame->pc = pc - 1;
-    frame->call_status |= XR_CALL_YIELDED;
+    vm_suspend_replay_yielded(frame, pc);
     XrCoroBlockResult result = xr_coro_chan_send(isolate, current, ch, base[c], xr_slot_none(), -1);
     if (result.kind == XR_CORO_BLOCK_READY) {
-        frame->call_status &= ~XR_CALL_YIELDED;
+        vm_suspend_clear_yielded(frame);
         base[a] = xr_null();
         return XR_DISP_NEXT;
     }
     if (result.kind == XR_CORO_BLOCK_CLOSED) {
-        frame->call_status &= ~XR_CALL_YIELDED;
+        vm_suspend_clear_yielded(frame);
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
     }
     if (result.kind == XR_CORO_BLOCK_BLOCKED) {
         return XR_DISP_BLOCKED;
     }
 
-    frame->call_status &= ~XR_CALL_YIELDED;
+    vm_suspend_clear_yielded(frame);
     VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel send failed");
 }
 
@@ -225,19 +224,18 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    frame->pc = pc - 1;
-    frame->call_status |= XR_CALL_YIELDED;
+    vm_suspend_replay_yielded(frame, pc);
     XrCoroBlockResult result = xr_coro_chan_recv(isolate, current, ch, xr_slot_xvalue_ptr(&base[a]),
                                                  xr_slot_xvalue_ptr(&base[a + 1]), -1);
     if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
-        frame->call_status &= ~XR_CALL_YIELDED;
+        vm_suspend_clear_yielded(frame);
         return XR_DISP_NEXT;
     }
     if (result.kind == XR_CORO_BLOCK_BLOCKED) {
         return XR_DISP_BLOCKED;
     }
 
-    frame->call_status &= ~XR_CALL_YIELDED;
+    vm_suspend_clear_yielded(frame);
     base[a] = xr_null();
     base[a + 1] = xr_bool(false);
     VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "recv: need to use blocking recv in coroutine");
@@ -282,8 +280,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc - 1;
-            return XR_DISP_BLOCKED;
+            return vm_suspend_block_replay(frame, pc);
         }
         base[a] = xr_bool(false);
         return XR_DISP_NEXT;
@@ -360,8 +357,7 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-            frame->pc = pc - 1;
-            return XR_DISP_BLOCKED;
+            return vm_suspend_block_replay(frame, pc);
         }
         base[a] = xr_null();
         base[a + 1] = xr_bool(false);
