@@ -241,7 +241,6 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
-        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
         if (timeout_ms > 0) {
             coro_arm_timeout(coro, timeout_ms);
         }
@@ -301,7 +300,6 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
-        xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
         if (timeout_ms > 0) {
             coro_arm_timeout(coro, timeout_ms);
         }
