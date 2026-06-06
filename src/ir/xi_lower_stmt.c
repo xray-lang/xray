@@ -2122,9 +2122,11 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
             lower_var_decl(l, node);
             break;
 
-        case AST_EXPR_STMT:
-            xi_lower_expr(l, node->as.expr_stmt);
-            break;
+        case AST_EXPR_STMT: {
+            XiValue *expr = xi_lower_expr(l, node->as.expr_stmt);
+            if (expr && expr->op == XI_GO)
+                expr->flags |= XI_FLAG_FIRE_AND_FORGET;
+        } break;
 
         case AST_PRINT_STMT:
             lower_print(l, node);

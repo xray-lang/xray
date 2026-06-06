@@ -210,8 +210,11 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
 
-    /* C field: bits[0:6] = nargs, bit 7 = fire-and-forget (0 for now) */
-    emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, nargs));
+    /* C field: bits[0:6] = nargs, bit 7 = fire-and-forget */
+    uint8_t c_field = nargs;
+    if (v->flags & XI_FLAG_FIRE_AND_FORGET)
+        c_field |= 0x80;
+    emit_inst(ctx, CREATE_ABC(OP_GO, dst, dst, c_field));
 
     /* NOP A=2: priority annotation (read by vm_go) */
     int priority = (((int) v->aux_int >> XI_GO_AUX_PRIORITY_SHIFT) & 0xff) - 1;

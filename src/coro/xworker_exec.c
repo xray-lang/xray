@@ -64,6 +64,22 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
     return false;
 }
 
+static inline bool worker_can_recycle_completed_coro(XrCoroutine *coro) {
+    if (!coro || !(coro->gc_flags & XR_CORO_GC_RECYCLABLE) ||
+        xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
+        return false;
+    }
+
+    XrTask *task = coro->task;
+    if (!task)
+        return true;
+    if (task->parent || task->first_child || task->links)
+        return false;
+    if (atomic_load_explicit(&task->on_completion, memory_order_acquire))
+        return false;
+    return atomic_load_explicit(&task->await_state, memory_order_acquire) != XR_AWAIT_WAITING;
+}
+
 static XrCoroEvent worker_event_from_coro(XrCoroutine *coro) {
     XrCoroEvent event;
     event.kind = XR_CORO_EVENT_START;
@@ -559,8 +575,7 @@ normal_result_path:
     // Deferred recycle: fire-and-forget coro completed, defer to next pool_get.
     // gc_flags bit 2 = recyclable for fire-and-forget go.
     // Push to pending linked list (via coro->next) — flushed in pool_get.
-    if (result.kind == XR_CORO_RUN_DONE && (coro->gc_flags & XR_CORO_GC_RECYCLABLE) &&
-        !xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
+    if (result.kind == XR_CORO_RUN_DONE && worker_can_recycle_completed_coro(coro)) {
         coro->next = p->pending_recycle_coro;
         p->pending_recycle_coro = coro;
     }

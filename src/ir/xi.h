@@ -507,6 +507,7 @@ typedef enum {
 #define XI_FLAG_WRITES_MEM (1 << 4)  /* writes heap memory (store_field, index_set, ...) */
 #define XI_FLAG_TAIL (1 << 5)        /* tail-position call: emit OP_TAILCALL / OP_INVOKE_TAIL */
 #define XI_FLAG_SPEC_CONST (1 << 6)  /* value is speculated constant (IC-guided, SCCP may fold) */
+#define XI_FLAG_FIRE_AND_FORGET (1 << 7) /* XI_GO result is not user-visible */
 
 /* Composite masks for query convenience */
 #define XI_FLAG_MEM_ANY (XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
