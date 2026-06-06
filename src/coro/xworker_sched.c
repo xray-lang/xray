@@ -274,14 +274,15 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrCoroutine *io_coro = local_ready.head;
         while (io_coro) {
             XrCoroutine *next = io_coro->sched_link;
-            io_coro->sched_link = NULL;
             XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
                       "poll_sources: waking DONE coroutine from local IO");
             SCHED_TRACE_CORO(worker, io_coro, "local_io_wake");
             xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
             xr_coro_transition_wake(io_coro);
-            xr_worker_push_lifo(worker, io_coro);
             io_coro = next;
+        }
+        if (local_ready.head) {
+            (void) xr_worker_push_lifo_batch(worker, local_ready.head);
         }
     }
 
@@ -312,14 +313,15 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrCoroutine *io_coro = ready.head;
         while (io_coro) {
             XrCoroutine *next = io_coro->sched_link;
-            io_coro->sched_link = NULL;
             XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
                       "poll_sources: waking DONE coroutine from IO");
             SCHED_TRACE_CORO(worker, io_coro, "io_wake");
             xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
             xr_coro_transition_wake(io_coro);
-            xr_worker_push_lifo(worker, io_coro);
             io_coro = next;
+        }
+        if (ready.head) {
+            (void) xr_worker_push_lifo_batch(worker, ready.head);
         }
     }
 
