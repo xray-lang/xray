@@ -56,17 +56,6 @@ static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     return (XrAotCoroState *) coro->backend_state;
 }
 
-static void aot_release_state(XrCoroutine *coro) {
-    XrAotCoroState *state = aot_state_from_coro(coro);
-    if (!state)
-        return;
-
-    if (state->desc && state->desc->release_frame && state->frame)
-        state->desc->release_frame(state->frame, coro ? coro->coro_gc : NULL);
-    xr_free(state);
-    coro->backend_state = NULL;
-}
-
 static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroGC *gc) {
     if (!frame)
         return;
@@ -75,6 +64,16 @@ static void aot_release_frame(const XrAotCoroDesc *desc, void *frame, XrCoroGC *
         return;
     }
     xr_aot_frame_free(frame);
+}
+
+static void aot_release_state(XrCoroutine *coro) {
+    XrAotCoroState *state = aot_state_from_coro(coro);
+    if (!state)
+        return;
+
+    aot_release_frame(state->desc, state->frame, coro ? coro->coro_gc : NULL);
+    xr_free(state);
+    coro->backend_state = NULL;
 }
 
 static const char *aot_backend_debug_name(const XrCoroutine *coro) {
