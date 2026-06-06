@@ -633,6 +633,16 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
+void xr_coro_finish_backend_resume_tokens(XrCoroutine *coro, int resume_status) {
+    if (!coro || !coro->ext || resume_status != XR_RESUME_TIMEOUT)
+        return;
+
+    int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
+    if (wait_reason == (XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT)) {
+        xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
+    }
+}
+
 XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
     if (milliseconds <= 0) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
