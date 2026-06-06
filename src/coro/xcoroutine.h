@@ -66,7 +66,6 @@
 #include "../base/xchecks.h"
 #include "../runtime/value/xvalue.h"
 #include "xcoro_abi.h"
-#include "xcoro_backend_ops.h"
 #include "xcoro_flags.h"
 #include "xslot_ref.h"
 #include "xtimer_wheel.h"
@@ -79,6 +78,7 @@ struct XrCoroMonitor;
 struct XrCoroRegistry;
 typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
+typedef struct XrCoroBackendOps XrCoroBackendOps;
 /* ========== Coroutine Priority ========== */
 
 typedef enum {
@@ -164,6 +164,7 @@ struct XrCoroutine {
     /* === Backend Execution State === */
     const XrCoroBackendVTable *backend;
     void *backend_state;
+    const XrCoroBackendOps *backend_ops;
 
     /* ================================================================
      * WARM ZONE — GC/result hot fields and backend-owned cold state
@@ -193,14 +194,17 @@ static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
 }
 
 static inline const XrCoroBackendOps *xr_coro_backend_ops(const XrCoroutine *coro) {
-    if (!coro || !coro->backend)
-        return NULL;
-    switch (coro->backend->kind) {
-        case XR_CORO_BACKEND_VM:
-            return xr_coro_vm_backend_ops();
-        default:
-            return NULL;
-    }
+    return coro ? coro->backend_ops : NULL;
+}
+
+static inline void xr_coro_attach_backend(XrCoroutine *coro, const XrCoroBackendVTable *backend,
+                                          void *backend_state,
+                                          const XrCoroBackendOps *backend_ops) {
+    if (!coro)
+        return;
+    coro->backend = backend;
+    coro->backend_state = backend_state;
+    coro->backend_ops = backend_ops;
 }
 
 /* ========== XrCoroExt Accessor ========== */

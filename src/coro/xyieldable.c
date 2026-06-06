@@ -17,6 +17,7 @@
 #include "../base/xchecks.h"
 #include "../os/os_time.h"
 #include "xcoroutine.h"
+#include "xcoro_backend_ops.h"
 #include "xworker.h"
 #include "xnetpoll.h"
 #include "xexec_frame.h"

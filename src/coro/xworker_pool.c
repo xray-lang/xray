@@ -25,6 +25,7 @@
  */
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
+#include "xcoro_backend_ops.h"
 
 // Get coroutine object from pool (per-Worker + batch steal)
 XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {

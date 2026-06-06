@@ -15,6 +15,7 @@
 
 #include "../coro/xworker_internal.h"
 #include "../coro/xblock.h"
+#include "../coro/xcoro_backend_ops.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
@@ -194,6 +195,8 @@ static void vm_entry_reset_no_free(XrVmCoroState *state) {
 static bool vm_backend_ensure_state(XrCoroutine *coro) {
     if (!coro)
         return false;
+    if (coro->backend == &vm_backend_vtable)
+        coro->backend_ops = &vm_backend_ops;
     if (vm_state_for_coro(coro))
         return true;
     if (coro->backend && coro->backend != &vm_backend_vtable && coro->backend_state)
@@ -203,8 +206,7 @@ static bool vm_backend_ensure_state(XrCoroutine *coro) {
         return false;
     state->ctx.handlers = state->ctx.handler_inline;
     state->ctx.handler_capacity = XR_HANDLER_INLINE_CAP;
-    coro->backend = xr_coro_vm_backend_vtable();
-    coro->backend_state = state;
+    xr_coro_attach_backend(coro, xr_coro_vm_backend_vtable(), state, &vm_backend_ops);
     coro->gc_flags |= XR_CORO_GC_BACKEND_STATE_OWNED;
     return true;
 }
@@ -830,6 +832,7 @@ static void vm_backend_destroy(XrCoroutine *coro) {
         xr_free(state);
         coro->backend_state = NULL;
         coro->backend = NULL;
+        coro->backend_ops = NULL;
         coro->gc_flags &= ~XR_CORO_GC_BACKEND_STATE_OWNED;
     }
 }
