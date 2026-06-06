@@ -557,13 +557,13 @@ TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
     producer.isolate = &f.isolate_storage;
     consumer.isolate = &f.isolate_storage;
 
-    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(1), &producer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(1), &producer, -1), (int) XR_CHAN_OK);
     XrValue out = xr_null();
-    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer, -1), (int) XR_CHAN_OK);
     ASSERT_EQ_INT((int) XR_TO_INT(out), 1);
 
-    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(2), &producer), (int) XR_CHAN_OK);
-    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(2), &producer, -1), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &consumer, -1), (int) XR_CHAN_OK);
     ASSERT_EQ_INT((int) XR_TO_INT(out), 2);
 
     ASSERT_EQ_INT((int) xr_sched_metric_load(&f.runtime.sched_stats.chan_kind_generic_op_count), 1);
@@ -597,7 +597,7 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     atomic_store(&sender.resume_status, XR_RESUME_OK);
     atomic_store(&sender.affinity_p, 0);
 
-    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(7), &sender), (int) XR_CHAN_BLOCK);
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(7), &sender, -1), (int) XR_CHAN_BLOCK);
     ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_REGISTERED);
     ASSERT_EQ_PTR(atomic_load(&sender_ext.chan_wait_token.channel), ch);
     ASSERT_TRUE(sender_ext.chan_wait_token.is_send);
@@ -613,6 +613,50 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
     ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_IDLE);
     ASSERT_NULL(atomic_load(&sender_ext.chan_wait_token.channel));
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
+TEST(channel_timed_wait_cancels_timer_on_channel_wake) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine sender;
+    XrCoroExt sender_ext;
+    memset(&sender, 0, sizeof(sender));
+    memset(&sender_ext, 0, sizeof(sender_ext));
+    sender.id = 302;
+    sender.isolate = &f.isolate_storage;
+    sender.ext = &sender_ext;
+    atomic_store(&sender.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&sender.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&sender.resume_status, XR_RESUME_OK);
+    atomic_store(&sender.affinity_p, 0);
+
+    ASSERT_EQ_INT((int) xr_channel_send(ch, xr_int(7), &sender, 1000), (int) XR_CHAN_BLOCK);
+    ASSERT_TRUE(atomic_load_explicit(&sender_ext.timer_active, memory_order_relaxed));
+    ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_REGISTERED);
+
+    XrCoroutine receiver;
+    memset(&receiver, 0, sizeof(receiver));
+    receiver.id = 303;
+    receiver.isolate = &f.isolate_storage;
+    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&receiver.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&receiver.resume_status, XR_RESUME_OK);
+    atomic_store(&receiver.affinity_p, 0);
+
+    XrValue out = xr_null();
+    ASSERT_EQ_INT((int) xr_channel_recv(ch, &out, &receiver, -1), (int) XR_CHAN_OK);
+    ASSERT_EQ_INT((int) XR_TO_INT(out), 7);
+    ASSERT_FALSE(atomic_load_explicit(&sender_ext.timer_active, memory_order_relaxed));
+    ASSERT_EQ_INT(atomic_load(&sender_ext.wait.timer_token.state), XR_TIMER_WAIT_CANCELLED);
+    ASSERT_EQ_INT(xr_coro_resume_load(&sender), XR_RESUME_CHANNEL);
 
     xr_channel_destroy(ch);
     xr_sysheap_free_shared(ch, sizeof(XrChannel));
@@ -1407,6 +1451,7 @@ RUN_TEST(channel_wake_command_batches_ready_waiters);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
+RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);
 RUN_TEST(channel_notify_send_without_current_worker_routes_to_inbox);
 RUN_TEST(channel_waiter_cancel_unlinks_channel_and_worker_queues);
 RUN_TEST(channel_waiter_cancel_routes_foreign_owner_detach);

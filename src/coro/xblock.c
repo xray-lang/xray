@@ -247,7 +247,7 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
     if (coro && !xr_coro_ensure_ext(coro))
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
 
-    XrChanResult chan_result = xr_channel_send(ch, value, coro);
+    XrChanResult chan_result = xr_channel_send(ch, value, coro, timeout_ms);
     if (chan_result == XR_CHAN_OK) {
         xr_slot_store_value(result_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
@@ -261,9 +261,6 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
-        if (timeout_ms > 0) {
-            coro_arm_timeout(coro, timeout_ms);
-        }
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
 
@@ -302,7 +299,7 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
     }
 
     XrValue recv_val;
-    XrChanResult chan_result = xr_channel_recv(ch, &recv_val, coro);
+    XrChanResult chan_result = xr_channel_recv(ch, &recv_val, coro, timeout_ms);
     if (chan_result == XR_CHAN_OK) {
         recv_val = xr_chan_copy_recv(isolate, recv_val, coro);
         xr_slot_store_value(value_slot, recv_val);
@@ -320,9 +317,6 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
     if (chan_result == XR_CHAN_BLOCK) {
-        if (timeout_ms > 0) {
-            coro_arm_timeout(coro, timeout_ms);
-        }
         return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
 
