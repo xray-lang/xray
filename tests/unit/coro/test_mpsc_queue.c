@@ -47,6 +47,7 @@ struct XrCoroutine {
 // Re-declare functions (they're in xray_core lib)
 void xr_mpsc_init(XrMPSCQueue *q);
 void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro);
+void xr_mpsc_push_batch(XrMPSCQueue *q, struct XrCoroutine *first, struct XrCoroutine *last);
 struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q);
 bool xr_mpsc_empty(XrMPSCQueue *q);
 
@@ -110,6 +111,26 @@ TEST(mpsc_push_multiple) {
         cur = cur->sched_link;
     }
     ASSERT_EQ_INT(count, 3);
+}
+
+TEST(mpsc_push_batch) {
+    init_mock_coros();
+    XrMPSCQueue q;
+    xr_mpsc_init(&q);
+
+    mock_coros[0].sched_link = &mock_coros[1];
+    mock_coros[1].sched_link = &mock_coros[2];
+    mock_coros[2].sched_link = NULL;
+
+    xr_mpsc_push_batch(&q, &mock_coros[0], &mock_coros[2]);
+    ASSERT_FALSE(xr_mpsc_empty(&q));
+
+    struct XrCoroutine *list = xr_mpsc_drain(&q);
+    ASSERT_EQ_INT(list->mock_id, 1);
+    ASSERT_EQ_INT(list->sched_link->mock_id, 2);
+    ASSERT_EQ_INT(list->sched_link->sched_link->mock_id, 3);
+    ASSERT_NULL(list->sched_link->sched_link->sched_link);
+    ASSERT_TRUE(xr_mpsc_empty(&q));
 }
 
 TEST(mpsc_drain_empty) {
@@ -206,6 +227,7 @@ RUN_TEST(mpsc_init);
 RUN_TEST_SUITE("MPSC Queue - Push/Drain");
 RUN_TEST(mpsc_push_single);
 RUN_TEST(mpsc_push_multiple);
+RUN_TEST(mpsc_push_batch);
 RUN_TEST(mpsc_drain_empty);
 RUN_TEST(mpsc_push_drain_push);
 

@@ -36,6 +36,10 @@ XR_FUNC void xr_mpsc_init(XrMPSCQueue *q);
 // Push (thread-safe, CAS loop)
 XR_FUNC void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro);
 
+// Push a pre-linked sched_link list with one CAS. first and last must be non-NULL.
+XR_FUNC void xr_mpsc_push_batch(XrMPSCQueue *q, struct XrCoroutine *first,
+                                struct XrCoroutine *last);
+
 // Drain all elements via O(1) atomic swap, return list via sched_link
 XR_FUNC struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q);
 
