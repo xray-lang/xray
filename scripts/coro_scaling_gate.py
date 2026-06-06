@@ -60,13 +60,19 @@ SCHED_METRIC_PREFIXES = (
     "LIFO gate:",
     "Fast dispatch:",
     "Channel wake commands:",
+    "Channel wake diagnostics:",
     "Channel hot path:",
-    "Channel worker shape:",
+    "Channel logical shape transitions:",
+    "Channel worker shape transitions:",
+    "Channel logical ops:",
+    "Channel worker-shape ops:",
     "Channel lock:",
     "Channel lock wait:",
     "Channel buffered fast path:",
     "Channel ops:",
+    "Channel waitq:",
     "Channel close fanout:",
+    "WorkQueue:",
     "Timeout:",
     "Timer:",
     "Timer cancel queue:",
@@ -527,6 +533,8 @@ def parse_sched_metrics(text: str) -> dict[str, float | None]:
         if prefix is None:
             continue
         section = re.sub(r"[^A-Za-z0-9]+", "_", prefix.strip(":").strip()).strip("_").lower()
+        if section == "workqueue":
+            section = "work_queue"
         for key, value in re.findall(r"([A-Za-z_][A-Za-z0-9_]*)=(-?[0-9]+(?:\.[0-9]+)?)", line):
             metrics[f"{section}_{key}"] = float(value)
     return metrics
