@@ -109,6 +109,8 @@ typedef struct XrCoroBackendVTable {
     XrCoroBackendKind kind;
     XrCoroResumeFn resume;
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
+    bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
+    void (*reset_reusable)(XrCoroutine *coro);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);

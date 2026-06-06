@@ -207,6 +207,19 @@ static inline void xr_coro_attach_backend(XrCoroutine *coro, const XrCoroBackend
     coro->backend_ops = backend_ops;
 }
 
+static inline bool xr_coro_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
+    if (!coro || !coro->backend || !coro->backend->prepare_recycle)
+        return false;
+    return coro->backend->prepare_recycle(coro, worker);
+}
+
+static inline bool xr_coro_backend_reset_reusable(XrCoroutine *coro) {
+    if (!coro || !coro->backend || !coro->backend->reset_reusable)
+        return false;
+    coro->backend->reset_reusable(coro);
+    return true;
+}
+
 /* ========== XrCoroExt Accessor ========== */
 
 #include "../base/xmalloc.h"

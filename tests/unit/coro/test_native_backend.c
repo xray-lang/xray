@@ -248,6 +248,35 @@ TEST(aot_coroutine_create_failure_releases_frame) {
     ASSERT_EQ_INT(release_count, 1);
 }
 
+TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
+    const XrCoroBackendVTable *vm_backend = xr_coro_vm_backend_vtable();
+    ASSERT_NOT_NULL(vm_backend);
+    ASSERT_EQ_INT(vm_backend->kind, XR_CORO_BACKEND_VM);
+    ASSERT_NOT_NULL(vm_backend->prepare_recycle);
+    ASSERT_NOT_NULL(vm_backend->reset_reusable);
+
+    XrayIsolate isolate;
+    memset(&isolate, 0, sizeof(isolate));
+
+    int counter = 0;
+    XrCoroutine *native = xr_coro_create_native(&isolate, native_increment, &counter, "native");
+    ASSERT_NOT_NULL(native);
+    ASSERT_FALSE(xr_coro_backend_prepare_recycle(native, NULL));
+    ASSERT_FALSE(xr_coro_backend_reset_reusable(native));
+    xr_coro_destroy(native);
+
+    int release_count = 0;
+    AotTestFrame *frame =
+        aot_test_frame_new(AOT_TEST_DONE, xr_int(1), XR_NULL_VAL, &release_count, NULL);
+    ASSERT_NOT_NULL(frame);
+    XrCoroutine *aot = xr_coro_create_aot(&isolate, &aot_test_desc, frame, "aot_no_pool");
+    ASSERT_NOT_NULL(aot);
+    ASSERT_FALSE(xr_coro_backend_prepare_recycle(aot, NULL));
+    ASSERT_FALSE(xr_coro_backend_reset_reusable(aot));
+    xr_coro_destroy(aot);
+    ASSERT_EQ_INT(release_count, 1);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Native Coroutine Backend");
@@ -255,5 +284,6 @@ RUN_TEST(native_coroutine_uses_native_backend_without_vm_state);
 RUN_TEST(aot_coroutine_uses_aot_backend_without_vm_state_and_maps_done);
 RUN_TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results);
 RUN_TEST(aot_coroutine_create_failure_releases_frame);
+RUN_TEST(coroutine_recycle_hooks_are_backend_abi_contract);
 
 TEST_MAIN_END()
