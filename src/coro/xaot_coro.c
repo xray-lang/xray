@@ -780,6 +780,19 @@ XrValue xr_aot_chan_try_recv_value(const XrAotContext *ctx, XrValue channel_valu
     return ok ? recv_value : XR_NULL_VAL;
 }
 
+bool xr_aot_chan_try_recv_slot(const XrAotContext *ctx, XrValue channel_value, XrSlotRef out_slot) {
+    if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value)) {
+        (void) xr_slot_store_value(out_slot, XR_NULL_VAL);
+        return false;
+    }
+
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    XrValue recv_value = XR_NULL_VAL;
+    bool ok = xr_chan_try_recv(ctx->isolate, ch, &recv_value, ctx->coro);
+    (void) xr_slot_store_value(out_slot, ok ? recv_value : XR_NULL_VAL);
+    return ok;
+}
+
 XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value) {
     if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
         return XR_NULL_VAL;
