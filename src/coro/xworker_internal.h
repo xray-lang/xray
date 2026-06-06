@@ -77,6 +77,7 @@ XR_FUNC XrCoroutine *worker_poll_sources(XrWorker *worker);
 
 // LIFO gate shared by the scheduler and fast dispatch.
 XR_FUNC XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget);
+XR_FUNC int xr_worker_push_lifo_batch(XrWorker *worker, XrCoroutine *first);
 XR_FUNC int xr_worker_push_batch(XrWorker *worker, XrCoroutine *first);
 
 // Global injection queue (xworker_runq.c)
@@ -85,7 +86,6 @@ XR_FUNC void xr_injectq_destroy(XrRuntime *runtime);
 XR_FUNC void xr_injectq_push(XrRuntime *runtime, XrCoroutine *coro);
 XR_FUNC void xr_injectq_push_batch(XrRuntime *runtime, XrCoroutine *first, XrCoroutine *last,
                                    int count, int priority);
-XR_FUNC XrCoroutine *xr_injectq_pop_one(XrRuntime *runtime, int priority);
 XR_FUNC int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int priority, int max_count);
 
 // Sysmon constants
