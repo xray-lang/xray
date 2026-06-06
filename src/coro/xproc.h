@@ -318,8 +318,9 @@ typedef struct XrProc {
     uint32_t io_poll_ewma;  // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
 
     /* === Scheduler Timestamp Cache === */
-    int64_t sched_time_cache;    // Cached monotonic ms for local enqueue timestamps
-    uint32_t sched_time_budget;  // Remaining local enqueues allowed to reuse the cache
+    int64_t sched_time_cache;      // Cached monotonic ms for local enqueue timestamps
+    uint32_t sched_time_budget;    // Remaining local enqueues allowed to reuse the cache
+    uint32_t spawn_share_counter;  // Owner-only fan-out sharing interval counter
 
     /* === Per-Worker Active Coro Counter (replaces global atomic active_coros) === */
     int local_active_coros;

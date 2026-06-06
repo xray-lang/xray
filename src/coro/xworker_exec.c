@@ -152,6 +152,38 @@ static bool worker_spawn_backlog_visible(XrWorker *worker, XrRuntime *runtime) {
     return worker_global_spawn_backlog_visible(runtime);
 }
 
+static int worker_spawn_share_backlog_limit(XrRuntime *runtime) {
+    if (!runtime)
+        return XR_SPAWN_INLINE_LOCAL_BACKLOG;
+    int limit = runtime->worker_count * XR_SPAWN_SHARE_BACKLOG_PER_WORKER;
+    int min_limit = XR_SPAWN_INLINE_LOCAL_BACKLOG * 2;
+    if (limit < min_limit)
+        limit = min_limit;
+    int max_local = XR_LOCAL_QUEUE_SIZE / 2;
+    if (limit > max_local)
+        limit = max_local;
+    return limit;
+}
+
+static bool worker_spawn_share_backlog_full(XrWorker *worker, XrRuntime *runtime) {
+    if (!worker || !runtime)
+        return false;
+    return xr_proc_local_runq_len(&worker->p) >= worker_spawn_share_backlog_limit(runtime);
+}
+
+static bool worker_should_share_spawn_child(XrWorker *worker, XrRuntime *runtime) {
+    if (!worker || !runtime || runtime->worker_count <= 1)
+        return false;
+    if (worker_global_spawn_backlog_visible(runtime))
+        return false;
+    if (worker_spawn_share_backlog_full(worker, runtime))
+        return false;
+    worker->p.spawn_share_counter++;
+    if (XR_SPAWN_SHARE_INTERVAL <= 1)
+        return true;
+    return (worker->p.spawn_share_counter % XR_SPAWN_SHARE_INTERVAL) == 0;
+}
+
 static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
                                              XrCoroutine *child) {
     int parent_priority = worker_coro_priority(parent);
@@ -167,6 +199,8 @@ static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *pare
         return true;
 
     if (worker_spawn_backlog_visible(worker, runtime))
+        return false;
+    if (worker_should_share_spawn_child(worker, runtime))
         return false;
 
     return !worker_high_priority_work_visible(runtime);
@@ -402,11 +436,18 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             result = xr_coro_run_error(XR_NULL_VAL, false);
             goto normal_result_path;
         }
+        int child_priority = worker_coro_priority(child);
+        int parent_priority = worker_coro_priority(coro);
         bool inline_child = worker_should_inline_spawn_child(worker, coro, child);
         // Queued and inline children both need worker threads visible before
         // the current worker continues the parent.
         xr_runtime_ensure_workers(p->runtime);
         p->stats.spawned_count++;
+        if (!inline_child && child_priority < CORO_PRIORITY_HIGH &&
+            child_priority >= parent_priority && !worker_high_priority_work_visible(p->runtime) &&
+            worker_spawn_share_backlog_full(worker, p->runtime)) {
+            inline_child = true;
+        }
         if (!inline_child) {
             xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
             xr_worker_push(worker, child);
