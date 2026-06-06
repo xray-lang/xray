@@ -13,38 +13,44 @@ if (process.args.length > 1) {
     TASKS = int(process.args[1]) ?? TASKS
 }
 
-fn make_shards(count: int, capacity: int) -> Array<Channel<int>> {
-    let shards: Array<Channel<int>> = []
-    for (let i = 0; i < count; i++) {
-        shards.push(Channel(capacity))
-    }
-    return shards
-}
+class WorkQueue<T> {
+    shards: Array<Channel<T>>
+    worker_count: int
 
-shared const queue_shards = make_shards(WORKERS, 1024)
-
-fn queue_push(value: int, shard: int) {
-    let idx = shard % WORKERS
-    queue_shards[idx].send(value)
-}
-
-fn queue_pop(worker_id: int) -> int? {
-    for (let i = 0; i < WORKERS; i++) {
-        let idx = (worker_id + i) % WORKERS
-        let (value, ok) = queue_shards[idx].tryRecv()
-        if (ok) {
-            return value
+    constructor(count: int, capacity: int) {
+        this.worker_count = count
+        this.shards = []
+        for (let i = 0; i < count; i++) {
+            let ch: Channel<T> = Channel(capacity)
+            this.shards.push(ch)
         }
     }
-    let own = worker_id % WORKERS
-    return queue_shards[own].recv()
-}
 
-fn queue_close() {
-    for (ch in queue_shards) {
-        ch.close()
+    push(value: T, shard: int) {
+        let idx = shard % this.worker_count
+        this.shards[idx].send(value)
+    }
+
+    pop(worker_id: int) -> T? {
+        for (let i = 0; i < this.worker_count; i++) {
+            let idx = (worker_id + i) % this.worker_count
+            let (value, ok) = this.shards[idx].tryRecv()
+            if (ok) {
+                return value
+            }
+        }
+        let own = worker_id % this.worker_count
+        return this.shards[own].recv()
+    }
+
+    close() {
+        for (ch in this.shards) {
+            ch.close()
+        }
     }
 }
+
+shared const work_queue = new WorkQueue<int>(WORKERS, 1024)
 
 print("=== Work Queue Pool 测试 ===")
 print("Worker数:", WORKERS)
@@ -64,10 +70,18 @@ fn fib(n: int) -> int {
     return b
 }
 
+fn expected_total(count: int) -> int {
+    let total = 0
+    for (let i = 0; i < count; i++) {
+        total = total + fib(i % 20)
+    }
+    return total
+}
+
 fn worker(id: int) -> int {
     let processed = 0
     while (true) {
-        let task = queue_pop(id)
+        let task = work_queue.pop(id)
         if (task == null) { break }
         result_ch.send(fib(task % 20))
         processed++
@@ -77,9 +91,9 @@ fn worker(id: int) -> int {
 
 fn submit_tasks(count: int) {
     for (let i = 0; i < count; i++) {
-        queue_push(i, i)
+        work_queue.push(i, i)
     }
-    queue_close()
+    work_queue.close()
 }
 
 let start = time.monotonic()
@@ -105,8 +119,11 @@ for (w in workers) {
 
 let elapsed = time.monotonic() - start
 result_ch.close()
+let expected = expected_total(TASKS)
 
 print("结果校验和:", total)
+print("预期:", expected)
+print("正确:", total == expected)
 print("时间:", elapsed, "ms")
 if (elapsed > 0) {
     print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
