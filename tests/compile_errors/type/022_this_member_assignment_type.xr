@@ -1,0 +1,14 @@
+class Person {
+    age: int
+
+    constructor() {
+        this.age = 0
+    }
+
+    setBad() {
+        this.age = "old"
+    }
+}
+
+let p = new Person()
+p.setBad()
