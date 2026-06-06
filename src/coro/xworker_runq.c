@@ -224,6 +224,8 @@ void xr_worker_refresh_runq_masks(XrWorker *worker) {
 
 static int worker_select_actual_priority(XrWorker *worker, int effective_priority, int64_t now,
                                          bool *oldest_first) {
+    int selected = -1;
+    int64_t selected_submit_time = 0;
     for (int actual = CORO_PRIORITY_HIGH; actual >= CORO_PRIORITY_LOW; actual--) {
         XrRunQueue *rq = &worker->p.runq[actual];
         if (xr_runq_len(rq) <= 0)
@@ -231,11 +233,16 @@ static int worker_select_actual_priority(XrWorker *worker, int effective_priorit
         int effective = runq_effective_priority(rq, now);
         if (effective != effective_priority)
             continue;
-        if (oldest_first)
-            *oldest_first = effective > actual;
-        return actual;
+        XrCoroutine *candidate = runq_oldest_candidate(rq);
+        int64_t submit_time = candidate ? candidate->submit_time : now;
+        if (selected < 0 || submit_time < selected_submit_time) {
+            selected = actual;
+            selected_submit_time = submit_time;
+        }
     }
-    return -1;
+    if (selected >= 0 && oldest_first)
+        *oldest_first = effective_priority > selected;
+    return selected;
 }
 
 static bool worker_has_effective_high_work(XrWorker *worker, int64_t now) {
