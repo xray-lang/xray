@@ -628,8 +628,6 @@ XrCoroBlockResult xr_coro_sleep(XrCoroutine *coro, int64_t milliseconds) {
         return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     }
 
-    ext->yield_info.wait_fd = -1;
-    ext->yield_info.wait_events = 0;
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_SLEEP >> XR_CORO_WAIT_SHIFT);
 
     XrWorker *worker = xr_current_worker();

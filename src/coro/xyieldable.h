@@ -22,7 +22,6 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <stddef.h>
 // POLLIN/POLLOUT come from poll.h on POSIX and winsock2.h on
 // Windows; os_net.h pulls in the right header per OS.
 #include "../os/os_net.h"
@@ -101,36 +100,6 @@ typedef enum XrResumeStatus {
 // without a VM coroutine object.
 typedef XrCFuncResult (*XrContinuation)(struct XrayIsolate *X, int status, XrValue resume_value,
                                         void *ctx, XrValue *result);
-
-// ========== Blocking Context ==========
-
-// XrYieldContext - Blocking context
-//
-// Saves C function state when blocked, used for resume execution.
-typedef struct XrYieldContext {
-    // User data
-    void *user_data;        // User state data pointer
-    size_t user_data_size;  // User data size (for memory management)
-    bool user_data_owned;   // Whether memory is managed by coroutine
-
-    // Continuation function
-    XrContinuation cont;  // Continuation function
-
-    // I/O wait conditions
-    int wait_fd;      // fd to wait on (-1 means none)
-    int wait_events;  // POLLIN/POLLOUT
-
-    // Timeout
-    int64_t timeout_ms;  // Timeout (milliseconds, -1 means forever)
-    int64_t deadline;    // Absolute deadline (microseconds)
-
-    // Result
-    int result_events;  // Actually triggered events
-    bool timed_out;     // Whether timed out
-
-    // Linked list (for nested blocking)
-    struct XrYieldContext *next;
-} XrYieldContext;
 
 // ========== Wait Event Constants ==========
 
