@@ -126,6 +126,14 @@ typedef struct XrProcStats {
     uint64_t fast_dispatch_count;
     uint64_t fast_dispatch_budget_stop_count;
     uint64_t fast_dispatch_empty_count;
+    uint64_t pool_deferred_recycle_count;
+    uint64_t pool_local_get_count;
+    uint64_t pool_global_free_get_count;
+    uint64_t pool_arena_cache_get_count;
+    uint64_t pool_arena_batch_get_count;
+    uint64_t pool_miss_count;
+    uint64_t pool_local_put_count;
+    uint64_t pool_global_return_count;
     uint64_t inbox_drain_count;     // Non-empty MPSC inbox drain batches
     uint64_t inject_pull_count;     // Coros pulled from global inject queues
     uint64_t park_count;            // Futex park attempts by this worker

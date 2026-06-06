@@ -665,6 +665,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
         coro->next = worker->p.local_free_list;
         worker->p.local_free_list = coro;
         worker->p.local_free_count++;
+        worker->p.stats.pool_local_put_count++;
     } else {
         // Local full: return to global pool via pool_put
         // (handles batch drain of local list + global free list addition)
