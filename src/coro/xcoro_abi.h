@@ -111,6 +111,9 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
+    void (*on_safepoint)(XrCoroutine *coro);
+    void (*detach_worker_state)(XrCoroutine *coro);
+    bool (*is_try_mode)(const XrCoroutine *coro);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);

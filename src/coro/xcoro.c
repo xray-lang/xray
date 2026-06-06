@@ -59,24 +59,24 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
 }
 
 void xr_coro_backend_on_safepoint(XrCoroutine *coro) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->on_safepoint)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->on_safepoint)
         return;
-    ops->on_safepoint(coro);
+    backend->on_safepoint(coro);
 }
 
 void xr_coro_detach_worker_state(XrCoroutine *coro) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->detach_worker_state)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->detach_worker_state)
         return;
-    ops->detach_worker_state(coro);
+    backend->detach_worker_state(coro);
 }
 
 bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
-    const XrCoroBackendOps *ops = xr_coro_backend_ops(coro);
-    if (!ops || !ops->is_try_mode)
+    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
+    if (!backend || !backend->is_try_mode)
         return false;
-    return ops->is_try_mode(coro);
+    return backend->is_try_mode(coro);
 }
 
 bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
@@ -253,6 +253,9 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .trace_roots = NULL,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,
+    .on_safepoint = NULL,
+    .detach_worker_state = NULL,
+    .is_try_mode = NULL,
     .release = native_backend_release,
     .destroy = native_backend_release,
     .debug_name = native_backend_debug_name,
