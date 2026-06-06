@@ -1178,6 +1178,7 @@ send_locked:
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
     coro->ext->send_value = value;  // Save value to send
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();
@@ -1264,6 +1265,7 @@ recv_locked:
     channel_note_participant_locked(ch, coro, false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = false;
+    xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
     XrWorker *w = xr_current_worker();

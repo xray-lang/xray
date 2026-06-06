@@ -601,6 +601,9 @@ TEST(channel_wait_token_tracks_block_wake_and_resume) {
     ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_REGISTERED);
     ASSERT_EQ_PTR(atomic_load(&sender_ext.chan_wait_token.channel), ch);
     ASSERT_TRUE(sender_ext.chan_wait_token.is_send);
+    ASSERT_EQ_INT(atomic_load(&sender.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_coro_get_wait_reason(xr_coro_flags_load(&sender)),
+                  XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
 
     xr_channel_close(ch);
     ASSERT_EQ_INT(atomic_load(&sender_ext.chan_wait_token.state), XR_CHAN_WAIT_RESOLVED);
