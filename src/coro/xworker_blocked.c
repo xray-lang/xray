@@ -139,13 +139,12 @@ static void bucket_clear_coro_links(XrCoroutine *coro) {
     coro->ext->wait_bucket_owner = -1;
 }
 
-static void worker_cancel_coro_timer_wait(XrCoroutine *coro) {
+static void worker_cancel_coro_timer_wait(XrWorker *worker, XrCoroutine *coro) {
     if (!coro || !coro->ext ||
         !atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
         return;
     }
-    xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
-    atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+    xr_worker_cancel_timer(worker, coro);
 }
 
 static void bucket_append_coro(XrWorker *worker, XrBlockedBucket *bucket, XrCoroutine *coro) {
@@ -327,10 +326,11 @@ static XrCoroutine *worker_pop_channel_waiter(XrWorker *worker, void *channel, b
     return coro;
 }
 
-static void worker_prepare_channel_waiter_resume(XrCoroutine *coro, int resume_status) {
+static void worker_prepare_channel_waiter_resume(XrWorker *worker, XrCoroutine *coro,
+                                                 int resume_status) {
     xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
     atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-    worker_cancel_coro_timer_wait(coro);
+    worker_cancel_coro_timer_wait(worker, coro);
     xr_coro_resume_store(coro, resume_status);
 }
 
@@ -352,7 +352,7 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     // close path) may have already claimed it; only the winner enqueues so the
     // coro is never double-pushed.
     if (xr_coro_claim_wake(coro)) {
-        worker_prepare_channel_waiter_resume(coro, XR_RESUME_CHANNEL);
+        worker_prepare_channel_waiter_resume(worker, coro, XR_RESUME_CHANNEL);
         xr_worker_push_lifo(worker, coro);
     }
 
@@ -378,7 +378,7 @@ bool xr_worker_wake_one_detached(XrWorker *worker, void *channel, bool wake_send
         return false;
 
     if (xr_coro_claim_wake(coro)) {
-        worker_prepare_channel_waiter_resume(coro, XR_RESUME_CHANNEL);
+        worker_prepare_channel_waiter_resume(worker, coro, XR_RESUME_CHANNEL);
         if (ready_out) {
             *ready_out = coro;
         }
@@ -418,7 +418,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         if (xr_coro_claim_wake(coro)) {
             xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-            worker_cancel_coro_timer_wait(coro);
+            worker_cancel_coro_timer_wait(worker, coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             coro->sched_link = NULL;
             if (ready_last) {
@@ -445,7 +445,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
         if (xr_coro_claim_wake(coro)) {
             xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
-            worker_cancel_coro_timer_wait(coro);
+            worker_cancel_coro_timer_wait(worker, coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
             coro->sched_link = NULL;
             if (ready_last) {
