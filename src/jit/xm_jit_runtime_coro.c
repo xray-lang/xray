@@ -1149,12 +1149,12 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 
 // Called from JIT via CALL_C for OP_AWAIT.
 // jit_call_args[0] = coro raw (XrValue tagged as PTR)
-// extra_arg = discard_result flag
+// extra_arg bit0 = discard_result, bit1 = one-shot await-go
 // Fast path: if Task is done, return result immediately.
 // Slow path: return XM_DEOPT_MARKER to trigger deopt to interpreter.
 // All await coordination lives on XrTask; raw coro await no longer supported.
 XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
-    int discard_result = (int) (extra_arg & 0xFF);
+    int discard_result = (int) (extra_arg & 0x01);
 
     int64_t raw0 = xr_coro_jit_state(coro)->scratch->call_args[0];
     XrValue val = jit_value_from_tag(raw0, XR_TAG_PTR);
@@ -1186,7 +1186,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  *
  * The Task ptr was stored in jit_call_args[0] by the preceding CALL_C
  * (xr_jit_await) which returned DEOPT_MARKER to signal "not done".
- * extra_arg encodes: bits[0:7] = discard_result.
+ * extra_arg bit0 = discard_result, bit1 = one-shot await-go.
  *
  * Returns:
  *   0 → blocked (JIT returns SUSPEND_MARKER, worker yields coro)
@@ -1194,7 +1194,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  *       (JIT reloads regs and continues inline)
  */
 XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
-    int discard_result = (int) (extra_arg & 0xFF);
+    int discard_result = (int) (extra_arg & 0x01);
 
     /* Retrieve Task pointer from the preceding xr_jit_await call.
      * The fast-path helper stored it in call_args[0]. */

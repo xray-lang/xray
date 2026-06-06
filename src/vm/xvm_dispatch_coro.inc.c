@@ -31,11 +31,15 @@ vmcase(OP_GO) {
 vmcase(OP_AWAIT) {
     TRACE_EXECUTION();
     /* Inline fast path: task completed with immediate value.
-     * Avoids out-of-line dispatch path call and defers executor recycle
-     * to next pool_get — matching channel recv hot path perf. */
+     * Avoids the out-of-line dispatch helper; one-shot await-go can
+     * clear the temporary Task slot and recycle the executor immediately. */
     {
         int _aw_a = GETARG_A(i);
-        XrValue _aw_tv = base[GETARG_B(i)];
+        int _aw_b = GETARG_B(i);
+        int _aw_flags = GETARG_C(i);
+        bool _aw_discard = (_aw_flags & 0x01) != 0;
+        bool _aw_one_shot = (_aw_flags & 0x02) != 0;
+        XrValue _aw_tv = base[_aw_b];
         if (xr_value_is_task(_aw_tv)) {
             XrTask *_aw_task = xr_value_to_task(_aw_tv);
             uint8_t _aw_st = atomic_load_explicit(&_aw_task->state, memory_order_acquire);
@@ -43,17 +47,22 @@ vmcase(OP_AWAIT) {
                 XrValue _aw_res = _aw_task->result;
                 if (!XR_IS_PTR(_aw_res)) {
                     // Immediate value: no deep copy
-                    base[_aw_a] = GETARG_C(i) ? xr_null() : _aw_res;
-                    /* Detach executor only — do NOT recycle.
-                     * Task lives on executor's Immix heap;
-                     * parent's tasks array still references it.
-                     * Recycling frees the Immix block, causing
-                     * use-after-free when parent's GC scans
-                     * the dangling Task pointer. */
+                    base[_aw_a] = _aw_discard ? xr_null() : _aw_res;
+                    if (_aw_one_shot && _aw_a != _aw_b)
+                        base[_aw_b] = xr_null();
                     XrCoroutine *_aw_exec = _aw_task->coro;
                     if (_aw_exec) {
                         _aw_task->coro = NULL;
                         _aw_exec->task = NULL;
+                        if (_aw_one_shot && xr_coro_flags_has(_aw_exec, XR_CORO_FLG_DONE) &&
+                            !xr_coro_flags_has(_aw_exec, XR_CORO_FLG_MAIN)) {
+                            XrWorker *_aw_worker = xr_current_worker();
+                            if (_aw_worker) {
+                                xr_coro_recycle_local(_aw_worker, _aw_exec);
+                            } else {
+                                xr_coro_destroy(_aw_exec);
+                            }
+                        }
                     }
                     vmbreak;
                 }

@@ -514,6 +514,12 @@ typedef enum {
 #define XI_FLAG_CALL_EFFECTS                                                                       \
     (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM)
 
+/* XI_AWAIT aux_int bits. */
+#define XI_AWAIT_AUX_ANY (1 << 0)
+#define XI_AWAIT_AUX_ALL (1 << 1)
+#define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
+#define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3) /* await operand is a non-escaping XI_GO */
+
 /* ========== Upvalue Capture Info ========== */
 
 /* Source kinds matching the VM's UpvalInfo.source constants */
