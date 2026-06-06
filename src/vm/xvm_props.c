@@ -992,6 +992,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         if (cfunc->is_yieldable) {
             frame->u.c.result_slot = (int16_t) a;
             frame->u.c.has_cfunc_result = false;
+            frame->pc = pc;
 
             XrValue result;
             XrCFuncResult status = cfunc->as.yieldable(isolate, &base[a + 2], nargs, &result);
@@ -1005,10 +1006,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
                     base[a] = result;
                     return XR_DISP_NEXT;
                 case XR_CFUNC_BLOCKED:
-                    frame->pc = pc;
                     return XR_DISP_BLOCKED;
                 case XR_CFUNC_YIELD:
-                    frame->pc = pc;
                     return XR_DISP_YIELD;
                 case XR_CFUNC_CALL_CLOSURE:
                     // Closure frame pushed, return to VM main loop
