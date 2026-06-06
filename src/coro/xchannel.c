@@ -1001,6 +1001,8 @@ void xr_channel_close(XrChannel *ch) {
 
     channel_clear_drained_direction_masks(ch, deferred_send_waiters == 0,
                                           deferred_recv_waiters == 0);
+    CHANNEL_METRIC_ADD(ch, chan_close_deferred_send_waiter_count, deferred_send_waiters);
+    CHANNEL_METRIC_ADD(ch, chan_close_deferred_recv_waiter_count, deferred_recv_waiters);
     xr_runtime_wake_channel_all(ch->isolate, ch);
 }
 

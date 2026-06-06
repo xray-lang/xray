@@ -84,6 +84,10 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_close_ready_wake_count;
     _Atomic uint64_t chan_close_send_waiter_count;
     _Atomic uint64_t chan_close_recv_waiter_count;
+    _Atomic uint64_t chan_close_deferred_send_waiter_count;
+    _Atomic uint64_t chan_close_deferred_recv_waiter_count;
+    _Atomic uint64_t chan_close_local_worker_count;
+    _Atomic uint64_t chan_close_remote_worker_count;
     _Atomic uint64_t chan_buffer_no_waiter_count;
     _Atomic uint64_t chan_lock_fast_count;
     _Atomic uint64_t chan_lock_contended_count;

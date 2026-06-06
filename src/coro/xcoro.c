@@ -762,6 +762,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
 
     // Local worker: direct wake (owner-safe)
     if (current) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_close_local_worker_count);
         xr_worker_wake_all(current, channel);
         while (xr_worker_wake_select_with_status(current, channel, XR_RESUME_CHANNEL_CLOSED)) {
             // Keep waking until no more select waiters
@@ -772,6 +773,7 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
     XrChannel *ch = (XrChannel *) channel;
     uint64_t mask = xr_channel_any_waiter_mask(ch);
     mask &= ~xr_channel_worker_bit(current_id);
+    uint64_t remote_workers = 0;
     while (mask) {
         int wid = __builtin_ctzll(mask);
         mask &= mask - 1;
@@ -779,6 +781,11 @@ void xr_runtime_wake_channel_all(XrayIsolate *X, void *channel) {
             continue;
 
         xr_worker_dispatch_chan_wake(runtime, wid, channel, false, true);
+        remote_workers++;
+    }
+    if (remote_workers > 0) {
+        xr_sched_metric_add(runtime, &runtime->sched_stats.chan_close_remote_worker_count,
+                            remote_workers);
     }
 
     // Clear the mask — channel is closed, no future waiters expected.
