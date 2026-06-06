@@ -285,6 +285,49 @@ int worker_pull_inject(XrWorker *worker, int max_per_priority) {
     return total;
 }
 
+static void worker_io_ready_append(XrCoroutine **first, XrCoroutine **last, XrCoroutine *coro) {
+    XR_DCHECK(first != NULL, "io_ready_append: NULL first");
+    XR_DCHECK(last != NULL, "io_ready_append: NULL last");
+    XR_DCHECK(coro != NULL, "io_ready_append: NULL coro");
+
+    coro->sched_link = NULL;
+    if (*last) {
+        (*last)->sched_link = coro;
+    } else {
+        *first = coro;
+    }
+    *last = coro;
+}
+
+static XrCoroutine *worker_claim_io_ready_coro(XrWorker *worker, XrCoroutine *coro) {
+    (void) worker;
+    if (!coro)
+        return NULL;
+    if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
+        return NULL;
+    SCHED_TRACE_CORO(worker, coro, "io_wake");
+    if (!xr_coro_claim_wake(coro))
+        return NULL;
+    xr_coro_resume_store(coro, XR_RESUME_IO_READY);
+    coro->sched_link = NULL;
+    return coro;
+}
+
+static XrCoroutine *worker_claim_io_ready_list(XrWorker *worker, XrCoroutine *head) {
+    XrCoroutine *claimed_first = NULL;
+    XrCoroutine *claimed_last = NULL;
+    XrCoroutine *io_coro = head;
+    while (io_coro) {
+        XrCoroutine *next = io_coro->sched_link;
+        io_coro->sched_link = NULL;
+        XrCoroutine *claimed = worker_claim_io_ready_coro(worker, io_coro);
+        if (claimed)
+            worker_io_ready_append(&claimed_first, &claimed_last, claimed);
+        io_coro = next;
+    }
+    return claimed_first;
+}
+
 // Poll all I/O sources and drain MPSC inbox into P's local run queue.
 // Returns a fast-path IO coroutine (single wakeup with affinity to this
 // worker) that the caller should execute directly, bypassing the queue.
@@ -300,18 +343,9 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
         XrReadyList local_ready = {0};
         xr_local_poll_events(&p->local_poll, 0, &local_ready);
         total_io_events += local_ready.count;
-        XrCoroutine *io_coro = local_ready.head;
-        while (io_coro) {
-            XrCoroutine *next = io_coro->sched_link;
-            XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
-                      "poll_sources: waking DONE coroutine from local IO");
-            SCHED_TRACE_CORO(worker, io_coro, "local_io_wake");
-            xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
-            xr_coro_transition_wake(io_coro);
-            io_coro = next;
-        }
-        if (local_ready.head) {
-            (void) xr_worker_push_lifo_batch(worker, local_ready.head);
+        XrCoroutine *claimed = worker_claim_io_ready_list(worker, local_ready.head);
+        if (claimed) {
+            (void) xr_worker_push_lifo_batch(worker, claimed);
         }
     }
 
@@ -327,30 +361,15 @@ XrCoroutine *worker_poll_sources(XrWorker *worker) {
             XrCoroutine *io_coro = ready.head;
             int aff = xr_coro_wake_target_id(io_coro);
             if (aff == p->id) {
-                io_coro->sched_link = NULL;
-                XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
-                          "poll_sources: waking DONE coroutine from IO");
-                SCHED_TRACE_CORO(worker, io_coro, "io_wake_fast");
-                xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
-                xr_coro_transition_wake(io_coro);
-                fast_coro = io_coro;
+                fast_coro = worker_claim_io_ready_coro(worker, io_coro);
                 goto after_netpoll;
             }
         }
 
         // Normal path: enqueue all ready coroutines to LIFO slot.
-        XrCoroutine *io_coro = ready.head;
-        while (io_coro) {
-            XrCoroutine *next = io_coro->sched_link;
-            XR_DCHECK(!xr_coro_flags_has(io_coro, XR_CORO_FLG_DONE),
-                      "poll_sources: waking DONE coroutine from IO");
-            SCHED_TRACE_CORO(worker, io_coro, "io_wake");
-            xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
-            xr_coro_transition_wake(io_coro);
-            io_coro = next;
-        }
-        if (ready.head) {
-            (void) xr_worker_push_lifo_batch(worker, ready.head);
+        XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
+        if (claimed) {
+            (void) xr_worker_push_lifo_batch(worker, claimed);
         }
     }
 
@@ -472,6 +491,11 @@ static void worker_sleep_timeout_callback(void *arg) {
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
             return;
         }
+        if (!xr_coro_claim_wake(coro)) {
+            xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+            return;
+        }
         xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         xr_select_wait_timeout(sw);
         atomic_store_explicit(&sw->selected_index, -1, memory_order_release);
@@ -479,8 +503,16 @@ static void worker_sleep_timeout_callback(void *arg) {
         // Remove from blocked queue
         xr_worker_unblock_select(worker, coro);
     } else {
-        xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
+        XrChannel *ch = (coro->ext) ? (XrChannel *) atomic_load_explicit(&coro->ext->wait_channel,
+                                                                         memory_order_acquire)
+                                    : NULL;
+        if (!xr_coro_claim_wake(coro)) {
+            xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
+            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
+            return;
+        }
+        xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         if (wait_reason == (XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT)) {
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)
@@ -492,9 +524,6 @@ static void worker_sleep_timeout_callback(void *arg) {
                 xr_await_wait_token_timeout(&wait->await_token);
         }
         // Check if waiting on channel (sendTimeout/recvTimeout)
-        XrChannel *ch = (coro->ext) ? (XrChannel *) atomic_load_explicit(&coro->ext->wait_channel,
-                                                                         memory_order_acquire)
-                                    : NULL;
         if (ch) {
             // Remove from channel wait queue
             xr_channel_remove_waiter(ch, coro);
@@ -505,15 +534,10 @@ static void worker_sleep_timeout_callback(void *arg) {
         xr_worker_unblock(worker, coro);
     }
 
-    // Clear blocked flags
-    xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK);
     atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
 
     // Set resume status to timeout
     xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
-
-    // Set ready state
-    xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
     // Enqueue to coroutine's target worker inbox (with Dekker sync + wake).
     // Respects Coro.lockThread(): locked coros return to their locked worker.
@@ -697,14 +721,10 @@ static void worker_park(XrWorker *worker) {
     {
         XrReadyList ready = xr_netpoll_poll(&runtime->netpoll, 0);
         if (ready.count > 0) {
-            XrCoroutine *io_coro = ready.head;
-            while (io_coro) {
-                XrCoroutine *next = io_coro->sched_link;
-                xr_coro_resume_store(io_coro, XR_RESUME_IO_READY);
-                xr_coro_transition_wake(io_coro);
-                io_coro = next;
-            }
-            (void) xr_worker_push_lifo_batch(worker, ready.head);
+            XrCoroutine *claimed = worker_claim_io_ready_list(worker, ready.head);
+            if (!claimed)
+                goto park_recheck_work;
+            (void) xr_worker_push_lifo_batch(worker, claimed);
             // Found IO work, abort park. M remains in idle_worker_list until
             // a later wake_idle_worker pops it — tolerable because the wake
             // is idempotent and in_idle_worker_list guards re-entry.
@@ -714,6 +734,7 @@ static void worker_park(XrWorker *worker) {
         }
     }
 
+park_recheck_work:
     // Recheck for work before sleeping
     if (!runtime_has_work(runtime) && atomic_load(&runtime->running)) {
         // Adaptive timeout: IO-heavy workloads use shorter sleep (faster response),

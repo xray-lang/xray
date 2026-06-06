@@ -24,6 +24,7 @@
 #include "xcoroutine.h"  // XrCoroutine
 #include "xworker.h"     // XrRuntime, XrWorker
 #include "xyieldable.h"  // XR_RESUME_TIMEOUT
+#include "../runtime/xisolate_internal.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
@@ -951,27 +952,29 @@ void xr_netpoll_deadline_impl(XrPollDesc *pd, uintptr_t seq, bool read) {
         // old is coroutine pointer, wake it
         if (atomic_compare_exchange_weak(gpp, &old, XR_PD_NIL)) {
             XrCoroutine *coro = (XrCoroutine *) old;
+            XrWorker *current_worker = xr_current_worker();
+            XrRuntime *rt = current_worker ? current_worker->p.runtime : NULL;
+            if (!rt && coro->isolate)
+                rt = (XrRuntime *) coro->isolate->vm.runtime;
+            if (!rt || !rt->workers || rt->worker_count <= 0)
+                return;
+
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)
                 xr_io_wait_token_timeout(&wait->io_token);
             if (pd->netpoll)
                 atomic_fetch_sub(&pd->netpoll->waiters, 1);
+            if (!xr_coro_claim_wake(coro))
+                return;
             xr_coro_resume_store(coro, XR_RESUME_TIMEOUT);
-
-            xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED);
-            xr_coro_flags_set(coro, XR_CORO_FLG_READY);
 
             // Add coroutine to target Worker inbox for scheduling.
             // Respects Coro.lockThread(): locked coros return to their locked worker.
-            XrWorker *current_worker = xr_current_worker();
-            if (current_worker && current_worker->p.runtime) {
-                XrRuntime *rt = current_worker->p.runtime;
-                int target_id = xr_coro_wake_target_id(coro);
-                if (target_id < 0 || target_id >= rt->worker_count) {
-                    target_id = 0;
-                }
-                xr_worker_inbox_enqueue(rt, target_id, coro);
+            int target_id = xr_coro_wake_target_id(coro);
+            if (target_id < 0 || target_id >= rt->worker_count) {
+                target_id = 0;
             }
+            xr_worker_inbox_enqueue(rt, target_id, coro);
 
             return;
         }
