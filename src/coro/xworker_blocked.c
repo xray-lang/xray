@@ -390,12 +390,16 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     if (!bucket)
         return;
 
+    XrCoroutine *ready_first = NULL;
+    XrCoroutine *ready_last = NULL;
+    int removed_count = 0;
+
     // Wake all senders
     XrCoroutine *coro = bucket->send_head;
     while (coro) {
         XrCoroutine *next = coro->ext->wait_link;
         if (worker_blocked_list_remove(worker, coro)) {
-            worker->p.blocked_count--;
+            removed_count++;
         }
 
         bucket_clear_coro_links(coro);
@@ -407,7 +411,13 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
             worker_cancel_coro_timer_wait(coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
-            xr_worker_push(worker, coro);
+            coro->sched_link = NULL;
+            if (ready_last) {
+                ready_last->sched_link = coro;
+            } else {
+                ready_first = coro;
+            }
+            ready_last = coro;
         }
 
         coro = next;
@@ -419,7 +429,7 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
     while (coro) {
         XrCoroutine *next = coro->ext->wait_link;
         if (worker_blocked_list_remove(worker, coro)) {
-            worker->p.blocked_count--;
+            removed_count++;
         }
 
         bucket_clear_coro_links(coro);
@@ -428,12 +438,24 @@ void xr_worker_wake_all(XrWorker *worker, void *channel) {
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
             worker_cancel_coro_timer_wait(coro);
             xr_coro_resume_store(coro, XR_RESUME_CHANNEL_CLOSED);
-            xr_worker_push(worker, coro);
+            coro->sched_link = NULL;
+            if (ready_last) {
+                ready_last->sched_link = coro;
+            } else {
+                ready_first = coro;
+            }
+            ready_last = coro;
         }
 
         coro = next;
     }
     bucket->recv_head = bucket->recv_tail = NULL;
+    if (removed_count > 0) {
+        worker->p.blocked_count -= removed_count;
+    }
+    if (ready_first) {
+        (void) xr_worker_push_batch(worker, ready_first);
+    }
     worker_clear_channel_waiter_mask(worker, channel);
 
     // Reclaim the bucket if select_head is also empty.
