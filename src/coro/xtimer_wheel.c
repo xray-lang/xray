@@ -252,16 +252,7 @@ static bool timer_is_in_slot(XrTimerWheel *tw, XrTWheelTimer *p, int slot) {
         return first == p && p->next == p && p->prev == p;
     if (!p->next || !p->prev || p->next->prev != p || p->prev->next != p)
         return false;
-    XrTWheelTimer *cur = first;
-    int guard = tw->nto + 1;
-    do {
-        if (cur == p)
-            return true;
-        if (!cur->next || !cur->prev)
-            return false;
-        cur = cur->next;
-    } while (cur != first && guard-- > 0);
-    return false;
+    return true;
 }
 
 // Trigger timer
