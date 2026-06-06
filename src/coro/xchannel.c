@@ -84,8 +84,23 @@ static bool channel_trylock_observed(XrChannel *ch) {
 
 static void channel_lock_after_failed_try(XrChannel *ch) {
     XR_DCHECK(ch != NULL, "channel_lock_after_failed_try: NULL channel");
-    CHANNEL_METRIC_INC(ch, chan_lock_slow_count);
-    xr_amutex_lock(&ch->lock);
+    XrRuntime *runtime = channel_stats_runtime(ch);
+    if (!runtime) {
+        xr_amutex_lock(&ch->lock);
+        return;
+    }
+
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_slow_count);
+    XrAdaptiveMutexAcquireMode mode = xr_amutex_lock_profiled(&ch->lock);
+    if (mode == XR_AMUTEX_ACQUIRE_FAST) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_recheck_count);
+    } else if (mode == XR_AMUTEX_ACQUIRE_SPIN) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_spin_count);
+    } else if (mode == XR_AMUTEX_ACQUIRE_YIELD) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_yield_count);
+    } else if (mode == XR_AMUTEX_ACQUIRE_SLEEP) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_lock_sleep_count);
+    }
 }
 
 // Ring buffer index advance: conditional increment is faster than modulo division
