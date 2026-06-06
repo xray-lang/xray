@@ -914,6 +914,23 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_close_deferred_recv_waiter_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_local_worker_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_remote_worker_count));
+    {
+        uint64_t wq_push = xr_sched_metric_load(&s->work_queue_push_count);
+        uint64_t wq_pop_local = xr_sched_metric_load(&s->work_queue_pop_local_count);
+        uint64_t wq_pop_steal = xr_sched_metric_load(&s->work_queue_pop_steal_count);
+        uint64_t wq_pop_empty = xr_sched_metric_load(&s->work_queue_pop_empty_count);
+        uint64_t wq_pop_total = wq_pop_local + wq_pop_steal;
+        fprintf(stderr,
+                "WorkQueue: push=%llu pop_local=%llu pop_steal=%llu pop_empty=%llu "
+                "steal_share=%.2f%% block=%llu wake=%llu close=%llu close_wake=%llu\n",
+                (unsigned long long) wq_push, (unsigned long long) wq_pop_local,
+                (unsigned long long) wq_pop_steal, (unsigned long long) wq_pop_empty,
+                stats_percent_u64(wq_pop_steal, wq_pop_total),
+                (unsigned long long) xr_sched_metric_load(&s->work_queue_block_count),
+                (unsigned long long) xr_sched_metric_load(&s->work_queue_wake_count),
+                (unsigned long long) xr_sched_metric_load(&s->work_queue_close_count),
+                (unsigned long long) xr_sched_metric_load(&s->work_queue_close_wake_count));
+    }
     fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
             (unsigned long long) xr_sched_metric_load(&s->handoff_create_count),
