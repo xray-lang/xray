@@ -698,6 +698,7 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
         if (!atomic_compare_exchange_strong(&sw->triggered, &expected, true))
             return false;
 
+        xr_select_wait_resolve(sw);
         atomic_store_explicit(&sw->selected_index, ci, memory_order_release);
         atomic_store_explicit(&sw->selected_status, status, memory_order_release);
         xr_worker_unblock_select(worker, coro);
@@ -754,6 +755,7 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
     atomic_store(&sw->triggered, false);
     atomic_store(&sw->selected_index, -1);
     atomic_store(&sw->selected_status, 0);
+    xr_select_wait_prepare(sw);
 
     XrChannel *timer_ch = NULL;
     for (int ci = 0; ci < ch_count && ci < sw->case_count; ci++) {

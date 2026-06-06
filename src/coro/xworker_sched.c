@@ -427,6 +427,7 @@ static void worker_sleep_timeout_callback(void *arg) {
             // Already woken by another channel, ignore this timer
             return;
         }
+        xr_select_wait_timeout(sw);
         atomic_store_explicit(&sw->selected_index, -1, memory_order_release);
         atomic_store_explicit(&sw->selected_status, XR_RESUME_TIMEOUT, memory_order_release);
         // Remove from blocked queue

@@ -123,6 +123,15 @@ static inline void xr_channel_wait_token_timeout(XrChannelWaitToken *token) {
 
 #define XR_SELECT_INLINE_CASES 4
 
+typedef enum {
+    XR_SELECT_WAIT_IDLE = 0,
+    XR_SELECT_WAIT_REGISTERING,
+    XR_SELECT_WAIT_REGISTERED,
+    XR_SELECT_WAIT_RESOLVED,
+    XR_SELECT_WAIT_CANCELLED,
+    XR_SELECT_WAIT_TIMED_OUT,
+} XrSelectWaitTokenState;
+
 typedef struct XrSelectCase {
     void *channel;
     bool is_send;
@@ -138,11 +147,53 @@ typedef struct XrSelectWait {
     XrSelectCase *cases;
     int case_count;
     void *timer_channel;
+    _Atomic int state;
     _Atomic bool active;
     _Atomic bool triggered;
     _Atomic int selected_index;
     _Atomic int selected_status;
+    uint32_t sequence;
 } XrSelectWait;
+
+static inline void xr_select_wait_prepare(XrSelectWait *wait) {
+    if (!wait)
+        return;
+    wait->sequence++;
+    atomic_store_explicit(&wait->state, XR_SELECT_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_select_wait_commit(XrSelectWait *wait) {
+    if (!wait)
+        return;
+    int expected = XR_SELECT_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&wait->state, &expected,
+                                                   XR_SELECT_WAIT_REGISTERED, memory_order_acq_rel,
+                                                   memory_order_acquire);
+}
+
+static inline void xr_select_wait_set_terminal(XrSelectWait *wait, int terminal) {
+    if (!wait)
+        return;
+    int state = atomic_load_explicit(&wait->state, memory_order_acquire);
+    while (state == XR_SELECT_WAIT_REGISTERING || state == XR_SELECT_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&wait->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_select_wait_resolve(XrSelectWait *wait) {
+    xr_select_wait_set_terminal(wait, XR_SELECT_WAIT_RESOLVED);
+}
+
+static inline void xr_select_wait_cancel(XrSelectWait *wait) {
+    xr_select_wait_set_terminal(wait, XR_SELECT_WAIT_CANCELLED);
+}
+
+static inline void xr_select_wait_timeout(XrSelectWait *wait) {
+    xr_select_wait_set_terminal(wait, XR_SELECT_WAIT_TIMED_OUT);
+}
 
 typedef struct XrSelectStorage {
     XrSelectWait wait;

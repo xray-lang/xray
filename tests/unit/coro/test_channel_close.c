@@ -187,15 +187,18 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     wait->case_count = 1;
     atomic_store(&wait->active, true);
     atomic_store(&wait->triggered, false);
+    xr_select_wait_prepare(wait);
 
     xr_worker_block_select(&f.worker, &coro, NULL, 1);
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 1);
     ASSERT_NE(atomic_load(&ch->waiter_worker_mask), 0);
+    ASSERT_EQ_INT(atomic_load(&wait->state), XR_SELECT_WAIT_REGISTERED);
 
     xr_channel_close(ch);
 
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
     ASSERT_TRUE(atomic_load(&wait->triggered));
+    ASSERT_EQ_INT(atomic_load(&wait->state), XR_SELECT_WAIT_RESOLVED);
     ASSERT_EQ_INT(xr_coro_resume_load(&coro), XR_RESUME_CHANNEL_CLOSED);
     ASSERT_TRUE(xr_coro_flags_has(&coro, XR_CORO_FLG_READY));
     ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_BLOCKED));
@@ -233,6 +236,7 @@ TEST(select_block_rechecks_already_closed_channel) {
 
     ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_READY);
     ASSERT_TRUE(atomic_load(&ext.select_storage.wait.triggered));
+    ASSERT_EQ_INT(atomic_load(&ext.select_storage.wait.state), XR_SELECT_WAIT_RESOLVED);
     ASSERT_EQ_INT(atomic_load(&ext.select_storage.wait.selected_index), 0);
     ASSERT_EQ_INT(atomic_load(&ext.select_storage.wait.selected_status), XR_RESUME_CHANNEL_CLOSED);
     ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
