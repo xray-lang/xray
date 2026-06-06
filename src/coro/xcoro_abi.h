@@ -121,6 +121,16 @@ typedef struct XrCoroBackendVTable {
     XrCFuncResult (*call_closure)(XrayIsolate *isolate, XrCoroutine *coro, XrClosure *closure,
                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
                                   XrValue *result);
+    bool (*ensure_state)(XrCoroutine *coro);
+    bool (*prepare_execution_state)(XrCoroutine *coro, XrayIsolate *isolate, XrWorker *worker,
+                                    bool need_storage, bool is_clean);
+    void (*reset_execution_state)(XrCoroutine *coro, XrayIsolate *isolate);
+    void (*clear_entry_state)(XrCoroutine *coro);
+    void (*reset_entry_state_no_free)(XrCoroutine *coro);
+    bool (*bind_closure_entry)(XrCoroutine *coro, XrayIsolate *isolate, XrClosure *closure,
+                               XrValue *args, int arg_count, bool copy_args);
+    bool (*bind_cfunc_entry)(XrCoroutine *coro, XrCoroCFuncEntry cfunc, XrValue *args,
+                             int arg_count);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);

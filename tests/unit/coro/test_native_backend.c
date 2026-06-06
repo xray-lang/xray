@@ -261,6 +261,12 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_NOT_NULL(vm_backend->setup_yield_continuation);
     ASSERT_NOT_NULL(vm_backend->has_continuation);
     ASSERT_NOT_NULL(vm_backend->call_closure);
+    ASSERT_NOT_NULL(vm_backend->ensure_state);
+    ASSERT_NOT_NULL(vm_backend->prepare_execution_state);
+    ASSERT_NOT_NULL(vm_backend->reset_execution_state);
+    ASSERT_NOT_NULL(vm_backend->clear_entry_state);
+    ASSERT_NOT_NULL(vm_backend->bind_closure_entry);
+    ASSERT_NOT_NULL(vm_backend->bind_cfunc_entry);
 
     XrayIsolate isolate;
     memset(&isolate, 0, sizeof(isolate));
@@ -276,6 +282,8 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_FALSE(xr_coro_has_continuation(native));
     ASSERT_NULL(native->backend->setup_yield_continuation);
     ASSERT_NULL(native->backend->call_closure);
+    ASSERT_NULL(native->backend->prepare_execution_state);
+    ASSERT_NULL(native->backend->bind_closure_entry);
     xr_coro_destroy(native);
 
     int release_count = 0;
@@ -292,6 +300,8 @@ TEST(coroutine_recycle_hooks_are_backend_abi_contract) {
     ASSERT_FALSE(xr_coro_has_continuation(aot));
     ASSERT_NULL(aot->backend->setup_yield_continuation);
     ASSERT_NULL(aot->backend->call_closure);
+    ASSERT_NULL(aot->backend->prepare_execution_state);
+    ASSERT_NULL(aot->backend->bind_closure_entry);
     xr_coro_destroy(aot);
     ASSERT_EQ_INT(release_count, 1);
 }

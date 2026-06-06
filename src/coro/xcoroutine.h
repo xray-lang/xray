@@ -78,7 +78,6 @@ struct XrCoroMonitor;
 struct XrCoroRegistry;
 typedef struct XrWaitQueue XrWaitQueue;
 typedef struct XrCoroutine XrCoroutine;
-typedef struct XrCoroBackendOps XrCoroBackendOps;
 /* ========== Coroutine Priority ========== */
 
 typedef enum {
@@ -164,7 +163,6 @@ struct XrCoroutine {
     /* === Backend Execution State === */
     const XrCoroBackendVTable *backend;
     void *backend_state;
-    const XrCoroBackendOps *backend_ops;
 
     /* ================================================================
      * WARM ZONE — GC/result hot fields and backend-owned cold state
@@ -193,18 +191,12 @@ static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
     return coro && coro->backend && coro->backend->kind == XR_CORO_BACKEND_VM;
 }
 
-static inline const XrCoroBackendOps *xr_coro_backend_ops(const XrCoroutine *coro) {
-    return coro ? coro->backend_ops : NULL;
-}
-
 static inline void xr_coro_attach_backend(XrCoroutine *coro, const XrCoroBackendVTable *backend,
-                                          void *backend_state,
-                                          const XrCoroBackendOps *backend_ops) {
+                                          void *backend_state) {
     if (!coro)
         return;
     coro->backend = backend;
     coro->backend_state = backend_state;
-    coro->backend_ops = backend_ops;
 }
 
 static inline bool xr_coro_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
