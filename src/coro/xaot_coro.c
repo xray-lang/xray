@@ -113,17 +113,13 @@ static void aot_mark_running(XrCoroutine *coro) {
                           memory_order_release);
 }
 
-static void aot_mark_blocked(XrCoroutine *coro) {
-    (void) xr_coro_try_transition_to_blocked(coro);
-}
-
 static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
     switch (result.kind) {
         case XR_AOT_RUN_DONE:
             coro->result = result.value;
             return xr_coro_run_done(result.value);
         case XR_AOT_RUN_BLOCKED:
-            aot_mark_blocked(coro);
+            (void) xr_coro_finalize_blocked_suspend(coro);
             return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
         case XR_AOT_RUN_YIELD:
             return xr_coro_run_result(XR_CORO_RUN_YIELD);

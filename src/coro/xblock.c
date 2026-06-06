@@ -633,6 +633,19 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
+bool xr_coro_publish_locked_block(XrCoroutine *coro) {
+    if (!coro)
+        return false;
+    xr_coro_transition_to_blocked(coro);
+    return true;
+}
+
+bool xr_coro_finalize_blocked_suspend(XrCoroutine *coro) {
+    if (!coro)
+        return false;
+    return xr_coro_try_transition_to_blocked(coro);
+}
+
 void xr_coro_finish_backend_resume_tokens(XrCoroutine *coro, int resume_status) {
     if (!coro || !coro->ext || resume_status != XR_RESUME_TIMEOUT)
         return;
