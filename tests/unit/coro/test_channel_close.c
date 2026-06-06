@@ -207,6 +207,43 @@ TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
     close_fixture_cleanup(&f);
 }
 
+TEST(select_block_rechecks_already_closed_channel) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+    xr_channel_close(ch);
+
+    XrCoroutine coro;
+    XrCoroExt ext;
+    memset(&coro, 0, sizeof(coro));
+    memset(&ext, 0, sizeof(ext));
+    coro.id = 8;
+    coro.isolate = &f.isolate_storage;
+    coro.ext = &ext;
+    atomic_store(&coro.flags, XR_CORO_FLG_RUNNING | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&coro.resume_status, XR_RESUME_OK);
+    atomic_store(&coro.affinity_p, 0);
+
+    XrValue channel_values[1] = {xr_value_from_channel(ch)};
+    XrCoroBlockResult result =
+        xr_coro_select_block(&f.isolate_storage, &coro, channel_values, 1, NULL, 1);
+
+    ASSERT_EQ_INT((int) result.kind, (int) XR_CORO_BLOCK_READY);
+    ASSERT_TRUE(atomic_load(&ext.select_storage.wait.triggered));
+    ASSERT_EQ_INT(atomic_load(&ext.select_storage.wait.selected_index), 0);
+    ASSERT_EQ_INT(atomic_load(&ext.select_storage.wait.selected_status), XR_RESUME_CHANNEL_CLOSED);
+    ASSERT_EQ_INT(f.worker.p.select_waiter_count, 0);
+    ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_BLOCKED));
+    ASSERT_NULL(worker_blocked_bucket_find(&f.worker, ch));
+
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST(channel_ready_wake_dispatches_single_remote_worker) {
     WakeRouteFixture f;
     ASSERT_TRUE(wake_route_fixture_init(&f));
@@ -356,6 +393,7 @@ TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
 RUN_TEST(channel_close_wakes_select_waiter_without_caller_fanout);
+RUN_TEST(select_block_rechecks_already_closed_channel);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
