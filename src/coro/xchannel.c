@@ -181,6 +181,59 @@ static void channel_record_kind_metric(XrRuntime *runtime, XrChannelKind kind, b
     }
 }
 
+static void channel_record_kind_op_metric(XrRuntime *runtime, XrChannelKind kind,
+                                          bool worker_kind) {
+    if (!runtime)
+        return;
+    XrSchedGlobalStats *stats = &runtime->sched_stats;
+    _Atomic uint64_t *counter = NULL;
+    if (worker_kind) {
+        switch (kind) {
+            case XR_CHAN_GENERIC:
+                counter = &stats->chan_worker_kind_generic_op_count;
+                break;
+            case XR_CHAN_SPSC:
+                counter = &stats->chan_worker_kind_spsc_op_count;
+                break;
+            case XR_CHAN_MPSC:
+                counter = &stats->chan_worker_kind_mpsc_op_count;
+                break;
+            case XR_CHAN_WORK_QUEUE:
+                counter = &stats->chan_worker_kind_work_queue_op_count;
+                break;
+            case XR_CHAN_MPMC:
+                counter = &stats->chan_worker_kind_mpmc_op_count;
+                break;
+            case XR_CHAN_RENDEZVOUS:
+                counter = &stats->chan_worker_kind_rendezvous_op_count;
+                break;
+        }
+    } else {
+        switch (kind) {
+            case XR_CHAN_GENERIC:
+                counter = &stats->chan_kind_generic_op_count;
+                break;
+            case XR_CHAN_SPSC:
+                counter = &stats->chan_kind_spsc_op_count;
+                break;
+            case XR_CHAN_MPSC:
+                counter = &stats->chan_kind_mpsc_op_count;
+                break;
+            case XR_CHAN_WORK_QUEUE:
+                counter = &stats->chan_kind_work_queue_op_count;
+                break;
+            case XR_CHAN_MPMC:
+                counter = &stats->chan_kind_mpmc_op_count;
+                break;
+            case XR_CHAN_RENDEZVOUS:
+                counter = &stats->chan_kind_rendezvous_op_count;
+                break;
+        }
+    }
+    if (counter)
+        xr_sched_metric_inc(runtime, counter);
+}
+
 static XrCoroutine *channel_current_coro_from_worker(XrWorker *worker) {
     if (!worker || !worker->m)
         return NULL;
@@ -232,21 +285,33 @@ static void channel_note_participant_locked(XrChannel *ch, XrCoroutine *coro, bo
         return;
 
     XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime : channel_stats_runtime(ch);
     channel_note_worker_locked(ch, worker, producer);
-    if (channel_kind_observation_stable(ch->kind))
+    if (channel_kind_observation_stable(ch->kind)) {
+        channel_record_kind_op_metric(runtime, ch->kind, false);
+        channel_record_kind_op_metric(runtime, ch->worker_kind, true);
         return;
+    }
 
     if (!coro)
         coro = channel_current_coro_from_worker(worker);
-    if (!channel_note_role_id_locked(ch, coro ? coro->id : -1, producer))
+    if (!channel_note_role_id_locked(ch, coro ? coro->id : -1, producer)) {
+        channel_record_kind_op_metric(runtime, ch->kind, false);
+        channel_record_kind_op_metric(runtime, ch->worker_kind, true);
         return;
+    }
 
     XrChannelKind next = channel_infer_role_kind(ch);
-    if (next == ch->kind)
+    if (next == ch->kind) {
+        channel_record_kind_op_metric(runtime, ch->kind, false);
+        channel_record_kind_op_metric(runtime, ch->worker_kind, true);
         return;
+    }
 
     ch->kind = next;
-    channel_record_kind_metric(worker ? worker->p.runtime : channel_stats_runtime(ch), next, false);
+    channel_record_kind_metric(runtime, next, false);
+    channel_record_kind_op_metric(runtime, ch->kind, false);
+    channel_record_kind_op_metric(runtime, ch->worker_kind, true);
 }
 
 // Distributed channel hooks live on XrayIsolate::channel_dist_hooks.

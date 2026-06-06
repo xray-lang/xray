@@ -108,6 +108,18 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_worker_kind_mpsc_count;
     _Atomic uint64_t chan_worker_kind_work_queue_count;
     _Atomic uint64_t chan_worker_kind_mpmc_count;
+    _Atomic uint64_t chan_kind_generic_op_count;
+    _Atomic uint64_t chan_kind_spsc_op_count;
+    _Atomic uint64_t chan_kind_mpsc_op_count;
+    _Atomic uint64_t chan_kind_work_queue_op_count;
+    _Atomic uint64_t chan_kind_mpmc_op_count;
+    _Atomic uint64_t chan_kind_rendezvous_op_count;
+    _Atomic uint64_t chan_worker_kind_generic_op_count;
+    _Atomic uint64_t chan_worker_kind_spsc_op_count;
+    _Atomic uint64_t chan_worker_kind_mpsc_op_count;
+    _Atomic uint64_t chan_worker_kind_work_queue_op_count;
+    _Atomic uint64_t chan_worker_kind_mpmc_op_count;
+    _Atomic uint64_t chan_worker_kind_rendezvous_op_count;
     _Atomic uint64_t inject_push_count;
     _Atomic uint64_t inject_pop_count;
     _Atomic uint64_t inject_spill_count;

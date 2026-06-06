@@ -823,21 +823,40 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_batch_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_node_count),
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_max_count));
+    fprintf(stderr, "Channel hot path: no_waiter_buffer=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_buffer_no_waiter_count));
     fprintf(stderr,
-            "Channel hot path: no_waiter_buffer=%llu kind_spsc=%llu kind_mpsc=%llu "
-            "kind_work_queue=%llu kind_mpmc=%llu\n",
-            (unsigned long long) xr_sched_metric_load(&s->chan_buffer_no_waiter_count),
+            "Channel logical shape transitions: spsc=%llu mpsc=%llu work_queue=%llu "
+            "mpmc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_count));
     fprintf(stderr,
-            "Channel worker shape: kind_spsc=%llu kind_mpsc=%llu kind_work_queue=%llu "
-            "kind_mpmc=%llu\n",
+            "Channel worker shape transitions: spsc=%llu mpsc=%llu work_queue=%llu "
+            "mpmc=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_spsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_mpsc_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_work_queue_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_mpmc_count));
+    fprintf(stderr,
+            "Channel logical ops: generic=%llu rendezvous=%llu spsc=%llu mpsc=%llu "
+            "work_queue=%llu mpmc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_op_count));
+    fprintf(stderr,
+            "Channel worker-shape ops: generic=%llu rendezvous=%llu spsc=%llu mpsc=%llu "
+            "work_queue=%llu mpmc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_generic_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_rendezvous_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_spsc_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_mpsc_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_work_queue_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_worker_kind_mpmc_op_count));
     uint64_t chan_lock_fast = xr_sched_metric_load(&s->chan_lock_fast_count);
     uint64_t chan_lock_contended = xr_sched_metric_load(&s->chan_lock_contended_count);
     uint64_t chan_lock_slow = xr_sched_metric_load(&s->chan_lock_slow_count);
