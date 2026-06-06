@@ -55,6 +55,7 @@ typedef struct XrAotContext {
 
 typedef XrAotResult (*XrAotResumeFn)(void *frame, const XrAotContext *ctx);
 typedef void (*XrAotFrameTraceFn)(void *frame, void *visitor);
+/* Optional hook; when present, it releases owned fields and frees the frame. */
 typedef void (*XrAotFrameReleaseFn)(void *frame, struct XrCoroGC *gc);
 typedef void (*XrAotRootVisitFn)(XrValue value, void *ctx);
 
