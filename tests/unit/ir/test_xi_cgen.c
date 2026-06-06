@@ -459,6 +459,81 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     xi_func_free(ir);
 }
 
+TEST(cgen_unresolved_import_fails_fast) {
+    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 102, .frozen = true};
+    XrType stub_string = {.kind = XR_KIND_STRING, .id = 103, .frozen = true};
+    XiFunc *ir = xi_func_new("main", &stub_unit);
+    assert(ir != NULL);
+
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+
+    XiImportRef *ref = (XiImportRef *) xi_func_arena_alloc(ir, sizeof(XiImportRef));
+    assert(ref != NULL);
+    ref->module_path = "./missing";
+    ref->member_name = "value";
+    ref->resolved_mod_index = -1;
+    ref->resolved_shared_slot = -1;
+
+    XiValue *import = xi_value_new(ir, entry, XI_IMPORT_REF, &stub_string, 0);
+    assert(import != NULL);
+    import->aux = ref;
+    import->aux_int = -1;
+    xi_block_set_return(entry, NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+
+    assert(had_error && "unresolved AOT imports must reject code generation");
+    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
+           "unresolved imports must emit an abort expression");
+    assert(!contains(code, "unresolved import:") &&
+           "unresolved import diagnostics should not be emitted as C comments");
+    assert(!contains(code, "XR_NULL_VAL /* unresolved") &&
+           "unresolved imports must not emit silent null placeholders");
+
+    printf("  Generated rejected unresolved import %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_unknown_method_symbol_fails_fast) {
+    XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 104, .frozen = true};
+    XrType stub_string = {.kind = XR_KIND_STRING, .id = 105, .frozen = true};
+    XiFunc *ir = xi_func_new("main", &stub_unit);
+    assert(ir != NULL);
+
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+
+    XiValue *recv = xi_const_str(ir, entry, "abc", &stub_string);
+    assert(recv != NULL);
+
+    XiValue *call = xi_value_new(ir, entry, XI_CALL_METHOD, &stub_string, 1);
+    assert(call != NULL);
+    call->args[0] = recv;
+    call->aux = (void *) "__aot_unknown_method__";
+    call->flags |= XI_FLAG_CALL_EFFECTS;
+    xi_block_set_return(entry, NULL);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+
+    assert(had_error && "unknown AOT method symbols must reject code generation");
+    assert(contains(code, "(abort(), XR_NULL_VAL)") &&
+           "unknown methods must emit an abort expression");
+    assert(!contains(code, "xrt_method_0(") &&
+           "unknown methods must not fall back to method symbol zero");
+    assert(!contains(code, "__aot_unknown_method__") &&
+           "unknown method diagnostics should stay out of generated C comments");
+
+    printf("  Generated rejected unknown method %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_suspendable_wrapper_aborts) {
     const char *src = "fn worker(n: int) -> int {\n"
                       "    yield\n"
@@ -1208,6 +1283,8 @@ int main(void) {
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_unsupported_coroutine_ops_fail_fast();
+    run_cgen_unresolved_import_fails_fast();
+    run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_direct_suspend_call_propagates_cps();
     run_cgen_suspendable_dependency_init_fails_fast();
