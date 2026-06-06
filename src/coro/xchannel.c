@@ -886,8 +886,29 @@ XrValue xr_channel_try_recv(XrChannel *ch, bool *ok) {
 // Internal: wake coroutine (set state and add to run queue)
 // Uses affinity_p to determine target Worker, supports cross-Worker wake
 // is_close: whether this is a close wake (needs to recheck buffer)
+static XrRuntime *channel_wake_runtime(XrCoroutine *coro, XrWorker **out_current) {
+    XrWorker *current = xr_current_worker();
+    XrRuntime *coro_runtime =
+        (coro && coro->isolate) ? (XrRuntime *) coro->isolate->vm.runtime : NULL;
+    XrRuntime *runtime = NULL;
+    if (current && current->p.runtime && (!coro_runtime || current->p.runtime == coro_runtime)) {
+        runtime = current->p.runtime;
+    } else {
+        runtime = coro_runtime;
+        current = NULL;
+    }
+    if (out_current)
+        *out_current = current;
+    return runtime;
+}
+
 static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     XR_DCHECK(coro != NULL, "channel_wake_coro_ex: NULL coro");
+
+    XrWorker *current = NULL;
+    XrRuntime *runtime = channel_wake_runtime(coro, &current);
+    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
+        return;
 
     // Atomically claim the wake. Only the caller that transitions the coro
     // BLOCKED -> READY proceeds; a racing waker (concurrent send/recv, close,
@@ -908,18 +929,13 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
         atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
     }
 
-    XrWorker *current = xr_current_worker();
-    if (!current || !current->p.runtime)
-        return;
-
-    XrRuntime *runtime = current->p.runtime;
     xr_sched_metric_inc(runtime, is_close ? &runtime->sched_stats.chan_close_ready_wake_count
                                           : &runtime->sched_stats.chan_ready_wake_count);
     int target_id = xr_coro_wake_target_id(coro);
 
     // Ensure target Worker ID is valid
     if (target_id < 0 || target_id >= runtime->worker_count) {
-        target_id = current->p.id;
+        target_id = current ? current->p.id : 0;
     }
 
     bool in_owner_blocked_bucket = coro->ext->wait_bucket != NULL &&
@@ -930,6 +946,11 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close) {
     }
     XrWorker *target = &runtime->workers[target_id];
     bool locked = xr_coro_is_thread_locked(coro);
+
+    if (!current) {
+        xr_worker_inbox_enqueue(runtime, target_id, coro);
+        return;
+    }
 
     if (in_owner_blocked_bucket && target == current) {
         xr_worker_unblock(current, coro);
