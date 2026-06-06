@@ -24,6 +24,7 @@
 typedef struct XrCoroutine XrCoroutine;
 typedef struct XrWorker XrWorker;
 typedef struct XrayIsolate XrayIsolate;
+typedef struct XrClosure XrClosure;
 
 #ifndef XR_CFUNC_RESULT_DEFINED
 typedef enum {
@@ -114,6 +115,12 @@ typedef struct XrCoroBackendVTable {
     void (*on_safepoint)(XrCoroutine *coro);
     void (*detach_worker_state)(XrCoroutine *coro);
     bool (*is_try_mode)(const XrCoroutine *coro);
+    bool (*setup_yield_continuation)(XrayIsolate *isolate, XrCoroutine *coro, void *continuation,
+                                     void *user_data);
+    bool (*has_continuation)(const XrCoroutine *coro);
+    XrCFuncResult (*call_closure)(XrayIsolate *isolate, XrCoroutine *coro, XrClosure *closure,
+                                  XrValue *args, int nargs, void *continuation, void *user_ctx,
+                                  XrValue *result);
     void (*release)(XrCoroutine *coro);
     void (*destroy)(XrCoroutine *coro);
     const char *(*debug_name)(const XrCoroutine *coro);

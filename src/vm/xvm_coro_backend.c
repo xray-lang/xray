@@ -79,9 +79,9 @@ static bool vm_backend_in_try_mode(const XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
-static int vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
-                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
-                                   XrValue *result);
+static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+                                             XrValue *args, int nargs, void *continuation,
+                                             void *user_ctx, XrValue *result);
 
 static const XrCoroBackendVTable vm_backend_vtable = {
     .kind = XR_CORO_BACKEND_VM,
@@ -92,6 +92,9 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .on_safepoint = vm_backend_on_safepoint,
     .detach_worker_state = vm_backend_detach_worker_state,
     .is_try_mode = vm_backend_in_try_mode,
+    .setup_yield_continuation = vm_backend_setup_yield_continuation,
+    .has_continuation = vm_backend_has_continuation,
+    .call_closure = vm_backend_call_closure,
     .release = NULL,
     .destroy = vm_backend_destroy,
     .debug_name = vm_backend_debug_name,
@@ -106,9 +109,6 @@ static const XrCoroBackendOps vm_backend_ops = {
     .reset_entry_state_no_free = vm_backend_reset_entry_state_no_free,
     .bind_closure_entry = vm_backend_bind_closure_entry,
     .bind_cfunc_entry = vm_backend_bind_cfunc_entry,
-    .setup_yield_continuation = vm_backend_setup_yield_continuation,
-    .has_continuation = vm_backend_has_continuation,
-    .call_closure = vm_backend_call_closure,
 };
 
 const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
@@ -754,9 +754,9 @@ static bool vm_backend_has_continuation(const XrCoroutine *coro) {
     return (frame->call_status & XR_CALL_HAS_CONT) && frame->u.c.continuation;
 }
 
-static int vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
-                                   XrValue *args, int nargs, void *continuation, void *user_ctx,
-                                   XrValue *result) {
+static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, XrClosure *closure,
+                                             XrValue *args, int nargs, void *continuation,
+                                             void *user_ctx, XrValue *result) {
     (void) X;
     (void) result;
     if (!coro || !closure || !closure->proto || !continuation)
