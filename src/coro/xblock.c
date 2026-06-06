@@ -633,11 +633,35 @@ XrCoroBlockResult xr_coro_await_any_task(XrCoroutine *coro, XrArray *tasks, bool
     return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
 }
 
-bool xr_coro_publish_locked_block(XrCoroutine *coro) {
+bool xr_coro_publish_wait_block(XrCoroutine *coro) {
     if (!coro)
         return false;
     xr_coro_transition_to_blocked(coro);
     return true;
+}
+
+XrCoroBlockSnapshot xr_coro_begin_reversible_block(XrCoroutine *coro) {
+    XrCoroBlockSnapshot snapshot = {XR_CORO_STATE_NONE, false};
+    if (!coro)
+        return snapshot;
+    snapshot.previous_state = atomic_load_explicit(&coro->coro_state, memory_order_acquire);
+    snapshot.active = true;
+    xr_coro_transition_to_blocked(coro);
+    return snapshot;
+}
+
+void xr_coro_rollback_reversible_block(XrCoroutine *coro, XrCoroBlockSnapshot snapshot) {
+    if (!coro || !snapshot.active)
+        return;
+
+    uint32_t restore_flag = xr_state_to_flag(snapshot.previous_state);
+    if (restore_flag) {
+        xr_coro_flags_swap(coro, XR_CORO_STATE_FLAG_MASK, restore_flag);
+        return;
+    }
+
+    atomic_store_explicit(&coro->coro_state, snapshot.previous_state, memory_order_release);
+    xr_coro_flags_clear(coro, XR_CORO_STATE_FLAG_MASK);
 }
 
 bool xr_coro_finalize_blocked_suspend(XrCoroutine *coro) {
