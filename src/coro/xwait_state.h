@@ -335,6 +335,88 @@ static inline void xr_timer_wait_token_finish(XrTimerWaitToken *token) {
     xr_timer_wait_token_reset(token);
 }
 
+/* ========== I/O Wait Token ==========
+ *
+ * Yieldable C functions park on netpoll descriptors.  The descriptor owns
+ * readiness; this coroutine-side token records which fd/mode registered the
+ * wait and whether netpoll woke, timed out, or cancelled it.
+ */
+typedef enum {
+    XR_IO_WAIT_IDLE = 0,
+    XR_IO_WAIT_REGISTERING,
+    XR_IO_WAIT_REGISTERED,
+    XR_IO_WAIT_READY,
+    XR_IO_WAIT_TIMED_OUT,
+    XR_IO_WAIT_CANCELLED,
+} XrIoWaitTokenState;
+
+typedef struct XrIoWaitToken {
+    _Atomic int state;
+    int fd;
+    int events;
+    int owner_worker_id;
+    int64_t timeout_ms;
+    uint32_t sequence;
+} XrIoWaitToken;
+
+static inline void xr_io_wait_token_reset(XrIoWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_IO_WAIT_IDLE, memory_order_relaxed);
+    token->fd = -1;
+    token->events = 0;
+    token->owner_worker_id = -1;
+    token->timeout_ms = -1;
+}
+
+static inline void xr_io_wait_token_prepare(XrIoWaitToken *token, int fd, int events,
+                                            int owner_worker_id, int64_t timeout_ms) {
+    if (!token)
+        return;
+    token->sequence++;
+    token->fd = fd;
+    token->events = events;
+    token->owner_worker_id = owner_worker_id;
+    token->timeout_ms = timeout_ms;
+    atomic_store_explicit(&token->state, XR_IO_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_io_wait_token_commit(XrIoWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_IO_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected, XR_IO_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_io_wait_token_set_terminal(XrIoWaitToken *token, int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_IO_WAIT_REGISTERING || state == XR_IO_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_io_wait_token_ready(XrIoWaitToken *token) {
+    xr_io_wait_token_set_terminal(token, XR_IO_WAIT_READY);
+}
+
+static inline void xr_io_wait_token_timeout(XrIoWaitToken *token) {
+    xr_io_wait_token_set_terminal(token, XR_IO_WAIT_TIMED_OUT);
+}
+
+static inline void xr_io_wait_token_cancel(XrIoWaitToken *token) {
+    xr_io_wait_token_set_terminal(token, XR_IO_WAIT_CANCELLED);
+}
+
+static inline void xr_io_wait_token_finish(XrIoWaitToken *token) {
+    xr_io_wait_token_reset(token);
+}
+
 /* ========== Channel Wait Token ==========
  *
  * A channel waiter has a short but race-sensitive lifecycle:
@@ -511,6 +593,7 @@ typedef struct XrCoroWaitState {
     XrMultiAwaitWaitToken multi_await_token;
     XrScopeWaitToken scope_token;
     XrTimerWaitToken timer_token;
+    XrIoWaitToken io_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {

@@ -440,6 +440,11 @@ static void worker_sleep_timeout_callback(void *arg) {
     } else {
         xr_timer_wait_token_fire(&coro->ext->wait.timer_token);
         int wait_reason = xr_coro_get_wait_reason(xr_coro_flags_load(coro));
+        if (wait_reason == (XR_CORO_WAIT_IO >> XR_CORO_WAIT_SHIFT)) {
+            XrCoroWaitState *wait = xr_coro_wait_state(coro);
+            if (wait)
+                xr_io_wait_token_timeout(&wait->io_token);
+        }
         if (wait_reason == (XR_CORO_WAIT_AWAIT >> XR_CORO_WAIT_SHIFT)) {
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)

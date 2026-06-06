@@ -12,6 +12,7 @@
 #include "coro/xblock.h"
 #include "coro/xchannel.h"
 #include "coro/xcoroutine.h"
+#include "coro/xnetpoll.h"
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "coro/xyieldable.h"
@@ -185,6 +186,21 @@ static void init_blocked_channel_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     atomic_store_explicit(&ext->wait_channel, ch, memory_order_release);
     ext->wait_send = wait_send;
     ext->wait_bucket_owner = -1;
+}
+
+static void init_blocked_io_coro(XrCoroutine *coro, XrCoroExt *ext, int id, XrayIsolate *isolate,
+                                 int fd, int events, int64_t timeout_ms) {
+    memset(coro, 0, sizeof(*coro));
+    memset(ext, 0, sizeof(*ext));
+    coro->id = id;
+    coro->isolate = isolate;
+    coro->ext = ext;
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_IO | XR_CORO_PRIO_NORMAL);
+    atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&coro->resume_status, XR_RESUME_OK);
+    atomic_store(&coro->affinity_p, 0);
+    xr_io_wait_token_prepare(&ext->wait.io_token, fd, events, 0, timeout_ms);
+    xr_io_wait_token_commit(&ext->wait.io_token);
 }
 
 TEST(channel_close_wakes_select_waiter_without_caller_fanout) {
@@ -654,6 +670,69 @@ TEST(multi_await_token_cancels_registered_task_waiters) {
     destroy_task_array(&tasks);
 }
 
+TEST(io_wait_token_tracks_netpoll_ready_and_cancel) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    init_blocked_io_coro(&waiter, &waiter_ext, 701, &f.isolate_storage, 44, XR_POLL_READ, 1000);
+
+    XrPollDesc pd;
+    memset(&pd, 0, sizeof(pd));
+    pd.fd = 44;
+    pd.netpoll = &f.runtime.netpoll;
+    atomic_store(&f.runtime.netpoll.waiters, 1);
+    atomic_store(&pd.rg, (uintptr_t) &waiter);
+
+    ASSERT_EQ_PTR(xr_netpoll_unblock(&pd, XR_POLL_READ, true), &waiter);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.io_token.state), XR_IO_WAIT_READY);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.netpoll.waiters), 0);
+    ASSERT_EQ_INT((int) atomic_load(&pd.rg), XR_PD_NIL);
+
+    init_blocked_io_coro(&waiter, &waiter_ext, 701, &f.isolate_storage, 44, XR_POLL_READ, 1000);
+    atomic_store(&f.runtime.netpoll.waiters, 1);
+    atomic_store(&pd.rg, (uintptr_t) &waiter);
+
+    ASSERT_EQ_PTR(xr_netpoll_unblock(&pd, XR_POLL_READ, false), &waiter);
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.io_token.state), XR_IO_WAIT_CANCELLED);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.netpoll.waiters), 0);
+    ASSERT_EQ_INT((int) atomic_load(&pd.rg), XR_PD_NIL);
+
+    close_fixture_cleanup(&f);
+}
+
+TEST(io_wait_token_tracks_netpoll_deadline_timeout) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    init_blocked_io_coro(&waiter, &waiter_ext, 702, &f.isolate_storage, 45, XR_POLL_READ, 25);
+
+    XrPollDesc pd;
+    memset(&pd, 0, sizeof(pd));
+    pd.fd = 45;
+    pd.netpoll = &f.runtime.netpoll;
+    pd.rseq_saved = 9;
+    atomic_store(&pd.rseq, 9);
+    atomic_store(&pd.rg, (uintptr_t) &waiter);
+    atomic_store(&f.runtime.netpoll.waiters, 1);
+
+    xr_netpoll_deadline_impl(&pd, 9, true);
+
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.io_token.state), XR_IO_WAIT_TIMED_OUT);
+    ASSERT_EQ_INT(atomic_load(&f.runtime.netpoll.waiters), 0);
+    ASSERT_EQ_INT(xr_coro_resume_load(&waiter), XR_RESUME_TIMEOUT);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+    ASSERT_FALSE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+
+    worker_drain_inbox(&f.worker);
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
+
+    close_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Channel Close");
@@ -668,5 +747,7 @@ RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);
 RUN_TEST(multi_await_token_clears_pending_waiters_on_await_any_ready);
 RUN_TEST(multi_await_token_cancels_registered_task_waiters);
+RUN_TEST(io_wait_token_tracks_netpoll_ready_and_cancel);
+RUN_TEST(io_wait_token_tracks_netpoll_deadline_timeout);
 
 TEST_MAIN_END()
