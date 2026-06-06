@@ -170,6 +170,24 @@ void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *cor
     }
 }
 
+void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutine *first,
+                                   XrCoroutine *last, int count) {
+    XR_DCHECK(runtime != NULL, "inbox_enqueue_batch: NULL runtime");
+    XR_DCHECK(first != NULL, "inbox_enqueue_batch: NULL first");
+    XR_DCHECK(last != NULL, "inbox_enqueue_batch: NULL last");
+    XR_DCHECK(count > 0, "inbox_enqueue_batch: invalid count");
+    XR_DCHECK(target_id >= 0 && target_id < runtime->worker_count,
+              "inbox_enqueue_batch: target_id out of range");
+
+    XrWorker *target = &runtime->workers[target_id];
+    xr_mpsc_push_batch(&target->p.inbox, first, last);
+    atomic_fetch_add_explicit(&runtime->total_inbox_len, count, memory_order_relaxed);
+    atomic_thread_fence(memory_order_seq_cst);
+    if (atomic_load(&target->m->state) == M_PARKING) {
+        worker_unpark(target);
+    }
+}
+
 // ========== Migration ==========
 
 // try_immigrate - Per-priority pull from high-load Worker

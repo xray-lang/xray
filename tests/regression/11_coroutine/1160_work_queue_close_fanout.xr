@@ -1,0 +1,27 @@
+// Regression: WorkQueue.close wakes all blocked pop waiters.
+
+import time
+
+shared const q: WorkQueue<int> = WorkQueue<int>(2, 2)
+
+fn pop_or_sentinel() -> int {
+    let value = q.pop(0)
+    return value ?? -1
+}
+
+@test
+fn test_work_queue_close_fanout() {
+    let t1 = go pop_or_sentinel()
+    let t2 = go pop_or_sentinel()
+    let t3 = go pop_or_sentinel()
+    let t4 = go pop_or_sentinel()
+
+    time.sleep(1)
+    q.close()
+
+    let results = await all [t1, t2, t3, t4]
+    assert_eq(results[0], -1)
+    assert_eq(results[1], -1)
+    assert_eq(results[2], -1)
+    assert_eq(results[3], -1)
+}

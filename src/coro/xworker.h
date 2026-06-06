@@ -326,6 +326,7 @@ XR_FUNC void xr_worker_destroy(XrWorker *worker);
 XR_FUNC XrCoroutine *xr_worker_pop(XrWorker *worker);
 XR_FUNC void xr_worker_push(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro);
+XR_FUNC int xr_worker_push_lifo_batch(XrWorker *worker, XrCoroutine *first);
 XR_FUNC void xr_worker_refresh_runq_masks(XrWorker *worker);
 XR_FUNC XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro);
 
@@ -344,6 +345,8 @@ XR_FUNC XrWorker *xr_current_worker(void);
 // Handles: MPSC push + total_inbox_len increment + Dekker fence + wake if parked.
 // This is the ONLY correct way to push to a remote worker's inbox.
 XR_FUNC void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *coro);
+XR_FUNC void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutine *first,
+                                           XrCoroutine *last, int count);
 
 XR_FUNC void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t delay_ms);
 

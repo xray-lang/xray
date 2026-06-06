@@ -199,9 +199,28 @@ static XrCoroutine *work_queue_waiter_pop_locked(XrWorkQueue *q) {
     return coro;
 }
 
-static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
-    XrRuntime *runtime = work_queue_runtime(q);
-    if (!runtime || !coro)
+typedef struct XrWorkQueueWakeBatch {
+    XrCoroutine *first;
+    XrCoroutine *last;
+    int count;
+} XrWorkQueueWakeBatch;
+
+static void work_queue_wake_batch_append(XrWorkQueueWakeBatch *batch, XrCoroutine *coro) {
+    if (!batch || !coro)
+        return;
+    coro->sched_link = NULL;
+    if (batch->last) {
+        batch->last->sched_link = coro;
+    } else {
+        batch->first = coro;
+    }
+    batch->last = coro;
+    batch->count++;
+}
+
+static bool work_queue_claim_waiter(XrWorkQueue *q, XrCoroutine *coro, XrRuntime *runtime,
+                                    int *target_id_out) {
+    if (!runtime || !coro || !target_id_out)
         return false;
     if (!xr_coro_claim_wake(coro))
         return false;
@@ -211,6 +230,15 @@ static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
     int target_id = xr_coro_wake_target_id(coro);
     if (target_id < 0 || target_id >= runtime->worker_count)
         target_id = 0;
+    *target_id_out = target_id;
+    return true;
+}
+
+static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
+    XrRuntime *runtime = work_queue_runtime(q);
+    int target_id = 0;
+    if (!work_queue_claim_waiter(q, coro, runtime, &target_id))
+        return false;
 
     XrWorker *current = xr_current_worker();
     if (current && current->p.runtime == runtime && target_id == current->p.id) {
@@ -249,15 +277,55 @@ static void work_queue_wake_all(XrWorkQueue *q) {
     atomic_store_explicit(&q->waiter_count, 0, memory_order_relaxed);
     xr_amutex_unlock(&q->wait_lock);
 
+    XrRuntime *runtime = work_queue_runtime(q);
+    XrWorker *current = xr_current_worker();
+    bool current_matches = current && current->p.runtime == runtime;
+    XrWorkQueueWakeBatch local_batch = {0};
+    XrWorkQueueWakeBatch *remote_batches = NULL;
+    if (runtime && runtime->worker_count > 0) {
+        remote_batches = (XrWorkQueueWakeBatch *) xr_calloc((size_t) runtime->worker_count,
+                                                            sizeof(XrWorkQueueWakeBatch));
+    }
+    int remote_ready_count = 0;
+
     while (list) {
         XrCoroutine *next = list->ext ? list->ext->wait_link : NULL;
         if (list->ext) {
             list->ext->wait_link = NULL;
             list->ext->wait_prev = NULL;
         }
-        if (work_queue_ready_waiter(q, list))
+        int target_id = 0;
+        if (work_queue_claim_waiter(q, list, runtime, &target_id)) {
             WORK_QUEUE_METRIC_INC(q, work_queue_close_wake_count);
+            if (current_matches && target_id == current->p.id) {
+                work_queue_wake_batch_append(&local_batch, list);
+            } else if (remote_batches) {
+                work_queue_wake_batch_append(&remote_batches[target_id], list);
+                remote_ready_count++;
+            } else {
+                xr_worker_inbox_enqueue(runtime, target_id, list);
+                remote_ready_count++;
+            }
+        }
         list = next;
+    }
+
+    if (local_batch.first) {
+        (void) xr_worker_push_lifo_batch(current, local_batch.first);
+        xr_runtime_wake_idle_worker(runtime);
+    }
+    if (remote_batches) {
+        for (int i = 0; i < runtime->worker_count; i++) {
+            XrWorkQueueWakeBatch *batch = &remote_batches[i];
+            if (batch->first) {
+                xr_worker_inbox_enqueue_batch(runtime, i, batch->first, batch->last, batch->count);
+            }
+        }
+        xr_free(remote_batches);
+    }
+    if (remote_ready_count > 0 &&
+        atomic_load_explicit(&runtime->spinning_count, memory_order_relaxed) == 0) {
+        xr_runtime_wake_idle_worker(runtime);
     }
 }
 

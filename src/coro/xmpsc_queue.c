@@ -34,6 +34,18 @@ void xr_mpsc_push(XrMPSCQueue *q, struct XrCoroutine *coro) {
                                                     memory_order_relaxed));
 }
 
+void xr_mpsc_push_batch(XrMPSCQueue *q, struct XrCoroutine *first, struct XrCoroutine *last) {
+    XR_DCHECK(q != NULL, "mpsc_push_batch: NULL queue");
+    XR_DCHECK(first != NULL, "mpsc_push_batch: NULL first");
+    XR_DCHECK(last != NULL, "mpsc_push_batch: NULL last");
+    struct XrCoroutine *old_head;
+    do {
+        old_head = atomic_load_explicit(&q->head, memory_order_relaxed);
+        last->sched_link = old_head;
+    } while (!atomic_compare_exchange_weak_explicit(&q->head, &old_head, first,
+                                                    memory_order_release, memory_order_relaxed));
+}
+
 // Drain: O(1) atomic swap, returns list via sched_link (newest first)
 struct XrCoroutine *xr_mpsc_drain(XrMPSCQueue *q) {
     return atomic_exchange_explicit(&q->head, NULL, memory_order_acquire);
