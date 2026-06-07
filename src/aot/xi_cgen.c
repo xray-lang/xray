@@ -1453,22 +1453,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
             break;
 
-            /* ============ ARC / Ownership ============ */
-
-        case XI_RETAIN:
-            XR_DCHECK(v->nargs >= 1, "XI_RETAIN: need arg");
-            fprintf(out, "xrt_retain(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
-        case XI_RELEASE:
-            XR_DCHECK(v->nargs >= 1, "XI_RELEASE: need arg");
-            fprintf(out, "xrt_release(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
         case XI_DROP_REUSE:
             XR_DCHECK(v->nargs >= 1, "XI_DROP_REUSE: need arg");
             fprintf(out, "xrt_drop_reuse(");

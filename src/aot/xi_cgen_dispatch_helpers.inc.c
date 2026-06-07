@@ -376,6 +376,27 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix, const char *fn_name) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_ownership_call: need arg");
+    fprintf(out, "%s(", fn_name);
+    emit_vref(out, v->args[0]);
+    fprintf(out, ")");
+}
+
+static void xicgen_retain(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                          const char *prefix) {
+    xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_retain");
+}
+
+static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_release");
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");

@@ -24,6 +24,8 @@
     X(GET_SHARED, "xi.get.shared", xi2xm_get_shared) \
     X(SET_SHARED, "xi.set.shared", xi2xm_set_shared) \
     X(IMPORT_REF, "xi.import.ref", xi2xm_import_ref) \
+    X(RETAIN, "xi.retain", xi2xm_retain) \
+    X(RELEASE, "xi.release", xi2xm_release) \
     X(SHL, "xi.shl", xi2xm_shl) \
     X(SHR, "xi.shr", xi2xm_shr) \
     X(EQ, "xi.eq", xi2xm_eq) \
