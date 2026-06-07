@@ -1778,47 +1778,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             }
             break;
 
-        /* Cross-module import reference: use resolved indices when available,
-         * otherwise fall back to string-scanning the import table. */
-        case XI_IMPORT_REF: {
-            const XiImportRef *ref = (const XiImportRef *) v->aux;
-            bool found = false;
-            if (ref && ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 &&
-                ref->resolved_mod_index < ctx->all_nmodules &&
-                ctx->all_modules[ref->resolved_mod_index]) {
-                /* Fast path: resolved at compile time via module graph */
-                const char *tname = ctx->all_modules[ref->resolved_mod_index]->name;
-                fprintf(out, "xrt_shared_%s[%d]", tname ? tname : "mod", ref->resolved_shared_slot);
-                found = true;
-            }
-            if (!found && ref) {
-                for (int ii = 0; ii < ctx->nimports; ii++) {
-                    if (ctx->imports[ii].module_path && ref->module_path &&
-                        strcmp(ctx->imports[ii].module_path, ref->module_path) == 0 &&
-                        ctx->imports[ii].member_name && ref->member_name &&
-                        strcmp(ctx->imports[ii].member_name, ref->member_name) == 0) {
-                        fprintf(out, "xrt_shared_%s[%d]", ctx->imports[ii].target_mod_name,
-                                ctx->imports[ii].shared_slot);
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            if (!found) {
-                if (ref && ref->module_path && !ref->member_name &&
-                    strcmp(ref->module_path, "time") == 0) {
-                    fprintf(out, "XR_NULL_VAL /* builtin module: time */");
-                } else {
-                    ctx->error = true;
-                    fprintf(stderr, "[xi_cgen] ERROR: unresolved AOT import '%s.%s'\n",
-                            ref && ref->module_path ? ref->module_path : "?",
-                            ref && ref->member_name ? ref->member_name : "?");
-                    emit_codegen_abort_expr(out);
-                }
-            }
-            break;
-        }
-
         /* Class creation: register the type in xrt_type_table.
          * For monomorphized classes, also link to skeleton via generic_origin
          * and set concrete type arg display names for Reflect.typeOf. */

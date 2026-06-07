@@ -1010,6 +1010,13 @@ static XmRef lower_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return val;
 }
 
+static XmRef lower_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    int so = ctx->proto ? ctx->proto->shared_offset : 0;
+    int64_t abs_idx = v->aux_int + so;
+    XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+    return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
+}
+
 static XmRef xi2xm_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_const(ctx, blk, v);
 }
@@ -1088,6 +1095,10 @@ static XmRef xi2xm_get_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_set_shared(ctx, blk, v);
+}
+
+static XmRef xi2xm_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_import_ref(ctx, blk, v);
 }
 
 static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1548,16 +1559,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             xm_emit(ctx->xm_func, blk, XM_TRY_END, XR_REP_I64, XM_NONE, XM_NONE);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
             return xm_const_i64(ctx->xm_func, 0);
-        }
-
-        /* Cross-module import ref — resolve via shared array (same as
-         * GET_SHARED).  The VM's module loader populates the shared slot
-         * at import time; JIT reads it like any other shared variable. */
-        case XI_IMPORT_REF: {
-            int so = ctx->proto ? ctx->proto->shared_offset : 0;
-            int64_t abs_idx = v->aux_int + so;
-            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
         }
 
         /* Reference counting (compile-time RC, inserted by xi_arc).
