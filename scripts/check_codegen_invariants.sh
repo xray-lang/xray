@@ -15,7 +15,9 @@
 #
 #   3. XmOp ownership and runtime dual-emit guardrails are enforced.
 #
-#   4. Generated codegen artifacts must match the xisa truth sources.
+#   4. Codegen quarantine baselines must not grow.
+#
+#   5. Generated codegen artifacts must match the xisa truth sources.
 #
 # Exit codes:
 #   0   all checks passed
@@ -189,9 +191,21 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 4. generated artifact freshness
+# 4. codegen quarantine
 # ----------------------------------------------------------------------------
-section "4. generated artifact freshness"
+section "4. codegen quarantine"
+
+if ! scripts/check_codegen_quarantine.sh; then
+    red "FAIL: codegen quarantine baseline grew."
+    EXIT=1
+else
+    green "OK: codegen quarantine baseline did not grow."
+fi
+
+# ----------------------------------------------------------------------------
+# 5. generated artifact freshness
+# ----------------------------------------------------------------------------
+section "5. generated artifact freshness"
 
 TMPDIR_PATH=$(mktemp -d "${TMPDIR:-/tmp}/xray_codegen_gen.XXXXXX")
 trap 'rm -rf "${TMPDIR_PATH}"' EXIT
@@ -322,7 +336,7 @@ else
     EXIT=1
 fi
 
-section "5. helper CALL_C metadata path"
+section "6. helper CALL_C metadata path"
 
 manual_callc=$(awk '
     /xm_emit[[:space:]]*\(/ {
@@ -404,9 +418,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 6. backend dispatch coverage matches isel.def
+# 7. backend dispatch coverage matches isel.def
 # ----------------------------------------------------------------------------
-section "6. backend dispatch coverage"
+section "7. backend dispatch coverage"
 
 if python3 scripts/check_codegen_dispatch.py >/tmp/xray_dispatch_check.log 2>&1; then
     green "OK: per-backend dispatch tables match isel.def manifest."
@@ -419,9 +433,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 7. xr_jit_* helper address closure
+# 8. xr_jit_* helper address closure
 # ----------------------------------------------------------------------------
-section "7. helper address closure"
+section "8. helper address closure"
 
 if python3 scripts/check_codegen_helpers.py >/tmp/xray_helpers_check.log 2>&1; then
     green "OK: every direct xr_jit_* reference is registered or declared as a runtime stub."
@@ -433,9 +447,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 8. fixed-bit encoding uniqueness (arm64 + riscv64)
+# 9. fixed-bit encoding uniqueness (arm64 + riscv64)
 # ----------------------------------------------------------------------------
-section "8. fixed-bit encoding uniqueness"
+section "9. fixed-bit encoding uniqueness"
 
 if python3 tools/xisagen/xisagen.py disasm-check \
         arm64=xisa/arch/arm64.isa \
@@ -454,9 +468,9 @@ else
 fi
 
 # ----------------------------------------------------------------------------
-# 9. external assembler diff (llvm-mc) — soft-skipped when llvm-mc absent
+# 10. external assembler diff (llvm-mc) — soft-skipped when llvm-mc absent
 # ----------------------------------------------------------------------------
-section "9. external assembler diff (llvm-mc)"
+section "10. external assembler diff (llvm-mc)"
 
 if python3 tools/xisagen/xisagen.py llvm-mc-check \
         arm64=xisa/arch/arm64.isa \
