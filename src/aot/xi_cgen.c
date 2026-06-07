@@ -967,13 +967,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Closure creation — wrap C function pointer in AOT closure value.
-         * Allocate xrt_closure_t with upvals[], initialize captured values
-         * from the XI_CLOSURE_NEW args (populated by xi_lower from XiCapture). */
-        case XI_CLOSURE_NEW:
-            emit_closure_new_expr(ctx, out, prefix, v);
-            break;
-
         /* Runtime type check: args[0]=value, aux=target XrType*.
          * AOT tag namespace extends VM tags: string uses XR_TAG_STR(14)
          * and XR_TAG_STR_ARC(19), not XR_TAG_PTR(5). */

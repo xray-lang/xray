@@ -376,6 +376,12 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static void xicgen_closure_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) f;
+    emit_closure_new_expr(ctx, out, prefix, v);
+}
+
 static bool xicgen_upval_needs_cell(const XiFunc *f, const XiValue *v) {
     return v->aux_int >= 0 && v->aux_int < f->ncaptures && f->captures[v->aux_int].needs_cell;
 }

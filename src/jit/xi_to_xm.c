@@ -1144,6 +1144,10 @@ static XmRef xi2xm_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_import_ref(ctx, blk, v);
 }
 
+static XmRef xi2xm_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_closure_new(ctx, blk, v);
+}
+
 static XmRef xi2xm_load_upval(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_load_upval(ctx, blk, v);
 }
@@ -1320,10 +1324,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Function call */
         case XI_CALL:
             return lower_call(ctx, blk, v);
-
-        /* Closure creation */
-        case XI_CLOSURE_NEW:
-            return lower_closure_new(ctx, blk, v);
 
         /* Print */
         case XI_PRINT:
