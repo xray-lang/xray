@@ -230,6 +230,72 @@ TEST(lower_div_mod_variants) {
     check_lower_binary_variant(XI_MOD, XM_MOD);
 }
 
+TEST(lower_select_value) {
+    XiFunc *f = make_func("select_value", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+    XiValue *params[1] = {cond};
+    register_func_params(f, params, 1);
+    XiValue *true_val = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *false_val = xi_const_int(f, entry, 20, &stub_int);
+    XiValue *sel = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    sel->args[0] = cond;
+    sel->args[1] = true_val;
+    sel->args[2] = false_val;
+    xi_block_set_return(entry, sel);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+    bool found_cond = false;
+    bool found_select = false;
+    for (uint32_t i = 0; i < xm->blocks[0]->nins; i++) {
+        if (xm->blocks[0]->ins[i].op == XM_SELECT_COND)
+            found_cond = true;
+        if (xm->blocks[0]->ins[i].op == XM_SELECT)
+            found_select = true;
+    }
+    assert(found_cond && found_select && "select should lower through generated dispatch");
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_select_tagged_condition) {
+    XiFunc *f = make_func("select_tagged_condition", &stub_int);
+    f->stage = XI_STAGE_REPPED;
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+    cond->rep = XR_REP_TAGGED;
+    XiValue *params[1] = {cond};
+    register_func_params(f, params, 1);
+    XiValue *true_val = xi_const_int(f, entry, 10, &stub_int);
+    true_val->rep = XR_REP_I64;
+    XiValue *false_val = xi_const_int(f, entry, 20, &stub_int);
+    false_val->rep = XR_REP_I64;
+    XiValue *sel = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    sel->rep = XR_REP_I64;
+    sel->args[0] = cond;
+    sel->args[1] = true_val;
+    sel->args[2] = false_val;
+    xi_block_set_return(entry, sel);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+    bool found_helper_call = false;
+    bool found_select = false;
+    for (uint32_t i = 0; i < xm->blocks[0]->nins; i++) {
+        if (xm->blocks[0]->ins[i].op == XM_CALL_C)
+            found_helper_call = true;
+        if (xm->blocks[0]->ins[i].op == XM_SELECT)
+            found_select = true;
+    }
+    assert(found_helper_call && found_select &&
+           "tagged select condition should lower through truthy helper");
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 TEST(lower_if_branch) {
     /* fn(c: bool) -> int { if c { return 1 } else { return 2 } } */
     XiFunc *f = make_func("branch", &stub_int);
@@ -857,6 +923,8 @@ int main(void) {
     run_lower_comparison_variants();
     run_lower_bitwise_variants();
     run_lower_div_mod_variants();
+    run_lower_select_value();
+    run_lower_select_tagged_condition();
     run_lower_if_branch();
     run_lower_phi();
     run_lower_neg_unary();

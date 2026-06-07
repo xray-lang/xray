@@ -494,25 +494,40 @@ static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_fold_emit(ctx->xm_func, blk, xm_op, rep, arg, XM_NONE);
 }
 
-static XmRef lower_logical_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    XR_DCHECK(v->nargs == 1, "logical not: expected 1 arg");
-    XiValue *arg_v = v->args[0];
+static XmRef lower_truthy_value(LowerCtx *ctx, XmBlock *blk, XiValue *arg_v) {
     XmRef arg = get_ref(ctx, arg_v);
     XmRef zero = xm_const_i64(ctx->xm_func, 0);
 
-    if (arg_v->type && (arg_v->type->kind == XR_KIND_INT || arg_v->type->kind == XR_KIND_BOOL ||
-                        arg_v->type->kind == XR_KIND_ENUM || arg_v->type->kind == XR_KIND_NULL)) {
-        return xm_fold_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, arg, zero);
+    if (ref_rep(ctx, arg) == XR_REP_TAGGED) {
+        XmRef args[1] = {arg};
+        return emit_helper_call(ctx, blk, XM_HELPER_rt_truthy, zero, args, (uint16_t) 1);
     }
+
+    if (arg_v->type && arg_v->type->kind == XR_KIND_NULL)
+        return zero;
 
     if (is_float_type(arg_v->type) || ref_rep(ctx, arg) == XR_REP_F64) {
         XmRef fzero = xm_const_f64(ctx->xm_func, 0.0);
-        return xm_fold_emit(ctx->xm_func, blk, XM_FEQ, XR_REP_I64, arg, fzero);
+        return xm_fold_emit(ctx->xm_func, blk, XM_FNE, XR_REP_I64, arg, fzero);
     }
 
-    XmRef args[1] = {arg};
-    XmRef truthy = emit_helper_call(ctx, blk, XM_HELPER_rt_truthy, zero, args, (uint16_t) 1);
+    return arg;
+}
+
+static XmRef lower_logical_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "logical not: expected 1 arg");
+    XmRef truthy = lower_truthy_value(ctx, blk, v->args[0]);
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
     return xm_fold_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, truthy, zero);
+}
+
+static XmRef lower_select_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 3, "select: expected cond, true, false");
+    XmRef cond = lower_truthy_value(ctx, blk, v->args[0]);
+    XmRef true_val = get_ref(ctx, v->args[1]);
+    XmRef false_val = get_ref(ctx, v->args[2]);
+    xm_emit(ctx->xm_func, blk, XM_SELECT_COND, XR_REP_VOID, cond, XM_NONE);
+    return xm_emit(ctx->xm_func, blk, XM_SELECT, v->rep, true_val, false_val);
 }
 
 /* ========== Comparison Lowering ========== */
@@ -1034,6 +1049,10 @@ static XmRef xi2xm_bnot(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_logical_not(ctx, blk, v);
+}
+
+static XmRef xi2xm_select(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_select_value(ctx, blk, v);
 }
 
 static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {

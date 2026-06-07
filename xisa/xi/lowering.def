@@ -106,6 +106,13 @@
   :jit-xm (driver xi2xm_not)
   :aot-c (driver xicgen_not))
 
+(lower xi.select
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver emit_select)
+  :jit-xm (driver xi2xm_select)
+  :aot-c (driver xicgen_select))
+
 (lower xi.shl
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
