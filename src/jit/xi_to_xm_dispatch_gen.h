@@ -24,6 +24,8 @@
     X(GET_SHARED, "xi.get.shared", xi2xm_get_shared) \
     X(SET_SHARED, "xi.set.shared", xi2xm_set_shared) \
     X(IMPORT_REF, "xi.import.ref", xi2xm_import_ref) \
+    X(LOAD_UPVAL, "xi.load.upval", xi2xm_load_upval) \
+    X(STORE_UPVAL, "xi.store.upval", xi2xm_store_upval) \
     X(THROW, "xi.throw", xi2xm_throw) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \

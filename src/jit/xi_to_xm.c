@@ -1017,6 +1017,30 @@ static XmRef lower_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
 }
 
+static bool lower_upval_needs_cell(const LowerCtx *ctx, const XiValue *v) {
+    int upi = (int) v->aux_int;
+    return ctx->xi_func && upi >= 0 && upi < (int) ctx->xi_func->ncaptures &&
+           ctx->xi_func->captures[upi].needs_cell;
+}
+
+static XmRef lower_load_upval(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmHelperId helper =
+        lower_upval_needs_cell(ctx, v) ? XM_HELPER_upval_cell_get : XM_HELPER_upval_get;
+    XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
+    return emit_helper_call(ctx, blk, helper, idx, NULL, 0);
+}
+
+static XmRef lower_store_upval(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
+    XmHelperId helper =
+        lower_upval_needs_cell(ctx, v) ? XM_HELPER_upval_cell_set : XM_HELPER_upval_set;
+    XmRef val = get_ref(ctx, v->args[0]);
+    XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
+    XmRef call_args[] = {val};
+    emit_helper_call(ctx, blk, helper, idx, call_args, 1);
+    return val;
+}
+
 static XmRef lower_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs >= 1, "throw: need value arg");
     XmRef val = get_ref(ctx, v->args[0]);
@@ -1118,6 +1142,14 @@ static XmRef xi2xm_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_import_ref(ctx, blk, v);
+}
+
+static XmRef xi2xm_load_upval(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_load_upval(ctx, blk, v);
+}
+
+static XmRef xi2xm_store_upval(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_store_upval(ctx, blk, v);
 }
 
 static XmRef xi2xm_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1296,33 +1328,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Print */
         case XI_PRINT:
             return lower_print(ctx, blk, v);
-
-        /* Upvalue access — must call runtime bridge (not XM_LOAD which
-         * reads JIT frame slots, not closure->upvals[]).
-         *
-         * For needs_cell captures (mutable shared), the upvalue stores a
-         * Cell pointer.  Use the *_cell variants so the runtime helper
-         * dereferences/writes through the cell. */
-        case XI_LOAD_UPVAL: {
-            int upi = (int) v->aux_int;
-            bool needs_cell = ctx->xi_func && upi >= 0 && upi < (int) ctx->xi_func->ncaptures &&
-                              ctx->xi_func->captures[upi].needs_cell;
-            XmHelperId helper = needs_cell ? XM_HELPER_upval_cell_get : XM_HELPER_upval_get;
-            XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            return emit_helper_call(ctx, blk, helper, idx, NULL, 0);
-        }
-        case XI_STORE_UPVAL: {
-            XR_DCHECK(v->nargs == 1, "store_upval: expected 1 arg");
-            int upi = (int) v->aux_int;
-            bool needs_cell = ctx->xi_func && upi >= 0 && upi < (int) ctx->xi_func->ncaptures &&
-                              ctx->xi_func->captures[upi].needs_cell;
-            XmHelperId helper = needs_cell ? XM_HELPER_upval_cell_set : XM_HELPER_upval_set;
-            XmRef val = get_ref(ctx, v->args[0]);
-            XmRef idx = xm_const_i64(ctx->xm_func, v->aux_int);
-            XmRef call_args[] = {val};
-            emit_helper_call(ctx, blk, helper, idx, call_args, 1);
-            return val;
-        }
 
         /* Method call — same as generic call for now */
         case XI_CALL_METHOD:

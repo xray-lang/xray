@@ -24,6 +24,8 @@
     X(GET_SHARED, "xi.get.shared", xicgen_get_shared) \
     X(SET_SHARED, "xi.set.shared", xicgen_set_shared) \
     X(IMPORT_REF, "xi.import.ref", xicgen_import_ref) \
+    X(LOAD_UPVAL, "xi.load.upval", xicgen_load_upval) \
+    X(STORE_UPVAL, "xi.store.upval", xicgen_store_upval) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \
