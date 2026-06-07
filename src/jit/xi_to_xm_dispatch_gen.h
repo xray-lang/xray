@@ -30,6 +30,9 @@
     X(ASSERT, "xi.assert", xi2xm_assert) \
     X(ASSERT_EQ, "xi.assert.eq", xi2xm_assert_eq) \
     X(ASSERT_NE, "xi.assert.ne", xi2xm_assert_ne) \
+    X(TYPEOF, "xi.typeof", xi2xm_typeof) \
+    X(GET_BUILTIN, "xi.get.builtin", xi2xm_get_builtin) \
+    X(CLASS_CREATE, "xi.class.create", xi2xm_class_create) \
     X(THROW, "xi.throw", xi2xm_throw) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \

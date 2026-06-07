@@ -12,6 +12,7 @@
 #include "../../../src/jit/xm_jit_runtime.h"
 #include "../../../src/jit/xm_helper_table.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/base/xglobal_indices.h"
 #include "../../../src/base/xmalloc.h"
 
 #include <stdio.h>
@@ -50,6 +51,65 @@ static void register_func_params(XiFunc *f, XiValue **params, uint16_t nparams) 
     f->nparams = nparams;
     for (uint16_t i = 0; i < nparams; i++)
         f->params[i] = params[i];
+}
+
+static void assert_op_deopts_to_vm(uint16_t op, const char *name, uint16_t nargs, int64_t aux_int) {
+    XiFunc *f = make_func(name, &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *arg = NULL;
+    if (nargs > 0) {
+        arg = xi_param(f, entry, 0, &stub_int);
+        XiValue *params[1] = {arg};
+        register_func_params(f, params, 1);
+    }
+
+    XiValue *v = xi_value_new(f, entry, op, &stub_int, nargs);
+    if (nargs > 0)
+        v->args[0] = arg;
+    v->aux = (void *) name;
+    v->aux_int = aux_int;
+    xi_block_set_return(entry, NULL);
+
+    XiSlotMap slot_map = {0};
+    slot_map.entries = xr_calloc(nargs > 0 ? 2 : 1, sizeof(XiSlotMapEntry));
+    assert(slot_map.entries != NULL);
+    slot_map.count = nargs > 0 ? 2 : 1;
+    slot_map.capacity = slot_map.count;
+    uint32_t value_index = 0;
+    if (nargs > 0) {
+        slot_map.entries[0] = (XiSlotMapEntry) {
+            .value_id = arg->id,
+            .bc_pc = 0,
+            .bc_slot = 0,
+            .xr_tag = 3,
+        };
+        value_index = 1;
+    }
+    slot_map.entries[value_index] = (XiSlotMapEntry) {
+        .value_id = v->id,
+        .bc_pc = value_index,
+        .bc_slot = (uint8_t) value_index,
+        .xr_tag = 3,
+    };
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, &slot_map, NULL, NULL);
+    assert(xm != NULL && "op should deopt to VM with a bytecode anchor");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_deopt = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        assert(blk0->ins[i].op != XM_CALL_DIRECT && "op must not lower through call ABI");
+        if (blk0->ins[i].op == XM_DEOPT)
+            found_deopt = true;
+    }
+    assert(found_deopt && "op should contain XM_DEOPT");
+    assert(xm->ndeopt == 1 && "op should record one deopt point");
+    assert(xm->deopt_infos[0].bc_pc == value_index && "deopt should resume at op bytecode");
+
+    xm_func_destroy(xm);
+    xr_free(slot_map.entries);
+    xi_func_free(f);
 }
 
 /* ========== Tests ========== */
@@ -783,6 +843,12 @@ TEST(lower_assert_deopts_to_vm) {
     xi_func_free(f);
 }
 
+TEST(lower_builtin_metadata_ops_deopt_to_vm) {
+    assert_op_deopts_to_vm(XI_TYPEOF, "typeof_deopt", 1, 0);
+    assert_op_deopts_to_vm(XI_GET_BUILTIN, "get_builtin_deopt", 0, XR_GLOBAL_VAR_PROCESS);
+    assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
+}
+
 TEST(lower_shared_var) {
     /* fn() { var x = 42; return x } (shared) */
     XiFunc *f = make_func("shared_test", &stub_int);
@@ -989,6 +1055,7 @@ int main(void) {
     run_lower_print();
     run_lower_throw();
     run_lower_assert_deopts_to_vm();
+    run_lower_builtin_metadata_ops_deopt_to_vm();
     run_lower_shared_var();
     run_lower_load_field();
     run_lower_index_get();

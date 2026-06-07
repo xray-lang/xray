@@ -1322,6 +1322,18 @@ static XmRef xi2xm_assert_ne(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
 
+static XmRef xi2xm_typeof(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
+static XmRef xi2xm_get_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
+static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1551,12 +1563,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             if (v->nargs == 1)
                 return get_ref(ctx, v->args[0]);
             return xm_const_i64(ctx->xm_func, 0);
-
-        /* Builtins lowered as generic runtime calls */
-        case XI_TYPEOF:
-        case XI_GET_BUILTIN:
-        case XI_CLASS_CREATE:
-            return lower_call(ctx, blk, v);
 
         case XI_STRUCT_NEW:
         case XI_STRUCT_GET:

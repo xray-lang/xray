@@ -176,6 +176,27 @@
   :jit-xm (driver xi2xm_assert_ne)
   :aot-c (driver xicgen_assert_ne))
 
+(lower xi.typeof
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_typeof)
+  :jit-xm (driver xi2xm_typeof)
+  :aot-c (driver xicgen_typeof))
+
+(lower xi.get.builtin
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_get_builtin)
+  :jit-xm (driver xi2xm_get_builtin)
+  :aot-c (driver xicgen_get_builtin))
+
+(lower xi.class.create
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_class_create)
+  :jit-xm (driver xi2xm_class_create)
+  :aot-c (driver xicgen_class_create))
+
 (lower xi.throw
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
