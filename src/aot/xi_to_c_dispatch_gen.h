@@ -21,6 +21,8 @@
     X(BNOT, "xi.bnot", xicgen_bnot) \
     X(NOT, "xi.not", xicgen_not) \
     X(SELECT, "xi.select", xicgen_select) \
+    X(GET_SHARED, "xi.get.shared", xicgen_get_shared) \
+    X(SET_SHARED, "xi.set.shared", xicgen_set_shared) \
     X(SHL, "xi.shl", xicgen_shl) \
     X(SHR, "xi.shr", xicgen_shr) \
     X(EQ, "xi.eq", xicgen_eq) \

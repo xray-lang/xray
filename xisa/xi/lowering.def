@@ -113,6 +113,20 @@
   :jit-xm (driver xi2xm_select)
   :aot-c (driver xicgen_select))
 
+(lower xi.get.shared
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_get_shared)
+  :jit-xm (driver xi2xm_get_shared)
+  :aot-c (driver xicgen_get_shared))
+
+(lower xi.set.shared
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_set_shared)
+  :jit-xm (driver xi2xm_set_shared)
+  :aot-c (driver xicgen_set_shared))
+
 (lower xi.shl
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)

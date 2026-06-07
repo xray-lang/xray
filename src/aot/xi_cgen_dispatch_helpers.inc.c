@@ -322,6 +322,22 @@ static void xicgen_select(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     fprintf(out, ")");
 }
 
+static void xicgen_get_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    fprintf(out, "%s[%d]", ctx->shared_name, (int) v->aux_int);
+}
+
+static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) f;
+    (void) prefix;
+    fprintf(out, "(%s[%d] = ", ctx->shared_name, (int) v->aux_int);
+    emit_vref(out, v->args[0]);
+    fprintf(out, ")");
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");

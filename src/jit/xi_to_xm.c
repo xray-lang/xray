@@ -983,6 +983,33 @@ static XmRef lower_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_const_i64(ctx->xm_func, 0);
 }
 
+static XmRef lower_get_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    int so = ctx->proto ? ctx->proto->shared_offset : 0;
+    int64_t abs_idx = v->aux_int + so;
+    XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+    XmRef result = emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
+    if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
+        int32_t si = ctx->slot_idx[v->id];
+        if (si >= 0) {
+            uint32_t vi = XM_REF_INDEX(result);
+            if (vi < ctx->xm_func->nvreg)
+                ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
+        }
+    }
+    return result;
+}
+
+static XmRef lower_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "set_shared: expected 1 arg");
+    XmRef val = get_ref(ctx, v->args[0]);
+    int so = ctx->proto ? ctx->proto->shared_offset : 0;
+    int64_t abs_idx = v->aux_int + so;
+    XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
+    XmRef call_args[] = {val};
+    emit_helper_call(ctx, blk, XM_HELPER_set_shared, idx, call_args, 1);
+    return val;
+}
+
 static XmRef xi2xm_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_const(ctx, blk, v);
 }
@@ -1053,6 +1080,14 @@ static XmRef xi2xm_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_select(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_select_value(ctx, blk, v);
+}
+
+static XmRef xi2xm_get_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_get_shared(ctx, blk, v);
+}
+
+static XmRef xi2xm_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_set_shared(ctx, blk, v);
 }
 
 static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1219,44 +1254,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Print */
         case XI_PRINT:
             return lower_print(ctx, blk, v);
-
-        /* Shared (module-level) variables — loaded via runtime bridge.
-         * XM_LOAD with a const-ref arg is wrong: xra_arg returns XZR for
-         * non-vreg refs, and ARM64 LDR treats XZR-base as SP, loading
-         * garbage from the stack instead of the shared array. */
-        case XI_GET_SHARED: {
-            /* aux_int is the relative shared slot; the runtime bridge
-             * needs the absolute index (relative + shared_offset). */
-            int so = ctx->proto ? ctx->proto->shared_offset : 0;
-            int64_t abs_idx = v->aux_int + so;
-            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            XmRef result = emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
-            /* Propagate bc_slot for runtime tag resolution */
-            if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
-                int32_t si = ctx->slot_idx[v->id];
-                if (si >= 0) {
-                    uint32_t vi = XM_REF_INDEX(result);
-                    if (vi < ctx->xm_func->nvreg)
-                        ctx->xm_func->vregs[vi].bc_slot =
-                            (int16_t) ctx->slot_map->entries[si].bc_slot;
-                }
-            }
-            return result;
-        }
-        case XI_SET_SHARED: {
-            /* Mirror XI_GET_SHARED: lower as CALL_C to xr_jit_set_shared.
-             * The runtime bridge reads the value from jit_ctx->call_args[0]
-             * (populated via the call_arg_pool) and the absolute shared
-             * index from extra_arg. */
-            XR_DCHECK(v->nargs == 1, "set_shared: expected 1 arg");
-            XmRef val = get_ref(ctx, v->args[0]);
-            int so = ctx->proto ? ctx->proto->shared_offset : 0;
-            int64_t abs_idx = v->aux_int + so;
-            XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
-            XmRef call_args[] = {val};
-            emit_helper_call(ctx, blk, XM_HELPER_set_shared, idx, call_args, 1);
-            return val;
-        }
 
         /* Upvalue access — must call runtime bridge (not XM_LOAD which
          * reads JIT frame slots, not closure->upvals[]).

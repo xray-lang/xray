@@ -967,17 +967,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Shared variables (module-level) */
-        case XI_GET_SHARED:
-            fprintf(out, "%s[%d]", ctx->shared_name, (int) v->aux_int);
-            break;
-
-        case XI_SET_SHARED:
-            fprintf(out, "(%s[%d] = ", ctx->shared_name, (int) v->aux_int);
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
         /* Closure creation — wrap C function pointer in AOT closure value.
          * Allocate xrt_closure_t with upvals[], initialize captured values
          * from the XI_CLOSURE_NEW args (populated by xi_lower from XiCapture). */
