@@ -1140,6 +1140,18 @@ static XmRef xi2xm_isnull(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_emit_unary(ctx->xm_func, blk, XM_RT_ISNULL, XR_REP_I64, arg);
 }
 
+static XmRef xi2xm_convert(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_convert(ctx, blk, v);
+}
+
+static XmRef xi2xm_box(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_box(ctx, blk, v);
+}
+
+static XmRef xi2xm_unbox(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_unbox(ctx, blk, v);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1173,14 +1185,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_DIV:
         case XI_MOD:
             return lower_binary_arith(ctx, blk, v);
-
-        /* Type conversion */
-        case XI_CONVERT:
-            return lower_convert(ctx, blk, v);
-        case XI_BOX:
-            return lower_box(ctx, blk, v);
-        case XI_UNBOX:
-            return lower_unbox(ctx, blk, v);
 
         /* Function call */
         case XI_CALL:

@@ -467,6 +467,74 @@ TEST(lower_width_variants) {
     check_width_variant(XI_WIDEN_F32, &stub_float, XM_F2I, XM_I2F, true);
 }
 
+TEST(lower_conversion_variants) {
+    XiFunc *convert_f = make_func("convert_f2i", &stub_int);
+    convert_f->stage = XI_STAGE_REPPED;
+    XiBlock *convert_entry = convert_f->entry;
+    XiValue *convert_arg = xi_param(convert_f, convert_entry, 0, &stub_float);
+    convert_arg->rep = XR_REP_F64;
+    XiValue *convert_params[1] = {convert_arg};
+    register_func_params(convert_f, convert_params, 1);
+    XiValue *converted = xi_unary(convert_f, convert_entry, XI_CONVERT, &stub_int, convert_arg);
+    converted->rep = XR_REP_I64;
+    xi_block_set_return(convert_entry, converted);
+
+    XmFunc *convert_xm = xi_to_xm_lower(convert_f, NULL, NULL, NULL, NULL);
+    assert(convert_xm != NULL);
+    bool found_f2i = false;
+    for (uint32_t i = 0; i < convert_xm->blocks[0]->nins; i++) {
+        if (convert_xm->blocks[0]->ins[i].op == XM_F2I)
+            found_f2i = true;
+    }
+    assert(found_f2i && "convert float->int should lower through generated dispatch");
+    xm_func_destroy(convert_xm);
+    xi_func_free(convert_f);
+
+    XiFunc *box_f = make_func("box_f64", &stub_float);
+    box_f->stage = XI_STAGE_REPPED;
+    XiBlock *box_entry = box_f->entry;
+    XiValue *box_arg = xi_param(box_f, box_entry, 0, &stub_float);
+    box_arg->rep = XR_REP_F64;
+    XiValue *box_params[1] = {box_arg};
+    register_func_params(box_f, box_params, 1);
+    XiValue *boxed = xi_unary(box_f, box_entry, XI_BOX, &stub_float, box_arg);
+    boxed->rep = XR_REP_TAGGED;
+    xi_block_set_return(box_entry, boxed);
+
+    XmFunc *box_xm = xi_to_xm_lower(box_f, NULL, NULL, NULL, NULL);
+    assert(box_xm != NULL);
+    bool found_box = false;
+    for (uint32_t i = 0; i < box_xm->blocks[0]->nins; i++) {
+        if (box_xm->blocks[0]->ins[i].op == XM_BOX_F64)
+            found_box = true;
+    }
+    assert(found_box && "box should lower through generated dispatch");
+    xm_func_destroy(box_xm);
+    xi_func_free(box_f);
+
+    XiFunc *unbox_f = make_func("unbox_i64", &stub_int);
+    unbox_f->stage = XI_STAGE_REPPED;
+    XiBlock *unbox_entry = unbox_f->entry;
+    XiValue *unbox_arg = xi_param(unbox_f, unbox_entry, 0, &stub_int);
+    unbox_arg->rep = XR_REP_TAGGED;
+    XiValue *unbox_params[1] = {unbox_arg};
+    register_func_params(unbox_f, unbox_params, 1);
+    XiValue *unboxed = xi_unary(unbox_f, unbox_entry, XI_UNBOX, &stub_int, unbox_arg);
+    unboxed->rep = XR_REP_I64;
+    xi_block_set_return(unbox_entry, unboxed);
+
+    XmFunc *unbox_xm = xi_to_xm_lower(unbox_f, NULL, NULL, NULL, NULL);
+    assert(unbox_xm != NULL);
+    bool found_unbox = false;
+    for (uint32_t i = 0; i < unbox_xm->blocks[0]->nins; i++) {
+        if (unbox_xm->blocks[0]->ins[i].op == XM_UNBOX_I64)
+            found_unbox = true;
+    }
+    assert(found_unbox && "unbox should lower through generated dispatch");
+    xm_func_destroy(unbox_xm);
+    xi_func_free(unbox_f);
+}
+
 TEST(lower_void_return) {
     XiFunc *f = make_func("void_fn", &stub_void);
     XiBlock *entry = f->entry;
@@ -790,6 +858,7 @@ int main(void) {
     run_lower_logical_not();
     run_lower_isnull();
     run_lower_width_variants();
+    run_lower_conversion_variants();
     run_lower_void_return();
     run_lower_call();
     run_lower_print();

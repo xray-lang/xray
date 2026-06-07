@@ -41,7 +41,10 @@
     X(WIDEN_I32, "xi.widen.i32", xi2xm_widen_i32) \
     X(WIDEN_U32, "xi.widen.u32", xi2xm_widen_u32) \
     X(WIDEN_F32, "xi.widen.f32", xi2xm_widen_f32) \
-    X(ISNULL, "xi.isnull", xi2xm_isnull)
+    X(ISNULL, "xi.isnull", xi2xm_isnull) \
+    X(CONVERT, "xi.convert", xi2xm_convert) \
+    X(BOX, "xi.box", xi2xm_box) \
+    X(UNBOX, "xi.unbox", xi2xm_unbox)
 
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */
