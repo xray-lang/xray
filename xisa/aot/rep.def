@@ -1,0 +1,156 @@
+; AOT representation source.
+; This file describes how AOT C carries typed Xi values.
+
+(define-aot-rep i8
+  :c-type "int8_t"
+  :size 1
+  :align 1
+  :signed yes
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_I8
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep u8
+  :c-type "uint8_t"
+  :size 1
+  :align 1
+  :signed no
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_U8
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep i16
+  :c-type "int16_t"
+  :size 2
+  :align 2
+  :signed yes
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_I16
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep u16
+  :c-type "uint16_t"
+  :size 2
+  :align 2
+  :signed no
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_U16
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep i32
+  :c-type "int32_t"
+  :size 4
+  :align 4
+  :signed yes
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_I32
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep u32
+  :c-type "uint32_t"
+  :size 4
+  :align 4
+  :signed no
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_U32
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep i64
+  :c-type "int64_t"
+  :size 8
+  :align 8
+  :signed yes
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_I64
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep u64
+  :c-type "uint64_t"
+  :size 8
+  :align 8
+  :signed no
+  :integer yes
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_U64
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep f32
+  :c-type "float"
+  :size 4
+  :align 4
+  :signed yes
+  :integer no
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_F32
+  :storage-rep XR_REP_F64)
+
+(define-aot-rep f64
+  :c-type "double"
+  :size 8
+  :align 8
+  :signed yes
+  :integer no
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_F64
+  :storage-rep XR_REP_F64)
+
+(define-aot-rep bool
+  :c-type "uint8_t"
+  :size 1
+  :align 1
+  :signed no
+  :integer no
+  :boxed no
+  :dynamic-kind scalar
+  :native-type XR_NATIVE_BOOL
+  :storage-rep XR_REP_I64)
+
+(define-aot-rep tagged
+  :c-type "XrValue"
+  :size 16
+  :align 8
+  :signed no
+  :integer no
+  :boxed yes
+  :dynamic-kind tagged
+  :native-type none
+  :storage-rep XR_REP_TAGGED)
+
+(define-aot-rep ptr
+  :c-type "void *"
+  :size 8
+  :align 8
+  :signed no
+  :integer no
+  :boxed no
+  :dynamic-kind pointer
+  :native-type none
+  :storage-rep XR_REP_PTR)
+
+(define-aot-rep void
+  :c-type "void"
+  :size 0
+  :align 1
+  :signed no
+  :integer no
+  :boxed no
+  :dynamic-kind void
+  :native-type none
+  :storage-rep XR_REP_VOID)

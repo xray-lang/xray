@@ -8,6 +8,7 @@ Reads declarative .def and .isa files, generates C headers for IR and JIT metada
   - isa:     xisa/arch/<arch>/isa.isa → emit helpers, mcattr, disasm, golden
   - xi-ops:  xisa/xi/ops.def     → xi_ops_gen.h
   - xi-lowering: xisa/xi/lowering.def → Xi target lowering headers
+  - aot-rep: xisa/aot/rep.def    → xaot_rep_gen.h
 
 Usage:
   python3 xisagen.py ops     <ops.def>     <output.h>
@@ -15,6 +16,7 @@ Usage:
   python3 xisagen.py isa     <isa.isa>     <output_dir>
   python3 xisagen.py xi-ops  <ops.def>     <output.h>
   python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
+  python3 xisagen.py aot-rep <rep.def>     <output.h>
 """
 
 import sys
@@ -1993,6 +1995,287 @@ def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef]) ->
     return written
 
 # ============================================================
+# L3: AOT representation metadata
+# ============================================================
+
+VALID_AOT_DYNAMIC_KINDS = {
+    'aggregate',
+    'pointer',
+    'scalar',
+    'tagged',
+    'void',
+}
+
+VALID_AOT_STORAGE_REPS = {
+    'XR_REP_F64',
+    'XR_REP_I64',
+    'XR_REP_PTR',
+    'XR_REP_TAGGED',
+    'XR_REP_VOID',
+}
+
+
+@dataclass
+class AotRepDef:
+    name: str
+    ident: str
+    c_type: str
+    size: int
+    align: int
+    signed: bool
+    integer: bool
+    boxed: bool
+    dynamic_kind: str
+    native_type: str
+    storage_rep: str
+
+
+def _aot_bool_atom(form: SList, keyword: str, context: str) -> bool:
+    value = _xi_get_kw(form, keyword)
+    if value is None:
+        die(f"{context}: missing {keyword}")
+    text = _sexpr_atom_value(value, context)
+    if text == 'yes':
+        return True
+    if text == 'no':
+        return False
+    die(f"{context}: {keyword} must be yes or no")
+
+
+def _aot_int_atom(form: SList, keyword: str, context: str) -> int:
+    value = _xi_get_kw(form, keyword)
+    if value is None:
+        die(f"{context}: missing {keyword}")
+    if not isinstance(value, SAtom) or not value.is_number:
+        die(f"{context}: {keyword} must be a number")
+    return value.int_value
+
+
+def parse_aot_rep_def(text: str, path: str = '<input>') -> list[AotRepDef]:
+    forms = parse_sexpr(tokenize_sexpr(text, path), path)
+    reps = []
+    seen_names = set()
+    seen_native_types = set()
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            die(f"{path}: top-level form must be a list")
+        head = _sexpr_atom_value(form.children[0], path)
+        if head != 'define-aot-rep':
+            die(f"{path}:{form.line}:{form.col}: expected define-aot-rep")
+        if len(form.children) < 2:
+            die(f"{path}:{form.line}:{form.col}: missing AOT rep name")
+        name = _sexpr_atom_value(form.children[1], 'define-aot-rep')
+        if name in seen_names:
+            die(f"{path}: duplicate AOT rep '{name}'")
+        seen_names.add(name)
+        context = f"{path}:{name}"
+        c_type = _xi_get_kw_str(form, ':c-type')
+        if not c_type:
+            die(f"{context}: missing :c-type")
+        size = _aot_int_atom(form, ':size', context)
+        align = _aot_int_atom(form, ':align', context)
+        if size < 0:
+            die(f"{context}: :size must be non-negative")
+        if align <= 0:
+            die(f"{context}: :align must be positive")
+        signed = _aot_bool_atom(form, ':signed', context)
+        integer = _aot_bool_atom(form, ':integer', context)
+        boxed = _aot_bool_atom(form, ':boxed', context)
+        dynamic_kind = _xi_get_kw_str(form, ':dynamic-kind')
+        if dynamic_kind not in VALID_AOT_DYNAMIC_KINDS:
+            die(f"{context}: unknown :dynamic-kind '{dynamic_kind}'")
+        if dynamic_kind == 'void' and size != 0:
+            die(f"{context}: void representation must have size 0")
+        if dynamic_kind != 'void' and size == 0:
+            die(f"{context}: non-void representation must have positive size")
+        native_type = _xi_get_kw_str(form, ':native-type')
+        if not native_type:
+            die(f"{context}: missing :native-type")
+        if native_type != 'none':
+            if not native_type.startswith('XR_NATIVE_'):
+                die(f"{context}: :native-type must be XR_NATIVE_* or none")
+            if native_type in seen_native_types:
+                die(f"{context}: duplicate native type '{native_type}'")
+            seen_native_types.add(native_type)
+        storage_rep = _xi_get_kw_str(form, ':storage-rep')
+        if storage_rep not in VALID_AOT_STORAGE_REPS:
+            die(f"{context}: unknown :storage-rep '{storage_rep}'")
+        reps.append(AotRepDef(name=name, ident=_xi_c_ident(name), c_type=c_type, size=size,
+                              align=align, signed=signed, integer=integer, boxed=boxed,
+                              dynamic_kind=dynamic_kind, native_type=native_type,
+                              storage_rep=storage_rep))
+    return reps
+
+
+def _c_bool(value: bool) -> str:
+    return 'true' if value else 'false'
+
+
+def _aot_int_fits_expr(rep: AotRepDef) -> str:
+    if not rep.integer:
+        return 'false'
+    if rep.signed:
+        if rep.size == 1:
+            return 'value >= INT8_MIN && value <= INT8_MAX'
+        if rep.size == 2:
+            return 'value >= INT16_MIN && value <= INT16_MAX'
+        if rep.size == 4:
+            return 'value >= INT32_MIN && value <= INT32_MAX'
+        if rep.size == 8:
+            return 'true'
+    else:
+        if rep.size == 1:
+            return 'value >= 0 && value <= UINT8_MAX'
+        if rep.size == 2:
+            return 'value >= 0 && value <= UINT16_MAX'
+        if rep.size == 4:
+            return 'value >= 0 && (uint64_t) value <= UINT32_MAX'
+        if rep.size == 8:
+            return 'value >= 0'
+    return 'false'
+
+
+def _aot_elem_name(rep: AotRepDef) -> str:
+    return f'XR_ELEM_{rep.ident}'
+
+
+def generate_aot_rep_header(reps: list[AotRepDef]) -> str:
+    dynamic_kinds = []
+    for rep in reps:
+        if rep.dynamic_kind not in dynamic_kinds:
+            dynamic_kinds.append(rep.dynamic_kind)
+    native_reps = [rep for rep in reps if rep.native_type != 'none']
+
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
+    lines.append('/* Source: xisa/aot/rep.def */')
+    lines.append('')
+    lines.append('#ifndef XAOT_REP_GEN_H')
+    lines.append('#define XAOT_REP_GEN_H')
+    lines.append('')
+    lines.append('#include <stdbool.h>')
+    lines.append('#include <stdint.h>')
+    lines.append('#include "../runtime/value/xtype.h"')
+    lines.append('')
+    lines.append('typedef enum {')
+    for i, rep in enumerate(reps):
+        lines.append(f'    XAOT_REP_{rep.ident} = {i},')
+    lines.append('    XAOT_REP_COUNT')
+    lines.append('} XaotRep;')
+    lines.append('')
+    lines.append('typedef enum {')
+    for i, kind in enumerate(dynamic_kinds):
+        lines.append(f'    XAOT_DYNAMIC_{_xi_c_ident(kind)} = {i},')
+    lines.append('    XAOT_DYNAMIC_COUNT')
+    lines.append('} XaotDynamicKind;')
+    lines.append('')
+    lines.append('typedef struct {')
+    lines.append('    const char *name;')
+    lines.append('    const char *c_type;')
+    lines.append('    uint8_t size;')
+    lines.append('    uint8_t align;')
+    lines.append('    bool is_signed;')
+    lines.append('    bool is_integer;')
+    lines.append('    bool is_boxed;')
+    lines.append('    uint8_t dynamic_kind;')
+    lines.append('    bool has_native_type;')
+    lines.append('    uint8_t native_type;')
+    lines.append('    XrRep storage_rep;')
+    lines.append('} XaotRepInfo;')
+    lines.append('')
+    lines.append('#define XAOT_REP_ENTRIES(X) \\')
+    for i, rep in enumerate(reps):
+        native_type = rep.native_type if rep.native_type != 'none' else '0'
+        suffix = ' \\' if i + 1 < len(reps) else ''
+        lines.append(
+            f'    X({rep.ident}, "{rep.name}", "{rep.c_type}", {rep.size}, {rep.align}, '
+            f'{_c_bool(rep.signed)}, {_c_bool(rep.integer)}, {_c_bool(rep.boxed)}, '
+            f'XAOT_DYNAMIC_{_xi_c_ident(rep.dynamic_kind)}, {_c_bool(rep.native_type != "none")}, '
+            f'{native_type}, {rep.storage_rep}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('static inline const XaotRepInfo *xaot_rep_info(XaotRep rep) {')
+    lines.append('    static const XaotRepInfo table[XAOT_REP_COUNT] = {')
+    for rep in reps:
+        native_type = rep.native_type if rep.native_type != 'none' else '0'
+        lines.append(f'        [XAOT_REP_{rep.ident}] = {{"{rep.name}", "{rep.c_type}",')
+        lines.append(f'                                      {rep.size}, {rep.align},')
+        lines.append(f'                                      {_c_bool(rep.signed)}, {_c_bool(rep.integer)},')
+        lines.append(f'                                      {_c_bool(rep.boxed)},')
+        lines.append(f'                                      XAOT_DYNAMIC_{_xi_c_ident(rep.dynamic_kind)},')
+        lines.append(f'                                      {_c_bool(rep.native_type != "none")}, {native_type},')
+        lines.append(f'                                      {rep.storage_rep}}},')
+    lines.append('    };')
+    lines.append('    if ((unsigned) rep >= XAOT_REP_COUNT)')
+    lines.append('        return NULL;')
+    lines.append('    return &table[rep];')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xaot_rep_from_native_type(uint8_t native_type, XaotRep *out) {')
+    lines.append('    switch (native_type) {')
+    for rep in native_reps:
+        lines.append(f'        case {rep.native_type}:')
+        lines.append(f'            if (out) *out = XAOT_REP_{rep.ident};')
+        lines.append('            return true;')
+    lines.append('        default:')
+    lines.append('            return false;')
+    lines.append('    }')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline const char *xaot_c_type_for_native_type(uint8_t native_type) {')
+    lines.append('    XaotRep rep;')
+    lines.append('    const XaotRepInfo *info;')
+    lines.append('    if (!xaot_rep_from_native_type(native_type, &rep))')
+    lines.append('        return NULL;')
+    lines.append('    info = xaot_rep_info(rep);')
+    lines.append('    return info ? info->c_type : NULL;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline const char *xaot_c_type_for_native_int_type(uint8_t native_type) {')
+    lines.append('    XaotRep rep;')
+    lines.append('    const XaotRepInfo *info;')
+    lines.append('    if (!xaot_rep_from_native_type(native_type, &rep))')
+    lines.append('        return NULL;')
+    lines.append('    info = xaot_rep_info(rep);')
+    lines.append('    return (info && info->is_integer) ? info->c_type : NULL;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline XrRep xaot_storage_rep_for_native_type(uint8_t native_type) {')
+    lines.append('    XaotRep rep;')
+    lines.append('    const XaotRepInfo *info;')
+    lines.append('    if (!xaot_rep_from_native_type(native_type, &rep))')
+    lines.append('        return XR_REP_TAGGED;')
+    lines.append('    info = xaot_rep_info(rep);')
+    lines.append('    return info ? info->storage_rep : XR_REP_TAGGED;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline const char *xaot_elem_name_for_native_type(uint8_t native_type) {')
+    lines.append('    switch (native_type) {')
+    for rep in native_reps:
+        lines.append(f'        case {rep.native_type}:')
+        lines.append(f'            return "{_aot_elem_name(rep)}";')
+    lines.append('        default:')
+    lines.append('            return NULL;')
+    lines.append('    }')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xaot_native_int_const_fits(uint8_t native_type, int64_t value) {')
+    lines.append('    switch (native_type) {')
+    for rep in native_reps:
+        if not rep.integer:
+            continue
+        lines.append(f'        case {rep.native_type}:')
+        lines.append(f'            return {_aot_int_fits_expr(rep)};')
+    lines.append('        default:')
+    lines.append('            return false;')
+    lines.append('    }')
+    lines.append('}')
+    lines.append('')
+    lines.append('#endif  /* XAOT_REP_GEN_H */')
+    lines.append('')
+    return '\n'.join(lines)
+
+# ============================================================
 # L3: .isa structured extraction
 # ============================================================
 
@@ -3931,6 +4214,17 @@ def cmd_xi_lowering(args: list[str]):
     print(f"xisagen: parsed {len(entries)} Xi lowering entries from {args[1]}", file=sys.stderr)
     for path in outputs:
         print(f"xisagen: generated {path}", file=sys.stderr)
+
+def cmd_aot_rep(args: list[str]):
+    if len(args) != 2:
+        die("usage: xisagen.py aot-rep <rep.def> <output.h>")
+    reps = parse_aot_rep_def(read_file(args[0]), args[0])
+    if not reps:
+        die(f"no AOT reps parsed from {args[0]}")
+    content = generate_aot_rep_header(reps)
+    write_file(args[1], content)
+    print(f"xisagen: parsed {len(reps)} AOT reps from {args[0]}", file=sys.stderr)
+    print(f"xisagen: generated {args[1]}", file=sys.stderr)
 
 def cmd_helpers(args: list[str]):
     if len(args) != 2:
@@ -6311,6 +6605,7 @@ def cmd_test(args: list[str]):
     _test_sexpr_parser()
     _test_xi_ops_parser()
     _test_xi_lowering_parser()
+    _test_aot_rep_parser()
     _test_ops_parser()
     _test_helpers_parser()
     _test_isel_parser()
@@ -6454,6 +6749,57 @@ def _test_xi_lowering_parser():
           :vm-bytecode (driver xi_emit_add))
         ''', ops)
         assert False, "missing required lowering target should be rejected"
+    except SystemExit:
+        pass
+    print(" PASS", file=sys.stderr)
+
+def _test_aot_rep_parser():
+    print("  test_aot_rep_parser...", end='', file=sys.stderr)
+    text = '''
+    (define-aot-rep i8
+      :c-type "int8_t"
+      :size 1
+      :align 1
+      :signed yes
+      :integer yes
+      :boxed no
+      :dynamic-kind scalar
+      :native-type XR_NATIVE_I8
+      :storage-rep XR_REP_I64)
+    (define-aot-rep tagged
+      :c-type "XrValue"
+      :size 16
+      :align 8
+      :signed no
+      :integer no
+      :boxed yes
+      :dynamic-kind tagged
+      :native-type none
+      :storage-rep XR_REP_TAGGED)
+    '''
+    reps = parse_aot_rep_def(text)
+    assert len(reps) == 2
+    assert reps[0].ident == 'I8'
+    assert reps[0].c_type == 'int8_t'
+    assert reps[0].integer
+    header = generate_aot_rep_header(reps)
+    assert 'XAOT_REP_I8' in header
+    assert 'xaot_c_type_for_native_int_type' in header
+    assert 'xaot_elem_name_for_native_type' in header
+    assert 'case XR_NATIVE_I8:' in header
+    try:
+        parse_aot_rep_def('''
+        (define-aot-rep bad
+          :size 1
+          :align 1
+          :signed yes
+          :integer yes
+          :boxed no
+          :dynamic-kind scalar
+          :native-type XR_NATIVE_I8
+          :storage-rep XR_REP_I64)
+        ''')
+        assert False, "missing c-type should be rejected"
     except SystemExit:
         pass
     print(" PASS", file=sys.stderr)
@@ -6800,6 +7146,7 @@ def main():
         'ops': cmd_ops,
         'xi-ops': cmd_xi_ops,
         'xi-lowering': cmd_xi_lowering,
+        'aot-rep': cmd_aot_rep,
         'helpers': cmd_helpers,
         'runtime-stubs': cmd_runtime_stubs,
         'isel': cmd_isel,

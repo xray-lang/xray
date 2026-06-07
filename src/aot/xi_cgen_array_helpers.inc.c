@@ -31,39 +31,12 @@ static bool cg_array_elem_info_from_type(const XrType *type, CgArrayElemInfo *ou
 
     memset(out, 0, sizeof(*out));
     if (elem->native_width != 0) {
-        switch (elem->native_width) {
-            case XR_NATIVE_I8:
-                *out = (CgArrayElemInfo) {"XR_ELEM_I8", "int8_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_U8:
-                *out = (CgArrayElemInfo) {"XR_ELEM_U8", "uint8_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_I16:
-                *out = (CgArrayElemInfo) {"XR_ELEM_I16", "int16_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_U16:
-                *out = (CgArrayElemInfo) {"XR_ELEM_U16", "uint16_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_I32:
-                *out = (CgArrayElemInfo) {"XR_ELEM_I32", "int32_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_U32:
-                *out = (CgArrayElemInfo) {"XR_ELEM_U32", "uint32_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_U64:
-                *out = (CgArrayElemInfo) {"XR_ELEM_U64", "uint64_t", XR_REP_I64};
-                return true;
-            case XR_NATIVE_F32:
-                *out = (CgArrayElemInfo) {"XR_ELEM_F32", "float", XR_REP_F64};
-                return true;
-            case XR_NATIVE_F64:
-                *out = (CgArrayElemInfo) {"XR_ELEM_F64", "double", XR_REP_F64};
-                return true;
-            case XR_NATIVE_BOOL:
-                *out = (CgArrayElemInfo) {"XR_ELEM_BOOL", "uint8_t", XR_REP_I64};
-                return true;
-            default:
-                break;
+        const char *elem_name = xaot_elem_name_for_native_type(elem->native_width);
+        const char *ctype = xaot_c_type_for_native_type(elem->native_width);
+        if (elem_name && ctype) {
+            *out = (CgArrayElemInfo) {elem_name, ctype,
+                                      xaot_storage_rep_for_native_type(elem->native_width)};
+            return true;
         }
     }
 
