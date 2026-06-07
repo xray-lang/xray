@@ -25,10 +25,20 @@
     X(LE, "xi.le", xicgen_le) \
     X(GT, "xi.gt", xicgen_gt) \
     X(GE, "xi.ge", xicgen_ge) \
+    X(NARROW_I8, "xi.narrow.i8", xicgen_narrow_i8) \
     X(NARROW_U8, "xi.narrow.u8", xicgen_narrow_u8) \
     X(NARROW_I16, "xi.narrow.i16", xicgen_narrow_i16) \
+    X(NARROW_U16, "xi.narrow.u16", xicgen_narrow_u16) \
+    X(NARROW_I32, "xi.narrow.i32", xicgen_narrow_i32) \
     X(NARROW_U32, "xi.narrow.u32", xicgen_narrow_u32) \
+    X(NARROW_F32, "xi.narrow.f32", xicgen_narrow_f32) \
+    X(WIDEN_I8, "xi.widen.i8", xicgen_widen_i8) \
     X(WIDEN_U8, "xi.widen.u8", xicgen_widen_u8) \
+    X(WIDEN_I16, "xi.widen.i16", xicgen_widen_i16) \
+    X(WIDEN_U16, "xi.widen.u16", xicgen_widen_u16) \
+    X(WIDEN_I32, "xi.widen.i32", xicgen_widen_i32) \
+    X(WIDEN_U32, "xi.widen.u32", xicgen_widen_u32) \
+    X(WIDEN_F32, "xi.widen.f32", xicgen_widen_f32) \
     X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xicgen_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \

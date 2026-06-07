@@ -25,10 +25,20 @@
     X(LE, "xi.le", xi2xm_le) \
     X(GT, "xi.gt", xi2xm_gt) \
     X(GE, "xi.ge", xi2xm_ge) \
+    X(NARROW_I8, "xi.narrow.i8", xi2xm_narrow_i8) \
     X(NARROW_U8, "xi.narrow.u8", xi2xm_narrow_u8) \
     X(NARROW_I16, "xi.narrow.i16", xi2xm_narrow_i16) \
+    X(NARROW_U16, "xi.narrow.u16", xi2xm_narrow_u16) \
+    X(NARROW_I32, "xi.narrow.i32", xi2xm_narrow_i32) \
     X(NARROW_U32, "xi.narrow.u32", xi2xm_narrow_u32) \
-    X(WIDEN_U8, "xi.widen.u8", xi2xm_widen_u8)
+    X(NARROW_F32, "xi.narrow.f32", xi2xm_narrow_f32) \
+    X(WIDEN_I8, "xi.widen.i8", xi2xm_widen_i8) \
+    X(WIDEN_U8, "xi.widen.u8", xi2xm_widen_u8) \
+    X(WIDEN_I16, "xi.widen.i16", xi2xm_widen_i16) \
+    X(WIDEN_U16, "xi.widen.u16", xi2xm_widen_u16) \
+    X(WIDEN_I32, "xi.widen.i32", xi2xm_widen_i32) \
+    X(WIDEN_U32, "xi.widen.u32", xi2xm_widen_u32) \
+    X(WIDEN_F32, "xi.widen.f32", xi2xm_widen_f32)
 
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */
