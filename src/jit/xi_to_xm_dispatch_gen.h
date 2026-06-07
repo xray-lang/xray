@@ -63,7 +63,9 @@
     X(ISNULL, "xi.isnull", xi2xm_isnull) \
     X(CONVERT, "xi.convert", xi2xm_convert) \
     X(BOX, "xi.box", xi2xm_box) \
-    X(UNBOX, "xi.unbox", xi2xm_unbox)
+    X(UNBOX, "xi.unbox", xi2xm_unbox) \
+    X(INDEX_GET, "xi.index.get", xi2xm_index_get) \
+    X(INDEX_SET, "xi.index.set", xi2xm_index_set)
 
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */
