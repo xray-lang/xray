@@ -358,6 +358,35 @@ TEST(lower_unary_variants) {
     check_lower_unary_variant(XI_BNOT, XM_NOT);
 }
 
+TEST(lower_logical_not) {
+    XiFunc *f = make_func("logical_not", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_bool);
+    XiValue *params[1] = {a};
+    register_func_params(f, params, 1);
+    XiValue *not_a = xi_unary(f, entry, XI_NOT, &stub_bool, a);
+    xi_block_set_return(entry, not_a);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_eq = false;
+    bool found_bitwise_not = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_EQ)
+            found_eq = true;
+        if (blk0->ins[i].op == XM_NOT)
+            found_bitwise_not = true;
+    }
+    assert(found_eq && "logical not should compare against false");
+    assert(!found_bitwise_not && "logical not must not lower to bitwise NOT");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 TEST(lower_void_return) {
     XiFunc *f = make_func("void_fn", &stub_void);
     XiBlock *entry = f->entry;
@@ -678,6 +707,7 @@ int main(void) {
     run_lower_phi();
     run_lower_neg_unary();
     run_lower_unary_variants();
+    run_lower_logical_not();
     run_lower_void_return();
     run_lower_call();
     run_lower_print();

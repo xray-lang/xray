@@ -193,6 +193,16 @@ static void xicgen_bnot(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_bitwise_unop(out, v, "~");
 }
 
+static void xicgen_not(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "!(");
+    emit_condition_expr(out, v->args[0]);
+    fprintf(out, ")");
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");

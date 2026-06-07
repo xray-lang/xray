@@ -102,6 +102,7 @@ XR_FUNC XrJitResult xr_jit_rt_mul(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_rt_div(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_rt_mod(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_rt_eq(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_rt_truthy(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_eq_value(struct XrCoroutine *coro, int64_t unused);
 /* ========== Property Access ========== */
 

@@ -999,6 +999,16 @@ XrJitResult xr_jit_rt_eq(XrCoroutine *coro, int64_t extra_arg) {
     return XR_JIT_BOOL(vm_values_equal(a, b) ? 1 : 0);
 }
 
+// Called from JIT via CALL_C for dynamic truthiness.
+// jit_call_args[0] = value raw.
+// Returns 1 for truthy values, 0 for falsy values.
+XrJitResult xr_jit_rt_truthy(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    XrValue val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0],
+                                     xr_coro_jit_state(coro)->scratch->call_arg_tags[0]);
+    return XR_JIT_BOOL(xr_vm_is_truthy(val) ? 1 : 0);
+}
+
 // Called from JIT via CALL_C for OP_EQK with non-numeric constants.
 // jit_call_args[0] = value A raw, jit_call_args[1] = value B raw (constant).
 // extra_arg = (a_slot_type << 8) | b_tag

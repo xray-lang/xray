@@ -46,6 +46,7 @@ XM_HELPER(rt_mul,              2, TAGGED, NONE,                                 
 XM_HELPER(rt_div,              2, TAGGED, NONE,                                     GC,   NONE)
 XM_HELPER(rt_mod,              2, TAGGED, NONE,                                     GC,   NONE)
 XM_HELPER(rt_eq,               2, I64,    NONE,                                     NONE, NONE)
+XM_HELPER(rt_truthy,           1, I64,    NONE,                                     NONE, NONE)
 XM_HELPER(eq_value,            2, I64,    NONE,                                     NONE, NONE)
 
 # ===== Property Access =====

@@ -16,6 +16,7 @@
     X(BOR, "xi.bor", xi2xm_bor) \
     X(BXOR, "xi.bxor", xi2xm_bxor) \
     X(BNOT, "xi.bnot", xi2xm_bnot) \
+    X(NOT, "xi.not", xi2xm_not) \
     X(SHL, "xi.shl", xi2xm_shl) \
     X(SHR, "xi.shr", xi2xm_shr) \
     X(EQ, "xi.eq", xi2xm_eq) \
