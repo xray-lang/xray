@@ -6,6 +6,7 @@
 
 #define XI_TO_XM_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xi2xm_const) \
+    X(PARAM, "xi.param", xi2xm_param) \
     X(COPY, "xi.copy", xi2xm_copy) \
     X(MOVE, "xi.move", xi2xm_move) \
     X(ADD, "xi.add", xi2xm_add) \

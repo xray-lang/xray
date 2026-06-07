@@ -972,6 +972,11 @@ static XmRef xi2xm_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_const(ctx, blk, v);
 }
 
+static XmRef xi2xm_param(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    return get_ref(ctx, v);
+}
+
 static XmRef xi2xm_identity(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     (void) blk;
     if (v->nargs >= 1)
@@ -1176,11 +1181,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return generated;
 
     switch (v->op) {
-        case XI_PARAM: {
-            /* Parameters are pre-mapped during initialization */
-            return get_ref(ctx, v);
-        }
-
         /* Binary arithmetic */
         case XI_DIV:
         case XI_MOD:

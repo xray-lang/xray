@@ -6,6 +6,7 @@
 
 #define XI_TO_C_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xicgen_const) \
+    X(PARAM, "xi.param", xicgen_param) \
     X(COPY, "xi.copy", xicgen_copy) \
     X(MOVE, "xi.move", xicgen_move) \
     X(ADD, "xi.add", xicgen_add) \

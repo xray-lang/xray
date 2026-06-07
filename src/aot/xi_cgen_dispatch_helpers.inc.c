@@ -28,6 +28,18 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     }
 }
 
+static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) prefix;
+    fprintf(out, "p%u", (unsigned) v->aux_int);
+    if (cg_func_param_abi_rep(ctx, f, (uint16_t) v->aux_int) != XR_REP_TAGGED)
+        return;
+    if (cg_rep(v) == XR_REP_I64)
+        fprintf(out, ".i");
+    else if (cg_rep(v) == XR_REP_F64)
+        fprintf(out, ".f");
+}
+
 static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     (void) ctx;

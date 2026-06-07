@@ -8,6 +8,13 @@
   :jit-xm (driver xi2xm_const)
   :aot-c (driver xicgen_const))
 
+(lower xi.param
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver emit_param)
+  :jit-xm (driver xi2xm_param)
+  :aot-c (driver xicgen_param))
+
 (lower xi.copy
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
