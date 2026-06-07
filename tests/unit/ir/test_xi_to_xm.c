@@ -732,6 +732,57 @@ TEST(lower_throw) {
     xi_func_free(f);
 }
 
+TEST(lower_assert_deopts_to_vm) {
+    XiFunc *f = make_func("assert_deopt", &stub_void);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+    XiValue *params[1] = {cond};
+    register_func_params(f, params, 1);
+
+    XiValue *assert_v = xi_value_new(f, entry, XI_ASSERT, &stub_void, 1);
+    assert_v->args[0] = cond;
+    assert_v->aux = "assert_deopt";
+    assert_v->aux_int = 0;
+    xi_block_set_return(entry, NULL);
+
+    XiSlotMap slot_map = {0};
+    slot_map.entries = xr_calloc(2, sizeof(XiSlotMapEntry));
+    assert(slot_map.entries != NULL);
+    slot_map.count = 2;
+    slot_map.capacity = 2;
+    slot_map.entries[0] = (XiSlotMapEntry) {
+        .value_id = cond->id,
+        .bc_pc = 0,
+        .bc_slot = 0,
+        .xr_tag = 1,
+    };
+    slot_map.entries[1] = (XiSlotMapEntry) {
+        .value_id = assert_v->id,
+        .bc_pc = 1,
+        .bc_slot = 1,
+        .xr_tag = 0,
+    };
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, &slot_map, NULL, NULL);
+    assert(xm != NULL && "assert lowering should deopt to VM with a bytecode anchor");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_deopt = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        assert(blk0->ins[i].op != XM_CALL_DIRECT && "assert must not lower through call ABI");
+        if (blk0->ins[i].op == XM_DEOPT)
+            found_deopt = true;
+    }
+    assert(found_deopt && "assert should contain XM_DEOPT");
+    assert(xm->ndeopt == 1 && "assert should record one deopt point");
+    assert(xm->deopt_infos[0].bc_pc == 1 && "assert deopt should resume at assertion bytecode");
+
+    xm_func_destroy(xm);
+    xr_free(slot_map.entries);
+    xi_func_free(f);
+}
+
 TEST(lower_shared_var) {
     /* fn() { var x = 42; return x } (shared) */
     XiFunc *f = make_func("shared_test", &stub_int);
@@ -937,6 +988,7 @@ int main(void) {
     run_lower_call();
     run_lower_print();
     run_lower_throw();
+    run_lower_assert_deopts_to_vm();
     run_lower_shared_var();
     run_lower_load_field();
     run_lower_index_get();

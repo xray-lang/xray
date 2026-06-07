@@ -27,6 +27,9 @@
     X(CLOSURE_NEW, "xi.closure.new", xicgen_closure_new) \
     X(LOAD_UPVAL, "xi.load.upval", xicgen_load_upval) \
     X(STORE_UPVAL, "xi.store.upval", xicgen_store_upval) \
+    X(ASSERT, "xi.assert", xicgen_assert) \
+    X(ASSERT_EQ, "xi.assert.eq", xicgen_assert_eq) \
+    X(ASSERT_NE, "xi.assert.ne", xicgen_assert_ne) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \

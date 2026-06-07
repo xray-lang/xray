@@ -27,6 +27,9 @@
     X(CLOSURE_NEW, xi_emit_closure_new) \
     X(LOAD_UPVAL, xi_emit_load_upval) \
     X(STORE_UPVAL, xi_emit_store_upval) \
+    X(ASSERT, xi_emit_assert) \
+    X(ASSERT_EQ, xi_emit_assert_eq) \
+    X(ASSERT_NE, xi_emit_assert_ne) \
     X(THROW, xi_emit_throw) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \
