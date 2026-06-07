@@ -23,6 +23,7 @@
     X(SELECT, emit_select) \
     X(GET_SHARED, xi_emit_get_shared) \
     X(SET_SHARED, xi_emit_set_shared) \
+    X(IMPORT_REF, xi_emit_import_ref) \
     X(SHL, xi_emit_arith) \
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
