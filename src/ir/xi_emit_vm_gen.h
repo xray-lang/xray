@@ -24,6 +24,8 @@
     X(GET_SHARED, xi_emit_get_shared) \
     X(SET_SHARED, xi_emit_set_shared) \
     X(IMPORT_REF, xi_emit_import_ref) \
+    X(LOAD_UPVAL, xi_emit_load_upval) \
+    X(STORE_UPVAL, xi_emit_store_upval) \
     X(THROW, xi_emit_throw) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \

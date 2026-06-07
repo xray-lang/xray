@@ -974,33 +974,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_closure_new_expr(ctx, out, prefix, v);
             break;
 
-        /* Upvalue access: reads/writes from the hidden _cl parameter.
-         * Closure children with captures receive xrt_closure_t *_cl as
-         * their first C parameter; upvals are stored in _cl->upvals[]. */
-        case XI_LOAD_UPVAL:
-            if (v->aux_int >= 0 && v->aux_int < f->ncaptures &&
-                f->captures[v->aux_int].needs_cell) {
-                char cell_expr[64];
-                snprintf(cell_expr, sizeof(cell_expr), "_cl->upvals[%d]", (int) v->aux_int);
-                emit_cell_get_for_rep(out, v, cell_expr);
-            } else {
-                fprintf(out, "_cl->upvals[%d]", (int) v->aux_int);
-            }
-            break;
-
-        case XI_STORE_UPVAL:
-            if (v->aux_int >= 0 && v->aux_int < f->ncaptures &&
-                f->captures[v->aux_int].needs_cell) {
-                fprintf(out, "(xrt_cell_set(_cl->upvals[%d], ", (int) v->aux_int);
-                emit_boxed_value_ref(out, v->args[0]);
-                fprintf(out, "), XR_NULL_VAL)");
-            } else {
-                fprintf(out, "(_cl->upvals[%d] = ", (int) v->aux_int);
-                emit_vref(out, v->args[0]);
-                fprintf(out, ")");
-            }
-            break;
-
         /* Runtime type check: args[0]=value, aux=target XrType*.
          * AOT tag namespace extends VM tags: string uses XR_TAG_STR(14)
          * and XR_TAG_STR_ARC(19), not XR_TAG_PTR(5). */

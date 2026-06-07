@@ -376,6 +376,38 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static bool xicgen_upval_needs_cell(const XiFunc *f, const XiValue *v) {
+    return v->aux_int >= 0 && v->aux_int < f->ncaptures && f->captures[v->aux_int].needs_cell;
+}
+
+static void xicgen_load_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) ctx;
+    (void) prefix;
+    if (xicgen_upval_needs_cell(f, v)) {
+        char cell_expr[64];
+        snprintf(cell_expr, sizeof(cell_expr), "_cl->upvals[%d]", (int) v->aux_int);
+        emit_cell_get_for_rep(out, v, cell_expr);
+    } else {
+        fprintf(out, "_cl->upvals[%d]", (int) v->aux_int);
+    }
+}
+
+static void xicgen_store_upval(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) ctx;
+    (void) prefix;
+    if (xicgen_upval_needs_cell(f, v)) {
+        fprintf(out, "(xrt_cell_set(_cl->upvals[%d], ", (int) v->aux_int);
+        emit_boxed_value_ref(out, v->args[0]);
+        fprintf(out, "), XR_NULL_VAL)");
+    } else {
+        fprintf(out, "(_cl->upvals[%d] = ", (int) v->aux_int);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    }
+}
+
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) ctx;
