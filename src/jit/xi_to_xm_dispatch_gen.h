@@ -32,6 +32,7 @@
     X(ASSERT_NE, "xi.assert.ne", xi2xm_assert_ne) \
     X(TYPEOF, "xi.typeof", xi2xm_typeof) \
     X(GET_BUILTIN, "xi.get.builtin", xi2xm_get_builtin) \
+    X(PRINT, "xi.print", xi2xm_print) \
     X(CLASS_CREATE, "xi.class.create", xi2xm_class_create) \
     X(THROW, "xi.throw", xi2xm_throw) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
@@ -66,7 +67,11 @@
     X(BOX, "xi.box", xi2xm_box) \
     X(UNBOX, "xi.unbox", xi2xm_unbox) \
     X(INDEX_GET, "xi.index.get", xi2xm_index_get) \
-    X(INDEX_SET, "xi.index.set", xi2xm_index_set)
+    X(INDEX_SET, "xi.index.set", xi2xm_index_set) \
+    X(ARRAY_NEW, "xi.array.new", xi2xm_array_new) \
+    X(MAP_NEW, "xi.map.new", xi2xm_map_new) \
+    X(SET_NEW, "xi.set.new", xi2xm_set_new) \
+    X(STR_CONCAT, "xi.str.concat", xi2xm_str_concat)
 
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */

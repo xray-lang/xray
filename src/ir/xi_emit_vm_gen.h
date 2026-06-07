@@ -32,6 +32,7 @@
     X(ASSERT_NE, xi_emit_assert_ne) \
     X(TYPEOF, xi_emit_typeof) \
     X(GET_BUILTIN, xi_emit_get_builtin) \
+    X(PRINT, xi_emit_print) \
     X(CLASS_CREATE, xi_emit_class_create) \
     X(THROW, xi_emit_throw) \
     X(RETAIN, xi_emit_retain) \
@@ -67,6 +68,10 @@
     X(UNBOX, xi_emit_unbox) \
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
+    X(ARRAY_NEW, xi_emit_array_new) \
+    X(MAP_NEW, xi_emit_map_new) \
+    X(SET_NEW, xi_emit_set_new) \
+    X(STR_CONCAT, xi_emit_str_concat) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \

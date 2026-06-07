@@ -1068,6 +1068,79 @@ TEST(lower_array_new) {
     xi_func_free(f);
 }
 
+TEST(lower_map_new) {
+    XiFunc *f = make_func("map_new", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *map = xi_value_new(f, entry, XI_MAP_NEW, &stub_int, 0);
+    xi_block_set_return(entry, map);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_RT_MAP_NEW)
+            found = true;
+    }
+    assert(found && "should contain XM_RT_MAP_NEW for map");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_set_new) {
+    XiFunc *f = make_func("set_new", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *set = xi_value_new(f, entry, XI_SET_NEW, &stub_int, 0);
+    xi_block_set_return(entry, set);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_RT_MAP_NEW)
+            found = true;
+    }
+    assert(found && "should contain XM_RT_MAP_NEW for set");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_str_concat) {
+    XiFunc *f = make_func("str_concat", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {a, b};
+    register_func_params(f, params, 2);
+
+    XiValue *concat = xi_value_new(f, entry, XI_STR_CONCAT, &stub_int, 2);
+    concat->args[0] = a;
+    concat->args[1] = b;
+    xi_block_set_return(entry, concat);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_RT_ADD)
+            found = true;
+    }
+    assert(found && "should contain XM_RT_ADD for string concatenation");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 TEST(reject_multi_ret_with_extra_results) {
     XiFunc *f = make_func("multi_ret_extra", &stub_int);
     XiBlock *entry = f->entry;
@@ -1158,6 +1231,9 @@ int main(void) {
     run_lower_index_get();
     run_lower_index_set();
     run_lower_array_new();
+    run_lower_map_new();
+    run_lower_set_new();
+    run_lower_str_concat();
     run_reject_multi_ret_with_extra_results();
     run_reject_extract_extra_result();
     run_reject_bytes_memory_ops_until_jit_driver_exists();
