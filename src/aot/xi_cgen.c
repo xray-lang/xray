@@ -853,15 +853,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 /* Use runtime dispatch — handles int/float/mixed correctly */
                 const char *fn = NULL;
                 switch (v->op) {
-                    case XI_ADD:
-                        fn = "xrt_add";
-                        break;
-                    case XI_SUB:
-                        fn = "xrt_sub";
-                        break;
-                    case XI_MUL:
-                        fn = "xrt_mul";
-                        break;
                     case XI_DIV:
                         fn = "xrt_div";
                         break;
@@ -945,18 +936,8 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                         fprintf(out, ")).f)");
                     }
                 } else {
-                    const char *op = "+";
-                    switch (v->op) {
-                        case XI_SUB:
-                            op = "-";
-                            break;
-                        case XI_MUL:
-                            op = "*";
-                            break;
-                        default:
-                            break;
-                    }
-                    emit_binop(out, v, op);
+                    emit_codegen_abort_expr(out);
+                    ctx->error = true;
                 }
             }
             break;
@@ -1006,17 +987,8 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED) ? XR_REP_TAGGED : a0_rep;
             if (arg_rep == XR_REP_TAGGED) {
                 switch (v->op) {
-                    case XI_EQ:
-                        fprintf(out, "xrt_eq(");
-                        break;
                     case XI_NE:
                         fprintf(out, "!xrt_eq(");
-                        break;
-                    case XI_LT:
-                        fprintf(out, "xrt_lt(");
-                        break;
-                    case XI_LE:
-                        fprintf(out, "xrt_le(");
                         break;
                     case XI_GT:
                         fprintf(out, "xrt_lt(");
@@ -1043,12 +1015,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 switch (v->op) {
                     case XI_NE:
                         op = "!=";
-                        break;
-                    case XI_LT:
-                        op = "<";
-                        break;
-                    case XI_LE:
-                        op = "<=";
                         break;
                     case XI_GT:
                         op = ">";
