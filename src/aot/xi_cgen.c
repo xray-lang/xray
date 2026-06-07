@@ -942,40 +942,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             }
             break;
         }
-        case XI_NEG: {
-            XrRep result_rep = cg_rep(v);
-            XrRep a_rep = cg_rep(v->args[0]);
-            if (result_rep == XR_REP_TAGGED || a_rep == XR_REP_TAGGED) {
-                fprintf(out, "xrt_neg(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ")");
-            } else {
-                fprintf(out, "-");
-                emit_vref(out, v->args[0]);
-            }
-            break;
-        }
-
-        /* Bitwise */
-        case XI_BAND:
-            emit_bitwise_binop(out, v, "&");
-            break;
-        case XI_BOR:
-            emit_bitwise_binop(out, v, "|");
-            break;
-        case XI_BXOR:
-            emit_bitwise_binop(out, v, "^");
-            break;
-        case XI_BNOT:
-            emit_bitwise_unop(out, v, "~");
-            break;
-        case XI_SHL:
-            emit_bitwise_binop(out, v, "<<");
-            break;
-        case XI_SHR:
-            emit_bitwise_binop(out, v, ">>");
-            break;
-
         /* Strict (identity) comparison: raw bit equality on tagged values */
         case XI_EQ_STRICT:
         case XI_NE_STRICT: {

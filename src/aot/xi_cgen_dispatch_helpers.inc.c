@@ -145,6 +145,64 @@ static void xicgen_mul(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
     xicgen_arith(ctx, out, f, v, prefix);
 }
 
+static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XrRep result_rep = cg_rep(v);
+    XrRep a_rep = cg_rep(v->args[0]);
+    if (result_rep == XR_REP_TAGGED || a_rep == XR_REP_TAGGED) {
+        fprintf(out, "xrt_neg(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "-");
+        emit_vref(out, v->args[0]);
+    }
+}
+
+static void xicgen_bitwise_binop(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix, const char *op) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    emit_bitwise_binop(out, v, op);
+}
+
+static void xicgen_band(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                        const char *prefix) {
+    xicgen_bitwise_binop(ctx, out, f, v, prefix, "&");
+}
+
+static void xicgen_bor(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    xicgen_bitwise_binop(ctx, out, f, v, prefix, "|");
+}
+
+static void xicgen_bxor(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                        const char *prefix) {
+    xicgen_bitwise_binop(ctx, out, f, v, prefix, "^");
+}
+
+static void xicgen_bnot(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                        const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    emit_bitwise_unop(out, v, "~");
+}
+
+static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");
+}
+
+static void xicgen_shr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    xicgen_bitwise_binop(ctx, out, f, v, prefix, ">>");
+}
+
 static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     (void) ctx;

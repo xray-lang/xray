@@ -44,6 +44,14 @@ static XiFunc *make_func(const char *name, XrType *ret) {
     return f;
 }
 
+static void register_func_params(XiFunc *f, XiValue **params, uint16_t nparams) {
+    f->params = xr_calloc(nparams, sizeof(XiValue *));
+    assert(f->params != NULL);
+    f->nparams = nparams;
+    for (uint16_t i = 0; i < nparams; i++)
+        f->params[i] = params[i];
+}
+
 /* ========== Tests ========== */
 
 TEST(lower_const_int) {
@@ -181,6 +189,40 @@ TEST(lower_comparison_variants) {
     check_lower_comparison_variant(XI_GE, XM_LE);
 }
 
+static void check_lower_binary_variant(XiOp xi_op, XmOp expected_xm_op) {
+    XiFunc *f = make_func("binary_variant", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {a, b};
+    register_func_params(f, params, 2);
+    XiValue *bin = xi_binary(f, entry, xi_op, &stub_int, a, b);
+    xi_block_set_return(entry, bin);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == expected_xm_op)
+            found = true;
+    }
+    assert(found && "binary variant should lower through generated dispatch");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_bitwise_variants) {
+    check_lower_binary_variant(XI_BAND, XM_AND);
+    check_lower_binary_variant(XI_BOR, XM_OR);
+    check_lower_binary_variant(XI_BXOR, XM_XOR);
+    check_lower_binary_variant(XI_SHL, XM_SHL);
+    check_lower_binary_variant(XI_SHR, XM_SHR);
+}
+
 TEST(lower_if_branch) {
     /* fn(c: bool) -> int { if c { return 1 } else { return 2 } } */
     XiFunc *f = make_func("branch", &stub_int);
@@ -284,6 +326,36 @@ TEST(lower_neg_unary) {
 
     xm_func_destroy(xm);
     xi_func_free(f);
+}
+
+static void check_lower_unary_variant(XiOp xi_op, XmOp expected_xm_op) {
+    XiFunc *f = make_func("unary_variant", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *params[1] = {a};
+    register_func_params(f, params, 1);
+    XiValue *un = xi_unary(f, entry, xi_op, &stub_int, a);
+    xi_block_set_return(entry, un);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == expected_xm_op)
+            found = true;
+    }
+    assert(found && "unary variant should lower through generated dispatch");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_unary_variants) {
+    check_lower_unary_variant(XI_NEG, XM_NEG);
+    check_lower_unary_variant(XI_BNOT, XM_NOT);
 }
 
 TEST(lower_void_return) {
@@ -601,9 +673,11 @@ int main(void) {
     run_lower_add_float();
     run_lower_comparison();
     run_lower_comparison_variants();
+    run_lower_bitwise_variants();
     run_lower_if_branch();
     run_lower_phi();
     run_lower_neg_unary();
+    run_lower_unary_variants();
     run_lower_void_return();
     run_lower_call();
     run_lower_print();
