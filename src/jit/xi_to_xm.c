@@ -1297,6 +1297,31 @@ static XmRef xi2xm_unbox(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_unbox(ctx, blk, v);
 }
 
+static XmRef xi2xm_deopt_to_vm(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    int bc_pc = slot_map_bc_pc(ctx, v->id);
+    uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
+    if (did == 0xFFFF) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t) did);
+    xm_emit(ctx->xm_func, blk, XM_DEOPT, XR_REP_I64, deopt_id, XM_NONE);
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
+static XmRef xi2xm_assert(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
+static XmRef xi2xm_assert_eq(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
+static XmRef xi2xm_assert_ne(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1528,9 +1553,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return xm_const_i64(ctx->xm_func, 0);
 
         /* Builtins lowered as generic runtime calls */
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
         case XI_TYPEOF:
         case XI_GET_BUILTIN:
         case XI_CLASS_CREATE:

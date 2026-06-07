@@ -1460,61 +1460,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* ============ Assertions ============ */
-
-        /* assert(cond): aux=location string, aux_int: 0=truthy, 1=falsy */
-        case XI_ASSERT: {
-            XR_DCHECK(v->nargs >= 1, "XI_ASSERT: need cond");
-            const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-            bool invert = (v->aux_int == 1);
-            if (invert) {
-                fprintf(out, "(xr_truthy(");
-                emit_vref(out, v->args[0]);
-                fprintf(out,
-                        ") ? (fprintf(stderr, \"Assertion failed (expected false): %s\\n\"), "
-                        "abort(), XR_NULL_VAL) : XR_NULL_VAL)",
-                        loc);
-            } else {
-                fprintf(out, "(!xr_truthy(");
-                emit_vref(out, v->args[0]);
-                fprintf(out,
-                        ") ? (fprintf(stderr, \"Assertion failed: %s\\n\"), abort(), XR_NULL_VAL) "
-                        ": XR_NULL_VAL)",
-                        loc);
-            }
-            break;
-        }
-
-        /* assert_eq(actual, expected): aux=location string */
-        case XI_ASSERT_EQ: {
-            XR_DCHECK(v->nargs >= 2, "XI_ASSERT_EQ: need 2 args");
-            const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-            fprintf(out, "(xrt_eq(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", ");
-            emit_vref(out, v->args[1]);
-            fprintf(out,
-                    ") ? XR_NULL_VAL : (fprintf(stderr, \"assert_eq failed: %s\\n\"), abort(), "
-                    "XR_NULL_VAL))",
-                    loc);
-            break;
-        }
-
-        /* assert_ne(actual, unexpected): aux=location string */
-        case XI_ASSERT_NE: {
-            XR_DCHECK(v->nargs >= 2, "XI_ASSERT_NE: need 2 args");
-            const char *loc = v->aux ? (const char *) v->aux : "<unknown>";
-            fprintf(out, "(!xrt_eq(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", ");
-            emit_vref(out, v->args[1]);
-            fprintf(out,
-                    ") ? XR_NULL_VAL : (fprintf(stderr, \"assert_ne failed: %s\\n\"), abort(), "
-                    "XR_NULL_VAL))",
-                    loc);
-            break;
-        }
-
         /* ============ Exception Handling ============ */
 
         /* TRY/END_TRY: handled structurally in emit_value_stmt */
