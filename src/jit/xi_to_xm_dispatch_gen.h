@@ -21,6 +21,8 @@
     X(SHR, "xi.shr", xi2xm_shr) \
     X(EQ, "xi.eq", xi2xm_eq) \
     X(NE, "xi.ne", xi2xm_ne) \
+    X(EQ_STRICT, "xi.eq.strict", xi2xm_eq_strict) \
+    X(NE_STRICT, "xi.ne.strict", xi2xm_ne_strict) \
     X(LT, "xi.lt", xi2xm_lt) \
     X(LE, "xi.le", xi2xm_le) \
     X(GT, "xi.gt", xi2xm_gt) \

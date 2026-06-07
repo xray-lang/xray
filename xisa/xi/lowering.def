@@ -113,6 +113,20 @@
   :jit-xm (driver xi2xm_ne)
   :aot-c (driver xicgen_ne))
 
+(lower xi.eq.strict
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_cmp)
+  :jit-xm (driver xi2xm_eq_strict)
+  :aot-c (driver xicgen_eq_strict))
+
+(lower xi.ne.strict
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_cmp)
+  :jit-xm (driver xi2xm_ne_strict)
+  :aot-c (driver xicgen_ne_strict))
+
 (lower xi.lt
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)

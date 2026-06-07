@@ -1039,6 +1039,14 @@ static XmRef xi2xm_ne(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
 
+static XmRef xi2xm_eq_strict(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_ne_strict(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
 static XmRef xi2xm_lt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
@@ -1165,11 +1173,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_DIV:
         case XI_MOD:
             return lower_binary_arith(ctx, blk, v);
-
-        /* Comparison */
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
-            return lower_comparison(ctx, blk, v);
 
         /* Type conversion */
         case XI_CONVERT:

@@ -185,6 +185,8 @@ static void check_lower_comparison_variant(XiOp xi_op, XmOp expected_xm_op) {
 
 TEST(lower_comparison_variants) {
     check_lower_comparison_variant(XI_NE, XM_NE);
+    check_lower_comparison_variant(XI_EQ_STRICT, XM_EQ);
+    check_lower_comparison_variant(XI_NE_STRICT, XM_NE);
     check_lower_comparison_variant(XI_GT, XM_LT);
     check_lower_comparison_variant(XI_GE, XM_LE);
 }
