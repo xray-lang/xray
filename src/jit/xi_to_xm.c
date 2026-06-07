@@ -1350,12 +1350,42 @@ static XmRef xi2xm_get_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
 
+static XmRef xi2xm_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_print(ctx, blk, v);
+}
+
 static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
 
 static XmRef xi2xm_is(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
+static XmRef xi2xm_array_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
+    return xm_emit_unary(ctx->xm_func, blk, XM_RT_ARRAY_NEW, XR_REP_I64, cap);
+}
+
+static XmRef xi2xm_map_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
+    return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
+}
+
+static XmRef xi2xm_set_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
+    return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
+}
+
+static XmRef xi2xm_str_concat(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (v->nargs == 0)
+        return xm_const_i64(ctx->xm_func, 0);
+    XmRef acc = get_ref(ctx, v->args[0]);
+    for (uint16_t i = 1; i < v->nargs; i++) {
+        XmRef part = get_ref(ctx, v->args[i]);
+        acc = xm_emit(ctx->xm_func, blk, XM_RT_ADD, XR_REP_I64, acc, part);
+    }
+    return acc;
 }
 
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
@@ -1385,10 +1415,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Function call */
         case XI_CALL:
             return lower_call(ctx, blk, v);
-
-        /* Print */
-        case XI_PRINT:
-            return lower_print(ctx, blk, v);
 
         /* Method call — same as generic call for now */
         case XI_CALL_METHOD:
@@ -1466,28 +1492,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Array / Map creation */
-        case XI_ARRAY_NEW: {
-            XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
-            return xm_emit_unary(ctx->xm_func, blk, XM_RT_ARRAY_NEW, XR_REP_I64, cap);
-        }
-        case XI_MAP_NEW: {
-            XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
-            return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
-        }
-
-        /* String concatenation — lower as sequential RT calls */
-        case XI_STR_CONCAT: {
-            if (v->nargs == 0)
-                return xm_const_i64(ctx->xm_func, 0);
-            XmRef acc = get_ref(ctx, v->args[0]);
-            for (uint16_t i = 1; i < v->nargs; i++) {
-                XmRef part = get_ref(ctx, v->args[i]);
-                acc = xm_emit(ctx->xm_func, blk, XM_RT_ADD, XR_REP_I64, acc, part);
-            }
-            return acc;
-        }
-
         /* Iteration — lower as generic calls (runtime handles protocol).
          * The iterator object lives in args[0], not a closure callee, so
          * lower_call's xr_jit_call_func bridge mis-routes the dispatch.
@@ -1539,12 +1543,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_JSON_DECODE:
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
-
-        /* Set creation */
-        case XI_SET_NEW: {
-            XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
-            return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
-        }
 
         /* Type casts lower as generic calls until cast-specific JIT support exists. */
         case XI_AS:
