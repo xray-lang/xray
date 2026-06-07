@@ -907,6 +907,37 @@ static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     fprintf(out, ")");
 }
 
+static void xicgen_tuple_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    if (v->nargs == 0) {
+        fprintf(out, "xrt_tuple_new(0)");
+        return;
+    }
+    fprintf(out, "xrt_tuple_make(%" PRIu16 ", (XrValue[]){", v->nargs);
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        if (a > 0)
+            fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+    }
+    fprintf(out, "})");
+}
+
+static void xicgen_tuple_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_tuple_get: need tuple");
+    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    fprintf(out, "xrt_tuple_get(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", %" PRId64 ")", v->aux_int);
+    emit_conversion_suffix(out, wrapped);
+}
+
 static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     (void) ctx;

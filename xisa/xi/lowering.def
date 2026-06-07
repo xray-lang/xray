@@ -428,6 +428,18 @@
   :jit-xm (driver xi2xm_index_set)
   :aot-c (driver xicgen_index_set))
 
+(lower xi.tuple.new
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_tuple_new)
+  :aot-c (driver xicgen_tuple_new))
+
+(lower xi.tuple.get
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_tuple_get)
+  :aot-c (driver xicgen_tuple_get))
+
 (lower xi.bytes.load.u32.le
   :match ()
   :required-targets (vm-bytecode aot-c)

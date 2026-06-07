@@ -1103,16 +1103,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        case XI_TUPLE_GET: {
-            XR_DCHECK(v->nargs >= 1, "XI_TUPLE_GET: need tuple");
-            bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
-            fprintf(out, "xrt_tuple_get(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ", %" PRId64 ")", v->aux_int);
-            emit_conversion_suffix(out, wrapped);
-            break;
-        }
-
         /* Property write: args[0]=object, args[1]=value, aux=field name string */
         case XI_STORE_FIELD: {
             XR_DCHECK(v->nargs >= 2, "XI_STORE_FIELD: need obj+val");
@@ -1461,20 +1451,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
          * before RETURN terminators in emit_block(). */
         case XI_DEFER:
             fprintf(out, "XR_NULL_VAL");
-            break;
-
-        case XI_TUPLE_NEW:
-            if (v->nargs == 0) {
-                fprintf(out, "xrt_tuple_new(0)");
-            } else {
-                fprintf(out, "xrt_tuple_make(%" PRIu16 ", (XrValue[]){", v->nargs);
-                for (uint16_t a = 0; a < v->nargs; a++) {
-                    if (a > 0)
-                        fprintf(out, ", ");
-                    emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
-                }
-                fprintf(out, "})");
-            }
             break;
 
         case XI_ERR_CHECK:
