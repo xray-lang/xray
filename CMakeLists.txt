@@ -75,8 +75,10 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
 )
 
-set(XRAY_GEN_AOT_REP_DEPS
+set(XRAY_GEN_AOT_METADATA_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
 )
 
 add_custom_command(
@@ -107,6 +109,30 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
     DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
     COMMENT "xisagen: generating xaot_rep_gen.h from rep.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-abi
+            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+            ${CMAKE_SOURCE_DIR}/xisa/aot/abi.def
+            ${CMAKE_SOURCE_DIR}/src/aot/xaot_abi_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+            ${CMAKE_SOURCE_DIR}/xisa/aot/abi.def
+    COMMENT "xisagen: generating xaot_abi_gen.h from abi.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-layout
+            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+            ${CMAKE_SOURCE_DIR}/xisa/aot/layout.def
+            ${CMAKE_SOURCE_DIR}/src/aot/xaot_layout_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+            ${CMAKE_SOURCE_DIR}/xisa/aot/layout.def
+    COMMENT "xisagen: generating xaot_layout_gen.h from layout.def"
 )
 
 add_custom_command(
@@ -274,8 +300,8 @@ add_custom_target(gen-xi-lowering DEPENDS
     ${XRAY_GEN_XI_LOWERING_DEPS}
 )
 
-add_custom_target(gen-aot-rep DEPENDS
-    ${XRAY_GEN_AOT_REP_DEPS}
+add_custom_target(gen-aot-metadata DEPENDS
+    ${XRAY_GEN_AOT_METADATA_DEPS}
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -825,7 +851,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering gen-aot-rep)
+add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering gen-aot-metadata)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

@@ -1,0 +1,138 @@
+; AOT layout source.
+; This file describes how native struct/class fields are carried in generated C.
+
+(define-aot-layout i8
+  :native-type XR_NATIVE_I8
+  :field-kind scalar
+  :rep i8
+  :c-type "int8_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout u8
+  :native-type XR_NATIVE_U8
+  :field-kind scalar
+  :rep u8
+  :c-type "uint8_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout i16
+  :native-type XR_NATIVE_I16
+  :field-kind scalar
+  :rep i16
+  :c-type "int16_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout u16
+  :native-type XR_NATIVE_U16
+  :field-kind scalar
+  :rep u16
+  :c-type "uint16_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout i32
+  :native-type XR_NATIVE_I32
+  :field-kind scalar
+  :rep i32
+  :c-type "int32_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout u32
+  :native-type XR_NATIVE_U32
+  :field-kind scalar
+  :rep u32
+  :c-type "uint32_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout i64
+  :native-type XR_NATIVE_I64
+  :field-kind scalar
+  :rep i64
+  :c-type "int64_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout u64
+  :native-type XR_NATIVE_U64
+  :field-kind scalar
+  :rep u64
+  :c-type "uint64_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout f32
+  :native-type XR_NATIVE_F32
+  :field-kind scalar
+  :rep f32
+  :c-type "float"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout f64
+  :native-type XR_NATIVE_F64
+  :field-kind scalar
+  :rep f64
+  :c-type "double"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout bool
+  :native-type XR_NATIVE_BOOL
+  :field-kind scalar
+  :rep bool
+  :c-type "uint8_t"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout string-ref
+  :native-type XR_NATIVE_STRING
+  :field-kind boxed-ref
+  :rep tagged
+  :c-type "XrValue"
+  :heap-field yes
+  :ref-tag none)
+
+(define-aot-layout array-ref
+  :native-type XR_NATIVE_ARRAY_REF
+  :field-kind pointer-ref
+  :rep tagged
+  :c-type "xrt_array_t *"
+  :heap-field yes
+  :ref-tag XR_TAG_ARRAY)
+
+(define-aot-layout map-ref
+  :native-type XR_NATIVE_MAP_REF
+  :field-kind pointer-ref
+  :rep tagged
+  :c-type "xrt_map_t *"
+  :heap-field yes
+  :ref-tag XR_TAG_MAP)
+
+(define-aot-layout set-ref
+  :native-type XR_NATIVE_SET_REF
+  :field-kind pointer-ref
+  :rep tagged
+  :c-type "xrt_set_t *"
+  :heap-field yes
+  :ref-tag XR_TAG_SET)
+
+(define-aot-layout struct
+  :native-type XR_NATIVE_STRUCT
+  :field-kind nested-aggregate
+  :rep tagged
+  :c-type "XrValue"
+  :heap-field nested
+  :ref-tag none)
+
+(define-aot-layout inline-array
+  :native-type XR_NATIVE_ARRAY
+  :field-kind inline-array
+  :rep tagged
+  :c-type none
+  :heap-field elem
+  :ref-tag none)

@@ -217,26 +217,53 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# INV-2C: generated AOT rep metadata must match its source descriptions
+# INV-2C: generated AOT metadata must match its source descriptions
 # --------------------------------------------------------------------------
-echo "--- INV-2C: generated AOT rep source sync ---"
-if [ -f tools/xisagen/xisagen.py ] && [ -f xisa/aot/rep.def ]; then
+echo "--- INV-2C: generated AOT metadata source sync ---"
+if [ -f tools/xisagen/xisagen.py ] && [ -f xisa/aot/rep.def ] &&
+   [ -f xisa/aot/abi.def ] && [ -f xisa/aot/layout.def ]; then
     GEN_TMP=$(mktemp -d)
     GEN_LOG=$(mktemp)
+    GEN_OK=1
     if ! python3 tools/xisagen/xisagen.py aot-rep xisa/aot/rep.def \
         "$GEN_TMP/src/aot/xaot_rep_gen.h" >"$GEN_LOG" 2>&1; then
-        fail "AOT rep generator failed"
+        GEN_OK=0
+    fi
+    if [ "$GEN_OK" -eq 1 ] && ! python3 tools/xisagen/xisagen.py aot-abi \
+        xisa/aot/rep.def xisa/aot/abi.def \
+        "$GEN_TMP/src/aot/xaot_abi_gen.h" >"$GEN_LOG" 2>&1; then
+        GEN_OK=0
+    fi
+    if [ "$GEN_OK" -eq 1 ] && ! python3 tools/xisagen/xisagen.py aot-layout \
+        xisa/aot/rep.def xisa/aot/layout.def \
+        "$GEN_TMP/src/aot/xaot_layout_gen.h" >"$GEN_LOG" 2>&1; then
+        GEN_OK=0
+    fi
+    if [ "$GEN_OK" -ne 1 ]; then
+        fail "AOT metadata generator failed"
         show_matches "$(cat "$GEN_LOG")"
-    elif diff -u src/aot/xaot_rep_gen.h "$GEN_TMP/src/aot/xaot_rep_gen.h" >/dev/null; then
-        pass "generated AOT rep metadata is in sync"
     else
-        fail "generated AOT rep metadata is stale:"
-        printf "%s\n" "src/aot/xaot_rep_gen.h" | sed 's/^/    /'
+        GEN_DIFF=""
+        for rel in \
+            src/aot/xaot_rep_gen.h \
+            src/aot/xaot_abi_gen.h \
+            src/aot/xaot_layout_gen.h
+        do
+            if ! diff -u "$rel" "$GEN_TMP/$rel" >/dev/null; then
+                GEN_DIFF="${GEN_DIFF}${rel}\n"
+            fi
+        done
+        if [ -z "$GEN_DIFF" ]; then
+            pass "generated AOT metadata is in sync"
+        else
+            fail "generated AOT metadata is stale:"
+            printf "$GEN_DIFF" | sed 's/^/    /'
+        fi
     fi
     rm -rf "$GEN_TMP"
     rm -f "$GEN_LOG"
 else
-    warn "AOT rep generator or xisa/aot/rep.def not found, skipping"
+    warn "AOT metadata generator or xisa/aot sources not found, skipping"
 fi
 
 # --------------------------------------------------------------------------

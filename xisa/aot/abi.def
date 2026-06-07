@@ -1,0 +1,74 @@
+; AOT ABI source.
+; This file describes how AOT function boundaries carry Xray types.
+
+(define-aot-abi int
+  :type-kind XR_KIND_INT
+  :nullable no
+  :abi-class scalar
+  :default-rep i64
+  :native-width yes
+  :typed-boundary yes)
+
+(define-aot-abi float
+  :type-kind XR_KIND_FLOAT
+  :nullable no
+  :abi-class scalar
+  :default-rep f64
+  :native-width yes
+  :typed-boundary yes)
+
+(define-aot-abi bool
+  :type-kind XR_KIND_BOOL
+  :nullable no
+  :abi-class scalar
+  :default-rep bool
+  :native-width no
+  :typed-boundary yes)
+
+(define-aot-abi unit
+  :type-kind XR_KIND_UNIT
+  :nullable no
+  :abi-class void
+  :default-rep void
+  :native-width no
+  :typed-boundary no)
+
+(define-aot-abi string
+  :type-kind XR_KIND_STRING
+  :nullable no
+  :abi-class tagged
+  :default-rep tagged
+  :native-width no
+  :typed-boundary no)
+
+(define-aot-abi array
+  :type-kind XR_KIND_ARRAY
+  :nullable no
+  :abi-class tagged
+  :default-rep tagged
+  :native-width no
+  :typed-boundary no)
+
+(define-aot-abi map
+  :type-kind XR_KIND_MAP
+  :nullable no
+  :abi-class tagged
+  :default-rep tagged
+  :native-width no
+  :typed-boundary no)
+
+(define-aot-abi set
+  :type-kind XR_KIND_SET
+  :nullable no
+  :abi-class tagged
+  :default-rep tagged
+  :native-width no
+  :typed-boundary no)
+
+(define-aot-abi tuple
+  :type-kind XR_KIND_TUPLE
+  :nullable no
+  :abi-class tagged
+  :default-rep tagged
+  :native-width no
+  :typed-boundary no)

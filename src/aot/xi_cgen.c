@@ -18,6 +18,8 @@
  */
 #include "xi_cgen.h"
 #include "xaot_rep_gen.h"
+#include "xaot_abi_gen.h"
+#include "xaot_layout_gen.h"
 #include "xi_to_c_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"

@@ -132,6 +132,16 @@ def main() -> int:
             "  :dynamic-kind scalar\n"
             "  :native-type XR_NATIVE_I8\n"
             "  :storage-rep XR_REP_I64)\n"
+            "(define-aot-rep i64\n"
+            "  :c-type \"int64_t\"\n"
+            "  :size 8\n"
+            "  :align 8\n"
+            "  :signed yes\n"
+            "  :integer yes\n"
+            "  :boxed no\n"
+            "  :dynamic-kind scalar\n"
+            "  :native-type XR_NATIVE_I64\n"
+            "  :storage-rep XR_REP_I64)\n"
             "(define-aot-rep tagged\n"
             "  :c-type \"XrValue\"\n"
             "  :size 16\n"
@@ -142,6 +152,60 @@ def main() -> int:
             "  :dynamic-kind tagged\n"
             "  :native-type none\n"
             "  :storage-rep XR_REP_TAGGED)\n",
+        )
+        bad_aot_abi = write(
+            tmp / "bad_aot_abi.def",
+            "(define-aot-abi int\n"
+            "  :type-kind XR_KIND_INT\n"
+            "  :nullable no\n"
+            "  :abi-class scalar\n"
+            "  :default-rep missing\n"
+            "  :native-width yes\n"
+            "  :typed-boundary yes)\n",
+        )
+        good_aot_abi = write(
+            tmp / "good_aot_abi.def",
+            "(define-aot-abi int\n"
+            "  :type-kind XR_KIND_INT\n"
+            "  :nullable no\n"
+            "  :abi-class scalar\n"
+            "  :default-rep i64\n"
+            "  :native-width yes\n"
+            "  :typed-boundary yes)\n"
+            "(define-aot-abi array\n"
+            "  :type-kind XR_KIND_ARRAY\n"
+            "  :nullable no\n"
+            "  :abi-class tagged\n"
+            "  :default-rep tagged\n"
+            "  :native-width no\n"
+            "  :typed-boundary no)\n",
+        )
+        bad_aot_layout = write(
+            tmp / "bad_aot_layout.def",
+            "(define-aot-layout i8\n"
+            "  :native-type XR_NATIVE_I8\n"
+            "  :field-kind scalar\n"
+            "  :rep missing\n"
+            "  :c-type \"int8_t\"\n"
+            "  :heap-field yes\n"
+            "  :ref-tag none)\n",
+        )
+        good_aot_layout = write(
+            tmp / "good_aot_layout.def",
+            "(define-aot-layout i8\n"
+            "  :native-type XR_NATIVE_I8\n"
+            "  :field-kind scalar\n"
+            "  :rep i8\n"
+            "  :c-type \"int8_t\"\n"
+            "  :heap-field yes\n"
+            "  :ref-tag none)\n"
+            "(define-aot-layout array-ref\n"
+            "  :native-type XR_NATIVE_ARRAY_REF\n"
+            "  :field-kind pointer-ref\n"
+            "  :rep tagged\n"
+            "  :c-type \"xrt_array_t *\"\n"
+            "  :heap-field yes\n"
+            "  :ref-tag XR_TAG_ARRAY)\n",
         )
         bad_isel = write(tmp / "bad_isel.def", "ISEL(BOGUS, x64, GP_RR, x64.add.rr)\n")
         # An isel entry that names a real op but a bogus mcinsn that is not
@@ -238,6 +302,49 @@ def main() -> int:
             raise AssertionError(f"missing AOT native int query: {aot_rep_header}")
         if "xaot_elem_name_for_native_type" not in aot_rep_header:
             raise AssertionError(f"missing AOT native element query: {aot_rep_header}")
+        expect_fail(
+            ns.xisagen,
+            ["aot-abi", str(good_aot_rep), str(bad_aot_abi), str(tmp / "xaot_abi_gen.h")],
+            "unknown :default-rep",
+        )
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "aot-abi", str(good_aot_rep),
+             str(good_aot_abi), str(tmp / "xaot_abi_gen.h")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"aot-abi success path failed: {proc.stderr}")
+        aot_abi_header = (tmp / "xaot_abi_gen.h").read_text()
+        if "xaot_abi_type_can_use_typed_boundary" not in aot_abi_header:
+            raise AssertionError(f"missing AOT ABI typed-boundary query: {aot_abi_header}")
+        if "XAOT_ABI_CLASS_SCALAR" not in aot_abi_header:
+            raise AssertionError(f"missing AOT ABI class enum: {aot_abi_header}")
+        expect_fail(
+            ns.xisagen,
+            [
+                "aot-layout", str(good_aot_rep), str(bad_aot_layout),
+                str(tmp / "xaot_layout_gen.h"),
+            ],
+            "unknown :rep",
+        )
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "aot-layout", str(good_aot_rep),
+             str(good_aot_layout), str(tmp / "xaot_layout_gen.h")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"aot-layout success path failed: {proc.stderr}")
+        aot_layout_header = (tmp / "xaot_layout_gen.h").read_text()
+        if "xaot_layout_ref_tag_name_for_native_type" not in aot_layout_header:
+            raise AssertionError(f"missing AOT layout ref-tag query: {aot_layout_header}")
+        if "XR_TAG_ARRAY" not in aot_layout_header:
+            raise AssertionError(f"missing AOT layout tag metadata: {aot_layout_header}")
         expect_fail(
             ns.xisagen,
             ["isel", str(good_isel_bad_mcinsn), str(ops),
