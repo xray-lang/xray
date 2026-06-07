@@ -1,0 +1,20 @@
+fn run() -> int {
+    let i8s: Array<int8> = []
+    let i16s: Array<int16> = []
+    let u16s: Array<uint16> = []
+    let u32s: Array<uint32> = []
+
+    i8s.push(127)
+    i8s.push(128)
+    i16s.push(32767)
+    i16s.push(32768)
+    u16s.push(65535)
+    u16s.push(65536)
+    u32s.push(4294967295)
+    u32s.push(4294967296)
+
+    return i8s[0] + i8s[1] + i16s[0] + i16s[1] +
+        u16s[0] + u16s[1] + u32s[0] + u32s[1]
+}
+
+print(run())

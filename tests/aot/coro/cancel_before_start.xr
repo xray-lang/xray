@@ -1,0 +1,13 @@
+import time
+
+fn sleeper() -> int {
+    time.sleep(1000)
+    return 7
+}
+
+let task = go sleeper()
+task.cancel()
+let value = await task
+print(value == null)
+print(task.done)
+print(task.cancelled)

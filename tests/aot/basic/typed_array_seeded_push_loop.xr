@@ -1,0 +1,16 @@
+fn copyRepeated(matchLen: int) -> Array<uint8> {
+    let out: Array<uint8> = []
+    out.push(65)
+    let matchPos = 0
+    let i = 0
+    while (i < matchLen) {
+        out.push(out[matchPos + i])
+        i = i + 1
+    }
+    return out
+}
+
+let copied = copyRepeated(63)
+print(copied.length)
+print(copied[0])
+print(copied[63])

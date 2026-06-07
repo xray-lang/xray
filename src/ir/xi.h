@@ -486,6 +486,8 @@ typedef struct XiClassData {
     const char **mono_type_arg_names;     /* concrete type display names (e.g. ["int","string"]) */
     int mono_type_arg_count;              /* element count */
     struct XrStructLayout *struct_layout; /* non-NULL for VALUE_TYPE (struct) classes */
+    struct XrStructLayout *instance_layout; /* non-NULL when class fields have native layout */
+    uint16_t inherited_field_count;         /* native class fields inherited from the parent */
 } XiClassData;
 
 /* ========== Block Kinds ========== */

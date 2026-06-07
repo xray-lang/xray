@@ -25,8 +25,8 @@
 #define XI_PIPELINE_H
 
 #include "xi.h"
+#include "xi_opt.h"
 #include "xi_module.h"
-#include "xi_pass.h"
 
 struct AstNode;
 struct XaAnalyzer;
@@ -83,6 +83,8 @@ typedef struct XiPipelineConfig {
                              * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
                              * instead of XI_GET/SET_SHARED (slot-indexed array).
                              * Default: false (script-mode shared array path). */
+    XiRepPolicy rep_policy; /* policy for representation boundary insertion */
+    XiOptDisableMask disabled_opt_passes;
 } XiPipelineConfig;
 
 /* ========== Pipeline Result ========== */

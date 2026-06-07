@@ -157,7 +157,8 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
-    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL;
+    return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
+           v.tag == XR_TAG_STRUCT_REF;
 }
 
 /* ARC retain: increment refcount.

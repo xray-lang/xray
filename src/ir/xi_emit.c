@@ -16,10 +16,12 @@
 
 #include "xi_emit_internal.h"
 #include "xi_analysis.h"
+#include "xi_emit_vm_gen.h"
 #include "xi_opt.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/object/xbigint.h"
+#include "../runtime/class/xclass_info.h"
 #include "../runtime/class/xclass_system.h"
 #include "../runtime/xisolate_internal.h"
 #include "../runtime/xisolate_api.h"
@@ -39,6 +41,28 @@ XR_FUNC int current_pc(EmitCtx *ctx) {
 
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst) {
     xr_vm_proto_write(ctx->proto, inst, ctx->current_line);
+}
+
+XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *layout,
+                                            uint8_t *slot_out) {
+    if (!ctx || !layout || !slot_out) {
+        if (ctx)
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return false;
+    }
+
+    uint32_t slot = ctx->struct_area_offset;
+    uint32_t bytes_needed = 8u + (uint32_t) layout->total_size;
+    uint32_t slots_needed = (bytes_needed + 15u) / 16u;
+    uint32_t next = slot + slots_needed;
+    if (slot > 255u || next > UINT16_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+
+    ctx->struct_area_offset = (uint16_t) next;
+    *slot_out = (uint8_t) slot;
+    return true;
 }
 
 /* Return a register to the free pool for reuse. */
@@ -361,6 +385,16 @@ static void emit_param(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Params already in registers; no-op. */
 }
 
+static XrStructLayout *emit_value_struct_layout(const XrType *type) {
+    if (!type || !type->is_value_type)
+        return NULL;
+    if (type->kind != XR_KIND_INSTANCE && type->kind != XR_KIND_CLASS)
+        return NULL;
+    if (!type->instance.class_ref)
+        return NULL;
+    return type->instance.class_ref->struct_layout;
+}
+
 static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -369,9 +403,18 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    /* Value types (structs) need deep copy to maintain copy-on-assign semantics */
-    XrType *src_type = v->args[0]->type;
+    /* Value types need independent storage to maintain copy-on-assign semantics. */
+    XrType *src_type = v->type ? v->type : v->args[0]->type;
     if (src_type && src_type->is_value_type) {
+        XrStructLayout *layout = emit_value_struct_layout(src_type);
+        XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
+        if (layout && origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
+            uint8_t slot = 0;
+            if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
+                return;
+            emit_inst(ctx, CREATE_ABC(OP_STRUCT_COPY, dst, src, slot));
+            return;
+        }
         emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
     } else if (dst != src) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, src, 0));
@@ -401,11 +444,10 @@ static void emit_select(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* ========== Dispatch Table ========== */
 
 const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
-    [XI_CONST] = emit_const,
-    [XI_PARAM] = emit_param,
-    [XI_ADD] = xi_emit_arith,
-    [XI_SUB] = xi_emit_arith,
-    [XI_MUL] = xi_emit_arith,
+#define XI_VM_HANDLER_ENTRY(op, handler) [XI_##op] = handler,
+    XI_EMIT_VM_LOWERING_HANDLERS(XI_VM_HANDLER_ENTRY)
+#undef XI_VM_HANDLER_ENTRY
+        [XI_PARAM] = emit_param,
     [XI_DIV] = xi_emit_arith,
     [XI_MOD] = xi_emit_arith,
     [XI_NEG] = xi_emit_neg,
@@ -415,10 +457,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_BNOT] = xi_emit_bnot,
     [XI_SHL] = xi_emit_arith,
     [XI_SHR] = xi_emit_arith,
-    [XI_EQ] = xi_emit_cmp,
     [XI_NE] = xi_emit_cmp,
-    [XI_LT] = xi_emit_cmp,
-    [XI_LE] = xi_emit_cmp,
     [XI_GT] = xi_emit_cmp,
     [XI_GE] = xi_emit_cmp,
     [XI_EQ_STRICT] = xi_emit_cmp,
@@ -428,14 +467,10 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_BOX] = xi_emit_box,
     [XI_UNBOX] = xi_emit_unbox,
     [XI_NARROW_I8] = xi_emit_narrow,
-    [XI_NARROW_U8] = xi_emit_narrow,
-    [XI_NARROW_I16] = xi_emit_narrow,
     [XI_NARROW_U16] = xi_emit_narrow,
     [XI_NARROW_I32] = xi_emit_narrow,
-    [XI_NARROW_U32] = xi_emit_narrow,
     [XI_NARROW_F32] = xi_emit_narrow,
     [XI_WIDEN_I8] = xi_emit_widen,
-    [XI_WIDEN_U8] = xi_emit_widen,
     [XI_WIDEN_I16] = xi_emit_widen,
     [XI_WIDEN_U16] = xi_emit_widen,
     [XI_WIDEN_I32] = xi_emit_widen,
@@ -484,7 +519,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_THROW] = xi_emit_throw,
     [XI_RETAIN] = xi_emit_retain,
     [XI_RELEASE] = xi_emit_release,
-    [XI_MOVE] = xi_emit_move,
     [XI_ERR_SET] = xi_emit_err_set,
     [XI_ERR_RETURN] = xi_emit_err_return,
     [XI_ERR_CHECK] = xi_emit_err_check,
@@ -505,7 +539,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_ISNULL] = xi_emit_isnull,
     [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
     [XI_SELECT] = emit_select,
-    [XI_COPY] = emit_copy,
     [XI_CLASS_CREATE] = xi_emit_class_create,
     [XI_SCOPE_ENTER] = xi_emit_scope_enter,
     [XI_SCOPE_EXIT] = xi_emit_scope_exit,

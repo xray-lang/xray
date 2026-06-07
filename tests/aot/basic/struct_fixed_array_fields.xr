@@ -1,0 +1,21 @@
+struct Buf {
+    data: [4]uint8
+    bias: int
+}
+
+let buf = Buf{data: [1, 2, 3, 4], bias: 5}
+buf.data[1] = 300
+print(buf.data[0] + buf.data[1] + buf.data[2] + buf.data[3] + buf.bias)
+
+fn copy_last(n: int) -> int {
+    let local = Buf{data: [10, 20, 30, 40], bias: 7}
+    let i = 0
+    while (i < n) {
+        local.data[0] = i
+        local.data[1] = local.data[0]
+        i = i + 1
+    }
+    return local.data[1] + local.bias
+}
+
+print(copy_last(260))

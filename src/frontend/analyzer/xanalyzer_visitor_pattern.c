@@ -233,14 +233,18 @@ static void register_pattern_bindings(XaInferContext *ctx, AstNode *pattern, XrT
         }
     }
 
-    /* ADT variant destructure: payload bindings get unknown type for now */
+    /* ADT variant destructure: bind each payload slot with the enum
+     * member's declared type, substituting generic enum arguments from
+     * the current match subject. */
     if (pattern->type == AST_PATTERN_ADT) {
         PatternAdtNode *ap = &pattern->as.pattern_adt;
         for (int i = 0; i < ap->count; i++) {
             AstNode *sub = ap->patterns[i];
             if (!sub)
                 continue;
-            register_pattern_bindings(ctx, sub, NULL);
+            XrType *payload_type =
+                xa_analyzer_resolve_adt_payload_type(ctx->analyzer, slot_type, ap->variant, i);
+            register_pattern_bindings(ctx, sub, payload_type);
         }
     }
 

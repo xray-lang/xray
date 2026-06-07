@@ -3,10 +3,14 @@
 @native
 class Array<T> {
     length: int
+    size: int
+    capacity: int
     push(value: T)
     pop() -> T?
     shift() -> T?
     unshift(value: T)
+    reserve(capacity: int) -> Array<T>
+    resize(length: int, fill: T) -> Array<T>
     slice(start?: int, end?: int) -> Array<T>
     splice(start: int, deleteCount?: int, ...items: T) -> Array<T>
     concat(...arrays: Array<T>) -> Array<T>
@@ -25,7 +29,6 @@ class Array<T> {
     some(fn: (item: T) -> bool) -> bool
     flat(depth?: int) -> Array<T>
     fill(value: T, start?: int, end?: int) -> Array<T>
-    copyWithin(target: int, start: int, end?: int) -> Array<T>
     // Iteration protocol — used by for-in lowering. Users can also
     // call them directly; iterator()/next() yields elements, while
     // entriesIterator()/next() yields (index, element) tuples.

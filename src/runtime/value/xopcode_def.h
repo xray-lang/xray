@@ -149,6 +149,7 @@
     _(RETURN0, FMT_NONE, KOP_NONE, "return (fast)")                                                \
     _(RETURN1, FMT_A, KOP_A_USE, "return R[A] (fast)")                                             \
     _(NEWARRAY, FMT_ABC, KOP_NEW_CONTAINER, "R[A] = [], B=capacity, C=storage")                    \
+    _(ARRAY_NEW_CAP, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = Array(cap=R[B]), C=storage")                \
     _(NEWMAP, FMT_ABC, KOP_NEW_CONTAINER, "R[A] = #{}, B=capacity, C=storage")                     \
     _(NEWTUPLE, FMT_AB, KOP_AB_NEW_LIT, "R[A] = (R[A+1]..R[A+B]), B=arity")                        \
     _(TUPLE_GET, FMT_ABC, KOP_ABC_BIN_LIT, "R[A] = R[B].C (tuple, C=field_index)")                 \
@@ -162,6 +163,13 @@
     _(ARRAY_SETC, FMT_ABC, KOP_ABC_INPLACE_LIT, "R[A]:Array[B] = R[C]")                            \
     _(ARRAY_PUSH, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.push(R[B])")                                 \
     _(ARRAY_LEN, FMT_AB, KOP_AB_UNARY, "R[A] = len(R[B]:Array)")                                   \
+    _(ARRAY_RESERVE, FMT_AB, KOP_AB_INPLACE, "R[A]:Array.reserve(R[B])")                           \
+    _(ARRAY_RESIZE, FMT_ABC, KOP_ABC_INPLACE, "R[A]:Array.resize(R[B], R[C])")                     \
+    _(BYTES_LOAD_U32_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU32LE(R[B], R[C])")               \
+    _(BYTES_LOAD_U64_LE, FMT_ABC, KOP_ABC_BIN, "R[A] = Bytes.loadU64LE(R[B], R[C])")               \
+    _(BYTES_COPY_WITHIN, FMT_A, KOP_A_INOUT, "R[A].copyWithin(R[A+1], R[A+2], R[A+3])")            \
+    _(BYTES_COPY_FROM, FMT_A, KOP_A_INOUT, "R[A].copyFrom(R[A+1], R[A+2], R[A+3], R[A+4])")        \
+    _(BYTES_REPEAT_FROM, FMT_A, KOP_A_INOUT, "R[A].repeatFrom(R[A+1], R[A+2], R[A+3])")            \
     _(ARRAY_INIT, FMT_AB_IMM, KOP_AB_BASE_LIT, "R[A][1..B] = R[A+1..A+B]")                         \
     _(MAP_GET, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B]:Map[R[C]]")                                      \
     _(MAP_GETK, FMT_ABC, KOP_ABC_BIN_K, "R[A] = R[B]:Map[K[C]]")                                   \

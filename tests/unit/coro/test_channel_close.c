@@ -540,6 +540,40 @@ TEST(channel_direction_masks_refresh_after_partial_wake) {
     close_fixture_cleanup(&f);
 }
 
+TEST(worker_block_clears_stale_bucket_link_before_reblock) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
+    ASSERT_NOT_NULL(ch);
+
+    XrCoroutine receiver;
+    XrCoroExt receiver_ext;
+    init_blocked_channel_coro(&receiver, &receiver_ext, 41, &f.isolate_storage, ch, false);
+
+    xr_worker_block(&f.worker, &receiver);
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 1);
+    ASSERT_NOT_NULL(receiver.ext->wait_bucket);
+
+    ASSERT_TRUE(worker_blocked_list_remove(&f.worker, &receiver));
+    f.worker.p.blocked_count--;
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 0);
+    ASSERT_NOT_NULL(receiver.ext->wait_bucket);
+
+    xr_worker_block(&f.worker, &receiver);
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 1);
+    XrBlockedBucket *bucket = worker_blocked_bucket_find(&f.worker, ch);
+    ASSERT_NOT_NULL(bucket);
+    ASSERT_EQ_PTR(bucket->recv_head, &receiver);
+    ASSERT_EQ_PTR(bucket->recv_tail, &receiver);
+
+    xr_worker_unblock(&f.worker, &receiver);
+    ASSERT_EQ_INT(f.worker.p.blocked_count, 0);
+    xr_channel_destroy(ch);
+    xr_sysheap_free_shared(ch, sizeof(XrChannel));
+    close_fixture_cleanup(&f);
+}
+
 TEST(channel_shape_op_metrics_track_logical_and_worker_kinds) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -1064,6 +1098,49 @@ TEST(single_task_await_legacy_and_node_wake_claim_once) {
     close_fixture_cleanup(&f);
 }
 
+TEST(single_task_await_cancelled_resolution_stores_null) {
+    CloseFixture f;
+    ASSERT_TRUE(close_fixture_init(&f));
+
+    XrCoroutine waiter;
+    XrCoroExt waiter_ext;
+    memset(&waiter, 0, sizeof(waiter));
+    memset(&waiter_ext, 0, sizeof(waiter_ext));
+    waiter.id = 425;
+    waiter.isolate = &f.isolate_storage;
+    waiter.ext = &waiter_ext;
+    atomic_store(&waiter.flags, XR_CORO_FLG_RUNNING);
+    atomic_store(&waiter.coro_state, XR_CORO_STATE_RUNNING);
+    atomic_store(&waiter.resume_status, XR_RESUME_OK);
+    atomic_store(&waiter.affinity_p, 0);
+
+    XrTask task;
+    init_stack_task(&task, XR_TASK_ACTIVE, xr_null(), xr_null());
+    XrValue result_slot = xr_int(99);
+
+    XrCoroBlockResult blocked = xr_coro_await_task_slot(
+        &f.isolate_storage, &waiter, &task, xr_slot_xvalue_ptr(&result_slot), -1, false);
+    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
+    ASSERT_EQ_PTR(task.await_waiters, &waiter_ext.wait.await_token.node);
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_BLOCKED));
+
+    task.result = xr_int(77);
+    atomic_store(&task.state, XR_TASK_CANCELLED);
+    xr_task_wake_waiter(&f.isolate_storage, &task);
+
+    ASSERT_TRUE(xr_coro_flags_has(&waiter, XR_CORO_FLG_READY));
+    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &waiter);
+
+    XrCoroBlockResult resumed = xr_coro_await_task_resume_slot(
+        &f.isolate_storage, &waiter, &task, xr_slot_xvalue_ptr(&result_slot), false);
+    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
+    ASSERT_TRUE(XR_IS_NULL(result_slot));
+    ASSERT_EQ_INT(atomic_load(&waiter_ext.wait.await_token.state), XR_AWAIT_WAIT_IDLE);
+    ASSERT_NULL(atomic_load(&waiter_ext.wait.await_task));
+
+    close_fixture_cleanup(&f);
+}
+
 TEST(single_task_await_timeout_unlinks_waiter_node) {
     CloseFixture f;
     ASSERT_TRUE(close_fixture_init(&f));
@@ -1446,6 +1523,7 @@ RUN_TEST(select_waiter_cancel_unlinks_worker_buckets);
 RUN_TEST(channel_ready_wake_dispatches_single_remote_worker);
 RUN_TEST(channel_wake_command_batches_ready_waiters);
 RUN_TEST(channel_direction_masks_refresh_after_partial_wake);
+RUN_TEST(worker_block_clears_stale_bucket_link_before_reblock);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(channel_wait_token_tracks_block_wake_and_resume);
 RUN_TEST(channel_timed_wait_cancels_timer_on_channel_wake);
@@ -1456,6 +1534,7 @@ RUN_TEST(select_waiter_cancel_routes_foreign_owner_detach);
 RUN_TEST(await_wait_token_tracks_register_resolve_and_resume);
 RUN_TEST(single_task_await_wakes_multiple_waiters);
 RUN_TEST(single_task_await_legacy_and_node_wake_claim_once);
+RUN_TEST(single_task_await_cancelled_resolution_stores_null);
 RUN_TEST(single_task_await_timeout_unlinks_waiter_node);
 RUN_TEST(timer_wait_token_tracks_channel_timeout_cancel_on_wake);
 RUN_TEST(timer_wait_token_cancels_select_timer_on_channel_wake);

@@ -452,8 +452,8 @@ vmcase(OP_GETPROP) {
     XrValue obj = R(b);
     int prop_symbol = PROTO_SYMBOL(cl->proto, c);  // Dereference local index → global symbol
 
-    // Fixed array .length
-    if (XR_IS_ARRAY_REF(obj) && prop_symbol == SYMBOL_LENGTH) {
+    // Fixed array .length/.size
+    if (XR_IS_ARRAY_REF(obj) && (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE)) {
         R(a) = XR_FROM_INT((int64_t) XR_ARRAY_REF_ELEM_COUNT(obj));
         vmbreak;
     }
@@ -489,6 +489,11 @@ vmcase(OP_GETPROP) {
                     R(a) = s ? XR_FROM_STR(s) : xr_null();
                     break;
                 }
+                case XR_NATIVE_ARRAY_REF:
+                case XR_NATIVE_MAP_REF:
+                case XR_NATIVE_SET_REF:
+                    R(a) = *(XrValue *) fp;
+                    break;
                 default:
                     R(a) = xr_null();
                     break;

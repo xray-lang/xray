@@ -64,6 +64,38 @@ set(XRAY_GEN_XM_OPS_DEPS
 )
 set_source_files_properties(${XRAY_GEN_XM_C_SRC} PROPERTIES GENERATED TRUE)
 
+set(XRAY_GEN_XI_OPS_DEPS
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
+)
+
+set(XRAY_GEN_XI_LOWERING_DEPS
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_lowering_coverage_gen.h
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_emit_vm_gen.h
+    ${CMAKE_SOURCE_DIR}/src/jit/xi_to_xm_dispatch_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-ops
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+    COMMENT "xisagen: generating xi_ops_gen.h from ops.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_lowering_coverage_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+            ${CMAKE_SOURCE_DIR}
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
+    COMMENT "xisagen: generating xi_lowering_coverage_gen.h from lowering.def"
+)
+
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
     COMMAND ${XRAY_PYTHON} ${XISAGEN} ops
@@ -219,6 +251,14 @@ list(APPEND XRAY_GEN_XM_OPS_DEPS ${CMAKE_BINARY_DIR}/isel_validated.stamp)
 
 add_custom_target(gen-xm-ops DEPENDS
     ${XRAY_GEN_XM_OPS_DEPS}
+)
+
+add_custom_target(gen-xi-ops DEPENDS
+    ${XRAY_GEN_XI_OPS_DEPS}
+)
+
+add_custom_target(gen-xi-lowering DEPENDS
+    ${XRAY_GEN_XI_LOWERING_DEPS}
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -752,7 +792,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xm-ops)
+add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

@@ -1,0 +1,17 @@
+struct Buf {
+    data: [4]int
+}
+
+@test
+fn test_struct_fixed_array_copy_is_value_copy() {
+    let a = Buf{data: [1, 2, 3, 4]}
+    let b = a
+
+    b.data[0] = 99
+    b.data[2] = 77
+
+    assert(a.data[0] == 1)
+    assert(a.data[2] == 3)
+    assert(b.data[0] == 99)
+    assert(b.data[2] == 77)
+}

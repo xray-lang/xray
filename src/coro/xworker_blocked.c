@@ -266,6 +266,12 @@ void xr_worker_block(XrWorker *worker, XrCoroutine *coro) {
         return;
     }
 
+    if (coro->ext && coro->ext->wait_bucket) {
+        if (coro->ext->wait_bucket_owner != worker->p.id)
+            return;
+        (void) worker_blocked_bucket_remove_coro(worker, coro);
+    }
+
     // Record Worker where coroutine is (for cross-Worker wake)
     atomic_store_explicit(&coro->affinity_p, worker->p.id, memory_order_relaxed);
 

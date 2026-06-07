@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Generate xbuiltin_hash.inc — compile-time const hash table for builtin symbols.
+"""Generate xbuiltin_hash.inc.c — compile-time const hash table for builtin symbols.
 
 Reads xr_builtin_symbol_names[] from xsymbol_table.c and produces an
 open-addressing hash table (FNV-1a, power-of-2 size) as a C const array.
 
 Usage:
-    python3 scripts/gen_builtin_hash.py > src/runtime/symbol/xbuiltin_hash.inc
+    python3 scripts/gen_builtin_hash.py > src/runtime/symbol/xbuiltin_hash.inc.c
 """
 
 import re, sys, os

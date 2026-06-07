@@ -27,6 +27,14 @@ static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
+static XrType stub_u8 = {
+    .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U8};
+static XrType stub_u8_array = {
+    .kind = XR_KIND_ARRAY,
+    .id = 9,
+    .frozen = true,
+    .container = {.element_type = &stub_u8},
+};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -760,6 +768,100 @@ TEST(select_rep_arith_chain_stays_unboxed) {
     xi_func_free(f);
 }
 
+TEST(select_rep_keeps_narrow_store_for_shared_typed_array) {
+    XiFunc *f = make_func("test", &stub_void);
+    XiBlock *blk = f->entry;
+
+    XiValue *arr = xi_value_new(f, blk, XI_GET_SHARED, &stub_u8_array, 0);
+    arr->aux_int = 0;
+    XiValue *idx = xi_const_int(f, blk, 0, &stub_int);
+    XiValue *val = xi_const_int(f, blk, 300, &stub_int);
+    XiValue *narrow = xi_value_new(f, blk, XI_NARROW_U8, &stub_int, 1);
+    narrow->args[0] = val;
+
+    XiValue *store = xi_value_new(f, blk, XI_INDEX_SET, &stub_void, 3);
+    store->args[0] = arr;
+    store->args[1] = idx;
+    store->args[2] = narrow;
+    xi_block_set_return(blk, NULL);
+
+    XiRepPolicy policy = xi_rep_policy_aot_transition();
+    xi_opt_select_rep_with_policy(f, &policy);
+
+    assert(store->args[2] == narrow && "typed array store must consume NARROW_U8 directly");
+    assert(narrow->rep == XR_REP_I64 && "NARROW_U8 stays in an integer register");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "shared typed array store should verify after select_rep");
+    xi_func_free(f);
+}
+
+TEST(select_rep_native_policy_keeps_return_unboxed) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *c42 = xi_const_int(f, blk, 42, &stub_int);
+    xi_block_set_return(blk, c42);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(f, &policy);
+
+    assert(blk->control == c42 && "native return policy should not BOX scalar return");
+    assert(c42->rep == XR_REP_I64 && "int return should stay I64");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "native scalar return rep should verify");
+    xi_func_free(f);
+}
+
+TEST(select_rep_aot_policy_keeps_scalar_phi_unboxed) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+    XiBlock *then_blk = xi_block_new(f);
+    XiBlock *else_blk = xi_block_new(f);
+    XiBlock *merge = xi_block_new(f);
+
+    XiValue *cond = xi_const_bool(f, entry, true, &stub_bool);
+    xi_block_set_if(entry, cond, then_blk, else_blk);
+
+    XiValue *c1 = xi_const_int(f, then_blk, 1, &stub_int);
+    xi_block_set_jump(then_blk, merge);
+
+    XiValue *c2 = xi_const_int(f, else_blk, 2, &stub_int);
+    xi_block_set_jump(else_blk, merge);
+
+    XiPhi *phi = xi_phi_new(f, merge, &stub_int, 2);
+    phi->value.args[0] = c1;
+    phi->value.args[1] = c2;
+
+    XiValue *c3 = xi_const_int(f, merge, 3, &stub_int);
+    XiValue *add = xi_binary(f, merge, XI_ADD, &stub_int, &phi->value, c3);
+    xi_block_set_return(merge, add);
+
+    XiRepPolicy policy = xi_rep_policy_aot_transition();
+    xi_opt_select_rep_with_policy(f, &policy);
+
+    assert(phi->value.rep == XR_REP_I64 && "AOT transition policy should keep int phi I64");
+    assert(phi->value.args[0] == c1 && "I64 phi arg should not be boxed");
+    assert(phi->value.args[1] == c2 && "I64 phi arg should not be boxed");
+    assert(add->args[0] == &phi->value && "arithmetic should consume native phi directly");
+    assert(merge->nvalues == 3 && "only return BOX should be inserted in merge block");
+    assert(merge->values[2]->op == XI_BOX && "AOT transition still boxes return for old cgen ABI");
+
+    char errbuf[256] = {0};
+    bool ok = xi_verify(f, errbuf, sizeof(errbuf));
+    if (!ok)
+        printf("  verify error: %s\n", errbuf);
+    assert(ok && "native scalar phi rep should verify");
+    xi_func_free(f);
+}
+
 /* ========== Tuple Projection Peephole Tests ========== */
 
 /* TUPLE_GET(TUPLE_NEW(a, b), 0) collapses to COPY(a). */
@@ -1260,6 +1362,9 @@ int main(void) {
     run_select_rep_unbox_param_for_arith();
     run_select_rep_no_change_for_call();
     run_select_rep_arith_chain_stays_unboxed();
+    run_select_rep_keeps_narrow_store_for_shared_typed_array();
+    run_select_rep_native_policy_keeps_return_unboxed();
+    run_select_rep_aot_policy_keeps_scalar_phi_unboxed();
 
     /* Tuple projection peephole */
     run_tuple_get_of_tuple_new_first();

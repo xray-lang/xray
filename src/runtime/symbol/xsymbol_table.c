@@ -214,6 +214,13 @@ static const char *xr_builtin_symbol_names[] = {
     "sort",
     "includes",
     "capacity",
+    "reserve",
+    "resize",
+    "loadU32LE",
+    "loadU64LE",
+    "copyWithin",
+    "copyFrom",
+    "repeatFrom",
     // Regex methods
     "test",
     "findAll",
@@ -226,6 +233,8 @@ static const char *xr_builtin_symbol_names[] = {
     "isBool",
     "isArray",
     "isObject",
+    // Collection property aliases
+    "size",
 };
 
 #define BUILTIN_NAME_COUNT                                                                         \
@@ -369,8 +378,8 @@ const char *xr_symbol_get_name_in_table(XrSymbolTable *table, SymbolId id) {
 /* ========== Builtin Symbol Fast Lookup (O(1) hash, const table) ========== */
 
 // Compile-time generated open-addressing hash table.
-// Regenerate: python3 scripts/gen_builtin_hash.py > src/runtime/symbol/xbuiltin_hash.inc
-#include "xbuiltin_hash.inc"
+// Regenerate: python3 scripts/gen_builtin_hash.py > src/runtime/symbol/xbuiltin_hash.inc.c
+#include "xbuiltin_hash.inc.c"
 
 static uint32_t builtin_hash_fn(const char *s) {
     uint32_t h = 2166136261u;

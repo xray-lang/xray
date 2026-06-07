@@ -1,0 +1,9 @@
+fn run() -> float {
+    let values: Array<float32> = []
+    values.push(1.25)
+    values.push(2.5)
+    values.push(3.75)
+    return values[0] + values[1] + values[2]
+}
+
+print(run())

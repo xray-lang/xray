@@ -65,7 +65,7 @@ typedef struct XrValue {
 #define XR_TAG_I64 3        /* integer (stored in .i as int64) */
 #define XR_TAG_F64 4        /* float (stored in .f as double) */
 #define XR_TAG_PTR 5        /* generic heap object pointer */
-#define XR_TAG_STRUCT_REF 6 /* stack-allocated struct ref */
+#define XR_TAG_STRUCT_REF 6 /* AOT native struct reference */
 #define XR_TAG_NOTFOUND 7   /* sentinel: map lookup miss */
 
 /* AOT extensions — object type encoded in tag (no GC header available) */
@@ -76,6 +76,27 @@ typedef struct XrValue {
 #define XR_TAG_CLOSURE 18 /* AOT closure */
 #define XR_TAG_STR_ARC 19 /* bump-allocated string */
 #define XR_TAG_CELL 20    /* AOT mutable closure cell */
+#define XR_TAG_TUPLE 21   /* AOT tuple */
+#define XR_TAG_SET 22     /* AOT set */
+
+/* Native field tags mirror XrNativeType for standalone generated C. */
+#define XR_NATIVE_I64 0
+#define XR_NATIVE_F64 1
+#define XR_NATIVE_BOOL 2
+#define XR_NATIVE_I8 3
+#define XR_NATIVE_I16 4
+#define XR_NATIVE_I32 5
+#define XR_NATIVE_U8 6
+#define XR_NATIVE_U16 7
+#define XR_NATIVE_U32 8
+#define XR_NATIVE_U64 9
+#define XR_NATIVE_F32 10
+#define XR_NATIVE_STRUCT 11
+#define XR_NATIVE_ARRAY 12
+#define XR_NATIVE_STRING 13
+#define XR_NATIVE_ARRAY_REF 14
+#define XR_NATIVE_MAP_REF 15
+#define XR_NATIVE_SET_REF 16
 
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
@@ -90,6 +111,18 @@ static inline XrValue xr_mkptr(void *p, uint8_t tag) {
     r.ptr = p;
     return r;
 }
+
+static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {
+    XrValue r = {0};
+    r.tag = XR_TAG_STRUCT_REF;
+    r.ext = ((uint32_t) elem_count << 8) | elem_native_type;
+    r.ptr = ptr;
+    return r;
+}
+
+#define XR_IS_ARRAY_REF(v) ((v).tag == XR_TAG_STRUCT_REF && (v).ext != 0)
+#define XR_ARRAY_REF_ELEM_TYPE(v) ((uint8_t) ((v).ext & 0xFF))
+#define XR_ARRAY_REF_ELEM_COUNT(v) ((uint16_t) ((v).ext >> 8))
 
 static inline XrValue xr_mkf64(double v, uint8_t tag) {
     XrValue r = {0};

@@ -105,8 +105,10 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
                                               XiCgenCoroFrameStats *coro_stats) {
     assert(ir != NULL);
 
-    /* Run select_rep to insert BOX/UNBOX */
-    xi_opt_select_rep(ir);
+    /* AOT codegen owns a native scalar boundary; tagged adapters are emitted
+     * only where dynamic closure calls require them. */
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(ir, &policy);
 
     /* Build module metadata if the pipeline didn't (e.g. standalone tests) */
     XiModule *mod = ir->module;
@@ -433,6 +435,1337 @@ TEST(cgen_for_loop) {
     assert(contains(code, "+") && "should have addition");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_uses_raw_storage_fast_path) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let values: Array<int> = []\n"
+                      "    values.push(41)\n"
+                      "    return values[0] + values.length\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array fast path should generate");
+    assert((contains(code, "xrt_array_new_typed(") || contains(code, "xrt_array_new_typed_ptr(")) &&
+           "Array<int> creation must preserve typed storage");
+    assert(contains(code, "XR_ELEM_I64") && "Array<int> must use the I64 typed element layout");
+    assert(contains(code, "((int64_t*)_a->data)") &&
+           "Array<int> index reads and writes must access raw typed storage");
+    assert((contains(code, "((xrt_array_t*)") || contains(code, "->len")) &&
+           "Array<int>.length must read the runtime array length directly");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<int>.push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "Array<int>.length must not fall back to dynamic property dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<int> index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_u8_uses_byte_storage_fast_path) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let bytes: Array<uint8> = []\n"
+                      "    bytes.push(300)\n"
+                      "    return bytes[0] + bytes.length\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed byte array fast path should generate");
+    assert((contains(code, "xrt_array_new_typed(") || contains(code, "xrt_array_new_typed_ptr(")) &&
+           "Array<uint8> creation must preserve typed storage");
+    assert(contains(code, "XR_ELEM_U8") && "Array<uint8> must use the U8 typed element layout");
+    assert(contains(code, "((uint8_t*)_a->data)") &&
+           "Array<uint8> index reads and writes must access raw byte storage");
+    assert(contains(code, "(uint8_t)") &&
+           "Array<uint8> writes must narrow to the byte storage width");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<uint8>.push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "Array<uint8>.length must not fall back to dynamic property dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<uint8> index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed byte array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_i16_and_u32_use_raw_storage_fast_path) {
+    const char *src = "fn mix() -> int {\n"
+                      "    let i16s: Array<int16> = []\n"
+                      "    let u32s: Array<uint32> = []\n"
+                      "    i16s.push(32768)\n"
+                      "    u32s.push(4294967295)\n"
+                      "    return i16s[0] + u32s[0] + i16s.length + u32s.length\n"
+                      "}\n"
+                      "print(mix())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed sub-width array fast path should generate");
+    assert(contains(code, "XR_ELEM_I16") && "Array<int16> must use the I16 typed element layout");
+    assert(contains(code, "((int16_t*)_a->data)") &&
+           "Array<int16> index reads and writes must access raw int16 storage");
+    assert(contains(code, "(int16_t)") &&
+           "Array<int16> writes must narrow to the signed 16-bit storage width");
+    assert(contains(code, "XR_ELEM_U32") && "Array<uint32> must use the U32 typed element layout");
+    assert(contains(code, "((uint32_t*)_a->data)") &&
+           "Array<uint32> index reads and writes must access raw uint32 storage");
+    assert(contains(code, "(uint32_t)") &&
+           "Array<uint32> writes must narrow to the unsigned 32-bit storage width");
+    assert(!contains(code, "xrt_method_1(") &&
+           "sub-width typed array push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "sub-width typed array index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed sub-width array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_float_and_bool_use_raw_storage_fast_path) {
+    const char *src = "fn mix() -> float {\n"
+                      "    let values: Array<float> = []\n"
+                      "    let samples: Array<float32> = []\n"
+                      "    let flags: Array<bool> = []\n"
+                      "    values.push(3.5)\n"
+                      "    samples.push(1.25)\n"
+                      "    flags.push(true)\n"
+                      "    if (flags[0]) {\n"
+                      "        return values[0] + samples[0] + values.length\n"
+                      "    }\n"
+                      "    return 0.0\n"
+                      "}\n"
+                      "print(mix())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed float/bool array fast path should generate");
+    assert(contains(code, "XR_ELEM_F64") && "Array<float> must use the F64 typed element layout");
+    assert(contains(code, "((double*)_a->data)") &&
+           "Array<float> index reads and writes must access raw double storage");
+    assert(contains(code, "XR_ELEM_F32") && "Array<float32> must use the F32 typed element layout");
+    assert(contains(code, "((float*)_a->data)") &&
+           "Array<float32> index reads and writes must access raw float storage");
+    assert(!contains(code, "(double)(float)((float*)") &&
+           "Array<float32> raw loads are already float-rounded");
+    assert(contains(code, "XR_ELEM_BOOL") && "Array<bool> must use the BOOL typed element layout");
+    assert(contains(code, "((uint8_t*)_a->data)") &&
+           "Array<bool> index reads and writes must access raw byte storage");
+    assert(!contains(code, "xrt_method_1(") &&
+           "typed array push must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "typed array length must not fall back to dynamic property dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "typed array index read must not fall back to runtime index dispatch");
+
+    printf("  Generated typed float/bool array fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_inlined_struct_uses_native_field_storage) {
+    const char *src = "struct Sample {\n"
+                      "    x: int\n"
+                      "    y: float\n"
+                      "    ok: bool\n"
+                      "    byte: uint8\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
+                      "    p.x = p.x + 1\n"
+                      "    p.byte = p.byte + 1\n"
+                      "    if (p.ok) {\n"
+                      "        return p.x + p.byte\n"
+                      "    }\n"
+                      "    return 0\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "inlined struct native fields should generate");
+    assert(contains(code, "struct { int64_t f0; double f1; uint8_t f2; uint8_t f3; }") &&
+           "inlined struct must use native C field storage");
+    assert(contains(code, "(uint8_t)") && "sub-width struct stores must narrow to storage width");
+    assert(!contains(code, "XrValue f0") && "inlined scalar struct fields must not be boxed");
+    assert(!contains(code, "xrt_getprop(") &&
+           "inlined scalar struct field reads must not use dynamic property dispatch");
+    assert(!contains(code, "xrt_map_set(") &&
+           "inlined scalar struct field writes must not use map-style dynamic storage");
+
+    printf("  Generated native struct field fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_escaping_struct_uses_heap_native_storage) {
+    const char *src = "struct Sample {\n"
+                      "    x: int\n"
+                      "    y: float\n"
+                      "    ok: bool\n"
+                      "    byte: uint8\n"
+                      "}\n"
+                      "let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}\n"
+                      "p.x = p.x + 1\n"
+                      "p.byte = p.byte + 1\n"
+                      "if (p.ok) {\n"
+                      "    print(p.x + p.byte)\n"
+                      "} else {\n"
+                      "    print(0)\n"
+                      "}\n"
+                      "print(p.y)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "escaping struct heap-native path should generate");
+    assert(contains(code, "typedef struct xrt_struct_test_") &&
+           "escaping primitive struct must emit a native heap layout");
+    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+           "escaping primitive struct must allocate as an AOT struct reference");
+    assert(contains(code, "->f0") && contains(code, "->f1") && contains(code, "->f2") &&
+           contains(code, "->f3") && "escaping primitive struct fields must use direct access");
+    assert(!contains(code, "xrt_map_new(") && "primitive struct must not allocate runtime map");
+    assert(!contains(code, "xrt_map_get(") && "primitive struct reads must not use runtime map");
+    assert(!contains(code, "xrt_map_set(") && "primitive struct writes must not use runtime map");
+    assert(!contains(code, "xrt_call_method(") &&
+           "escaping struct path must not call an undeclared constructor helper");
+
+    printf("  Generated escaping struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_escaping_struct_string_field_uses_heap_native_storage) {
+    const char *src = "struct Item {\n"
+                      "    count: int\n"
+                      "    name: string\n"
+                      "}\n"
+                      "let item = Item{count: 2, name: \"hi\"}\n"
+                      "item.count = item.count + 3\n"
+                      "print(item.count)\n"
+                      "print(item.name)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "string-field heap-native struct path should generate");
+    assert(contains(code, "typedef struct xrt_struct_test_") &&
+           "mixed scalar/string struct must emit a native heap layout");
+    assert(contains(code, "XrValue f1") &&
+           "string struct field must be stored as a tagged immutable reference field");
+    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+           "mixed scalar/string struct must allocate as an AOT struct reference");
+    assert(contains(code, "->f0") && contains(code, "->f1") &&
+           "mixed scalar/string struct fields must use direct access");
+    assert(!contains(code, "xrt_map_new(") && "mixed scalar/string struct must not allocate map");
+    assert(!contains(code, "xrt_map_get(") && "mixed scalar/string struct reads must not use map");
+    assert(!contains(code, "xrt_map_set(") && "mixed scalar/string struct writes must not use map");
+
+    printf("  Generated string-field struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_nested_struct_field_uses_embedded_heap_native_storage) {
+    const char *src = "struct Point {\n"
+                      "    x: int\n"
+                      "    y: int\n"
+                      "}\n"
+                      "struct Box {\n"
+                      "    p: Point\n"
+                      "    z: int\n"
+                      "}\n"
+                      "let b = Box{p: Point{x: 1, y: 2}, z: 3}\n"
+                      "b.p.x = b.p.x + 4\n"
+                      "print(b.p.x + b.p.y + b.z)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "nested struct heap-native path should generate");
+    const char *code_end = code + strlen(code);
+    assert(count_between(code, code_end, "typedef struct xrt_struct_test_") >= 2 &&
+           "nested struct path must emit parent and child native heap layouts");
+    assert(contains(code, "xrt_struct_test_") && contains(code, " f0;") &&
+           "parent heap layout must embed the child native struct field");
+    assert(contains(code, "memcpy(&") &&
+           "nested struct field assignment must copy embedded native bytes");
+    assert(contains(code, "*)&") &&
+           "nested struct field reads must use direct access through the embedded field address");
+    assert(!contains(code, "xrt_map_new(") && "nested struct must not allocate map storage");
+    assert(!contains(code, "xrt_map_get(") && "nested struct reads must not use map storage");
+    assert(!contains(code, "xrt_map_set(") && "nested struct writes must not use map storage");
+
+    printf("  Generated nested struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
+    const char *src = "struct Buf {\n"
+                      "    data: [4]uint8\n"
+                      "    bias: int\n"
+                      "}\n"
+                      "let buf = Buf{data: [1, 2, 3, 4], bias: 5}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let i = 0\n"
+                      "    while (i < n) {\n"
+                      "        buf.data[0] = i\n"
+                      "        buf.data[1] = buf.data[0]\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return buf.data[1]\n"
+                      "}\n"
+                      "print(run(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "fixed-array struct field heap-native path should generate");
+
+    const char *fn = strstr(code, "static int64_t test_run_");
+    assert(fn != NULL && "run declaration should exist");
+    fn = strstr(fn + 1, "static int64_t test_run_");
+    assert(fn != NULL && "run definition should exist");
+    const char *fn_end = strstr(fn, "static XrValue test_run_");
+    assert(fn_end != NULL && "boxed run adapter should follow typed function");
+    const char *fn_body = strchr(fn, '{');
+    assert(fn_body != NULL && fn_body < fn_end && "run function body should be bounded");
+
+    assert(contains(code, "uint8_t f0[4]") &&
+           "fixed array field must be embedded in the native heap layout");
+    assert(contains(code, "xrt_fixed_array_copy") &&
+           "fixed array field initialization must copy into embedded storage");
+    assert(count_between(fn_body, fn_end, "f0[") > 0 &&
+           "fixed array hot path must use direct C array indexing");
+    assert(count_between(fn_body, fn_end, "\n    XrValue v") == 0 &&
+           "fixed array hot function must not materialize tagged array refs");
+    assert(count_between(fn_body, fn_end, "xrt_index_get(") == 0 &&
+           count_between(fn_body, fn_end, "xrt_index_set(") == 0 &&
+           "fixed array hot path must not call generic index helpers");
+    assert(!contains(code, "xrt_map_new(") && !contains(code, "xrt_map_get(") &&
+           !contains(code, "xrt_map_set(") && "fixed array struct must not use map storage");
+
+    printf("  Generated fixed-array struct heap-native path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
+    const char *src = "struct Cell {\n"
+                      "    a: int\n"
+                      "    b: int\n"
+                      "    step: int\n"
+                      "}\n"
+                      "let cell = Cell{a: 1, b: 2, step: 3}\n"
+                      "fn run(n: int) -> int {\n"
+                      "    let p = cell\n"
+                      "    let i = 0\n"
+                      "    let sum = 0\n"
+                      "    while (i < n) {\n"
+                      "        p.a = p.a + i\n"
+                      "        p.b = p.b + p.step\n"
+                      "        sum = sum + p.a - p.b\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return sum + p.a + p.b\n"
+                      "}\n"
+                      "print(run(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "shared struct alias fast path should generate");
+
+    const char *fn = strstr(code, "static int64_t test_run_");
+    assert(fn != NULL && "run declaration should exist");
+    fn = strstr(fn + 1, "static int64_t test_run_");
+    assert(fn != NULL && "run definition should exist");
+    const char *fn_end = strstr(fn, "static XrValue test_run_");
+    assert(fn_end != NULL && "boxed run adapter should follow typed function");
+    const char *fn_body = strchr(fn, '{');
+    assert(fn_body != NULL && fn_body < fn_end && "run function body should be bounded");
+
+    assert(contains(code, "XR_TAG_STRUCT_REF") &&
+           "shared primitive struct must use native heap storage");
+    assert(count_between(fn_body, fn_end, "\n    XrValue v") == 0 &&
+           "shared struct hot function must not materialize tagged local aliases");
+    assert(count_between(fn_body, fn_end, "xrt_shared[") > 0 &&
+           count_between(fn_body, fn_end, "].ptr") > 0 &&
+           "shared struct fields should read the shared slot pointer directly");
+    assert(count_between(fn_body, fn_end, "xrt_release(") == 0 &&
+           "elided shared struct alias should not emit a dead release");
+    assert(count_between(fn_body, fn_end, "xrt_map_get") == 0 &&
+           count_between(fn_body, fn_end, "xrt_map_set") == 0 &&
+           "shared struct hot path must not cross the map boundary");
+
+    printf("  Generated shared struct alias fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_class_method_caches_receiver_scalar_fields) {
+    const char *src = "class Counter {\n"
+                      "    value: int\n"
+                      "    step: int\n"
+                      "    constructor(init: int, step: int) {\n"
+                      "        this.value = init\n"
+                      "        this.step = step\n"
+                      "    }\n"
+                      "    bump(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        let sum = 0\n"
+                      "        while (i < n) {\n"
+                      "            this.value = this.value + this.step\n"
+                      "            sum = sum + this.value\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return sum + this.value\n"
+                      "    }\n"
+                      "}\n"
+                      "let c = Counter(1, 3)\n"
+                      "print(c.bump(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "class receiver field cache should generate");
+
+    const char *fn = strstr(code, "static int64_t test_bump_");
+    assert(fn != NULL && "bump method should use typed ABI");
+    fn = strstr(fn + 1, "static int64_t test_bump_");
+    assert(fn != NULL && "bump method definition should follow its declaration");
+    const char *fn_end = strstr(fn, "static XrValue test_bump_");
+    assert(fn_end != NULL && "boxed bump adapter should follow typed method");
+
+    assert(contains(code, "typedef struct xrt_native_test_Counter") &&
+           "primitive-layout classes should emit an AOT native receiver type");
+    assert(contains(fn, "xrt_native_test_Counter *p0") &&
+           "bump method receiver should use native pointer ABI");
+    assert(count_between(fn, fn_end, "_cf") > 0 &&
+           "receiver scalar fields should be cached in native locals");
+    assert(count_between(fn, fn_end, "xrt_map_get") == 0 &&
+           "native receiver method body should not read fields through map boundary");
+    assert(count_between(fn, fn_end, "xrt_map_set") == 0 &&
+           "native receiver method body should not flush fields through map boundary");
+    const char *value_load = strstr(fn, "p0->f0");
+    const char *step_load = strstr(fn, "p0->f1");
+    assert(value_load != NULL && value_load < fn_end && step_load != NULL && step_load < fn_end &&
+           value_load < step_load && "receiver scalar field cache should follow class layout");
+    assert(count_between(fn, fn_end, "XR_FROM_INT(v") == 0 &&
+           "method body should not box scalar field store temporaries");
+
+    printf("  Generated class receiver field cache %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
+    const char *src = "class Bag {\n"
+                      "    values: Set<int>\n"
+                      "    constructor() {\n"
+                      "        this.values = #[]\n"
+                      "    }\n"
+                      "    fill(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        while (i < n) {\n"
+                      "            this.values.add(i)\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return this.values.length + this.values.size\n"
+                      "    }\n"
+                      "}\n"
+                      "let bag = Bag()\n"
+                      "print(bag.fill(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "class Set<int> length/size sum should generate");
+
+    const char *fn = strstr(code, "static int64_t test_fill_");
+    assert(fn != NULL && "fill method should use typed ABI");
+    fn = strstr(fn + 1, "static int64_t test_fill_");
+    assert(fn != NULL && "fill method definition should follow its declaration");
+    const char *fn_end = strstr(fn, "static XrValue test_fill_");
+    assert(fn_end != NULL && "boxed fill adapter should follow typed method");
+
+    assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_I64)") &&
+           "Set<int> class field constructor should use typed int64 set storage");
+    assert(count_between(fn, fn_end, "xrt_set_add_i64(") == 1 &&
+           "Set<int>.add should use the int64 direct helper");
+    assert(count_between(fn, fn_end, "int64_t v") > 0 && count_between(fn, fn_end, "->len") > 0 &&
+           "Set<int>.length/size should be materialized as scalar field loads");
+    assert(count_between(fn, fn_end, "XR_FROM_INT((p0)->") == 0 &&
+           "Set<int>.length/size should not box the native length field");
+    assert(count_between(fn, fn_end, "xrt_add(") == 0 &&
+           "Set<int>.length + size should use native integer arithmetic");
+    assert(count_between(fn, fn_end, " + ") > 0 &&
+           "Set<int>.length + size should emit a C integer add");
+
+    printf("  Generated class Set<int> scalar length/size fast path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
+    const char *src = "class Bag {\n"
+                      "    values: Set<uint8>\n"
+                      "    constructor() {\n"
+                      "        this.values = #[]\n"
+                      "    }\n"
+                      "    fill(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        while (i < n) {\n"
+                      "            this.values.add(i)\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return this.values.length\n"
+                      "    }\n"
+                      "    scan(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        let hits = 0\n"
+                      "        while (i < n) {\n"
+                      "            if (this.values.has(i)) {\n"
+                      "                hits = hits + i\n"
+                      "            }\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return hits\n"
+                      "    }\n"
+                      "    prune(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        let removed = 0\n"
+                      "        while (i < n) {\n"
+                      "            if (this.values.delete(i)) {\n"
+                      "                removed = removed + 1\n"
+                      "            }\n"
+                      "            i = i + 2\n"
+                      "        }\n"
+                      "        return removed\n"
+                      "    }\n"
+                      "}\n"
+                      "let bag = Bag()\n"
+                      "print(bag.fill(10) + bag.scan(10) + bag.prune(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "class Set<uint8> direct helpers should generate");
+
+    const char *fill = strstr(code, "static int64_t test_fill_");
+    assert(fill != NULL && "fill method should use typed ABI");
+    fill = strstr(fill + 1, "static int64_t test_fill_");
+    assert(fill != NULL && "fill method definition should follow its declaration");
+    const char *fill_end = strstr(fill, "static XrValue test_fill_");
+    assert(fill_end != NULL && "boxed fill adapter should follow typed method");
+    const char *scan = strstr(code, "static int64_t test_scan_");
+    assert(scan != NULL && "scan method should use typed ABI");
+    scan = strstr(scan + 1, "static int64_t test_scan_");
+    assert(scan != NULL && "scan method definition should follow its declaration");
+    const char *scan_end = strstr(scan, "static XrValue test_scan_");
+    assert(scan_end != NULL && "boxed scan adapter should follow typed method");
+    const char *prune = strstr(code, "static int64_t test_prune_");
+    assert(prune != NULL && "prune method should use typed ABI");
+    prune = strstr(prune + 1, "static int64_t test_prune_");
+    assert(prune != NULL && "prune method definition should follow its declaration");
+    const char *prune_end = strstr(prune, "static XrValue test_prune_");
+    assert(prune_end != NULL && "boxed prune adapter should follow typed method");
+
+    assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_U8)") &&
+           "Set<uint8> class field constructor should use byte set storage");
+    assert(count_between(fill, fill_end, "xrt_set_add_i64_typed(") == 1 &&
+           "Set<uint8>.add should use the typed integer direct helper");
+    assert(count_between(scan, scan_end, "xrt_set_has_i64_typed(") == 1 &&
+           "Set<uint8>.has should use the typed integer direct helper");
+    assert(count_between(prune, prune_end, "xrt_set_delete_i64_typed(") == 1 &&
+           "Set<uint8>.delete should use the typed integer direct helper");
+    assert(contains(code, "XR_ELEM_U8") && "Set<uint8> helper calls should pass XR_ELEM_U8");
+    assert(!contains(code, "xrt_set_add(") && !contains(code, "xrt_set_has(") &&
+           !contains(code, "xrt_set_delete(") &&
+           "Set<uint8> class hot methods should not fall back to tagged set helpers");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
+    const char *src = "class Bag {\n"
+                      "    values: Map<int, int>\n"
+                      "    constructor() {\n"
+                      "        this.values = #{}\n"
+                      "    }\n"
+                      "    fill(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        while (i < n) {\n"
+                      "            this.values.set(i, i * 3 + 1)\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return this.values.size\n"
+                      "    }\n"
+                      "    scan(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        let hits = 0\n"
+                      "        while (i < n) {\n"
+                      "            if (this.values.has(i)) {\n"
+                      "                hits = hits + this.values.get(i)\n"
+                      "            }\n"
+                      "            i = i + 1\n"
+                      "        }\n"
+                      "        return hits\n"
+                      "    }\n"
+                      "    prune(n: int) -> int {\n"
+                      "        let i = 0\n"
+                      "        let removed = 0\n"
+                      "        while (i < n) {\n"
+                      "            if (this.values.delete(i)) {\n"
+                      "                removed = removed + 1\n"
+                      "            }\n"
+                      "            i = i + 2\n"
+                      "        }\n"
+                      "        return removed\n"
+                      "    }\n"
+                      "}\n"
+                      "let bag = Bag()\n"
+                      "print(bag.fill(10) + bag.scan(10) + bag.prune(10))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "class Map<int,int> direct helpers should generate");
+
+    const char *fill = strstr(code, "static int64_t test_fill_");
+    assert(fill != NULL && "fill method should use typed ABI");
+    fill = strstr(fill + 1, "static int64_t test_fill_");
+    assert(fill != NULL && "fill method definition should follow its declaration");
+    const char *fill_end = strstr(fill, "static XrValue test_fill_");
+    assert(fill_end != NULL && "boxed fill adapter should follow typed method");
+    const char *scan = strstr(code, "static int64_t test_scan_");
+    assert(scan != NULL && "scan method should use typed ABI");
+    scan = strstr(scan + 1, "static int64_t test_scan_");
+    assert(scan != NULL && "scan method definition should follow its declaration");
+    const char *scan_end = strstr(scan, "static XrValue test_scan_");
+    assert(scan_end != NULL && "boxed scan adapter should follow typed method");
+    const char *prune = strstr(code, "static int64_t test_prune_");
+    assert(prune != NULL && "prune method should use typed ABI");
+    prune = strstr(prune + 1, "static int64_t test_prune_");
+    assert(prune != NULL && "prune method definition should follow its declaration");
+    const char *prune_end = strstr(prune, "static XrValue test_prune_");
+    assert(prune_end != NULL && "boxed prune adapter should follow typed method");
+
+    assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)") &&
+           "Map<int,int> class field constructor should use typed map storage");
+    assert(count_between(fill, fill_end, "xrt_map_set_i64_i64_typed(") == 1 &&
+           "Map<int,int>.set should use the typed integer direct helper");
+    assert(count_between(scan, scan_end, "xrt_map_has_i64_typed(") == 1 &&
+           "Map<int,int>.has should use the typed integer direct helper");
+    assert(count_between(scan, scan_end, "xrt_map_get_i64_i64_typed(") == 1 &&
+           "Map<int,int>.get should use the typed integer direct helper");
+    assert(count_between(prune, prune_end, "xrt_map_delete_i64_typed(") == 1 &&
+           "Map<int,int>.delete should use the typed integer direct helper");
+    assert(count_between(fill, fill_end, "xrt_map_set(") == 0 &&
+           count_between(scan, scan_end, "xrt_map_has(") == 0 &&
+           count_between(scan, scan_end, "xrt_map_get(") == 0 &&
+           count_between(prune, prune_end, "xrt_map_delete(") == 0 &&
+           "Map<int,int> class hot methods should not fall back to boxed map helpers");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
+    const char *src =
+        "class Bag { values: Map<bool, float32>\n"
+        "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 1.5); "
+        "this.values.set(false, 2.25); return this.values.size } "
+        "scan() -> float { let sum = 0.0; if (this.values.has(true)) { sum = sum + "
+        "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
+        "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
+        "this.values.length }; return 0 }\n"
+        "} class IntBag { values: Map<bool, int>\n"
+        "constructor() { this.values = #{} } fill() -> int { this.values.set(true, 11); "
+        "this.values.set(false, 23); return this.values.size } "
+        "scan() -> int { let sum = 0; if (this.values.has(true)) { sum = sum + "
+        "this.values.get(true) }; if (this.values.has(false)) { sum = sum + this.values.get(false) "
+        "}; return sum } prune() -> int { if (this.values.delete(false)) { return "
+        "this.values.length }; return 0 }\n"
+        "} let bag = Bag(); print(bag.fill() + bag.prune()); print(bag.scan())\n"
+        "let int_bag = IntBag(); print(int_bag.fill() + int_bag.prune()); print(int_bag.scan())\n";
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "class bool-key Map direct helpers should generate");
+    const char *code_end = code + strlen(code);
+    assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_F32)"));
+    assert(count_between(code, code_end, "xrt_map_set_bool_f32_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_has_bool_f32_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_get_bool_f32_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_delete_bool_f32_typed(") == 1);
+    assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_I64)"));
+    assert(count_between(code, code_end, "xrt_map_set_bool_i64_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_has_bool_i64_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_get_bool_i64_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_delete_bool_i64_typed(") == 1);
+    assert(!contains(code, "xrt_map_set_i64_i64_typed(") &&
+           !contains(code, "xrt_map_get_i64_i64_typed(") &&
+           !contains(code, "xrt_map_set_i64_f64_typed(") &&
+           !contains(code, "xrt_map_has_i64_typed(") &&
+           !contains(code, "xrt_map_get_i64_f64_typed(") &&
+           !contains(code, "xrt_map_delete_i64_typed(") &&
+           "bool-key Map class hot methods should not use generic i64 helpers");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_inherited_class_uses_native_base_layout) {
+    const char *src = "class Shape {\n"
+                      "    kind: int\n"
+                      "    constructor(kind: int) {\n"
+                      "        this.kind = kind\n"
+                      "    }\n"
+                      "    kind_plus() -> int {\n"
+                      "        return this.kind + 7\n"
+                      "    }\n"
+                      "}\n"
+                      "class Rect extends Shape {\n"
+                      "    w: int\n"
+                      "    h: int\n"
+                      "    constructor(w: int, h: int) {\n"
+                      "        super(1)\n"
+                      "        this.w = w\n"
+                      "        this.h = h\n"
+                      "    }\n"
+                      "    area() -> int {\n"
+                      "        return this.w * this.h\n"
+                      "    }\n"
+                      "    kind_plus() -> int {\n"
+                      "        return this.kind + this.w\n"
+                      "    }\n"
+                      "    score_with_area() -> int {\n"
+                      "        return this.area() + this.kind\n"
+                      "    }\n"
+                      "}\n"
+                      "let r = Rect(2, 3)\n"
+                      "print(r.area())\n"
+                      "print(r.kind_plus())\n"
+                      "print(r.score_with_area())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "inherited class native layout should generate");
+
+    assert(contains(code, "typedef struct xrt_native_test_Shape { int64_t f0; }") &&
+           "base class should emit native scalar layout");
+    assert(contains(code, "typedef struct xrt_native_test_Rect { xrt_native_test_Shape base; "
+                          "int64_t f1; int64_t f2; }") &&
+           "derived class should embed the base layout as a prefix");
+    assert(contains(code, "&((p0)->base)") &&
+           "super constructor should receive a pointer to the embedded base layout");
+
+    const char *area = strstr(code, "static int64_t test_area_");
+    assert(area != NULL && "area method should use typed ABI");
+    area = strstr(area + 1, "static int64_t test_area_");
+    assert(area != NULL && "area method definition should follow its declaration");
+    const char *area_end = strstr(area, "static XrValue test_area_");
+    assert(area_end != NULL && "boxed area adapter should follow typed method");
+    assert(contains(area, "xrt_native_test_Rect *p0") &&
+           "derived method receiver should use native pointer ABI");
+    assert(count_between(area, area_end, "p0->f1") > 0 &&
+           count_between(area, area_end, "p0->f2") > 0 &&
+           "derived method should read own fields from native layout");
+    assert(count_between(area, area_end, "xrt_map_get") == 0 &&
+           count_between(area, area_end, "xrt_map_set") == 0 &&
+           "derived method body should not cross the map boundary");
+
+    const char *kind = strstr(area_end, "static int64_t test_kind_plus_");
+    assert(kind != NULL && "derived kind_plus method should follow area adapter");
+    const char *kind_end = strstr(kind, "static XrValue test_kind_plus_");
+    assert(kind_end != NULL && "boxed kind_plus adapter should follow typed method");
+    assert(contains(kind, "xrt_native_test_Rect *p0") &&
+           "derived override receiver should use native pointer ABI");
+    assert(count_between(kind, kind_end, "p0->base.f0") > 0 &&
+           "derived method should read inherited fields through the native base prefix");
+    assert(count_between(kind, kind_end, "p0->f1") > 0 &&
+           "derived method should still read own fields directly");
+    assert(count_between(kind, kind_end, "xrt_map_get") == 0 &&
+           count_between(kind, kind_end, "xrt_map_set") == 0 &&
+           "inherited field hot path should not cross the map boundary");
+
+    const char *score = strstr(kind_end, "static int64_t test_score_with_area_");
+    assert(score != NULL && "score_with_area method should follow kind_plus adapter");
+    const char *score_end = strstr(score, "static XrValue test_score_with_area_");
+    assert(score_end != NULL && "boxed score_with_area adapter should follow typed method");
+    assert(count_between(score, score_end, "test_area_") > 0 &&
+           "nested native method call should remain a direct C call");
+    assert(count_between(score, score_end, "base.f0") > 0 &&
+           "nested native method call body should still read inherited fields directly");
+    assert(count_between(score, score_end, "xrt_has_pending_error") == 0 &&
+           "no-throw nested native method call must not keep a dead error check");
+
+    printf("  Generated inherited class native layout %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let bytes: Array<uint8> = []\n"
+                      "    bytes.push(1)\n"
+                      "    bytes.push(2)\n"
+                      "    bytes.push(3)\n"
+                      "    let mid = bytes[1:3]\n"
+                      "    return mid[0] + mid.length\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array slice fast path should generate");
+    assert(contains(code, "xrt_slice(") &&
+           "typed array slice must call the typed-preserving AOT slice helper");
+    assert(contains(code, "XR_ELEM_U8") && "Array<uint8> source must keep byte storage");
+    assert((contains(code, "((uint8_t*)_a->data)") || contains(code, "uint8_t *_ad")) &&
+           "Array<uint8> slice reads must access raw byte storage");
+    assert(contains(code, "((xrt_array_t*)") &&
+           "Array<uint8> slice length must read the runtime array length directly");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<uint8> slice index read must not fall back to runtime index dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "Array<uint8> slice length must not fall back to dynamic property dispatch");
+    assert(!contains(code, "xrt_method_") &&
+           "Array<uint8> slice expression must not use dynamic method dispatch");
+
+    printf("  Generated typed array slice fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
+    const char *src = "fn sum(n: int) -> int {\n"
+                      "    let bytes: Array<uint8> = []\n"
+                      "    let i = 0\n"
+                      "    while (i < n) {\n"
+                      "        bytes.push(i)\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    let mid = bytes[1:n - 1]\n"
+                      "    let total = 0\n"
+                      "    i = 0\n"
+                      "    while (i < mid.length) {\n"
+                      "        total = total + mid[i]\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(sum(200))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array guarded slice loop should generate");
+    const char *code_end = code + strlen(code);
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "guarded Array<uint8> fill loop must preallocate uninitialized typed storage");
+    assert(contains(code, "uint8_t *_ad") &&
+           "guarded Array<uint8> fill loop must cache raw byte storage");
+    assert(count_between(code, code_end, "uint8_t *_ad") >= 2 &&
+           "guarded Array<uint8> slice loop must cache source and slice data pointers");
+    assert(!contains(code, "_a->len =") &&
+           "guarded typed array fill loop must use final len store outside the push body");
+    assert(!contains(code, "_a->len >= _a->cap") &&
+           "guarded typed array fill loop must not keep per-push capacity checks");
+    assert(!contains(code, "XRT_REALLOC(_a->data") &&
+           "guarded typed array fill loop must not keep per-push realloc paths");
+    assert(!contains(code, "xrt_has_pending_error()) {\n        return 0;") &&
+           "guarded typed array fill loop must not keep dead error propagation checks");
+    assert(!contains(code, "xrt_index_get(") &&
+           "guarded typed array loop must not fall back to runtime index dispatch");
+    assert(!contains(code, "if (_idx < 0)") &&
+           "guarded typed array loop must not keep negative-index adjustment");
+    assert(!contains(code, "_idx >= 0 && _idx < _a->len") &&
+           "guarded typed array loop must not keep the bounds ternary");
+    assert(!contains(code, "XR_TO_INT(v") && "guarded typed array loop index must stay native");
+
+    printf("  Generated guarded typed array slice loop %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store) {
+    const char *src = "fn sum(n: int) -> float {\n"
+                      "    let values: Array<float> = []\n"
+                      "    let i = 0\n"
+                      "    let x = 1.0\n"
+                      "    while (i < n) {\n"
+                      "        values.push(x)\n"
+                      "        x = x + 0.25\n"
+                      "        if (x > 17.0) {\n"
+                      "            x = 1.0\n"
+                      "        }\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    let total = 0.0\n"
+                      "    i = 0\n"
+                      "    while (i < values.length) {\n"
+                      "        total = total + values[i]\n"
+                      "        i = i + 1\n"
+                      "    }\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(sum(200))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array branchy fill loop should generate");
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "branchy Array<float> fill loop must preallocate uninitialized typed storage");
+    assert(contains(code, "double *_ad") &&
+           "branchy Array<float> fill loop must cache raw double storage");
+    assert(!contains(code, "_a->len =") &&
+           "branchy typed array fill loop must use final len store outside the push body");
+    assert(!contains(code, "_a->len >= _a->cap") &&
+           "branchy typed array fill loop must not keep per-push capacity checks");
+    assert(!contains(code, "XRT_REALLOC(_a->data") &&
+           "branchy typed array fill loop must not keep per-push realloc paths");
+    assert(!contains(code, "xrt_has_pending_error()) {\n        return 0;") &&
+           "branchy typed array fill loop must not keep dead error propagation checks");
+    assert(!contains(code, "xr_typed_get(") && !contains(code, "xr_typed_set(") &&
+           !contains(code, "xrt_release(") &&
+           "branchy typed array fill loop must not use typed runtime switches or no-op release");
+
+    printf("  Generated branchy typed array fill loop %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let bytes: Array<uint8> = []\n"
+                      "    bytes.push(1)\n"
+                      "    bytes.push(2)\n"
+                      "    bytes.push(3)\n"
+                      "    let kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    kept.push(9)\n"
+                      "    return kept[0] + kept[2] + kept.length\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array filter fast path should generate");
+    assert(!contains(code, "xrt_array_filter_typed(") &&
+           "pure Array<uint8>.filter callback must inline instead of using boxed runtime helper");
+    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "pure inlined Array<uint8>.filter must not allocate a callback closure");
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "inlined Array<uint8>.filter must preallocate typed result storage");
+    assert(contains(code, "XR_ELEM_U8") &&
+           "Array<uint8>.filter result must use the U8 typed element layout");
+    assert(contains(code, "uint8_t *_dstd") &&
+           "inlined Array<uint8>.filter must write through a typed result pointer");
+    assert(contains(code, "uint8_t *_srcd") &&
+           "inlined Array<uint8>.filter must read through a typed source pointer");
+    assert(contains(code, "test___anonymous__") &&
+           "inlined Array<uint8>.filter must call the callback's native function");
+    assert((contains(code, "((uint8_t*)_a->data)") || contains(code, "uint8_t *_dstd")) &&
+           "Array<uint8> filter result reads and writes must access raw byte storage");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<uint8>.filter must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<uint8> filter result index read must not fall back to runtime index dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "Array<uint8> filter result length must not fall back to dynamic property dispatch");
+
+    printf("  Generated typed array filter fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let values: Array<int> = []\n"
+                      "    values.push(1)\n"
+                      "    values.push(2)\n"
+                      "    values.push(3)\n"
+                      "    let mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    mapped.push(9)\n"
+                      "    return mapped[0] + mapped[3] + mapped.length\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array map fast path should generate");
+    assert(!contains(code, "xrt_array_map_typed(") &&
+           "pure Array<int>.map callback must inline instead of using boxed runtime helper");
+    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "pure inlined Array<int>.map must not allocate a callback closure");
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "inlined Array<int>.map must preallocate typed result storage");
+    assert(contains(code, "XR_ELEM_I64") &&
+           "Array<int>.map result must use the I64 typed element layout");
+    assert(contains(code, "int64_t *_dstd") &&
+           "inlined Array<int>.map must write through a typed result pointer");
+    assert(contains(code, "int64_t *_srcd") &&
+           "inlined Array<int>.map must read through a typed source pointer");
+    assert(contains(code, "test___anonymous__") &&
+           "inlined Array<int>.map must call the callback's native function");
+    assert((contains(code, "((int64_t*)_a->data)") || contains(code, "int64_t *_dstd")) &&
+           "Array<int>.map result reads and writes must access raw int64 storage");
+    assert(!contains(code, "xrt_method_1(") &&
+           "Array<int>.map must not fall back to dynamic method dispatch");
+    assert(!contains(code, "xrt_index_get(") &&
+           "Array<int>.map result index read must not fall back to runtime index dispatch");
+    assert(!contains(code, "xrt_getprop(") &&
+           "Array<int>.map result length must not fall back to dynamic property dispatch");
+
+    printf("  Generated typed array map fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let values: Array<int> = []\n"
+                      "    values.push(1)\n"
+                      "    values.push(2)\n"
+                      "    values.push(3)\n"
+                      "    let mapped = values.map(fn(x: int) -> int { return x + 2 })\n"
+                      "    let i = 0\n"
+                      "    let total = 0\n"
+                      "    while (i < mapped.length) {\n"
+                      "        total += mapped[i]\n"
+                      "        i += 1\n"
+                      "    }\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    const char *code_end = code + strlen(code);
+    assert(!had_error && "read-only typed array map scan should generate");
+    assert(!contains(code, "xrt_array_map_typed(") &&
+           "read-only pure Array<int>.map must inline instead of using boxed runtime helper");
+    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "read-only pure Array<int>.map must not allocate a callback closure");
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "read-only pure Array<int>.map must preallocate typed result storage");
+    assert(contains(code, "int64_t *_ad") &&
+           "read-only map result must cache the typed data pointer");
+    assert(count_between(code, code_end, "int64_t *_ad") >= 1 &&
+           "read-only map result should have at least one cached data pointer");
+    assert(count_between(code, code_end, "_ad") >= 2 &&
+           "read-only map result scan must use the cached data pointer");
+    assert(!contains(code, "xrt_index_get(") &&
+           "read-only map result scan must not fall back to runtime index dispatch");
+
+    printf("  Generated read-only typed array map scan %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let values: Array<int> = []\n"
+                      "    values.push(1)\n"
+                      "    values.push(2)\n"
+                      "    let offset = 3\n"
+                      "    let mapped = values.map(fn(x: int) -> int { return x + offset })\n"
+                      "    return mapped[0] + mapped[1]\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "captured typed array map should generate");
+    assert(contains(code, "xrt_array_map_typed(") &&
+           "captured Array<int>.map callback must keep the closure helper path");
+    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "captured Array<int>.map callback must still allocate a closure env");
+    assert(contains(code, "XR_ELEM_I64") &&
+           "captured Array<int>.map result must preserve typed storage");
+    assert(!contains(code, "xrt_method_1(") &&
+           "captured Array<int>.map must not fall back to dynamic method dispatch");
+
+    printf("  Generated captured typed array map helper path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let bytes: Array<uint8> = []\n"
+                      "    bytes.push(1)\n"
+                      "    bytes.push(2)\n"
+                      "    bytes.push(3)\n"
+                      "    let kept = bytes.filter(fn(x: uint8) -> bool { return x > 1 })\n"
+                      "    let i = 0\n"
+                      "    let total = 0\n"
+                      "    while (i < kept.length) {\n"
+                      "        total += kept[i]\n"
+                      "        i += 1\n"
+                      "    }\n"
+                      "    return total\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    const char *code_end = code + strlen(code);
+    assert(!had_error && "read-only typed array filter scan should generate");
+    assert(!contains(code, "xrt_array_filter_typed(") &&
+           "read-only pure Array<uint8>.filter must inline instead of using boxed runtime helper");
+    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "read-only pure Array<uint8>.filter must not allocate a callback closure");
+    assert((contains(code, "xrt_array_new_typed_uninit(") ||
+            contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
+           "read-only pure Array<uint8>.filter must preallocate typed result storage");
+    assert(contains(code, "uint8_t *_ad") &&
+           "read-only filter result must cache the typed data pointer");
+    assert(count_between(code, code_end, "uint8_t *_ad") >= 1 &&
+           "read-only filter result should have at least one cached data pointer");
+    assert(count_between(code, code_end, "_ad") >= 2 &&
+           "read-only filter result scan must use the cached data pointer");
+    assert(!contains(code, "xrt_index_get(") &&
+           "read-only filter result scan must not fall back to runtime index dispatch");
+
+    printf("  Generated read-only typed array filter scan %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_filter_captured_callback_uses_runtime_helper) {
+    const char *src = "fn sum() -> int {\n"
+                      "    let values: Array<int> = []\n"
+                      "    values.push(1)\n"
+                      "    values.push(4)\n"
+                      "    let limit = 2\n"
+                      "    let kept = values.filter(fn(x: int) -> bool { return x > limit })\n"
+                      "    return kept[0]\n"
+                      "}\n"
+                      "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "captured typed array filter should generate");
+    assert(contains(code, "xrt_array_filter_typed(") &&
+           "captured Array<int>.filter callback must keep the closure helper path");
+    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "captured Array<int>.filter callback must still allocate a closure env");
+    assert(contains(code, "XR_ELEM_I64") &&
+           "captured Array<int>.filter result must preserve typed storage");
+    assert(!contains(code, "xrt_method_1(") &&
+           "captured Array<int>.filter must not fall back to dynamic method dispatch");
+
+    printf("  Generated captured typed array filter helper path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
+    const char *src =
+        "fn sum() -> int {\n"
+        "    let values: Array<int> = []\n"
+        "    values.push(1)\n"
+        "    values.push(2)\n"
+        "    values.push(3)\n"
+        "    return values.reduce(fn(acc: int, x: int) -> int { return acc + x }, 0)\n"
+        "}\n"
+        "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typed array reduce fast path should generate");
+    assert(!contains(code, "xrt_array_reduce_typed(") &&
+           "pure Array<int>.reduce callback must inline instead of using boxed runtime helper");
+    assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "pure inlined Array<int>.reduce must not allocate a callback closure");
+    assert(contains(code, "int64_t _acc") &&
+           "inlined Array<int>.reduce must use a native accumulator");
+    assert(contains(code, "int64_t *_srcd") &&
+           "inlined Array<int>.reduce must read through a typed source pointer");
+    assert(contains(code, "test___anonymous__") &&
+           "inlined Array<int>.reduce must call the callback's native function");
+    assert(!contains(code, "xrt_method_2(") &&
+           "Array<int>.reduce must not fall back to dynamic method dispatch");
+
+    printf("  Generated typed array reduce fast path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_typed_array_reduce_captured_callback_uses_runtime_helper) {
+    const char *src =
+        "fn sum() -> int {\n"
+        "    let values: Array<int> = []\n"
+        "    values.push(1)\n"
+        "    values.push(2)\n"
+        "    let offset = 3\n"
+        "    return values.reduce(fn(acc: int, x: int) -> int { return acc + x + offset }, 0)\n"
+        "}\n"
+        "print(sum())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "captured typed array reduce should generate");
+    assert(contains(code, "xrt_array_reduce_typed(") &&
+           "captured Array<int>.reduce callback must keep the closure helper path");
+    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "captured Array<int>.reduce callback must still allocate a closure env");
+    assert(!contains(code, "xrt_method_2(") &&
+           "captured Array<int>.reduce must not fall back to dynamic method dispatch");
+
+    printf("  Generated captured typed array reduce helper path %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_int_const_div_mod_uses_native_ops) {
+    const char *src = "fn fast(n: int) -> int {\n"
+                      "    return (n / 5) + (n % 7)\n"
+                      "}\n"
+                      "fn checked(n: int, d: int) -> int {\n"
+                      "    return n % d\n"
+                      "}\n"
+                      "print(fast(42))\n"
+                      "print(checked(42, 6))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "integer div/mod fast path should generate");
+
+    const char *code_end = code + strlen(code);
+    assert(contains(code, "static int64_t test_fast_") &&
+           contains(code, "static int64_t test_checked_") &&
+           "both test functions should be generated");
+    assert(count_between(code, code_end, "xrt_int_div(") == 0 &&
+           "constant non-zero integer division must use native /");
+    assert(count_between(code, code_end, "xrt_int_mod(") == 1 &&
+           "constant non-zero integer modulo must use native %");
+    assert(count_between(code, code_end, " / ") >= 1 &&
+           "constant non-zero integer division should emit C /");
+    assert(count_between(code, code_end, " % ") >= 1 &&
+           "constant non-zero integer modulo should emit C %");
+
+    printf("  Generated integer div/mod fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -841,12 +2174,14 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT go of sync functions should generate");
-    assert(contains(code, "XrValue _result = test_compute_") &&
-           "sync go wrapper must call the normal AOT function body");
-    assert(contains(code, "XrValue _result = test_mutate_copy_") &&
-           "sync go wrapper must call normal function bodies for tagged arguments");
-    assert(contains(code, "XrValue _result = test_identity_copy_") &&
+    assert(contains(code, "int64_t _raw_result = test_compute_") &&
+           "sync go wrapper must call typed normal function bodies");
+    assert(contains(code, "int64_t _raw_result = test_mutate_copy_") &&
+           "sync go wrapper must pass tagged params to typed normal functions");
+    assert(contains(code, "XrValue _raw_result = test_identity_copy_") &&
            "sync go wrapper must support tagged results that alias frame params");
+    assert(contains(code, "XrValue _result = XR_FROM_INT(_raw_result)") &&
+           "sync go wrapper must box native scalar results for the coroutine ABI");
     assert(contains(code, "xrt_retain(_result)") &&
            "sync go wrapper must retain a result that aliases an owned frame param");
     assert(contains(code, "xrt_release(f->p0)") &&
@@ -952,9 +2287,9 @@ TEST(cgen_coro_sync_go_wrappers_only_for_go_targets) {
            "frame stats should count the main coroutine and the sync-go frame");
     assert(stats.total_frame_bytes >= stats.max_frame_bytes &&
            "frame stats should preserve aggregate frame bytes");
-    assert(contains(code, "XrValue _result = test_used_") &&
+    assert(contains(code, "int64_t _raw_result = test_used_") &&
            "go target should keep its sync-go wrapper");
-    assert(!contains(code, "XrValue _result = test_unused_") &&
+    assert(!contains(code, "_raw_result = test_unused_") &&
            "non-go sync functions must not emit sync-go wrappers");
     assert(!contains(code, "typedef struct test_unused_") &&
            "non-go sync functions must not emit sync-go frame structs");
@@ -1148,6 +2483,43 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
     assert(contains(code, "INT64_C(25)") && "timeout expression should be evaluated");
 
     printf("  Generated await timeout %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_tagged_null_equality_keeps_null_literal) {
+    const char *src = "import time\n"
+                      "\n"
+                      "fn sleeper() -> int {\n"
+                      "    time.sleep(1000)\n"
+                      "    return 7\n"
+                      "}\n"
+                      "\n"
+                      "let tasks: Array<Task> = []\n"
+                      "let task = go sleeper()\n"
+                      "tasks.push(task)\n"
+                      "task.cancel()\n"
+                      "let picked = tasks[0]\n"
+                      "let result = await picked\n"
+                      "print(result == null)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT null equality should generate");
+    const char *eq = strstr(code, "xrt_eq(");
+    assert(eq != NULL && "tagged await result should use tagged equality");
+    const char *eq_end = strchr(eq, ')');
+    assert(eq_end != NULL && "tagged equality call should be closed");
+    assert(count_between(eq, eq_end, "XR_NULL_VAL") == 1 &&
+           "tagged null equality must compare against XR_NULL_VAL");
+    assert(count_between(eq, eq_end, "XR_FROM_INT") == 0 &&
+           "tagged null equality must not turn null into int zero");
+
+    printf("  Generated tagged null equality %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1567,6 +2939,34 @@ int main(void) {
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_recursive();
     run_cgen_for_loop();
+    run_cgen_typed_array_uses_raw_storage_fast_path();
+    run_cgen_typed_array_u8_uses_byte_storage_fast_path();
+    run_cgen_typed_array_i16_and_u32_use_raw_storage_fast_path();
+    run_cgen_typed_array_float_and_bool_use_raw_storage_fast_path();
+    run_cgen_inlined_struct_uses_native_field_storage();
+    run_cgen_escaping_struct_uses_heap_native_storage();
+    run_cgen_escaping_struct_string_field_uses_heap_native_storage();
+    run_cgen_nested_struct_field_uses_embedded_heap_native_storage();
+    run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
+    run_cgen_shared_struct_alias_elides_tagged_hot_locals();
+    run_cgen_class_method_caches_receiver_scalar_fields();
+    run_cgen_class_set_length_size_sum_uses_native_arithmetic();
+    run_cgen_class_set_u8_uses_typed_direct_helpers();
+    run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
+    run_cgen_class_bool_key_map_uses_specialized_direct_helpers();
+    run_cgen_inherited_class_uses_native_base_layout();
+    run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
+    run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
+    run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();
+    run_cgen_typed_array_filter_preserves_raw_storage_fast_path();
+    run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
+    run_cgen_typed_array_map_readonly_result_caches_data_pointer();
+    run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_filter_readonly_result_caches_data_pointer();
+    run_cgen_typed_array_filter_captured_callback_uses_runtime_helper();
+    run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();
+    run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
+    run_cgen_int_const_div_mod_uses_native_ops();
     run_cgen_unsupported_coroutine_ops_fail_fast();
     run_cgen_unresolved_import_fails_fast();
     run_cgen_unknown_method_symbol_fails_fast();
@@ -1588,6 +2988,7 @@ int main(void) {
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_scalar_await_uses_typed_slot();
     run_cgen_coro_await_timeout_passes_deadline();
+    run_cgen_tagged_null_equality_keeps_null_literal();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
     run_cgen_coro_scalar_channel_recv_uses_typed_slot();
     run_cgen_coro_scalar_channel_try_recv_uses_native_slot();

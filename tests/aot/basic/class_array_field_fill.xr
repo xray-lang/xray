@@ -1,0 +1,40 @@
+class FillBag {
+    values: Array<int>
+
+    constructor() {
+        let values: Array<int> = []
+        this.values = values
+    }
+
+    fill(n: int) -> int {
+        let values: Array<int> = []
+        this.values = values
+
+        let i = 0
+        while (i < n) {
+            this.values.push(i * 2 + 1)
+            i = i + 1
+        }
+
+        let j = 0
+        let total = 0
+        while (j < this.values.length) {
+            total = total + this.values[j]
+            j = j + 1
+        }
+        return total
+    }
+
+    at(i: int) -> int {
+        return this.values[i]
+    }
+
+    len() -> int {
+        return this.values.length
+    }
+}
+
+let bag = FillBag()
+print(bag.fill(6))
+print(bag.len())
+print(bag.at(5))

@@ -1,0 +1,20 @@
+fn run(n: int) -> int {
+    let values: Array<int> = []
+    let i = 0
+    while (i < n) {
+        values.push((i * 17) % 251)
+        i = i + 1
+    }
+
+    let kept = values.filter(fn(x: int) -> bool { return (x % 3) == 1 })
+
+    let sum = 0
+    i = 0
+    while (i < kept.length) {
+        sum = sum + kept[i]
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(200000))

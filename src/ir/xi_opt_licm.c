@@ -45,6 +45,7 @@ static bool licm_is_pure(const XiValue *v) {
     if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
         return false;
     switch (v->op) {
+        case XI_CONST:
         case XI_ADD:
         case XI_SUB:
         case XI_MUL:
@@ -172,8 +173,6 @@ static bool def_outside_loop(const XiValue *v, const uint32_t *def_blk, uint32_t
                              const bool *in_loop, uint32_t nblocks) {
     if (!v)
         return true; /* NULL arg (e.g. CLOSURE_NEW) treated as outside */
-    if (v->op == XI_CONST)
-        return true; /* Constants are loop-invariant */
     if (v->id >= max_id)
         return false;
     uint32_t bi = def_blk[v->id];

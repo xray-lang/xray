@@ -3,6 +3,7 @@
 @native
 class Map<K, V> {
     length: int
+    size: int
     get(key: K) -> V?
     set(key: K, value: V)
     has(key: K) -> bool

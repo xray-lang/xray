@@ -14,6 +14,7 @@
 #include "xi_verify.h"
 #include "xi_effect.h"
 #include "xi_backend.h"
+#include "xi_ops_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
 #include "xi_tbaa.h"
@@ -417,133 +418,7 @@ static void verify_dominance(VerifyCtx *ctx, XiFunc *f) {
 
 /* ========== Check 9: Operand Arity ========== */
 
-/* Expected argument count per XiOp.  0xFF = variadic (skip check). */
-static const uint8_t expected_narg[XI_OP_COUNT] = {
-    [XI_CONST] = 0,
-    [XI_PARAM] = 0,
-    [XI_ADD] = 2,
-    [XI_SUB] = 2,
-    [XI_MUL] = 2,
-    [XI_DIV] = 2,
-    [XI_MOD] = 2,
-    [XI_NEG] = 1,
-    [XI_BAND] = 2,
-    [XI_BOR] = 2,
-    [XI_BXOR] = 2,
-    [XI_BNOT] = 1,
-    [XI_SHL] = 2,
-    [XI_SHR] = 2,
-    [XI_EQ] = 2,
-    [XI_NE] = 2,
-    [XI_LT] = 2,
-    [XI_LE] = 2,
-    [XI_GT] = 2,
-    [XI_GE] = 2,
-    [XI_EQ_STRICT] = 2,
-    [XI_NE_STRICT] = 2,
-    [XI_NOT] = 1,
-    [XI_CONVERT] = 1,
-    [XI_BOX] = 1,
-    [XI_UNBOX] = 1,
-    [XI_NARROW_I8] = 1,
-    [XI_NARROW_U8] = 1,
-    [XI_NARROW_I16] = 1,
-    [XI_NARROW_U16] = 1,
-    [XI_NARROW_I32] = 1,
-    [XI_NARROW_U32] = 1,
-    [XI_NARROW_F32] = 1,
-    [XI_WIDEN_I8] = 1,
-    [XI_WIDEN_U8] = 1,
-    [XI_WIDEN_I16] = 1,
-    [XI_WIDEN_U16] = 1,
-    [XI_WIDEN_I32] = 1,
-    [XI_WIDEN_U32] = 1,
-    [XI_WIDEN_F32] = 1,
-    [XI_LOAD_FIELD] = 1,
-    [XI_STORE_FIELD] = 2,
-    [XI_INDEX_GET] = 2,
-    [XI_INDEX_SET] = 3,
-    [XI_STRUCT_NEW] = 1,  /* args[0]=class */
-    [XI_STRUCT_GET] = 1,  /* args[0]=struct */
-    [XI_STRUCT_SET] = 2,  /* args[0]=struct, args[1]=val */
-    [XI_JSON_NEW] = 0,    /* no args; aux carries field count + names */
-    [XI_JSON_INIT_F] = 2, /* args[0]=json, args[1]=val */
-    [XI_JSON_GET_F] = 1,  /* args[0]=json */
-    [XI_JSON_SET_F] = 2,  /* args[0]=json, args[1]=val */
-    [XI_JSON_DECODE] = 1, /* args[0]=string_data */
-    [XI_ARRAY_NEW] = 0xFF,
-    [XI_MAP_NEW] = 0xFF,
-    [XI_TUPLE_NEW] = 0xFF, /* args[0..n-1]=elements; nargs encoded by lowerer */
-    [XI_TUPLE_GET] = 1,    /* args[0]=tuple */
-    [XI_CALL] = 0xFF,      /* callee + params: variadic */
-    [XI_CALL_METHOD] = 0xFF,
-    [XI_CALL_METHOD_DIRECT] = 0xFF,
-    [XI_CALL_BUILTIN] = 0xFF,
-    [XI_EXTRACT] = 1,
-    [XI_CLOSURE_NEW] = 0xFF, /* captures: variadic */
-    [XI_LOAD_UPVAL] = 0,
-    [XI_STORE_UPVAL] = 1,
-    [XI_GET_SHARED] = 0,
-    [XI_SET_SHARED] = 1,
-    [XI_GET_GLOBAL] = 0,
-    [XI_SET_GLOBAL] = 1,
-    [XI_PRINT] = 0xFF, /* one arg per print, but lowerer can vary */
-    [XI_GO] = 0xFF,
-    [XI_AWAIT] = 0xFF, /* 1 or 2 (optional timeout arg) */
-    [XI_CHAN_SEND] = 2,
-    [XI_CHAN_RECV] = 1,
-    [XI_CHAN_TRY_SEND] = 2,
-    [XI_CHAN_TRY_RECV] = 1,
-    [XI_CHAN_IS_CLOSED] = 1,
-    [XI_TIME_AFTER] = 1,
-    [XI_SELECT_BLOCK] = 0xFF,
-    [XI_YIELD] = 0,
-    [XI_THROW] = 1,
-    [XI_ERR_SET] = 1,
-    [XI_ERR_RETURN] = 1,
-    [XI_ERR_CHECK] = 0,
-    [XI_ERR_CATCH] = 0,
-    [XI_ITER_NEW] = 1,
-    [XI_ITER_NEXT] = 1,
-    [XI_ITER_VALID] = 1,
-    [XI_DEFER] = 0xFF,    /* variadic: callee + optional arguments */
-    [XI_CHAN_NEW] = 0xFF, /* 0 or 1 (buffer size optional) */
-    [XI_SET_NEW] = 0xFF,
-    [XI_STR_CONCAT] = 0xFF, /* variadic */
-    [XI_IS] = 2,
-    [XI_AS] = 1,
-    [XI_SLICE] = 3,
-    [XI_RANGE] = 2,
-    [XI_MULTI_RET] = 0xFF, /* variadic */
-    [XI_ISNULL] = 1,
-    [XI_PHI] = 0xFF, /* matches preds: variadic */
-    [XI_SELECT] = 3,
-    [XI_COPY] = 1,
-    [XI_CLASS_CREATE] = 0xFF, /* child function refs: variadic */
-    [XI_SCOPE_ENTER] = 0,
-    [XI_SCOPE_EXIT] = 0,
-    [XI_TRY] = 0,
-    [XI_CATCH] = 0,
-    [XI_END_TRY] = 0,
-    [XI_ASSERT] = 1,
-    [XI_ASSERT_EQ] = 2,
-    [XI_ASSERT_NE] = 2,
-    [XI_ASSERT_THROWS] = 1,
-    [XI_TYPEOF] = 1,
-    [XI_GET_BUILTIN] = 0,
-    [XI_IMPORT_REF] = 0,
-    [XI_REGEX_COMPILE] = 2,
-    [XI_RETAIN] = 1,
-    [XI_RELEASE] = 1,
-    [XI_DROP_REUSE] = 1,
-    [XI_ALLOC_AT] = 1,
-    [XI_MOVE] = 1,
-    [XI_STACK_ALLOC] = 0xFF, /* variadic: inherits args from original alloc op */
-    [XI_CORO_OP] = 0xFF,     /* variadic: 0..2 args depending on Coro method */
-    [XI_BOUNDS_CHECK] = 2,   /* index, length */
-    [XI_GUARD_TYPE] = 1,     /* guarded value */
-};
-
+/* Expected argument count per XiOp comes from generated Xi metadata. */
 static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -556,9 +431,9 @@ static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
             XiValue *v = blk->values[i];
             if (!v || v->op >= XI_OP_COUNT)
                 continue;
-            uint8_t expect = expected_narg[v->op];
-            if (expect == 0xFF)
-                continue; /* variadic — skip */
+            uint8_t expect = xi_generated_op_arity(v->op);
+            if (expect == XI_OP_ARITY_VARIADIC)
+                continue; /* variadic: skip */
             if (v->nargs != expect) {
                 verr(ctx, "func '%s': v%u %s in b%u has %u args, expected %u", f->name, v->id,
                      xi_op_name(v->op), blk->id, (unsigned) v->nargs, (unsigned) expect);
@@ -875,8 +750,7 @@ static void verify_tail_calls(VerifyCtx *ctx, const XiFunc *f) {
 /* ========== Check 15: Representation Consistency (STAGE_REPPED) ========== */
 
 /* After select_rep, every value must have a valid XrRep.
- * BOX must produce TAGGED. UNBOX must produce I64 or F64.
- * Phi nodes must be TAGGED (merge point). */
+ * BOX must produce TAGGED. UNBOX must produce I64 or F64. */
 static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -916,11 +790,12 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
             }
         }
 
-        /* Phi nodes must be TAGGED at merge points */
+        /* Phi nodes follow backend policy: VM-style pipelines can keep them
+         * tagged, while AOT can keep scalar phis native. */
         for (XiPhi *phi = blk->phis; phi && !ctx->failed; phi = phi->next) {
-            if (phi->value.rep != XR_REP_TAGGED) {
-                verr(ctx, "func '%s': phi v%u in b%u has rep %u, expected TAGGED", f->name,
-                     phi->value.id, blk->id, phi->value.rep);
+            if (phi->value.rep > XR_REP_STR) {
+                verr(ctx, "func '%s': phi v%u in b%u has invalid rep %u", f->name, phi->value.id,
+                     blk->id, phi->value.rep);
                 return;
             }
         }

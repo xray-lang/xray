@@ -91,6 +91,25 @@ static XiFunc *lower_source(const char *source) {
     return func;
 }
 
+static int func_tree_has_op(XiFunc *f, uint16_t op) {
+    if (!f)
+        return 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] && blk->values[i]->op == op)
+                return 1;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (func_tree_has_op(f->children[i], op))
+            return 1;
+    }
+    return 0;
+}
+
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
@@ -757,6 +776,43 @@ TEST(struct_literal) {
     xi_func_free(f);
 }
 
+TEST(struct_literal_inside_function) {
+    XiFunc *f = lower_source("struct Pair {\n"
+                             "    a: int\n"
+                             "    b: int\n"
+                             "}\n"
+                             "fn run() -> int {\n"
+                             "    let p = Pair{a: 1, b: 2}\n"
+                             "    return p.a + p.b\n"
+                             "}\n"
+                             "print(run())\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_STRUCT_NEW) &&
+           "function-local struct literal should emit STRUCT_NEW");
+    assert(func_tree_has_op(f, XI_STRUCT_SET) &&
+           "function-local struct literal should set fields via STRUCT_SET");
+    assert(func_tree_has_op(f, XI_STRUCT_GET) &&
+           "function-local struct field access should emit STRUCT_GET");
+    xi_func_free(f);
+}
+
+TEST(struct_field_store_narrows_native_width) {
+    XiFunc *f = lower_source("struct Sample {\n"
+                             "    byte: uint8\n"
+                             "}\n"
+                             "fn run() -> int {\n"
+                             "    let p = Sample{byte: 300}\n"
+                             "    p.byte = p.byte + 1\n"
+                             "    return p.byte\n"
+                             "}\n"
+                             "print(run())\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_NARROW_U8) &&
+           "uint8 struct field writes should narrow before storage");
+    assert(func_tree_has_op(f, XI_STRUCT_SET) && "struct field writes should use STRUCT_SET");
+    xi_func_free(f);
+}
+
 TEST(force_unwrap) {
     XiFunc *f = lower_source("let x: int? = 42\n"
                              "let y = x!\n"
@@ -907,6 +963,8 @@ int main(void) {
     run_range_expr();
     run_optional_chain();
     run_struct_literal();
+    run_struct_literal_inside_function();
+    run_struct_field_store_narrows_native_width();
     run_force_unwrap();
     run_destructure_decl();
     run_multi_assign();

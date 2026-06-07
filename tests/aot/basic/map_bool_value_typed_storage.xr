@@ -1,0 +1,48 @@
+let flags: Map<int, bool> = #{}
+flags.set(1, true)
+flags.set(2, false)
+flags.set(3, true)
+print(flags.length)
+print(flags.get(1))
+print(flags.get(2))
+print(flags.has(4))
+
+let values = flags.values()
+print(values.length)
+print(values[0])
+
+class BoolValueMapBag {
+    values: Map<int, bool>
+
+    constructor() {
+        let values: Map<int, bool> = #{}
+        this.values = values
+    }
+
+    fill(n: int) -> int {
+        let i = 0
+        while (i < n) {
+            this.values.set(i, i % 3 == 0)
+            i = i + 1
+        }
+        return this.values.size
+    }
+
+    count(n: int) -> int {
+        let i = 0
+        let total = 0
+        while (i < n) {
+            if (this.values.has(i)) {
+                if (this.values.get(i)) {
+                    total = total + 1
+                }
+            }
+            i = i + 1
+        }
+        return total
+    }
+}
+
+let bag = BoolValueMapBag()
+print(bag.fill(8))
+print(bag.count(8))

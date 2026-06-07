@@ -2,15 +2,19 @@
 """
 xisagen — XISA code generator (Python rewrite)
 
-Reads declarative .def and .isa files, generates C headers for the JIT:
+Reads declarative .def and .isa files, generates C headers for IR and JIT metadata:
   - ops:     xisa/xm/ops.def     → xm_ops_gen.h
   - helpers: xisa/xm/helpers.def → xm_helpers_gen.h
   - isa:     xisa/arch/<arch>/isa.isa → emit helpers, mcattr, disasm, golden
+  - xi-ops:  xisa/xi/ops.def     → xi_ops_gen.h
+  - xi-lowering: xisa/xi/lowering.def → Xi target lowering headers
 
 Usage:
   python3 xisagen.py ops     <ops.def>     <output.h>
   python3 xisagen.py helpers <helpers.def> <output.h>
   python3 xisagen.py isa     <isa.isa>     <output_dir>
+  python3 xisagen.py xi-ops  <ops.def>     <output.h>
+  python3 xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>
 """
 
 import sys
@@ -1453,6 +1457,540 @@ def parse_isa_file(path: str) -> list[SExpr]:
     text = read_file(path)
     tokens = tokenize_sexpr(text, path)
     return parse_sexpr(tokens, path)
+
+# ============================================================
+# L3: Xi semantic op metadata
+# ============================================================
+
+VALID_XI_EFFECTS = {
+    'allocates',
+    'may-deopt',
+    'may-suspend',
+    'may-throw',
+    'memory-read',
+    'memory-write',
+    'releases',
+    'retains',
+    'side-effect',
+}
+
+VALID_XI_TARGETS = {
+    'aot-c',
+    'aot-verify',
+    'jit-xm',
+    'vm-bytecode',
+}
+
+VALID_XI_JIT_POLICIES = {
+    'catch-up',
+    'none',
+    'required',
+}
+
+
+@dataclass
+class XiOperandDef:
+    kind: str
+    name: str
+    attrs: dict = field(default_factory=dict)
+
+
+@dataclass
+class XiResultDef:
+    kind: str
+    name: str
+    attrs: dict = field(default_factory=dict)
+
+
+@dataclass
+class XiOpDef:
+    name: str
+    ident: str
+    cls: str
+    arity: int
+    operands: list[XiOperandDef]
+    results: list[XiResultDef]
+    effects: list
+    requires: list
+    observable: list
+    targets: list
+    jit_policy: str
+
+
+def _xi_c_ident(token: str) -> str:
+    ident = re.sub(r'[^0-9A-Za-z_]', '_', token).upper()
+    ident = re.sub(r'_+', '_', ident).strip('_')
+    if ident and ident[0].isdigit():
+        ident = '_' + ident
+    return ident
+
+
+def _xi_op_ident(name: str) -> str:
+    if not name.startswith('xi.'):
+        die(f"Xi op name must start with 'xi.': {name}")
+    return _xi_c_ident(name[3:])
+
+
+def _sexpr_atom_value(expr: SExpr, context: str) -> str:
+    if not isinstance(expr, SAtom):
+        die(f"{context}: expected atom")
+    return expr.str_value
+
+
+def _xi_get_kw(form: SList, keyword: str) -> Optional[SExpr]:
+    found = []
+    for i, child in enumerate(form.children):
+        if isinstance(child, SAtom) and child.value == keyword:
+            if i + 1 >= len(form.children):
+                die(f"{keyword}: missing value")
+            found.append(form.children[i + 1])
+    if len(found) > 1:
+        die(f"duplicate {keyword}")
+    return found[0] if found else None
+
+
+def _xi_get_kw_str(form: SList, keyword: str, default: str = '') -> str:
+    value = _xi_get_kw(form, keyword)
+    if value is None:
+        return default
+    return _sexpr_atom_value(value, keyword)
+
+
+def _xi_get_kw_list(form: SList, keyword: str) -> Optional[SList]:
+    value = _xi_get_kw(form, keyword)
+    if value is None:
+        return None
+    if not isinstance(value, SList):
+        die(f"{keyword}: expected list")
+    return value
+
+
+def _xi_parse_atom_list(expr: Optional[SList], context: str) -> list:
+    if expr is None:
+        return []
+    values = []
+    for child in expr.children:
+        values.append(_sexpr_atom_value(child, context))
+    return values
+
+
+def _xi_parse_arity(expr: Optional[SExpr], default: int, context: str) -> int:
+    if expr is None:
+        return default
+    value = _sexpr_atom_value(expr, context)
+    if value == 'variadic':
+        return 0xFF
+    if not isinstance(expr, SAtom) or not expr.is_number:
+        die(f"{context}: arity must be a number or variadic")
+    arity = expr.int_value
+    if arity < 0 or arity > 254:
+        die(f"{context}: fixed arity must be in [0, 254]")
+    return arity
+
+
+def _xi_parse_value_defs(expr: Optional[SList], context: str, result: bool) -> list:
+    if expr is None:
+        return []
+    values = []
+    for entry in expr.children:
+        if not isinstance(entry, SList) or len(entry.children) < 2:
+            die(f"{context}: expected entries like (value $name)")
+        kind = _sexpr_atom_value(entry.children[0], context)
+        name = _sexpr_atom_value(entry.children[1], context)
+        if not name.startswith('$'):
+            die(f"{context}: value name must start with '$': {name}")
+        attrs = {}
+        i = 2
+        while i < len(entry.children):
+            key_expr = entry.children[i]
+            if not isinstance(key_expr, SAtom) or not key_expr.is_keyword:
+                die(f"{context}: expected attribute keyword")
+            if i + 1 >= len(entry.children):
+                die(f"{context}: missing value for {key_expr.value}")
+            key = key_expr.value[1:]
+            value = _sexpr_atom_value(entry.children[i + 1], context)
+            attrs[key] = value
+            i += 2
+        item = XiResultDef(kind=kind, name=name, attrs=attrs)
+        if not result:
+            item = XiOperandDef(kind=kind, name=name, attrs=attrs)
+        values.append(item)
+    return values
+
+
+def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
+    forms = parse_sexpr(tokenize_sexpr(text, path), path)
+    ops = []
+    seen = set()
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            die(f"{path}: top-level form must be a list")
+        head = _sexpr_atom_value(form.children[0], path)
+        if head != 'define-xi-op':
+            die(f"{path}:{form.line}:{form.col}: expected define-xi-op")
+        if len(form.children) < 2:
+            die(f"{path}:{form.line}:{form.col}: missing Xi op name")
+        name = _sexpr_atom_value(form.children[1], 'define-xi-op')
+        if name in seen:
+            die(f"{path}: duplicate Xi op '{name}'")
+        seen.add(name)
+        ident = _xi_op_ident(name)
+        cls = _xi_get_kw_str(form, ':class')
+        if not cls:
+            die(f"{path}: Xi op '{name}' is missing :class")
+        operands = _xi_parse_value_defs(_xi_get_kw_list(form, ':operands'),
+                                        f"{name}:operands", result=False)
+        results = _xi_parse_value_defs(_xi_get_kw_list(form, ':results'),
+                                       f"{name}:results", result=True)
+        arity = _xi_parse_arity(_xi_get_kw(form, ':arity'), len(operands), f"{name}:arity")
+        effects = _xi_parse_atom_list(_xi_get_kw_list(form, ':effects'), f"{name}:effects")
+        for effect in effects:
+            if effect not in VALID_XI_EFFECTS:
+                die(f"{path}: Xi op '{name}' uses unknown effect '{effect}'")
+        requires = _xi_parse_atom_list(_xi_get_kw_list(form, ':requires'), f"{name}:requires")
+        observable = _xi_parse_atom_list(_xi_get_kw_list(form, ':observable'),
+                                         f"{name}:observable")
+        targets = _xi_parse_atom_list(_xi_get_kw_list(form, ':targets'), f"{name}:targets")
+        if not targets:
+            die(f"{path}: Xi op '{name}' is missing :targets")
+        for target in targets:
+            if target not in VALID_XI_TARGETS:
+                die(f"{path}: Xi op '{name}' uses unknown target '{target}'")
+        jit_policy = _xi_get_kw_str(form, ':jit-policy', 'catch-up')
+        if jit_policy not in VALID_XI_JIT_POLICIES:
+            die(f"{path}: Xi op '{name}' uses unknown jit policy '{jit_policy}'")
+        ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
+                           results=results, effects=effects, requires=requires,
+                           observable=observable, targets=targets,
+                           jit_policy=jit_policy))
+    return ops
+
+
+def _xi_bit_expr(prefix: str, values: list) -> str:
+    if not values:
+        return '0'
+    return ' | '.join(f'{prefix}_{_xi_c_ident(v)}' for v in values)
+
+
+def _xi_effect_flag_expr(values: list) -> str:
+    flag_map = {
+        'side-effect': 'XI_FLAG_SIDE_EFFECT',
+        'may-throw': 'XI_FLAG_MAY_THROW',
+        'may-suspend': 'XI_FLAG_MAY_SUSPEND',
+        'memory-read': 'XI_FLAG_READS_MEM',
+        'memory-write': 'XI_FLAG_WRITES_MEM',
+    }
+    flags = []
+    for value in values:
+        flag = flag_map.get(value)
+        if flag:
+            flags.append(flag)
+    return ' | '.join(flags) if flags else '0'
+
+
+def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
+    lines.append('/* Source: xisa/xi/ops.def */')
+    lines.append('')
+    lines.append('#ifndef XI_OPS_GEN_H')
+    lines.append('#define XI_OPS_GEN_H')
+    lines.append('')
+    lines.append('#include <stdint.h>')
+    lines.append('#include "xi.h"')
+    lines.append('')
+    lines.append('#define XI_OP_ARITY_VARIADIC 0xFFu')
+    lines.append('')
+    lines.append('/* ========== Effect Flags ========== */')
+    lines.append('')
+    lines.append('#define XI_EFFECT_NONE 0')
+    for i, effect in enumerate(sorted(VALID_XI_EFFECTS)):
+        lines.append(f'#define XI_EFFECT_{_xi_c_ident(effect)} (1u << {i})')
+    lines.append('')
+    lines.append('/* ========== Target Flags ========== */')
+    lines.append('')
+    lines.append('#define XI_TARGET_NONE 0')
+    for i, target in enumerate(sorted(VALID_XI_TARGETS)):
+        lines.append(f'#define XI_TARGET_{_xi_c_ident(target)} (1u << {i})')
+    lines.append('')
+
+    seen_classes = []
+    for op in ops:
+        if op.cls not in seen_classes:
+            seen_classes.append(op.cls)
+    lines.append('/* ========== Op Classes ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    for i, cls in enumerate(seen_classes):
+        lines.append(f'    XI_GEN_CLASS_{_xi_c_ident(cls)} = {i},')
+    lines.append('    XI_GEN_CLASS__COUNT')
+    lines.append('} XiGeneratedOpClass;')
+    lines.append('')
+    lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
+    lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
+    lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
+    lines.append('')
+
+    lines.append('/* ========== Op Metadata Shape ========== */')
+    lines.append('')
+    lines.append('typedef struct {')
+    lines.append('    const char *name;')
+    lines.append('    const char *ident;')
+    lines.append('    uint8_t op_class;')
+    lines.append('    uint8_t arity;')
+    lines.append('    uint8_t operand_count;')
+    lines.append('    uint8_t result_count;')
+    lines.append('    uint8_t default_flags;')
+    lines.append('    uint32_t effects;')
+    lines.append('    uint32_t targets;')
+    lines.append('    const char *jit_policy;')
+    lines.append('} XiGeneratedOpInfo;')
+    lines.append('')
+
+    lines.append('#define XI_GENERATED_OPS(X) \\')
+    for i, op in enumerate(ops):
+        arity = 'XI_OP_ARITY_VARIADIC' if op.arity == 0xFF else str(op.arity)
+        effects = _xi_bit_expr('XI_EFFECT', op.effects)
+        targets = _xi_bit_expr('XI_TARGET', op.targets)
+        flags = _xi_effect_flag_expr(op.effects)
+        suffix = ' \\' if i + 1 < len(ops) else ''
+        lines.append(
+            f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
+            f'{len(op.operands)}, {len(op.results)}, {flags}, {effects}, {targets}, '
+            f'"{op.jit_policy}"){suffix}')
+    lines.append('')
+    lines.append('')
+
+    lines.append('static inline const char *xi_generated_op_name(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return "{op.ident}";')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return "???";')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_arity(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        arity = 'XI_OP_ARITY_VARIADIC' if op.arity == 0xFF else str(op.arity)
+        lines.append(f'        case XI_{op.ident}: return {arity};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_OP_ARITY_VARIADIC;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_default_flags(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        flags = _xi_effect_flag_expr(op.effects)
+        lines.append(f'        case XI_{op.ident}: return {flags};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('#endif  /* XI_OPS_GEN_H */')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+# ============================================================
+# L3: Xi lowering coverage metadata
+# ============================================================
+
+VALID_XI_LOWERING_TARGETS = {
+    'aot-c',
+    'aot-verify',
+    'jit-xm',
+    'vm-bytecode',
+}
+
+
+@dataclass
+class XiLoweringDef:
+    op_name: str
+    ident: str
+    required_targets: list
+    targets: list
+    target_drivers: dict
+    match: Optional[SList] = None
+
+
+def _xi_lowering_driver(form: SList, target: str, op_name: str) -> Optional[str]:
+    value = _xi_get_kw(form, ':' + target)
+    if value is None:
+        return None
+    if not isinstance(value, SList) or len(value.children) != 2:
+        die(f"{op_name}:{target}: expected (driver name)")
+    kind = _sexpr_atom_value(value.children[0], f"{op_name}:{target}")
+    if kind != 'driver':
+        die(f"{op_name}:{target}: expected driver entry")
+    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}")
+
+
+def _xi_lowering_target_drivers(form: SList, op_name: str) -> dict:
+    drivers = {}
+    for target in sorted(VALID_XI_LOWERING_TARGETS):
+        driver = _xi_lowering_driver(form, target, op_name)
+        if driver is not None:
+            drivers[target] = driver
+    return drivers
+
+
+def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') -> list[XiLoweringDef]:
+    known_ops = {op.name for op in ops}
+    forms = parse_sexpr(tokenize_sexpr(text, path), path)
+    entries = []
+    seen = set()
+    for form in forms:
+        if not isinstance(form, SList) or not form.children:
+            die(f"{path}: top-level form must be a list")
+        head = _sexpr_atom_value(form.children[0], path)
+        if head != 'lower':
+            die(f"{path}:{form.line}:{form.col}: expected lower")
+        if len(form.children) < 2:
+            die(f"{path}:{form.line}:{form.col}: missing lowered Xi op name")
+        op_name = _sexpr_atom_value(form.children[1], 'lower')
+        if op_name not in known_ops:
+            die(f"{path}: lowering references unknown Xi op '{op_name}'")
+        ident = _xi_op_ident(op_name)
+        if op_name in seen:
+            die(f"{path}: duplicate lowering entry for '{op_name}'")
+        seen.add(op_name)
+        required = _xi_parse_atom_list(_xi_get_kw_list(form, ':required-targets'),
+                                      f"{op_name}:required-targets")
+        for target in required:
+            if target not in VALID_XI_LOWERING_TARGETS:
+                die(f"{path}: lowering '{op_name}' uses unknown required target '{target}'")
+        target_drivers = _xi_lowering_target_drivers(form, op_name)
+        targets = sorted(target_drivers.keys())
+        if not targets:
+            die(f"{path}: lowering '{op_name}' has no target emit")
+        missing = [target for target in required if target not in targets]
+        if missing:
+            die(f"{path}: lowering '{op_name}' missing required target(s): {', '.join(missing)}")
+        entries.append(XiLoweringDef(op_name=op_name, ident=ident, required_targets=required,
+                                     targets=targets, target_drivers=target_drivers,
+                                     match=_xi_get_kw_list(form, ':match')))
+    return entries
+
+
+def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
+    lines.append('/* Source: xisa/xi/lowering.def */')
+    lines.append('')
+    lines.append('#ifndef XI_LOWERING_COVERAGE_GEN_H')
+    lines.append('#define XI_LOWERING_COVERAGE_GEN_H')
+    lines.append('')
+    lines.append('#include <stdbool.h>')
+    lines.append('#include <stdint.h>')
+    lines.append('#include "xi.h"')
+    lines.append('')
+    lines.append('#define XI_LOWER_TARGET_NONE 0')
+    for i, target in enumerate(sorted(VALID_XI_LOWERING_TARGETS)):
+        lines.append(f'#define XI_LOWER_TARGET_{_xi_c_ident(target)} (1u << {i})')
+    lines.append('')
+    lines.append(f'enum {{ XI_LOWERING_ENTRY_COUNT = {len(entries)} }};')
+    lines.append('')
+    lines.append('#define XI_LOWERING_COVERAGE_ENTRIES(X) \\')
+    for i, entry in enumerate(entries):
+        target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
+        required_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.required_targets)
+        suffix = ' \\' if i + 1 < len(entries) else ''
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", {target_bits}, {required_bits}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('static inline uint32_t xi_lowering_generated_targets(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in entries:
+        target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
+        lines.append(f'        case XI_{entry.ident}: return {target_bits};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint32_t xi_lowering_required_targets(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in entries:
+        required_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.required_targets)
+        lines.append(f'        case XI_{entry.ident}: return {required_bits};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xi_lowering_has_target(uint16_t op, uint32_t target) {')
+    lines.append('    return (xi_lowering_generated_targets(op) & target) == target;')
+    lines.append('}')
+    lines.append('')
+    lines.append('#endif  /* XI_LOWERING_COVERAGE_GEN_H */')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
+    vm_entries = [entry for entry in entries if 'vm-bytecode' in entry.target_drivers]
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
+    lines.append('/* Source: xisa/xi/lowering.def */')
+    lines.append('')
+    lines.append('#ifndef XI_EMIT_VM_GEN_H')
+    lines.append('#define XI_EMIT_VM_GEN_H')
+    lines.append('')
+    lines.append('#define XI_EMIT_VM_LOWERING_HANDLERS(X) \\')
+    for i, entry in enumerate(vm_entries):
+        driver = entry.target_drivers['vm-bytecode']
+        suffix = ' \\' if i + 1 < len(vm_entries) else ''
+        lines.append(f'    X({entry.ident}, {driver}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('#endif  /* XI_EMIT_VM_GEN_H */')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def generate_xi_target_dispatch_header(entries: list[XiLoweringDef], target: str,
+                                       guard: str, macro: str) -> str:
+    target_entries = [entry for entry in entries if target in entry.target_drivers]
+    lines = []
+    lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
+    lines.append('/* Source: xisa/xi/lowering.def */')
+    lines.append('')
+    lines.append(f'#ifndef {guard}')
+    lines.append(f'#define {guard}')
+    lines.append('')
+    lines.append(f'#define {macro}(X) \\')
+    for i, entry in enumerate(target_entries):
+        driver = entry.target_drivers[target]
+        suffix = ' \\' if i + 1 < len(target_entries) else ''
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", {driver}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append(f'#endif  /* {guard} */')
+    lines.append('')
+    return '\n'.join(lines)
+
+
+def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef]) -> list[str]:
+    outputs = [
+        ('src/ir/xi_lowering_coverage_gen.h', generate_xi_lowering_coverage_header(entries)),
+        ('src/ir/xi_emit_vm_gen.h', generate_xi_vm_dispatch_header(entries)),
+        ('src/jit/xi_to_xm_dispatch_gen.h',
+         generate_xi_target_dispatch_header(entries, 'jit-xm', 'XI_TO_XM_DISPATCH_GEN_H',
+                                            'XI_TO_XM_LOWERING_DRIVERS')),
+        ('src/aot/xi_to_c_dispatch_gen.h',
+         generate_xi_target_dispatch_header(entries, 'aot-c', 'XI_TO_C_DISPATCH_GEN_H',
+                                            'XI_TO_C_LOWERING_DRIVERS')),
+    ]
+    written = []
+    for relpath, content in outputs:
+        path = os.path.join(output_root, relpath)
+        write_file(path, content)
+        written.append(path)
+    return written
 
 # ============================================================
 # L3: .isa structured extraction
@@ -3370,6 +3908,29 @@ def cmd_ops(args: list[str]):
     write_file(args[1], content)
     print(f"xisagen: parsed {len(ops)} ops from {args[0]}", file=sys.stderr)
     print(f"xisagen: generated {args[1]}", file=sys.stderr)
+
+def cmd_xi_ops(args: list[str]):
+    if len(args) != 2:
+        die("usage: xisagen.py xi-ops <ops.def> <output.h>")
+    ops = parse_xi_ops_def(read_file(args[0]), args[0])
+    if not ops:
+        die(f"no Xi ops parsed from {args[0]}")
+    content = generate_xi_ops_header(ops)
+    write_file(args[1], content)
+    print(f"xisagen: parsed {len(ops)} Xi ops from {args[0]}", file=sys.stderr)
+    print(f"xisagen: generated {args[1]}", file=sys.stderr)
+
+def cmd_xi_lowering(args: list[str]):
+    if len(args) != 3:
+        die("usage: xisagen.py xi-lowering <ops.def> <lowering.def> <output-root>")
+    ops = parse_xi_ops_def(read_file(args[0]), args[0])
+    entries = parse_xi_lowering_def(read_file(args[1]), ops, args[1])
+    if not entries:
+        die(f"no Xi lowering entries parsed from {args[1]}")
+    outputs = write_xi_lowering_outputs(args[2], entries)
+    print(f"xisagen: parsed {len(entries)} Xi lowering entries from {args[1]}", file=sys.stderr)
+    for path in outputs:
+        print(f"xisagen: generated {path}", file=sys.stderr)
 
 def cmd_helpers(args: list[str]):
     if len(args) != 2:
@@ -5748,6 +6309,8 @@ def cmd_test(args: list[str]):
     """Run self-tests."""
     print("xisagen self-test:", file=sys.stderr)
     _test_sexpr_parser()
+    _test_xi_ops_parser()
+    _test_xi_lowering_parser()
     _test_ops_parser()
     _test_helpers_parser()
     _test_isel_parser()
@@ -5796,6 +6359,103 @@ def _test_sexpr_parser():
     assert lst.get_kw_int(':min-bytes') == 3
     assert lst.get_kw_str(':name') == 'test'
 
+    print(" PASS", file=sys.stderr)
+
+def _test_xi_ops_parser():
+    print("  test_xi_ops_parser...", end='', file=sys.stderr)
+    text = '''
+    (define-xi-op xi.add
+      :class pure
+      :operands ((value $lhs :type int) (value $rhs :type int))
+      :results ((value $result :type int))
+      :effects ()
+      :requires (same-numeric-type)
+      :observable (integer-wrap)
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy required)
+    (define-xi-op xi.mem.load
+      :class memory
+      :operands ((address $addr :type pointer))
+      :results ((value $result))
+      :effects (memory-read may-throw)
+      :requires (valid-address)
+      :observable (load-width)
+      :targets (jit-xm aot-c aot-verify)
+      :jit-policy catch-up)
+    '''
+    ops = parse_xi_ops_def(text)
+    assert len(ops) == 2
+    assert ops[0].name == 'xi.add'
+    assert ops[0].ident == 'ADD'
+    assert ops[0].arity == 2
+    assert ops[0].operands[0].attrs['type'] == 'int'
+    assert ops[1].ident == 'MEM_LOAD'
+    assert ops[1].arity == 1
+    assert ops[1].effects == ['memory-read', 'may-throw']
+    header = generate_xi_ops_header(ops)
+    assert 'case XI_ADD: return "ADD";' in header
+    assert 'case XI_MEM_LOAD: return 1;' in header
+    assert 'XI_EFFECT_MAY_THROW' in header
+    assert 'XI_TARGET_AOT_C' in header
+    assert 'xi_generated_op_arity' in header
+    assert 'xi_generated_op_default_flags' in header
+    print(" PASS", file=sys.stderr)
+
+def _test_xi_lowering_parser():
+    print("  test_xi_lowering_parser...", end='', file=sys.stderr)
+    ops_text = '''
+    (define-xi-op xi.add
+      :class arithmetic
+      :arity 2
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy required)
+    (define-xi-op xi.copy
+      :class pure
+      :arity 1
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy required)
+    '''
+    lowering_text = '''
+    (lower xi.add
+      :match ()
+      :required-targets (vm-bytecode jit-xm aot-c)
+      :vm-bytecode (driver xi_emit_add)
+      :jit-xm (driver xi2xm_add)
+      :aot-c (driver xicgen_add))
+    (lower xi.copy
+      :match ()
+      :required-targets (vm-bytecode aot-c)
+      :vm-bytecode (driver xi_emit_copy)
+      :aot-c (driver xicgen_copy))
+    '''
+    ops = parse_xi_ops_def(ops_text)
+    entries = parse_xi_lowering_def(lowering_text, ops)
+    assert len(entries) == 2
+    assert entries[0].ident == 'ADD'
+    assert entries[0].targets == ['aot-c', 'jit-xm', 'vm-bytecode']
+    assert entries[0].target_drivers['jit-xm'] == 'xi2xm_add'
+    header = generate_xi_lowering_coverage_header(entries)
+    assert 'XI_LOWERING_ENTRY_COUNT = 2' in header
+    assert 'case XI_ADD: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;' in header
+    vm_header = generate_xi_vm_dispatch_header(entries)
+    assert 'X(ADD, xi_emit_add)' in vm_header
+    jit_header = generate_xi_target_dispatch_header(entries, 'jit-xm', 'TEST_JIT_H', 'TEST_JIT')
+    assert 'X(ADD, "xi.add", xi2xm_add)' in jit_header
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm)
+          :vm-bytecode (driver xi_emit_add))
+        ''', ops)
+        assert False, "missing required lowering target should be rejected"
+    except SystemExit:
+        pass
     print(" PASS", file=sys.stderr)
 
 def _test_ops_parser():
@@ -6138,6 +6798,8 @@ def main():
 
     commands = {
         'ops': cmd_ops,
+        'xi-ops': cmd_xi_ops,
+        'xi-lowering': cmd_xi_lowering,
         'helpers': cmd_helpers,
         'runtime-stubs': cmd_runtime_stubs,
         'isel': cmd_isel,

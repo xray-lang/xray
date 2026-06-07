@@ -3,6 +3,7 @@
 @native
 class Set<T> {
     length: int
+    size: int
     add(value: T)
     has(value: T) -> bool
     delete(value: T) -> bool

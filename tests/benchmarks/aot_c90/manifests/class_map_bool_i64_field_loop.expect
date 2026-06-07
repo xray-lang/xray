@@ -1,0 +1,22 @@
+min_ratio=0.90
+# Class Map<bool,int> fields must use typed backing and bool-key direct helpers.
+hot_function=^class_map_bool_i64_field_loop_(fill|scan)_[0-9]+$
+hot_function_count=2
+hot_xrvalue_count=0
+hot_xrvalue_local_count=0
+hot_box_count=0
+hot_unbox_count=0
+hot_runtime_arith_calls=0
+hot_runtime_int_checked_arith_calls=0
+hot_runtime_array_calls=0
+hot_runtime_map_calls=6
+hot_runtime_set_calls=0
+hot_dynamic_dispatch_calls=0
+hot_runtime_property_calls=0
+hot_typed_array_runtime_calls=0
+hot_typed_array_bounds_check_count=0
+hot_typed_array_capacity_check_count=0
+hot_pending_error_check_count=0
+dynamic_dispatch_calls=0
+runtime_property_calls=0
+vm_jit_include_count=0

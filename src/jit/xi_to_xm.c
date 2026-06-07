@@ -16,6 +16,7 @@
  */
 
 #include "xi_to_xm.h"
+#include "xi_to_xm_dispatch_gen.h"
 #include "xm.h"
 #include "xm_ops.h"
 #include "xm_jit_runtime.h"
@@ -949,22 +950,108 @@ static XmRef lower_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_const_i64(ctx->xm_func, 0);
 }
 
+static XmRef xi2xm_const(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_const(ctx, blk, v);
+}
+
+static XmRef xi2xm_identity(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    if (v->nargs >= 1)
+        return get_ref(ctx, v->args[0]);
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
+static XmRef xi2xm_copy(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_identity(ctx, blk, v);
+}
+
+static XmRef xi2xm_move(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_identity(ctx, blk, v);
+}
+
+static XmRef xi2xm_add(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_sub(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_mul(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_eq(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_lt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_le(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_zero_extend(LowerCtx *ctx, XmBlock *blk, XiValue *v, int64_t mask) {
+    XmRef a = get_ref(ctx, v->args[0]);
+    XmRef m = xm_const_i64(ctx->xm_func, mask);
+    return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
+}
+
+static XmRef xi2xm_sign_extend_shift(LowerCtx *ctx, XmBlock *blk, XiValue *v, int64_t shift) {
+    XmRef a = get_ref(ctx, v->args[0]);
+    XmRef sh = xm_const_i64(ctx->xm_func, shift);
+    XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
+    return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
+}
+
+static XmRef xi2xm_narrow_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFF);
+}
+
+static XmRef xi2xm_narrow_i16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 48);
+}
+
+static XmRef xi2xm_narrow_u32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFFFFFFFF);
+}
+
+static XmRef xi2xm_widen_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFF);
+}
+
+static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
+    XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
+    switch (v->op) {
+#define XI2XM_GENERATED_CASE(op, name, driver)                                                     \
+    case XI_##op:                                                                                  \
+        (void) name;                                                                               \
+        *out = driver(ctx, blk, v);                                                                \
+        return true;
+        XI_TO_XM_LOWERING_DRIVERS(XI2XM_GENERATED_CASE)
+#undef XI2XM_GENERATED_CASE
+        case XI_OP_COUNT:
+            break;
+    }
+    return false;
+}
+
 /* ========== Value Lowering Dispatch ========== */
 
 static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    switch (v->op) {
-        case XI_CONST:
-            return lower_const(ctx, blk, v);
+    XmRef generated = XM_NONE;
+    if (xi_to_xm_lower_generated(ctx, blk, v, &generated))
+        return generated;
 
+    switch (v->op) {
         case XI_PARAM: {
             /* Parameters are pre-mapped during initialization */
             return get_ref(ctx, v);
         }
 
         /* Binary arithmetic + bitwise */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
         case XI_DIV:
         case XI_MOD:
         case XI_BAND:
@@ -981,10 +1068,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return lower_unary(ctx, blk, v);
 
         /* Comparison */
-        case XI_EQ:
         case XI_NE:
-        case XI_LT:
-        case XI_LE:
         case XI_GT:
         case XI_GE:
         case XI_EQ_STRICT:
@@ -1001,19 +1085,12 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
         /* Explicit width narrowing/widening — ensures correct value range
          * in the JIT register. Unsigned: AND mask. Signed: SHL+SAR. */
-        case XI_NARROW_U8:
-        case XI_WIDEN_U8: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef m = xm_const_i64(ctx->xm_func, 0xFF);
-            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
-        }
         case XI_NARROW_U16:
         case XI_WIDEN_U16: {
             XmRef a = get_ref(ctx, v->args[0]);
             XmRef m = xm_const_i64(ctx->xm_func, 0xFFFF);
             return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
         }
-        case XI_NARROW_U32:
         case XI_WIDEN_U32: {
             XmRef a = get_ref(ctx, v->args[0]);
             XmRef m = xm_const_i64(ctx->xm_func, 0xFFFFFFFF);
@@ -1026,7 +1103,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
             return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
         }
-        case XI_NARROW_I16:
         case XI_WIDEN_I16: {
             XmRef a = get_ref(ctx, v->args[0]);
             XmRef sh = xm_const_i64(ctx->xm_func, 48);
@@ -1334,12 +1410,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 return get_ref(ctx, v->args[0]);
             return xm_const_i64(ctx->xm_func, 0);
 
-        /* Identity / type narrowing — transparent passthrough */
-        case XI_COPY:
-            if (v->nargs >= 1)
-                return get_ref(ctx, v->args[0]);
-            return xm_const_i64(ctx->xm_func, 0);
-
         /* Builtins lowered as generic runtime calls */
         case XI_ASSERT:
         case XI_ASSERT_EQ:
@@ -1432,13 +1502,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             emit_helper_call(ctx, blk, XM_HELPER_rc_drop, extra, args, 1);
             return xm_const_i64(ctx->xm_func, 0);
         }
-        case XI_MOVE:
-            /* Ownership transfer: no runtime refcount change, the SSA value
-             * simply flows to its consumer. Transparent passthrough. */
-            if (v->nargs >= 1)
-                return get_ref(ctx, v->args[0]);
-            return xm_const_i64(ctx->xm_func, 0);
-
         case XI_DROP_REUSE: {
             XR_DCHECK(v->nargs >= 1, "drop_reuse: need value arg");
             XmRef val = get_ref(ctx, v->args[0]);

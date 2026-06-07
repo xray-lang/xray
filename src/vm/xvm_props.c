@@ -187,6 +187,11 @@ XR_FUNC XrDispatchAction vm_setprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                 case XR_NATIVE_STRING:
                     *(XrString **) fp = (XrString *) value.ptr;
                     break;
+                case XR_NATIVE_ARRAY_REF:
+                case XR_NATIVE_MAP_REF:
+                case XR_NATIVE_SET_REF:
+                    *(XrValue *) fp = value;
+                    break;
                 default:
                     break;
             }
@@ -437,7 +442,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     // Map property access
     if (XR_IS_MAP(obj)) {
         XrMap *map = XR_TO_MAP(obj);
-        if (prop_symbol == SYMBOL_LENGTH) {
+        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
             base[a] = xr_int((xr_Integer) xr_map_size(map));
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(xr_map_is_empty(map));
@@ -480,7 +485,7 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     // Set property access
     if (XR_IS_SET(obj)) {
         struct XrSet *set = XR_TO_SET(obj);
-        if (prop_symbol == SYMBOL_LENGTH) {
+        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
             base[a] = xr_int((xr_Integer) xr_set_size(set));
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(xr_set_is_empty(set));
@@ -515,6 +520,10 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_TO_ARRAY) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_TO_ARRAY));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_VALUES) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_set_get_handler(isolate, SYMBOL_VALUES));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_FOREACH) {
             XrBoundMethod *bm =
@@ -667,8 +676,10 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
     // Array property access
     if (XR_IS_ARRAY(obj)) {
         XrArray *array = XR_TO_ARRAY(obj);
-        if (prop_symbol == SYMBOL_LENGTH) {
+        if (prop_symbol == SYMBOL_LENGTH || prop_symbol == SYMBOL_SIZE) {
             base[a] = xr_int((xr_Integer) array->length);
+        } else if (prop_symbol == SYMBOL_CAPACITY) {
+            base[a] = xr_int((xr_Integer) array->capacity);
         } else if (prop_symbol == SYMBOL_IS_EMPTY) {
             base[a] = xr_bool(array->length == 0);
         } else if (prop_symbol == SYMBOL_KEYS) {
@@ -727,6 +738,34 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
         } else if (prop_symbol == SYMBOL_CLEAR) {
             XrBoundMethod *bm =
                 xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_CLEAR));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_RESERVE) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_RESERVE));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_RESIZE) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_RESIZE));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_LOADU32LE) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_LOADU32LE));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_LOADU64LE) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_LOADU64LE));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_COPYWITHIN) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_COPYWITHIN));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_COPYFROM) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_COPYFROM));
+            base[a] = xr_value_from_bound_method(bm);
+        } else if (prop_symbol == SYMBOL_REPEATFROM) {
+            XrBoundMethod *bm =
+                xr_bound_method_new(isolate, obj, xr_array_get_handler(isolate, SYMBOL_REPEATFROM));
             base[a] = xr_value_from_bound_method(bm);
         } else if (prop_symbol == SYMBOL_ITERATOR) {
             XrBoundMethod *bm =

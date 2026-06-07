@@ -45,6 +45,15 @@ static void xi_own_dump_recursive(XiFunc *f) {
         xi_own_dump_recursive(f->children[i]);
 }
 
+static void xi_rep_cleanup_recursive(XiFunc *f) {
+    if (!f)
+        return;
+    xi_opt_copy_prop(f);
+    xi_opt_dce(f);
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        xi_rep_cleanup_recursive(f->children[i]);
+}
+
 /* ========== Configuration ========== */
 
 XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
@@ -64,6 +73,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
     cfg.budget_ns = XI_BUDGET_JIT_TIER1_NS;
+    cfg.rep_policy = xi_rep_policy_tagged_boundary();
     return cfg;
 }
 
@@ -81,6 +91,8 @@ XR_FUNC XiPipelineConfig xi_pipeline_aot_config(void) {
     cfg.run_emit = false;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
+    cfg.rep_policy = xi_rep_policy_native_boundary();
+    cfg.disabled_opt_passes = XI_OPT_DISABLE_IVSR;
     return cfg;
 }
 
@@ -127,7 +139,8 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
             level = XI_OPT_LIGHT;
 
         XiPipelineStats stats;
-        xi_opt_run_pipeline_ex(ir, level, &stats, cfg->budget_ns);
+        xi_opt_run_pipeline_ex_with_mask(ir, level, &stats, cfg->budget_ns,
+                                         cfg->disabled_opt_passes);
 
         /* Optional dump: XRAY_XI_STATS=1 prints per-function stats */
         const char *env = getenv("XRAY_XI_STATS");
@@ -184,8 +197,9 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     /* SelectRepresentations: insert BOX/UNBOX at representation boundaries.
      * Run after general optimization so constants/copies are resolved first. */
     if (cfg->run_select_rep) {
-        xi_opt_select_rep(ir);
+        xi_opt_select_rep_with_policy(ir, &cfg->rep_policy);
         xi_opt_box_elim(ir);
+        xi_rep_cleanup_recursive(ir);
 #ifndef NDEBUG
         if (cfg->run_verify) {
             char rep_errbuf[512];

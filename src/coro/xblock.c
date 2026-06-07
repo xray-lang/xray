@@ -396,7 +396,10 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
             xr_await_wait_token_finish(&wait->await_token);
             xr_timer_wait_token_finish(&wait->timer_token);
         }
-        return block_result(XR_CORO_BLOCK_READY, task->result, true);
+        uint8_t task_state = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (task_state == XR_TASK_COMPLETED)
+            return block_result(XR_CORO_BLOCK_READY, task->result, true);
+        return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
     }
 
     if (task && xr_task_is_done(task)) {

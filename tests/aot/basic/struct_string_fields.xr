@@ -1,0 +1,18 @@
+struct Item {
+    count: int
+    name: string
+}
+
+let item = Item{count: 2, name: "hi"}
+item.count = item.count + 3
+print(item.count)
+print(item.name)
+
+fn bump(n: int) -> int {
+    let local = Item{count: n, name: "local"}
+    local.count = local.count + 4
+    print(local.name)
+    return local.count
+}
+
+print(bump(6))

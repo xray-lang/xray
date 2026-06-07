@@ -26,6 +26,21 @@ static bool block_is_empty(const XiBlock *blk) {
     return blk->nvalues == 0 && blk->phis == NULL;
 }
 
+static bool pred_would_form_parallel_if_edge(const XiBlock *pred, const XiBlock *skip,
+                                             const XiBlock *succ) {
+    if (!pred || !skip || !succ || pred->kind != XI_BLOCK_IF)
+        return false;
+    bool reaches_skip = false;
+    bool reaches_succ = false;
+    for (uint16_t i = 0; i < 2; i++) {
+        if (pred->succs[i] == succ)
+            reaches_succ = true;
+        if (pred->succs[i] == skip)
+            reaches_skip = true;
+    }
+    return reaches_skip && reaches_succ;
+}
+
 /* ========== Empty Block Elimination ========== */
 
 /* Try to eliminate an empty PLAIN block by redirecting its preds to
@@ -51,6 +66,13 @@ static bool try_eliminate_empty(XiFunc *f, XiBlock *blk) {
 
     XiBlock *succ = blk->succs[0];
     XR_DCHECK(succ != NULL, "empty block has NULL successor");
+
+    if (xi_cfg_phi_count(succ) > 0) {
+        for (uint16_t i = 0; i < blk->npreds; i++) {
+            if (pred_would_form_parallel_if_edge(blk->preds[i], blk, succ))
+                return false;
+        }
+    }
 
     uint16_t blk_idx = xi_cfg_pred_index(succ, blk);
     if (blk_idx == succ->npreds)

@@ -44,6 +44,90 @@ static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
     return false;
 }
 
+static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd) {
+    if (!l || !cd || !cd->super_name || cd->super_module)
+        return NULL;
+    for (int i = 0; i < XI_LOWER_MAX_VARS; i++) {
+        XiClassData *data = l->shared_slot_classes[i];
+        if (data && data->class_name && strcmp(data->class_name, cd->super_name) == 0 &&
+            data->instance_layout)
+            return data;
+    }
+    return NULL;
+}
+
+static XrStructLayout *class_make_native_instance_layout(XiLower *l, ClassDeclNode *cd,
+                                                         uint16_t *out_inherited) {
+    if (!l || !l->func || !l->isolate || !cd)
+        return NULL;
+
+    XiClassData *super_data = class_find_native_super(l, cd);
+    if ((cd->super_name || cd->super_module) && !super_data)
+        return NULL;
+    uint16_t inherited = super_data ? super_data->instance_layout->field_count : 0;
+    if (out_inherited)
+        *out_inherited = inherited;
+
+    int instance_fields = 0;
+    for (int i = 0; i < cd->field_count; i++) {
+        if (cd->fields[i]->type != AST_FIELD_DECL)
+            continue;
+        FieldDeclNode *f = &cd->fields[i]->as.field_decl;
+        if (!f->is_static)
+            instance_fields++;
+    }
+    int total_fields = (int) inherited + instance_fields;
+    if (total_fields <= 0 || total_fields > XR_MAX_STRUCT_FIELDS)
+        return NULL;
+
+    XrStructLayout *layout =
+        (XrStructLayout *) xi_func_arena_alloc(l->func, sizeof(XrStructLayout));
+    if (!layout)
+        return NULL;
+    layout->field_count = (uint16_t) total_fields;
+    layout->field_names = (const char **) xi_func_arena_alloc(
+        l->func, (uint32_t) (sizeof(const char *) * (size_t) total_fields));
+    if (!layout->field_names)
+        return NULL;
+
+    uint16_t out_idx = 0;
+    if (super_data && super_data->instance_layout) {
+        XrStructLayout *parent = super_data->instance_layout;
+        for (uint16_t i = 0; i < parent->field_count; i++) {
+            layout->field_names[out_idx] = parent->field_names ? parent->field_names[i] : NULL;
+            layout->fields[out_idx] = parent->fields[i];
+            out_idx++;
+        }
+    }
+    for (int i = 0; i < cd->field_count; i++) {
+        if (cd->fields[i]->type != AST_FIELD_DECL)
+            continue;
+        FieldDeclNode *f = &cd->fields[i]->as.field_decl;
+        if (f->is_static)
+            continue;
+        if (!f->name || !f->field_type)
+            return NULL;
+        XrType *type = xr_tref_resolve(l->isolate, f->field_type);
+        if (!type || type->kind == XR_KIND_UNKNOWN)
+            return NULL;
+        int native = xr_type_kind_to_native(type->kind, type->native_width);
+        if (native < 0 && type->kind == XR_KIND_ARRAY)
+            native = XR_NATIVE_ARRAY_REF;
+        if (native < 0 && type->kind == XR_KIND_MAP)
+            native = XR_NATIVE_MAP_REF;
+        if (native < 0 && type->kind == XR_KIND_SET)
+            native = XR_NATIVE_SET_REF;
+        if (native < 0 || native == XR_NATIVE_STRING)
+            return NULL;
+        layout->field_names[out_idx] = arena_strdup(l->func, f->name);
+        layout->fields[out_idx].native_type = (uint8_t) native;
+        out_idx++;
+    }
+
+    xr_struct_layout_compute(layout);
+    return layout;
+}
+
 /* Lower a class method body to a child XiFunc.
  * Instance methods get an implicit 'this' parameter at index 0.
  * For constructors, cd provides field declarations so complex
@@ -85,12 +169,19 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
         }
     }
 
+    struct XrType *this_type = ml.type_any;
+    if (is_inst && cd && cd->name) {
+        struct XrType *named_this = xr_type_new_named_instance(l->isolate, cd->name);
+        if (named_this)
+            this_type = named_this;
+    }
+
     /* Instance methods: 'this' is param 0 */
     int base = 0;
     if (is_inst) {
-        XiValue *th = xi_param(ml.func, entry, 0, ml.type_any);
+        XiValue *th = xi_param(ml.func, entry, 0, this_type);
         ml.func->params[0] = th;
-        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, "this", ml.type_any), entry, th);
+        xi_lower_braun_write(&ml, xi_lower_var_create(&ml, 0, "this", this_type), entry, th);
         base = 1;
     }
 
@@ -130,7 +221,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
     ml.func->operator_borrowed = m->is_operator;
 
     if (is_ctor && is_inst && cd) {
-        int this_var_init = xi_lower_var_create(&ml, 0, "this", ml.type_any);
+        int this_var_init = xi_lower_var_create(&ml, 0, "this", this_type);
         XiValue *this_val = xi_lower_braun_read(&ml, this_var_init, ml.cur_block);
         for (int fi = 0; fi < cd->field_count; fi++) {
             if (cd->fields[fi]->type != AST_FIELD_DECL)
@@ -162,7 +253,7 @@ static XiFunc *lower_method_as_func(XiLower *l, MethodDeclNode *m, bool is_inst,
      * convention (xemit_return(emitter, 0, 1) at end of constructor). */
     if (ml.cur_block) {
         if (is_ctor && is_inst) {
-            int this_var = xi_lower_var_create(&ml, 0, "this", ml.type_any);
+            int this_var = xi_lower_var_create(&ml, 0, "this", this_type);
             XiValue *this_ret = xi_lower_braun_read(&ml, this_var, ml.cur_block);
             xi_block_set_return(ml.cur_block, this_ret);
         } else {
@@ -338,13 +429,20 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
     /* Propagate struct_layout from analyzer for VALUE_TYPE classes.
      * The layout is owned by XrClassInfo and outlives the IR arena. */
     data->struct_layout = NULL;
+    data->instance_layout = NULL;
+    data->inherited_field_count = 0;
     data->is_cycle_candidate = false;
     if (cd->name && l->analyzer) {
         XaSymbol *cls_sym = xa_analyzer_lookup(l->analyzer, cd->name);
+        if (!cls_sym)
+            cls_sym = xa_analyzer_lookup_deep(l->analyzer, cd->name);
         if (cls_sym) {
             XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, cls_sym);
             if (links && links->class_info && links->class_info->struct_layout)
                 data->struct_layout = links->class_info->struct_layout;
+            if (links && links->class_info && !links->class_info->struct_layout)
+                data->instance_layout =
+                    class_make_native_instance_layout(l, cd, &data->inherited_field_count);
             if (links && links->type && links->type->is_cycle_candidate)
                 data->is_cycle_candidate = true;
         }

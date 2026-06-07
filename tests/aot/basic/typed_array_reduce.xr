@@ -1,0 +1,10 @@
+let values: Array<int> = []
+values.push(1)
+values.push(2)
+values.push(3)
+
+let sum = values.reduce(fn(acc: int, x: int) -> int {
+    return acc + x
+}, 0)
+
+print(sum)

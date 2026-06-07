@@ -72,3 +72,16 @@ print(m.has("b"))         // true
 print(m.get("a"))         // 1
 m.delete("b")
 print(m.has("b"))         // false
+
+// --- Set methods ---
+let st: Set<int> = #[]
+st.add(1)
+st.add(2)
+st.add(1)
+print(st.length)          // 2
+print(st.has(2))          // true
+print(st.delete(2))       // true
+print(st.has(2))          // false
+let stVals = st.values()
+print(stVals.length)      // 1
+print(stVals[0])          // 1

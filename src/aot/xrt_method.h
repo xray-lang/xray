@@ -7,30 +7,9 @@
  *
  * xrt_method.h - AOT-side method dispatch, property access, toString.
  *
- * KEY CONCEPT:
- *   This header lives inside the AOT runtime umbrella (xrt.h) and is
- *   #include'd verbatim into AOT-generated C files. AOT-generated code
- *   must compile and run without any runtime header, so this file has
- *   to be self-contained: it cannot reach into runtime/value/ even
- *   though those tables are the source of truth at the language level.
- *
- *   Concretely the AOT-side methods operate on XrValue (a small
- *   tagged union, see xrt_value.h) and call AOT's bump-allocator
- *   helpers; the runtime side operates on runtime/value/xvalue.h's
- *   XrValue and has access to XrayIsolate / GC. The layouts and tag
- *   numbers are intentionally distinct: the AOT side keeps a
- *   self-contained standalone representation and only reuses selected
- *   source-level names.
- *
- *   The remaining shared invariant is the SYMBOL ID number space:
- *   every XRT_SYM_X below must equal the matching SYMBOL_X in
- *   src/runtime/symbol/xsymbol_table.h, otherwise OP_INVOKE in the
- *   VM and the equivalent xrt_method_N call in AOT-generated C
- *   would route the same method name to different slots. The runtime-
- *   only translation unit src/aot/xrt_symbol_check.c links into
- *   xray_core (never into AOT output) and pairs every XRT_SYM_X with
- *   its SYMBOL_X via _Static_assert; drift fails the build before any
- *   miscompiled AOT binary can ship.
+ * This header is included verbatim into generated C and stays independent
+ * from the VM/runtime value headers. XRT_SYM_* values must match the VM
+ * symbol table; xrt_symbol_check.c validates the shared numeric namespace.
  */
 
 #ifndef XRT_METHOD_H
@@ -39,19 +18,12 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"   // xrt_str_concat, xrt_str_alloc
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
+#include "xrt_array_hof.h"
 
-/* =========================================================================
- * Builtin method symbol IDs.
- *
- * The numeric constants live in xrt_method_symbols.h so that xray_core
- * TUs can consume them without dragging xrt_arc.h into link. They are
- * paired with SYMBOL_X via _Static_assert in xrt_symbol_check.c.
- * ========================================================================= */
+/* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
 
-/* =========================================================================
- * toString helper
- * ========================================================================= */
+/* toString helper. */
 
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
     if (slot_hint == 1 || val.tag == XR_TAG_I64) {
@@ -147,18 +119,14 @@ static XrValue xrt_to_bool(XrValue val) {
         return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->len > 0);
     if (val.tag == XR_TAG_MAP)
         return XR_FROM_BOOL(((xrt_map_t *) val.ptr)->len > 0);
+    if (val.tag == XR_TAG_SET)
+        return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
     return XR_TRUE_VAL;
 }
 
-/* =========================================================================
- * Fixed-arity method dispatch (no varargs, inlinable by C compiler)
- *
- * Replaces the old varargs xrt_invoke_method. Three fixed-arity versions
- * for 0, 1, and 2 arguments. The C compiler can inline these because
- * they have known signatures (unlike varargs which block inlining).
- * ========================================================================= */
+/* Fixed-arity method dispatch is intentionally inlineable by the C compiler. */
 
-/* String 0-arg method dispatch (extracted to keep xrt_method_0 under 150 lines) */
+/* String 0-arg method dispatch. */
 static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv, int sym) {
     if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
         return XR_FROM_INT(slen);
@@ -239,6 +207,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
             return XR_FROM_INT(a->len);
+        if (sym == XRT_SYM_CAPACITY)
+            return XR_FROM_INT(a->cap);
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(a->len == 0);
         if (sym == XRT_SYM_POP && a->len > 0) {
@@ -299,18 +269,44 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_KEYS) {
             XrValue arr = xrt_array_new(m->len);
             for (int64_t i = 0; i < m->len; i++)
-                xrt_array_push(arr, m->entries[i].key);
+                xrt_array_push(arr, xrt_map_key_get(m, i));
             return arr;
         }
         if (sym == XRT_SYM_VALUES) {
             XrValue arr = xrt_array_new(m->len);
             for (int64_t i = 0; i < m->len; i++)
-                xrt_array_push(arr, m->entries[i].val);
+                xrt_array_push(arr, xrt_map_value_get(m, i));
             return arr;
         }
     }
-    if (recv.tag == XR_TAG_STRBUF)
-        return xrt_strbuf_finish(recv);
+    if (recv.tag == XR_TAG_SET) {
+        xrt_set_t *s = (xrt_set_t *) recv.ptr;
+        if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+            return XR_FROM_INT(s->len);
+        if (sym == XRT_SYM_IS_EMPTY)
+            return XR_FROM_BOOL(s->len == 0);
+        if (sym == XRT_SYM_CLEAR) {
+            xrt_set_clear(s);
+            return XR_NULL_VAL;
+        }
+        if (sym == XRT_SYM_VALUES)
+            return xrt_set_values(s);
+    }
+    if (recv.tag == XR_TAG_STRBUF) {
+        xrt_strbuf_t *sb = (xrt_strbuf_t *) recv.ptr;
+        if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
+            return XR_FROM_INT(sb ? sb->len : 0);
+        if (sym == XRT_SYM_CLEAR) {
+            if (sb) {
+                sb->len = 0;
+                if (sb->buf)
+                    sb->buf[0] = 0;
+            }
+            return recv;
+        }
+        if (sym == XRT_SYM_TOSTRING)
+            return xrt_strbuf_finish(recv);
+    }
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
@@ -338,7 +334,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
-/* String 1-arg method dispatch (extracted to keep xrt_method_1 under 150 lines) */
+/* String 1-arg method dispatch. */
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
     if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0))
@@ -462,11 +458,45 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_BYTE_AT && arg0.tag == XR_TAG_I64) {
         int64_t idx = arg0.i;
         if (idx < 0 || idx >= slen)
-            return xr_box_str("");
+            return XR_NULL_VAL;
         XrValue sv = xrt_str_alloc(1);
         ((char *) sv.ptr)[0] = s[idx];
         ((char *) sv.ptr)[1] = 0;
         return sv;
+    }
+    if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
+        int64_t target = arg0.i;
+        if (target < 0)
+            return XR_FROM_INT(-1);
+        const unsigned char *p = (const unsigned char *) s;
+        const unsigned char *end = p + slen;
+        for (int64_t char_index = 0; p < end; char_index++) {
+            int64_t remaining = (int64_t) (end - p);
+            uint32_t cp = p[0];
+            int advance = 1;
+            if ((p[0] & 0x80u) == 0) {
+                cp = p[0];
+            } else if ((p[0] & 0xE0u) == 0xC0u && remaining >= 2 && (p[1] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x1Fu) << 6) | (uint32_t) (p[1] & 0x3Fu);
+                advance = 2;
+            } else if ((p[0] & 0xF0u) == 0xE0u && remaining >= 3 && (p[1] & 0xC0u) == 0x80u &&
+                       (p[2] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x0Fu) << 12) | ((uint32_t) (p[1] & 0x3Fu) << 6) |
+                     (uint32_t) (p[2] & 0x3Fu);
+                advance = 3;
+            } else if ((p[0] & 0xF8u) == 0xF0u && remaining >= 4 && (p[1] & 0xC0u) == 0x80u &&
+                       (p[2] & 0xC0u) == 0x80u && (p[3] & 0xC0u) == 0x80u) {
+                cp = ((uint32_t) (p[0] & 0x07u) << 18) | ((uint32_t) (p[1] & 0x3Fu) << 12) |
+                     ((uint32_t) (p[2] & 0x3Fu) << 6) | (uint32_t) (p[3] & 0x3Fu);
+                advance = 4;
+            } else {
+                cp = 0xFFFD;
+            }
+            if (char_index == target)
+                return XR_FROM_INT(cp);
+            p += advance;
+        }
+        return XR_FROM_INT(-1);
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
@@ -482,6 +512,14 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             xrt_array_push(recv, arg0);
             return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
         }
+        if (sym == XRT_SYM_RESERVE)
+            return xrt_array_reserve_value(recv, arg0);
+        if (sym == XRT_SYM_RESIZE)
+            return xrt_array_resize_value(recv, arg0, XR_FROM_INT(0));
+        if (sym == XRT_SYM_LOADU32LE)
+            return xrt_bytes_load_u32_le(recv, arg0);
+        if (sym == XRT_SYM_LOADU64LE)
+            return xrt_bytes_load_u64_le(recv, arg0);
         if (sym == XRT_SYM_UNSHIFT) {
             xrt_array_push(recv, XR_NULL_VAL);
             a = (xrt_array_t *) recv.ptr;
@@ -546,37 +584,18 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
                 start += a->len;
             if (start < 0)
                 start = 0;
-            if (start >= a->len)
-                return xrt_array_new(0);
-            int64_t rlen = a->len - start;
-            XrValue arr = xrt_array_new(rlen);
-            for (int64_t i = 0; i < rlen; i++)
-                xrt_array_push(arr, xr_typed_get(a->data, (int32_t) (start + i), a->elem_type));
-            return arr;
+            return xrt_array_slice_view(recv, start, a->len);
         }
-        /* Higher-order methods: callback is an AOT closure (XR_TAG_CLOSURE).
-         * The closure's fn pointer has signature:
-         *   XrValue (*)(xrt_closure_t *_cl, XrValue elem)
-         * where _cl points to the closure itself (for upvalue access). */
+        /* Higher-order callbacks are AOT closures. */
         if (arg0.tag == XR_TAG_CLOSURE) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
             typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
             xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
             if (sym == XRT_SYM_MAP) {
-                XrValue arr = xrt_array_new(a->len);
-                for (int64_t i = 0; i < a->len; i++)
-                    xrt_array_push(arr, fn(cl, xr_typed_get(a->data, (int32_t) i, a->elem_type)));
-                return arr;
+                return xrt_array_map_typed(recv, arg0, XR_ELEM_ANY);
             }
             if (sym == XRT_SYM_FILTER) {
-                XrValue arr = xrt_array_new(a->len);
-                for (int64_t i = 0; i < a->len; i++) {
-                    XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                    XrValue r = fn(cl, elem);
-                    if (xr_truthy(r))
-                        xrt_array_push(arr, elem);
-                }
-                return arr;
+                return xrt_array_filter_typed(recv, arg0);
             }
             if (sym == XRT_SYM_FOREACH) {
                 for (int64_t i = 0; i < a->len; i++)
@@ -589,33 +608,33 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_GET)
             return xrt_map_get(m, arg0);
-        if (sym == XRT_SYM_HAS) {
-            for (int64_t i = 0; i < m->len; i++)
-                if (xrt_key_eq(m->entries[i].key, arg0))
-                    return XR_FROM_BOOL(1);
-            return XR_FROM_BOOL(0);
+        if (sym == XRT_SYM_HAS)
+            return XR_FROM_BOOL(xrt_map_has(m, arg0));
+        if (sym == XRT_SYM_DELETE)
+            return XR_FROM_BOOL(xrt_map_delete(m, arg0));
+    }
+    if (recv.tag == XR_TAG_SET) {
+        xrt_set_t *s = (xrt_set_t *) recv.ptr;
+        if (sym == XRT_SYM_SET) {
+            (void) xrt_set_add(s, arg0);
+            return XR_NULL_VAL;
         }
-        if (sym == XRT_SYM_DELETE) {
-            for (int64_t i = 0; i < m->len; i++) {
-                if (xrt_key_eq(m->entries[i].key, arg0)) {
-                    m->entries[i] = m->entries[--m->len];
-                    return XR_FROM_BOOL(1);
-                }
-            }
-            return XR_FROM_BOOL(0);
-        }
+        if (sym == XRT_SYM_HAS)
+            return XR_FROM_BOOL(xrt_set_has(s, arg0));
+        if (sym == XRT_SYM_DELETE)
+            return XR_FROM_BOOL(xrt_set_delete(s, arg0));
     }
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));
     }
-    /* toFixed(digits): float receiver, int arg */
+    /* toFixed(digits). */
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
         return xrt_str_concat(buf, "");
     }
-    /* max/min: polymorphic (int or float receiver+arg) */
+    /* max/min accept int or float operands. */
     if (sym == XRT_SYM_MAX) {
         if (recv.tag == XR_TAG_I64 && arg0.tag == XR_TAG_I64)
             return XR_FROM_INT(recv.i > arg0.i ? recv.i : arg0.i);
@@ -663,7 +682,7 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         size_t olen = strlen(old_s), nlen = strlen(new_s);
         if (olen == 0)
             return recv;
-        /* Count occurrences first */
+        /* Count occurrences before allocating the result. */
         int count = 0;
         const char *p = s;
         while ((p = strstr(p, old_s)) != NULL) {
@@ -746,14 +765,12 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             start = 0;
         if (end > a->len)
             end = a->len;
-        if (start >= end)
-            return xrt_array_new(0);
-        int64_t rlen = end - start;
-        XrValue arr = xrt_array_new(rlen);
-        for (int64_t i = 0; i < rlen; i++)
-            xrt_array_push(arr, xr_typed_get(a->data, (int32_t) (start + i), a->elem_type));
-        return arr;
+        return xrt_array_slice_view(recv, start, end);
     }
+    if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
+        return xrt_array_reduce_typed(recv, arg0, arg1);
+    if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_RESIZE)
+        return xrt_array_resize_value(recv, arg0, arg1);
     if (recv.tag == XR_TAG_MAP && sym == XRT_SYM_SET) {
         xrt_map_set((xrt_map_t *) recv.ptr, arg0, arg1);
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
@@ -761,36 +778,6 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
 }
 
-/* =========================================================================
- * Inline property access (replaces extern xrt_vm_getprop for known types)
- *
- * Handles .length and .isEmpty for Array, Map, String.
- * Returns XR_TAG_NULL for unknown properties.
- * ========================================================================= */
-
-static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
-    if (obj.tag == XR_TAG_ARRAY) {
-        xrt_array_t *a = (xrt_array_t *) obj.ptr;
-        if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(a->len);
-        if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(a->len == 0);
-    }
-    if (obj.tag == XR_TAG_MAP) {
-        xrt_map_t *m = (xrt_map_t *) obj.ptr;
-        if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(m->len);
-        if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(m->len == 0);
-    }
-    if (XR_IS_STR(obj)) {
-        const char *s = (const char *) obj.ptr;
-        if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT((int64_t) strlen(s));
-        if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(s[0] == '\0');
-    }
-    return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
-}
+#include "xrt_getprop.inc.c"
 
 #endif  // XRT_METHOD_H

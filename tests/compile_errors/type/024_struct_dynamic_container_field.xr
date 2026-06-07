@@ -1,0 +1,8 @@
+struct Bag {
+    data: Array<int>
+}
+
+fn main() {
+    let bag = Bag{data: []}
+    print(bag.data.length)
+}

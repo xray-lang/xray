@@ -401,8 +401,10 @@ XrType *xr_type_new_datetime(XrayIsolate *X) {
 }
 
 XrType *xr_type_new_bytes(XrayIsolate *X) {
-    /* Bytes is a type alias for Array<int> (runtime storage: XR_ELEM_U8). */
-    return xr_type_new_array(X, xr_type_new(X, XR_KIND_INT));
+    XrType *elem = xr_type_new_int_width(X, XR_NATIVE_U8);
+    if (!elem)
+        return NULL;
+    return xr_type_new_array(X, elem);
 }
 
 XrType *xr_type_new_regex(XrayIsolate *X) {

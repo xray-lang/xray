@@ -5,6 +5,7 @@
 
 #include "../../../src/ir/xi_opt_licm.h"
 #include "../../../src/ir/xi_tbaa.h"
+#include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_op_name.h"
 #include "../../../src/runtime/value/xtype.h"
@@ -15,6 +16,7 @@
 #include <string.h>
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
+static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -122,6 +124,61 @@ TEST(hoist_pure_add) {
             found_in_body = true;
     }
     ASSERT(!found_in_body);
+
+    xi_func_free(f);
+}
+
+/* ========== Test: hoist constant operands before dependent values ========== */
+
+TEST(hoist_const_operand_before_dependent_value) {
+    /*
+     * A constant defined inside the loop is still an SSA definition.  LICM
+     * must move it before moving a dependent pure value to the preheader.
+     */
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+
+    entry->kind = XI_BLOCK_PLAIN;
+    wire(entry, header, 0);
+
+    header->kind = XI_BLOCK_IF;
+    wire(header, body, 0);
+    wire(header, exit_blk, 1);
+
+    body->kind = XI_BLOCK_PLAIN;
+    wire(body, header, 0);
+
+    exit_blk->kind = XI_BLOCK_RETURN;
+
+    XiValue *outer = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    outer->aux_int = 44;
+
+    XiValue *cond = xi_value_new(f, header, XI_CONST, &stub_int, 0);
+    cond->aux_int = 1;
+    header->control = cond;
+
+    XiValue *inner_const = xi_value_new(f, body, XI_CONST, &stub_int, 0);
+    inner_const->aux_int = 255;
+
+    XiValue *cmp = xi_value_new(f, body, XI_EQ, &stub_bool, 2);
+    cmp->args[0] = outer;
+    cmp->args[1] = inner_const;
+
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    XiPassChange chg = xi_opt_licm(f);
+    ASSERT(chg.values_changed);
+    ASSERT(inner_const->block == entry);
+    ASSERT(cmp->block == entry);
+
+    char errbuf[256];
+    ASSERT(xi_verify(f, errbuf, sizeof(errbuf)));
 
     xi_func_free(f);
 }
@@ -642,6 +699,7 @@ int main(void) {
     printf("=== Xi LICM Tests ===\n\n");
 
     run_hoist_pure_add();
+    run_hoist_const_operand_before_dependent_value();
     run_hoist_const_load();
     run_hoist_disjoint_load();
     run_no_hoist_aliasing_load();

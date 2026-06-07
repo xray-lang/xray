@@ -10,24 +10,24 @@
  * Walks XiFunc -> XiBlock -> XiValue and emits equivalent C code.
  *
  * Strategy:
- *   - All locals declared at function top (C89 style) to avoid
- *     scope issues across labels.
+ *   - PHI locals are declared at function top to avoid scope issues across labels.
  *   - Each basic block emits a label (L0:, L1:, ...).
- *   - PHI nodes are eliminated by inserting assignments before
- *     jumps in predecessor blocks.
+ *   - PHI nodes are eliminated by inserting assignments before predecessor jumps.
  *   - Value representation (I64/F64/TAGGED) read from v->rep,
  *     populated by xi_opt_select_rep in the pipeline.
  */
-
 #include "xi_cgen.h"
+#include "xi_to_c_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_op_name.h"
 #include "../ir/xi_opt.h"
 #include "../ir/xi_own.h"
+#include "../ir/xi_range.h"
 #include "../base/xdefs.h"
 #include "../runtime/class/xenum.h"
 #include "../runtime/value/xstruct_layout.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -35,12 +35,7 @@
 #include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <inttypes.h>
-
-/* Iterator/hasNext/next symbols defined in xrt_method_symbols.h
- * with values matching SYMBOL_ITERATOR(54)/HASNEXT(56)/NEXT(57). */
-
 /* ========== Representation Helpers ========== */
-
 /* Read the stored representation set by select_rep.
  * select_rep always runs in the AOT pipeline before code generation. */
 static inline XrRep cg_rep(const XiValue *v) {
@@ -58,12 +53,141 @@ static const char *ctype_str(XrRep rep) {
     }
 }
 
+static const char *cg_native_int_ctype(uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return "int8_t";
+        case XR_NATIVE_U8:
+            return "uint8_t";
+        case XR_NATIVE_I16:
+            return "int16_t";
+        case XR_NATIVE_U16:
+            return "uint16_t";
+        case XR_NATIVE_I32:
+            return "int32_t";
+        case XR_NATIVE_U32:
+            return "uint32_t";
+        default:
+            return NULL;
+    }
+}
+
+static uint8_t cg_narrow_int_native_width(uint16_t op) {
+    switch (op) {
+        case XI_NARROW_I8:
+            return XR_NATIVE_I8;
+        case XI_NARROW_U8:
+            return XR_NATIVE_U8;
+        case XI_NARROW_I16:
+            return XR_NATIVE_I16;
+        case XI_NARROW_U16:
+            return XR_NATIVE_U16;
+        case XI_NARROW_I32:
+            return XR_NATIVE_I32;
+        case XI_NARROW_U32:
+            return XR_NATIVE_U32;
+        default:
+            return 0;
+    }
+}
+
+static bool cg_const_int_fits_native_width(int64_t value, uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return value >= INT8_MIN && value <= INT8_MAX;
+        case XR_NATIVE_U8:
+            return value >= 0 && value <= UINT8_MAX;
+        case XR_NATIVE_I16:
+            return value >= INT16_MIN && value <= INT16_MAX;
+        case XR_NATIVE_U16:
+            return value >= 0 && value <= UINT16_MAX;
+        case XR_NATIVE_I32:
+            return value >= INT32_MIN && value <= INT32_MAX;
+        case XR_NATIVE_U32:
+            return value >= 0 && (uint64_t) value <= UINT32_MAX;
+        default:
+            return false;
+    }
+}
+
+static bool cg_value_narrow_local_native_width(const XiValue *v, uint8_t depth,
+                                               uint8_t *out_native_width) {
+    if (!v || cg_rep(v) != XR_REP_I64 || depth > 8)
+        return false;
+
+    uint8_t op_width = cg_narrow_int_native_width(v->op);
+    if (op_width != 0) {
+        if (out_native_width)
+            *out_native_width = op_width;
+        return true;
+    }
+
+    if (v->op != XI_PHI)
+        return false;
+
+    uint8_t phi_width = 0;
+    if (v->type && v->type->kind == XR_KIND_INT && v->type->native_width != 0 &&
+        cg_native_int_ctype(v->type->native_width))
+        phi_width = v->type->native_width;
+
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        const XiValue *arg = v->args[i];
+        if (!arg)
+            return false;
+        if (arg->op == XI_CONST)
+            continue;
+        uint8_t arg_width = 0;
+        if (!cg_value_narrow_local_native_width(arg, (uint8_t) (depth + 1), &arg_width) ||
+            !cg_native_int_ctype(arg_width))
+            return false;
+        if (phi_width == 0)
+            phi_width = arg_width;
+        else if (arg_width != phi_width)
+            return false;
+    }
+
+    if (phi_width == 0)
+        return false;
+
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        const XiValue *arg = v->args[i];
+        if (arg && arg->op == XI_CONST && !cg_const_int_fits_native_width(arg->aux_int, phi_width))
+            return false;
+    }
+
+    if (out_native_width)
+        *out_native_width = phi_width;
+    return true;
+}
+
+static const char *local_ctype_str(const XiValue *v) {
+    uint8_t native_width = 0;
+    if (cg_value_narrow_local_native_width(v, 0, &native_width)) {
+        const char *ctype = cg_native_int_ctype(native_width);
+        if (ctype)
+            return ctype;
+    }
+    return ctype_str(cg_rep(v));
+}
+
 static const XiValue *cg_unwrap_identity_value(const XiValue *v) {
     while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
            v->nargs >= 1) {
         v = v->args[0];
     }
     return v;
+}
+
+static bool cg_type_has_no_aot_arc_header(const XrType *type) {
+    return type && (type->kind == XR_KIND_ARRAY || type->kind == XR_KIND_MAP ||
+                    type->kind == XR_KIND_SET || type->kind == XR_KIND_FIXED_ARRAY);
+}
+
+static bool cg_ownership_op_is_noop(const XiValue *v) {
+    if (!v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
+        return false;
+    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 
 /* Check whether an op is void-like (produces no named result).
@@ -140,75 +264,7 @@ static bool cg_is_aot_suspend_op(uint16_t op) {
     }
 }
 
-static bool cg_type_is_channel(const XrType *type) {
-    if (!type)
-        return false;
-    if (type->kind == XR_KIND_CHANNEL)
-        return true;
-    if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
-            if (cg_type_is_channel(type->union_type.members[i]))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool cg_value_type_is_channel(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
-        v = v->args[0];
-    return v && cg_type_is_channel(v->type);
-}
-
-static bool cg_value_type_is_bool(const XiValue *v) {
-    return v && v->type && v->type->kind == XR_KIND_BOOL;
-}
-
-static bool cg_type_is_task(const XrType *type) {
-    if (!type)
-        return false;
-    if (type->kind == XR_KIND_INSTANCE)
-        return type->instance.class_name && strcmp(type->instance.class_name, "Task") == 0;
-    if (type->kind == XR_KIND_UNION) {
-        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
-            if (cg_type_is_task(type->union_type.members[i]))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool cg_value_type_is_task(const XiValue *v) {
-    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
-        v = v->args[0];
-    return v && cg_type_is_task(v->type);
-}
-
-static const char *cg_task_field_helper(const char *field) {
-    if (!field)
-        return NULL;
-    if (strcmp(field, "done") == 0)
-        return "xr_aot_task_done";
-    if (strcmp(field, "cancelled") == 0)
-        return "xr_aot_task_cancelled";
-    if (strcmp(field, "result") == 0)
-        return "xr_aot_task_result";
-    if (strcmp(field, "error") == 0)
-        return "xr_aot_task_error";
-    return NULL;
-}
-
-static bool cg_task_field_needs_xrt_bridge(const char *field) {
-    return field && (strcmp(field, "result") == 0 || strcmp(field, "error") == 0);
-}
-
-static bool cg_channel_method_may_suspend(const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
-        return false;
-    const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "send") == 0 || strcmp(method, "recv") == 0 ||
-                      strcmp(method, "sendTimeout") == 0 || strcmp(method, "recvTimeout") == 0);
-}
+#include "xi_cgen_type_helpers.inc.c"
 
 static const XiImportRef *cg_value_import_ref(const XiValue *v) {
     v = cg_unwrap_identity_value(v);
@@ -262,8 +318,7 @@ static bool cg_value_is_module_import(const XiFunc *f, const XiValue *v, const c
     return false;
 }
 
-#include "xi_cgen_time_helpers.inc"
-
+#include "xi_cgen_time_helpers.inc.c"
 static bool cg_value_needs_aot_coro(const XiFunc *f, const XiValue *v) {
     if (!v)
         return false;
@@ -289,17 +344,20 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 }
 
 /* ========== Codegen Context ========== */
-
 #define CG_MAX_SHARED 512
 #define CG_MAX_METHODS 256
 #define CG_MAX_IMPORTS 256
 #define CG_MAX_SYNC_GO_TARGETS 512
-
+#define CG_MAX_CLASS_FIELD_CACHE 16
+#define CG_MAX_CLASS_FIELD_CACHE_ALIASES 32
+#define CG_MAX_SHARED_NATIVE_EXPORTS 512
 typedef struct {
     const char *class_name; /* owning class (e.g. "Rect") */
     const char *name;       /* method name (e.g. "area") */
     const XiFunc *func;
     const char *module_prefix; /* C function name prefix (NULL = current module) */
+    const XiClassData *class_data;
+    const XrStructLayout *instance_layout;
 } CgMethodEntry;
 
 typedef struct {
@@ -312,6 +370,43 @@ typedef struct {
     const XiFunc *exporter_func;     /* exporter module XiFunc (for class child resolution) */
 } CgImportEntry;
 
+typedef struct {
+    const char *name;
+    const XrType *type;
+    XrRep rep;
+    bool dirty;
+    int16_t layout_index;
+} CgClassFieldCacheEntry;
+
+typedef struct {
+    bool active;
+    bool native_receiver;
+    const XiValue *receiver;
+    const XrStructLayout *layout;
+    const XiClassData *class_data;
+    uint16_t nreceiver_aliases;
+    const XiValue *receiver_aliases[CG_MAX_CLASS_FIELD_CACHE_ALIASES];
+    uint16_t nfields;
+    CgClassFieldCacheEntry fields[CG_MAX_CLASS_FIELD_CACHE];
+} CgClassFieldCache;
+
+typedef struct {
+    bool active;
+    const XiClassData *class_data;
+    const XiFunc *ctor;
+    const char *ctor_prefix;
+    const XiValue *ctor_call;
+} CgSharedNativeInstance;
+
+typedef struct {
+    bool active;
+    const XiModule *module;
+    const char *module_name;
+    int module_index;
+    int slot;
+    const XiClassData *class_data;
+} CgSharedNativeExport;
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -319,6 +414,9 @@ struct XiCgenCtx {
     const XiFunc *shared_funcs[CG_MAX_SHARED];
     const XiClassData *shared_class[CG_MAX_SHARED];
     const XiEnumData *shared_enum[CG_MAX_SHARED];
+    CgSharedNativeInstance shared_native_instances[CG_MAX_SHARED];
+    CgSharedNativeExport shared_native_exports[CG_MAX_SHARED_NATIVE_EXPORTS];
+    int nshared_native_exports;
     int nshared;
     CgMethodEntry methods[CG_MAX_METHODS];
     int nmethod;
@@ -335,10 +433,11 @@ struct XiCgenCtx {
     XiCgenCoroFrameStats coro_frame_stats;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
+    CgClassFieldCache class_field_cache;
 };
 
-#include "xi_cgen_ctx_impl.inc"
-#include "xi_cgen_time_ctx_helpers.inc"
+#include "xi_cgen_ctx_impl.inc.c"
+#include "xi_cgen_time_ctx_helpers.inc.c"
 
 /* Find the constructor child XiFunc from a XiClassData descriptor.
  * Uses arena-safe XiClassMethod array (no AST dependency). */
@@ -376,6 +475,8 @@ static void cg_register_class_methods(XiCgenCtx *ctx, const XiFunc *parent, cons
                     ctx->methods[ctx->nmethod].class_name = cd->class_name;
                     ctx->methods[ctx->nmethod].name = m->name;
                     ctx->methods[ctx->nmethod].func = parent->children[idx];
+                    ctx->methods[ctx->nmethod].class_data = cd;
+                    ctx->methods[ctx->nmethod].instance_layout = cd->instance_layout;
                     ctx->nmethod++;
                 }
             }
@@ -422,33 +523,27 @@ static const XiFunc *cg_lookup_class_ctor(XiCgenCtx *ctx, const char *class_name
     return NULL;
 }
 
-/* Lookup a class instance method by name, optionally filtered by class.
- * If class_name is non-NULL, only match methods of that class.
- * If class_name is NULL, return the last match (most-derived class
- * is registered last due to topo-order scan).
+/* Lookup a class instance method by name and receiver class.
+ * Builtin receivers must never fall through to a class method with the
+ * same source-level name.
  * If out_prefix is non-NULL, stores the method's module prefix (for
  * cross-module class methods; NULL means current module). */
 static const XiFunc *cg_lookup_method(XiCgenCtx *ctx, const char *name, const char *class_name,
                                       const char **out_prefix) {
-    if (!name)
+    if (!name || !class_name)
         return NULL;
-    const XiFunc *last_match = NULL;
-    const char *last_prefix = NULL;
     for (int i = 0; i < ctx->nmethod; i++) {
         if (!ctx->methods[i].name || strcmp(ctx->methods[i].name, name) != 0)
             continue;
-        if (class_name && ctx->methods[i].class_name &&
-            strcmp(ctx->methods[i].class_name, class_name) == 0) {
+        if (ctx->methods[i].class_name && strcmp(ctx->methods[i].class_name, class_name) == 0) {
             if (out_prefix)
                 *out_prefix = ctx->methods[i].module_prefix;
             return ctx->methods[i].func;
         }
-        last_match = ctx->methods[i].func;
-        last_prefix = ctx->methods[i].module_prefix;
     }
     if (out_prefix)
-        *out_prefix = class_name ? NULL : last_prefix;
-    return class_name ? NULL : last_match;
+        *out_prefix = NULL;
+    return NULL;
 }
 
 static const XiFunc *cg_lookup_method_by_index(XiCgenCtx *ctx, const char *class_name,
@@ -481,6 +576,7 @@ static void cg_init_from_module(XiCgenCtx *ctx, XiModule *mod) {
     memset(ctx->shared_funcs, 0, sizeof(ctx->shared_funcs));
     memset(ctx->shared_class, 0, sizeof(ctx->shared_class));
     memset(ctx->shared_enum, 0, sizeof(ctx->shared_enum));
+    memset(ctx->shared_native_instances, 0, sizeof(ctx->shared_native_instances));
     ctx->nshared = mod->init->nshared;
     ctx->nmethod = 0;
     ctx->module = mod;
@@ -594,6 +690,8 @@ typedef struct {
     bool is_class_constructor;
 } CgStaticFunctionCall;
 
+static bool cg_func_needs_aot_coro_ctx(XiCgenCtx *ctx, const XiFunc *f);
+
 static CgStaticFunctionCall cg_no_static_function_call(void) {
     CgStaticFunctionCall call;
     call.func = NULL;
@@ -644,83 +742,7 @@ static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc 
     return NULL;
 }
 
-static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
-                                                            const XiImportRef *ref) {
-    if (!ctx || !ref)
-        return cg_no_static_function_call();
-
-    if (ref->resolved_mod_index >= 0 && ref->resolved_mod_index < ctx->all_nmodules) {
-        const XiModule *target_module = ctx->all_modules[ref->resolved_mod_index];
-        const char *target_module_name = target_module ? target_module->name : NULL;
-        for (int ii = 0; ii < ctx->nimports; ii++) {
-            CgImportEntry *imp = &ctx->imports[ii];
-            if (!imp->target_func)
-                continue;
-            if (imp->target_mod_name && target_module_name &&
-                strcmp(imp->target_mod_name, target_module_name) == 0 && imp->member_name &&
-                ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
-                return imp->target_class
-                           ? cg_static_class_constructor_call(imp->target_func,
-                                                              imp->target_mod_name)
-                           : cg_static_function_call(imp->target_func, imp->target_mod_name);
-            }
-        }
-    }
-
-    for (int ii = 0; ii < ctx->nimports; ii++) {
-        CgImportEntry *imp = &ctx->imports[ii];
-        if (!imp->target_func)
-            continue;
-        if (imp->module_path && ref->module_path &&
-            strcmp(imp->module_path, ref->module_path) == 0 && imp->member_name &&
-            ref->member_name && strcmp(imp->member_name, ref->member_name) == 0) {
-            return imp->target_class
-                       ? cg_static_class_constructor_call(imp->target_func, imp->target_mod_name)
-                       : cg_static_function_call(imp->target_func, imp->target_mod_name);
-        }
-    }
-    return cg_no_static_function_call();
-}
-
-static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, const XiFunc *current,
-                                                            const XiValue *callee) {
-    if (!callee)
-        return cg_no_static_function_call();
-
-    if ((callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY ||
-         callee->op == XI_MOVE) &&
-        callee->nargs >= 1) {
-        CgStaticFunctionCall inner = cg_resolve_static_function_call(ctx, current, callee->args[0]);
-        if (inner.func)
-            return inner;
-    }
-
-    if (callee->op == XI_CLOSURE_NEW && callee->aux) {
-        const XiFunc *target = (const XiFunc *) callee->aux;
-        return cg_static_function_call(target, cg_module_prefix_for_func(ctx, target));
-    }
-
-    if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL && current &&
-        current->name) {
-        return cg_static_function_call(current, NULL);
-    }
-
-    if (callee->op == XI_GET_SHARED && ctx) {
-        int slot = (int) callee->aux_int;
-        if (slot >= 0 && slot < ctx->nshared && ctx->shared_funcs[slot])
-            return cg_static_function_call(ctx->shared_funcs[slot], NULL);
-        const XiFunc *module_init = ctx->module ? ctx->module->init : current;
-        const XiImportRef *ref = cg_shared_slot_import_ref(module_init, slot);
-        CgStaticFunctionCall imported = cg_resolve_import_function_call(ctx, ref);
-        if (imported.func)
-            return imported;
-    }
-
-    if (callee->op == XI_IMPORT_REF && callee->aux)
-        return cg_resolve_import_function_call(ctx, (const XiImportRef *) callee->aux);
-
-    return cg_no_static_function_call();
-}
+#include "xi_cgen_call_resolve.inc.c"
 
 /* Write a value reference: v<id> or phi<id> for phi nodes */
 static void emit_vref(FILE *out, const XiValue *v) {
@@ -730,94 +752,32 @@ static void emit_vref(FILE *out, const XiValue *v) {
         fprintf(out, "v%u", v->id);
 }
 
-#include "xi_cgen_value_helpers.inc"
+#include "xi_cgen_class_native_meta.inc.c"
+#include "xi_cgen_abi_helpers.inc.c"
+#include "xi_cgen_value_helpers.inc.c"
+#include "xi_cgen_method_symbols.inc.c"
+static bool cg_array_same_value(const XiValue *a, const XiValue *b);
+static bool cg_array_value_known_nonnegative(const XiValue *v, const XiValue *root, uint8_t depth);
+static bool cg_array_block_has_no_side_effect_after(const XiBlock *blk, const XiValue *start);
+static bool cg_array_block_has_no_side_effect_before(const XiBlock *blk, const XiValue *target);
+static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
+static bool cg_array_index_set_counted_loop_bounds_proven(XiCgenCtx *ctx, const XiFunc *f,
+                                                          const XiValue *v);
+#include "xi_cgen_struct_helpers.inc.c"
+#include "xi_cgen_class_helpers.inc.c"
+static bool cg_has_exception_handling(const XiFunc *f);
+#include "xi_cgen_class_native_helpers.inc.c"
+#include "xi_cgen_array_helpers.inc.c"
+
+static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (cg_array_value_uses_native_local(ctx, f, v))
+        return "xrt_array_t *";
+    return local_ctype_str(v);
+}
 
 /* Write a phi variable reference: phi<id> */
 static void emit_phi_ref(FILE *out, const XiPhi *phi) {
     fprintf(out, "phi%u", phi->value.id);
-}
-
-/* ========== Method Symbol Resolution ========== */
-
-/* Map a method name string (from XI_CALL_METHOD/XI_LOAD_FIELD aux) to
- * the corresponding XRT_SYM_* integer. Returns -1 if not a known builtin. */
-static int cg_method_sym(const char *name) {
-    if (!name)
-        return -1;
-    /* Auto-generated from xi_method_sym.def */
-    static const struct {
-        const char *name;
-        int sym;
-    } map[] = {
-#define XI_METHOD_SYM(aot_name, id, rt_name, display_name) {display_name, XRT_SYM_##aot_name},
-#include "../ir/xi_method_sym.def"
-#undef XI_METHOD_SYM
-        /* Aliases not in the .def */
-        {"size", XRT_SYM_SIZE}, /* alias for length */
-        {"add", XRT_SYM_SET},   /* set.add() maps to SET symbol */
-    };
-    for (size_t i = 0; i < sizeof(map) / sizeof(map[0]); i++) {
-        if (strcmp(name, map[i].name) == 0)
-            return map[i].sym;
-    }
-    return -1;
-}
-
-/* ========== Struct Inline Helpers ========== */
-
-/* Check if all uses of `target` are safe for struct inlining.
- * Safe uses: STRUCT_GET(args[0]), STRUCT_SET(args[0]), COPY(args[0]).
- * COPY is transparent — its result is recursively checked.
- * Depth-limited to prevent pathological COPY chains. */
-static bool cg_struct_uses_safe(const XiFunc *f, const XiValue *target, int depth) {
-    if (depth > 8)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control == target)
-            return false;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t k = 0; k < phi->value.nargs; k++)
-                if (phi->value.args[k] == target)
-                    return false;
-        }
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v)
-                continue;
-            for (uint16_t a = 0; a < v->nargs; a++) {
-                if (v->args[a] != target)
-                    continue;
-                if ((v->op == XI_STRUCT_GET || v->op == XI_STRUCT_SET) && a == 0)
-                    continue;
-                /* COPY is transparent: check the copy's own uses */
-                if (v->op == XI_COPY && a == 0) {
-                    if (!cg_struct_uses_safe(f, v, depth + 1))
-                        return false;
-                    continue;
-                }
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-/* Check if XI_STRUCT_NEW value can be inlined as a local C struct.
- * True iff all transitive uses (through COPY chains) are
- * STRUCT_GET(args[0]) or STRUCT_SET(args[0]). */
-static bool cg_struct_can_inline(const XiFunc *f, const XiValue *target) {
-    XR_DCHECK(f != NULL && target != NULL, "cg_struct_can_inline: NULL");
-    return cg_struct_uses_safe(f, target, 0);
-}
-
-/* Trace COPY chain to find the defining XI_STRUCT_NEW. */
-static const XiValue *cg_trace_struct_new(const XiValue *v) {
-    while (v && v->op == XI_COPY && v->nargs >= 1)
-        v = v->args[0];
-    return (v && v->op == XI_STRUCT_NEW) ? v : NULL;
 }
 
 /* ========== Value Emission ========== */
@@ -827,6 +787,32 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
     fprintf(out, " %s ", op);
     emit_vref(out, v->args[1]);
 }
+
+static void emit_bitwise_binop(FILE *out, const XiValue *v, const char *op) {
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "(");
+    emit_value_as_rep(out, v->args[0], XR_REP_I64);
+    fprintf(out, ") %s (", op);
+    emit_value_as_rep(out, v->args[1], XR_REP_I64);
+    fprintf(out, ")");
+    if (boxed)
+        fprintf(out, ")");
+}
+
+static void emit_bitwise_unop(FILE *out, const XiValue *v, const char *op) {
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "%s(", op);
+    emit_value_as_rep(out, v->args[0], XR_REP_I64);
+    fprintf(out, ")");
+    if (boxed)
+        fprintf(out, ")");
+}
+
+#include "xi_cgen_arith_helpers.inc.c"
 
 static void emit_condition_expr(FILE *out, const XiValue *v) {
     if (cg_rep(v) == XR_REP_TAGGED) {
@@ -848,6 +834,10 @@ static void emit_codegen_abort_aot_result(FILE *out) {
     fprintf(out, "    return (abort(), xr_aot_error(XR_NULL_VAL, false));\n");
 }
 
+#include "xi_cgen_array_builtin_helpers.inc.c"
+
+#include "xi_cgen_dispatch_helpers.inc.c"
+
 /* Emit the RHS expression for a single value. */
 static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
@@ -862,50 +852,24 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
     }
 
-    switch (v->op) {
-        case XI_CONST:
-            if (v->type->kind == XR_KIND_INT)
-                fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
-            else if (v->type->kind == XR_KIND_FLOAT) {
-                double d;
-                memcpy(&d, &v->aux_int, sizeof(double));
-                fprintf(out, "%a", d);
-            } else if (v->type->kind == XR_KIND_BOOL)
-                fprintf(out, "%" PRId64, v->aux_int);
-            else if (v->type->kind == XR_KIND_NULL)
-                fprintf(out, "XR_NULL_VAL");
-            else if (v->type->kind == XR_KIND_STRING) {
-                /* Emit escaped string literal wrapped in xrt_box_str */
-                const char *s = (const char *) v->aux;
-                fprintf(out, "xr_box_str(");
-                emit_c_string_literal(out, s);
-                fprintf(out, ")");
-            } else if (v->type->kind == XR_KIND_UNKNOWN && v->aux) {
-                emit_enum_type_expr(out, cg_enum_for_runtime_type(ctx, v->aux));
-            } else {
-                fprintf(out, "XR_NULL_VAL /* unknown const kind */");
-            }
-            break;
+    if (xi_to_c_emit_generated(ctx, out, f, v, prefix))
+        return;
 
+    switch (v->op) {
         case XI_PARAM:
             fprintf(out, "p%u", (unsigned) v->aux_int);
+            if (cg_func_param_abi_rep(ctx, f, (uint16_t) v->aux_int) != XR_REP_TAGGED)
+                break;
             if (cg_rep(v) == XR_REP_I64)
                 fprintf(out, ".i");
             else if (cg_rep(v) == XR_REP_F64)
                 fprintf(out, ".f");
             break;
 
-        case XI_COPY:
-            emit_vref(out, v->args[0]);
-            break;
-
         /* Arithmetic: use C operators when both operands are scalar.
          * When any operand is tagged (XrValue), must use runtime functions.
          * When result rep is scalar but operands are mixed, box each tagged
          * operand before the C operation, or fall back to runtime dispatch. */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
         case XI_DIV:
         case XI_MOD: {
             XrRep result_rep = cg_rep(v);
@@ -980,16 +944,17 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     fprintf(out, ")");
                 }
             } else {
-                /* Typed scalar path. For DIV/MOD route through xrt_int_div /
-                 * xrt_int_mod so zero-check + INT64_MIN/-1 wrap match VM/JIT
-                 * even when both operands are XR_REP_I64 native int64. */
+                /* Typed scalar path.  Constant non-zero divisors can use native
+                 * C operators; other integer DIV/MOD keeps the checked helper. */
                 if ((v->op == XI_DIV || v->op == XI_MOD) && result_rep == XR_REP_I64) {
-                    const char *fn = (v->op == XI_DIV) ? "xrt_int_div" : "xrt_int_mod";
-                    fprintf(out, "%s(", fn);
-                    emit_vref(out, v->args[0]);
-                    fprintf(out, ", ");
-                    emit_vref(out, v->args[1]);
-                    fprintf(out, ")");
+                    if (!emit_native_const_div_mod_expr(out, v)) {
+                        const char *fn = (v->op == XI_DIV) ? "xrt_int_div" : "xrt_int_mod";
+                        fprintf(out, "%s(", fn);
+                        emit_vref(out, v->args[0]);
+                        fprintf(out, ", ");
+                        emit_vref(out, v->args[1]);
+                        fprintf(out, ")");
+                    }
                 } else if ((v->op == XI_DIV || v->op == XI_MOD) && result_rep == XR_REP_F64) {
                     /* Float div: emit checked division to throw on /0
                      * with parity to the tagged xrt_div / xrt_mod path. */
@@ -1039,31 +1004,27 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         /* Bitwise */
         case XI_BAND:
-            emit_binop(out, v, "&");
+            emit_bitwise_binop(out, v, "&");
             break;
         case XI_BOR:
-            emit_binop(out, v, "|");
+            emit_bitwise_binop(out, v, "|");
             break;
         case XI_BXOR:
-            emit_binop(out, v, "^");
+            emit_bitwise_binop(out, v, "^");
             break;
         case XI_BNOT:
-            fprintf(out, "~");
-            emit_vref(out, v->args[0]);
+            emit_bitwise_unop(out, v, "~");
             break;
         case XI_SHL:
-            emit_binop(out, v, "<<");
+            emit_bitwise_binop(out, v, "<<");
             break;
         case XI_SHR:
-            emit_binop(out, v, ">>");
+            emit_bitwise_binop(out, v, ">>");
             break;
 
         /* Comparison: scalar comparison uses C operators; tagged uses xrt_eq/lt/le.
          * Result is always I64 (boolean 0/1). */
-        case XI_EQ:
         case XI_NE:
-        case XI_LT:
-        case XI_LE:
         case XI_GT:
         case XI_GE: {
             XrRep a0_rep = cg_rep(v->args[0]);
@@ -1211,12 +1172,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "(int64_t)(int8_t)");
             emit_vref(out, v->args[0]);
             break;
-        case XI_NARROW_U8:
-        case XI_WIDEN_U8:
-            fprintf(out, "(int64_t)(uint8_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_NARROW_I16:
         case XI_WIDEN_I16:
             fprintf(out, "(int64_t)(int16_t)");
             emit_vref(out, v->args[0]);
@@ -1231,14 +1186,16 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "(int64_t)(int32_t)");
             emit_vref(out, v->args[0]);
             break;
-        case XI_NARROW_U32:
         case XI_WIDEN_U32:
             fprintf(out, "(int64_t)(uint32_t)");
             emit_vref(out, v->args[0]);
             break;
         case XI_NARROW_F32:
         case XI_WIDEN_F32:
-            fprintf(out, "(double)(float)");
+            fputs((v->op == XI_WIDEN_F32 && cg_array_index_get_reads_f32_storage(v->args[0]))
+                      ? ""
+                      : "(double)(float)",
+                  out);
             emit_vref(out, v->args[0]);
             break;
 
@@ -1400,24 +1357,31 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             if (target && is_class_call) {
                 /* Class constructor call: alloc map instance + call ctor.
                  * xrt_map_new returns a tagged XrValue directly. */
+                if (emit_class_native_constructor_boxed_expr(ctx, out, f, prefix, v, target,
+                                                             import_prefix))
+                    break;
                 fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
                 emit_fname(ctx, out, import_prefix ? import_prefix : prefix, target);
                 fprintf(out, "(NULL, _inst");
                 for (uint16_t a = 1; a < v->nargs; a++) {
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[a]);
+                    emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
                 }
                 fprintf(out, "); _inst; })");
             } else if (target) {
                 /* Use the exporter's module prefix for cross-module calls */
+                XrRep actual_rep = cg_func_return_abi_rep(ctx, target);
+                bool wrapped = emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
                 emit_fname(ctx, out, import_prefix ? import_prefix : prefix, target);
                 fprintf(out, "(");
                 emit_call_hidden_closure(out, f, target, callee);
                 for (uint16_t a = 1; a < v->nargs; a++) {
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[a]);
+                    emit_value_as_rep(out, v->args[a],
+                                      cg_func_param_abi_rep(ctx, target, (uint16_t) (a - 1)));
                 }
                 fprintf(out, ")");
+                emit_conversion_suffix(out, wrapped);
             } else {
                 /* Indirect call (fully dynamic, not yet supported) */
                 ctx->error = true;
@@ -1548,22 +1512,29 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         /* Indexed read: args[0]=collection, args[1]=key */
         case XI_INDEX_GET:
             XR_DCHECK(v->nargs >= 2, "XI_INDEX_GET: need obj+key");
+            if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
+                emit_typed_array_index_get_expr(ctx, out, f, v, prefix))
+                break;
             fprintf(out, "xrt_index_get(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", ");
-            emit_vref(out, v->args[1]);
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ")");
             break;
 
         /* Indexed write: args[0]=collection, args[1]=key, args[2]=value */
         case XI_INDEX_SET:
             XR_DCHECK(v->nargs >= 3, "XI_INDEX_SET: need obj+key+val");
+            if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
+                break;
+            if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
+                break;
             fprintf(out, "xrt_index_set(");
-            emit_vref(out, v->args[0]);
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
             fprintf(out, ", ");
-            emit_vref(out, v->args[1]);
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
             fprintf(out, ", ");
-            emit_vref(out, v->args[2]);
+            emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
             fprintf(out, ")");
             break;
 
@@ -1572,6 +1543,10 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         /* Property read: args[0]=object, aux=field name string */
         case XI_LOAD_FIELD: {
             XR_DCHECK(v->nargs >= 1, "XI_LOAD_FIELD: need object");
+            if (emit_class_cached_field_load_expr(ctx, out, v))
+                break;
+            if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))
+                break;
             const char *field = (const char *) v->aux;
             if (!field && v->aux_int >= 0) {
                 fprintf(out, "xrt_index_get(");
@@ -1597,30 +1572,57 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     fprintf(out, ")");
                 break;
             }
+            if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+                emit_class_native_map_length_expr(ctx, out, f, v))
+                break;
+            if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+                emit_class_native_set_length_expr(ctx, out, f, v))
+                break;
+            if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+                emit_typed_array_length_expr(ctx, out, f, prefix, v))
+                break;
             /* Use xrt_getprop with symbol lookup for builtin properties,
              * or xrt_map_get for map-like objects */
             int sym = cg_method_sym(field);
             if (sym >= 0) {
+                bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
                 fprintf(out, "xrt_getprop(");
                 emit_vref(out, v->args[0]);
                 fprintf(out, ", %d)", sym);
+                emit_conversion_suffix(out, wrapped);
             } else {
                 /* Generic field: use map get with string key */
+                bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
                 fprintf(out, "xrt_map_get((xrt_map_t*)");
                 emit_vref(out, v->args[0]);
                 fprintf(out, ".ptr, xr_box_str(\"%s\"))", field ? field : "?");
+                emit_conversion_suffix(out, wrapped);
             }
+            break;
+        }
+
+        case XI_TUPLE_GET: {
+            XR_DCHECK(v->nargs >= 1, "XI_TUPLE_GET: need tuple");
+            bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+            fprintf(out, "xrt_tuple_get(");
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", %" PRId64 ")", v->aux_int);
+            emit_conversion_suffix(out, wrapped);
             break;
         }
 
         /* Property write: args[0]=object, args[1]=value, aux=field name string */
         case XI_STORE_FIELD: {
             XR_DCHECK(v->nargs >= 2, "XI_STORE_FIELD: need obj+val");
+            if (emit_class_cached_field_store_expr(ctx, out, v))
+                break;
+            if (emit_class_native_receiver_field_store_expr(ctx, out, f, v))
+                break;
             const char *field = (const char *) v->aux;
             fprintf(out, "(xrt_map_set((xrt_map_t*)");
             emit_vref(out, v->args[0]);
             fprintf(out, ".ptr, xr_box_str(\"%s\"), ", field ? field : "?");
-            emit_vref(out, v->args[1]);
+            emit_boxed_value_ref(out, v->args[1]);
             fprintf(out, "), ");
             emit_vref(out, v->args[1]);
             fprintf(out, ")");
@@ -1635,9 +1637,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 /* Handled in emit_value_stmt — this RHS is never reached */
                 fprintf(out, "XR_NULL_VAL");
             } else {
-                fprintf(out, "xrt_call_method(");
-                emit_vref(out, v->args[0]);
-                fprintf(out, ", %d, 0)", cg_method_sym("constructor"));
+                emit_struct_fallback_new_expr(out, (XrStructLayout *) v->aux, prefix);
             }
             break;
         }
@@ -1645,26 +1645,12 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             XR_DCHECK(v->nargs >= 1, "XI_STRUCT_GET: need struct arg");
             const XiValue *origin = cg_trace_struct_new(v->args[0]);
             if (origin && cg_struct_can_inline(f, origin)) {
-                fprintf(out, "_st%u.f%d", origin->id, (int) v->aux_int);
+                emit_struct_inline_field_get_expr(out, (XrStructLayout *) origin->aux, origin,
+                                                  v->aux_int);
             } else {
                 XrStructLayout *sl = (XrStructLayout *) v->aux;
-                const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
-                                        ? sl->field_names[v->aux_int]
-                                        : NULL;
-                if (fname) {
-                    int sym = cg_method_sym(fname);
-                    if (sym >= 0) {
-                        fprintf(out, "xrt_getprop(");
-                        emit_vref(out, v->args[0]);
-                        fprintf(out, ", %d)", sym);
-                    } else {
-                        fprintf(out, "xrt_map_get((xrt_map_t*)");
-                        emit_vref(out, v->args[0]);
-                        fprintf(out, ".ptr, xr_box_str(\"%s\"))", fname);
-                    }
-                } else {
-                    fprintf(out, "XR_NULL");
-                }
+                emit_struct_fallback_field_get(ctx, out, f, sl, v->aux_int, v->args[0], v->type,
+                                               cg_rep(v), prefix);
             }
             break;
         }
@@ -1672,23 +1658,12 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             XR_DCHECK(v->nargs >= 2, "XI_STRUCT_SET: need struct + val");
             const XiValue *origin = cg_trace_struct_new(v->args[0]);
             if (origin && cg_struct_can_inline(f, origin)) {
-                fprintf(out, "(_st%u.f%d = ", origin->id, (int) v->aux_int);
-                emit_vref(out, v->args[1]);
-                fprintf(out, ")");
+                emit_struct_inline_field_set_expr(out, (XrStructLayout *) origin->aux, origin,
+                                                  v->aux_int, v->args[1]);
             } else {
                 XrStructLayout *sl = (XrStructLayout *) v->aux;
-                const char *fname = (sl && sl->field_names && v->aux_int < sl->field_count)
-                                        ? sl->field_names[v->aux_int]
-                                        : NULL;
-                if (fname) {
-                    fprintf(out, "(xrt_map_set((xrt_map_t*)");
-                    emit_vref(out, v->args[0]);
-                    fprintf(out, ".ptr, xr_box_str(\"%s\"), ", fname);
-                    emit_vref(out, v->args[1]);
-                    fprintf(out, "), ");
-                    emit_vref(out, v->args[1]);
-                    fprintf(out, ")");
-                }
+                emit_struct_fallback_field_set(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1],
+                                               prefix);
             }
             break;
         }
@@ -1762,9 +1737,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 /* Try receiver-type-specific lookup first.
                  * XI_CALL_METHOD args[0] = receiver, whose type may carry
                  * the class name (XR_KIND_INSTANCE → instance.class_name). */
-                const char *recv_class = NULL;
-                if (v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INSTANCE)
-                    recv_class = v->args[0]->type->instance.class_name;
+                const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
                 if (v->op == XI_CALL_METHOD_DIRECT)
                     mfunc = cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int,
                                                       &method_prefix);
@@ -1772,6 +1745,20 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     mfunc = cg_lookup_method(ctx, method, recv_class, &method_prefix);
             }
             uint16_t nargs = (uint16_t) (v->nargs - 1);
+
+            if (nargs == 0 && method && strcmp(method, "length") == 0 &&
+                emit_typed_array_length_expr(ctx, out, f, prefix, v))
+                break;
+            if (nargs == 1 && method && strcmp(method, "push") == 0 &&
+                emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
+                break;
+            if (method && ((nargs == 1 && strcmp(method, "map") == 0 &&
+                            emit_typed_array_map_expr(ctx, out, f, prefix, v)) ||
+                           (nargs == 1 && strcmp(method, "filter") == 0 &&
+                            emit_typed_array_filter_expr(ctx, out, f, prefix, v)) ||
+                           (nargs == 2 && strcmp(method, "reduce") == 0 &&
+                            emit_typed_array_reduce_expr(ctx, out, f, prefix, v))))
+                break;
 
             const XiEnumData *recv_enum = cg_enum_for_shared_value(ctx, v->args[0]);
             int enum_member = cg_enum_member_index(recv_enum, method);
@@ -1820,15 +1807,38 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     break;
                 }
                 /* Direct class method call: NULL _cl, receiver is first visible param */
+                if (emit_class_native_method_call_expr(ctx, out, f, prefix, v, mfunc,
+                                                       method_prefix))
+                    break;
+                XrRep actual_rep = cg_func_return_abi_rep(ctx, mfunc);
+                bool wrapped = emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
                 emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
                 fprintf(out, "(NULL");
                 for (uint16_t a = 0; a < v->nargs; a++) {
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[a]);
+                    emit_value_as_rep(out, v->args[a],
+                                      cg_func_param_abi_rep(ctx, mfunc, (uint16_t) a));
                 }
                 fprintf(out, ")");
+                emit_conversion_suffix(out, wrapped);
             } else {
                 int sym = cg_method_sym(method);
+                const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
+                bool recv_is_stringbuilder =
+                    recv_type && recv_type->kind == XR_KIND_INSTANCE &&
+                    recv_type->instance.class_name &&
+                    strcmp(recv_type->instance.class_name, "StringBuilder") == 0;
+                if (sym < 0 && recv_is_stringbuilder && method && strcmp(method, "append") == 0 &&
+                    nargs == 1) {
+                    fprintf(out, "(xrt_strbuf_append(");
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                    fprintf(out, ", ");
+                    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+                    fprintf(out, "), ");
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                    fprintf(out, ")");
+                    break;
+                }
                 if (sym < 0) {
                     ctx->error = true;
                     fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method '%s'\n",
@@ -1836,23 +1846,28 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                     emit_codegen_abort_expr(out);
                     break;
                 }
+                if (emit_class_native_map_method_call_expr(ctx, out, f, v))
+                    break;
+                if (emit_class_native_set_method_call_expr(ctx, out, f, v))
+                    break;
+                bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
                 if (nargs == 0) {
                     fprintf(out, "xrt_method_0(");
-                    emit_vref(out, v->args[0]);
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
                     fprintf(out, ", %d)", sym);
                 } else if (nargs == 1) {
                     fprintf(out, "xrt_method_1(");
-                    emit_vref(out, v->args[0]);
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
                     fprintf(out, ", %d, ", sym);
-                    emit_vref(out, v->args[1]);
+                    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
                     fprintf(out, ")");
                 } else if (nargs == 2) {
                     fprintf(out, "xrt_method_2(");
-                    emit_vref(out, v->args[0]);
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
                     fprintf(out, ", %d, ", sym);
-                    emit_vref(out, v->args[1]);
+                    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
                     fprintf(out, ", ");
-                    emit_vref(out, v->args[2]);
+                    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
                     fprintf(out, ")");
                 } else {
                     ctx->error = true;
@@ -1860,6 +1875,7 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                             (unsigned) nargs);
                     emit_codegen_abort_expr(out);
                 }
+                emit_conversion_suffix(out, wrapped);
             }
             break;
         }
@@ -1886,11 +1902,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "xrt_release(");
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
-            break;
-
-        case XI_MOVE:
-            XR_DCHECK(v->nargs >= 1, "XI_MOVE: need arg");
-            emit_vref(out, v->args[0]);
             break;
 
         case XI_DROP_REUSE:
@@ -1924,12 +1935,14 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
                 int64_t cap = (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
                                   ? v->args[0]->aux_int
                                   : 8;
-                fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+                if (!emit_typed_map_new_expr(out, v, cap))
+                    fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
             } else if (orig_op == XI_SET_NEW) {
                 int64_t cap = (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
                                   ? v->args[0]->aux_int
                                   : 8;
-                fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+                if (!emit_typed_set_new_expr(out, v, cap))
+                    fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
             } else if (orig_op == XI_STR_CONCAT) {
                 emit_str_concat_expr(out, v);
             } else if (orig_op == XI_CLOSURE_NEW) {
@@ -2027,6 +2040,20 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, "XR_NULL_VAL");
             break;
 
+        case XI_TUPLE_NEW:
+            if (v->nargs == 0) {
+                fprintf(out, "xrt_tuple_new(0)");
+            } else {
+                fprintf(out, "xrt_tuple_make(%" PRIu16 ", (XrValue[]){", v->nargs);
+                for (uint16_t a = 0; a < v->nargs; a++) {
+                    if (a > 0)
+                        fprintf(out, ", ");
+                    emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+                }
+                fprintf(out, "})");
+            }
+            break;
+
         case XI_ERR_CHECK:
             if (cg_rep(v) == XR_REP_I64)
                 fprintf(out, "0");
@@ -2055,13 +2082,54 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             } else if (strcmp(bn, "array_new") == 0) {
                 int64_t cap =
                     (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 4;
-                fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+                if (cg_array_value_uses_native_local(ctx, f, v)) {
+                    if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, cap))
+                        fprintf(out, "(xrt_array_t*)xrt_array_new(%" PRId64 ").ptr", cap);
+                } else if (!emit_typed_array_new_expr(ctx, out, f, v, cap)) {
+                    fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+                }
+            } else if (strcmp(bn, "Bytes") == 0) {
+                if (cg_array_value_uses_native_local(ctx, f, v)) {
+                    if (!emit_bytes_new_native_local_expr(out, v)) {
+                        emit_codegen_abort_expr(out);
+                        ctx->error = true;
+                    }
+                } else if (v->nargs == 0) {
+                    fprintf(out, "xrt_bytes_new_len(0)");
+                } else if (v->nargs == 1) {
+                    if (v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
+                        fprintf(out, "xrt_bytes_new_len(");
+                        emit_value_as_rep(out, v->args[0], XR_REP_I64);
+                        fprintf(out, ")");
+                    } else {
+                        fprintf(out, "xrt_bytes_new_1(");
+                        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                        fprintf(out, ")");
+                    }
+                } else if (v->nargs == 2) {
+                    fprintf(out, "xrt_bytes_new_fill(");
+                    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                    fprintf(out, ", ");
+                    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+                    fprintf(out, ")");
+                } else {
+                    emit_codegen_abort_expr(out);
+                    ctx->error = true;
+                }
+            } else if (emit_array_bytes_builtin_expr(ctx, out, v, bn)) {
+                /* Expression emitted by the array/bytes helper. */
+            } else if (strcmp(bn, "StringBuilder") == 0) {
+                fprintf(out, "xrt_strbuf_new()");
             } else if (strcmp(bn, "map_new") == 0) {
                 int64_t cap =
                     (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
-                fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+                if (!emit_typed_map_new_expr(out, v, cap))
+                    fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
             } else if (strcmp(bn, "set_new") == 0) {
-                fprintf(out, "xrt_map_new(8)");
+                int64_t cap =
+                    (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
+                if (!emit_typed_set_new_expr(out, v, cap))
+                    fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
             } else if (strcmp(bn, "json_new") == 0) {
                 int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
                 fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
@@ -2132,6 +2200,18 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             }
             break;
         }
+
+        case XI_GET_BUILTIN:
+            if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
+                v->aux_int == XR_GLOBAL_VAR_DIR) {
+                fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
+            } else {
+                ctx->error = true;
+                fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT builtin global '%s'\n",
+                        v->aux ? (const char *) v->aux : "?");
+                emit_codegen_abort_expr(out);
+            }
+            break;
 
         /* Cross-module import reference: use resolved indices when available,
          * otherwise fall back to string-scanning the import table. */
@@ -2254,7 +2334,10 @@ static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         const XiValue *cv = deferred_vals[di];
         const XiFunc *cf = (const XiFunc *) cv->aux;
         fprintf(out, "    ");
-        emit_fname(ctx, out, prefix, cf);
+        if (cg_func_uses_typed_abi(ctx, cf))
+            emit_typed_abi_fname(ctx, out, prefix, cf);
+        else
+            emit_fname(ctx, out, prefix, cf);
         if (cf->ncaptures > 0) {
             fprintf(out, "((xrt_closure_t*)");
             emit_vref(out, cv);
@@ -2265,32 +2348,97 @@ static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     }
 }
 
+static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+    if (ret_rep == XR_REP_TAGGED)
+        fprintf(out, "XR_NULL_VAL");
+    else
+        fprintf(out, "0");
+}
+
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
 
-    /* Inlined struct: emit local anonymous C struct (no XrValue variable).
-     * Fields are stored as XrValue for type compatibility with GET/SET. */
+    /* Inlined struct: emit local anonymous C struct with native fields. */
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
         XrStructLayout *sl = (XrStructLayout *) v->aux;
         XR_DCHECK(sl != NULL, "inlined XI_STRUCT_NEW: missing layout");
         fprintf(out, "    struct { ");
-        for (uint16_t i = 0; i < sl->field_count; i++)
-            fprintf(out, "XrValue f%u; ", i);
-        fprintf(out, "} _st%u = {{0}};\n", v->id);
+        for (uint16_t i = 0; i < sl->field_count; i++) {
+            char fname[32];
+            snprintf(fname, sizeof(fname), "f%u", i);
+            emit_struct_field_decl(out, sl, i, fname, prefix);
+            fprintf(out, "; ");
+        }
+        fprintf(out, "} _st%u = {0};\n", v->id);
         return;
     }
 
-    /* COPY of an inlined struct is a no-op — GET/SET trace through
-     * the COPY chain to the origin _st variable. */
-    if (v->op == XI_COPY && v->nargs >= 1) {
-        const XiValue *origin = cg_trace_struct_new(v);
-        if (origin && cg_struct_can_inline(f, origin))
-            return;
+    if (cg_value_is_elided_nested_struct_ref(f, v) || cg_value_is_elided_fixed_array_ref(f, v))
+        return;
+    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
+                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+        return;
+
+    if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && v->nargs >= 1 &&
+        (cg_value_traces_to_inlined_struct(f, v->args[0]) ||
+         cg_value_is_elided_heap_struct_alias(ctx, f, v) ||
+         cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
+         cg_value_is_elided_fixed_array_ref(f, v->args[0])))
+        return;
+    if (cg_ownership_op_is_noop(v))
+        return;
+
+    if (cg_class_native_value_stmt_is_elided(ctx, f, v))
+        return;
+
+    if (emit_class_shared_native_ctor_value_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if (cg_class_shared_native_set_is_elided(ctx, f, v) ||
+        cg_class_shared_native_value_is_elided(ctx, f, v))
+        return;
+
+    if (cg_array_class_field_alloc_value_is_elided(ctx, f, v))
+        return;
+
+    if (cg_array_class_field_value_is_elided(ctx, f, v)) {
+        emit_typed_array_data_cache_decl(ctx, out, v);
+        return;
+    }
+    if (cg_class_native_map_field_value_is_elided(ctx, f, v))
+        return;
+    if (cg_class_native_set_field_value_is_elided(ctx, f, v))
+        return;
+
+    if (emit_class_native_map_method_call_stmt(ctx, out, f, v))
+        return;
+    if (emit_class_native_set_method_call_stmt(ctx, out, f, v))
+        return;
+
+    if (cg_array_typed_push_value_is_elided(ctx, f, v)) {
+        fprintf(out, "    ");
+        emit_value_rhs(ctx, out, f, v, prefix);
+        fprintf(out, ";\n");
+        return;
     }
 
-    /* Side-effect-only values that don't produce a named result. */
+    if (emit_class_native_ctor_value_stmt(ctx, out, f, prefix, v))
+        return;
+
+    if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
+        cg_value_is_elided_heap_struct_alias(ctx, f, v))
+        return;
+
+    if (cg_array_closure_value_only_used_by_inline_map(ctx, f, prefix, v) ||
+        cg_value_is_dead_aot_marker(ctx, f, v))
+        return;
+
+    if (emit_typed_array_class_field_alloc_store_stmt(ctx, out, f, v))
+        return;
+
     bool void_like = cg_is_void_like(v);
 
     if (void_like) {
@@ -2354,8 +2502,11 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, "    xrt_pending_error = ");
         emit_vref(out, v->args[0]);
         fprintf(out, ";\n");
+        emit_class_field_cache_flush(ctx, out);
         emit_deferred_calls(ctx, out, f, prefix);
-        fprintf(out, "    return XR_NULL_VAL;\n");
+        fprintf(out, "    return ");
+        emit_default_return_for_abi(ctx, out, f);
+        fprintf(out, ";\n");
         return;
     }
 
@@ -2377,10 +2528,19 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
+    if (v->op == XI_ERR_CHECK && (cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
+                                  cg_array_err_check_after_typed_push(ctx, f, v) ||
+                                  cg_array_err_check_after_inline_hof(ctx, f, prefix, v) ||
+                                  cg_class_native_err_check_after_nothrow_call(ctx, f, v)))
+        return;
+
     if (v->op == XI_ERR_CHECK) {
         fprintf(out, "    if (xrt_has_pending_error()) {\n");
+        emit_class_field_cache_flush(ctx, out);
         emit_deferred_calls(ctx, out, f, prefix);
-        fprintf(out, "        return XR_NULL_VAL;\n");
+        fprintf(out, "        return ");
+        emit_default_return_for_abi(ctx, out, f);
+        fprintf(out, ";\n");
         fprintf(out, "    }\n");
         return;
     }
@@ -2400,6 +2560,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
+    if (emit_typed_array_map_inline_stmt(ctx, out, f, prefix, v) ||
+        emit_typed_array_filter_inline_stmt(ctx, out, f, prefix, v))
+        return;
     bool cell_origin = cg_value_is_cell_origin(ctx, v);
     bool cell_update = cg_value_has_cell(ctx, v) && !cell_origin;
 
@@ -2411,13 +2574,13 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");
     } else {
-        XrRep rep = cg_rep(v);
-        fprintf(out, "    %s ", ctype_str(rep));
+        fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
         emit_vref(out, v);
         fprintf(out, " = ");
         emit_value_rhs(ctx, out, f, v, prefix);
         fprintf(out, ";\n");
     }
+    emit_typed_array_data_cache_decl(ctx, out, v);
     if (cell_origin) {
         fprintf(out, "    ");
         emit_cell_ref(out, v->var_id);
@@ -2437,13 +2600,19 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
 /* Emit phi assignments for all phis in `target` whose predecessor
  * at index `pred_idx` is `pred_blk`. Called before the jump/branch. */
-static void emit_phi_copies(FILE *out, const XiBlock *target, uint16_t pred_idx) {
+static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *target,
+                            uint16_t pred_idx) {
     for (const XiPhi *phi = target->phis; phi; phi = phi->next) {
+        if (cg_value_traces_to_inlined_struct(f, &phi->value))
+            continue;
+        if (!cg_func_needs_aot_coro_ctx(ctx, f) &&
+            cg_value_is_elided_heap_struct_alias(ctx, f, &phi->value))
+            continue;
         if (pred_idx < phi->value.nargs && phi->value.args[pred_idx]) {
             fprintf(out, "    ");
             emit_phi_ref(out, phi);
             fprintf(out, " = ");
-            emit_vref(out, phi->value.args[pred_idx]);
+            emit_value_as_rep(out, phi->value.args[pred_idx], cg_rep(&phi->value));
             fprintf(out, ";\n");
         }
     }
@@ -2458,6 +2627,8 @@ static uint16_t find_pred_idx(const XiBlock *blk, const XiBlock *pred) {
     return 0; /* fallback; should not happen in valid IR */
 }
 
+#include "xi_cgen_loop_helpers.inc.c"
+
 /* ========== Block Emission ========== */
 
 static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock *blk,
@@ -2467,6 +2638,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
     /* Label (skip for entry block b0 to reduce clutter) */
     if (blk->id != 0)
         fprintf(out, "L%u:;\n", blk->id);
+    emit_typed_array_final_len_stores(ctx, out, f, blk);
 
     /* Instructions */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
@@ -2481,20 +2653,28 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         case XI_BLOCK_RETURN: {
             if (blk->control && blk->control->op == XI_ERR_RETURN)
                 break;
+            emit_class_field_cache_flush(ctx, out);
             emit_deferred_calls(ctx, out, f, prefix);
+            if (emit_class_native_return_stmt(ctx, out, f, blk))
+                break;
             if (blk->control) {
                 fprintf(out, "    return ");
-                emit_vref(out, blk->control);
+                emit_value_as_rep(out, blk->control, cg_func_return_abi_rep(ctx, f));
                 fprintf(out, ";\n");
             } else {
-                fprintf(out, "    return XR_NULL_VAL;\n");
+                if (cg_func_return_abi_rep(ctx, f) == XR_REP_TAGGED)
+                    fprintf(out, "    return XR_NULL_VAL;\n");
+                else
+                    fprintf(out, "    return 0;\n");
             }
             break;
         }
 
         case XI_BLOCK_PLAIN:
             if (blk->succs[0]) {
-                emit_phi_copies(out, blk->succs[0], find_pred_idx(blk->succs[0], blk));
+                if (emit_structured_counted_loop_stmt(ctx, out, f, blk, prefix))
+                    break;
+                emit_phi_copies(ctx, out, f, blk->succs[0], find_pred_idx(blk->succs[0], blk));
                 fprintf(out, "    goto L%u;\n", blk->succs[0]->id);
             }
             break;
@@ -2503,14 +2683,16 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             XR_DCHECK(blk->control != NULL, "IF block missing control");
             XR_DCHECK(blk->succs[0] != NULL, "IF block missing then");
             XR_DCHECK(blk->succs[1] != NULL, "IF block missing else");
+            if (emit_bool_accumulate_diamond_stmt(out, blk))
+                break;
             /* Emit phi copies for both branches */
             fprintf(out, "    if (");
             emit_condition_expr(out, blk->control);
             fprintf(out, ") {\n");
-            emit_phi_copies(out, blk->succs[0], find_pred_idx(blk->succs[0], blk));
+            emit_phi_copies(ctx, out, f, blk->succs[0], find_pred_idx(blk->succs[0], blk));
             fprintf(out, "        goto L%u;\n", blk->succs[0]->id);
             fprintf(out, "    } else {\n");
-            emit_phi_copies(out, blk->succs[1], find_pred_idx(blk->succs[1], blk));
+            emit_phi_copies(ctx, out, f, blk->succs[1], find_pred_idx(blk->succs[1], blk));
             fprintf(out, "        goto L%u;\n", blk->succs[1]->id);
             fprintf(out, "    }\n");
             break;
@@ -2525,7 +2707,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
     }
 }
 
-#include "xi_cgen_coro.inc"
+#include "xi_cgen_coro.inc.c"
 
 /* ========== Function Emission ========== */
 
@@ -2566,8 +2748,12 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
 
         /* Phi variables (always pre-declared) */
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            if (cg_value_traces_to_inlined_struct(f, &phi->value))
+                continue;
+            if (cg_value_is_elided_heap_struct_alias(ctx, f, &phi->value))
+                continue;
             XrRep rep = cg_rep(&phi->value);
-            fprintf(out, "    %s ", ctype_str(rep));
+            fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
             emit_phi_ref(out, phi);
             if (rep == XR_REP_TAGGED)
                 fprintf(out, " = XR_NULL_VAL;\n");
@@ -2586,13 +2772,32 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                     continue;
                 if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
                     continue;
-                if (v->op == XI_COPY && v->nargs >= 1) {
-                    const XiValue *origin = cg_trace_struct_new(v);
-                    if (origin && cg_struct_can_inline(f, origin))
-                        continue;
-                }
+                if ((v->op == XI_COPY || v->op == XI_MOVE) &&
+                    (cg_value_traces_to_inlined_struct(f, v) ||
+                     cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+                    continue;
+                if (cg_class_native_value_stmt_is_elided(ctx, f, v) ||
+                    cg_class_native_ctor_can_inline(ctx, f, v) ||
+                    cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
+                    cg_class_shared_native_set_is_elided(ctx, f, v) ||
+                    cg_class_shared_native_value_is_elided(ctx, f, v))
+                    continue;
+                if (cg_array_class_field_alloc_value_is_elided(ctx, f, v))
+                    continue;
+                if (cg_class_native_map_field_value_is_elided(ctx, f, v))
+                    continue;
+                if (cg_class_native_set_field_value_is_elided(ctx, f, v))
+                    continue;
+                if (cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
+                    cg_class_native_set_method_call_value_is_elided(ctx, f, v))
+                    continue;
+                if (cg_array_typed_push_value_is_elided(ctx, f, v))
+                    continue;
+                if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
+                    cg_value_is_elided_heap_struct_alias(ctx, f, v))
+                    continue;
                 XrRep rep = cg_rep(v);
-                fprintf(out, "    %s ", ctype_str(rep));
+                fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
                 if (rep == XR_REP_TAGGED)
                     fprintf(out, " = XR_NULL_VAL;\n");
@@ -2606,10 +2811,10 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
     XR_DCHECK(out != NULL, "xi_cgen_func: NULL output");
     XR_DCHECK(f != NULL, "xi_cgen_func: NULL func");
-    /* Auto-lower to STAGE_BACKEND if caller bypasses the pipeline
-     * (e.g. unit tests that construct IR manually). */
+    /* Auto-lower if callers bypass the pipeline. */
     if (f->stage < XI_STAGE_REPPED) {
-        xi_opt_select_rep(f);
+        XiRepPolicy policy = xi_rep_policy_native_boundary();
+        xi_opt_select_rep_with_policy(f, &policy);
         xi_opt_box_elim(f);
     }
     if (f->stage < XI_STAGE_BACKEND)
@@ -2621,6 +2826,8 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             xi_cgen_func(ctx, out, f->children[i], prefix);
     }
 
+    cg_class_field_cache_reset(&ctx->class_field_cache);
+
     if (cg_func_needs_aot_coro_ctx(ctx, f)) {
         xi_cgen_coro_func(ctx, out, f, prefix);
         return;
@@ -2629,40 +2836,71 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     /* Function signature.  Closure children with captures receive a hidden
      * first parameter xrt_closure_t *_cl for per-closure upvalue access. */
     bool has_cl = (f->ncaptures > 0);
-    fprintf(out, "static XrValue ");
+    bool typed_abi = cg_func_uses_typed_abi(ctx, f);
+    fprintf(out, "static ");
+    if (!emit_class_native_return_type(ctx, out, prefix, f))
+        fprintf(out, "%s", ctype_str(cg_func_return_abi_rep(ctx, f)));
+    fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
     if (has_cl) {
         fprintf(out, "xrt_closure_t *_cl");
         for (uint16_t i = 0; i < f->nparams; i++)
-            fprintf(out, ", XrValue p%u", i);
+            fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
     } else if (f->nparams == 0) {
         fprintf(out, "xrt_closure_t *_cl");
     } else {
         fprintf(out, "xrt_closure_t *_cl");
         for (uint16_t i = 0; i < f->nparams; i++)
-            fprintf(out, ", XrValue p%u", i);
+            fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
     }
     fprintf(out, ") {\n");
     if (!has_cl)
         fprintf(out, "    (void)_cl;\n");
 
-    /* Shared array declared at file scope by xi_cgen_program(),
-     * so child functions can reference it too. */
-
-    /* Pre-declare variables (phis always; all SSA values when
-     * exception handling is present to avoid goto-over-decl UB). */
     ctx->pre_decl_all = cg_has_exception_handling(f);
     cg_prepare_cell_vars(ctx, f);
+    cg_class_field_cache_collect(ctx, f);
     emit_declarations(ctx, out, f);
+    emit_class_field_cache_decls(ctx, out);
 
     /* Blocks in order */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        if (f->blocks[bi])
+        if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(f, f->blocks[bi]))
             emit_block(ctx, out, f, f->blocks[bi], prefix);
     }
 
     fprintf(out, "}\n\n");
+
+    if (cg_class_func_uses_native_receiver(ctx, f)) {
+        emit_class_native_boxed_adapter(ctx, out, prefix, f);
+    } else if (typed_abi) {
+        fprintf(out, "static XrValue ");
+        emit_typed_abi_fname(ctx, out, prefix, f);
+        fprintf(out, "(xrt_closure_t *_cl");
+        for (uint16_t i = 0; i < f->nparams; i++)
+            fprintf(out, ", XrValue p%u", i);
+        fprintf(out, ") {\n");
+        fprintf(out, "    return ");
+        bool wrapped = emit_conversion_prefix(out, f->return_type, cg_func_return_abi_rep(ctx, f),
+                                              XR_REP_TAGGED);
+        emit_fname(ctx, out, prefix, f);
+        fprintf(out, "(_cl");
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            fprintf(out, ", ");
+            XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
+            if (param_rep == XR_REP_F64)
+                fprintf(out, "XR_TO_FLOAT(p%u)", i);
+            else if (param_rep == XR_REP_I64)
+                fprintf(out, "XR_TO_INT(p%u)", i);
+            else
+                fprintf(out, "p%u", i);
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, wrapped);
+        fprintf(out, ";\n");
+        fprintf(out, "}\n\n");
+    }
 
     if (cg_func_needs_sync_go_wrapper_ctx(ctx, f))
         emit_sync_go_wrapper(ctx, out, f, prefix);
@@ -2677,13 +2915,25 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
             emit_forward_decls(ctx, out, f->children[i], prefix);
     }
 
-    fprintf(out, "static XrValue ");
+    fprintf(out, "static ");
+    if (!emit_class_native_return_type(ctx, out, prefix, f))
+        fprintf(out, "%s", ctype_str(cg_func_return_abi_rep(ctx, f)));
+    fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
     fprintf(out, "xrt_closure_t *_cl");
     for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, ", XrValue p%u", i);
+        fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
     fprintf(out, ");\n");
+
+    if (cg_class_func_uses_native_receiver(ctx, f) || cg_func_uses_typed_abi(ctx, f)) {
+        fprintf(out, "static XrValue ");
+        emit_typed_abi_fname(ctx, out, prefix, f);
+        fprintf(out, "(xrt_closure_t *_cl");
+        for (uint16_t i = 0; i < f->nparams; i++)
+            fprintf(out, ", XrValue p%u", i);
+        fprintf(out, ");\n");
+    }
 
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     bool needs_sync_go = !needs_aot_coro && cg_func_needs_sync_go_wrapper_ctx(ctx, f);
@@ -2702,297 +2952,5 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 }
 
-/* ========== Cross-module Import Resolution ========== */
-
-/* Derive the relative import path from exporter to importer directory.
- * E.g. "/a/b/math.xr" from dir "/a/b" → "./math".  Caller must free. */
-static char *cg_derive_import_string(const char *target_path, const char *importer_dir) {
-    size_t dir_len = strlen(importer_dir);
-    if (strncmp(target_path, importer_dir, dir_len) == 0 && target_path[dir_len] == '/') {
-        const char *filename = target_path + dir_len + 1;
-        size_t flen = strlen(filename);
-        if (flen > 3 && strcmp(filename + flen - 3, ".xr") == 0)
-            flen -= 3;
-        char *result = (char *) xr_malloc(2 + flen + 1);
-        if (!result)
-            return NULL;
-        result[0] = '.';
-        result[1] = '/';
-        memcpy(result + 2, filename, flen);
-        result[2 + flen] = '\0';
-        return result;
-    }
-    const char *base = strrchr(target_path, '/');
-    base = base ? base + 1 : target_path;
-    size_t blen = strlen(base);
-    if (blen > 3 && strcmp(base + blen - 3, ".xr") == 0)
-        blen -= 3;
-    char *result = (char *) xr_malloc(2 + blen + 1);
-    if (!result)
-        return NULL;
-    result[0] = '.';
-    result[1] = '/';
-    memcpy(result + 2, base, blen);
-    result[2 + blen] = '\0';
-    return result;
-}
-
-/* Add one entry to the internal import table. */
-static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *member_name,
-                          const char *target_mod_name, int shared_slot, const XiFunc *target_func,
-                          const XiClassData *target_class, const XiFunc *exporter_func) {
-    if (ctx->nimports >= CG_MAX_IMPORTS)
-        return;
-    CgImportEntry *e = &ctx->imports[ctx->nimports++];
-    e->module_path = module_path;
-    e->member_name = member_name;
-    e->target_mod_name = target_mod_name;
-    e->shared_slot = shared_slot;
-    e->target_func = target_func;
-    e->target_class = target_class;
-    e->exporter_func = exporter_func;
-}
-
-XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, int nmodules) {
-    XR_DCHECK(ctx != NULL, "xi_cgen_resolve_module_imports: NULL ctx");
-    if (!modules || nmodules <= 1)
-        return;
-
-    ctx->nimports = 0;
-    memset(ctx->imports, 0, sizeof(ctx->imports));
-    ctx->all_modules = modules;
-    ctx->all_nmodules = nmodules;
-
-    for (int exporter = 0; exporter < nmodules; exporter++) {
-        XiModule *emod = modules[exporter];
-        if (!emod || emod->nexports == 0)
-            continue;
-
-        for (int importer = 0; importer < nmodules; importer++) {
-            if (importer == exporter)
-                continue;
-            XR_DCHECK(modules[importer] != NULL,
-                      "xi_cgen_resolve_module_imports: NULL importer module");
-
-            /* Derive importer directory from its path */
-            char importer_dir[1024];
-            const char *imp_path = modules[importer]->path;
-            if (!imp_path)
-                continue;
-            strncpy(importer_dir, imp_path, sizeof(importer_dir) - 1);
-            importer_dir[sizeof(importer_dir) - 1] = '\0';
-            char *slash = strrchr(importer_dir, '/');
-            if (slash)
-                *slash = '\0';
-
-            char *import_str = cg_derive_import_string(emod->path, importer_dir);
-            if (!import_str)
-                continue;
-
-            for (uint16_t ei = 0; ei < emod->nexports; ei++) {
-                const XiModuleExport *exp = &emod->exports[ei];
-                const XiFunc *target_fn = exp->function;
-                const XiClassData *target_cd = exp->class_data;
-
-                /* For class exports, resolve constructor if not already set */
-                if (target_cd && !target_fn && target_cd->methods) {
-                    for (uint16_t mi = 0; mi < target_cd->nmethod; mi++) {
-                        if (target_cd->methods[mi].is_constructor && target_cd->child_idx &&
-                            mi < target_cd->ninst + target_cd->nstat) {
-                            uint16_t idx = target_cd->child_idx[mi];
-                            if (idx < emod->init->nchildren) {
-                                target_fn = emod->init->children[idx];
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                cg_add_import(ctx, import_str, exp->name, emod->name, (int) exp->shared_slot,
-                              target_fn, target_cd, emod->init);
-            }
-            /* import_str leaked intentionally — pointers stored in table,
-             * freed implicitly at process exit (short-lived AOT tool). */
-        }
-    }
-
-    cg_prepare_sync_go_targets_for_modules(ctx, modules, nmodules);
-}
-
-/* ========== Multi-module API ========== */
-
-XR_FUNC void xi_cgen_header(FILE *out) {
-    XR_DCHECK(out != NULL, "xi_cgen_header: NULL output");
-    fprintf(out, "/* Generated by xi_cgen \xe2\x80\x94 do not edit */\n");
-    fprintf(out, "#define XRT_IMPL\n");
-    fprintf(out, "#include \"xrt.h\"\n\n");
-    fprintf(out, "#include \"xray.h\"\n");
-    fprintf(out, "#include \"xray_isolate.h\"\n");
-    fprintf(out, "#include \"xaot_coro.h\"\n\n");
-}
-
-XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, XiModule *module) {
-    XR_DCHECK(ctx != NULL, "xi_cgen_module: NULL ctx");
-    XR_DCHECK(out != NULL, "xi_cgen_module: NULL output");
-    XR_DCHECK(module != NULL, "xi_cgen_module: NULL module");
-    XR_DCHECK(module->init != NULL, "xi_cgen_module: NULL init func");
-
-    const char *prefix = module->name ? module->name : "mod";
-    XiFunc *module_func = module->init;
-
-    /* Initialize ctx from module metadata (no IR scanning) */
-    cg_init_from_module(ctx, module);
-    cg_register_imported_classes(ctx);
-
-    /* Module-scoped shared variable array.
-     * Multi-module builds use a prefixed name to avoid collisions. */
-    char shared_buf[256];
-    snprintf(shared_buf, sizeof(shared_buf), "xrt_shared_%s", prefix);
-    ctx->shared_name = shared_buf;
-
-    if (module_func->nshared > 0)
-        fprintf(out, "static XrValue %s[%u];\n", ctx->shared_name, module_func->nshared);
-
-    fprintf(out, "\n");
-
-    /* Forward declarations */
-    emit_forward_decls(ctx, out, module_func, prefix);
-    fprintf(out, "\n");
-
-    /* Function bodies */
-    xi_cgen_func(ctx, out, module_func, prefix);
-
-    /* Reset shared name to default */
-    ctx->shared_name = "xrt_shared";
-}
-
-XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, XiModule **modules, int n, int entry_index) {
-    XR_DCHECK(ctx != NULL, "xi_cgen_main: NULL ctx");
-    XR_DCHECK(out != NULL, "xi_cgen_main: NULL output");
-    XR_DCHECK(n > 0, "xi_cgen_main: no modules");
-    XR_DCHECK(entry_index >= 0 && entry_index < n, "xi_cgen_main: bad entry_index");
-
-    bool entry_is_coro = modules[entry_index] && modules[entry_index]->init &&
-                         cg_func_needs_aot_coro_ctx(ctx, modules[entry_index]->init);
-
-    fprintf(out, "int main(int argc, char **argv) {\n");
-    fprintf(out, "    xrt_bump_enabled = 1;\n");
-    fprintf(out, "    xrt_arc_init();\n");
-    if (entry_is_coro) {
-        fprintf(out, "    XrayIsolateParams params;\n");
-        fprintf(out, "    xray_isolate_params_init(&params);\n");
-        fprintf(out, "    xray_isolate_setup_full(&params);\n");
-        fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
-        fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
-        fprintf(out, "    if (!X) return 1;\n");
-        fprintf(out, "    xr_multicore_init(X, 0);\n");
-        fprintf(out, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
-                     "argc > 1 ? argv + 1 : NULL);\n");
-    } else {
-        fprintf(out, "    (void) argc;\n");
-        fprintf(out, "    (void) argv;\n");
-    }
-    for (int m = 0; m < n; m++) {
-        if (!modules[m] || !modules[m]->init)
-            continue;
-        if (m == entry_index && entry_is_coro) {
-            fprintf(out, "    void *_entry_frame = ");
-            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
-                              modules[m]->init, "_aot_frame_new");
-            fprintf(out, "();\n");
-            fprintf(out, "    xr_aot_run_main(X, &");
-            emit_fname_suffix(ctx, out, modules[m]->name ? modules[m]->name : "mod",
-                              modules[m]->init, "_aot_desc");
-            fprintf(out, ", _entry_frame);\n");
-        } else {
-            if (cg_func_needs_aot_coro_ctx(ctx, modules[m]->init)) {
-                fprintf(stderr,
-                        "[xi_cgen] ERROR: suspendable AOT dependency module init '%s' must "
-                        "be the entry module\n",
-                        modules[m]->name ? modules[m]->name : "mod");
-                ctx->error = true;
-                fprintf(out, "    return 1;\n");
-                continue;
-            }
-            fprintf(out, "    ");
-            emit_fname(ctx, out, modules[m]->name ? modules[m]->name : "mod", modules[m]->init);
-            fprintf(out, "(NULL);\n");
-        }
-    }
-    if (entry_is_coro) {
-        fprintf(out, "    xr_multicore_destroy(X);\n");
-        fprintf(out, "    xray_isolate_delete(X);\n");
-    }
-    fprintf(out, "    xrt_bump_destroy();\n");
-    fprintf(out, "    return 0;\n");
-    fprintf(out, "}\n");
-}
-
-XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
-    XR_DCHECK(ctx != NULL, "xi_cgen_program: NULL ctx");
-    XR_DCHECK(out != NULL, "xi_cgen_program: NULL output");
-    XR_DCHECK(module != NULL, "xi_cgen_program: NULL module");
-    XR_DCHECK(module->init != NULL, "xi_cgen_program: NULL init func");
-
-    XiFunc *main_func = module->init;
-    const char *prefix = module->name ? module->name : "mod";
-
-    /* Reset function name counter for each compilation unit */
-    ctx->fname_counter = 0;
-
-    XiModule *single_module[1] = {module};
-    cg_prepare_sync_go_targets_for_modules(ctx, single_module, 1);
-
-    /* Initialize from module metadata (no IR scanning) */
-    cg_init_from_module(ctx, module);
-    ctx->shared_name = "xrt_shared";
-
-    /* Header */
-    xi_cgen_header(out);
-
-    /* File-scope shared variable array */
-    if (main_func->nshared > 0)
-        fprintf(out, "static XrValue xrt_shared[%u];\n", main_func->nshared);
-
-    fprintf(out, "\n");
-
-    /* Forward declarations */
-    emit_forward_decls(ctx, out, main_func, prefix);
-    fprintf(out, "\n");
-
-    /* Function bodies */
-    xi_cgen_func(ctx, out, main_func, prefix);
-
-    /* Entry point */
-    fprintf(out, "int main(int argc, char **argv) {\n");
-    fprintf(out, "    xrt_bump_enabled = 1;\n");
-    fprintf(out, "    xrt_arc_init();\n");
-    if (cg_func_needs_aot_coro_ctx(ctx, main_func)) {
-        fprintf(out, "    XrayIsolateParams params;\n");
-        fprintf(out, "    xray_isolate_params_init(&params);\n");
-        fprintf(out, "    xray_isolate_setup_full(&params);\n");
-        fprintf(out, "    params.init_flags = XR_INIT_RUNTIME;\n");
-        fprintf(out, "    XrayIsolate *X = xray_isolate_new(&params);\n");
-        fprintf(out, "    if (!X) return 1;\n");
-        fprintf(out, "    xr_multicore_init(X, 0);\n");
-        fprintf(out, "    xray_isolate_set_script_info(X, NULL, argc > 1 ? argc - 1 : 0, "
-                     "argc > 1 ? argv + 1 : NULL);\n");
-        fprintf(out, "    void *_entry_frame = ");
-        emit_fname_suffix(ctx, out, prefix, main_func, "_aot_frame_new");
-        fprintf(out, "();\n");
-        fprintf(out, "    xr_aot_run_main(X, &");
-        emit_fname_suffix(ctx, out, prefix, main_func, "_aot_desc");
-        fprintf(out, ", _entry_frame);\n");
-        fprintf(out, "    xr_multicore_destroy(X);\n");
-        fprintf(out, "    xray_isolate_delete(X);\n");
-    } else {
-        fprintf(out, "    (void) argc;\n");
-        fprintf(out, "    (void) argv;\n");
-        fprintf(out, "    ");
-        emit_fname(ctx, out, prefix, main_func);
-        fprintf(out, "(NULL);\n");
-    }
-    fprintf(out, "    xrt_bump_destroy();\n");
-    fprintf(out, "    return 0;\n");
-    fprintf(out, "}\n");
-}
+#include "xi_cgen_import_helpers.inc.c"
+#include "xi_cgen_program_entry.inc.c"

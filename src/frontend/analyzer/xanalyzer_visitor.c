@@ -747,6 +747,19 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                 XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
                 links->type = xr_type_new_enum(ctx->analyzer->isolate, edecl->name);
                 links->declared_type = links->type;
+                if (edecl->type_param_count > 0 && edecl->type_params) {
+                    const char **type_param_names =
+                        xr_malloc(sizeof(const char *) * (size_t) edecl->type_param_count);
+                    if (type_param_names) {
+                        for (int i = 0; i < edecl->type_param_count; i++) {
+                            type_param_names[i] =
+                                edecl->type_params[i] ? edecl->type_params[i]->name : NULL;
+                        }
+                        xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL,
+                                                        edecl->type_param_count);
+                        xr_free(type_param_names);
+                    }
+                }
 
                 // Detect ADT enum: any variant with payload_count > 0
                 bool is_adt = false;
@@ -783,8 +796,16 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
                                 XrType **ptypes = xr_calloc((size_t) pc, sizeof(XrType *));
                                 for (int p = 0; p < pc; p++) {
                                     XrTypeRef *tref = mem->as.enum_member.payload_types[p];
-                                    ptypes[p] = tref ? xr_tref_resolve(ctx->analyzer->isolate, tref)
-                                                     : xr_type_new_unknown(NULL);
+                                    XrType *ptype =
+                                        tref ? xr_tref_resolve(ctx->analyzer->isolate, tref)
+                                             : xr_type_new_unknown(NULL);
+                                    if (ptype && edecl->type_param_count > 0 &&
+                                        edecl->type_params && links->type_param_names) {
+                                        ptype = resolve_class_to_type_param(
+                                            ctx->analyzer->isolate, ptype, links->type_param_names,
+                                            links->type_param_count);
+                                    }
+                                    ptypes[p] = ptype;
                                 }
                                 links->enum_payload_types[idx] = ptypes;
                             }

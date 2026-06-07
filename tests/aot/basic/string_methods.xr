@@ -20,3 +20,9 @@ let s = "ab"
 let t = s + s + s
 print(t)                // ababab
 print(t.length)         // 6
+
+fn lowByteAt(text: string, index: int) -> int {
+    return text.codePointAt(index) & 0xFF
+}
+
+print(lowByteAt("abc", 0)) // 97

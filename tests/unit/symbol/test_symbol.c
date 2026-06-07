@@ -163,10 +163,14 @@ TEST(symbol_builtin_lookup) {
     // Common method symbols should exist
     SymbolId has_id = xr_symbol_lookup_in_table(table, "has");
     SymbolId length_id = xr_symbol_lookup_in_table(table, "length");
+    SymbolId size_id = xr_symbol_lookup_in_table(table, "size");
     SymbolId push_id = xr_symbol_lookup_in_table(table, "push");
 
     ASSERT_TRUE(has_id != SYMBOL_INVALID);
     ASSERT_TRUE(length_id != SYMBOL_INVALID);
+    ASSERT_TRUE(size_id != SYMBOL_INVALID);
+    ASSERT_EQ_INT(size_id, SYMBOL_SIZE);
+    ASSERT_EQ_INT(xr_builtin_symbol_from_name("size"), SYMBOL_SIZE);
     ASSERT_TRUE(push_id != SYMBOL_INVALID);
 
     xr_symbol_table_destroy(table);

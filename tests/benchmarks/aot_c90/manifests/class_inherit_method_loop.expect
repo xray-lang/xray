@@ -1,0 +1,18 @@
+min_ratio=0.90
+# Inherited primitive classes keep hot methods on native receiver pointers.
+hot_function=^class_inherit_method_loop_score_[0-9]+$
+hot_function_count=1
+hot_xrvalue_count=0
+hot_xrvalue_local_count=0
+hot_box_count=0
+hot_unbox_count=0
+hot_runtime_arith_calls=0
+hot_runtime_int_checked_arith_calls=0
+hot_typed_array_runtime_calls=0
+hot_runtime_array_calls=0
+hot_runtime_map_calls=0
+hot_runtime_property_calls=0
+hot_dynamic_dispatch_calls=0
+pending_error_check_count=1
+hot_pending_error_check_count=0
+vm_jit_include_count=0

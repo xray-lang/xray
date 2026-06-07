@@ -46,6 +46,45 @@ static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
 }
 
+static XaSymbol *xi_lower_lookup_class_symbol(XiLower *l, const char *name) {
+    if (!l || !l->analyzer || !name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(l->analyzer, name);
+    if (sym && sym->kind == XA_SYM_CLASS)
+        return sym;
+    sym = xa_analyzer_lookup_in_scope(l->analyzer, name, l->analyzer->global_scope);
+    if (sym && sym->kind == XA_SYM_CLASS)
+        return sym;
+    sym = xa_analyzer_lookup_deep(l->analyzer, name);
+    return (sym && sym->kind == XA_SYM_CLASS) ? sym : NULL;
+}
+
+static XrStructLayout *xi_lower_lookup_struct_layout(XiLower *l, const char *name) {
+    XaSymbol *sym = xi_lower_lookup_class_symbol(l, name);
+    if (!sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    return (links && links->class_info) ? links->class_info->struct_layout : NULL;
+}
+
+static XrStructLayout *xi_lower_value_struct_layout(XiValue *v) {
+    XrStructLayout *layout = xi_lower_struct_layout_of(v ? v->type : NULL);
+    if (layout)
+        return layout;
+    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+        v = v->args[0];
+    if (!v || v->op != XI_STRUCT_GET)
+        return NULL;
+    XrStructLayout *parent = (XrStructLayout *) v->aux;
+    if (!parent || v->aux_int < 0 || v->aux_int >= parent->field_count)
+        return NULL;
+    XrStructFieldLayout *field = &parent->fields[v->aux_int];
+    return field->native_type == XR_NATIVE_STRUCT ? field->sub_layout : NULL;
+}
+
+static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
+                                                 uint8_t native_type);
+
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
  * every intermediate level up to the defining SRC_REG capture needs
@@ -108,6 +147,43 @@ static XiValue *lower_literal(XiLower *l, AstNode *node) {
         default:
             return xi_const_null(l->func, l->cur_block, l->type_null);
     }
+}
+
+static uint16_t xi_narrow_op_for_native_type(uint8_t native_type);
+
+static bool xi_binary_needs_wrap(uint16_t op) {
+    switch (op) {
+        case XI_ADD:
+        case XI_SUB:
+        case XI_MUL:
+        case XI_DIV:
+        case XI_MOD:
+        case XI_BAND:
+        case XI_BOR:
+        case XI_BXOR:
+        case XI_BNOT:
+        case XI_SHL:
+        case XI_SHR:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static XiValue *xi_lower_wrap_if_needed(XiLower *l, AstNode *node, XiValue *value,
+                                        struct XrType *result_type, uint16_t source_op) {
+    if (!value || !result_type || result_type->kind != XR_KIND_INT ||
+        !xi_binary_needs_wrap(source_op))
+        return value;
+    uint16_t narrow_op = xi_narrow_op_for_native_type(result_type->native_width);
+    if (!narrow_op)
+        return value;
+    XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, result_type, 1);
+    if (!n)
+        return value;
+    n->args[0] = value;
+    n->line = (uint32_t) node->line;
+    return n;
 }
 
 /* Collect leaf operands from a string ADD chain (left-recursive flatten). */
@@ -173,7 +249,8 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     }
     uint16_t op = xi_lower_binary_ast_to_xi_op(node->type);
 
-    return xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
+    XiValue *raw = xi_binary(l->func, l->cur_block, op, result_type, lhs, rhs);
+    return xi_lower_wrap_if_needed(l, node, raw, result_type, op);
 }
 
 static XiValue *lower_unary(XiLower *l, AstNode *node) {
@@ -203,7 +280,10 @@ static XiValue *lower_unary(XiLower *l, AstNode *node) {
             break;
     }
 
-    return xi_unary(l->func, l->cur_block, op, result_type, operand);
+    XiValue *raw = xi_unary(l->func, l->cur_block, op, result_type, operand);
+    if (op == XI_BNOT)
+        return xi_lower_wrap_if_needed(l, node, raw, result_type, op);
+    return raw;
 }
 
 static XiValue *lower_variable(XiLower *l, AstNode *node) {
@@ -330,6 +410,18 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
                 val = conv;
             }
         }
+        if (var_type && var_type->kind == XR_KIND_INT && var_type->native_width != 0 && val->type &&
+            XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(var_type->native_width);
+            if (narrow_op) {
+                XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, var_type, 1);
+                if (n) {
+                    n->args[0] = val;
+                    n->line = (uint32_t) node->line;
+                    val = n;
+                }
+            }
+        }
         /* When assigning from a different variable (e.g. x = i), insert
          * an explicit copy so the target gets its own SSA value.  Without
          * this, braun_write stores the source variable's value directly,
@@ -382,13 +474,38 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
     /* Check for program-level variable from nested scope */
     XiTopBinding tb = xi_lower_find_top_binding(l, sid, name);
     if (xi_top_binding_valid(tb)) {
+        if (tb.type && tb.type->kind == XR_KIND_INT && tb.type->native_width != 0 && val->type &&
+            XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(tb.type->native_width);
+            if (narrow_op) {
+                XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, tb.type, 1);
+                if (n) {
+                    n->args[0] = val;
+                    n->line = (uint32_t) node->line;
+                    val = n;
+                }
+            }
+        }
         xi_lower_emit_top_store(l, tb, val);
         return val;
     }
 
     /* Try upvalue store for captured mutable variable */
-    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, NULL);
+    struct XrType *upval_type = NULL;
+    int upval_idx = xi_lower_resolve_upvalue(l, sid, name, &upval_type);
     if (upval_idx >= 0) {
+        if (upval_type && upval_type->kind == XR_KIND_INT && upval_type->native_width != 0 &&
+            val->type && XR_TYPE_IS_INT(val->type)) {
+            uint16_t narrow_op = xi_narrow_op_for_native_type(upval_type->native_width);
+            if (narrow_op) {
+                XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, upval_type, 1);
+                if (n) {
+                    n->args[0] = val;
+                    n->line = (uint32_t) node->line;
+                    val = n;
+                }
+            }
+        }
         /* Mark the capture as needing cell indirection because the child
          * mutates the captured variable.  The emit stage uses this to
          * emit CELL_NEW in the parent and CELL_GET/CELL_SET in the child. */
@@ -434,7 +551,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
 
     /* Struct with compile-time layout → XI_STRUCT_GET (emitter decides
      * whether to stack-allocate or fall back to OP_GETPROP) */
-    XrStructLayout *slayout = xi_lower_struct_layout_of(obj->type);
+    XrStructLayout *slayout = xi_lower_value_struct_layout(obj);
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ma->name);
         if (sidx >= 0) {
@@ -505,10 +622,11 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     struct XrType *result_type = val->type;
 
     /* Struct with compile-time layout → XI_STRUCT_SET */
-    XrStructLayout *slayout = xi_lower_struct_layout_of(obj->type);
+    XrStructLayout *slayout = xi_lower_value_struct_layout(obj);
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ms->member);
         if (sidx >= 0) {
+            val = xi_lower_narrow_for_native_field(l, node, val, slayout->fields[sidx].native_type);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, result_type, 2);
             if (!v)
                 return NULL;
@@ -548,74 +666,7 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
     return v;
 }
 
-/* Map typed-array element type to XI_NARROW_* op (for stores).
- * Returns 0 if no narrowing needed (i64/f64/bool/any). */
-static uint16_t xi_narrow_op_for_elem(struct XrType *elem_type) {
-    if (!elem_type)
-        return 0;
-    uint8_t nw = elem_type->native_width;
-    if (nw == 0) {
-        /* Default width: int->i64, float->f64 — no narrowing */
-        return 0;
-    }
-    switch (nw) {
-        case XR_NATIVE_I8:
-            return XI_NARROW_I8;
-        case XR_NATIVE_U8:
-            return XI_NARROW_U8;
-        case XR_NATIVE_I16:
-            return XI_NARROW_I16;
-        case XR_NATIVE_U16:
-            return XI_NARROW_U16;
-        case XR_NATIVE_I32:
-            return XI_NARROW_I32;
-        case XR_NATIVE_U32:
-            return XI_NARROW_U32;
-        case XR_NATIVE_F32:
-            return XI_NARROW_F32;
-        default:
-            return 0; /* i64/u64/f64/bool: no narrowing */
-    }
-}
-
-/* Map typed-array element type to XI_WIDEN_* op (for loads).
- * Returns 0 if no widening needed. */
-static uint16_t xi_widen_op_for_elem(struct XrType *elem_type) {
-    if (!elem_type)
-        return 0;
-    uint8_t nw = elem_type->native_width;
-    if (nw == 0)
-        return 0;
-    switch (nw) {
-        case XR_NATIVE_I8:
-            return XI_WIDEN_I8;
-        case XR_NATIVE_U8:
-            return XI_WIDEN_U8;
-        case XR_NATIVE_I16:
-            return XI_WIDEN_I16;
-        case XR_NATIVE_U16:
-            return XI_WIDEN_U16;
-        case XR_NATIVE_I32:
-            return XI_WIDEN_I32;
-        case XR_NATIVE_U32:
-            return XI_WIDEN_U32;
-        case XR_NATIVE_F32:
-            return XI_WIDEN_F32;
-        default:
-            return 0;
-    }
-}
-
-/* Get element type from a container type (Array<T> or [N]T). */
-static struct XrType *xi_get_container_elem_type(struct XrType *container_type) {
-    if (!container_type)
-        return NULL;
-    if (container_type->kind == XR_KIND_ARRAY)
-        return container_type->container.element_type;
-    if (container_type->kind == XR_KIND_FIXED_ARRAY)
-        return container_type->fixed_array.element_type;
-    return NULL;
-}
+#include "xi_lower_native_width.inc.c"
 
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
@@ -625,6 +676,8 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
         return NULL;
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (obj->type && XR_TYPE_IS_MAP(obj->type))
+        idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
     if (!v)
         return NULL;
@@ -654,15 +707,20 @@ static XiValue *lower_index_set(XiLower *l, AstNode *node) {
     if (!obj || !idx || !val)
         return NULL;
 
-    /* Insert XI_NARROW before writing to a sub-width typed array */
-    struct XrType *elem_type = xi_get_container_elem_type(obj->type);
-    uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
-    if (narrow_op) {
-        XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, val->type, 1);
-        if (n) {
-            n->args[0] = val;
-            n->line = (uint32_t) node->line;
-            val = n;
+    if (obj->type && XR_TYPE_IS_MAP(obj->type)) {
+        idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
+        val = xi_lower_narrow_for_static_type(l, node, val, obj->type->map.value_type);
+    } else {
+        /* Insert XI_NARROW before writing to a sub-width typed array */
+        struct XrType *elem_type = xi_get_container_elem_type(obj->type);
+        uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
+        if (narrow_op) {
+            XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, val->type, 1);
+            if (n) {
+                n->args[0] = val;
+                n->line = (uint32_t) node->line;
+                val = n;
+            }
         }
     }
 
@@ -748,15 +806,27 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     arr_val->line = (uint32_t) node->line;
 
     /* Populate: INDEX_SET for each element */
+    struct XrType *elem_type = xi_get_container_elem_type(result_type);
+    uint16_t narrow_op = xi_narrow_op_for_elem(elem_type);
     for (int i = 0; i < n; i++) {
         XiValue *idx = xi_const_int(l->func, l->cur_block, i, l->type_int);
+        XiValue *elem = elem_vals[i];
+        if (narrow_op) {
+            XiValue *narrow = xi_value_new(l->func, l->cur_block, narrow_op, elem->type, 1);
+            if (narrow) {
+                narrow->args[0] = elem;
+                narrow->line = (uint32_t) node->line;
+                elem = narrow;
+            }
+        }
         XiValue *set = xi_value_new(l->func, l->cur_block, XI_INDEX_SET, l->type_unit, 3);
         if (!set)
             break;
         set->args[0] = arr_val;
         set->args[1] = idx;
-        set->args[2] = elem_vals[i];
+        set->args[2] = elem;
         set->flags |= XI_FLAG_SIDE_EFFECT;
+        set->line = (uint32_t) node->line;
     }
     return arr_val;
 }
@@ -1118,6 +1188,27 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;
 
+        if (ma->object && ma->object->type == AST_VARIABLE && ma->name &&
+            strcmp(ma->name, "withCapacity") == 0 && call->arg_count == 1 &&
+            (strcmp(ma->object->as.variable.name, "Array") == 0 ||
+             strcmp(ma->object->as.variable.name, "Bytes") == 0)) {
+            XiValue *cap = xi_lower_expr(l, call->arguments[0]);
+            if (!cap)
+                return NULL;
+            struct XrType *result_type = xi_lower_node_type(l, node);
+            if (!result_type && strcmp(ma->object->as.variable.name, "Bytes") == 0)
+                result_type = xr_type_new_bytes(NULL);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 1);
+            if (!v)
+                return NULL;
+            v->args[0] = cap;
+            v->aux = (void *) "array_with_capacity";
+            v->aux_int = xi_array_cfield_from_type(result_type);
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
         /* Json.decode<T>(data) → XI_JSON_DECODE with compile-time field info.
          * The analyzer already validated T is a sealed Json type with fields
          * and stored the result type as T? in the node table. */
@@ -1175,6 +1266,73 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             return NULL;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
+
+        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
+            strcmp(ma->name, "reserve") == 0 && n == 1) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg_vals[0];
+            v->aux = (void *) "array_reserve";
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
+        if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
+            strcmp(ma->name, "resize") == 0 &&
+            (n == 2 || (n == 1 && xi_type_is_bytes(recv->type)))) {
+            XiValue *fill =
+                n == 2 ? arg_vals[1] : xi_const_int(l->func, l->cur_block, 0, l->type_int);
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 3);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg_vals[0];
+            v->args[2] = fill;
+            v->aux = (void *) "array_resize";
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
+        if (xi_type_is_bytes(recv->type) && ma->name) {
+            const char *builtin_name = NULL;
+            bool mutates = false;
+            if (strcmp(ma->name, "loadU32LE") == 0 && n == 1) {
+                builtin_name = "bytes_load_u32_le";
+            } else if (strcmp(ma->name, "loadU64LE") == 0 && n == 1) {
+                builtin_name = "bytes_load_u64_le";
+            } else if (strcmp(ma->name, "copyWithin") == 0 && n == 3) {
+                builtin_name = "bytes_copy_within";
+                mutates = true;
+            } else if (strcmp(ma->name, "copyFrom") == 0 && n == 4) {
+                builtin_name = "bytes_copy_from";
+                mutates = true;
+            } else if (strcmp(ma->name, "repeatFrom") == 0 && n == 3) {
+                builtin_name = "bytes_repeat_from";
+                mutates = true;
+            }
+            if (builtin_name) {
+                XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type,
+                                          (uint16_t) (n + 1));
+                if (!v)
+                    return NULL;
+                v->args[0] = recv;
+                for (int i = 0; i < n; i++)
+                    v->args[i + 1] = arg_vals[i];
+                v->aux = (void *) builtin_name;
+                if (mutates)
+                    v->flags |= XI_FLAG_SIDE_EFFECT;
+                v->line = (uint32_t) node->line;
+                return v;
+            }
+        }
+
+        xi_lower_narrow_map_method_args(l, node, ma->name, recv, arg_vals, n);
+        xi_lower_narrow_set_method_args(l, node, ma->name, recv, arg_vals, n);
+
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
         if (!v)
@@ -1226,6 +1384,9 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         int n = lower_call_args_expand_spread(l, call, arg_vals, 32, NULL, 0);
         if (n < 0)
             return NULL;
+
+        xi_lower_narrow_map_method_args(l, node, oc->name, obj, arg_vals, n);
+        xi_lower_narrow_set_method_args(l, node, oc->name, obj, arg_vals, n);
 
         uint16_t nargs = (uint16_t) (n + 1);
         XiValue *mcall = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
@@ -1450,6 +1611,14 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
 
     /* Create map: XI_MAP_NEW with capacity */
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (result_type && XR_TYPE_IS_MAP(result_type)) {
+        for (int i = 0; i < n; i++) {
+            key_vals[i] =
+                xi_lower_narrow_for_static_type(l, node, key_vals[i], result_type->map.key_type);
+            val_vals[i] =
+                xi_lower_narrow_for_static_type(l, node, val_vals[i], result_type->map.value_type);
+        }
+    }
     XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
     XiValue *map_val = xi_value_new(l->func, l->cur_block, XI_MAP_NEW, result_type, 1);
     if (!map_val)
@@ -1604,6 +1773,22 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
             v->line = (uint32_t) node->line;
             return v;
         }
+        if (strcmp(cname, "Array") == 0 && ne->arg_count == 2) {
+            XiValue *count = xi_lower_expr(l, ne->arguments[0]);
+            XiValue *fill = xi_lower_expr(l, ne->arguments[1]);
+            if (!count || !fill)
+                return NULL;
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = count;
+            v->args[1] = fill;
+            v->aux = (void *) "array_filled_new";
+            v->aux_int = xi_array_cfield_from_type(result_type);
+            v->flags |= XI_FLAG_SIDE_EFFECT;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
         if (strcmp(cname, "Set") == 0 && ne->arg_count == 0) {
             XiValue *cap = xi_const_int(l->func, l->cur_block, 0, l->type_int);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
@@ -1748,20 +1933,16 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     /* Zero-arg struct with compile-time layout → XI_STRUCT_NEW.
      * The emitter decides stack vs heap via struct_can_stack_alloc. */
     if (ne->arg_count == 0 && ne->module_name == NULL && l->analyzer) {
-        XaSymbol *sym = xa_analyzer_lookup(l->analyzer, cname);
-        if (sym) {
-            XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-            if (links && links->class_info && links->class_info->struct_layout) {
-                XrStructLayout *slayout = links->class_info->struct_layout;
-                XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, result_type, 1);
-                if (!inst)
-                    return NULL;
-                inst->args[0] = cls;
-                inst->aux = (void *) slayout;
-                inst->flags |= XI_FLAG_SIDE_EFFECT;
-                inst->line = (uint32_t) node->line;
-                return inst;
-            }
+        XrStructLayout *slayout = xi_lower_lookup_struct_layout(l, cname);
+        if (slayout) {
+            XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, result_type, 1);
+            if (!inst)
+                return NULL;
+            inst->args[0] = cls;
+            inst->aux = (void *) slayout;
+            inst->flags |= XI_FLAG_SIDE_EFFECT;
+            inst->line = (uint32_t) node->line;
+            return inst;
         }
     }
 
@@ -1918,6 +2099,12 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (result_type && XR_TYPE_IS_SET(result_type)) {
+        for (int i = 0; i < n; i++) {
+            elem_vals[i] = xi_lower_narrow_for_static_type(l, node, elem_vals[i],
+                                                           result_type->container.element_type);
+        }
+    }
     XiValue *cap = xi_const_int(l->func, l->cur_block, count, l->type_int);
     XiValue *set_val = xi_value_new(l->func, l->cur_block, XI_SET_NEW, result_type, 1);
     if (!set_val)
@@ -2166,9 +2353,10 @@ static XiValue *lower_slice_expr(XiLower *l, AstNode *node) {
     XiValue *src = xi_lower_expr(l, sl->source);
     XiValue *start = sl->start ? xi_lower_expr(l, sl->start)
                                : xi_const_int(l->func, l->cur_block, 0, l->type_int);
-    /* Omitted end → sentinel -1 (VM interprets as "up to length") */
-    XiValue *end =
-        sl->end ? xi_lower_expr(l, sl->end) : xi_const_int(l->func, l->cur_block, -1, l->type_int);
+    /* Omitted end clamps to the container length without colliding with
+     * negative slice indices. */
+    XiValue *end = sl->end ? xi_lower_expr(l, sl->end)
+                           : xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
     if (!src)
         return NULL;
 
@@ -2251,15 +2439,7 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     /* Struct with layout: emit XI_STRUCT_NEW + XI_STRUCT_SET.
      * Emitter decides stack vs heap based on local use-scan. */
     if (cls) {
-        XrStructLayout *slayout = NULL;
-        if (sname && l->analyzer) {
-            XaSymbol *sym = xa_analyzer_lookup(l->analyzer, sname);
-            if (sym) {
-                XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
-                if (links && links->class_info)
-                    slayout = links->class_info->struct_layout;
-            }
-        }
+        XrStructLayout *slayout = xi_lower_lookup_struct_layout(l, sname);
 
         if (slayout) {
             XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, result_type, 1);
@@ -2276,11 +2456,13 @@ static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
                 int fidx = xi_lower_struct_field_index(slayout, sl->field_names[i]);
                 if (fidx < 0)
                     continue;
+                XiValue *field_val = xi_lower_narrow_for_native_field(
+                    l, node, val_vals[i], slayout->fields[fidx].native_type);
                 XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_unit, 2);
                 if (!set)
                     break;
                 set->args[0] = inst;
-                set->args[1] = val_vals[i];
+                set->args[1] = field_val;
                 set->aux = (void *) slayout;
                 set->aux_int = fidx;
                 set->flags |= XI_FLAG_SIDE_EFFECT;

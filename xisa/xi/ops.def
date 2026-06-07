@@ -1,0 +1,1163 @@
+; Xi semantic op metadata source.
+; This file describes typed IR operations before target-specific lowering.
+
+(define-xi-op xi.const
+  :class constant
+  :arity 0
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.param
+  :class constant
+  :arity 0
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.add
+  :class arithmetic
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.sub
+  :class arithmetic
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.mul
+  :class arithmetic
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.div
+  :class arithmetic
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.mod
+  :class arithmetic
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.neg
+  :class arithmetic
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.band
+  :class bitwise
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bor
+  :class bitwise
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bxor
+  :class bitwise
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bnot
+  :class bitwise
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.shl
+  :class bitwise
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.shr
+  :class bitwise
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.eq
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.ne
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.lt
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.le
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.gt
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.ge
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.eq.strict
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.ne.strict
+  :class comparison
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.not
+  :class type
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.convert
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.box
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.unbox
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.i8
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.u8
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.i16
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.u16
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.i32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.u32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.narrow.f32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.i8
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.u8
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.i16
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.u16
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.i32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.u32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.widen.f32
+  :class conversion
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.load.field
+  :class memory-read
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.store.field
+  :class memory-write
+  :arity 2
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.index.get
+  :class memory-read
+  :arity 2
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.index.set
+  :class memory-write
+  :arity 3
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.struct.new
+  :class allocation
+  :arity 1
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.struct.get
+  :class memory-read
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.struct.set
+  :class memory-write
+  :arity 2
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.json.new
+  :class allocation
+  :arity 0
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.json.init.f
+  :class memory-write
+  :arity 2
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.json.get.f
+  :class memory-read
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.json.set.f
+  :class memory-write
+  :arity 2
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.json.decode
+  :class allocation
+  :arity 1
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.array.new
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.map.new
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.tuple.new
+  :class allocation
+  :arity variadic
+  :effects (memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.tuple.get
+  :class memory-read
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.call
+  :class call
+  :arity variadic
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.call.method
+  :class call
+  :arity variadic
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.call.method.direct
+  :class call
+  :arity variadic
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.tail.call
+  :class call
+  :arity variadic
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.call.builtin
+  :class call
+  :arity variadic
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.extract
+  :class call
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.closure.new
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.load.upval
+  :class memory-read
+  :arity 0
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.store.upval
+  :class memory-write
+  :arity 1
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.get.shared
+  :class memory-read
+  :arity 0
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.set.shared
+  :class memory-write
+  :arity 1
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.get.global
+  :class memory-read
+  :arity 0
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.set.global
+  :class memory-write
+  :arity 1
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.print
+  :class side-effect
+  :arity variadic
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.go
+  :class coroutine
+  :arity variadic
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.await
+  :class coroutine
+  :arity variadic
+  :effects (side-effect may-suspend may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.send
+  :class coroutine
+  :arity 2
+  :effects (side-effect may-suspend memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.recv
+  :class coroutine
+  :arity 1
+  :effects (side-effect may-suspend memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.try.send
+  :class coroutine
+  :arity 2
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.try.recv
+  :class coroutine
+  :arity 1
+  :effects (side-effect memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.is.closed
+  :class coroutine
+  :arity 1
+  :effects (side-effect memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.time.after
+  :class allocation
+  :arity 1
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.select.block
+  :class coroutine
+  :arity variadic
+  :effects (side-effect may-suspend memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.yield
+  :class coroutine
+  :arity 0
+  :effects (side-effect may-suspend)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.throw
+  :class exception
+  :arity 1
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.err.set
+  :class error
+  :arity 1
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.err.return
+  :class error
+  :arity 1
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.err.check
+  :class error
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.err.catch
+  :class error
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.iter.new
+  :class iterator
+  :arity 1
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.iter.next
+  :class iterator
+  :arity 1
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.iter.valid
+  :class iterator
+  :arity 1
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.defer
+  :class side-effect
+  :arity variadic
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.new
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.set.new
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.str.concat
+  :class sequence
+  :arity variadic
+  :effects (memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.is
+  :class type
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.as
+  :class type
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.slice
+  :class sequence
+  :arity 3
+  :effects (memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.range
+  :class sequence
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.multi.ret
+  :class call
+  :arity variadic
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.isnull
+  :class type
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.phi
+  :class pure
+  :arity variadic
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.select
+  :class pure
+  :arity 3
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.copy
+  :class pure
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.class.create
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.scope.enter
+  :class coroutine
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.scope.exit
+  :class coroutine
+  :arity 0
+  :effects (side-effect may-suspend)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.try
+  :class exception
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.catch
+  :class exception
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.end.try
+  :class exception
+  :arity 0
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.assert
+  :class side-effect
+  :arity 1
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.assert.eq
+  :class side-effect
+  :arity 2
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.assert.ne
+  :class side-effect
+  :arity 2
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.assert.throws
+  :class side-effect
+  :arity 1
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.typeof
+  :class type
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.get.builtin
+  :class memory-read
+  :arity 0
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.import.ref
+  :class memory-read
+  :arity 0
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.regex.compile
+  :class allocation
+  :arity 2
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bounds.check
+  :class guard
+  :arity 2
+  :effects (side-effect may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.retain
+  :class ownership
+  :arity 1
+  :effects (side-effect retains)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.release
+  :class ownership
+  :arity 1
+  :effects (side-effect releases)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.move
+  :class pure
+  :arity 1
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.drop.reuse
+  :class ownership
+  :arity 1
+  :effects (side-effect)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.alloc.at
+  :class allocation
+  :arity 1
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.stack.alloc
+  :class allocation
+  :arity variadic
+  :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.coro.op
+  :class coroutine
+  :arity variadic
+  :effects (side-effect memory-read memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.guard.type
+  :class guard
+  :arity 1
+  :effects (side-effect may-deopt may-throw)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.vec.load
+  :class vector
+  :arity 2
+  :effects (memory-read)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.vec.store
+  :class vector
+  :arity 3
+  :effects (side-effect memory-write)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.vec.add
+  :class vector
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.vec.sub
+  :class vector
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.vec.mul
+  :class vector
+  :arity 2
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)

@@ -605,21 +605,171 @@ XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
 /* Determine the machine representation a value naturally produces.
  * Constants and arithmetic with known numeric types produce I64/F64.
  * Calls, loads, and polymorphic ops produce TAGGED. */
-static XrRep sr_def_rep(const XiValue *v) {
+static XrRep sr_type_scalar_rep(const struct XrType *type) {
+    if (!type)
+        return XR_REP_TAGGED;
+    XrRep r = xr_type_base_rep(type);
+    return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+}
+
+static bool sr_type_is_task_instance(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, "Task") == 0;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (sr_type_is_task_instance(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
+    if (!receiver || !receiver->type || receiver->type->kind != XR_KIND_INSTANCE)
+        return false;
+    return !sr_type_is_task_instance(receiver->type);
+}
+
+static const XrType *sr_array_elem_type(const XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_ARRAY)
+        return type->container.element_type;
+    if (type->kind == XR_KIND_FIXED_ARRAY)
+        return type->fixed_array.element_type;
+    return NULL;
+}
+
+static XrRep sr_typed_array_elem_rep(const XrType *type) {
+    const XrType *elem = sr_array_elem_type(type);
+    if (!elem || elem->is_nullable)
+        return XR_REP_TAGGED;
+    return sr_type_scalar_rep(elem);
+}
+
+static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
+    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static bool sr_value_has_static_typed_array_storage_depth(const XiValue *value, uint8_t depth) {
+    const XiValue *v = sr_unwrap_identity_value(value);
+    if (!v || depth > 8 || sr_typed_array_elem_rep(v->type) == XR_REP_TAGGED)
+        return false;
+    if (v->op == XI_ARRAY_NEW)
+        return true;
+    if (v->op == XI_LOAD_FIELD)
+        return true;
+    if (v->op == XI_SLICE && v->nargs >= 1)
+        return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
+    if (v->op == XI_CALL_BUILTIN) {
+        const char *name = (const char *) v->aux;
+        if (name && (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0))
+            return true;
+        if (name && strcmp(name, "slice") == 0 && v->nargs >= 1)
+            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
+        return false;
+    }
+    if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
+        const char *method = (const char *) v->aux;
+        if (method && strcmp(method, "slice") == 0)
+            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
+        if (method && strcmp(method, "filter") == 0)
+            return sr_value_has_static_typed_array_storage_depth(v->args[0], depth + 1);
+        if (method && strcmp(method, "map") == 0)
+            return true;
+    }
+    if (v->op == XI_PHI) {
+        bool has_base = false;
+        if (v->nargs == 0)
+            return false;
+        for (uint16_t i = 0; i < v->nargs; i++) {
+            const XiValue *arg = sr_unwrap_identity_value(v->args[i]);
+            if (arg == v)
+                continue;
+            if (!sr_value_has_static_typed_array_storage_depth(arg, depth + 1))
+                return false;
+            has_base = true;
+        }
+        return has_base;
+    }
+    return false;
+}
+
+static bool sr_value_has_static_typed_array_storage(const XiValue *value) {
+    return sr_value_has_static_typed_array_storage_depth(value, 0);
+}
+
+static bool sr_value_is_fixed_array_field_ref(const XiValue *value) {
+    const XiValue *v = sr_unwrap_identity_value(value);
+    if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
+        return false;
+    const XrStructLayout *sl = (const XrStructLayout *) v->aux;
+    if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
+        return false;
+    return sl->fields[v->aux_int].native_type == XR_NATIVE_ARRAY;
+}
+
+static bool sr_value_is_typed_array_field_ref(const XiValue *value) {
+    const XiValue *v = sr_unwrap_identity_value(value);
+    if (!v || v->op != XI_STRUCT_GET || v->nargs < 1)
+        return false;
+    const XrStructLayout *sl = (const XrStructLayout *) v->aux;
+    if (!sl || v->aux_int < 0 || v->aux_int >= sl->field_count)
+        return false;
+    return sl->fields[v->aux_int].native_type == XR_NATIVE_ARRAY_REF &&
+           sr_typed_array_elem_rep(v->type) != XR_REP_TAGGED;
+}
+
+static bool sr_value_has_static_index_storage(const XiValue *value) {
+    return sr_value_has_static_typed_array_storage(value) ||
+           sr_value_is_typed_array_field_ref(value) || sr_value_is_fixed_array_field_ref(value);
+}
+
+static bool sr_value_has_static_unboxed_array_elem_type(const XiValue *value) {
+    const XiValue *v = sr_unwrap_identity_value(value);
+    return v && sr_typed_array_elem_rep(v->type) != XR_REP_TAGGED;
+}
+
+static bool sr_is_typed_array_length_field(const XiValue *v) {
+    if (!v || v->nargs < 1 || !v->args[0])
+        return false;
+    if (!sr_value_has_static_typed_array_storage(v->args[0]) &&
+        !sr_value_is_typed_array_field_ref(v->args[0]))
+        return false;
+    const char *field = (const char *) v->aux;
+    return field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0);
+}
+
+static bool sr_is_static_collection_length_field(const XiValue *v) {
+    if (!v || v->nargs < 1 || !v->args[0] || !v->aux)
+        return false;
+    const char *field = (const char *) v->aux;
+    if (strcmp(field, "length") != 0 && strcmp(field, "size") != 0)
+        return false;
+    const XiValue *receiver = sr_unwrap_identity_value(v->args[0]);
+    if (!receiver || !receiver->type)
+        return false;
+    return receiver->type->kind == XR_KIND_ARRAY || receiver->type->kind == XR_KIND_MAP ||
+           receiver->type->kind == XR_KIND_SET;
+}
+
+static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
     switch (v->op) {
         case XI_PARAM: {
             /* Typed scalar params get concrete rep.  The JIT/AOT can
              * use this directly instead of re-inferring from type->kind. */
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         case XI_CONST: {
             if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
                 return XR_REP_TAGGED;
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         case XI_ADD:
         case XI_SUB:
@@ -633,8 +783,7 @@ static XrRep sr_def_rep(const XiValue *v) {
         case XI_BNOT:
         case XI_SHL:
         case XI_SHR: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         case XI_EQ:
         case XI_NE:
@@ -649,25 +798,44 @@ static XrRep sr_def_rep(const XiValue *v) {
         case XI_CHAN_IS_CLOSED:
             return XR_REP_I64;
         case XI_SELECT: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
+        case XI_CALL:
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            return sr_type_scalar_rep(v->type);
+        case XI_LOAD_FIELD:
+            if (sr_is_typed_array_length_field(v) || sr_is_static_collection_length_field(v))
+                return XR_REP_I64;
+            if (policy && policy->prefer_call_args_native && v->nargs >= 1 &&
+                sr_field_receiver_uses_native_rep(v->args[0]))
+                return sr_type_scalar_rep(v->type);
+            return XR_REP_TAGGED;
+        case XI_STRUCT_GET:
+            return sr_type_scalar_rep(v->type);
+        case XI_INDEX_GET:
+            if (v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0]))
+                return sr_typed_array_elem_rep(v->args[0]->type);
+            return XR_REP_TAGGED;
+        case XI_PHI:
+            if (policy && !policy->force_phi_tagged)
+                return sr_type_scalar_rep(v->type);
+            return XR_REP_TAGGED;
         case XI_BOX:
             return XR_REP_TAGGED;
         case XI_UNBOX: {
-            XrRep ur = xr_type_base_rep(v->type);
-            if (ur == XR_REP_I64 || ur == XR_REP_F64)
+            XrRep ur = sr_type_scalar_rep(v->type);
+            if (ur != XR_REP_TAGGED)
                 return ur;
             if (v->nargs >= 1 && v->args[0] && v->args[0]->type) {
-                ur = xr_type_base_rep(v->args[0]->type);
-                if (ur == XR_REP_I64 || ur == XR_REP_F64)
+                ur = sr_type_scalar_rep(v->args[0]->type);
+                if (ur != XR_REP_TAGGED)
                     return ur;
             }
             return XR_REP_TAGGED;
         }
         case XI_CONVERT: {
-            XrRep r = xr_type_base_rep(v->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(v->type);
         }
         /* NARROW/WIDEN: value stays in machine register, only range changes.
          * Integer variants keep I64, float variants keep F64. */
@@ -696,7 +864,7 @@ static XrRep sr_def_rep(const XiValue *v) {
  * Determine what representation an instruction needs at a given arg position.
  * Arithmetic and comparisons prefer unboxed; everything else wants tagged.
  */
-static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
+static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy *policy) {
     switch (user->op) {
         case XI_ADD:
         case XI_SUB:
@@ -710,8 +878,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
         case XI_BNOT:
         case XI_SHL:
         case XI_SHR: {
-            XrRep r = xr_type_base_rep(user->type);
-            return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+            return sr_type_scalar_rep(user->type);
         }
         case XI_EQ:
         case XI_NE:
@@ -722,26 +889,73 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx) {
         case XI_EQ_STRICT:
         case XI_NE_STRICT:
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {
-                XrRep r = xr_type_base_rep(user->args[arg_idx]->type);
-                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+                return sr_type_scalar_rep(user->args[arg_idx]->type);
             }
             return XR_REP_TAGGED;
         case XI_NOT:
             if (arg_idx == 0 && user->args[0])
-                return sr_def_rep(user->args[0]);
+                return sr_def_rep(user->args[0], policy);
             return XR_REP_TAGGED;
         case XI_SELECT:
             if (arg_idx == 0 && user->args[0])
-                return sr_def_rep(user->args[0]);
+                return sr_def_rep(user->args[0], policy);
             if (arg_idx < 3) {
-                XrRep r = xr_type_base_rep(user->type);
-                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+                return sr_type_scalar_rep(user->type);
             }
             return XR_REP_TAGGED;
+        case XI_CALL:
+            if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
+                user->args[arg_idx]) {
+                return sr_type_scalar_rep(user->args[arg_idx]->type);
+            }
+            return XR_REP_TAGGED;
+        case XI_CALL_BUILTIN: {
+            const char *name = (const char *) user->aux;
+            if (name && strcmp(name, "Bytes") == 0 && arg_idx < user->nargs &&
+                user->args[arg_idx] && user->args[arg_idx]->type &&
+                user->args[arg_idx]->type->kind == XR_KIND_INT)
+                return XR_REP_I64;
+            return XR_REP_TAGGED;
+        }
+        case XI_CALL_METHOD:
+        case XI_CALL_METHOD_DIRECT:
+            if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
+                user->args[arg_idx]) {
+                return sr_type_scalar_rep(user->args[arg_idx]->type);
+            }
+            return XR_REP_TAGGED;
+        case XI_INDEX_GET:
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[0] &&
+                sr_value_has_static_index_storage(user->args[0])) {
+                return XR_REP_I64;
+            }
+            return XR_REP_TAGGED;
+        case XI_INDEX_SET:
+            if (user->nargs >= 3 && user->args[0] &&
+                (sr_value_has_static_index_storage(user->args[0]) ||
+                 sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
+                if (arg_idx == 1)
+                    return XR_REP_I64;
+                if (arg_idx == 2)
+                    return sr_typed_array_elem_rep(user->args[0]->type);
+            }
+            return XR_REP_TAGGED;
+        case XI_STRUCT_SET:
+            if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
+                return sr_type_scalar_rep(user->args[1]->type);
+            return XR_REP_TAGGED;
+        case XI_STORE_FIELD:
+            if (arg_idx == 1 && policy && policy->prefer_call_args_native && user->nargs >= 2 &&
+                sr_field_receiver_uses_native_rep(user->args[0]) && user->args[1])
+                return sr_type_scalar_rep(user->args[1]->type);
+            return XR_REP_TAGGED;
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
-                XrRep r = xr_type_base_rep(user->args[0]->type);
-                return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
+                return sr_type_scalar_rep(user->args[0]->type);
             }
             return XR_REP_TAGGED;
         case XI_UNBOX:
@@ -793,11 +1007,11 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
 
 /* Rewrite a single arg reference if rep mismatches. */
 static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue **box_of,
-                           XiValue **unbox_of, uint32_t max_id) {
+                           XiValue **unbox_of, uint32_t max_id, const XiRepPolicy *policy) {
     XiValue *arg = *arg_slot;
     if (!arg || arg->id >= max_id)
         return;
-    XrRep def_r = sr_def_rep(arg);
+    XrRep def_r = sr_def_rep(arg, policy);
     if (def_r == use_r)
         return;
 
@@ -818,8 +1032,9 @@ static void sr_rewrite_arg(XiFunc *f, XiValue **arg_slot, XrRep use_r, XiValue *
     }
 }
 
-XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
-    XR_DCHECK(f != NULL, "xi_opt_select_rep: NULL func");
+XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy) {
+    XR_DCHECK(f != NULL, "xi_opt_select_rep_with_policy: NULL func");
+    XiRepPolicy local_policy = policy ? *policy : xi_rep_policy_tagged_boundary();
 
     uint32_t max_id = f->next_value_id;
     if (max_id == 0)
@@ -844,21 +1059,27 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
             if (!v)
                 continue;
             for (uint16_t ai = 0; ai < v->nargs; ai++) {
-                XrRep use_r = sr_use_rep(v, ai);
-                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, unbox_of, max_id);
+                XrRep use_r = sr_use_rep(v, ai, &local_policy);
+                sr_rewrite_arg(f, &v->args[ai], use_r, box_of, unbox_of, max_id, &local_policy);
             }
         }
 
-        /* Phi args: force TAGGED (merge point, safe default) */
+        /* Phi args follow the selected backend policy.  VM-style consumers keep
+         * merge points tagged; AOT can keep scalar phis native. */
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            XrRep phi_rep =
+                local_policy.force_phi_tagged ? XR_REP_TAGGED : sr_type_scalar_rep(phi->value.type);
             for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
-                sr_rewrite_arg(f, &phi->value.args[ai], XR_REP_TAGGED, box_of, unbox_of, max_id);
+                sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, unbox_of, max_id,
+                               &local_policy);
             }
         }
 
-        /* Return control: must be TAGGED */
+        /* Return control follows the function ABI policy. */
         if (blk->kind == XI_BLOCK_RETURN && blk->control) {
-            sr_rewrite_arg(f, &blk->control, XR_REP_TAGGED, box_of, unbox_of, max_id);
+            XrRep ret_rep = local_policy.force_return_tagged ? XR_REP_TAGGED
+                                                             : sr_type_scalar_rep(f->return_type);
+            sr_rewrite_arg(f, &blk->control, ret_rep, box_of, unbox_of, max_id, &local_policy);
         }
     }
 
@@ -928,7 +1149,7 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
     /* Recurse into children first (bottom-up) */
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i])
-            xi_opt_select_rep(f->children[i]);
+            xi_opt_select_rep_with_policy(f->children[i], &local_policy);
     }
 
     /* Populate v->rep for every value and phi in this function.
@@ -941,15 +1162,20 @@ XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (v)
-                v->rep = (uint8_t) sr_def_rep(v);
+                v->rep = (uint8_t) sr_def_rep(v, &local_policy);
         }
         for (XiPhi *phi = blk->phis; phi; phi = phi->next)
-            phi->value.rep = XR_REP_TAGGED;
+            phi->value.rep = (uint8_t) sr_def_rep(&phi->value, &local_policy);
     }
 
     f->stage = XI_STAGE_REPPED;
     f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
     return xi_pass_change_all();
+}
+
+XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f) {
+    XiRepPolicy policy = xi_rep_policy_tagged_boundary();
+    return xi_opt_select_rep_with_policy(f, &policy);
 }
 
 /* ========== BOX/UNBOX Peephole Elimination ========== */
@@ -1195,6 +1421,14 @@ static XiPassStats *stats_slot(XiPipelineStats *st, const char *name) {
     return s;
 }
 
+static bool pass_disabled_by_mask(const XiPassDesc *desc, XiOptDisableMask disabled_passes) {
+    if (!desc || (desc->flags & XI_PASS_REQUIRED))
+        return false;
+    if ((disabled_passes & XI_OPT_DISABLE_IVSR) && strcmp(desc->name, "ivsr") == 0)
+        return true;
+    return false;
+}
+
 static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
     if (!dst || !src)
         return;
@@ -1391,9 +1625,10 @@ cleanup:
     }
 }
 
-XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
-                                            uint64_t budget_ns) {
-    XR_DCHECK(f != NULL, "xi_opt_run_pipeline_ex: NULL func");
+XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
+                                                      XiPipelineStats *stats, uint64_t budget_ns,
+                                                      XiOptDisableMask disabled_passes) {
+    XR_DCHECK(f != NULL, "xi_opt_run_pipeline_ex_with_mask: NULL func");
 
     validate_pass_table();
 
@@ -1517,6 +1752,8 @@ XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipel
 
             /* XRAY_XI_PASS: skip disabled passes (unless required) */
             if (pass_cfg[p].disable && !(desc->flags & XI_PASS_REQUIRED))
+                continue;
+            if (pass_disabled_by_mask(desc, disabled_passes))
                 continue;
 
             /* Budget check before each pass */
@@ -1677,8 +1914,8 @@ done:
         if (f->children[i]) {
             XiPipelineStats child_stats;
             XiPipelineStats *child_stats_ptr = stats ? &child_stats : NULL;
-            XiPassChange child_chg =
-                xi_opt_run_pipeline_ex(f->children[i], level, child_stats_ptr, budget_ns);
+            XiPassChange child_chg = xi_opt_run_pipeline_ex_with_mask(
+                f->children[i], level, child_stats_ptr, budget_ns, disabled_passes);
             total = xi_pass_merge(total, child_chg);
             if (stats)
                 stats_merge(stats, &child_stats);
@@ -1686,6 +1923,11 @@ done:
     }
 
     return total;
+}
+
+XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
+                                            uint64_t budget_ns) {
+    return xi_opt_run_pipeline_ex_with_mask(f, level, stats, budget_ns, XI_OPT_DISABLE_NONE);
 }
 
 XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level) {

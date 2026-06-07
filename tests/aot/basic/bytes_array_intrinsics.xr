@@ -1,0 +1,61 @@
+let b = new Bytes(16)
+b[0] = 1
+b[1] = 2
+b[2] = 3
+b[3] = 4
+b[4] = 5
+b[5] = 6
+b[6] = 7
+b[7] = 8
+
+print(b.loadU32LE(0))
+print(b.loadU64LE(0))
+
+let dst = Bytes.withCapacity(6)
+print(dst.length)
+print(dst.capacity)
+dst.resize(6)
+dst.copyFrom(b, 1, 2, 3)
+print(dst[0])
+print(dst[2])
+print(dst[3])
+print(dst[4])
+
+let move = new Bytes(6)
+move[0] = 10
+move[1] = 20
+move[2] = 30
+move[3] = 40
+move.copyWithin(2, 0, 4)
+print(move[2])
+print(move[3])
+print(move[4])
+print(move[5])
+
+let rep = new Bytes(9)
+rep[0] = 65
+rep[1] = 66
+rep[2] = 67
+rep.repeatFrom(3, 3, 6)
+print(rep[3])
+print(rep[4])
+print(rep[5])
+print(rep[6])
+print(rep[7])
+print(rep[8])
+
+let xs = new Array<int>(4, 9)
+print(xs.length)
+print(xs[0])
+print(xs[3])
+
+let u: uint32 = 4294967295
+let wrapped = u + 1
+print(wrapped)
+
+let assigned: uint32 = 4294967296
+print(assigned)
+
+let byte: uint8 = 255
+let byte_wrapped = byte + 1
+print(byte_wrapped)
