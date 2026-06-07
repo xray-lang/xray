@@ -11,6 +11,13 @@
     X(ADD, "xi.add", xicgen_add) \
     X(SUB, "xi.sub", xicgen_sub) \
     X(MUL, "xi.mul", xicgen_mul) \
+    X(NEG, "xi.neg", xicgen_neg) \
+    X(BAND, "xi.band", xicgen_band) \
+    X(BOR, "xi.bor", xicgen_bor) \
+    X(BXOR, "xi.bxor", xicgen_bxor) \
+    X(BNOT, "xi.bnot", xicgen_bnot) \
+    X(SHL, "xi.shl", xicgen_shl) \
+    X(SHR, "xi.shr", xicgen_shr) \
     X(EQ, "xi.eq", xicgen_eq) \
     X(NE, "xi.ne", xicgen_ne) \
     X(LT, "xi.lt", xicgen_lt) \

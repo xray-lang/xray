@@ -981,6 +981,34 @@ static XmRef xi2xm_mul(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_binary_arith(ctx, blk, v);
 }
 
+static XmRef xi2xm_neg(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_unary(ctx, blk, v);
+}
+
+static XmRef xi2xm_band(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_bor(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_bxor(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_bnot(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_unary(ctx, blk, v);
+}
+
+static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_shr(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
 static XmRef xi2xm_eq(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
@@ -1063,19 +1091,12 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return get_ref(ctx, v);
         }
 
-        /* Binary arithmetic + bitwise */
+        /* Binary arithmetic */
         case XI_DIV:
         case XI_MOD:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_SHL:
-        case XI_SHR:
             return lower_binary_arith(ctx, blk, v);
 
         /* Unary */
-        case XI_NEG:
-        case XI_BNOT:
         case XI_NOT:
             return lower_unary(ctx, blk, v);
 

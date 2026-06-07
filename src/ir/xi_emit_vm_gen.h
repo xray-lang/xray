@@ -11,6 +11,13 @@
     X(ADD, xi_emit_arith) \
     X(SUB, xi_emit_arith) \
     X(MUL, xi_emit_arith) \
+    X(NEG, xi_emit_neg) \
+    X(BAND, xi_emit_arith) \
+    X(BOR, xi_emit_arith) \
+    X(BXOR, xi_emit_arith) \
+    X(BNOT, xi_emit_bnot) \
+    X(SHL, xi_emit_arith) \
+    X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
     X(NE, xi_emit_cmp) \
     X(LT, xi_emit_cmp) \
