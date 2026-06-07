@@ -675,6 +675,41 @@ static struct XrProto *find_callee_proto(LowerCtx *ctx, XiFunc *child_xi) {
     return NULL;
 }
 
+static bool jit_builtin_name_is_known(const char *name) {
+    static const char *known[] = {
+        "array_new",     "Bytes",      "chr",       "copy",       "dump",
+        "Exception",     "iter_new",   "iter_next", "iter_valid", "json_get_f",
+        "json_init_f",   "json_set_f", "map_new",   "print",      "range",
+        "regex_compile", "set_new",    "slice",     "str_concat", "StringBuilder",
+        "typeof",        NULL,
+    };
+    for (int k = 0; known[k]; k++) {
+        if (strcmp(name, known[k]) == 0)
+            return true;
+    }
+    return false;
+}
+
+static XmRef lower_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    const char *bn = (const char *) v->aux;
+    int bid = (int) v->aux_int;
+    if (bn != NULL) {
+        if (!jit_builtin_name_is_known(bn)) {
+            fprintf(stderr, "[xi_to_xm] ERROR: unknown builtin name '%s'\n", bn);
+            XR_DCHECK(false, "unregistered builtin in JIT lowering");
+        }
+    } else if (bid < 0) {
+        fprintf(stderr, "[xi_to_xm] ERROR: invalid builtin id %d\n", bid);
+        XR_DCHECK(false, "invalid builtin id in JIT lowering");
+    }
+    int bc_pc = slot_map_bc_pc(ctx, v->id);
+    uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
+    XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t) did);
+    xm_emit(ctx->xm_func, blk, XM_DEOPT, XR_REP_I64, deopt_id, XM_NONE);
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
 static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     /* Generic call lowering for XI_CALL and ops delegated to runtime.
      * For XI_CALL: args[0]=callee, args[1..n]=params.
@@ -759,46 +794,6 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
 
 generic_call:
-    /* XI_CALL_BUILTIN (dump, copy, StringBuilder, Bytes, cancelled):
-     * these are specialized VM ops that don't use xr_jit_invoke_method.
-     * Validate the builtin name, then deopt to the VM interpreter. */
-    if (v->op == XI_CALL_BUILTIN) {
-        const char *bn = (const char *) v->aux;
-        int bid = (int) v->aux_int;
-        /* Hard fail: reject unknown builtins at JIT lowering time.
-         * Known name-based builtins deopt to VM. Numeric-ID builtins
-         * (bid > 0) route through OP_INVOKE and also deopt. */
-        if (bn != NULL) {
-            static const char *known[] = {
-                "array_new",     "Bytes",      "chr",       "copy",       "dump",
-                "Exception",     "iter_new",   "iter_next", "iter_valid", "json_get_f",
-                "json_init_f",   "json_set_f", "map_new",   "print",      "range",
-                "regex_compile", "set_new",    "slice",     "str_concat", "StringBuilder",
-                "typeof",        NULL,
-            };
-            bool found = false;
-            for (int k = 0; known[k]; k++) {
-                if (strcmp(bn, known[k]) == 0) {
-                    found = true;
-                    break;
-                }
-            }
-            if (!found) {
-                fprintf(stderr, "[xi_to_xm] ERROR: unknown builtin name '%s'\n", bn);
-                XR_DCHECK(false, "unregistered builtin in JIT lowering");
-            }
-        } else if (bid < 0) {
-            fprintf(stderr, "[xi_to_xm] ERROR: invalid builtin id %d\n", bid);
-            XR_DCHECK(false, "invalid builtin id in JIT lowering");
-        }
-        int bc_pc = slot_map_bc_pc(ctx, v->id);
-        uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
-        XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t) did);
-        xm_emit(ctx->xm_func, blk, XM_DEOPT, XR_REP_I64, deopt_id, XM_NONE);
-        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-        return xm_const_i64(ctx->xm_func, 0);
-    }
-
     /* Method calls (XI_CALL_METHOD) go through xr_jit_invoke_method
      * which resolves the method on the receiver at runtime. */
     if (v->op == XI_CALL_METHOD) {
@@ -1354,6 +1349,10 @@ static XmRef xi2xm_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_print(ctx, blk, v);
 }
 
+static XmRef xi2xm_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_call_builtin(ctx, blk, v);
+}
+
 static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
@@ -1419,7 +1418,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         /* Method call — same as generic call for now */
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
-        case XI_CALL_BUILTIN:
             return lower_call(ctx, blk, v);
 
         /* Extract i-th result from a multi-return call.  aux_int is the

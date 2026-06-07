@@ -34,6 +34,7 @@
     X(GET_BUILTIN, "xi.get.builtin", xi2xm_get_builtin) \
     X(PRINT, "xi.print", xi2xm_print) \
     X(CLASS_CREATE, "xi.class.create", xi2xm_class_create) \
+    X(CALL_BUILTIN, "xi.call.builtin", xi2xm_call_builtin) \
     X(THROW, "xi.throw", xi2xm_throw) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \

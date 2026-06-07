@@ -33,6 +33,7 @@
     X(TYPEOF, "xi.typeof", xicgen_typeof) \
     X(GET_BUILTIN, "xi.get.builtin", xicgen_get_builtin) \
     X(CLASS_CREATE, "xi.class.create", xicgen_class_create) \
+    X(CALL_BUILTIN, "xi.call.builtin", xicgen_call_builtin) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \

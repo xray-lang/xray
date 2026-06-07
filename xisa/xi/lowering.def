@@ -203,6 +203,13 @@
   :jit-xm (driver xi2xm_class_create)
   :aot-c (driver xicgen_class_create))
 
+(lower xi.call.builtin
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_call_builtin)
+  :jit-xm (driver xi2xm_call_builtin)
+  :aot-c (driver xicgen_call_builtin))
+
 (lower xi.throw
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
