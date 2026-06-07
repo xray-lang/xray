@@ -24,10 +24,21 @@
 #include "../runtime/value/xvalue.h"
 #include <string.h>
 
+struct XrStructLayout;
+
 /* ========== Constants ========== */
 
 #define MAX_REGS 256
 #define NO_REG 255
+
+#define XI_EMIT_STRUCT_PROMOTED_BIT ((int64_t) 1 << 32)
+#define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
+
+static inline XiValue *xi_emit_trace_struct_origin(XiValue *v) {
+    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
 
 /* ========== Emit Context ========== */
 
@@ -122,6 +133,8 @@ typedef struct {
 XR_FUNC void emit_error(EmitCtx *ctx, XiEmitStatus s);
 XR_FUNC int current_pc(EmitCtx *ctx);
 XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst);
+XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const struct XrStructLayout *layout,
+                                            uint8_t *slot_out);
 XR_FUNC void free_reg(EmitCtx *ctx, uint8_t reg);
 XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v);
 XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v);

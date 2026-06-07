@@ -1,0 +1,40 @@
+class Shape {
+    kind: int
+
+    constructor(kind: int) {
+        this.kind = kind
+    }
+}
+
+class Rect extends Shape {
+    w: int
+    h: int
+
+    constructor(w: int, h: int) {
+        super(7)
+        this.w = w
+        this.h = h
+    }
+
+    area() -> int {
+        return this.w * this.h
+    }
+
+    score(n: int) -> int {
+        let i = 0
+        let sum = 0
+        while (i < n) {
+            this.w = this.w + (sum % 3)
+            sum = sum + this.area() + this.kind
+            i = i + 1
+        }
+        return sum
+    }
+}
+
+fn run(n: int) -> int {
+    let r = Rect(3, 4)
+    return r.score(n)
+}
+
+print(run(2000000))

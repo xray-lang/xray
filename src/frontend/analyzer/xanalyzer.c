@@ -18,6 +18,8 @@
 #include "xanalyzer_builtin_interfaces.h"
 #include "xa_node_table.h"
 #include "xa_selection.h"
+#include "../parser/xast_nodes.h"
+#include "../parser/xast_types.h"
 #include "../../base/xintmap.h"
 #include "../../base/xhashmap.h"
 #include "../../base/xmalloc.h"
@@ -1109,6 +1111,110 @@ const struct XaSelection *xa_analyzer_get_selection(XaAnalyzer *analyzer,
     if (!analyzer || !node)
         return NULL;
     return xa_selection_table_get((XaSelectionTable *) analyzer->selection_table, node);
+}
+
+static const char *adt_subject_enum_name(struct XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_ENUM)
+        return type->enum_type.enum_name;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_name)
+        return type->instance.class_name;
+    return NULL;
+}
+
+static const char *adt_variant_owner_name(const struct AstNode *variant) {
+    if (!variant)
+        return NULL;
+    if (variant->type == AST_ENUM_ACCESS)
+        return variant->as.enum_access.enum_name;
+    if (variant->type == AST_MEMBER_ACCESS) {
+        const AstNode *object = variant->as.member_access.object;
+        if (object && object->type == AST_VARIABLE)
+            return object->as.variable.name;
+    }
+    return NULL;
+}
+
+static const char *adt_variant_member_name(const struct AstNode *variant) {
+    if (!variant)
+        return NULL;
+    if (variant->type == AST_ENUM_ACCESS)
+        return variant->as.enum_access.member_name;
+    if (variant->type == AST_MEMBER_ACCESS)
+        return variant->as.member_access.name;
+    return NULL;
+}
+
+static XaSymbol *adt_lookup_enum_symbol(XaAnalyzer *analyzer, const char *name) {
+    if (!analyzer || !name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(analyzer, name);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_in_scope(analyzer, name, analyzer->global_scope);
+    if (!sym || sym->kind != XA_SYM_ENUM)
+        sym = xa_analyzer_lookup_deep(analyzer, name);
+    return (sym && sym->kind == XA_SYM_ENUM) ? sym : NULL;
+}
+
+struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
+                                                    struct XrType *subject_type,
+                                                    const struct AstNode *variant,
+                                                    int payload_index) {
+    if (!analyzer || !variant || payload_index < 0)
+        return NULL;
+
+    const char *subject_name = adt_subject_enum_name(subject_type);
+    const char *owner_name = adt_variant_owner_name(variant);
+    const char *member_name = adt_variant_member_name(variant);
+    const char *enum_name = subject_name ? subject_name : owner_name;
+    if (!enum_name || !member_name)
+        return NULL;
+    if (subject_name && owner_name && strcmp(subject_name, owner_name) != 0)
+        return NULL;
+
+    XaSymbol *enum_sym = adt_lookup_enum_symbol(analyzer, enum_name);
+    XaSymbolLinks *links = xa_analyzer_get_links(analyzer, enum_sym);
+    if (!links || !links->enum_payload_counts || !links->enum_payload_types)
+        return NULL;
+
+    int member_index = -1;
+    for (int i = 0; i < links->enum_member_count; i++) {
+        if (links->enum_member_names[i] && strcmp(links->enum_member_names[i], member_name) == 0) {
+            member_index = i;
+            break;
+        }
+    }
+    if (member_index < 0 || payload_index >= links->enum_payload_counts[member_index])
+        return NULL;
+
+    XrType **payload_types = links->enum_payload_types[member_index];
+    XrType *payload_type = payload_types ? payload_types[payload_index] : NULL;
+    if (!payload_type)
+        return NULL;
+
+    int param_count = xa_symbol_links_get_type_param_count(links);
+    if (param_count <= 0 || !subject_type ||
+        (subject_type->kind != XR_KIND_INSTANCE && subject_type->kind != XR_KIND_CLASS) ||
+        subject_type->instance.type_arg_count != param_count || !subject_type->instance.type_args)
+        return payload_type;
+
+    const char *stack_names[8];
+    const char **param_names = stack_names;
+    if (param_count > 8) {
+        param_names = (const char **) xr_malloc(sizeof(const char *) * (size_t) param_count);
+        if (!param_names)
+            return payload_type;
+    }
+    for (int i = 0; i < param_count; i++)
+        param_names[i] = xa_symbol_links_get_type_param_name(links, i);
+
+    XrType *resolved = xr_type_substitute(analyzer->isolate, payload_type, param_names,
+                                          subject_type->instance.type_args, param_count);
+    if (param_names != stack_names)
+        xr_free((void *) param_names);
+    return resolved ? resolved : payload_type;
 }
 
 void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file) {

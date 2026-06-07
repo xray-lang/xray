@@ -162,6 +162,111 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
         }                                                                                          \
     } while (0)
 
+static bool vm_struct_write_field_bytes(uint8_t *fp, const XrStructFieldLayout *field, XrValue src);
+
+static bool vm_struct_write_instance_bytes(uint8_t *dst, XrInstance *inst) {
+    if (!dst || !inst || !inst->klass || !inst->klass->struct_layout)
+        return false;
+    XrStructLayout *layout = inst->klass->struct_layout;
+    if (layout->field_count > xr_class_instance_field_count(inst->klass))
+        return false;
+
+    *(XrClass **) dst = inst->klass;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        XrStructFieldLayout *field = &layout->fields[i];
+        uint8_t *fp = dst + 8 + field->offset;
+        if (!vm_struct_write_field_bytes(fp, field, inst->fields[i]))
+            return false;
+    }
+    return true;
+}
+
+static bool vm_struct_write_array_bytes(uint8_t *fp, const XrStructFieldLayout *field,
+                                        XrValue src) {
+    uint8_t es = xr_native_type_size(field->elem_native_type);
+    if (XR_IS_ARRAY(src)) {
+        XrArray *arr = (XrArray *) src.ptr;
+        int count = arr->length < field->elem_count ? arr->length : field->elem_count;
+        for (int idx = 0; idx < count; idx++) {
+            XrValue elem = xr_array_get(arr, idx);
+            if (!vm_struct_write_field_bytes(
+                    fp + idx * es, &(XrStructFieldLayout) {.native_type = field->elem_native_type},
+                    elem))
+                return false;
+        }
+        if (count < field->elem_count)
+            memset(fp + count * es, 0, (field->elem_count - count) * es);
+        return true;
+    }
+    if (XR_IS_ARRAY_REF(src)) {
+        memcpy(fp, src.ptr, field->size);
+        return true;
+    }
+    return false;
+}
+
+static bool vm_struct_write_field_bytes(uint8_t *fp, const XrStructFieldLayout *field,
+                                        XrValue src) {
+    if (!fp || !field)
+        return false;
+    switch (field->native_type) {
+        case XR_NATIVE_I64:
+            *(int64_t *) fp = XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U64:
+            *(uint64_t *) fp = (uint64_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_F64:
+            *(double *) fp = XR_TO_FLOAT(src);
+            return true;
+        case XR_NATIVE_BOOL:
+            *(uint8_t *) fp = (uint8_t) src.i;
+            return true;
+        case XR_NATIVE_I32:
+            *(int32_t *) fp = (int32_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U32:
+            *(uint32_t *) fp = (uint32_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_I16:
+            *(int16_t *) fp = (int16_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U16:
+            *(uint16_t *) fp = (uint16_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_I8:
+            *(int8_t *) fp = (int8_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_U8:
+            *(uint8_t *) fp = (uint8_t) XR_TO_INT(src);
+            return true;
+        case XR_NATIVE_F32:
+            *(float *) fp = (float) XR_TO_FLOAT(src);
+            return true;
+        case XR_NATIVE_STRING:
+            *(XrString **) fp = (XrString *) src.ptr;
+            return true;
+        case XR_NATIVE_STRUCT:
+            if (XR_IS_STRUCT_REF(src)) {
+                uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
+                memcpy(fp, src_ptr, field->size);
+                return true;
+            }
+            if (XR_IS_INSTANCE(src))
+                return vm_struct_write_instance_bytes(fp, XR_TO_INSTANCE(src));
+            return false;
+        case XR_NATIVE_ARRAY:
+            return vm_struct_write_array_bytes(fp, field, src);
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+            *(XrValue *) fp = src;
+            return true;
+        default:
+            return false;
+    }
+}
+
 /* ========== VM Execution Loop ========== */
 
 // Optimized VM loop with local variable caching

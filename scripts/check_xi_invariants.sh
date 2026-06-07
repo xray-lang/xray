@@ -137,37 +137,83 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# INV-2: xi_op_name.h sync — every XI_* enum in xi.h must have a name
+# INV-2: generated op name sync — every XI_* enum in xi.h must have a name
 # --------------------------------------------------------------------------
 echo "--- INV-2: op name sync ---"
-if [ -f src/ir/xi.h ] && [ -f src/ir/xi_op_name.h ]; then
+if [ -f src/ir/xi.h ] && [ -f src/ir/xi_ops_gen.h ]; then
     # Extract every concrete op identifier in the [XI_CONST, XI_OP_COUNT)
     # range, dedup, drop the XI_OP_COUNT sentinel, then diff against the
-    # set of cases handled by xi_op_name.h. Anything left is a real gap.
+    # set of cases handled by generated Xi metadata. Anything left is a real gap.
     OPS_FILE=$(mktemp)
     NAMES_FILE=$(mktemp)
     awk '/XI_CONST = 0/,/XI_OP_COUNT/' src/ir/xi.h \
-        | grep -oE '^[[:space:]]*XI_[A-Z_]+' \
+        | grep -oE '^[[:space:]]*XI_[A-Z0-9_]+' \
         | tr -d ' ' \
         | grep -v '^XI_OP_COUNT$' \
         | sort -u > "$OPS_FILE"
-    grep -oE 'case XI_[A-Z_]+' src/ir/xi_op_name.h \
+    grep -oE 'case XI_[A-Z0-9_]+' src/ir/xi_ops_gen.h \
         | sed 's/case //' \
+        | grep -v '^XI_OP_COUNT$' \
         | sort -u > "$NAMES_FILE"
     MISSING=$(comm -23 "$OPS_FILE" "$NAMES_FILE")
     EXTRA=$(comm -13 "$OPS_FILE" "$NAMES_FILE")
     rm -f "$OPS_FILE" "$NAMES_FILE"
     if [ -z "$MISSING" ] && [ -z "$EXTRA" ]; then
-        pass "every XI_* op has a name entry, no orphan cases"
+        pass "every XI_* op has a generated name entry, no orphan cases"
     elif [ -n "$MISSING" ]; then
-        fail "ops missing from xi_op_name.h:"
+        fail "ops missing from generated Xi metadata:"
         printf "%s\n" "$MISSING" | sed 's/^/    /'
     else
-        fail "xi_op_name.h has cases for unknown XI_* ops:"
+        fail "generated Xi metadata has cases for unknown XI_* ops:"
         printf "%s\n" "$EXTRA" | sed 's/^/    /'
     fi
 else
-    warn "xi.h or xi_op_name.h not found, skipping"
+    warn "xi.h or xi_ops_gen.h not found, skipping"
+fi
+
+# --------------------------------------------------------------------------
+# INV-2B: generated Xi metadata must match its source descriptions
+# --------------------------------------------------------------------------
+echo "--- INV-2B: generated Xi source sync ---"
+if [ -f tools/xisagen/xisagen.py ] && [ -f xisa/xi/ops.def ] && [ -f xisa/xi/lowering.def ]; then
+    GEN_TMP=$(mktemp -d)
+    GEN_LOG=$(mktemp)
+    GEN_OK=1
+    if ! python3 tools/xisagen/xisagen.py xi-ops xisa/xi/ops.def \
+        "$GEN_TMP/src/ir/xi_ops_gen.h" >"$GEN_LOG" 2>&1; then
+        GEN_OK=0
+    fi
+    if [ "$GEN_OK" -eq 1 ] && ! python3 tools/xisagen/xisagen.py xi-lowering \
+        xisa/xi/ops.def xisa/xi/lowering.def "$GEN_TMP" >"$GEN_LOG" 2>&1; then
+        GEN_OK=0
+    fi
+    if [ "$GEN_OK" -ne 1 ]; then
+        fail "Xi generator failed"
+        show_matches "$(cat "$GEN_LOG")"
+    else
+        GEN_DIFF=""
+        for rel in \
+            src/ir/xi_ops_gen.h \
+            src/ir/xi_lowering_coverage_gen.h \
+            src/ir/xi_emit_vm_gen.h \
+            src/jit/xi_to_xm_dispatch_gen.h \
+            src/aot/xi_to_c_dispatch_gen.h
+        do
+            if ! diff -u "$rel" "$GEN_TMP/$rel" >/dev/null; then
+                GEN_DIFF="${GEN_DIFF}${rel}\n"
+            fi
+        done
+        if [ -z "$GEN_DIFF" ]; then
+            pass "generated Xi metadata is in sync"
+        else
+            fail "generated Xi metadata is stale:"
+            printf "$GEN_DIFF" | sed 's/^/    /'
+        fi
+    fi
+    rm -rf "$GEN_TMP"
+    rm -f "$GEN_LOG"
+else
+    warn "Xi generator or xisa/xi sources not found, skipping"
 fi
 
 # --------------------------------------------------------------------------

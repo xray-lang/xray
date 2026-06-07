@@ -82,6 +82,31 @@ def main() -> int:
             "  :external-reference some-blog-post)\n",
         )
         ops = write(tmp / "ops.def", "XM_DEF(ADD, ARITH, 2, I64, NONE)\n")
+        xi_ops = write(
+            tmp / "xi_ops.def",
+            "(define-xi-op xi.add\n"
+            "  :class arithmetic\n"
+            "  :arity 2\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode jit-xm aot-c)\n"
+            "  :jit-policy required)\n",
+        )
+        bad_xi_lowering = write(
+            tmp / "bad_xi_lowering.def",
+            "(lower xi.add\n"
+            "  :required-targets (vm-bytecode jit-xm)\n"
+            "  :vm-bytecode (driver xi_emit_add))\n",
+        )
+        good_xi_lowering = write(
+            tmp / "good_xi_lowering.def",
+            "(lower xi.add\n"
+            "  :required-targets (vm-bytecode jit-xm aot-c)\n"
+            "  :vm-bytecode (driver xi_emit_arith)\n"
+            "  :jit-xm (driver xi2xm_add)\n"
+            "  :aot-c (driver xicgen_add))\n",
+        )
         bad_isel = write(tmp / "bad_isel.def", "ISEL(BOGUS, x64, GP_RR, x64.add.rr)\n")
         # An isel entry that names a real op but a bogus mcinsn that is not
         # in the supplied .isa fixture. Triggers the new arch-xref check.
@@ -127,6 +152,34 @@ def main() -> int:
             "documented set",
         )
         expect_fail(ns.xisagen, ["isel", str(bad_isel), str(ops)], "unknown op")
+        expect_fail(
+            ns.xisagen,
+            ["xi-lowering", str(xi_ops), str(bad_xi_lowering), str(tmp)],
+            "missing required target",
+        )
+        out_root = tmp / "xi_lowering_out"
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "xi-lowering", str(xi_ops),
+             str(good_xi_lowering), str(out_root)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"xi-lowering success path failed: {proc.stderr}")
+        expected_outputs = [
+            out_root / "src/ir/xi_lowering_coverage_gen.h",
+            out_root / "src/ir/xi_emit_vm_gen.h",
+            out_root / "src/jit/xi_to_xm_dispatch_gen.h",
+            out_root / "src/aot/xi_to_c_dispatch_gen.h",
+        ]
+        missing_outputs = [str(path) for path in expected_outputs if not path.exists()]
+        if missing_outputs:
+            raise AssertionError(f"xi-lowering did not generate: {missing_outputs}")
+        vm_dispatch = (out_root / "src/ir/xi_emit_vm_gen.h").read_text()
+        if "X(ADD, xi_emit_arith)" not in vm_dispatch:
+            raise AssertionError(f"missing VM lowering driver entry: {vm_dispatch}")
         expect_fail(
             ns.xisagen,
             ["isel", str(good_isel_bad_mcinsn), str(ops),

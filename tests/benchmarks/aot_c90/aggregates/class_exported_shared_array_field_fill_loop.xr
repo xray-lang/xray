@@ -1,0 +1,7 @@
+import { shared_bag } from "../../../aot/modules/shared_bag_lib"
+
+fn class_exported_shared_array_field_fill_loop_run(rounds: int) -> int {
+    return shared_bag.fill(256, rounds)
+}
+
+print(class_exported_shared_array_field_fill_loop_run(20000))

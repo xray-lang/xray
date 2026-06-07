@@ -1,0 +1,31 @@
+// AOT test: generic enum payload keeps tuple type after match binding.
+
+enum DecodeResult<T> {
+    Ok(T),
+    Err(string)
+}
+
+fn readPair() -> DecodeResult<(int, int)> {
+    return DecodeResult.Ok((12, 34))
+}
+
+let r = readPair()
+match (r) {
+    DecodeResult.Ok(p) -> {
+        print(p.0)
+        print(p.1)
+    }
+    DecodeResult.Err(e) -> {
+        print(e)
+    }
+}
+
+match (readPair()) {
+    DecodeResult.Ok((a, b)) -> {
+        print(a + b)
+    }
+    DecodeResult.Err(e) -> {
+        print(e)
+    }
+}
+

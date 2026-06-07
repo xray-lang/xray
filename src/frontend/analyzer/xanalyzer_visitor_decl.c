@@ -1044,8 +1044,9 @@ skip_interfaces:
         }
     }
 
-    // Check recursive struct self-reference (direct value embedding)
-    if (node->type == AST_STRUCT_DECL && cls->name) {
+    // Check struct-only value-type constraints before layout construction.
+    bool struct_field_types_valid = true;
+    if (node->type == AST_STRUCT_DECL) {
         for (int i = 0; i < info->field_count; i++) {
             XaSymbol *fs = info->fields[i];
             if (!fs)
@@ -1054,6 +1055,22 @@ skip_interfaces:
             if (!fl || !fl->type)
                 continue;
             XrType *ft = fl->type;
+
+            if (ft->kind == XR_KIND_ARRAY || ft->kind == XR_KIND_MAP || ft->kind == XR_KIND_SET) {
+                XrLocation loc = {.file = ctx->file_path, .line = fs->location.line};
+                char msg[256];
+                snprintf(msg, sizeof(msg),
+                         "Struct '%s' field '%s' cannot use a dynamic container type; "
+                         "use a class field or a fixed array [N]T",
+                         cls->name ? cls->name : "?", fs->name ? fs->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                struct_field_types_valid = false;
+                continue;
+            }
+
+            if (!cls->name)
+                continue;
             // Field referencing the same struct → infinite size
             const char *type_name = NULL;
             if ((ft->kind == XR_KIND_CLASS || ft->kind == XR_KIND_INSTANCE) &&
@@ -1069,7 +1086,7 @@ skip_interfaces:
                          cls->name);
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                break;
+                struct_field_types_valid = false;
             }
         }
     }
@@ -1077,7 +1094,8 @@ skip_interfaces:
     // Compute struct layout (VALUE_TYPE only, skip generic templates)
     int struct_type_param_count =
         (node->type == AST_STRUCT_DECL) ? node->as.struct_decl.type_param_count : 0;
-    if (node->type == AST_STRUCT_DECL && info->field_count > 0 && struct_type_param_count == 0) {
+    if (node->type == AST_STRUCT_DECL && info->field_count > 0 && struct_type_param_count == 0 &&
+        struct_field_types_valid) {
         XrStructLayout *layout = xr_calloc(1, sizeof(XrStructLayout));
         if (!layout)
             goto skip_layout;
@@ -1105,8 +1123,7 @@ skip_interfaces:
                 char msg[256];
                 snprintf(msg, sizeof(msg),
                          "Struct '%s' field '%s' must have an explicit type annotation "
-                         "(int, float, bool, string) — mutable reference types are not supported "
-                         "in struct fields",
+                         "(int, float, bool, string, fixed array, or struct)",
                          cls->name ? cls->name : "?", fs->name ? fs->name : "?");
                 xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                            XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
@@ -1176,6 +1193,7 @@ skip_interfaces:
                     layout->fields[i].native_type = XR_NATIVE_STRUCT;
                     layout->fields[i].size = 8 + sub_layout->total_size;
                     layout->fields[i].sub_layout_id = sub_layout->layout_id;
+                    layout->fields[i].sub_layout = sub_layout;
                 } else {
                     XrLocation loc = {.file = ctx->file_path, .line = node->line};
                     char msg[256];

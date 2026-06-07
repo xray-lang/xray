@@ -286,6 +286,18 @@ TEST(pipeline_stats_include_child_ivsr) {
     xi_func_free(parent);
 }
 
+TEST(pipeline_mask_can_disable_ivsr) {
+    XiFunc *f = build_live_counted_loop();
+
+    XiPipelineStats stats;
+    xi_opt_run_pipeline_ex_with_mask(f, XI_OPT_FULL, &stats, 0, XI_OPT_DISABLE_IVSR);
+
+    ASSERT(find_stats(&stats, "ivsr") == NULL);
+    ASSERT(find_stats(&stats, "block_simplify") != NULL);
+
+    xi_func_free(f);
+}
+
 int main(void) {
     printf("=== Xi IVSR tests ===\n\n");
 
@@ -295,6 +307,7 @@ int main(void) {
     run_no_loop_no_change();
     run_j_next_step_is_correct();
     run_pipeline_stats_include_child_ivsr();
+    run_pipeline_mask_can_disable_ivsr();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

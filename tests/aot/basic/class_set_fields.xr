@@ -1,0 +1,34 @@
+class SeenSet {
+    values: Set<int>
+
+    constructor() {
+        let values: Set<int> = #[]
+        this.values = values
+    }
+
+    add(value: int) -> int {
+        this.values.add(value)
+        return this.values.length
+    }
+
+    contains(value: int) -> bool {
+        return this.values.has(value)
+    }
+
+    remove(value: int) -> bool {
+        return this.values.delete(value)
+    }
+
+    count() -> int {
+        return this.values.length
+    }
+}
+
+let seen = SeenSet()
+print(seen.add(3))
+print(seen.add(5))
+print(seen.add(3))
+print(seen.contains(5))
+print(seen.remove(5))
+print(seen.contains(5))
+print(seen.count())

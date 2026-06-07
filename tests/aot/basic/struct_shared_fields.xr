@@ -1,0 +1,17 @@
+struct Sample {
+    x: int
+    y: float
+    ok: bool
+    byte: uint8
+}
+
+let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}
+p.x = p.x + 1
+p.byte = p.byte + 1
+
+if (p.ok) {
+    print(p.x + p.byte)
+} else {
+    print(0)
+}
+print(p.y)

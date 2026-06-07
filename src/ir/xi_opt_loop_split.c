@@ -78,7 +78,7 @@ static XiBlock *find_splittable_exit(const XiLoop *loop, XiValue **out_check,
 
     for (uint32_t bi = 0; bi < loop->nbody; bi++) {
         XiBlock *blk = loop->body[bi];
-        if (!blk || blk == loop->header)
+        if (!blk || blk == loop->header || blk == loop->preheader || blk == loop->latch)
             continue;
         if (blk->kind != XI_BLOCK_IF || !blk->control)
             continue;
@@ -149,6 +149,22 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
     uint16_t pre_idx = xi_cfg_pred_index(header, preheader);
     if (pre_idx >= header->npreds)
         return false;
+    if (xi_cfg_phi_count(early_exit) != 0)
+        return false;
+
+    uint32_t header_nphis = xi_cfg_phi_count(header);
+    XiValue **header_guard_args = NULL;
+    if (header_nphis > 0) {
+        header_guard_args = (XiValue **) xi_func_arena_alloc(f, header_nphis * sizeof(XiValue *));
+        if (!header_guard_args)
+            return false;
+        uint32_t i = 0;
+        for (XiPhi *phi = header->phis; phi; phi = phi->next, i++) {
+            if (pre_idx >= phi->value.nargs || !phi->value.args[pre_idx])
+                return false;
+            header_guard_args[i] = phi->value.args[pre_idx];
+        }
+    }
 
     /* Clone the exit condition with preheader (first-iteration) values. */
     XiValue *guard_args[2] = {NULL, NULL};
@@ -180,8 +196,8 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
 
     /* Determine which successor of exit_block is the early exit
      * and which continues in the loop. */
-    bool exit_on_true = (exit_block->succs[1] == early_exit);
-    XiBlock *continue_succ = exit_on_true ? exit_block->succs[0] : exit_block->succs[1];
+    bool exit_on_true = (exit_block->succs[0] == early_exit);
+    XiBlock *continue_succ = exit_on_true ? exit_block->succs[1] : exit_block->succs[0];
 
     /* In the main loop body: convert the early-exit IF into an
      * unconditional jump to the continue successor. */
@@ -193,15 +209,22 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
 
     /* Wire the guard: if guard condition would cause early exit,
      * jump directly to the early exit; otherwise enter the loop. */
+    guard->kind = XI_BLOCK_IF;
+    guard->control = guard_cond;
     if (exit_on_true) {
-        /* Original: if (!cond) exit; in the guard: if (cond) exit. */
-        xi_block_set_if(guard, guard_cond, early_exit, header);
+        guard->succs[0] = early_exit;
+        guard->succs[1] = header;
     } else {
-        xi_block_set_if(guard, guard_cond, header, early_exit);
+        guard->succs[0] = header;
+        guard->succs[1] = early_exit;
     }
 
     /* Redirect preheader → guard → header. */
     if (!xi_cfg_redirect_edge(preheader, header, guard, NULL, 0))
+        return false;
+    if (!xi_cfg_append_pred(header, guard, header_guard_args, header_nphis))
+        return false;
+    if (!xi_cfg_append_pred(early_exit, guard, NULL, 0))
         return false;
 
     guard->sealed = true;

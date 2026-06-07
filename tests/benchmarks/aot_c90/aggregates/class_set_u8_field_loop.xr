@@ -1,0 +1,54 @@
+class ByteSetBag {
+    values: Set<uint8>
+
+    constructor() {
+        let values: Set<uint8> = #[]
+        this.values = values
+    }
+
+    fill(n: int) -> int {
+        let i = 0
+        while (i < n) {
+            this.values.add(i)
+            i = i + 1
+        }
+        return this.values.length
+    }
+
+    scan(n: int, rounds: int) -> int {
+        let r = 0
+        let hits = 0
+        while (r < rounds) {
+            let i = 0
+            while (i < n) {
+                if (this.values.has(i)) {
+                    hits = hits + i
+                }
+                i = i + 1
+            }
+            r = r + 1
+        }
+        return hits
+    }
+
+    prune(n: int) -> int {
+        let i = 0
+        let removed = 0
+        while (i < n) {
+            if (this.values.delete(i)) {
+                removed = removed + 1
+            }
+            i = i + 2
+        }
+        return removed + this.values.length
+    }
+}
+
+fn class_set_u8_field_loop_run(n: int, rounds: int) -> int {
+    let bag = ByteSetBag()
+    let count = bag.fill(n)
+    let sum = bag.scan(n, rounds)
+    return sum + count + bag.prune(n)
+}
+
+print(class_set_u8_field_loop_run(64, 5000))

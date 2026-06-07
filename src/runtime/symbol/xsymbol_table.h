@@ -241,6 +241,13 @@ enum {
     SYMBOL_SORT,
     SYMBOL_INCLUDES,
     SYMBOL_CAPACITY,
+    SYMBOL_RESERVE,
+    SYMBOL_RESIZE,
+    SYMBOL_LOADU32LE,
+    SYMBOL_LOADU64LE,
+    SYMBOL_COPYWITHIN,
+    SYMBOL_COPYFROM,
+    SYMBOL_REPEATFROM,
 
     // Regex methods
     SYMBOL_TEST,
@@ -255,6 +262,9 @@ enum {
     SYMBOL_IS_BOOL,
     SYMBOL_IS_ARRAY,
     SYMBOL_IS_OBJECT,
+
+    // Collection property aliases
+    SYMBOL_SIZE,
 
     SYMBOL_BUILTIN_COUNT  // sentinel
 };

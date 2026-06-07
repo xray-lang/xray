@@ -233,6 +233,89 @@ XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, (uint8_t) v->aux_int, c));
 }
 
+static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, uint8_t dst, OpCode op) {
+    if (v->nargs != 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t bytes = reg_of(ctx, v->args[0]);
+    uint8_t offset = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(op, dst, bytes, offset));
+}
+
+static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, uint8_t dst, OpCode op,
+                                         uint16_t expected_args) {
+    if (v->nargs != expected_args) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    if (ctx->next_reg + expected_args >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    uint8_t base = ctx->next_reg;
+    ctx->next_reg = (uint8_t) (base + expected_args);
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t a = 0; a < expected_args; a++) {
+        uint8_t src = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        uint8_t target = (uint8_t) (base + a);
+        if (src != target)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(op, base, 0, 0));
+    if (dst != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+}
+
+static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    uint8_t nargs = (uint8_t) v->nargs;
+    if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    uint8_t base = ctx->next_reg;
+    ctx->next_reg += 1 + nargs;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    for (uint16_t a = 0; a < nargs; a++) {
+        uint8_t arg_r = reg_of(ctx, v->args[a]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t) (base + 1 + a), arg_r, 0));
+    }
+    emit_inst(ctx, CREATE_ABC(OP_BYTES_NEW, base, nargs, 0));
+    if (dst != base)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+}
+
+static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs != 2) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t len = reg_of(ctx, v->args[0]);
+    uint8_t fill = reg_of(ctx, v->args[1]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    if (ctx->next_reg + 2 >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    uint8_t len_tmp = ctx->next_reg++;
+    uint8_t fill_tmp = ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, len_tmp, len, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, fill_tmp, fill, 0));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, len_tmp, (uint8_t) (v->aux_int & 0xFF)));
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, dst, len_tmp, fill_tmp));
+}
+
 /* Builtin call: aux_int=builtin_id or aux=name string */
 XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Name-based dispatch (aux is a string identifier) */
@@ -282,27 +365,74 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
     if (bname && strcmp(bname, "Bytes") == 0) {
-        uint8_t nargs = (uint8_t) v->nargs;
-        if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
-            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
-            return;
-        }
-        uint8_t base = ctx->next_reg;
-        ctx->next_reg += 1 + nargs;
-        if (ctx->next_reg > ctx->max_reg)
-            ctx->max_reg = ctx->next_reg;
-        for (uint16_t a = 0; a < nargs; a++) {
-            uint8_t arg_r = reg_of(ctx, v->args[a]);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t) (base + 1 + a), arg_r, 0));
-        }
-        emit_inst(ctx, CREATE_ABC(OP_BYTES_NEW, base, nargs, 0));
-        if (dst != base)
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
+        emit_builtin_bytes_new(ctx, v, dst);
         return;
     }
-    /* Exception: no dedicated opcode — handled as a regular class via
+    if (bname && strcmp(bname, "array_with_capacity") == 0) {
+        if (v->nargs != 1) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        uint8_t cap = reg_of(ctx, v->args[0]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, (uint8_t) (v->aux_int & 0xFF)));
+        return;
+    }
+    if (bname && strcmp(bname, "array_filled_new") == 0) {
+        emit_builtin_array_filled_new(ctx, v, dst);
+        return;
+    }
+    if (bname && strcmp(bname, "array_reserve") == 0) {
+        if (v->nargs != 2) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        uint8_t arr = reg_of(ctx, v->args[0]);
+        uint8_t cap = reg_of(ctx, v->args[1]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESERVE, arr, cap, 0));
+        if (dst != arr)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, arr, 0));
+        return;
+    }
+    if (bname && strcmp(bname, "array_resize") == 0) {
+        if (v->nargs != 3) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+        uint8_t arr = reg_of(ctx, v->args[0]);
+        uint8_t len = reg_of(ctx, v->args[1]);
+        uint8_t fill = reg_of(ctx, v->args[2]);
+        if (ctx->status != XI_EMIT_OK)
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, arr, len, fill));
+        if (dst != arr)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, arr, 0));
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_load_u32_le") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_load_u64_le") == 0) {
+        emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_copy_within") == 0) {
+        emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_WITHIN, 4);
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_copy_from") == 0) {
+        emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_FROM, 5);
+        return;
+    }
+    if (bname && strcmp(bname, "bytes_repeat_from") == 0) {
+        emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_REPEAT_FROM, 4);
+        return;
+    }
+    /* Exception: no dedicated opcode; handled as a regular class via
      * the generic OP_INVOKE pipeline with a primitive constructor. */
     /* Hard fail for unrecognized name-based builtins */
     if (bname) {

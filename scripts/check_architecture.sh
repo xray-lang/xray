@@ -61,6 +61,27 @@ done < <(find "$SRC_DIR" -name '*.h' -exec wc -l {} + 2>/dev/null | grep -v 'tot
 echo ""
 
 # -----------------------------------------------
+# Q-2B: C include fragments use .inc.c suffix
+# -----------------------------------------------
+echo "--- Q-2B: C include fragment suffix ---"
+q2b_hits=$(find "$SRC_DIR" "$INC_DIR" -type f -name '*.inc' 2>/dev/null || true)
+q2b_includes=$(grep -rnE '#[[:space:]]*include[[:space:]]+"[^"]+\.inc"' \
+        --include='*.c' --include='*.h' --include='*.inc.c' \
+        "$SRC_DIR" "$INC_DIR" 2>/dev/null || true)
+if [ -n "$q2b_hits" ] || [ -n "$q2b_includes" ]; then
+    fail "C include fragments must use .inc.c, not bare .inc"
+    if [ -n "$q2b_hits" ]; then
+        echo "$q2b_hits" | head -5 | sed 's/^/    file: /'
+    fi
+    if [ -n "$q2b_includes" ]; then
+        echo "$q2b_includes" | head -5 | sed 's/^/    include: /'
+    fi
+else
+    pass "No bare .inc C include fragments"
+fi
+echo ""
+
+# -----------------------------------------------
 # Q-3: No direct malloc / free / calloc / realloc
 # -----------------------------------------------
 # Rule: all heap allocations must go through xr_malloc / xr_free /

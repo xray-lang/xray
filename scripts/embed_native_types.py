@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Embed stdlib/types/*.xr files into a C header as string literals.
 
-Usage: python3 scripts/embed_native_types.py stdlib/types/ > src/frontend/analyzer/xnative_type_defs.inc
+Usage: python3 scripts/embed_native_types.py stdlib/types/ > src/frontend/analyzer/xnative_type_defs.inc.c
 
 The generated file provides:
   - XR_NATIVE_TYPE_DEFS: X-macro list of (name, source_string)

@@ -1,0 +1,20 @@
+fn run(n: int) -> int {
+    let values: Array<int> = []
+    let i = 0
+    while (i < n) {
+        values.push((i * 17) % 251)
+        i = i + 1
+    }
+
+    let mapped = values.map(fn(x: int) -> int { return x * 3 + 5 })
+
+    let sum = 0
+    i = 0
+    while (i < mapped.length) {
+        sum = sum + mapped[i]
+        i = i + 1
+    }
+    return sum
+}
+
+print(run(200000))

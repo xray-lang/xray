@@ -97,6 +97,43 @@ vmcase(OP_NEWARRAY) {
     vmbreak;
 }
 
+vmcase(OP_ARRAY_NEW_CAP) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c_field = GETARG_C(i);
+    XrValue cap_value = R(b);
+    if (!XR_IS_INT(cap_value)) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array capacity must be an integer");
+    }
+    int32_t cap = (int32_t) XR_TO_INT(cap_value);
+    if (cap < 0)
+        cap = 0;
+
+    int storage_mode = c_field & 0x03;
+    uint8_t elem_tid = (uint8_t) ((c_field >> 2) & 0x1F);
+    uint8_t elem_type = xr_tid_to_elem_type(elem_tid);
+
+    XrArray *array;
+    if (storage_mode != 0 && isolate->sys_heap) {
+        array = (XrArray *) xr_sysheap_alloc_shared(isolate->sys_heap, sizeof(XrArray), XR_TARRAY);
+        if (array) {
+            xr_array_init_inplace(array, cap, elem_type);
+            XR_GC_SET_STORAGE(&array->gc, storage_mode);
+            if (storage_mode == XR_GC_STORAGE_SHARED)
+                xr_shared_set_refc(&array->gc, 1);
+        }
+    } else {
+        array = xr_array_with_capacity_typed(VM_CURRENT_CORO, cap, elem_type);
+    }
+
+    if (array)
+        array->elem_tid = elem_tid;
+    R(a) = array ? xr_value_from_array(array) : xr_null();
+    if (storage_mode == 0)
+        checkGC(base + a + 1);
+    vmbreak;
+}
+
 vmcase(OP_NEWTUPLE) {
     /* OP_NEWTUPLE: build a new tuple from B consecutive elements
     ** A = destination register
@@ -752,6 +789,118 @@ vmcase(OP_ARRAY_LEN) {
     vmbreak;
 }
 
+vmcase(OP_ARRAY_RESERVE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.reserve(capacity) expects an integer");
+    }
+    if (!xr_array_reserve(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.reserve failed");
+    }
+    vmbreak;
+}
+
+vmcase(OP_ARRAY_RESIZE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(b))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Array.resize(length, fill) expects integer length");
+    }
+    if (!xr_array_resize(XR_TO_ARRAY(R(a)), (int32_t) XR_TO_INT(R(b)), R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "Array.resize failed");
+    }
+    vmbreak;
+}
+
+vmcase(OP_BYTES_LOAD_U32_LE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE(offset) expects Bytes and integer");
+    }
+    XrArray *arr = XR_TO_ARRAY(R(b));
+    if (arr->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU32LE receiver must be Bytes");
+    bool ok = false;
+    uint32_t value = xr_array_load_u32_le(arr, (int32_t) XR_TO_INT(R(c)), &ok);
+    if (!ok)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU32LE offset out of bounds");
+    R(a) = xr_int((xr_Integer) value);
+    vmbreak;
+}
+
+vmcase(OP_BYTES_LOAD_U64_LE) {
+    int a = GETARG_A(i);
+    int b = GETARG_B(i);
+    int c = GETARG_C(i);
+    if (!XR_IS_ARRAY(R(b)) || !XR_IS_INT(R(c))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE(offset) expects Bytes and integer");
+    }
+    XrArray *arr = XR_TO_ARRAY(R(b));
+    if (arr->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.loadU64LE receiver must be Bytes");
+    bool ok = false;
+    uint64_t value = xr_array_load_u64_le(arr, (int32_t) XR_TO_INT(R(c)), &ok);
+    if (!ok)
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.loadU64LE offset out of bounds");
+    R(a) = xr_int((xr_Integer) value);
+    vmbreak;
+}
+
+vmcase(OP_BYTES_COPY_WITHIN) {
+    int a = GETARG_A(i);
+    if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
+        !XR_IS_INT(R(a + 3))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Bytes.copyWithin expects integer offsets and count");
+    }
+    XrArray *arr = XR_TO_ARRAY(R(a));
+    if (arr->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyWithin receiver must be Bytes");
+    if (!xr_array_bytes_copy_within(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyWithin range out of bounds");
+    }
+    vmbreak;
+}
+
+vmcase(OP_BYTES_COPY_FROM) {
+    int a = GETARG_A(i);
+    if (!XR_IS_ARRAY(R(a)) || !XR_IS_ARRAY(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
+        !XR_IS_INT(R(a + 3)) || !XR_IS_INT(R(a + 4))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom expects Bytes and integer ranges");
+    }
+    XrArray *dst = XR_TO_ARRAY(R(a));
+    XrArray *src = XR_TO_ARRAY(R(a + 1));
+    if (dst->elem_type != XR_ELEM_U8 || src->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.copyFrom operands must be Bytes");
+    if (!xr_array_bytes_copy_from(dst, src, (int32_t) XR_TO_INT(R(a + 2)),
+                                  (int32_t) XR_TO_INT(R(a + 3)), (int32_t) XR_TO_INT(R(a + 4)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.copyFrom range out of bounds");
+    }
+    vmbreak;
+}
+
+vmcase(OP_BYTES_REPEAT_FROM) {
+    int a = GETARG_A(i);
+    if (!XR_IS_ARRAY(R(a)) || !XR_IS_INT(R(a + 1)) || !XR_IS_INT(R(a + 2)) ||
+        !XR_IS_INT(R(a + 3))) {
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                         "Bytes.repeatFrom expects integer offsets and count");
+    }
+    XrArray *arr = XR_TO_ARRAY(R(a));
+    if (arr->elem_type != XR_ELEM_U8)
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "Bytes.repeatFrom receiver must be Bytes");
+    if (!xr_array_bytes_repeat_from(arr, (int32_t) XR_TO_INT(R(a + 1)),
+                                    (int32_t) XR_TO_INT(R(a + 2)), (int32_t) XR_TO_INT(R(a + 3)))) {
+        VM_RUNTIME_ERROR(XR_ERR_INDEX_OUT_OF_BOUNDS, "Bytes.repeatFrom range out of bounds");
+    }
+    vmbreak;
+}
+
 vmcase(OP_ARRAY_INIT) {
     /* OP_ARRAY_INIT: batch initialization
     ** A = array register, B = element count
@@ -1247,7 +1396,7 @@ vmcase(OP_SLICE) {
     ** R[A] = R[B][R[C]:R[C+1]]
     ** - R[B]: source object (Array/String/Bytes)
     ** - R[C]: start index (0 = from beginning)
-    ** - R[C+1]: end index (-1 = to end)
+    ** - R[C+1]: end index (large positive value = to end)
     */
     int a = GETARG_A(i);
     int b = GETARG_B(i);

@@ -1,0 +1,21 @@
+struct Counter {
+    total: int
+    step: int
+    name: string
+}
+
+let counter = Counter{total: 1, step: 3, name: "counter"}
+
+fn run(n: int) -> int {
+    let p = counter
+    let i = 0
+    let sum = 0
+    while (i < n) {
+        p.total = p.total + p.step + i
+        sum = sum + p.total
+        i = i + 1
+    }
+    return sum + p.total
+}
+
+print(run(2000000))

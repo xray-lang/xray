@@ -1,0 +1,27 @@
+class Counter {
+    value: int
+    step: int
+
+    constructor(init: int, step: int) {
+        this.value = init
+        this.step = step
+    }
+
+    bump(n: int) -> int {
+        let i = 0
+        let sum = 0
+        while (i < n) {
+            this.value = this.value + this.step
+            sum = sum + this.value
+            i = i + 1
+        }
+        return sum + this.value
+    }
+}
+
+fn run(n: int) -> int {
+    let c = Counter(1, 3)
+    return c.bump(n)
+}
+
+print(run(2000000))

@@ -72,6 +72,11 @@ typedef enum {
     XI_OPT_FULL = 2,  /* LIGHT + SCCP + GVN + LICM + GCM + inlining + if-conv */
 } XiOptLevel;
 
+typedef uint32_t XiOptDisableMask;
+
+#define XI_OPT_DISABLE_NONE 0u
+#define XI_OPT_DISABLE_IVSR (1u << 0)
+
 /* ========== Pass Descriptor ========== */
 
 /* Pass function signature: mutates XiFunc in-place, returns change record */
@@ -145,6 +150,9 @@ XR_FUNC XiPassChange xi_opt_run_pipeline(XiFunc *f, XiOptLevel level);
  *               time exceeds this limit (0 = no limit). */
 XR_FUNC XiPassChange xi_opt_run_pipeline_ex(XiFunc *f, XiOptLevel level, XiPipelineStats *stats,
                                             uint64_t budget_ns);
+XR_FUNC XiPassChange xi_opt_run_pipeline_ex_with_mask(XiFunc *f, XiOptLevel level,
+                                                      XiPipelineStats *stats, uint64_t budget_ns,
+                                                      XiOptDisableMask disabled_passes);
 
 /* Dump pipeline stats to stderr (human-readable, one line per pass). */
 XR_FUNC void xi_pipeline_stats_dump(const XiPipelineStats *stats, const char *func_name);

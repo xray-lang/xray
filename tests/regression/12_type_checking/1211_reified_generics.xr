@@ -42,6 +42,10 @@ fn test_reified_generics() {
     let bool_arr: Array<bool> = [true, false]
     assert_eq(Reflect.elementType(bool_arr), "bool")
 
+    let byte_arr: Array<uint8> = [65, 66]
+    assert_eq(Reflect.elementType(byte_arr), "uint8")
+    assert_eq(Reflect.typeOf(byte_arr), "Array<uint8>")
+
     // === Test 3: Empty typed containers ===
     let empty_int: Array<int> = []
     assert_eq(Reflect.elementType(empty_int), "int")
@@ -108,6 +112,10 @@ fn test_reified_generics() {
 
     // Slice from typed array preserves typeOf
     assert_eq(Reflect.typeOf(sliced), "Array<int>")
+
+    let mapped_bytes = byte_arr.map(fn(x: uint8) -> int { return x + 1 })
+    assert_eq(Reflect.elementType(mapped_bytes), "int")
+    assert_eq(mapped_bytes[0], 66)
 
     // === Test 8: User-defined generic class reified ===
 

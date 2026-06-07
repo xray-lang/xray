@@ -1,0 +1,14 @@
+fn run(n: int) -> int {
+    let values: Array<int> = []
+    let i = 0
+    while (i < n) {
+        values.push((i * 17) % 251)
+        i = i + 1
+    }
+
+    return values.reduce(fn(acc: int, x: int) -> int {
+        return acc + x * 3
+    }, 5)
+}
+
+print(run(200000))

@@ -123,6 +123,8 @@ XR_FUNC bool xr_array_some(XrayIsolate *iso, XrArray *arr, struct XrClosure *cal
 XR_FUNC void xr_array_fill(XrArray *arr, XrValue value, int start, int end);
 XR_FUNC void xr_array_sort(XrayIsolate *iso, XrArray *arr, struct XrClosure *comparator);
 XR_FUNC struct XrString *xr_array_join(XrayIsolate *iso, XrArray *arr, struct XrString *delimiter);
+XR_FUNC bool xr_array_reserve(XrArray *arr, int32_t capacity);
+XR_FUNC bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill);
 
 /* ====== Utility Methods ====== */
 
@@ -187,5 +189,13 @@ static inline uint8_t *xr_array_raw_u8(XrArray *arr) {
 
 XR_FUNC void xr_array_append_data(XrArray *arr, const uint8_t *data, int32_t len);
 XR_FUNC struct XrString *xr_array_to_string(struct XrayIsolate *iso, XrArray *arr);
+XR_FUNC uint32_t xr_array_load_u32_le(XrArray *arr, int32_t offset, bool *ok);
+XR_FUNC uint64_t xr_array_load_u64_le(XrArray *arr, int32_t offset, bool *ok);
+XR_FUNC bool xr_array_bytes_copy_within(XrArray *arr, int32_t dst_offset, int32_t src_offset,
+                                        int32_t count);
+XR_FUNC bool xr_array_bytes_copy_from(XrArray *dst, XrArray *src, int32_t src_offset,
+                                      int32_t dst_offset, int32_t count);
+XR_FUNC bool xr_array_bytes_repeat_from(XrArray *arr, int32_t dst_offset, int32_t distance,
+                                        int32_t count);
 
 #endif  // XARRAY_H

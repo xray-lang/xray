@@ -55,6 +55,77 @@ static int json_field_index(XrType *type, const char *name) {
     return -1;
 }
 
+static bool xa_type_is_bytes(XrType *type) {
+    if (!type || !XR_TYPE_IS_ARRAY(type) || !type->container.element_type)
+        return false;
+    XrType *elem = type->container.element_type;
+    return XR_TYPE_IS_INT(elem) && elem->native_width == XR_NATIVE_U8;
+}
+
+static bool xa_type_has_collection_size_alias(XrType *type) {
+    return type && (XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_MAP(type) || type->kind == XR_KIND_SET);
+}
+
+static bool xa_symbol_is_collection_length(SymbolId sym, XrType *type) {
+    if (!type)
+        return false;
+    if (sym == SYMBOL_LENGTH) {
+        return XR_TYPE_IS_ARRAY(type) || XR_TYPE_IS_STRING(type) || XR_TYPE_IS_MAP(type) ||
+               type->kind == XR_KIND_SET;
+    }
+    if (sym == SYMBOL_SIZE)
+        return xa_type_has_collection_size_alias(type);
+    return false;
+}
+
+static XrType *xa_function_type1(XaInferContext *ctx, XrType *p0, XrType *ret) {
+    XrType *params[1] = {p0};
+    return xr_type_new_function(ctx->analyzer->isolate, params, 1, ret, false);
+}
+
+static XrType *xa_bytes_method_type(XaInferContext *ctx, XrType *receiver, const char *name) {
+    if (!xa_type_is_bytes(receiver) || !name)
+        return NULL;
+    XrayIsolate *X = ctx->analyzer->isolate;
+    XrType *t_int = xr_type_new_int(X);
+    XrType *t_bytes = xr_type_new_bytes(X);
+    if (strcmp(name, "loadU32LE") == 0)
+        return xa_function_type1(ctx, t_int, xr_type_new_int_width(X, XR_NATIVE_U32));
+    if (strcmp(name, "loadU64LE") == 0)
+        return xa_function_type1(ctx, t_int, xr_type_new_int_width(X, XR_NATIVE_U64));
+    if (strcmp(name, "copyWithin") == 0 || strcmp(name, "repeatFrom") == 0) {
+        XrType *params[3] = {t_int, t_int, t_int};
+        return xr_type_new_function(X, params, 3, t_bytes, false);
+    }
+    if (strcmp(name, "copyFrom") == 0) {
+        XrType *params[4] = {t_bytes, t_int, t_int, t_int};
+        return xr_type_new_function(X, params, 4, t_bytes, false);
+    }
+    if (strcmp(name, "resize") == 0) {
+        XrType *params[2] = {t_int, xr_type_new_int_width(X, XR_NATIVE_U8)};
+        XrType *fn = xr_type_new_function(X, params, 2, t_bytes, false);
+        if (fn)
+            fn->function.min_params = 1;
+        return fn;
+    }
+    return NULL;
+}
+
+static XrType *xa_static_capacity_method_type(XaInferContext *ctx, AstNode *object,
+                                              const char *name) {
+    if (!object || object->type != AST_VARIABLE || !name || strcmp(name, "withCapacity") != 0)
+        return NULL;
+    const char *type_name = object->as.variable.name;
+    XrayIsolate *X = ctx->analyzer->isolate;
+    if (strcmp(type_name, "Bytes") == 0)
+        return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_bytes(X));
+    if (strcmp(type_name, "Array") == 0) {
+        XrType *elem = xr_type_new_unknown(X);
+        return xa_function_type1(ctx, xr_type_new_int(X), xr_type_new_array(X, elem));
+    }
+    return NULL;
+}
+
 static void add_index_type_error(XaInferContext *ctx, AstNode *node, XrType *index_type,
                                  XrType *expected_type) {
     XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -235,8 +306,15 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
         }
         return NULL;
     }
-    if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right))
+    if (XR_TYPE_IS_INT(left) && XR_TYPE_IS_INT(right)) {
+        uint8_t lw = left->native_width;
+        uint8_t rw = right->native_width;
+        if (lw != 0 && (rw == 0 || rw == lw))
+            return xr_type_new_int_width(NULL, lw);
+        if (rw != 0 && lw == 0)
+            return xr_type_new_int_width(NULL, rw);
         return xr_type_new_int(NULL);
+    }
 
     // Generic body: preserve type parameter through arithmetic so
     // `fn add_one<T>(x: T): T { return x + 1 }` type-checks before
@@ -247,6 +325,22 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
         return right;
 
     return NULL;
+}
+
+static XrType *binary_int_result_pair(XrType *left, XrType *right, bool shift) {
+    if (!left || !right || !XR_TYPE_IS_INT(left) || !XR_TYPE_IS_INT(right))
+        return NULL;
+    if (shift) {
+        return left->native_width != 0 ? xr_type_new_int_width(NULL, left->native_width)
+                                       : xr_type_new_int(NULL);
+    }
+    uint8_t lw = left->native_width;
+    uint8_t rw = right->native_width;
+    if (lw != 0 && (rw == 0 || rw == lw))
+        return xr_type_new_int_width(NULL, lw);
+    if (rw != 0 && lw == 0)
+        return xr_type_new_int_width(NULL, rw);
+    return xr_type_new_int(NULL);
 }
 
 // Distribute a binary arithmetic op over union members so e.g.
@@ -306,8 +400,11 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_BOR:
         case AST_BINARY_BXOR:
         case AST_BINARY_LSHIFT:
-        case AST_BINARY_RSHIFT:
-            return xr_type_new_int(NULL);
+        case AST_BINARY_RSHIFT: {
+            XrType *r = binary_int_result_pair(
+                left, right, node->type == AST_BINARY_LSHIFT || node->type == AST_BINARY_RSHIFT);
+            return r ? r : xr_type_new_unknown(NULL);
+        }
         default:
             break;
     }
@@ -341,7 +438,7 @@ XrType *xa_visit_unary(XaInferContext *ctx, AstNode *node) {
         case AST_UNARY_NOT:
             return xr_type_new_bool(NULL);
         case AST_UNARY_BNOT:
-            return xr_type_new_int(NULL);
+            return XR_TYPE_IS_INT(operand) ? operand : xr_type_new_int(NULL);
         default:
             return xr_type_new_unknown(NULL);
     }
@@ -356,6 +453,10 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     MemberAccessNode *ma = &node->as.member_access;
     XrType *obj_type = xa_visit_infer_expr(ctx, ma->object);
+
+    XrType *static_capacity_fn = xa_static_capacity_method_type(ctx, ma->object, ma->name);
+    if (static_capacity_fn)
+        return static_capacity_fn;
 
     // Check module member access before the unknown-type early return (e.g., net.dial)
     if (XR_TYPE_IS_UNKNOWN(obj_type) && ma->object->type == AST_VARIABLE) {
@@ -534,16 +635,19 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
 
     // Handle built-in properties
     SymbolId prop_sym = xr_builtin_symbol_from_name(ma->name);
-    if (prop_sym == SYMBOL_LENGTH) {
-        if (XR_TYPE_IS_ARRAY(obj_type) || XR_TYPE_IS_STRING(obj_type) || XR_TYPE_IS_MAP(obj_type) ||
-            (obj_type->kind == XR_KIND_SET)) {
-            return xr_type_new_int(NULL);
-        }
+    if (xa_symbol_is_collection_length(prop_sym, obj_type))
+        return xr_type_new_int(NULL);
+    if (prop_sym == SYMBOL_CAPACITY && XR_TYPE_IS_ARRAY(obj_type)) {
+        return xr_type_new_int(NULL);
     }
     if (obj_type->kind == XR_KIND_CHANNEL) {
         if (prop_sym == SYMBOL_CANCELLED)
             return xr_type_new_bool(NULL);
     }
+
+    XrType *bytes_method = xa_bytes_method_type(ctx, obj_type, ma->name);
+    if (bytes_method)
+        return bytes_method;
 
     // Handle built-in methods (return function type for method access)
     if (xa_builtin_is_method(obj_type, ma->name)) {
@@ -1375,8 +1479,7 @@ XrType *xa_visit_optional_chain(XaInferContext *ctx, AstNode *node) {
         const char *prop_name = node->as.optional_chain.name;
 
         // Built-in properties — result is nullable (object may be null)
-        if ((XR_TYPE_IS_ARRAY(base_type) || XR_TYPE_IS_STRING(base_type)) &&
-            xr_builtin_symbol_from_name(prop_name) == SYMBOL_LENGTH) {
+        if (xa_symbol_is_collection_length(xr_builtin_symbol_from_name(prop_name), base_type)) {
             return xr_type_make_nullable(ctx->analyzer->isolate, xr_type_new_int(NULL));
         }
 

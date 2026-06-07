@@ -130,6 +130,26 @@ static XrValue m_fill(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     return self;
 }
 
+static XrValue m_reserve(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    xr_array_reserve(array_self(self), (int32_t) XR_TO_INT(args[0]));
+    return self;
+}
+
+static XrValue m_resize(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return self;
+    XrArray *arr = array_self(self);
+    XrValue fill = argc >= 2 ? args[1] : xr_null();
+    if (arr->elem_type == XR_ELEM_U8 && argc < 2)
+        fill = xr_int(0);
+    xr_array_resize(arr, (int32_t) XR_TO_INT(args[0]), fill);
+    return self;
+}
+
 static XrValue m_sort(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
     XrArray *arr = array_self(self);
     // sort's compareFn is optional. When absent we fall back to the
@@ -168,6 +188,52 @@ static XrValue m_index_of(XrayIsolate *iso, XrValue self, XrValue *args, int arg
     if (argc < 1)
         return xr_int(-1);
     return xr_int((xr_Integer) xr_array_index_of(array_self(self), args[0]));
+}
+
+static XrValue m_load_u32_le(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(0);
+    bool ok = false;
+    uint32_t value = xr_array_load_u32_le(array_self(self), (int32_t) XR_TO_INT(args[0]), &ok);
+    return ok ? xr_int((xr_Integer) value) : xr_int(0);
+}
+
+static XrValue m_load_u64_le(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 1 || !XR_IS_INT(args[0]))
+        return xr_int(0);
+    bool ok = false;
+    uint64_t value = xr_array_load_u64_le(array_self(self), (int32_t) XR_TO_INT(args[0]), &ok);
+    return ok ? xr_int((xr_Integer) value) : xr_int(0);
+}
+
+static XrValue m_copy_within(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+        return self;
+    xr_array_bytes_copy_within(array_self(self), (int32_t) XR_TO_INT(args[0]),
+                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+    return self;
+}
+
+static XrValue m_copy_from(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 4 || !XR_IS_ARRAY(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]) ||
+        !XR_IS_INT(args[3]))
+        return self;
+    xr_array_bytes_copy_from(array_self(self), XR_TO_ARRAY(args[0]), (int32_t) XR_TO_INT(args[1]),
+                             (int32_t) XR_TO_INT(args[2]), (int32_t) XR_TO_INT(args[3]));
+    return self;
+}
+
+static XrValue m_repeat_from(XrayIsolate *iso, XrValue self, XrValue *args, int argc) {
+    (void) iso;
+    if (argc < 3 || !XR_IS_INT(args[0]) || !XR_IS_INT(args[1]) || !XR_IS_INT(args[2]))
+        return self;
+    xr_array_bytes_repeat_from(array_self(self), (int32_t) XR_TO_INT(args[0]),
+                               (int32_t) XR_TO_INT(args[1]), (int32_t) XR_TO_INT(args[2]));
+    return self;
 }
 
 /* === Construction (returns new array) === */
@@ -418,11 +484,18 @@ void xr_array_register_native_type(XrayIsolate *isolate) {
         {"clear", m_clear, 0},
         {"reverse", m_reverse, 0},
         {"fill", m_fill, 1},
+        {"reserve", m_reserve, 1},
+        {"resize", m_resize, 1},
         {"sort", m_sort, 0},
         /* Query */
         {"isEmpty", m_is_empty, 0},
         {"includes", m_includes, 1},
         {"indexOf", m_index_of, 1},
+        {"loadU32LE", m_load_u32_le, 1},
+        {"loadU64LE", m_load_u64_le, 1},
+        {"copyWithin", m_copy_within, 3},
+        {"copyFrom", m_copy_from, 4},
+        {"repeatFrom", m_repeat_from, 3},
         /* Construction */
         {"slice", m_slice, 0},
         {"concat", m_concat, 0},

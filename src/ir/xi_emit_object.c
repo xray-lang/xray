@@ -91,18 +91,13 @@ XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 }
 
-/* Scan all uses of XI_STRUCT_NEW value v in the function.
- * Returns true if the struct never escapes local field access —
- * safe for stack allocation via OP_NEW_STRUCT.
- *
- * Safe consumers: XI_STRUCT_GET (args[0]),
- *                 XI_STRUCT_SET (args[0] only — the container),
- *                 XI_PRINT.
- * Unsafe: XI_STRUCT_SET args[1] (stored value escapes into field),
- *         COPY (value semantics require independent copies),
- *         returned, passed as call arg, stored to shared/upval/field,
- *         pushed into container, used in PHI (may cross loop iteration). */
-static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
+/* Scan all transitive uses of a struct value in the function.
+ * Stack allocation is safe while the value is only observed through field
+ * operations or identity nodes whose result is checked recursively. */
+static bool struct_uses_safe_depth(EmitCtx *ctx, XiValue *target, XiValue *origin, int depth) {
+    if (depth > 8)
+        return false;
+
     XiFunc *f = ctx->func;
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -121,14 +116,6 @@ static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
             }
         }
 
-        /* Value args: only direct field access on this struct is safe.
-         * Everything else (COPY, CALL, STORE, RETURN...) escapes.
-         *
-         * XI_STRUCT_GET: target must be args[0] (the struct being read).
-         * XI_STRUCT_SET: target as args[0] is safe (container being written).
-         *                target as args[1] is UNSAFE — storing a stack struct_ref
-         *                into another struct creates a dangling pointer when the
-         *                container is heap-allocated. */
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             XiValue *v = blk->values[vi];
             if (!v)
@@ -148,6 +135,20 @@ static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
                         break;
                     case XI_PRINT:
                         break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (a != 0)
+                            return false;
+                        break;
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (a != 0)
+                            return false;
+                        if (xi_emit_trace_struct_origin(v) != origin)
+                            return false;
+                        if (!struct_uses_safe_depth(ctx, v, origin, depth + 1))
+                            return false;
+                        break;
                     default:
                         return false;
                 }
@@ -157,16 +158,11 @@ static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
     return true;
 }
 
-/* Mark a XI_STRUCT_NEW value as stack-promoted by setting a flag bit.
- * Emit handlers for XI_STRUCT_GET/SET check this to decide the opcode. */
-#define STRUCT_PROMOTED_BIT ((int64_t) 1 << 32)
-#define STRUCT_IS_PROMOTED(v) (((v)->aux_int & STRUCT_PROMOTED_BIT) != 0)
-
-/* Trace through COPY chain to find the defining XI_STRUCT_NEW. */
-static XiValue *trace_struct_origin(XiValue *v) {
-    while (v && v->op == XI_COPY && v->nargs >= 1)
-        v = v->args[0];
-    return v;
+/* Returns true if the struct never escapes local value operations and is safe
+ * for stack allocation via OP_NEW_STRUCT. */
+static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
+    XiValue *origin = xi_emit_trace_struct_origin(target);
+    return origin == target && struct_uses_safe_depth(ctx, target, origin, 0);
 }
 
 /* Struct new: decide stack vs heap at emit time.
@@ -187,14 +183,12 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         if (ctx->status != XI_EMIT_OK)
             return;
 
-        uint16_t slot = ctx->struct_area_offset;
-        uint16_t bytes_needed = (uint16_t) (8 + layout->total_size);
-        uint16_t slots_needed = (bytes_needed + 15) / 16;
-        ctx->struct_area_offset = (uint16_t) (slot + slots_needed);
+        uint8_t slot = 0;
+        if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
+            return;
 
-        XR_DCHECK(slot <= 255, "XI_STRUCT_NEW: struct_area slot overflow");
-        emit_inst(ctx, CREATE_ABC(OP_NEW_STRUCT, dst, cls_reg, (uint8_t) slot));
-        v->aux_int |= STRUCT_PROMOTED_BIT;
+        emit_inst(ctx, CREATE_ABC(OP_NEW_STRUCT, dst, cls_reg, slot));
+        v->aux_int |= XI_EMIT_STRUCT_PROMOTED_BIT;
     } else {
         /* Heap path: emit OP_INVOKE(constructor, 0 args).
          * OP_INVOKE needs R[dst+1] for receiver. Allocate a fresh
@@ -233,8 +227,8 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
 
-    XiValue *origin = trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_STRUCT_NEW && STRUCT_IS_PROMOTED(origin));
+    XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
+    bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     uint8_t obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
@@ -270,8 +264,8 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
 
-    XiValue *origin = trace_struct_origin(v->args[0]);
-    bool promoted = (origin && origin->op == XI_STRUCT_NEW && STRUCT_IS_PROMOTED(origin));
+    XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
+    bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
     uint8_t obj = reg_of(ctx, v->args[0]);
     uint8_t val = reg_of(ctx, v->args[1]);
@@ -328,17 +322,25 @@ XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
 /* Array creation */
 XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    uint8_t cap = 0;
-    if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-        cap = (uint8_t) v->args[0]->aux_int;
-    }
     /* C = (elem_tid << 2) | storage_mode.
      * elem_tid is only set when the lowerer explicitly encodes it in
      * aux_int (e.g. new Array<T>()).  Array literals like [1,2,3] always
      * create XR_ELEM_ANY arrays because OP_NEWARRAY pushes B elements
      * from registers and typed storage crashes on uninitialized slots. */
     uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
-    emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, cap, c_field));
+    if (v->nargs >= 1 && v->args[0]->op == XI_CONST && v->args[0]->aux_int >= 0 &&
+        v->args[0]->aux_int <= 255) {
+        emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, (uint8_t) v->args[0]->aux_int, c_field));
+        return;
+    }
+    if (v->nargs < 1) {
+        emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, 0, c_field));
+        return;
+    }
+    uint8_t cap = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, c_field));
 }
 
 /* Tuple creation: N elements in args[0..N-1].  OP_NEWTUPLE scoops

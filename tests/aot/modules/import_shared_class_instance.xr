@@ -1,0 +1,7 @@
+import { shared_bag } from "./shared_bag_lib"
+
+fn run(rounds: int) -> int {
+    return shared_bag.fill(8, rounds)
+}
+
+print(run(3))

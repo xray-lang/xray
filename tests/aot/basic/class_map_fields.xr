@@ -1,0 +1,33 @@
+class ScoreBag {
+    scores: Map<string, int>
+
+    constructor() {
+        let scores: Map<string, int> = #{}
+        this.scores = scores
+    }
+
+    put(name: string, score: int) -> int {
+        this.scores.set(name, score)
+        return score
+    }
+
+    score(name: string) -> int {
+        return this.scores.get(name)
+    }
+
+    contains(name: string) -> bool {
+        return this.scores.has(name)
+    }
+
+    remove(name: string) -> bool {
+        return this.scores.delete(name)
+    }
+}
+
+let bag = ScoreBag()
+print(bag.put("alice", 9))
+print(bag.put("bob", 7))
+print(bag.score("alice"))
+print(bag.contains("bob"))
+print(bag.remove("bob"))
+print(bag.contains("bob"))

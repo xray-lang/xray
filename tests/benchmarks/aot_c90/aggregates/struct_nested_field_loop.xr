@@ -1,0 +1,26 @@
+struct Point {
+    x: int
+    y: int
+    step: int
+}
+
+struct Box {
+    point: Point
+    bias: int
+}
+
+let box = Box{point: Point{x: 1, y: 2, step: 3}, bias: 5}
+
+fn run(n: int) -> int {
+    let i = 0
+    let sum = 0
+    while (i < n) {
+        box.point.x = box.point.x + i
+        box.point.y = box.point.y + box.point.step
+        sum = sum + box.point.x - box.point.y + box.bias
+        i = i + 1
+    }
+    return sum + box.point.x + box.point.y + box.bias
+}
+
+print(run(2000000))

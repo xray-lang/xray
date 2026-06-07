@@ -1,0 +1,41 @@
+class ByteMapBag {
+    values: Map<uint8, int32>
+
+    constructor() {
+        let values: Map<uint8, int32> = #{}
+        this.values = values
+    }
+
+    fill(n: int) -> int {
+        let i = 0
+        while (i < n) {
+            this.values.set(i, i * 5 + 7)
+            i = i + 1
+        }
+        return this.values.size
+    }
+
+    scan(n: int, rounds: int) -> int {
+        let r = 0
+        let sum = 0
+        while (r < rounds) {
+            let i = 0
+            while (i < n) {
+                if (this.values.has(i)) {
+                    sum = sum + this.values.get(i)
+                }
+                i = i + 1
+            }
+            r = r + 1
+        }
+        return sum
+    }
+}
+
+fn class_map_u8_i32_field_loop_run(n: int, rounds: int) -> int {
+    let bag = ByteMapBag()
+    let count = bag.fill(n)
+    return bag.scan(n, rounds) + count
+}
+
+print(class_map_u8_i32_field_loop_run(128, 5000))

@@ -1,0 +1,19 @@
+min_ratio=0.90
+# Escaping primitive structs must use heap-native storage instead of maps.
+hot_function=^struct_shared_field_loop_run_[0-9]+$
+hot_function_count=1
+hot_xrvalue_count=0
+hot_xrvalue_local_count=0
+hot_box_count=0
+hot_unbox_count=0
+hot_runtime_arith_calls=0
+hot_runtime_int_checked_arith_calls=0
+hot_runtime_map_calls=0
+hot_runtime_property_calls=0
+hot_dynamic_dispatch_calls=0
+runtime_arith_calls=0
+runtime_int_checked_arith_calls=0
+runtime_map_calls=0
+runtime_property_calls=0
+dynamic_dispatch_calls=0
+vm_jit_include_count=0

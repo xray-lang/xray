@@ -1,0 +1,24 @@
+struct Sample {
+    x: int
+    y: float
+    ok: bool
+    byte: uint8
+}
+
+fn score() -> int {
+    let p = Sample{x: 41, y: 2.5, ok: true, byte: 300}
+    p.x = p.x + 1
+    p.byte = p.byte + 1
+    if (p.ok) {
+        return p.x + p.byte
+    }
+    return 0
+}
+
+fn measure() -> float {
+    let p = Sample{x: 0, y: 2.5, ok: false, byte: 0}
+    return p.y
+}
+
+print(score())
+print(measure())

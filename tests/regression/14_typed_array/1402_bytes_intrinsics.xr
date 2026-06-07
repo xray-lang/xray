@@ -1,0 +1,73 @@
+/* Bytes intrinsic and capacity tests. */
+
+@test
+fn test_bytes_intrinsics_and_capacity() {
+    let b = new Bytes(16)
+    b[0] = 1
+    b[1] = 2
+    b[2] = 3
+    b[3] = 4
+    b[4] = 5
+    b[5] = 6
+    b[6] = 7
+    b[7] = 8
+
+    assert_eq(b.loadU32LE(0), 67305985)
+    assert_eq(b.loadU64LE(0), 578437695752307201)
+
+    let dst = Bytes.withCapacity(6)
+    assert_eq(dst.length, 0)
+    assert_eq(dst.capacity, 6)
+    dst.resize(6)
+    dst.copyFrom(b, 1, 2, 3)
+    assert_eq(dst[0], 0)
+    assert_eq(dst[1], 0)
+    assert_eq(dst[2], 2)
+    assert_eq(dst[3], 3)
+    assert_eq(dst[4], 4)
+
+    let move = new Bytes(6)
+    move[0] = 10
+    move[1] = 20
+    move[2] = 30
+    move[3] = 40
+    move.copyWithin(2, 0, 4)
+    assert_eq(move[2], 10)
+    assert_eq(move[3], 20)
+    assert_eq(move[4], 30)
+    assert_eq(move[5], 40)
+
+    let rep = new Bytes(9)
+    rep[0] = 65
+    rep[1] = 66
+    rep[2] = 67
+    rep.repeatFrom(3, 3, 6)
+    assert_eq(rep[0], 65)
+    assert_eq(rep[1], 66)
+    assert_eq(rep[2], 67)
+    assert_eq(rep[3], 65)
+    assert_eq(rep[4], 66)
+    assert_eq(rep[5], 67)
+    assert_eq(rep[6], 65)
+    assert_eq(rep[7], 66)
+    assert_eq(rep[8], 67)
+}
+
+@test
+fn test_array_filled_constructor_and_integer_wrap() {
+    let xs = new Array<int>(4, 9)
+    assert_eq(xs.length, 4)
+    assert_eq(xs[0], 9)
+    assert_eq(xs[3], 9)
+
+    let u: uint32 = 4294967295
+    let wrapped = u + 1
+    assert_eq(wrapped, 0)
+
+    let assigned: uint32 = 4294967296
+    assert_eq(assigned, 0)
+
+    let byte: uint8 = 255
+    let byte_wrapped = byte + 1
+    assert_eq(byte_wrapped, 0)
+}

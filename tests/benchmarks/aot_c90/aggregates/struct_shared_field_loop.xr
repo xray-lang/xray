@@ -1,0 +1,22 @@
+struct Cell {
+    a: int
+    b: int
+    step: int
+}
+
+let cell = Cell{a: 1, b: 2, step: 3}
+
+fn run(n: int) -> int {
+    let p = cell
+    let i = 0
+    let sum = 0
+    while (i < n) {
+        p.a = p.a + i
+        p.b = p.b + p.step
+        sum = sum + p.a - p.b
+        i = i + 1
+    }
+    return sum + p.a + p.b
+}
+
+print(run(2000000))

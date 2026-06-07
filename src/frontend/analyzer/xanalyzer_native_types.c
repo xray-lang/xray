@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   Builtin type interfaces (Array, Map, String, ...) are declared in
  *   stdlib/types/ using @native class syntax.  At build time a script
- *   embeds their source into C string literals (xnative_type_defs.inc).
+ *   embeds their source into C string literals (xnative_type_defs.inc.c).
  *   This module parses those strings once at startup and fills the
  *   builtin member tables used by the analyzer and LSP.
  */
@@ -31,7 +31,7 @@
 
 /* ========== Embedded .xr sources ========== */
 
-#include "xnative_type_defs.inc"
+#include "xnative_type_defs.inc.c"
 
 /* ========== Lightweight text parser ========================================
  *

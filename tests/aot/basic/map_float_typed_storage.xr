@@ -1,0 +1,127 @@
+let by_int: Map<int, float32> = #{}
+by_int.set(1, 1.25)
+by_int.set(2, 2.5)
+by_int.set(1, 3.75)
+print(by_int.length)
+print(by_int.get(1))
+print(by_int.has(2))
+
+let int_values = by_int.values()
+print(int_values.length)
+print(int_values[0] + int_values[1])
+
+let by_float: Map<float32, int> = #{}
+by_float.set(1.25, 10)
+by_float.set(2.5, 20)
+print(by_float.size)
+print(by_float.get(1.25))
+print(by_float.delete(2.5))
+print(by_float.has(2.5))
+
+let by_double: Map<float, int> = #{}
+by_double.set(1.125, 11)
+by_double.set(2.25, 22)
+by_double.set(1.125, 33)
+print(by_double.length)
+print(by_double.get(1.125))
+print(by_double.delete(2.25))
+print(by_double.has(2.25))
+
+let by_bool: Map<bool, float32> = #{}
+by_bool.set(true, 1.5)
+by_bool.set(false, 2.25)
+print(by_bool.length)
+print(by_bool.get(true) + by_bool.get(false))
+
+class BoolFloatMapBag {
+    values: Map<bool, float32>
+
+    constructor() {
+        let values: Map<bool, float32> = #{}
+        this.values = values
+    }
+
+    fill() -> int {
+        this.values.set(true, 1.5)
+        this.values.set(false, 2.25)
+        return this.values.size
+    }
+
+    scan(rounds: int) -> float {
+        let r = 0
+        let sum = 0.0
+        while (r < rounds) {
+            if (this.values.has(true)) {
+                sum = sum + this.values.get(true)
+            }
+            if (this.values.has(false)) {
+                sum = sum + this.values.get(false)
+            }
+            r = r + 1
+        }
+        return sum
+    }
+
+    prune() -> int {
+        let removed = 0
+        if (this.values.delete(false)) {
+            removed = removed + 1
+        }
+        return removed + this.values.length
+    }
+}
+
+let bool_bag = BoolFloatMapBag()
+print(bool_bag.fill())
+print(bool_bag.scan(3))
+print(bool_bag.prune())
+print(bool_bag.scan(3))
+
+class FloatMapBag {
+    values: Map<float32, float32>
+
+    constructor() {
+        let values: Map<float32, float32> = #{}
+        this.values = values
+    }
+
+    fill(n: int) -> int {
+        let i = 0
+        while (i < n) {
+            this.values.set(i + 0.5, i * 0.25 + 1.0)
+            i = i + 1
+        }
+        return this.values.size
+    }
+
+    scan(n: int) -> float {
+        let i = 0
+        let sum = 0.0
+        while (i < n) {
+            let key = i + 0.5
+            if (this.values.has(key)) {
+                sum = sum + this.values.get(key)
+            }
+            i = i + 1
+        }
+        return sum
+    }
+
+    prune(n: int) -> int {
+        let i = 0
+        let removed = 0
+        while (i < n) {
+            if (this.values.delete(i + 0.5)) {
+                removed = removed + 1
+            }
+            i = i + 2
+        }
+        return removed + this.values.length
+    }
+}
+
+let bag = FloatMapBag()
+print(bag.fill(5))
+print(bag.scan(5))
+print(bag.prune(5))
+print(bag.scan(5))

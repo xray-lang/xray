@@ -8,6 +8,7 @@ fn test_slice_operator_basic() {
     assert_eq(s[0:5], "Hello")
     assert_eq(s[6:11], "World")
     assert_eq(s[0:11], "Hello World")
+    assert_eq(s[6:], "World")
 }
 
 // ===== Negative indices =====

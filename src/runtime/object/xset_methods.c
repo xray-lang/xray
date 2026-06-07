@@ -177,7 +177,7 @@ static XrValue xr_set_method_to_string(XrayIsolate *iso, XrValue self, XrValue *
 #include "builtins/xset_builtins.h"
 
 void xr_set_register_native_type(XrayIsolate *isolate) {
-    static const XrNativeMethod set_methods[] = {
+    static XrNativeMethod set_methods[] = {
         {"has", xr_set_method_has, 1},
         {"delete", xr_set_method_delete, 1},
         {"isEmpty", xr_set_method_is_empty, 0},
@@ -190,11 +190,12 @@ void xr_set_register_native_type(XrayIsolate *isolate) {
         {"isSubset", xr_set_method_is_subset, 0},
         {"isSuperset", xr_set_method_is_superset, 0},
         {"toArray", xr_set_method_to_array, 0},
+        {"values", xr_set_method_to_array, 0},
         {"iterator", xr_set_method_iterator, 0},
         {"toString", xr_set_method_to_string, 0},
         {NULL, NULL, 0},
     };
-    static const XrNativeMethod set_statics[] = {
+    static XrNativeMethod set_statics[] = {
         {"constructor", xr_builtin_set_construct, 0},
         {"from", xr_builtin_set_from, 1},
         {"range", xr_builtin_set_range, 2},

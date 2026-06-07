@@ -1,0 +1,55 @@
+// AOT test: Bytes, tuple values, codePointAt, and StringBuilder.
+
+fn pair(n: int) -> (int, int) {
+    return (n, n + 1)
+}
+
+let empty = new Bytes()
+print(empty.length)
+
+let sized = new Bytes(3)
+sized[0] = 65
+sized[1] = 300
+sized[2] = -1
+print(sized.length)
+print(sized[0])
+print(sized[1])
+print(sized[2])
+
+let filled = new Bytes(2, 257)
+print(filled[0])
+print(filled[1])
+
+let raw = [72, 101, 300]
+let copied = new Bytes(raw)
+print(copied.length)
+print(copied[0])
+print(copied[1])
+print(copied[2])
+
+let grown = new Bytes()
+grown.push(88)
+grown.push(300)
+print(grown.length)
+print(grown[0])
+print(grown[1])
+
+let p = pair(41)
+print(p.0)
+print(p.1)
+
+print("A".codePointAt(0))
+print("世界".codePointAt(0))
+print("世界".codePointAt(1))
+print("A".codePointAt(9))
+print("0123456789abcdef"[10])
+print("你好"[1])
+print("A"[9])
+
+let sb = new StringBuilder()
+sb.append("A").append(7).append(true)
+print(sb.length)
+print(sb.toString())
+sb.clear().append("B")
+print(sb.length)
+print(sb.toString())

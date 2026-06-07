@@ -1,0 +1,20 @@
+struct Pair {
+    a: int
+    b: int
+    scale: int
+}
+
+fn run(n: int) -> int {
+    let p = Pair{a: 1, b: 2, scale: 3}
+    let i = 0
+    let sum = 0
+    while (i < n) {
+        p.a = p.a + i
+        p.b = p.b + p.scale
+        sum = sum + p.a - p.b
+        i = i + 1
+    }
+    return sum + p.a + p.b
+}
+
+print(run(2000000))

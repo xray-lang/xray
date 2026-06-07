@@ -1,0 +1,61 @@
+let counts: Map<bool, int> = #{}
+counts.set(true, 7)
+counts.set(false, 11)
+counts.set(true, 13)
+print(counts.length)
+print(counts.size)
+print(counts.get(true))
+print(counts.get(false))
+print(counts.has(false))
+
+let keys = counts.keys()
+let values = counts.values()
+print(keys.length)
+print(values.length)
+print(values[0] + values[1])
+print(counts.delete(false))
+print(counts.has(false))
+print(counts.get(false) == null)
+
+class BoolKeyMapBag {
+    values: Map<bool, int>
+
+    constructor() {
+        let values: Map<bool, int> = #{}
+        this.values = values
+    }
+
+    fill() -> int {
+        this.values.set(true, 21)
+        this.values.set(false, 34)
+        return this.values.size
+    }
+
+    scan(rounds: int) -> int {
+        let r = 0
+        let sum = 0
+        while (r < rounds) {
+            if (this.values.has(true)) {
+                sum = sum + this.values.get(true)
+            }
+            if (this.values.has(false)) {
+                sum = sum + this.values.get(false)
+            }
+            r = r + 1
+        }
+        return sum
+    }
+
+    prune() -> int {
+        if (this.values.delete(false)) {
+            return this.values.length
+        }
+        return 0
+    }
+}
+
+let bag = BoolKeyMapBag()
+print(bag.fill())
+print(bag.scan(4))
+print(bag.prune())
+print(bag.scan(4))

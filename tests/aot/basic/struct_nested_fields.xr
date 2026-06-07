@@ -1,0 +1,22 @@
+struct Point {
+    x: int
+    y: int
+}
+
+struct Box {
+    p: Point
+    z: int
+}
+
+let b = Box{p: Point{x: 1, y: 2}, z: 3}
+b.p.x = b.p.x + 4
+print(b.p.x + b.p.y + b.z)
+
+fn local() -> int {
+    let p = Point{x: 10, y: 20}
+    let box = Box{p: p, z: 30}
+    box.p.y = box.p.y + 5
+    return box.p.x + box.p.y + box.z
+}
+
+print(local())

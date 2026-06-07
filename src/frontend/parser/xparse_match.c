@@ -26,6 +26,7 @@
  */
 static AstNode *parse_pattern(Parser *parser);
 static AstNode *parse_pattern_single(Parser *parser);
+static AstNode *expr_to_pattern(Parser *parser, AstNode *expr);
 
 /* Parse a positional tuple pattern starting at the current `(` token.
  * `()`, `(p,)` and `(p1, p2, ...)` are all accepted; sub-patterns
@@ -67,6 +68,52 @@ static AstNode *parse_tuple_pattern(Parser *parser) {
 
     xr_parser_consume(parser, TK_RPAREN, "expected ')' to close tuple pattern");
     return xr_ast_pattern_tuple(parser->X, patterns, count, line);
+}
+
+static AstNode *expr_to_adt_pattern(Parser *parser, AstNode *expr) {
+    if (!parser || !expr || expr->type != AST_CALL_EXPR)
+        return NULL;
+
+    AstNode *callee = expr->as.call_expr.callee;
+    if (!callee || (callee->type != AST_MEMBER_ACCESS && callee->type != AST_ENUM_ACCESS))
+        return NULL;
+
+    int argc = expr->as.call_expr.arg_count;
+    AstNode **sub_pats = NULL;
+    if (argc > 0) {
+        sub_pats = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) argc);
+        for (int i = 0; i < argc; i++)
+            sub_pats[i] = expr_to_pattern(parser, expr->as.call_expr.arguments[i]);
+    }
+    return xr_ast_pattern_adt(parser->X, callee, sub_pats, argc, expr->line);
+}
+
+static AstNode *expr_to_pattern(Parser *parser, AstNode *expr) {
+    if (!parser || !expr)
+        return NULL;
+
+    if (expr->type == AST_VARIABLE) {
+        if (strcmp(expr->as.variable.name, "_") == 0)
+            return xr_ast_pattern_wildcard(parser->X, expr->line);
+        return xr_ast_pattern_literal(parser->X, expr, expr->line);
+    }
+
+    if (expr->type == AST_TUPLE_LITERAL) {
+        int count = expr->as.tuple_literal.count;
+        AstNode **patterns = NULL;
+        if (count > 0) {
+            patterns = (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) count);
+            for (int i = 0; i < count; i++)
+                patterns[i] = expr_to_pattern(parser, expr->as.tuple_literal.elements[i]);
+        }
+        return xr_ast_pattern_tuple(parser->X, patterns, count, expr->line);
+    }
+
+    AstNode *adt = expr_to_adt_pattern(parser, expr);
+    if (adt)
+        return adt;
+
+    return xr_ast_pattern_literal(parser->X, expr, expr->line);
 }
 
 /* Parse exactly one pattern atom — wildcard, tuple destructure,
@@ -137,17 +184,8 @@ static AstNode *parse_pattern_single(Parser *parser) {
             if (argc > 0) {
                 sub_pats =
                     (AstNode **) ast_alloc_array(parser->X, sizeof(AstNode *), (size_t) argc);
-                for (int i = 0; i < argc; i++) {
-                    AstNode *arg = first->as.call_expr.arguments[i];
-                    /* Wrap each arg as a pattern node:
-                     * variable → binding, wildcard stays, literal → literal */
-                    if (arg->type == AST_VARIABLE && strcmp(arg->as.variable.name, "_") == 0)
-                        sub_pats[i] = xr_ast_pattern_wildcard(parser->X, arg->line);
-                    else if (arg->type == AST_VARIABLE)
-                        sub_pats[i] = xr_ast_pattern_literal(parser->X, arg, arg->line);
-                    else
-                        sub_pats[i] = xr_ast_pattern_literal(parser->X, arg, arg->line);
-                }
+                for (int i = 0; i < argc; i++)
+                    sub_pats[i] = expr_to_pattern(parser, first->as.call_expr.arguments[i]);
             }
             return xr_ast_pattern_adt(parser->X, callee, sub_pats, argc, line);
         }

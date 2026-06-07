@@ -172,6 +172,11 @@ vmcase(OP_NEW_STRUCT) {
                 case XR_NATIVE_STRING:
                     *(XrString **) fp = (XrString *) dv.ptr;
                     break;
+                case XR_NATIVE_ARRAY_REF:
+                case XR_NATIVE_MAP_REF:
+                case XR_NATIVE_SET_REF:
+                    *(XrValue *) fp = dv;
+                    break;
                 default:
                     break;
             }
@@ -243,6 +248,11 @@ vmcase(OP_STRUCT_GET) {
         case XR_NATIVE_ARRAY:
             R(a) = xr_array_ref(fp, field->elem_native_type, field->elem_count);
             break;
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+            R(a) = *(XrValue *) fp;
+            break;
         default:
             R(a) = xr_null();
             break;
@@ -301,8 +311,10 @@ vmcase(OP_STRUCT_SET) {
             break;
         }
         case XR_NATIVE_STRUCT: {
-            uint8_t *src_ptr = (uint8_t *) xr_to_struct_ptr(src);
-            memcpy(fp, src_ptr, field->size);
+            if (!vm_struct_write_field_bytes(fp, field, src)) {
+                VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH,
+                                 "cannot assign non-struct value to nested struct field");
+            }
             break;
         }
         case XR_NATIVE_ARRAY: {
@@ -359,6 +371,11 @@ vmcase(OP_STRUCT_SET) {
             }
             break;
         }
+        case XR_NATIVE_ARRAY_REF:
+        case XR_NATIVE_MAP_REF:
+        case XR_NATIVE_SET_REF:
+            *(XrValue *) fp = src;
+            break;
         default:
             break;
     }

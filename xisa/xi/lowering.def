@@ -1,0 +1,93 @@
+; Xi lowering target coverage source.
+; Entries describe which backend targets implement a semantic op slice.
+
+(lower xi.const
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver emit_const)
+  :jit-xm (driver xi2xm_const)
+  :aot-c (driver xicgen_const))
+
+(lower xi.copy
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver emit_copy)
+  :jit-xm (driver xi2xm_copy)
+  :aot-c (driver xicgen_copy))
+
+(lower xi.move
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_move)
+  :jit-xm (driver xi2xm_move)
+  :aot-c (driver xicgen_move))
+
+(lower xi.add
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_arith)
+  :jit-xm (driver xi2xm_add)
+  :aot-c (driver xicgen_add))
+
+(lower xi.sub
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_arith)
+  :jit-xm (driver xi2xm_sub)
+  :aot-c (driver xicgen_sub))
+
+(lower xi.mul
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_arith)
+  :jit-xm (driver xi2xm_mul)
+  :aot-c (driver xicgen_mul))
+
+(lower xi.eq
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_cmp)
+  :jit-xm (driver xi2xm_eq)
+  :aot-c (driver xicgen_eq))
+
+(lower xi.lt
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_cmp)
+  :jit-xm (driver xi2xm_lt)
+  :aot-c (driver xicgen_lt))
+
+(lower xi.le
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_cmp)
+  :jit-xm (driver xi2xm_le)
+  :aot-c (driver xicgen_le))
+
+(lower xi.narrow.u8
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_u8)
+  :aot-c (driver xicgen_narrow_u8))
+
+(lower xi.narrow.i16
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_i16)
+  :aot-c (driver xicgen_narrow_i16))
+
+(lower xi.narrow.u32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_u32)
+  :aot-c (driver xicgen_narrow_u32))
+
+(lower xi.widen.u8
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_u8)
+  :aot-c (driver xicgen_widen_u8))

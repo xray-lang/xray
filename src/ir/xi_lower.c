@@ -880,14 +880,12 @@ static void build_module_metadata(XiLower *l) {
     XiFunc *f = l->func;
     XR_DCHECK(f != NULL, "build_module_metadata: NULL func");
 
-    uint16_t nshared = f->nshared;
-    if (nshared == 0 && f->nchildren == 0)
-        return;
-
     /* Allocate module (caller must free via xi_module_free) */
     XiModule *mod = xi_module_new(NULL, NULL, f);
     if (!mod)
         return;
+
+    uint16_t nshared = f->nshared;
 
     /* Build exports from export_names + tracked function/class pointers */
     if (f->export_names && nshared > 0) {

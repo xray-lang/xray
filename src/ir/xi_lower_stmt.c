@@ -19,6 +19,7 @@
 #include "../base/xchecks.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
+#include "../frontend/analyzer/xanalyzer.h"
 #include "../frontend/parser/xast_nodes.h"
 #include "../frontend/parser/xast_types.h"
 
@@ -27,6 +28,42 @@
 
 /* Forward declaration */
 static void lower_stmts(XiLower *l, AstNode **stmts, int count);
+
+static uint16_t stmt_narrow_op_for_type(struct XrType *type) {
+    if (!type || type->kind != XR_KIND_INT || type->native_width == 0)
+        return 0;
+    switch (type->native_width) {
+        case XR_NATIVE_I8:
+            return XI_NARROW_I8;
+        case XR_NATIVE_U8:
+            return XI_NARROW_U8;
+        case XR_NATIVE_I16:
+            return XI_NARROW_I16;
+        case XR_NATIVE_U16:
+            return XI_NARROW_U16;
+        case XR_NATIVE_I32:
+            return XI_NARROW_I32;
+        case XR_NATIVE_U32:
+            return XI_NARROW_U32;
+        default:
+            return 0;
+    }
+}
+
+static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *val,
+                                            struct XrType *target_type) {
+    if (!val || !val->type || !XR_TYPE_IS_INT(val->type))
+        return val;
+    uint16_t narrow_op = stmt_narrow_op_for_type(target_type);
+    if (!narrow_op)
+        return val;
+    XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, target_type, 1);
+    if (!n)
+        return val;
+    n->args[0] = val;
+    n->line = (uint32_t) node->line;
+    return n;
+}
 
 /* ========== Select Statement ========== */
 
@@ -436,7 +473,10 @@ static void lower_pattern_bindings(XiLower *l, XiValue *subject, AstNode *patter
             AstNode *sub = ap->patterns[i];
             if (!sub || sub->type == AST_PATTERN_WILDCARD)
                 continue;
-            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD, l->type_any, 1);
+            struct XrType *payload_type =
+                xa_analyzer_resolve_adt_payload_type(l->analyzer, subject->type, ap->variant, i);
+            XiValue *field = xi_value_new(l->func, l->cur_block, XI_LOAD_FIELD,
+                                          payload_type ? payload_type : l->type_any, 1);
             if (!field)
                 continue;
             field->args[0] = subject;
@@ -1578,6 +1618,7 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
                 init_val = conv;
             }
         }
+        init_val = stmt_narrow_for_target_type(l, node, init_val, type);
     } else {
         /* Zero-value initialization for typed variables without initializer.
          * Nullable types (T?) default to null. Non-nullable primitives:

@@ -293,8 +293,28 @@ uint8_t xr_type_to_tid(const XrType *type) {
         case XR_KIND_UNKNOWN:
             return 0;
         case XR_KIND_INT:
+            switch (type->native_width) {
+                case XR_NATIVE_I8:
+                    return XR_TID_INT8;
+                case XR_NATIVE_U8:
+                    return XR_TID_UINT8;
+                case XR_NATIVE_I16:
+                    return XR_TID_INT16;
+                case XR_NATIVE_U16:
+                    return XR_TID_UINT16;
+                case XR_NATIVE_I32:
+                    return XR_TID_INT32;
+                case XR_NATIVE_U32:
+                    return XR_TID_UINT32;
+                case XR_NATIVE_U64:
+                    return XR_TID_UINT64;
+                default:
+                    break;
+            }
             return XR_TID_INT;
         case XR_KIND_FLOAT:
+            if (type->native_width == XR_NATIVE_F32)
+                return XR_TID_FLOAT32;
             return XR_TID_FLOAT;
         case XR_KIND_STRING:
             return XR_TID_STRING;

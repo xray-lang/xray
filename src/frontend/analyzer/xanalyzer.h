@@ -170,6 +170,10 @@ XR_FUNC void xa_analyzer_remove_file(XaAnalyzer *analyzer, const char *file);
 XR_FUNC void xa_analyzer_set_node_type(XaAnalyzer *analyzer, struct AstNode *node,
                                        struct XrType *type);
 XR_FUNC struct XrType *xa_analyzer_get_node_type(XaAnalyzer *analyzer, const struct AstNode *node);
+XR_FUNC struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
+                                                            struct XrType *subject_type,
+                                                            const struct AstNode *variant,
+                                                            int payload_index);
 
 // API: Selection facts (member/method/index resolution).
 // Recorded during Pass 2. Consumed by lowerer to avoid re-resolving members.
