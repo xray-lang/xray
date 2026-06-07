@@ -21,6 +21,8 @@
     X(BNOT, xi_emit_bnot) \
     X(NOT, xi_emit_not) \
     X(SELECT, emit_select) \
+    X(GET_SHARED, xi_emit_get_shared) \
+    X(SET_SHARED, xi_emit_set_shared) \
     X(SHL, xi_emit_arith) \
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \

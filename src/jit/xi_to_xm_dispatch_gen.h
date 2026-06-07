@@ -21,6 +21,8 @@
     X(BNOT, "xi.bnot", xi2xm_bnot) \
     X(NOT, "xi.not", xi2xm_not) \
     X(SELECT, "xi.select", xi2xm_select) \
+    X(GET_SHARED, "xi.get.shared", xi2xm_get_shared) \
+    X(SET_SHARED, "xi.set.shared", xi2xm_set_shared) \
     X(SHL, "xi.shl", xi2xm_shl) \
     X(SHR, "xi.shr", xi2xm_shr) \
     X(EQ, "xi.eq", xi2xm_eq) \
