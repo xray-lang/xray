@@ -42,8 +42,8 @@ static bool cg_func_has_nonlocal_exception_flow(const XiFunc *f) {
 static XrRep cg_type_scalar_rep(const XrType *type) {
     if (!type)
         return XR_REP_TAGGED;
-    XrRep rep = xr_type_base_rep(type);
-    return (rep == XR_REP_I64 || rep == XR_REP_F64) ? rep : XR_REP_TAGGED;
+    return xaot_abi_type_can_use_typed_boundary(type) ? xaot_abi_storage_rep_for_type(type)
+                                                      : XR_REP_TAGGED;
 }
 
 static bool cg_func_uses_typed_abi(XiCgenCtx *ctx, const XiFunc *f) {

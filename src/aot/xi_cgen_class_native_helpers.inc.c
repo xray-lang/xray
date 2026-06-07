@@ -30,16 +30,7 @@ static void emit_class_native_field_ref(XiCgenCtx *ctx, FILE *out, const XiClass
 }
 
 static const char *cg_class_native_ref_field_tag_name(uint8_t native_type) {
-    switch ((XrNativeType) native_type) {
-        case XR_NATIVE_ARRAY_REF:
-            return "XR_TAG_ARRAY";
-        case XR_NATIVE_MAP_REF:
-            return "XR_TAG_MAP";
-        case XR_NATIVE_SET_REF:
-            return "XR_TAG_SET";
-        default:
-            return NULL;
-    }
+    return xaot_layout_ref_tag_name_for_native_type(native_type);
 }
 
 static const XiValue *cg_class_native_receiver_value(const XiCgenCtx *ctx, const XiFunc *f,

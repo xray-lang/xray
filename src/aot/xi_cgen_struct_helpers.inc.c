@@ -9,61 +9,12 @@
  */
 
 static const char *cg_struct_native_c_type(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_F32:
-            return "float";
-        case XR_NATIVE_F64:
-            return "double";
-        case XR_NATIVE_I8:
-            return "int8_t";
-        case XR_NATIVE_I16:
-            return "int16_t";
-        case XR_NATIVE_I32:
-            return "int32_t";
-        case XR_NATIVE_U8:
-        case XR_NATIVE_BOOL:
-            return "uint8_t";
-        case XR_NATIVE_U16:
-            return "uint16_t";
-        case XR_NATIVE_U32:
-            return "uint32_t";
-        case XR_NATIVE_U64:
-            return "uint64_t";
-        case XR_NATIVE_I64:
-            return "int64_t";
-        case XR_NATIVE_STRING:
-            return "XrValue";
-        case XR_NATIVE_ARRAY_REF:
-            return "xrt_array_t *";
-        case XR_NATIVE_MAP_REF:
-            return "xrt_map_t *";
-        case XR_NATIVE_SET_REF:
-            return "xrt_set_t *";
-        case XR_NATIVE_STRUCT:
-            return "XrValue";
-        default:
-            return "XrValue";
-    }
+    const char *c_type = xaot_layout_c_type_for_native_type(native_type);
+    return c_type ? c_type : "XrValue";
 }
 
 static XrRep cg_struct_native_rep(uint8_t native_type) {
-    switch (native_type) {
-        case XR_NATIVE_F32:
-        case XR_NATIVE_F64:
-            return XR_REP_F64;
-        case XR_NATIVE_I8:
-        case XR_NATIVE_I16:
-        case XR_NATIVE_I32:
-        case XR_NATIVE_I64:
-        case XR_NATIVE_U8:
-        case XR_NATIVE_U16:
-        case XR_NATIVE_U32:
-        case XR_NATIVE_U64:
-        case XR_NATIVE_BOOL:
-            return XR_REP_I64;
-        default:
-            return XR_REP_TAGGED;
-    }
+    return xaot_layout_storage_rep_for_native_type(native_type);
 }
 
 static bool cg_struct_native_heap_supported_depth(const XrStructLayout *sl, int depth) {
@@ -72,35 +23,21 @@ static bool cg_struct_native_heap_supported_depth(const XrStructLayout *sl, int 
     if (depth > 8)
         return false;
     for (uint16_t i = 0; i < sl->field_count; i++) {
-        switch (sl->fields[i].native_type) {
-            case XR_NATIVE_F32:
-            case XR_NATIVE_F64:
-            case XR_NATIVE_I8:
-            case XR_NATIVE_I16:
-            case XR_NATIVE_I32:
-            case XR_NATIVE_I64:
-            case XR_NATIVE_U8:
-            case XR_NATIVE_U16:
-            case XR_NATIVE_U32:
-            case XR_NATIVE_U64:
-            case XR_NATIVE_BOOL:
-            case XR_NATIVE_STRING:
-            case XR_NATIVE_ARRAY_REF:
-            case XR_NATIVE_MAP_REF:
-            case XR_NATIVE_SET_REF:
-                break;
-            case XR_NATIVE_ARRAY:
-                if (sl->fields[i].elem_count == 0 ||
-                    cg_struct_native_rep(sl->fields[i].elem_native_type) == XR_REP_TAGGED)
-                    return false;
-                break;
-            case XR_NATIVE_STRUCT:
-                if (!cg_struct_native_heap_supported_depth(sl->fields[i].sub_layout, depth + 1))
-                    return false;
-                break;
-            default:
+        uint8_t native_type = sl->fields[i].native_type;
+        if (xaot_layout_native_field_direct_heap_supported(native_type))
+            continue;
+        if (xaot_layout_native_field_uses_elem_layout(native_type)) {
+            if (sl->fields[i].elem_count == 0 ||
+                cg_struct_native_rep(sl->fields[i].elem_native_type) == XR_REP_TAGGED)
                 return false;
+            continue;
         }
+        if (xaot_layout_native_field_uses_nested_layout(native_type)) {
+            if (!cg_struct_native_heap_supported_depth(sl->fields[i].sub_layout, depth + 1))
+                return false;
+            continue;
+        }
+        return false;
     }
     return true;
 }
