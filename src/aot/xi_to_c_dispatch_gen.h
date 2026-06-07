@@ -61,6 +61,7 @@
     X(WIDEN_U32, "xi.widen.u32", xicgen_widen_u32) \
     X(WIDEN_F32, "xi.widen.f32", xicgen_widen_f32) \
     X(ISNULL, "xi.isnull", xicgen_isnull) \
+    X(IS, "xi.is", xicgen_is) \
     X(CONVERT, "xi.convert", xicgen_convert) \
     X(BOX, "xi.box", xicgen_box) \
     X(UNBOX, "xi.unbox", xicgen_unbox) \

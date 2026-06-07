@@ -849,6 +849,64 @@ TEST(lower_builtin_metadata_ops_deopt_to_vm) {
     assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
 }
 
+TEST(lower_is_deopts_to_vm) {
+    XiFunc *f = make_func("is_deopt", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *value = xi_param(f, entry, 0, &stub_int);
+    XiValue *type_value = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {value, type_value};
+    register_func_params(f, params, 2);
+
+    XiValue *is_v = xi_value_new(f, entry, XI_IS, &stub_bool, 2);
+    is_v->args[0] = value;
+    is_v->args[1] = type_value;
+    is_v->aux = &stub_int;
+    xi_block_set_return(entry, is_v);
+
+    XiSlotMap slot_map = {0};
+    slot_map.entries = xr_calloc(3, sizeof(XiSlotMapEntry));
+    assert(slot_map.entries != NULL);
+    slot_map.count = 3;
+    slot_map.capacity = 3;
+    slot_map.entries[0] = (XiSlotMapEntry) {
+        .value_id = value->id,
+        .bc_pc = 0,
+        .bc_slot = 0,
+        .xr_tag = 3,
+    };
+    slot_map.entries[1] = (XiSlotMapEntry) {
+        .value_id = type_value->id,
+        .bc_pc = 0,
+        .bc_slot = 1,
+        .xr_tag = 3,
+    };
+    slot_map.entries[2] = (XiSlotMapEntry) {
+        .value_id = is_v->id,
+        .bc_pc = 2,
+        .bc_slot = 2,
+        .xr_tag = 1,
+    };
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, &slot_map, NULL, NULL);
+    assert(xm != NULL && "is lowering should deopt to VM with a bytecode anchor");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_deopt = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        assert(blk0->ins[i].op != XM_CALL_DIRECT && "is must not lower through call ABI");
+        if (blk0->ins[i].op == XM_DEOPT)
+            found_deopt = true;
+    }
+    assert(found_deopt && "is should contain XM_DEOPT");
+    assert(xm->ndeopt == 1 && "is should record one deopt point");
+    assert(xm->deopt_infos[0].bc_pc == 2 && "is deopt should resume at is bytecode");
+
+    xm_func_destroy(xm);
+    xr_free(slot_map.entries);
+    xi_func_free(f);
+}
+
 TEST(lower_shared_var) {
     /* fn() { var x = 42; return x } (shared) */
     XiFunc *f = make_func("shared_test", &stub_int);
@@ -1094,6 +1152,7 @@ int main(void) {
     run_lower_throw();
     run_lower_assert_deopts_to_vm();
     run_lower_builtin_metadata_ops_deopt_to_vm();
+    run_lower_is_deopts_to_vm();
     run_lower_shared_var();
     run_lower_load_field();
     run_lower_index_get();
