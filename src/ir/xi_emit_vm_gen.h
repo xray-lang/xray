@@ -25,10 +25,20 @@
     X(LE, xi_emit_cmp) \
     X(GT, xi_emit_cmp) \
     X(GE, xi_emit_cmp) \
+    X(NARROW_I8, xi_emit_narrow) \
     X(NARROW_U8, xi_emit_narrow) \
     X(NARROW_I16, xi_emit_narrow) \
+    X(NARROW_U16, xi_emit_narrow) \
+    X(NARROW_I32, xi_emit_narrow) \
     X(NARROW_U32, xi_emit_narrow) \
+    X(NARROW_F32, xi_emit_narrow) \
+    X(WIDEN_I8, xi_emit_widen) \
     X(WIDEN_U8, xi_emit_widen) \
+    X(WIDEN_I16, xi_emit_widen) \
+    X(WIDEN_U16, xi_emit_widen) \
+    X(WIDEN_I32, xi_emit_widen) \
+    X(WIDEN_U32, xi_emit_widen) \
+    X(WIDEN_F32, xi_emit_widen) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, xi_emit_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \

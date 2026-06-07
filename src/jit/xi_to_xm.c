@@ -1068,6 +1068,10 @@ static XmRef xi2xm_sign_extend_shift(LowerCtx *ctx, XmBlock *blk, XiValue *v, in
     return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
 }
 
+static XmRef xi2xm_narrow_i8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 56);
+}
+
 static XmRef xi2xm_narrow_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_zero_extend(ctx, blk, v, 0xFF);
 }
@@ -1076,12 +1080,50 @@ static XmRef xi2xm_narrow_i16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_sign_extend_shift(ctx, blk, v, 48);
 }
 
+static XmRef xi2xm_narrow_u16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFFFF);
+}
+
+static XmRef xi2xm_narrow_i32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 32);
+}
+
 static XmRef xi2xm_narrow_u32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_zero_extend(ctx, blk, v, 0xFFFFFFFF);
 }
 
+static XmRef xi2xm_narrow_f32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    return get_ref(ctx, v->args[0]);
+}
+
+static XmRef xi2xm_widen_i8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 56);
+}
+
 static XmRef xi2xm_widen_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_zero_extend(ctx, blk, v, 0xFF);
+}
+
+static XmRef xi2xm_widen_i16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 48);
+}
+
+static XmRef xi2xm_widen_u16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFFFF);
+}
+
+static XmRef xi2xm_widen_i32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_sign_extend_shift(ctx, blk, v, 32);
+}
+
+static XmRef xi2xm_widen_u32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_zero_extend(ctx, blk, v, 0xFFFFFFFF);
+}
+
+static XmRef xi2xm_widen_f32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    return get_ref(ctx, v->args[0]);
 }
 
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
@@ -1130,47 +1172,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return lower_box(ctx, blk, v);
         case XI_UNBOX:
             return lower_unbox(ctx, blk, v);
-
-        /* Explicit width narrowing/widening — ensures correct value range
-         * in the JIT register. Unsigned: AND mask. Signed: SHL+SAR. */
-        case XI_NARROW_U16:
-        case XI_WIDEN_U16: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef m = xm_const_i64(ctx->xm_func, 0xFFFF);
-            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
-        }
-        case XI_WIDEN_U32: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef m = xm_const_i64(ctx->xm_func, 0xFFFFFFFF);
-            return xm_emit(ctx->xm_func, blk, XM_AND, XR_REP_I64, a, m);
-        }
-        case XI_NARROW_I8:
-        case XI_WIDEN_I8: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef sh = xm_const_i64(ctx->xm_func, 56);
-            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
-            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
-        }
-        case XI_WIDEN_I16: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef sh = xm_const_i64(ctx->xm_func, 48);
-            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
-            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
-        }
-        case XI_NARROW_I32:
-        case XI_WIDEN_I32: {
-            XmRef a = get_ref(ctx, v->args[0]);
-            XmRef sh = xm_const_i64(ctx->xm_func, 32);
-            XmRef t = xm_emit(ctx->xm_func, blk, XM_SHL, XR_REP_I64, a, sh);
-            return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
-        }
-        case XI_NARROW_F32:
-        case XI_WIDEN_F32: {
-            /* float precision roundtrip — typed array runtime already handles
-             * the actual float32 truncation, so this is a semantic no-op in JIT.
-             * If we had FCVTS/FCVTD, we'd emit them here. */
-            return get_ref(ctx, v->args[0]);
-        }
 
         /* Null check */
         case XI_ISNULL: {

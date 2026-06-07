@@ -141,6 +141,13 @@
   :jit-xm (driver xi2xm_ge)
   :aot-c (driver xicgen_ge))
 
+(lower xi.narrow.i8
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_i8)
+  :aot-c (driver xicgen_narrow_i8))
+
 (lower xi.narrow.u8
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
@@ -155,6 +162,20 @@
   :jit-xm (driver xi2xm_narrow_i16)
   :aot-c (driver xicgen_narrow_i16))
 
+(lower xi.narrow.u16
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_u16)
+  :aot-c (driver xicgen_narrow_u16))
+
+(lower xi.narrow.i32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_i32)
+  :aot-c (driver xicgen_narrow_i32))
+
 (lower xi.narrow.u32
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
@@ -162,12 +183,61 @@
   :jit-xm (driver xi2xm_narrow_u32)
   :aot-c (driver xicgen_narrow_u32))
 
+(lower xi.narrow.f32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_narrow)
+  :jit-xm (driver xi2xm_narrow_f32)
+  :aot-c (driver xicgen_narrow_f32))
+
+(lower xi.widen.i8
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_i8)
+  :aot-c (driver xicgen_widen_i8))
+
 (lower xi.widen.u8
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_widen)
   :jit-xm (driver xi2xm_widen_u8)
   :aot-c (driver xicgen_widen_u8))
+
+(lower xi.widen.i16
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_i16)
+  :aot-c (driver xicgen_widen_i16))
+
+(lower xi.widen.u16
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_u16)
+  :aot-c (driver xicgen_widen_u16))
+
+(lower xi.widen.i32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_i32)
+  :aot-c (driver xicgen_widen_i32))
+
+(lower xi.widen.u32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_u32)
+  :aot-c (driver xicgen_widen_u32))
+
+(lower xi.widen.f32
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_widen)
+  :jit-xm (driver xi2xm_widen_f32)
+  :aot-c (driver xicgen_widen_f32))
 
 (lower xi.bytes.load.u32.le
   :match ()

@@ -387,6 +387,58 @@ TEST(lower_logical_not) {
     xi_func_free(f);
 }
 
+static void check_width_variant(XiOp xi_op, XrType *result_type, XmOp expected_op_a,
+                                XmOp expected_op_b, bool expect_identity) {
+    XiFunc *f = make_func("width_variant", result_type);
+    XiBlock *entry = f->entry;
+    XrType *param_type = result_type->kind == XR_KIND_FLOAT ? &stub_float : &stub_int;
+
+    XiValue *a = xi_param(f, entry, 0, param_type);
+    XiValue *params[1] = {a};
+    register_func_params(f, params, 1);
+    XiValue *cast = xi_unary(f, entry, xi_op, result_type, a);
+    xi_block_set_return(entry, cast);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_a = false;
+    bool found_b = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == expected_op_a)
+            found_a = true;
+        if (blk0->ins[i].op == expected_op_b)
+            found_b = true;
+    }
+    if (expect_identity) {
+        assert(!found_a && !found_b && "f32 width cast is a JIT identity");
+    } else {
+        assert(found_a && "width variant should emit expected first op");
+        assert(found_b && "width variant should emit expected second op");
+    }
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_width_variants) {
+    check_width_variant(XI_NARROW_I8, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_NARROW_U8, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_NARROW_I16, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_NARROW_U16, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_NARROW_I32, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_NARROW_U32, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_NARROW_F32, &stub_float, XM_F2I, XM_I2F, true);
+    check_width_variant(XI_WIDEN_I8, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_WIDEN_U8, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_WIDEN_I16, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_WIDEN_U16, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_WIDEN_I32, &stub_int, XM_SHL, XM_SHR, false);
+    check_width_variant(XI_WIDEN_U32, &stub_int, XM_AND, XM_AND, false);
+    check_width_variant(XI_WIDEN_F32, &stub_float, XM_F2I, XM_I2F, true);
+}
+
 TEST(lower_void_return) {
     XiFunc *f = make_func("void_fn", &stub_void);
     XiBlock *entry = f->entry;
@@ -708,6 +760,7 @@ int main(void) {
     run_lower_neg_unary();
     run_lower_unary_variants();
     run_lower_logical_not();
+    run_lower_width_variants();
     run_lower_void_return();
     run_lower_call();
     run_lower_print();

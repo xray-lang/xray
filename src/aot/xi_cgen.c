@@ -1009,40 +1009,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Narrow: truncate to sub-width, sign/zero-extend back to i64/f64.
-         * AOT emits native C casts — the C compiler produces optimal code. */
-        case XI_NARROW_I8:
-        case XI_WIDEN_I8:
-            fprintf(out, "(int64_t)(int8_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_WIDEN_I16:
-            fprintf(out, "(int64_t)(int16_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_NARROW_U16:
-        case XI_WIDEN_U16:
-            fprintf(out, "(int64_t)(uint16_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_NARROW_I32:
-        case XI_WIDEN_I32:
-            fprintf(out, "(int64_t)(int32_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_WIDEN_U32:
-            fprintf(out, "(int64_t)(uint32_t)");
-            emit_vref(out, v->args[0]);
-            break;
-        case XI_NARROW_F32:
-        case XI_WIDEN_F32:
-            fputs((v->op == XI_WIDEN_F32 && cg_array_index_get_reads_f32_storage(v->args[0]))
-                      ? ""
-                      : "(double)(float)",
-                  out);
-            emit_vref(out, v->args[0]);
-            break;
-
         /* Convert */
         case XI_CONVERT: {
             XrRep dst_rep = cg_rep(v);
