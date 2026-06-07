@@ -17,7 +17,12 @@
     X(NARROW_U8, xi_emit_narrow) \
     X(NARROW_I16, xi_emit_narrow) \
     X(NARROW_U32, xi_emit_narrow) \
-    X(WIDEN_U8, xi_emit_widen)
+    X(WIDEN_U8, xi_emit_widen) \
+    X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
+    X(BYTES_LOAD_U64_LE, xi_emit_bytes_load_u64_le) \
+    X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \
+    X(BYTES_COPY_FROM, xi_emit_bytes_copy_from) \
+    X(BYTES_REPEAT_FROM, xi_emit_bytes_repeat_from)
 
 
 #endif  /* XI_EMIT_VM_GEN_H */

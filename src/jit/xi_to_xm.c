@@ -1297,6 +1297,14 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return val;
         }
 
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_COPY_FROM:
+        case XI_BYTES_REPEAT_FROM:
+            ctx->error = true;
+            return xm_const_i64(ctx->xm_func, 0);
+
         /* Array / Map creation */
         case XI_ARRAY_NEW: {
             XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);

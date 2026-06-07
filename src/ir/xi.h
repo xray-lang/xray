@@ -239,6 +239,18 @@ typedef enum {
     XI_INDEX_GET,   /* obj[key]: args[0]=obj, args[1]=key */
     XI_INDEX_SET,   /* obj[key]=val: args[0]=obj, args[1]=key, args[2]=val */
 
+    /* Bytes memory primitives: all offsets/counts are integer values.
+     * LOAD args: args[0]=bytes, args[1]=offset.
+     * COPY_WITHIN args: args[0]=bytes, args[1]=dst, args[2]=src, args[3]=count.
+     * COPY_FROM args: args[0]=dst, args[1]=src, args[2]=src_offset,
+     *                 args[3]=dst_offset, args[4]=count.
+     * REPEAT_FROM args: args[0]=bytes, args[1]=dst, args[2]=distance, args[3]=count. */
+    XI_BYTES_LOAD_U32_LE,
+    XI_BYTES_LOAD_U64_LE,
+    XI_BYTES_COPY_WITHIN,
+    XI_BYTES_COPY_FROM,
+    XI_BYTES_REPEAT_FROM,
+
     /* Struct native storage: typed field access with compile-time layout.
      * args[0]=class_val for NEW; args[0]=struct for GET/SET.
      * aux=XrStructLayout*; aux_int=field_index for GET/SET. */

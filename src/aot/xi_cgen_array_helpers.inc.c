@@ -1042,6 +1042,13 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
             return arg_index == 0;
         case XI_INDEX_SET:
             return arg_index == 0;
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_REPEAT_FROM:
+            return arg_index == 0;
+        case XI_BYTES_COPY_FROM:
+            return arg_index == 0 || arg_index == 1;
         case XI_LOAD_FIELD: {
             const char *field = (const char *) user->aux;
             return arg_index == 0 && field &&

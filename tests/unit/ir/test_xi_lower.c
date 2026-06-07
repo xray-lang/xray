@@ -110,6 +110,26 @@ static int func_tree_has_op(XiFunc *f, uint16_t op) {
     return 0;
 }
 
+static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
+    if (!f || !name)
+        return 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (v && v->op == XI_CALL_BUILTIN && v->aux && strcmp((const char *) v->aux, name) == 0)
+                return 1;
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        if (func_tree_has_builtin_name(f->children[i], name))
+            return 1;
+    }
+    return 0;
+}
+
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
     static void run_##name(void) {                                                                 \
@@ -397,6 +417,31 @@ TEST(member_access_field_symbols_are_distinct) {
     assert(done_symbol > 0 && "task.done should carry a field symbol");
     assert(cancelled_symbol > 0 && "task.cancelled should carry a field symbol");
     assert(done_symbol != cancelled_symbol && "different task fields need distinct symbols");
+    xi_func_free(f);
+}
+
+TEST(bytes_methods_lower_to_semantic_ops) {
+    XiFunc *f = lower_source("let src = new Bytes(8)\n"
+                             "let dst = new Bytes(8)\n"
+                             "let a = src.loadU32LE(0)\n"
+                             "let b = src.loadU64LE(0)\n"
+                             "src.copyWithin(1, 0, 2)\n"
+                             "dst.copyFrom(src, 0, 0, 2)\n"
+                             "dst.repeatFrom(2, 2, 4)\n"
+                             "print(a)\n"
+                             "print(b)\n");
+    assert(f != NULL);
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U32_LE) && "loadU32LE should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_LOAD_U64_LE) && "loadU64LE should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_COPY_WITHIN) && "copyWithin should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_COPY_FROM) && "copyFrom should lower to Bytes op");
+    assert(func_tree_has_op(f, XI_BYTES_REPEAT_FROM) && "repeatFrom should lower to Bytes op");
+    assert(!func_tree_has_builtin_name(f, "bytes_load_u32_le") &&
+           "loadU32LE should not lower through string builtin");
+    assert(!func_tree_has_builtin_name(f, "bytes_copy_within") &&
+           "copyWithin should not lower through string builtin");
+    assert(!func_tree_has_builtin_name(f, "bytes_repeat_from") &&
+           "repeatFrom should not lower through string builtin");
     xi_func_free(f);
 }
 
@@ -942,6 +987,7 @@ int main(void) {
     run_index_access();
     run_member_access();
     run_member_access_field_symbols_are_distinct();
+    run_bytes_methods_lower_to_semantic_ops();
     run_throw_stmt();
     run_for_in_loop();
     run_nullish_coalesce();

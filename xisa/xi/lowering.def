@@ -91,3 +91,33 @@
   :vm-bytecode (driver xi_emit_widen)
   :jit-xm (driver xi2xm_widen_u8)
   :aot-c (driver xicgen_widen_u8))
+
+(lower xi.bytes.load.u32.le
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_load_u32_le)
+  :aot-c (driver xicgen_bytes_load_u32_le))
+
+(lower xi.bytes.load.u64.le
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_load_u64_le)
+  :aot-c (driver xicgen_bytes_load_u64_le))
+
+(lower xi.bytes.copy.within
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_copy_within)
+  :aot-c (driver xicgen_bytes_copy_within))
+
+(lower xi.bytes.copy.from
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_copy_from)
+  :aot-c (driver xicgen_bytes_copy_from))
+
+(lower xi.bytes.repeat.from
+  :match ()
+  :required-targets (vm-bytecode aot-c)
+  :vm-bytecode (driver xi_emit_bytes_repeat_from)
+  :aot-c (driver xicgen_bytes_repeat_from))
