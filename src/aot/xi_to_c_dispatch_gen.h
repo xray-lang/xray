@@ -12,8 +12,11 @@
     X(SUB, "xi.sub", xicgen_sub) \
     X(MUL, "xi.mul", xicgen_mul) \
     X(EQ, "xi.eq", xicgen_eq) \
+    X(NE, "xi.ne", xicgen_ne) \
     X(LT, "xi.lt", xicgen_lt) \
     X(LE, "xi.le", xicgen_le) \
+    X(GT, "xi.gt", xicgen_gt) \
+    X(GE, "xi.ge", xicgen_ge) \
     X(NARROW_U8, "xi.narrow.u8", xicgen_narrow_u8) \
     X(NARROW_I16, "xi.narrow.i16", xicgen_narrow_i16) \
     X(NARROW_U32, "xi.narrow.u32", xicgen_narrow_u32) \

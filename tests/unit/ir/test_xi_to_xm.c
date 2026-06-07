@@ -151,6 +151,36 @@ TEST(lower_comparison) {
     xi_func_free(f);
 }
 
+static void check_lower_comparison_variant(XiOp xi_op, XmOp expected_xm_op) {
+    XiFunc *f = make_func("cmp_variant", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *cmp = xi_binary(f, entry, xi_op, &stub_bool, a, b);
+    xi_block_set_return(entry, cmp);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == expected_xm_op)
+            found = true;
+    }
+    assert(found && "comparison variant should lower through generated dispatch");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_comparison_variants) {
+    check_lower_comparison_variant(XI_NE, XM_NE);
+    check_lower_comparison_variant(XI_GT, XM_LT);
+    check_lower_comparison_variant(XI_GE, XM_LE);
+}
+
 TEST(lower_if_branch) {
     /* fn(c: bool) -> int { if c { return 1 } else { return 2 } } */
     XiFunc *f = make_func("branch", &stub_int);
@@ -570,6 +600,7 @@ int main(void) {
     run_lower_add_int();
     run_lower_add_float();
     run_lower_comparison();
+    run_lower_comparison_variants();
     run_lower_if_branch();
     run_lower_phi();
     run_lower_neg_unary();

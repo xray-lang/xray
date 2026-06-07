@@ -12,8 +12,11 @@
     X(SUB, xi_emit_arith) \
     X(MUL, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
+    X(NE, xi_emit_cmp) \
     X(LT, xi_emit_cmp) \
     X(LE, xi_emit_cmp) \
+    X(GT, xi_emit_cmp) \
+    X(GE, xi_emit_cmp) \
     X(NARROW_U8, xi_emit_narrow) \
     X(NARROW_I16, xi_emit_narrow) \
     X(NARROW_U32, xi_emit_narrow) \

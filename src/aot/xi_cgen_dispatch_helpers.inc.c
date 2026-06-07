@@ -158,31 +158,68 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             case XI_EQ:
                 fprintf(out, "xrt_eq(");
                 break;
+            case XI_NE:
+                fprintf(out, "!xrt_eq(");
+                break;
             case XI_LT:
                 fprintf(out, "xrt_lt(");
                 break;
             case XI_LE:
                 fprintf(out, "xrt_le(");
                 break;
-            default:
-                fprintf(out, "xrt_eq(");
+            case XI_GT:
+                fprintf(out, "xrt_lt(");
                 break;
+            case XI_GE:
+                fprintf(out, "xrt_le(");
+                break;
+            default:
+                XR_CHECK(false, "xicgen_compare: unsupported tagged compare op");
         }
-        emit_boxed_value_ref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_boxed_value_ref(out, v->args[1]);
+        if (v->op == XI_GT || v->op == XI_GE) {
+            emit_boxed_value_ref(out, v->args[1]);
+            fprintf(out, ", ");
+            emit_boxed_value_ref(out, v->args[0]);
+        } else {
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_boxed_value_ref(out, v->args[1]);
+        }
         fprintf(out, ")");
     } else {
-        const char *op = "==";
-        if (v->op == XI_LT)
-            op = "<";
-        else if (v->op == XI_LE)
-            op = "<=";
+        const char *op = NULL;
+        switch (v->op) {
+            case XI_EQ:
+                op = "==";
+                break;
+            case XI_NE:
+                op = "!=";
+                break;
+            case XI_LT:
+                op = "<";
+                break;
+            case XI_LE:
+                op = "<=";
+                break;
+            case XI_GT:
+                op = ">";
+                break;
+            case XI_GE:
+                op = ">=";
+                break;
+            default:
+                XR_CHECK(false, "xicgen_compare: unsupported native compare op");
+        }
         emit_binop(out, v, op);
     }
 }
 
 static void xicgen_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    xicgen_compare(ctx, out, f, v, prefix);
+}
+
+static void xicgen_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
     xicgen_compare(ctx, out, f, v, prefix);
 }
@@ -193,6 +230,16 @@ static void xicgen_lt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
 }
 
 static void xicgen_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    xicgen_compare(ctx, out, f, v, prefix);
+}
+
+static void xicgen_gt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    xicgen_compare(ctx, out, f, v, prefix);
+}
+
+static void xicgen_ge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
     xicgen_compare(ctx, out, f, v, prefix);
 }
