@@ -1653,66 +1653,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        case XI_GET_BUILTIN:
-            if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
-                v->aux_int == XR_GLOBAL_VAR_DIR) {
-                fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
-            } else {
-                ctx->error = true;
-                fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT builtin global '%s'\n",
-                        v->aux ? (const char *) v->aux : "?");
-                emit_codegen_abort_expr(out);
-            }
-            break;
-
-        /* Class creation: register the type in xrt_type_table.
-         * For monomorphized classes, also link to skeleton via generic_origin
-         * and set concrete type arg display names for Reflect.typeOf. */
-        case XI_CLASS_CREATE: {
-            const XiClassData *cd = (const XiClassData *) v->aux;
-            if (!cd) {
-                fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
-                break;
-            }
-            const char *name = cd->class_name ? cd->class_name : "?";
-            if (cd->is_monomorphized && cd->display_name) {
-                /* Emit static type arg names array + register + set_generic.
-                 * The skeleton's type_id is resolved by scanning xrt_type_table
-                 * at runtime (skeleton is always registered first). */
-                fprintf(out, "({ ");
-                /* Emit static const char* array for type arg names */
-                if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
-                    fprintf(out, "static const char *_ta_%s[] = {", name);
-                    for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
-                        fprintf(out, "%s\"%s\"", ti > 0 ? ", " : "",
-                                cd->mono_type_arg_names[ti] ? cd->mono_type_arg_names[ti]
-                                                            : "unknown");
-                    }
-                    fprintf(out, "}; ");
-                }
-                fprintf(out, "uint16_t _tid = xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0); ",
-                        name);
-                /* Find skeleton type_id by scanning the table for display_name match */
-                fprintf(out,
-                        "uint16_t _orig = 0; "
-                        "for (uint16_t _i = 1; _i < xrt_type_count; _i++) "
-                        "{ if (xrt_type_table[_i].name && strcmp(xrt_type_table[_i].name, \"%s\") "
-                        "== 0) "
-                        "{ _orig = _i; break; } } ",
-                        cd->display_name);
-                fprintf(out, "xrt_type_set_generic(_tid, _orig, \"%s\", ", cd->display_name);
-                if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
-                    fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
-                } else {
-                    fprintf(out, "NULL, 0");
-                }
-                fprintf(out, "); XR_FROM_INT(_tid); })");
-            } else {
-                fprintf(out, "XR_FROM_INT(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))", name);
-            }
-            break;
-        }
-
         default:
             fprintf(stderr, "[xi_cgen] ERROR: unsupported Xi op %s (%d)\n", xi_op_name(v->op),
                     v->op);

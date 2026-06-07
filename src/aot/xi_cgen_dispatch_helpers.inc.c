@@ -473,6 +473,78 @@ static void xicgen_assert_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
             loc);
 }
 
+static void xicgen_typeof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                          const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_typeof: need arg");
+    if (v->aux_int == 1) {
+        fprintf(out, "xr_typename(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "XR_FROM_INT(xr_typeof_id(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, "))");
+    }
+}
+
+static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) f;
+    (void) prefix;
+    if (v->aux_int == XR_GLOBAL_VAR_PROCESS || v->aux_int == XR_GLOBAL_VAR_FILE ||
+        v->aux_int == XR_GLOBAL_VAR_DIR) {
+        fprintf(out, "xrt_builtins[%d]", (int) v->aux_int);
+    } else {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT builtin global '%s'\n",
+                v->aux ? (const char *) v->aux : "?");
+        emit_codegen_abort_expr(out);
+    }
+}
+
+static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    const XiClassData *cd = (const XiClassData *) v->aux;
+    if (!cd) {
+        fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
+        return;
+    }
+    const char *name = cd->class_name ? cd->class_name : "?";
+    if (cd->is_monomorphized && cd->display_name) {
+        fprintf(out, "({ ");
+        if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+            fprintf(out, "static const char *_ta_%s[] = {", name);
+            for (int ti = 0; ti < cd->mono_type_arg_count; ti++) {
+                fprintf(out, "%s\"%s\"", ti > 0 ? ", " : "",
+                        cd->mono_type_arg_names[ti] ? cd->mono_type_arg_names[ti] : "unknown");
+            }
+            fprintf(out, "}; ");
+        }
+        fprintf(out, "uint16_t _tid = xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0); ", name);
+        fprintf(out,
+                "uint16_t _orig = 0; "
+                "for (uint16_t _i = 1; _i < xrt_type_count; _i++) "
+                "{ if (xrt_type_table[_i].name && strcmp(xrt_type_table[_i].name, \"%s\") == 0) "
+                "{ _orig = _i; break; } } ",
+                cd->display_name);
+        fprintf(out, "xrt_type_set_generic(_tid, _orig, \"%s\", ", cd->display_name);
+        if (cd->mono_type_arg_count > 0 && cd->mono_type_arg_names) {
+            fprintf(out, "_ta_%s, %d", name, cd->mono_type_arg_count);
+        } else {
+            fprintf(out, "NULL, 0");
+        }
+        fprintf(out, "); XR_FROM_INT(_tid); })");
+    } else {
+        fprintf(out, "XR_FROM_INT(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))", name);
+    }
+}
+
 static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) ctx;

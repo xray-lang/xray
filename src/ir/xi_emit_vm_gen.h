@@ -30,6 +30,9 @@
     X(ASSERT, xi_emit_assert) \
     X(ASSERT_EQ, xi_emit_assert_eq) \
     X(ASSERT_NE, xi_emit_assert_ne) \
+    X(TYPEOF, xi_emit_typeof) \
+    X(GET_BUILTIN, xi_emit_get_builtin) \
+    X(CLASS_CREATE, xi_emit_class_create) \
     X(THROW, xi_emit_throw) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \

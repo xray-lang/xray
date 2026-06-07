@@ -30,6 +30,9 @@
     X(ASSERT, "xi.assert", xicgen_assert) \
     X(ASSERT_EQ, "xi.assert.eq", xicgen_assert_eq) \
     X(ASSERT_NE, "xi.assert.ne", xicgen_assert_ne) \
+    X(TYPEOF, "xi.typeof", xicgen_typeof) \
+    X(GET_BUILTIN, "xi.get.builtin", xicgen_get_builtin) \
+    X(CLASS_CREATE, "xi.class.create", xicgen_class_create) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \
