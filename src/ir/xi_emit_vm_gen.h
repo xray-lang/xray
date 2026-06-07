@@ -64,6 +64,8 @@
     X(CONVERT, xi_emit_convert) \
     X(BOX, xi_emit_box) \
     X(UNBOX, xi_emit_unbox) \
+    X(INDEX_GET, xi_emit_index_get) \
+    X(INDEX_SET, xi_emit_index_set) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, xi_emit_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \

@@ -878,6 +878,35 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, ".i");
 }
 
+static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
+    if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
+        emit_typed_array_index_get_expr(ctx, out, f, v, prefix))
+        return;
+    fprintf(out, "xrt_index_get(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
+static void xicgen_index_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    XR_DCHECK(v->nargs >= 3, "xicgen_index_set: need obj, key, and value");
+    if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
+        return;
+    if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
+        return;
+    fprintf(out, "xrt_index_set(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
 static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
     (void) ctx;

@@ -414,6 +414,20 @@
   :jit-xm (driver xi2xm_unbox)
   :aot-c (driver xicgen_unbox))
 
+(lower xi.index.get
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_index_get)
+  :jit-xm (driver xi2xm_index_get)
+  :aot-c (driver xicgen_index_get))
+
+(lower xi.index.set
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_index_set)
+  :jit-xm (driver xi2xm_index_set)
+  :aot-c (driver xicgen_index_set))
+
 (lower xi.bytes.load.u32.le
   :match ()
   :required-targets (vm-bytecode aot-c)

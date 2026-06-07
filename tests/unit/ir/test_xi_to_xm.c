@@ -949,6 +949,44 @@ TEST(lower_index_get) {
     xi_func_free(f);
 }
 
+TEST(lower_index_set) {
+    XiFunc *f = make_func("idx_set", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_param(f, entry, 0, &stub_int);
+    XiValue *idx = xi_param(f, entry, 1, &stub_int);
+    XiValue *val = xi_param(f, entry, 2, &stub_int);
+    XiValue *set = xi_value_new(f, entry, XI_INDEX_SET, &stub_int, 3);
+    set->args[0] = arr;
+    set->args[1] = idx;
+    set->args[2] = val;
+    xi_block_set_return(entry, set);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_CALL_C && blk0->ins[i].args[0] != XM_NONE) {
+            uint32_t ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+            assert(ci < xm->nconst);
+            assert(xm->consts[ci].val.ptr == (void *) xr_jit_index_set);
+            assert((blk0->ins[i].flags & XM_FLAG_MAY_GC) != 0);
+            assert((blk0->ins[i].flags & XM_FLAG_SAFEPOINT) != 0);
+            assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_index_set));
+            uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+            assert(vi < xm->nvreg);
+            assert(xm->vregs[vi].call_nargs == 3);
+            found = true;
+        }
+    }
+    assert(found && "should contain CALL_C to xr_jit_index_set");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 TEST(lower_array_new) {
     /* fn() -> any { return [] } */
     XiFunc *f = make_func("arr_new", &stub_int);
@@ -1059,6 +1097,7 @@ int main(void) {
     run_lower_shared_var();
     run_lower_load_field();
     run_lower_index_get();
+    run_lower_index_set();
     run_lower_array_new();
     run_reject_multi_ret_with_extra_results();
     run_reject_extract_extra_result();

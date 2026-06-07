@@ -1040,35 +1040,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
 
         /* ============ Containers ============ */
 
-        /* Indexed read: args[0]=collection, args[1]=key */
-        case XI_INDEX_GET:
-            XR_DCHECK(v->nargs >= 2, "XI_INDEX_GET: need obj+key");
-            if (emit_struct_fixed_array_index_get_expr(ctx, out, f, v, prefix) ||
-                emit_typed_array_index_get_expr(ctx, out, f, v, prefix))
-                break;
-            fprintf(out, "xrt_index_get(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-            fprintf(out, ")");
-            break;
-
-        /* Indexed write: args[0]=collection, args[1]=key, args[2]=value */
-        case XI_INDEX_SET:
-            XR_DCHECK(v->nargs >= 3, "XI_INDEX_SET: need obj+key+val");
-            if (emit_struct_fixed_array_index_set_expr(ctx, out, f, v, prefix))
-                break;
-            if (emit_typed_array_index_set_expr(ctx, out, f, v, prefix))
-                break;
-            fprintf(out, "xrt_index_set(");
-            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-            fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
-            fprintf(out, ")");
-            break;
-
         /* ============ Field Access ============ */
 
         /* Property read: args[0]=object, aux=field name string */

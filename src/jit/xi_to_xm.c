@@ -1297,6 +1297,26 @@ static XmRef xi2xm_unbox(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_unbox(ctx, blk, v);
 }
 
+static XmRef xi2xm_index_get(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs >= 2, "index_get: need obj + key");
+    XmRef obj = get_ref(ctx, v->args[0]);
+    XmRef key = get_ref(ctx, v->args[1]);
+    XmRef extra = xm_const_i64(ctx->xm_func, 0);
+    XmRef args[2] = {obj, key};
+    return emit_helper_call(ctx, blk, XM_HELPER_index_get, extra, args, 2);
+}
+
+static XmRef xi2xm_index_set(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs >= 3, "index_set: need obj + key + val");
+    XmRef obj = get_ref(ctx, v->args[0]);
+    XmRef key = get_ref(ctx, v->args[1]);
+    XmRef val = get_ref(ctx, v->args[2]);
+    XmRef extra = xm_const_i64(ctx->xm_func, 0);
+    XmRef args[3] = {obj, key, val};
+    emit_helper_call(ctx, blk, XM_HELPER_index_set, extra, args, 3);
+    return val;
+}
+
 static XmRef xi2xm_deopt_to_vm(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     int bc_pc = slot_map_bc_pc(ctx, v->id);
     uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
@@ -1431,27 +1451,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             sf->rep = XM_SF_TAG_RUNTIME;
             sf->dst = off;
             sf->flags |= XM_FLAG_SIDE_EFFECT;
-            return val;
-        }
-
-        /* Index access */
-        case XI_INDEX_GET: {
-            XR_DCHECK(v->nargs >= 2, "index_get: need obj + key");
-            XmRef obj = get_ref(ctx, v->args[0]);
-            XmRef key = get_ref(ctx, v->args[1]);
-            XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef args[2] = {obj, key};
-            XmRef result = emit_helper_call(ctx, blk, XM_HELPER_index_get, extra, args, 2);
-            return result;
-        }
-        case XI_INDEX_SET: {
-            XR_DCHECK(v->nargs >= 3, "index_set: need obj + key + val");
-            XmRef obj = get_ref(ctx, v->args[0]);
-            XmRef key = get_ref(ctx, v->args[1]);
-            XmRef val = get_ref(ctx, v->args[2]);
-            XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef args[3] = {obj, key, val};
-            emit_helper_call(ctx, blk, XM_HELPER_index_set, extra, args, 3);
             return val;
         }
 
