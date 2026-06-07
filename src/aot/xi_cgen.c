@@ -17,6 +17,7 @@
  *     populated by xi_opt_select_rep in the pipeline.
  */
 #include "xi_cgen.h"
+#include "xaot_rep_gen.h"
 #include "xi_to_c_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
@@ -54,22 +55,7 @@ static const char *ctype_str(XrRep rep) {
 }
 
 static const char *cg_native_int_ctype(uint8_t native_width) {
-    switch (native_width) {
-        case XR_NATIVE_I8:
-            return "int8_t";
-        case XR_NATIVE_U8:
-            return "uint8_t";
-        case XR_NATIVE_I16:
-            return "int16_t";
-        case XR_NATIVE_U16:
-            return "uint16_t";
-        case XR_NATIVE_I32:
-            return "int32_t";
-        case XR_NATIVE_U32:
-            return "uint32_t";
-        default:
-            return NULL;
-    }
+    return xaot_c_type_for_native_int_type(native_width);
 }
 
 static uint8_t cg_narrow_int_native_width(uint16_t op) {
@@ -92,22 +78,7 @@ static uint8_t cg_narrow_int_native_width(uint16_t op) {
 }
 
 static bool cg_const_int_fits_native_width(int64_t value, uint8_t native_width) {
-    switch (native_width) {
-        case XR_NATIVE_I8:
-            return value >= INT8_MIN && value <= INT8_MAX;
-        case XR_NATIVE_U8:
-            return value >= 0 && value <= UINT8_MAX;
-        case XR_NATIVE_I16:
-            return value >= INT16_MIN && value <= INT16_MAX;
-        case XR_NATIVE_U16:
-            return value >= 0 && value <= UINT16_MAX;
-        case XR_NATIVE_I32:
-            return value >= INT32_MIN && value <= INT32_MAX;
-        case XR_NATIVE_U32:
-            return value >= 0 && (uint64_t) value <= UINT32_MAX;
-        default:
-            return false;
-    }
+    return xaot_native_int_const_fits(native_width, value);
 }
 
 static bool cg_value_narrow_local_native_width(const XiValue *v, uint8_t depth,

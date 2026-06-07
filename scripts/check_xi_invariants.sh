@@ -217,6 +217,29 @@ else
 fi
 
 # --------------------------------------------------------------------------
+# INV-2C: generated AOT rep metadata must match its source descriptions
+# --------------------------------------------------------------------------
+echo "--- INV-2C: generated AOT rep source sync ---"
+if [ -f tools/xisagen/xisagen.py ] && [ -f xisa/aot/rep.def ]; then
+    GEN_TMP=$(mktemp -d)
+    GEN_LOG=$(mktemp)
+    if ! python3 tools/xisagen/xisagen.py aot-rep xisa/aot/rep.def \
+        "$GEN_TMP/src/aot/xaot_rep_gen.h" >"$GEN_LOG" 2>&1; then
+        fail "AOT rep generator failed"
+        show_matches "$(cat "$GEN_LOG")"
+    elif diff -u src/aot/xaot_rep_gen.h "$GEN_TMP/src/aot/xaot_rep_gen.h" >/dev/null; then
+        pass "generated AOT rep metadata is in sync"
+    else
+        fail "generated AOT rep metadata is stale:"
+        printf "%s\n" "src/aot/xaot_rep_gen.h" | sed 's/^/    /'
+    fi
+    rm -rf "$GEN_TMP"
+    rm -f "$GEN_LOG"
+else
+    warn "AOT rep generator or xisa/aot/rep.def not found, skipping"
+fi
+
+# --------------------------------------------------------------------------
 # INV-3: Xi backend builtin lowering must be JIT-visible
 # --------------------------------------------------------------------------
 echo "--- INV-3: Xi backend builtin lowering sync ---"

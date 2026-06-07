@@ -75,6 +75,10 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
 )
 
+set(XRAY_GEN_AOT_REP_DEPS
+    ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
+)
+
 add_custom_command(
     OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
     COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-ops
@@ -94,6 +98,15 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def
     COMMENT "xisagen: generating xi_lowering_coverage_gen.h from lowering.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} aot-rep
+            ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+            ${CMAKE_SOURCE_DIR}/src/aot/xaot_rep_gen.h
+    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/aot/rep.def
+    COMMENT "xisagen: generating xaot_rep_gen.h from rep.def"
 )
 
 add_custom_command(
@@ -259,6 +272,10 @@ add_custom_target(gen-xi-ops DEPENDS
 
 add_custom_target(gen-xi-lowering DEPENDS
     ${XRAY_GEN_XI_LOWERING_DEPS}
+)
+
+add_custom_target(gen-aot-rep DEPENDS
+    ${XRAY_GEN_AOT_REP_DEPS}
 )
 
 # Linux: expose POSIX/GNU extensions (CLOCK_MONOTONIC, CPU_SET, pthread_setaffinity_np, etc.)
@@ -610,6 +627,13 @@ set(XRAY_COMMON_INCLUDES
 # Source File Collection
 # ============================================================================
 
+function(xray_exclude_include_fragments source_list_name)
+    if(DEFINED ${source_list_name})
+        list(FILTER ${source_list_name} EXCLUDE REGEX "\\.inc\\.c$")
+        set(${source_list_name} "${${source_list_name}}" PARENT_SCOPE)
+    endif()
+endfunction()
+
 file(GLOB BASE_SRC "src/base/*.c")
 # Cross-platform abstraction layer. Each impl file is exclusive to
 # its platform — no body guards, only the right subtree is built.
@@ -638,14 +662,10 @@ file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
 file(GLOB FRONTEND_CANONICAL_SRC "src/frontend/canonical/*.c")
 file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
-# Dispatch case bodies live in *.inc.c files included from xvm.c inside
-# the computed-goto switch. They are not standalone translation units.
-list(FILTER VM_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB JIT_SRC "src/jit/*.c")
 list(APPEND JIT_SRC ${XRAY_GEN_XM_C_SRC} "${CMAKE_CURRENT_SOURCE_DIR}/src/jit/xm_dispatch_meta.c")
 list(REMOVE_DUPLICATES JIT_SRC)
 file(GLOB IR_SRC "src/ir/*.c")
-list(FILTER IR_SRC EXCLUDE REGEX "\\.inc\\.c$")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
 file(GLOB API_SRC "src/api/*.c")
@@ -760,6 +780,19 @@ else()
     endif()
 endif()
 
+# C include fragments use *.inc.c for editor support, but they are included
+# from owning .c files and must never be compiled as standalone translation units.
+foreach(XRAY_SRC_LIST
+        BASE_SRC OS_SRC RUNTIME_TOP_SRC RUNTIME_VALUE_SRC RUNTIME_GC_SRC
+        RUNTIME_OBJECT_SRC RUNTIME_OBJECT_BUILTINS_SRC RUNTIME_CLASS_SRC
+        RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
+        FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
+        FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC
+        VM_SRC JIT_SRC IR_SRC MODULE_SRC AOT_SRC API_SRC NEW_CLI_SRC
+        STDLIB_CORE_SRC STDLIB_SRC)
+    xray_exclude_include_fragments(${XRAY_SRC_LIST})
+endforeach()
+
 # ============================================================================
 # Build Target - Core Library (all core components)
 # ============================================================================
@@ -792,7 +825,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering)
+add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering gen-aot-rep)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

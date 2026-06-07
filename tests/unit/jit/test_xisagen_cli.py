@@ -107,6 +107,42 @@ def main() -> int:
             "  :jit-xm (driver xi2xm_add)\n"
             "  :aot-c (driver xicgen_add))\n",
         )
+        bad_aot_rep = write(
+            tmp / "bad_aot_rep.def",
+            "(define-aot-rep i8\n"
+            "  :c-type \"int8_t\"\n"
+            "  :size 1\n"
+            "  :align 1\n"
+            "  :signed yes\n"
+            "  :integer yes\n"
+            "  :boxed no\n"
+            "  :dynamic-kind scalar\n"
+            "  :native-type native_i8\n"
+            "  :storage-rep XR_REP_I64)\n",
+        )
+        good_aot_rep = write(
+            tmp / "good_aot_rep.def",
+            "(define-aot-rep i8\n"
+            "  :c-type \"int8_t\"\n"
+            "  :size 1\n"
+            "  :align 1\n"
+            "  :signed yes\n"
+            "  :integer yes\n"
+            "  :boxed no\n"
+            "  :dynamic-kind scalar\n"
+            "  :native-type XR_NATIVE_I8\n"
+            "  :storage-rep XR_REP_I64)\n"
+            "(define-aot-rep tagged\n"
+            "  :c-type \"XrValue\"\n"
+            "  :size 16\n"
+            "  :align 8\n"
+            "  :signed no\n"
+            "  :integer no\n"
+            "  :boxed yes\n"
+            "  :dynamic-kind tagged\n"
+            "  :native-type none\n"
+            "  :storage-rep XR_REP_TAGGED)\n",
+        )
         bad_isel = write(tmp / "bad_isel.def", "ISEL(BOGUS, x64, GP_RR, x64.add.rr)\n")
         # An isel entry that names a real op but a bogus mcinsn that is not
         # in the supplied .isa fixture. Triggers the new arch-xref check.
@@ -180,6 +216,28 @@ def main() -> int:
         vm_dispatch = (out_root / "src/ir/xi_emit_vm_gen.h").read_text()
         if "X(ADD, xi_emit_arith)" not in vm_dispatch:
             raise AssertionError(f"missing VM lowering driver entry: {vm_dispatch}")
+        expect_fail(
+            ns.xisagen,
+            ["aot-rep", str(bad_aot_rep), str(tmp / "xaot_rep_gen.h")],
+            ":native-type must be XR_NATIVE_* or none",
+        )
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "aot-rep", str(good_aot_rep),
+             str(tmp / "xaot_rep_gen.h")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"aot-rep success path failed: {proc.stderr}")
+        aot_rep_header = (tmp / "xaot_rep_gen.h").read_text()
+        if "XAOT_REP_I8" not in aot_rep_header:
+            raise AssertionError(f"missing AOT rep enum entry: {aot_rep_header}")
+        if "xaot_c_type_for_native_int_type" not in aot_rep_header:
+            raise AssertionError(f"missing AOT native int query: {aot_rep_header}")
+        if "xaot_elem_name_for_native_type" not in aot_rep_header:
+            raise AssertionError(f"missing AOT native element query: {aot_rep_header}")
         expect_fail(
             ns.xisagen,
             ["isel", str(good_isel_bad_mcinsn), str(ops),
