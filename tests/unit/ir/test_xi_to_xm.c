@@ -847,6 +847,7 @@ TEST(lower_builtin_metadata_ops_deopt_to_vm) {
     assert_op_deopts_to_vm(XI_TYPEOF, "typeof_deopt", 1, 0);
     assert_op_deopts_to_vm(XI_GET_BUILTIN, "get_builtin_deopt", 0, XR_GLOBAL_VAR_PROCESS);
     assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
+    assert_op_deopts_to_vm(XI_CALL_BUILTIN, "print", 1, 0);
 }
 
 TEST(lower_is_deopts_to_vm) {

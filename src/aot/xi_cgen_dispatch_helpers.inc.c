@@ -505,6 +505,141 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 }
 
+static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                const char *prefix) {
+    (void) prefix;
+    const char *bn = v->aux ? (const char *) v->aux : "";
+
+    if (strcmp(bn, "print") == 0) {
+        int flags = (int) v->aux_int;
+        bool add_space = (flags & 1) != 0;
+        bool newline = (flags & 2) != 0;
+        if (add_space)
+            fprintf(out, "(putchar(' '), ");
+        fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (add_space)
+            fprintf(out, ")");
+    } else if (strcmp(bn, "str_concat") == 0) {
+        emit_str_concat_expr(out, v);
+    } else if (strcmp(bn, "array_new") == 0) {
+        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 4;
+        if (cg_array_value_uses_native_local(ctx, f, v)) {
+            if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, cap))
+                fprintf(out, "(xrt_array_t*)xrt_array_new(%" PRId64 ").ptr", cap);
+        } else if (!emit_typed_array_new_expr(ctx, out, f, v, cap)) {
+            fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+        }
+    } else if (strcmp(bn, "Bytes") == 0) {
+        if (cg_array_value_uses_native_local(ctx, f, v)) {
+            if (!emit_bytes_new_native_local_expr(out, v)) {
+                emit_codegen_abort_expr(out);
+                ctx->error = true;
+            }
+        } else if (v->nargs == 0) {
+            fprintf(out, "xrt_bytes_new_len(0)");
+        } else if (v->nargs == 1) {
+            if (v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_INT) {
+                fprintf(out, "xrt_bytes_new_len(");
+                emit_value_as_rep(out, v->args[0], XR_REP_I64);
+                fprintf(out, ")");
+            } else {
+                fprintf(out, "xrt_bytes_new_1(");
+                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+            }
+        } else if (v->nargs == 2) {
+            fprintf(out, "xrt_bytes_new_fill(");
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+            fprintf(out, ")");
+        } else {
+            emit_codegen_abort_expr(out);
+            ctx->error = true;
+        }
+    } else if (emit_array_bytes_builtin_expr(ctx, out, v, bn)) {
+        /* Expression emitted by the array/bytes helper. */
+    } else if (strcmp(bn, "StringBuilder") == 0) {
+        fprintf(out, "xrt_strbuf_new()");
+    } else if (strcmp(bn, "map_new") == 0) {
+        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
+        if (!emit_typed_map_new_expr(out, v, cap))
+            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+    } else if (strcmp(bn, "set_new") == 0) {
+        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
+        if (!emit_typed_set_new_expr(out, v, cap))
+            fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+    } else if (strcmp(bn, "json_new") == 0) {
+        int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
+        fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
+    } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
+        fprintf(out, "xrt_json_set_field(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d, ", (int) v->aux_int);
+        emit_vref(out, v->args[1]);
+        fprintf(out, ")");
+    } else if (strcmp(bn, "json_get_f") == 0) {
+        fprintf(out, "xrt_json_get_field(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d)", (int) v->aux_int);
+    } else if (strcmp(bn, "iter_new") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin iter_new: need arg");
+        fprintf(out, "xrt_method_0(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d)", XRT_SYM_ITERATOR);
+    } else if (strcmp(bn, "iter_valid") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin iter_valid: need arg");
+        fprintf(out, "xr_truthy(xrt_method_0(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d))", XRT_SYM_HAS_NEXT);
+    } else if (strcmp(bn, "iter_next") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin iter_next: need arg");
+        fprintf(out, "xrt_method_0(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d)", XRT_SYM_NEXT);
+    } else if (strcmp(bn, "slice") == 0) {
+        XR_DCHECK(v->nargs >= 3, "builtin slice: need 3 args");
+        fprintf(out, "xrt_slice(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[2]);
+        fprintf(out, ")");
+    } else if (strcmp(bn, "range") == 0) {
+        XR_DCHECK(v->nargs >= 2, "builtin range: need 2 args");
+        fprintf(out, "xrt_range(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out, ")");
+    } else if (strcmp(bn, "typeof") == 0) {
+        XR_DCHECK(v->nargs >= 1, "builtin typeof: need arg");
+        if (v->aux_int == 1) {
+            fprintf(out, "xr_typename(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "XR_FROM_INT(xr_typeof_id(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "))");
+        }
+    } else if (strcmp(bn, "regex_compile") == 0) {
+        XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
+        fprintf(out, "xr_regex_compile_literal(iso, ");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", ");
+        emit_vref(out, v->args[1]);
+        fprintf(out, ")");
+    } else {
+        fprintf(stderr, "[xi_cgen] ERROR: unknown builtin '%s'\n", bn);
+        emit_codegen_abort_expr(out);
+        ctx->error = true;
+    }
+}
+
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     (void) ctx;

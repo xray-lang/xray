@@ -34,6 +34,7 @@
     X(GET_BUILTIN, xi_emit_get_builtin) \
     X(PRINT, xi_emit_print) \
     X(CLASS_CREATE, xi_emit_class_create) \
+    X(CALL_BUILTIN, xi_emit_call_builtin) \
     X(THROW, xi_emit_throw) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \
