@@ -482,9 +482,6 @@ static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_BNOT:
             xm_op = XM_NOT;
             break;
-        case XI_NOT:
-            xm_op = XM_NOT;
-            break;
         default:
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
@@ -495,6 +492,27 @@ static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         arg = coerce_to_f64(ctx, blk, arg);
 
     return xm_fold_emit(ctx->xm_func, blk, xm_op, rep, arg, XM_NONE);
+}
+
+static XmRef lower_logical_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "logical not: expected 1 arg");
+    XiValue *arg_v = v->args[0];
+    XmRef arg = get_ref(ctx, arg_v);
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
+
+    if (arg_v->type && (arg_v->type->kind == XR_KIND_INT || arg_v->type->kind == XR_KIND_BOOL ||
+                        arg_v->type->kind == XR_KIND_ENUM || arg_v->type->kind == XR_KIND_NULL)) {
+        return xm_fold_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, arg, zero);
+    }
+
+    if (is_float_type(arg_v->type) || ref_rep(ctx, arg) == XR_REP_F64) {
+        XmRef fzero = xm_const_f64(ctx->xm_func, 0.0);
+        return xm_fold_emit(ctx->xm_func, blk, XM_FEQ, XR_REP_I64, arg, fzero);
+    }
+
+    XmRef args[1] = {arg};
+    XmRef truthy = emit_helper_call(ctx, blk, XM_HELPER_rt_truthy, zero, args, (uint16_t) 1);
+    return xm_fold_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, truthy, zero);
 }
 
 /* ========== Comparison Lowering ========== */
@@ -1001,6 +1019,10 @@ static XmRef xi2xm_bnot(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_unary(ctx, blk, v);
 }
 
+static XmRef xi2xm_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_logical_not(ctx, blk, v);
+}
+
 static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_binary_arith(ctx, blk, v);
 }
@@ -1095,10 +1117,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_DIV:
         case XI_MOD:
             return lower_binary_arith(ctx, blk, v);
-
-        /* Unary */
-        case XI_NOT:
-            return lower_unary(ctx, blk, v);
 
         /* Comparison */
         case XI_EQ_STRICT:

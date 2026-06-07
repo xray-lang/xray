@@ -78,6 +78,13 @@
   :jit-xm (driver xi2xm_bnot)
   :aot-c (driver xicgen_bnot))
 
+(lower xi.not
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_not)
+  :jit-xm (driver xi2xm_not)
+  :aot-c (driver xicgen_not))
+
 (lower xi.shl
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)

@@ -16,6 +16,7 @@
     X(BOR, xi_emit_arith) \
     X(BXOR, xi_emit_arith) \
     X(BNOT, xi_emit_bnot) \
+    X(NOT, xi_emit_not) \
     X(SHL, xi_emit_arith) \
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \

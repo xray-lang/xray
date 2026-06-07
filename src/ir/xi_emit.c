@@ -452,7 +452,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_MOD] = xi_emit_arith,
     [XI_EQ_STRICT] = xi_emit_cmp,
     [XI_NE_STRICT] = xi_emit_cmp,
-    [XI_NOT] = xi_emit_not,
     [XI_CONVERT] = xi_emit_convert,
     [XI_BOX] = xi_emit_box,
     [XI_UNBOX] = xi_emit_unbox,

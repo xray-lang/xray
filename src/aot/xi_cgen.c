@@ -954,13 +954,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Logical */
-        case XI_NOT:
-            fprintf(out, "!(");
-            emit_condition_expr(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
         case XI_SELECT:
             XR_DCHECK(v->nargs == 3, "XI_SELECT: need cond, true, false");
             fprintf(out, "(");
