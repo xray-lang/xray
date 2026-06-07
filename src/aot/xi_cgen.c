@@ -1445,14 +1445,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* throw(value): abort with exception */
-        case XI_THROW:
-            XR_DCHECK(v->nargs >= 1, "XI_THROW: need arg");
-            fprintf(out, "xrt_throw_exc(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
         case XI_DROP_REUSE:
             XR_DCHECK(v->nargs >= 1, "XI_DROP_REUSE: need arg");
             fprintf(out, "xrt_drop_reuse(");
