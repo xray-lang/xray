@@ -292,6 +292,28 @@ static void xicgen_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     xicgen_compare(ctx, out, f, v, prefix);
 }
 
+static void xicgen_strict_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix, const char *op) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ".i %s ", op);
+    emit_vref(out, v->args[1]);
+    fprintf(out, ".i)");
+}
+
+static void xicgen_eq_strict(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    xicgen_strict_compare(ctx, out, f, v, prefix, "==");
+}
+
+static void xicgen_ne_strict(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    xicgen_strict_compare(ctx, out, f, v, prefix, "!=");
+}
+
 static void xicgen_lt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                       const char *prefix) {
     xicgen_compare(ctx, out, f, v, prefix);

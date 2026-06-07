@@ -942,18 +942,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             }
             break;
         }
-        /* Strict (identity) comparison: raw bit equality on tagged values */
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT: {
-            const char *eq_op = (v->op == XI_EQ_STRICT) ? "==" : "!=";
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".i %s ", eq_op);
-            emit_vref(out, v->args[1]);
-            fprintf(out, ".i)");
-            break;
-        }
-
         case XI_SELECT:
             XR_DCHECK(v->nargs == 3, "XI_SELECT: need cond, true, false");
             fprintf(out, "(");

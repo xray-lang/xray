@@ -21,6 +21,8 @@
     X(SHR, xi_emit_arith) \
     X(EQ, xi_emit_cmp) \
     X(NE, xi_emit_cmp) \
+    X(EQ_STRICT, xi_emit_cmp) \
+    X(NE_STRICT, xi_emit_cmp) \
     X(LT, xi_emit_cmp) \
     X(LE, xi_emit_cmp) \
     X(GT, xi_emit_cmp) \
