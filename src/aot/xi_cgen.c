@@ -965,12 +965,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
             break;
 
-        case XI_ISNULL:
-            fprintf(out, "(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ".tag == XR_TAG_NULL)");
-            break;
-
         /* Box / Unbox */
         case XI_BOX: {
             struct XrType *sty = v->args[0]->type;

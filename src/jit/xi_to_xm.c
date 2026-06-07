@@ -1126,6 +1126,12 @@ static XmRef xi2xm_widen_f32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return get_ref(ctx, v->args[0]);
 }
 
+static XmRef xi2xm_isnull(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "isnull: expected 1 arg");
+    XmRef arg = get_ref(ctx, v->args[0]);
+    return xm_emit_unary(ctx->xm_func, blk, XM_RT_ISNULL, XR_REP_I64, arg);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1172,13 +1178,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return lower_box(ctx, blk, v);
         case XI_UNBOX:
             return lower_unbox(ctx, blk, v);
-
-        /* Null check */
-        case XI_ISNULL: {
-            XR_DCHECK(v->nargs == 1, "isnull: expected 1 arg");
-            XmRef arg = get_ref(ctx, v->args[0]);
-            return xm_emit_unary(ctx->xm_func, blk, XM_RT_ISNULL, XR_REP_I64, arg);
-        }
 
         /* Function call */
         case XI_CALL:
