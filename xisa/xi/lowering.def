@@ -239,6 +239,13 @@
   :jit-xm (driver xi2xm_widen_f32)
   :aot-c (driver xicgen_widen_f32))
 
+(lower xi.isnull
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_isnull)
+  :jit-xm (driver xi2xm_isnull)
+  :aot-c (driver xicgen_isnull))
+
 (lower xi.bytes.load.u32.le
   :match ()
   :required-targets (vm-bytecode aot-c)

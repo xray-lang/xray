@@ -434,6 +434,16 @@ static void xicgen_widen_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const X
     xicgen_f32_roundtrip(out, v, cg_array_index_get_reads_f32_storage(v->args[0]));
 }
 
+static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                          const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    fprintf(out, "(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ".tag == XR_TAG_NULL)");
+}
+
 static void xicgen_bytes_ptr_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *prefix, uint16_t arg_index) {
     XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes pointer arg out of range");

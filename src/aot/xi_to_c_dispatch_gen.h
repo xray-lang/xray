@@ -39,6 +39,7 @@
     X(WIDEN_I32, "xi.widen.i32", xicgen_widen_i32) \
     X(WIDEN_U32, "xi.widen.u32", xicgen_widen_u32) \
     X(WIDEN_F32, "xi.widen.f32", xicgen_widen_f32) \
+    X(ISNULL, "xi.isnull", xicgen_isnull) \
     X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xicgen_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \

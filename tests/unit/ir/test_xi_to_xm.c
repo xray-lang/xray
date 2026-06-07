@@ -387,6 +387,32 @@ TEST(lower_logical_not) {
     xi_func_free(f);
 }
 
+TEST(lower_isnull) {
+    XiFunc *f = make_func("isnull", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *params[1] = {a};
+    register_func_params(f, params, 1);
+    XiValue *isnull = xi_value_new(f, entry, XI_ISNULL, &stub_bool, 1);
+    isnull->args[0] = a;
+    xi_block_set_return(entry, isnull);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op == XM_RT_ISNULL)
+            found = true;
+    }
+    assert(found && "isnull should lower through generated dispatch");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
 static void check_width_variant(XiOp xi_op, XrType *result_type, XmOp expected_op_a,
                                 XmOp expected_op_b, bool expect_identity) {
     XiFunc *f = make_func("width_variant", result_type);
@@ -760,6 +786,7 @@ int main(void) {
     run_lower_neg_unary();
     run_lower_unary_variants();
     run_lower_logical_not();
+    run_lower_isnull();
     run_lower_width_variants();
     run_lower_void_return();
     run_lower_call();

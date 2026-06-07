@@ -39,6 +39,7 @@
     X(WIDEN_I32, xi_emit_widen) \
     X(WIDEN_U32, xi_emit_widen) \
     X(WIDEN_F32, xi_emit_widen) \
+    X(ISNULL, xi_emit_isnull) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, xi_emit_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \
