@@ -6,6 +6,7 @@
 
 #define XI_EMIT_VM_LOWERING_HANDLERS(X) \
     X(CONST, emit_const) \
+    X(PARAM, emit_param) \
     X(COPY, emit_copy) \
     X(MOVE, xi_emit_move) \
     X(ADD, xi_emit_arith) \

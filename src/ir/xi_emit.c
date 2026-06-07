@@ -447,8 +447,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
 #define XI_VM_HANDLER_ENTRY(op, handler) [XI_##op] = handler,
     XI_EMIT_VM_LOWERING_HANDLERS(XI_VM_HANDLER_ENTRY)
 #undef XI_VM_HANDLER_ENTRY
-        [XI_PARAM] = emit_param,
-    [XI_DIV] = xi_emit_arith,
+        [XI_DIV] = xi_emit_arith,
     [XI_MOD] = xi_emit_arith,
     [XI_LOAD_FIELD] = xi_emit_load_field,
     [XI_STORE_FIELD] = xi_emit_store_field,

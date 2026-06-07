@@ -829,16 +829,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
 
     switch (v->op) {
-        case XI_PARAM:
-            fprintf(out, "p%u", (unsigned) v->aux_int);
-            if (cg_func_param_abi_rep(ctx, f, (uint16_t) v->aux_int) != XR_REP_TAGGED)
-                break;
-            if (cg_rep(v) == XR_REP_I64)
-                fprintf(out, ".i");
-            else if (cg_rep(v) == XR_REP_F64)
-                fprintf(out, ".f");
-            break;
-
         /* Arithmetic: use C operators when both operands are scalar.
          * When any operand is tagged (XrValue), must use runtime functions.
          * When result rep is scalar but operands are mixed, box each tagged
