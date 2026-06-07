@@ -485,7 +485,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_TIME_AFTER] = xi_emit_time_after,
     [XI_SELECT_BLOCK] = xi_emit_select_block,
     [XI_YIELD] = xi_emit_yield,
-    [XI_THROW] = xi_emit_throw,
     [XI_ERR_SET] = xi_emit_err_set,
     [XI_ERR_RETURN] = xi_emit_err_return,
     [XI_ERR_CHECK] = xi_emit_err_check,

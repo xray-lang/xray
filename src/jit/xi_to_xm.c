@@ -1017,6 +1017,15 @@ static XmRef lower_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
 }
 
+static XmRef lower_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs >= 1, "throw: need value arg");
+    XmRef val = get_ref(ctx, v->args[0]);
+    XmRef extra = xm_const_i64(ctx->xm_func, 0);
+    XmRef args[1] = {val};
+    emit_helper_call(ctx, blk, XM_HELPER_throw, extra, args, 1);
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
 static XmRef lower_ownership_helper(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmHelperId helper,
                                     const char *op_name) {
     XR_DCHECK_FMT(v->nargs >= 1, "%s: need value arg", op_name);
@@ -1109,6 +1118,10 @@ static XmRef xi2xm_set_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_import_ref(ctx, blk, v);
+}
+
+static XmRef xi2xm_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_throw(ctx, blk, v);
 }
 
 static XmRef xi2xm_retain(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1428,18 +1441,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 acc = xm_emit(ctx->xm_func, blk, XM_RT_ADD, XR_REP_I64, acc, part);
             }
             return acc;
-        }
-
-        /* Exception throw — delegates to xr_jit_throw runtime bridge.
-         * Codegen checks xr_coro_jit_state(coro)->scratch->exception after the call and
-         * branches to exception_handler if non-NULL. */
-        case XI_THROW: {
-            XR_DCHECK(v->nargs >= 1, "throw: need value arg");
-            XmRef val = get_ref(ctx, v->args[0]);
-            XmRef extra = xm_const_i64(ctx->xm_func, 0);
-            XmRef args[1] = {val};
-            emit_helper_call(ctx, blk, XM_HELPER_throw, extra, args, 1);
-            return xm_const_i64(ctx->xm_func, 0);
         }
 
         /* Iteration — lower as generic calls (runtime handles protocol).

@@ -376,6 +376,17 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
+static void xicgen_throw(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_throw: need arg");
+    fprintf(out, "xrt_throw_exc(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ")");
+}
+
 static void xicgen_ownership_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                   const char *prefix, const char *fn_name) {
     (void) ctx;
