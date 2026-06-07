@@ -829,17 +829,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         return;
 
     switch (v->op) {
-        case XI_SELECT:
-            XR_DCHECK(v->nargs == 3, "XI_SELECT: need cond, true, false");
-            fprintf(out, "(");
-            emit_condition_expr(out, v->args[0]);
-            fprintf(out, " ? ");
-            emit_vref(out, v->args[1]);
-            fprintf(out, " : ");
-            emit_vref(out, v->args[2]);
-            fprintf(out, ")");
-            break;
-
         /* Function call: args[0]=callee, args[1..n]=params */
         case XI_CALL: {
             XiValue *callee = v->args[0];

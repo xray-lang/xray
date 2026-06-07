@@ -20,6 +20,7 @@
     X(BXOR, "xi.bxor", xicgen_bxor) \
     X(BNOT, "xi.bnot", xicgen_bnot) \
     X(NOT, "xi.not", xicgen_not) \
+    X(SELECT, "xi.select", xicgen_select) \
     X(SHL, "xi.shl", xicgen_shl) \
     X(SHR, "xi.shr", xicgen_shr) \
     X(EQ, "xi.eq", xicgen_eq) \

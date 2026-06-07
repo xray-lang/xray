@@ -508,7 +508,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_RANGE] = xi_emit_range,
     [XI_MULTI_RET] = xi_emit_multi_ret,
     [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
-    [XI_SELECT] = emit_select,
     [XI_CLASS_CREATE] = xi_emit_class_create,
     [XI_SCOPE_ENTER] = xi_emit_scope_enter,
     [XI_SCOPE_EXIT] = xi_emit_scope_exit,

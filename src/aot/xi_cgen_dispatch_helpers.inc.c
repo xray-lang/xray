@@ -307,6 +307,21 @@ static void xicgen_not(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
     fprintf(out, ")");
 }
 
+static void xicgen_select(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                          const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs == 3, "xicgen_select: need cond, true, false");
+    fprintf(out, "(");
+    emit_condition_expr(out, v->args[0]);
+    fprintf(out, " ? ");
+    emit_vref(out, v->args[1]);
+    fprintf(out, " : ");
+    emit_vref(out, v->args[2]);
+    fprintf(out, ")");
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");
