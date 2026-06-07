@@ -225,6 +225,11 @@ TEST(lower_bitwise_variants) {
     check_lower_binary_variant(XI_SHR, XM_SHR);
 }
 
+TEST(lower_div_mod_variants) {
+    check_lower_binary_variant(XI_DIV, XM_DIV);
+    check_lower_binary_variant(XI_MOD, XM_MOD);
+}
+
 TEST(lower_if_branch) {
     /* fn(c: bool) -> int { if c { return 1 } else { return 2 } } */
     XiFunc *f = make_func("branch", &stub_int);
@@ -851,6 +856,7 @@ int main(void) {
     run_lower_comparison();
     run_lower_comparison_variants();
     run_lower_bitwise_variants();
+    run_lower_div_mod_variants();
     run_lower_if_branch();
     run_lower_phi();
     run_lower_neg_unary();

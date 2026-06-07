@@ -12,6 +12,8 @@
     X(ADD, xi_emit_arith) \
     X(SUB, xi_emit_arith) \
     X(MUL, xi_emit_arith) \
+    X(DIV, xi_emit_arith) \
+    X(MOD, xi_emit_arith) \
     X(NEG, xi_emit_neg) \
     X(BAND, xi_emit_arith) \
     X(BOR, xi_emit_arith) \

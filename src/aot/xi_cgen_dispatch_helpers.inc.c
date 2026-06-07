@@ -157,6 +157,98 @@ static void xicgen_mul(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
     xicgen_arith(ctx, out, f, v, prefix);
 }
 
+static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XrRep result_rep = cg_rep(v);
+    XrRep a_rep = cg_rep(v->args[0]);
+    XrRep b_rep = cg_rep(v->args[1]);
+    bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
+    if (result_rep == XR_REP_TAGGED || any_tagged) {
+        const char *fn = (v->op == XI_DIV) ? "xrt_div" : "xrt_mod";
+        if (result_rep == XR_REP_F64) {
+            fprintf(out, "%s(", fn);
+            if (a_rep != XR_REP_TAGGED) {
+                fprintf(out, "XR_FROM_FLOAT(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+            } else {
+                emit_vref(out, v->args[0]);
+            }
+            fprintf(out, ", ");
+            if (b_rep != XR_REP_TAGGED) {
+                fprintf(out, "XR_FROM_FLOAT(");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            } else {
+                emit_vref(out, v->args[1]);
+            }
+            fprintf(out, ").f");
+        } else if (result_rep == XR_REP_I64) {
+            fprintf(out, "%s(", fn);
+            if (a_rep != XR_REP_TAGGED) {
+                fprintf(out, "XR_FROM_INT(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ")");
+            } else {
+                emit_vref(out, v->args[0]);
+            }
+            fprintf(out, ", ");
+            if (b_rep != XR_REP_TAGGED) {
+                fprintf(out, "XR_FROM_INT(");
+                emit_vref(out, v->args[1]);
+                fprintf(out, ")");
+            } else {
+                emit_vref(out, v->args[1]);
+            }
+            fprintf(out, ").i");
+        } else {
+            fprintf(out, "%s(", fn);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")");
+        }
+    } else if (result_rep == XR_REP_I64) {
+        if (!emit_native_const_div_mod_expr(out, v)) {
+            const char *fn = (v->op == XI_DIV) ? "xrt_int_div" : "xrt_int_mod";
+            fprintf(out, "%s(", fn);
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")");
+        }
+    } else if (result_rep == XR_REP_F64) {
+        if (v->op == XI_DIV) {
+            fprintf(out, "(xrt_div(XR_FROM_FLOAT(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "), XR_FROM_FLOAT(");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")).f)");
+        } else {
+            fprintf(out, "(xrt_mod(XR_FROM_FLOAT(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "), XR_FROM_FLOAT(");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")).f)");
+        }
+    } else {
+        emit_codegen_abort_expr(out);
+        ctx->error = true;
+    }
+}
+
+static void xicgen_div(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    xicgen_div_mod(ctx, out, f, v, prefix);
+}
+
+static void xicgen_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    xicgen_div_mod(ctx, out, f, v, prefix);
+}
+
 static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     (void) ctx;
