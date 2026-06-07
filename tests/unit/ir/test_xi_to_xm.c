@@ -543,6 +543,23 @@ TEST(reject_extract_extra_result) {
     xi_func_free(f);
 }
 
+TEST(reject_bytes_memory_ops_until_jit_driver_exists) {
+    XiFunc *f = make_func("bytes_mem", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *bytes = xi_param(f, entry, 0, &stub_int);
+    XiValue *offset = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *load = xi_value_new(f, entry, XI_BYTES_LOAD_U32_LE, &stub_int, 2);
+    load->args[0] = bytes;
+    load->args[1] = offset;
+    xi_block_set_return(entry, load);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm == NULL && "Bytes memory ops must explicitly reject JIT until a driver exists");
+
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -566,6 +583,7 @@ int main(void) {
     run_lower_array_new();
     run_reject_multi_ret_with_extra_results();
     run_reject_extract_extra_result();
+    run_reject_bytes_memory_ops_until_jit_driver_exists();
 
     printf("\n=== %d/%d tests passed ===\n", tests_passed, tests_passed);
     return 0;

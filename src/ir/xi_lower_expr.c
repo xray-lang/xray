@@ -1298,33 +1298,32 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         }
 
         if (xi_type_is_bytes(recv->type) && ma->name) {
-            const char *builtin_name = NULL;
-            bool mutates = false;
+            uint16_t bytes_op = 0;
+            uint16_t expected_args = 0;
             if (strcmp(ma->name, "loadU32LE") == 0 && n == 1) {
-                builtin_name = "bytes_load_u32_le";
+                bytes_op = XI_BYTES_LOAD_U32_LE;
+                expected_args = 2;
             } else if (strcmp(ma->name, "loadU64LE") == 0 && n == 1) {
-                builtin_name = "bytes_load_u64_le";
+                bytes_op = XI_BYTES_LOAD_U64_LE;
+                expected_args = 2;
             } else if (strcmp(ma->name, "copyWithin") == 0 && n == 3) {
-                builtin_name = "bytes_copy_within";
-                mutates = true;
+                bytes_op = XI_BYTES_COPY_WITHIN;
+                expected_args = 4;
             } else if (strcmp(ma->name, "copyFrom") == 0 && n == 4) {
-                builtin_name = "bytes_copy_from";
-                mutates = true;
+                bytes_op = XI_BYTES_COPY_FROM;
+                expected_args = 5;
             } else if (strcmp(ma->name, "repeatFrom") == 0 && n == 3) {
-                builtin_name = "bytes_repeat_from";
-                mutates = true;
+                bytes_op = XI_BYTES_REPEAT_FROM;
+                expected_args = 4;
             }
-            if (builtin_name) {
-                XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type,
-                                          (uint16_t) (n + 1));
+            if (bytes_op) {
+                XiValue *v =
+                    xi_value_new(l->func, l->cur_block, bytes_op, result_type, expected_args);
                 if (!v)
                     return NULL;
                 v->args[0] = recv;
                 for (int i = 0; i < n; i++)
                     v->args[i + 1] = arg_vals[i];
-                v->aux = (void *) builtin_name;
-                if (mutates)
-                    v->flags |= XI_FLAG_SIDE_EFFECT;
                 v->line = (uint32_t) node->line;
                 return v;
             }

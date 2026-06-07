@@ -17,7 +17,12 @@
     X(NARROW_U8, "xi.narrow.u8", xicgen_narrow_u8) \
     X(NARROW_I16, "xi.narrow.i16", xicgen_narrow_i16) \
     X(NARROW_U32, "xi.narrow.u32", xicgen_narrow_u32) \
-    X(WIDEN_U8, "xi.widen.u8", xicgen_widen_u8)
+    X(WIDEN_U8, "xi.widen.u8", xicgen_widen_u8) \
+    X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xicgen_bytes_load_u32_le) \
+    X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
+    X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \
+    X(BYTES_COPY_FROM, "xi.bytes.copy.from", xicgen_bytes_copy_from) \
+    X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from)
 
 
 #endif  /* XI_TO_C_DISPATCH_GEN_H */

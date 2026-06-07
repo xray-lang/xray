@@ -397,6 +397,51 @@
   :targets (vm-bytecode jit-xm aot-c aot-verify)
   :jit-policy catch-up)
 
+(define-xi-op xi.bytes.load.u32.le
+  :class memory-read
+  :arity 2
+  :effects (may-throw memory-read)
+  :requires (bytes bounds little-endian)
+  :observable (u32-wrap)
+  :targets (vm-bytecode aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bytes.load.u64.le
+  :class memory-read
+  :arity 2
+  :effects (may-throw memory-read)
+  :requires (bytes bounds little-endian)
+  :observable (u64-wrap)
+  :targets (vm-bytecode aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bytes.copy.within
+  :class memory-write
+  :arity 4
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytes bounds overlap-safe)
+  :observable (in-place-copy)
+  :targets (vm-bytecode aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bytes.copy.from
+  :class memory-write
+  :arity 5
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytes bounds)
+  :observable (in-place-copy)
+  :targets (vm-bytecode aot-c aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.bytes.repeat.from
+  :class memory-write
+  :arity 4
+  :effects (side-effect may-throw memory-read memory-write)
+  :requires (bytes bounds overlap-repeat)
+  :observable (lz-match-copy)
+  :targets (vm-bytecode aot-c aot-verify)
+  :jit-policy catch-up)
+
 (define-xi-op xi.struct.new
   :class allocation
   :arity 1

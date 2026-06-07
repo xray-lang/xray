@@ -817,6 +817,9 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             if (v->nargs >= 1 && v->args[0] && sr_value_has_static_index_storage(v->args[0]))
                 return sr_typed_array_elem_rep(v->args[0]->type);
             return XR_REP_TAGGED;
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+            return XR_REP_I64;
         case XI_PHI:
             if (policy && !policy->force_phi_tagged)
                 return sr_type_scalar_rep(v->type);
@@ -940,6 +943,14 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
                     return sr_typed_array_elem_rep(user->args[0]->type);
             }
             return XR_REP_TAGGED;
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+            return arg_idx == 1 ? XR_REP_I64 : XR_REP_TAGGED;
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_REPEAT_FROM:
+            return arg_idx == 0 ? XR_REP_TAGGED : XR_REP_I64;
+        case XI_BYTES_COPY_FROM:
+            return arg_idx <= 1 ? XR_REP_TAGGED : XR_REP_I64;
         case XI_STRUCT_SET:
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
                 return sr_type_scalar_rep(user->args[1]->type);

@@ -293,6 +293,26 @@ static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
+XR_FUNC void xi_emit_bytes_load_u32_le(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
+}
+
+XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
+}
+
+XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_WITHIN, 4);
+}
+
+XR_FUNC void xi_emit_bytes_copy_from(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_FROM, 5);
+}
+
+XR_FUNC void xi_emit_bytes_repeat_from(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_REPEAT_FROM, 4);
+}
+
 static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs != 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);

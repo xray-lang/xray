@@ -90,6 +90,13 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_INDEX_GET:
         case XI_INDEX_SET:
 
+        /* Typed byte memory ops (target-specific lowering drivers) */
+        case XI_BYTES_LOAD_U32_LE:
+        case XI_BYTES_LOAD_U64_LE:
+        case XI_BYTES_COPY_WITHIN:
+        case XI_BYTES_COPY_FROM:
+        case XI_BYTES_REPEAT_FROM:
+
         /* Struct native storage (direct bytecode: OP_NEW_STRUCT/STRUCT_GET/SET) */
         case XI_STRUCT_NEW:
         case XI_STRUCT_GET:

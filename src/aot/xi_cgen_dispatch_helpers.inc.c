@@ -234,6 +234,97 @@ static void xicgen_widen_u8(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     xicgen_cast_i64_arg(out, v, "uint8_t");
 }
 
+static void xicgen_bytes_ptr_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                 const char *prefix, uint16_t arg_index) {
+    XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes pointer arg out of range");
+    emit_typed_array_ptr_expr(ctx, out, f, v->args[arg_index], prefix);
+}
+
+static void xicgen_bytes_i64_arg(FILE *out, const XiValue *v, uint16_t arg_index) {
+    XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes i64 arg out of range");
+    emit_value_as_rep(out, v->args[arg_index], XR_REP_I64);
+}
+
+static void xicgen_bytes_box_array_result(FILE *out, bool boxed) {
+    if (boxed)
+        fprintf(out, ", XR_TAG_ARRAY)");
+}
+
+static void xicgen_bytes_load_u32_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    fprintf(out, "(int64_t)xrt_bytes_load_u32_le_raw(");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 1);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, wrapped);
+}
+
+static void xicgen_bytes_load_u64_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    fprintf(out, "(int64_t)xrt_bytes_load_u64_le_raw(");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 1);
+    fprintf(out, ")");
+    emit_conversion_suffix(out, wrapped);
+}
+
+static void xicgen_bytes_copy_within(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "xrt_bytes_copy_within_raw(");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 1);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 2);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 3);
+    fprintf(out, ")");
+    xicgen_bytes_box_array_result(out, boxed);
+}
+
+static void xicgen_bytes_copy_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                   const char *prefix) {
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "xrt_bytes_copy_from_raw(");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    fprintf(out, ", ");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 1);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 2);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 3);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 4);
+    fprintf(out, ")");
+    xicgen_bytes_box_array_result(out, boxed);
+}
+
+static void xicgen_bytes_repeat_from(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                     const char *prefix) {
+    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "xr_mkptr(");
+    fprintf(out, "xrt_bytes_repeat_from_raw(");
+    xicgen_bytes_ptr_arg(ctx, out, f, v, prefix, 0);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 1);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 2);
+    fprintf(out, ", ");
+    xicgen_bytes_i64_arg(out, v, 3);
+    fprintf(out, ")");
+    xicgen_bytes_box_array_result(out, boxed);
+}
+
 static bool xi_to_c_emit_generated(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                    const char *prefix) {
     switch (v->op) {
