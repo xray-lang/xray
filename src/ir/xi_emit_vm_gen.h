@@ -42,6 +42,9 @@
     X(WIDEN_U32, xi_emit_widen) \
     X(WIDEN_F32, xi_emit_widen) \
     X(ISNULL, xi_emit_isnull) \
+    X(CONVERT, xi_emit_convert) \
+    X(BOX, xi_emit_box) \
+    X(UNBOX, xi_emit_unbox) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, xi_emit_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, xi_emit_bytes_copy_within) \

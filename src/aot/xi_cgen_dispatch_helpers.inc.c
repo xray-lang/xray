@@ -466,6 +466,100 @@ static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     fprintf(out, ".tag == XR_TAG_NULL)");
 }
 
+static void xicgen_box(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                       const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    struct XrType *sty = v->args[0]->type;
+    if (sty && sty->kind == XR_KIND_NULL) {
+        emit_vref(out, v->args[0]);
+    } else if (sty && sty->kind == XR_KIND_FLOAT) {
+        fprintf(out, "XR_FROM_FLOAT(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    } else if (sty && sty->kind == XR_KIND_BOOL) {
+        fprintf(out, "XR_FROM_BOOL(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    } else if (sty && sty->kind == XR_KIND_STRING) {
+        emit_vref(out, v->args[0]);
+    } else {
+        fprintf(out, "XR_FROM_INT(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    }
+}
+
+static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XrRep ur = cg_rep(v);
+    emit_vref(out, v->args[0]);
+    if (ur == XR_REP_F64)
+        fprintf(out, ".f");
+    else if (ur == XR_REP_I64)
+        fprintf(out, ".i");
+}
+
+static void xicgen_convert(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XrRep dst_rep = cg_rep(v);
+    XrRep src_rep = cg_rep(v->args[0]);
+    if (v->type->kind == XR_KIND_FLOAT) {
+        if (dst_rep == XR_REP_TAGGED) {
+            fprintf(out, "xrt_to_float(");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ")");
+        } else if (src_rep == XR_REP_TAGGED) {
+            fprintf(out, "XR_TO_FLOAT(xrt_to_float(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "(double)");
+            emit_vref(out, v->args[0]);
+        }
+    } else if (v->type->kind == XR_KIND_INT) {
+        if (dst_rep == XR_REP_TAGGED) {
+            fprintf(out, "xrt_to_int(");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ")");
+        } else if (src_rep == XR_REP_TAGGED) {
+            fprintf(out, "XR_TO_INT(xrt_to_int(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "(int64_t)");
+            emit_vref(out, v->args[0]);
+        }
+    } else if (v->type->kind == XR_KIND_STRING) {
+        fprintf(out, "xrt_to_string(");
+        emit_boxed_value_ref(out, v->args[0]);
+        fprintf(out, ")");
+    } else if (v->type->kind == XR_KIND_BOOL) {
+        if (dst_rep == XR_REP_TAGGED) {
+            fprintf(out, "xrt_to_bool(");
+            emit_boxed_value_ref(out, v->args[0]);
+            fprintf(out, ")");
+        } else if (src_rep == XR_REP_TAGGED) {
+            fprintf(out, "XR_TO_INT(xrt_to_bool(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, "))");
+        } else {
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, " != 0)");
+        }
+    } else {
+        emit_vref(out, v->args[0]);
+    }
+}
+
 static void xicgen_bytes_ptr_arg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *prefix, uint16_t arg_index) {
     XR_DCHECK(v != NULL && arg_index < v->nargs, "xicgen bytes pointer arg out of range");

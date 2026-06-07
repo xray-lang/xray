@@ -260,6 +260,27 @@
   :jit-xm (driver xi2xm_isnull)
   :aot-c (driver xicgen_isnull))
 
+(lower xi.convert
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_convert)
+  :jit-xm (driver xi2xm_convert)
+  :aot-c (driver xicgen_convert))
+
+(lower xi.box
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_box)
+  :jit-xm (driver xi2xm_box)
+  :aot-c (driver xicgen_box))
+
+(lower xi.unbox
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_unbox)
+  :jit-xm (driver xi2xm_unbox)
+  :aot-c (driver xicgen_unbox))
+
 (lower xi.bytes.load.u32.le
   :match ()
   :required-targets (vm-bytecode aot-c)
