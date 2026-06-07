@@ -976,60 +976,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             emit_bitwise_binop(out, v, ">>");
             break;
 
-        /* Comparison: scalar comparison uses C operators; tagged uses xrt_eq/lt/le.
-         * Result is always I64 (boolean 0/1). */
-        case XI_NE:
-        case XI_GT:
-        case XI_GE: {
-            XrRep a0_rep = cg_rep(v->args[0]);
-            XrRep a1_rep = cg_rep(v->args[1]);
-            XrRep arg_rep =
-                (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED) ? XR_REP_TAGGED : a0_rep;
-            if (arg_rep == XR_REP_TAGGED) {
-                switch (v->op) {
-                    case XI_NE:
-                        fprintf(out, "!xrt_eq(");
-                        break;
-                    case XI_GT:
-                        fprintf(out, "xrt_lt(");
-                        break;
-                    case XI_GE:
-                        fprintf(out, "xrt_le(");
-                        break;
-                    default:
-                        break;
-                }
-                /* GT/GE: swap operands → xrt_lt(b,a) / xrt_le(b,a) */
-                if (v->op == XI_GT || v->op == XI_GE) {
-                    emit_boxed_value_ref(out, v->args[1]);
-                    fprintf(out, ", ");
-                    emit_boxed_value_ref(out, v->args[0]);
-                } else {
-                    emit_boxed_value_ref(out, v->args[0]);
-                    fprintf(out, ", ");
-                    emit_boxed_value_ref(out, v->args[1]);
-                }
-                fprintf(out, ")");
-            } else {
-                const char *op = "==";
-                switch (v->op) {
-                    case XI_NE:
-                        op = "!=";
-                        break;
-                    case XI_GT:
-                        op = ">";
-                        break;
-                    case XI_GE:
-                        op = ">=";
-                        break;
-                    default:
-                        break;
-                }
-                emit_binop(out, v, op);
-            }
-            break;
-        }
-
         /* Strict (identity) comparison: raw bit equality on tagged values */
         case XI_EQ_STRICT:
         case XI_NE_STRICT: {

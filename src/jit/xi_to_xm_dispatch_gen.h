@@ -12,8 +12,11 @@
     X(SUB, "xi.sub", xi2xm_sub) \
     X(MUL, "xi.mul", xi2xm_mul) \
     X(EQ, "xi.eq", xi2xm_eq) \
+    X(NE, "xi.ne", xi2xm_ne) \
     X(LT, "xi.lt", xi2xm_lt) \
     X(LE, "xi.le", xi2xm_le) \
+    X(GT, "xi.gt", xi2xm_gt) \
+    X(GE, "xi.ge", xi2xm_ge) \
     X(NARROW_U8, "xi.narrow.u8", xi2xm_narrow_u8) \
     X(NARROW_I16, "xi.narrow.i16", xi2xm_narrow_i16) \
     X(NARROW_U32, "xi.narrow.u32", xi2xm_narrow_u32) \

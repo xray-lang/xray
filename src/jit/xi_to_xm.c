@@ -985,11 +985,23 @@ static XmRef xi2xm_eq(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
 
+static XmRef xi2xm_ne(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
 static XmRef xi2xm_lt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
 
 static XmRef xi2xm_le(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_gt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_comparison(ctx, blk, v);
+}
+
+static XmRef xi2xm_ge(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_comparison(ctx, blk, v);
 }
 
@@ -1068,9 +1080,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return lower_unary(ctx, blk, v);
 
         /* Comparison */
-        case XI_NE:
-        case XI_GT:
-        case XI_GE:
         case XI_EQ_STRICT:
         case XI_NE_STRICT:
             return lower_comparison(ctx, blk, v);
