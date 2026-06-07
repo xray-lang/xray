@@ -12,6 +12,8 @@
     X(ADD, "xi.add", xicgen_add) \
     X(SUB, "xi.sub", xicgen_sub) \
     X(MUL, "xi.mul", xicgen_mul) \
+    X(DIV, "xi.div", xicgen_div) \
+    X(MOD, "xi.mod", xicgen_mod) \
     X(NEG, "xi.neg", xicgen_neg) \
     X(BAND, "xi.band", xicgen_band) \
     X(BOR, "xi.bor", xicgen_bor) \

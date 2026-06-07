@@ -1004,6 +1004,14 @@ static XmRef xi2xm_mul(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_binary_arith(ctx, blk, v);
 }
 
+static XmRef xi2xm_div(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
+static XmRef xi2xm_mod(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_binary_arith(ctx, blk, v);
+}
+
 static XmRef xi2xm_neg(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_unary(ctx, blk, v);
 }
@@ -1181,11 +1189,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return generated;
 
     switch (v->op) {
-        /* Binary arithmetic */
-        case XI_DIV:
-        case XI_MOD:
-            return lower_binary_arith(ctx, blk, v);
-
         /* Function call */
         case XI_CALL:
             return lower_call(ctx, blk, v);
