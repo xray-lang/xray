@@ -878,6 +878,72 @@ static void xicgen_unbox(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         fprintf(out, ".i");
 }
 
+static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_is: missing arg");
+    struct XrType *target = (struct XrType *) v->aux;
+    if (!target) {
+        fprintf(out, "0 /* XI_IS: NULL target type */");
+        return;
+    }
+    switch (target->kind) {
+        case XR_KIND_INT:
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == %u)", XR_TAG_I64);
+            break;
+        case XR_KIND_FLOAT:
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == %u)", XR_TAG_F64);
+            break;
+        case XR_KIND_BOOL:
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == %u)", XR_TAG_BOOL);
+            break;
+        case XR_KIND_NULL:
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ".tag == %u)", XR_TAG_NULL);
+            break;
+        case XR_KIND_STRING:
+            fprintf(out, "XR_IS_STR(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, ")");
+            break;
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS: {
+            const char *cname = target->instance.class_name;
+            int slot = cg_find_class_slot(ctx, cname);
+            if (slot >= 0) {
+                fprintf(out, "xrt_instanceof(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ", (uint16_t)%s[%d].i)", ctx->shared_name, slot);
+            } else {
+                fprintf(out, "(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ".tag == %u) /* is %s: class not resolved */", (unsigned) XR_TAG_PTR,
+                        cname ? cname : "?");
+            }
+            break;
+        }
+        default: {
+            uint8_t tag = xr_type_to_xr_tag(target);
+            if (tag != 0xFF) {
+                fprintf(out, "(");
+                emit_vref(out, v->args[0]);
+                fprintf(out, ".tag == %u)", (unsigned) tag);
+            } else {
+                fprintf(out, "0 /* unsupported is-check */");
+            }
+            break;
+        }
+    }
+}
+
 static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");

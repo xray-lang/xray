@@ -61,6 +61,7 @@
     X(WIDEN_U32, xi_emit_widen) \
     X(WIDEN_F32, xi_emit_widen) \
     X(ISNULL, xi_emit_isnull) \
+    X(IS, xi_emit_is) \
     X(CONVERT, xi_emit_convert) \
     X(BOX, xi_emit_box) \
     X(UNBOX, xi_emit_unbox) \

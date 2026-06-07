@@ -1354,6 +1354,10 @@ static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
 
+static XmRef xi2xm_is(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return xi2xm_deopt_to_vm(ctx, blk, v);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1542,8 +1546,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
         }
 
-        /* Type operations — deopt to VM for runtime type checks */
-        case XI_IS:
+        /* Type casts lower as generic calls until cast-specific JIT support exists. */
         case XI_AS:
             return lower_call(ctx, blk, v);
 
