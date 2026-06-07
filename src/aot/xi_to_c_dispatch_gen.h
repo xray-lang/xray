@@ -66,6 +66,8 @@
     X(UNBOX, "xi.unbox", xicgen_unbox) \
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
+    X(TUPLE_NEW, "xi.tuple.new", xicgen_tuple_new) \
+    X(TUPLE_GET, "xi.tuple.get", xicgen_tuple_get) \
     X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xicgen_bytes_load_u32_le) \
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xicgen_bytes_load_u64_le) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xicgen_bytes_copy_within) \
