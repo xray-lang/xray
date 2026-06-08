@@ -94,6 +94,11 @@ static void test_optimization_traits(void) {
     ASSERT_TRUE(xi_op_is_commutative(XI_ADD), "ADD is commutative");
     ASSERT_TRUE(xi_op_is_commutative(XI_EQ), "EQ is commutative");
     ASSERT_TRUE(!xi_op_is_commutative(XI_SUB), "SUB is not commutative");
+    ASSERT_TRUE(xi_op_is_associative(XI_ADD), "ADD is associative");
+    ASSERT_TRUE(xi_op_is_associative(XI_MUL), "MUL is associative");
+    ASSERT_TRUE(xi_op_is_associative(XI_BAND), "BAND is associative");
+    ASSERT_TRUE(!xi_op_is_associative(XI_SUB), "SUB is not associative");
+    ASSERT_TRUE(!xi_op_is_associative(XI_EQ), "EQ is not associative");
 }
 
 static void test_speculation_traits(void) {

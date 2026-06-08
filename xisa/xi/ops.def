@@ -25,7 +25,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
-  :algebraic (commutative)
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -48,7 +48,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
-  :algebraic (commutative)
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -93,7 +93,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
-  :algebraic (commutative)
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -105,7 +105,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
-  :algebraic (commutative)
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -117,7 +117,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
-  :algebraic (commutative)
+  :algebraic (associative commutative)
   :effects ()
   :requires ()
   :observable ()

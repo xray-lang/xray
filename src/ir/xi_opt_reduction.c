@@ -14,13 +14,14 @@
 #include "xi_opt_reduction.h"
 #include "xi_loop.h"
 #include "xi_analysis.h"
-
-#define REDUCE_TAG_SUM 1
-#define REDUCE_TAG_PRODUCT 2
-#define REDUCE_TAG_MIN 3
-#define REDUCE_TAG_MAX 4
+#include "xi_effect.h"
 
 static XiReductionKind classify_update(XiOp op) {
+    if (xi_op_class(op) != XI_GEN_CLASS_ARITHMETIC)
+        return XI_REDUCE_NONE;
+    if (!xi_op_is_associative(op) || !xi_op_is_commutative(op))
+        return XI_REDUCE_NONE;
+
     switch (op) {
         case XI_ADD:
             return XI_REDUCE_SUM;
@@ -71,10 +72,7 @@ static bool detect_reduction_in_loop(const XiLoop *loop, uint32_t *n_found) {
             if (!acc)
                 continue;
 
-            if (kind == XI_REDUCE_SUM)
-                acc->aux_int = REDUCE_TAG_SUM;
-            else if (kind == XI_REDUCE_PRODUCT)
-                acc->aux_int = REDUCE_TAG_PRODUCT;
+            acc->aux_int = (int64_t) kind;
             (*n_found)++;
             any = true;
         }
