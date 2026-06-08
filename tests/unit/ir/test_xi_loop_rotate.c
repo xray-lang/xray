@@ -125,6 +125,16 @@ static XiBlock *find_new_guard(const LoopFixture *fx) {
     return NULL;
 }
 
+static bool block_has_op(const XiBlock *blk, XiOp op) {
+    if (!blk)
+        return false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        if (blk->values[i] && blk->values[i]->op == op)
+            return true;
+    }
+    return false;
+}
+
 TEST(rotates_counted_while_shape) {
     LoopFixture fx = {0};
     ASSERT(make_counted_loop(&fx));
@@ -150,6 +160,39 @@ TEST(rotates_counted_while_shape) {
     ASSERT(fx.body->npreds == 2);
     ASSERT(fx.body->phis != NULL);
     ASSERT(fx.next->args[0] == &fx.body->phis->value);
+
+    xi_func_free(fx.f);
+}
+
+TEST(rotates_header_value_from_generated_speculation_policy) {
+    LoopFixture fx = {0};
+    ASSERT(make_counted_loop(&fx));
+    XiValue *converted = xi_unary(fx.f, fx.header, XI_CONVERT, &stub_int, fx.start);
+    ASSERT(converted != NULL);
+    ASSERT(verify_func(fx.f));
+
+    XiPassChange chg = xi_opt_loop_rotate(fx.f);
+    ASSERT(chg.cfg_changed);
+    ASSERT(verify_func(fx.f));
+
+    XiBlock *guard = find_new_guard(&fx);
+    ASSERT(guard != NULL);
+    ASSERT(block_has_op(guard, XI_CONVERT));
+
+    xi_func_free(fx.f);
+}
+
+TEST(rejects_zero_effect_condition_without_safe_speculation) {
+    LoopFixture fx = {0};
+    ASSERT(make_counted_loop(&fx));
+    fx.cond->op = XI_EQ_STRICT;
+    fx.cond->flags = 0;
+    ASSERT(verify_func(fx.f));
+
+    XiPassChange chg = xi_opt_loop_rotate(fx.f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(fx.entry->succs[0] == fx.header);
+    ASSERT(verify_func(fx.f));
 
     xi_func_free(fx.f);
 }
@@ -228,6 +271,8 @@ int main(void) {
     printf("=== Xi Loop Rotate Tests ===\n\n");
 
     run_rotates_counted_while_shape();
+    run_rotates_header_value_from_generated_speculation_policy();
+    run_rejects_zero_effect_condition_without_safe_speculation();
     run_rotated_loop_is_idempotent();
     run_preserves_exit_phi_for_zero_iteration_path();
     run_rejects_header_value_used_directly_after_loop();
