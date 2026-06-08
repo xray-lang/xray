@@ -30,13 +30,17 @@
     X(ASSERT, xi_emit_assert) \
     X(ASSERT_EQ, xi_emit_assert_eq) \
     X(ASSERT_NE, xi_emit_assert_ne) \
+    X(ASSERT_THROWS, xi_emit_assert_throws) \
     X(TYPEOF, xi_emit_typeof) \
     X(GET_BUILTIN, xi_emit_get_builtin) \
+    X(GET_GLOBAL, xi_emit_get_global) \
+    X(SET_GLOBAL, xi_emit_set_global) \
     X(PRINT, xi_emit_print) \
     X(CLASS_CREATE, xi_emit_class_create) \
     X(CALL, xi_emit_call) \
     X(CALL_METHOD, xi_emit_call_method) \
     X(CALL_METHOD_DIRECT, xi_emit_call_method_direct) \
+    X(TAIL_CALL, xi_emit_tail_call) \
     X(CALL_BUILTIN, xi_emit_call_builtin) \
     X(EXTRACT, xi_emit_extract) \
     X(MULTI_RET, xi_emit_multi_ret) \
@@ -44,6 +48,10 @@
     X(TRY, xi_emit_try) \
     X(CATCH, xi_emit_catch) \
     X(END_TRY, xi_emit_end_try) \
+    X(ERR_SET, xi_emit_err_set) \
+    X(ERR_RETURN, xi_emit_err_return) \
+    X(ERR_CHECK, xi_emit_err_check) \
+    X(ERR_CATCH, xi_emit_err_catch) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \
     X(SHL, xi_emit_arith) \
@@ -99,6 +107,7 @@
     X(TIME_AFTER, xi_emit_time_after) \
     X(SELECT_BLOCK, xi_emit_select_block) \
     X(YIELD, xi_emit_yield) \
+    X(CORO_OP, xi_emit_coro_op) \
     X(CHAN_NEW, xi_emit_chan_new) \
     X(DEFER, xi_emit_defer) \
     X(JSON_NEW, xi_emit_json_new) \
@@ -111,6 +120,7 @@
     X(STRUCT_SET, xi_emit_struct_set) \
     X(SCOPE_ENTER, xi_emit_scope_enter) \
     X(SCOPE_EXIT, xi_emit_scope_exit) \
+    X(REGEX_COMPILE, xi_emit_regex_compile) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \

@@ -176,6 +176,11 @@
   :jit-xm (driver xi2xm_assert_ne)
   :aot-c (driver xicgen_assert_ne))
 
+(lower xi.assert.throws
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_assert_throws))
+
 (lower xi.typeof
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
@@ -189,6 +194,16 @@
   :vm-bytecode (driver xi_emit_get_builtin)
   :jit-xm (driver xi2xm_get_builtin)
   :aot-c (driver xicgen_get_builtin))
+
+(lower xi.get.global
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_get_global))
+
+(lower xi.set.global
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_set_global))
 
 (lower xi.print
   :match ()
@@ -220,6 +235,11 @@
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_call_method_direct)
   :jit-xm (driver xi2xm_call))
+
+(lower xi.tail.call
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_tail_call))
 
 (lower xi.call.builtin
   :match ()
@@ -264,6 +284,26 @@
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_end_try)
   :jit-xm (driver xi2xm_end_try))
+
+(lower xi.err.set
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_err_set))
+
+(lower xi.err.return
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_err_return))
+
+(lower xi.err.check
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_err_check))
+
+(lower xi.err.catch
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_err_catch))
 
 (lower xi.retain
   :match ()
@@ -640,6 +680,11 @@
   :vm-bytecode (driver xi_emit_yield)
   :jit-xm (reject xi2xm_reject_unsupported))
 
+(lower xi.coro.op
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_coro_op))
+
 (lower xi.chan.new
   :match ()
   :required-targets (vm-bytecode jit-xm)
@@ -711,6 +756,11 @@
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_scope_exit)
   :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.regex.compile
+  :match ()
+  :required-targets (vm-bytecode)
+  :vm-bytecode (driver xi_emit_regex_compile))
 
 (lower xi.tuple.new
   :match ()
