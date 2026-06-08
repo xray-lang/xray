@@ -157,6 +157,16 @@ def main() -> int:
             "  :jit-xm (driver xi2xm_add)\n"
             "  :aot-c (driver xicgen_add))\n",
         )
+        good_xi_verifier = write(
+            tmp / "good_xi_verifier.def",
+            "(verify-xi-op xi.add\n"
+            "  :checks (bool-result))\n",
+        )
+        bad_xi_verifier = write(
+            tmp / "bad_xi_verifier.def",
+            "(verify-xi-op xi.add\n"
+            "  :checks (shape-shift))\n",
+        )
         bad_aot_rep = write(
             tmp / "bad_aot_rep.def",
             "(define-aot-rep i8\n"
@@ -342,6 +352,24 @@ def main() -> int:
         vm_dispatch = (out_root / "src/ir/xi_emit_vm_gen.h").read_text()
         if "X(ADD, xi_emit_arith)" not in vm_dispatch:
             raise AssertionError(f"missing VM lowering driver entry: {vm_dispatch}")
+        expect_fail(
+            ns.xisagen,
+            ["xi-verify", str(xi_ops), str(bad_xi_verifier), str(tmp / "xi_verify_gen.h")],
+            "unknown check",
+        )
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "xi-verify", str(xi_ops),
+             str(good_xi_verifier), str(tmp / "xi_verify_gen.h")],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"xi-verify success path failed: {proc.stderr}")
+        xi_verify_header = (tmp / "xi_verify_gen.h").read_text()
+        if "XI_VERIFY_CHECK_BOOL_RESULT" not in xi_verify_header:
+            raise AssertionError(f"missing Xi verifier check flag: {xi_verify_header}")
         special_out_root = tmp / "xi_lowering_special_out"
         proc = subprocess.run(
             [sys.executable, str(ns.xisagen), "xi-lowering", str(xi_ops_special_policy),

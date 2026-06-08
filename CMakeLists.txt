@@ -68,6 +68,10 @@ set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
 )
 
+set(XRAY_GEN_XI_VERIFY_DEPS
+    ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
+)
+
 set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_lowering_coverage_gen.h
     ${CMAKE_SOURCE_DIR}/src/ir/xi_emit_vm_gen.h
@@ -89,6 +93,18 @@ add_custom_command(
             ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
     DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
     COMMENT "xisagen: generating xi_ops_gen.h from ops.def"
+)
+
+add_custom_command(
+    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
+    COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-verify
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/verifier.def
+            ${CMAKE_SOURCE_DIR}/src/ir/xi_verify_gen.h
+    DEPENDS ${XISAGEN}
+            ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
+            ${CMAKE_SOURCE_DIR}/xisa/xi/verifier.def
+    COMMENT "xisagen: generating xi_verify_gen.h from verifier.def"
 )
 
 add_custom_command(
@@ -295,6 +311,10 @@ add_custom_target(gen-xm-ops DEPENDS
 
 add_custom_target(gen-xi-ops DEPENDS
     ${XRAY_GEN_XI_OPS_DEPS}
+)
+
+add_custom_target(gen-xi-verify DEPENDS
+    ${XRAY_GEN_XI_VERIFY_DEPS}
 )
 
 add_custom_target(gen-xi-lowering DEPENDS
@@ -852,7 +872,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-lowering gen-aot-metadata)
+add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

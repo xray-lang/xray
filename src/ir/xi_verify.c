@@ -15,6 +15,7 @@
 #include "xi_effect.h"
 #include "xi_backend.h"
 #include "xi_ops_gen.h"
+#include "xi_verify_gen.h"
 #include "xi_op_name.h"
 #include "xi_analysis.h"
 #include "xi_tbaa.h"
@@ -445,15 +446,6 @@ static void verify_op_arity(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 10: Type Contracts ========== */
 
-static bool is_comparison_op(uint16_t op) {
-    return (op >= XI_EQ && op <= XI_GE) || op == XI_EQ_STRICT || op == XI_NE_STRICT;
-}
-
-static bool is_bool_producing_op(uint16_t op) {
-    return is_comparison_op(op) || op == XI_NOT || op == XI_IS || op == XI_ISNULL ||
-           op == XI_ITER_VALID;
-}
-
 static bool verify_type_is_boolish(const XrType *type) {
     return type && (type->kind == XR_KIND_BOOL || type->kind == XR_KIND_UNKNOWN);
 }
@@ -500,14 +492,14 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
             uint16_t op = v->op;
 
-            if (op == XI_EXTRACT || op == XI_MULTI_RET) {
+            if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_OBSOLETE)) {
                 verr(ctx, "func '%s': obsolete multi-return op %u in b%u; use tuple values instead",
                      f->name, op, blk->id);
                 return;
             }
 
             /* Comparisons and boolean ops must produce bool type */
-            if (is_bool_producing_op(op)) {
+            if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_BOOL_RESULT)) {
                 XrTypeKind kind = v->type->kind;
                 /* Accept XR_KIND_BOOL and XR_KIND_UNKNOWN (lowerer's
                  * type_any for polymorphic comparison results) */
@@ -521,7 +513,8 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
             }
 
             /* XI_SELECT must have 3 args: cond, true_val, false_val */
-            if (op == XI_SELECT && v->nargs == 3) {
+            if (xi_verify_generated_op_has_check(op, XI_VERIFY_CHECK_SELECT_CONTRACT) &&
+                v->nargs == 3) {
                 /* Condition (arg[0]) should be bool */
                 if (v->args[0] && v->args[0]->type) {
                     if (!verify_type_is_boolish(v->args[0]->type)) {
