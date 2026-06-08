@@ -34,6 +34,9 @@
     X(GET_BUILTIN, "xi.get.builtin", xi2xm_get_builtin) \
     X(PRINT, "xi.print", xi2xm_print) \
     X(CLASS_CREATE, "xi.class.create", xi2xm_class_create) \
+    X(CALL, "xi.call", xi2xm_call) \
+    X(CALL_METHOD, "xi.call.method", xi2xm_call) \
+    X(CALL_METHOD_DIRECT, "xi.call.method.direct", xi2xm_call) \
     X(CALL_BUILTIN, "xi.call.builtin", xi2xm_call_builtin) \
     X(EXTRACT, "xi.extract", xi2xm_extract) \
     X(MULTI_RET, "xi.multi.ret", xi2xm_multi_ret) \
@@ -77,6 +80,9 @@
     X(MAP_NEW, "xi.map.new", xi2xm_map_new) \
     X(SET_NEW, "xi.set.new", xi2xm_set_new) \
     X(STR_CONCAT, "xi.str.concat", xi2xm_str_concat) \
+    X(AS, "xi.as", xi2xm_call) \
+    X(SLICE, "xi.slice", xi2xm_call) \
+    X(RANGE, "xi.range", xi2xm_call) \
     X(ITER_NEW, "xi.iter.new", xi2xm_reject_unsupported) \
     X(ITER_NEXT, "xi.iter.next", xi2xm_reject_unsupported) \
     X(ITER_VALID, "xi.iter.valid", xi2xm_reject_unsupported) \

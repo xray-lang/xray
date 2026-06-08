@@ -1369,6 +1369,10 @@ static XmRef xi2xm_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_call_builtin(ctx, blk, v);
 }
 
+static XmRef xi2xm_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_call(ctx, blk, v);
+}
+
 static XmRef xi2xm_extract(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     (void) blk;
     XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
@@ -1455,15 +1459,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return generated;
 
     switch (v->op) {
-        /* Function call */
-        case XI_CALL:
-            return lower_call(ctx, blk, v);
-
-        /* Method call — same as generic call for now */
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-            return lower_call(ctx, blk, v);
-
         /* Field access — class-based dynamic-layout dispatch handles the
          * fast path in the VM; JIT bails to OP_GETPROP for property reads. */
         case XI_LOAD_FIELD: {
@@ -1511,15 +1506,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             sf->flags |= XM_FLAG_SIDE_EFFECT;
             return val;
         }
-
-        /* Type casts lower as generic calls until cast-specific JIT support exists. */
-        case XI_AS:
-            return lower_call(ctx, blk, v);
-
-        /* Slice / Range — lower as generic calls */
-        case XI_SLICE:
-        case XI_RANGE:
-            return lower_call(ctx, blk, v);
 
         /* Exception handling */
         case XI_TRY: {

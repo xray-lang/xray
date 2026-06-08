@@ -33,5 +33,5 @@ src/jit/xm_codegen_x64_call.c func_def 1
 src/jit/xm_codegen_x64_mem.c emit 0
 src/jit/xm_codegen_x64_mem.c case_xm 35
 src/jit/xm_codegen_x64_mem.c func_def 1
-src/jit/xi_to_xm.c case_xi 36
+src/jit/xi_to_xm.c case_xi 30
 src/aot/xi_cgen.c case_xi 63

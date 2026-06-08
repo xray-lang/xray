@@ -34,6 +34,9 @@
     X(GET_BUILTIN, xi_emit_get_builtin) \
     X(PRINT, xi_emit_print) \
     X(CLASS_CREATE, xi_emit_class_create) \
+    X(CALL, xi_emit_call) \
+    X(CALL_METHOD, xi_emit_call_method) \
+    X(CALL_METHOD_DIRECT, xi_emit_call_method_direct) \
     X(CALL_BUILTIN, xi_emit_call_builtin) \
     X(EXTRACT, xi_emit_extract) \
     X(MULTI_RET, xi_emit_multi_ret) \
@@ -75,6 +78,9 @@
     X(MAP_NEW, xi_emit_map_new) \
     X(SET_NEW, xi_emit_set_new) \
     X(STR_CONCAT, xi_emit_str_concat) \
+    X(AS, xi_emit_as) \
+    X(SLICE, xi_emit_slice) \
+    X(RANGE, xi_emit_range) \
     X(ITER_NEW, xi_emit_iter) \
     X(ITER_NEXT, xi_emit_iter) \
     X(ITER_VALID, xi_emit_iter) \
