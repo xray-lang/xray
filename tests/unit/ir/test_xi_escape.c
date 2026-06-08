@@ -36,7 +36,6 @@ static int g_failed = 0;
 
 static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
-static XrType t_str = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 
 /* Helper: create function with sealed entry block */
@@ -235,6 +234,23 @@ static void test_heap_alloc_check(void) {
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CALL), 0, "CALL is not heap alloc");
 }
 
+/* ========== Test: generated use-site escape policy ========== */
+
+static void test_generated_use_escape_policy(void) {
+    ASSERT_EQ(xi_op_use_escape_level(XI_SET_SHARED), XI_ESC_GLOBAL,
+              "SET_SHARED use escape is GLOBAL");
+    ASSERT_EQ(xi_op_use_escape_level(XI_CHAN_SEND), XI_ESC_GLOBAL,
+              "CHAN_SEND use escape is GLOBAL");
+    ASSERT_EQ(xi_op_use_escape_level(XI_GO), XI_ESC_GLOBAL, "GO use escape is GLOBAL");
+    ASSERT_EQ(xi_op_use_escape_level(XI_STORE_FIELD), XI_ESC_HEAP,
+              "STORE_FIELD use escape is HEAP");
+    ASSERT_EQ(xi_op_use_escape_level(XI_TUPLE_NEW), XI_ESC_HEAP, "TUPLE_NEW use escape is HEAP");
+    ASSERT_EQ(xi_op_use_escape_level(XI_CALL), XI_ESC_HEAP, "CALL use escape is HEAP");
+    ASSERT_EQ(xi_op_use_escape_level(XI_THROW), XI_ESC_ARG, "THROW use escape is ARG");
+    ASSERT_EQ(xi_op_use_escape_level(XI_ADD), XI_ESC_NONE, "ADD use escape is NONE");
+    ASSERT_EQ(xi_op_use_escape_level(XI_INDEX_GET), XI_ESC_NONE, "INDEX_GET use escape is NONE");
+}
+
 /* ========== Test: lattice join ========== */
 
 static void test_lattice_join(void) {
@@ -375,6 +391,7 @@ static void test_stack_alloc_escaping_stays(void) {
 
 int main(void) {
     test_heap_alloc_check();
+    test_generated_use_escape_policy();
     test_lattice_join();
     test_local_no_escape();
     test_return_escape();

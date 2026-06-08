@@ -31,6 +31,7 @@
 #define XI_ESCAPE_H
 
 #include "xi.h"
+#include "xi_ops_gen.h"
 
 /* Escape levels — stored in XiValue.escape (2 bits). */
 typedef enum {
@@ -56,6 +57,23 @@ static inline bool xi_op_is_heap_alloc(uint16_t op) {
         default:
             return false;
     }
+}
+
+/* Query the escape level imposed on arguments at a use site. */
+static inline XiEscapeLevel xi_op_use_escape_level(uint16_t op) {
+    switch (xi_generated_op_escape_use(op)) {
+        case XI_GEN_ESCAPE_USE_NONE:
+            return XI_ESC_NONE;
+        case XI_GEN_ESCAPE_USE_ARG:
+            return XI_ESC_ARG;
+        case XI_GEN_ESCAPE_USE_HEAP:
+            return XI_ESC_HEAP;
+        case XI_GEN_ESCAPE_USE_GLOBAL:
+            return XI_ESC_GLOBAL;
+        case XI_GEN_ESCAPE_USE__COUNT:
+            break;
+    }
+    return XI_ESC_HEAP;
 }
 
 /* Join two escape levels (lattice meet = max). */

@@ -462,6 +462,7 @@
   :arity 2
   :result-kind void
   :tbaa-group field
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -484,6 +485,7 @@
   :arity 3
   :result-kind void
   :tbaa-group array
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -560,6 +562,7 @@
   :arity 2
   :result-kind void
   :tbaa-group struct
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -580,6 +583,7 @@
   :arity 2
   :result-kind void
   :tbaa-group json
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -602,6 +606,7 @@
   :arity 2
   :result-kind void
   :tbaa-group json
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -638,6 +643,7 @@
 (define-xi-op xi.tuple.new
   :class allocation
   :arity variadic
+  :escape-use heap
   :effects (memory-write allocates)
   :requires ()
   :observable ()
@@ -659,6 +665,7 @@
   :class call
   :arity variadic
   :tbaa-group top
+  :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -669,6 +676,7 @@
   :class call
   :arity variadic
   :tbaa-group top
+  :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -679,6 +687,7 @@
   :class call
   :arity variadic
   :tbaa-group top
+  :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -689,6 +698,7 @@
   :class call
   :arity variadic
   :tbaa-group top
+  :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -700,6 +710,7 @@
   :arity variadic
   :result-kind dynamic
   :tbaa-group top
+  :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -719,6 +730,7 @@
 (define-xi-op xi.closure.new
   :class allocation
   :arity variadic
+  :escape-use heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -741,6 +753,7 @@
   :arity 1
   :result-kind void
   :tbaa-group upval
+  :escape-use heap
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -763,6 +776,7 @@
   :arity 1
   :result-kind void
   :tbaa-group shared
+  :escape-use global
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -784,6 +798,7 @@
   :class memory-write
   :arity 1
   :tbaa-group global
+  :escape-use global
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -803,6 +818,7 @@
 (define-xi-op xi.go
   :class coroutine
   :arity variadic
+  :escape-use global
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -822,6 +838,7 @@
   :class coroutine
   :arity 2
   :tbaa-group chan
+  :escape-use global
   :effects (side-effect may-suspend memory-write)
   :requires ()
   :observable ()
@@ -842,6 +859,7 @@
   :class coroutine
   :arity 2
   :tbaa-group chan
+  :escape-use global
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -901,6 +919,7 @@
   :class exception
   :arity 1
   :result-kind void
+  :escape-use arg
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
