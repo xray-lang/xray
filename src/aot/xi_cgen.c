@@ -25,6 +25,7 @@
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_op_name.h"
+#include "../ir/xi_ops_gen.h"
 #include "../ir/xi_opt.h"
 #include "../ir/xi_own.h"
 #include "../ir/xi_range.h"
@@ -194,48 +195,11 @@ static bool cg_is_void_like(const XiValue *v) {
 }
 
 static bool cg_is_unsupported_coroutine_op(uint16_t op) {
-    switch (op) {
-        case XI_GO:
-        case XI_AWAIT:
-        case XI_CHAN_SEND:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_SEND:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-        case XI_YIELD:
-        case XI_CHAN_NEW:
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-        case XI_CORO_OP:
-            return true;
-        default:
-            return false;
-    }
+    return xi_generated_op_class(op) == XI_GEN_CLASS_COROUTINE;
 }
 
 static bool cg_is_aot_suspend_op(uint16_t op) {
-    switch (op) {
-        case XI_GO:
-        case XI_AWAIT:
-        case XI_YIELD:
-            return true;
-        case XI_CHAN_SEND:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_SEND:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-        case XI_CHAN_NEW:
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-        case XI_CORO_OP:
-            return true;
-        default:
-            return false;
-    }
+    return xi_generated_op_class(op) == XI_GEN_CLASS_COROUTINE;
 }
 
 #include "xi_cgen_type_helpers.inc.c"
