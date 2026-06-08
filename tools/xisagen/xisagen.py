@@ -2359,6 +2359,10 @@ VALID_XI_LOWERING_TARGETS = {
     'vm-bytecode',
 }
 
+VALID_XI_LOWERING_TARGET_ATTRS = {
+    'fresh-dst',
+}
+
 
 @dataclass
 class XiLoweringDef:
@@ -2368,31 +2372,64 @@ class XiLoweringDef:
     targets: list
     target_drivers: dict
     target_rejects: dict
+    target_attrs: dict
     match: Optional[SList] = None
 
 
-def _xi_lowering_target_entry(form: SList, target: str, op_name: str) -> tuple[Optional[str], bool]:
+def _xi_lowering_parse_bool_attr(value: SExpr, context: str) -> bool:
+    text = _sexpr_atom_value(value, context)
+    if text == 'yes':
+        return True
+    if text == 'no':
+        return False
+    die(f"{context}: expected yes or no")
+
+
+def _xi_lowering_target_entry(form: SList, target: str,
+                              op_name: str) -> tuple[Optional[str], bool, dict]:
     value = _xi_get_kw(form, ':' + target)
     if value is None:
-        return None, False
-    if not isinstance(value, SList) or len(value.children) != 2:
+        return None, False, {}
+    if not isinstance(value, SList) or len(value.children) < 2:
         die(f"{op_name}:{target}: expected (driver name) or (reject name)")
     kind = _sexpr_atom_value(value.children[0], f"{op_name}:{target}")
     if kind not in {'driver', 'reject'}:
         die(f"{op_name}:{target}: expected driver or reject entry")
-    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}"), kind == 'reject'
+    attrs = {}
+    if len(value.children) > 2:
+        extras = value.children[2:]
+        if len(extras) % 2 != 0:
+            die(f"{op_name}:{target}: target attributes must be keyword/value pairs")
+        for i in range(0, len(extras), 2):
+            key_expr = extras[i]
+            if not isinstance(key_expr, SAtom) or not key_expr.value.startswith(':'):
+                die(f"{op_name}:{target}: target attribute key must start with ':'")
+            key = key_expr.value[1:]
+            if key not in VALID_XI_LOWERING_TARGET_ATTRS:
+                die(f"{op_name}:{target}: unknown target attribute '{key}'")
+            if key == 'fresh-dst':
+                if target != 'vm-bytecode':
+                    die(f"{op_name}:{target}: fresh-dst is only valid for vm-bytecode")
+                attrs[key] = _xi_lowering_parse_bool_attr(extras[i + 1],
+                                                          f"{op_name}:{target}:fresh-dst")
+    if attrs.get('fresh-dst', False) and kind == 'reject':
+        die(f"{op_name}:{target}: rejected target cannot require fresh-dst")
+    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}"), kind == 'reject', attrs
 
 
-def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict]:
+def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict, dict]:
     drivers = {}
     rejects = {}
+    attrs = {}
     for target in sorted(VALID_XI_LOWERING_TARGETS):
-        driver, reject = _xi_lowering_target_entry(form, target, op_name)
+        driver, reject, target_attrs = _xi_lowering_target_entry(form, target, op_name)
         if driver is not None:
             drivers[target] = driver
+            if target_attrs:
+                attrs[target] = target_attrs
             if reject:
                 rejects[target] = driver
-    return drivers, rejects
+    return drivers, rejects, attrs
 
 
 def _xi_validate_lowering_policy(entries: list[XiLoweringDef], ops: list[XiOpDef],
@@ -2448,7 +2485,7 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
         for target in required:
             if target not in VALID_XI_LOWERING_TARGETS:
                 die(f"{path}: lowering '{op_name}' uses unknown required target '{target}'")
-        target_drivers, target_rejects = _xi_lowering_target_entries(form, op_name)
+        target_drivers, target_rejects, target_attrs = _xi_lowering_target_entries(form, op_name)
         targets = sorted(target_drivers.keys())
         if not targets:
             die(f"{path}: lowering '{op_name}' has no target emit")
@@ -2458,6 +2495,7 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
         entries.append(XiLoweringDef(op_name=op_name, ident=ident, required_targets=required,
                                      targets=targets, target_drivers=target_drivers,
                                      target_rejects=target_rejects,
+                                     target_attrs=target_attrs,
                                      match=_xi_get_kw_list(form, ':match')))
     _xi_validate_lowering_policy(entries, ops, path)
     return entries
@@ -2538,6 +2576,10 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
 
 def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     vm_entries = [entry for entry in entries if 'vm-bytecode' in entry.target_drivers]
+    fresh_dst_entries = [
+        entry for entry in vm_entries
+        if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst', False)
+    ]
     lines = []
     lines.append('/* AUTO-GENERATED by xisagen - DO NOT EDIT */')
     lines.append('/* Source: xisa/xi/lowering.def */')
@@ -2545,12 +2587,26 @@ def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('#ifndef XI_EMIT_VM_GEN_H')
     lines.append('#define XI_EMIT_VM_GEN_H')
     lines.append('')
+    lines.append('#include <stdbool.h>')
+    lines.append('#include <stdint.h>')
+    lines.append('#include "xi.h"')
+    lines.append('')
     lines.append('#define XI_EMIT_VM_LOWERING_HANDLERS(X) \\')
     for i, entry in enumerate(vm_entries):
         driver = entry.target_drivers['vm-bytecode']
         suffix = ' \\' if i + 1 < len(vm_entries) else ''
         lines.append(f'    X({entry.ident}, {driver}){suffix}')
     lines.append('')
+    lines.append('')
+    lines.append('static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in fresh_dst_entries:
+        lines.append(f'        case XI_{entry.ident}: return true;')
+    lines.append('        case XI_OP_COUNT: return false;')
+    lines.append('        default: return false;')
+    lines.append('    }')
+    lines.append('    return false;')
+    lines.append('}')
     lines.append('')
     lines.append('#endif  /* XI_EMIT_VM_GEN_H */')
     lines.append('')
@@ -2585,6 +2641,7 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
     lines.append('/* Source: xisa/xi/lowering.def */')
     lines.append('')
     lines.append('#include "../../../src/ir/xi_lowering_coverage_gen.h"')
+    lines.append('#include "../../../src/ir/xi_emit_vm_gen.h"')
     lines.append('')
     lines.append('#include <assert.h>')
     lines.append('#include <stdio.h>')
@@ -2598,6 +2655,9 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         lines.append(f'    assert(xi_lowering_generated_targets(XI_{entry.ident}) == ({target_bits}));')
         lines.append(f'    assert(xi_lowering_required_targets(XI_{entry.ident}) == ({required_bits}));')
         lines.append(f'    assert(xi_lowering_rejected_targets(XI_{entry.ident}) == ({reject_bits}));')
+        fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
+                                                                            False) else 'false'
+        lines.append(f'    assert(xi_emit_vm_requires_fresh_dst(XI_{entry.ident}) == {fresh_dst});')
     lines.append('    printf("Xi lowering generated coverage: %d entries\\n", XI_LOWERING_ENTRY_COUNT);')
     lines.append('    return 0;')
     lines.append('}')
@@ -8005,7 +8065,7 @@ def _test_xi_lowering_parser():
     (lower xi.add
       :match ()
       :required-targets (vm-bytecode jit-xm aot-c)
-      :vm-bytecode (driver xi_emit_add)
+      :vm-bytecode (driver xi_emit_add :fresh-dst yes)
       :jit-xm (driver xi2xm_add)
       :aot-c (driver xicgen_add))
     (lower xi.copy
@@ -8022,6 +8082,7 @@ def _test_xi_lowering_parser():
     assert entries[0].ident == 'ADD'
     assert entries[0].targets == ['aot-c', 'jit-xm', 'vm-bytecode']
     assert entries[0].target_drivers['jit-xm'] == 'xi2xm_add'
+    assert entries[0].target_attrs['vm-bytecode']['fresh-dst'] is True
     assert entries[1].target_rejects['jit-xm'] == 'xi2xm_copy_reject'
     assert entries[1].target_drivers['aot-c-stmt'] == 'xicgen_stmt_copy'
     header = generate_xi_lowering_coverage_header(entries)
@@ -8031,6 +8092,10 @@ def _test_xi_lowering_parser():
     assert 'case XI_COPY: return XI_LOWER_TARGET_JIT_XM;' in header
     vm_header = generate_xi_vm_dispatch_header(entries)
     assert 'X(ADD, xi_emit_add)' in vm_header
+    assert 'case XI_ADD: return true;' in vm_header
+    lowering_test = generate_xi_lowering_test(entries)
+    assert 'xi_emit_vm_requires_fresh_dst(XI_ADD) == true' in lowering_test
+    assert 'xi_emit_vm_requires_fresh_dst(XI_COPY) == false' in lowering_test
     jit_header = generate_xi_target_dispatch_header(entries, 'jit-xm', 'TEST_JIT_H', 'TEST_JIT')
     assert 'X(ADD, "xi.add", xi2xm_add)' in jit_header
     assert 'X(COPY, "xi.copy", xi2xm_copy_reject)' in jit_header
@@ -8044,6 +8109,70 @@ def _test_xi_lowering_parser():
           :vm-bytecode (driver xi_emit_add))
         ''', ops)
         assert False, "missing required lowering target should be rejected"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add :fresh-dst maybe)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        (lower xi.copy
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_copy)
+          :jit-xm (driver xi2xm_copy)
+          :aot-c (driver xicgen_copy))
+        ''', ops)
+        assert False, "invalid target bool attribute should be rejected"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add :window yes)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        (lower xi.copy
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_copy)
+          :jit-xm (driver xi2xm_copy)
+          :aot-c (driver xicgen_copy))
+        ''', ops)
+        assert False, "unknown target attribute should be rejected"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add)
+          :jit-xm (driver xi2xm_add :fresh-dst yes)
+          :aot-c (driver xicgen_add))
+        (lower xi.copy
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_copy)
+          :jit-xm (driver xi2xm_copy)
+          :aot-c (driver xicgen_copy))
+        ''', ops)
+        assert False, "fresh-dst should be VM-only"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (reject xi_emit_add_reject :fresh-dst yes)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        (lower xi.copy
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_copy)
+          :jit-xm (driver xi2xm_copy)
+          :aot-c (driver xicgen_copy))
+        ''', ops)
+        assert False, "reject target cannot require fresh-dst"
     except SystemExit:
         pass
     try:

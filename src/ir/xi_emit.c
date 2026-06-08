@@ -460,16 +460,8 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     if (v == ctx->fused_cmp)
         return;
 
-    /* Call-like ops place args at dst+1..dst+nargs.  A recycled low register
-     * for dst could overlap with live source arg registers (clobber bug).
-     * Force fresh allocation so dst > all previously allocated registers. */
-    /* OP_CHAN_TRY_RECV clobbers R[dst+1] with the ok flag, and
-     * OP_SELECT_BLOCK consumes a contiguous register window. Treat both
-     * as call-like so dst is beyond all live registers. */
-    bool call_like =
-        (v->op == XI_CALL || v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT ||
-         v->op == XI_GO || v->op == XI_CHAN_TRY_RECV || v->op == XI_SELECT_BLOCK);
-    uint8_t dst = call_like ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
+    bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op);
+    uint8_t dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -563,18 +555,15 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         free_reg(ctx, dst);
     }
 
-    /* Call-like ops use alloc_reg_fresh which places the result in a high
-     * register to prevent call-frame clobber.  When the variable already
-     * has a coalesced register (var_reg) from a prior non-call definition,
-     * the fresh register diverges from var_reg.  Copy the result back so
-     * that (a) exception paths (OP_THROW bypasses phi) read the correct
-     * value, and (b) merge-point phi moves become no-ops. */
-    if (call_like && ctx->status == XI_EMIT_OK && v->var_id != 0xFF && !need_cell_set &&
+    /* Fresh-dst handlers reserve a VM register window around the result.
+     * Copy the value back to a coalesced variable register so exception
+     * edges and merge-point phi moves see the expected register. */
+    if (fresh_dst && ctx->status == XI_EMIT_OK && v->var_id != 0xFF && !need_cell_set &&
         !need_cell_new) {
         uint8_t vr = ctx->var_reg[v->var_id];
-        uint8_t call_dst = ctx->reg_map[v->id];
-        if (vr != NO_REG && vr != call_dst) {
-            emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, call_dst, 0));
+        uint8_t fresh_reg = ctx->reg_map[v->id];
+        if (vr != NO_REG && vr != fresh_reg) {
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, fresh_reg, 0));
         }
     }
 
