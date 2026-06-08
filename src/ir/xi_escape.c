@@ -9,8 +9,9 @@
  *
  * Single-pass forward dataflow analysis that computes escape levels
  * for every SSA value. The analysis is conservative: if a value's
- * escape level cannot be determined precisely, it defaults to
- * GLOBAL_ESCAPE (safe for correctness, pessimistic for optimization).
+ * use-site policies come from generated Xi op metadata. Invalid op
+ * values fall back to HEAP_ESCAPE, which is safe for correctness and
+ * pessimistic for optimization.
  *
  * Algorithm:
  *   1. Initialize all heap-allocating values to NO_ESCAPE.
@@ -43,202 +44,14 @@ static inline void raise_esc(XiValue *v, XiEscapeLevel level) {
         v->escape = (uint8_t) level;
 }
 
-/* Raise escape level of source value that flows into a destination.
- * If dst is a heap-allocating value, it needs at least HEAP_ESCAPE
- * because its contents are stored into dst's heap object. */
-static inline void raise_arg_esc(XiValue *arg, XiEscapeLevel level) {
-    if (!arg)
-        return;
-    raise_esc(arg, level);
-    /* Transitivity: if arg was produced by a PHI or COPY, we need to
-     * propagate through those in the fixpoint loop, not here. */
-}
-
 /* ========== Use-Site Escape Rules ========== */
 
 /* Determine the escape level that a given use-site imposes on the
  * value being used. Returns the minimum escape level required. */
 static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
     XR_DCHECK(user != NULL, "use_escape_level: NULL user");
-
-    switch (user->op) {
-        /* ---- GLOBAL_ESCAPE: leaves the function's world ---- */
-        case XI_SET_SHARED: /* stored to module-level shared array */
-        case XI_SET_GLOBAL: /* stored to module-level globals dict */
-        case XI_GO:         /* launched as goroutine */
-        case XI_CHAN_SEND:  /* sent through channel */
-        case XI_CHAN_TRY_SEND:
-            return XI_ESC_GLOBAL;
-
-        /* ---- HEAP_ESCAPE: stored into a heap object ---- */
-        case XI_STORE_FIELD: /* obj.field = value */
-        case XI_STRUCT_SET:  /* struct.field = value */
-        case XI_INDEX_SET:   /* obj[key] = value */
-        case XI_JSON_INIT_F: /* json field init */
-        case XI_JSON_SET_F:  /* json field set */
-        case XI_STORE_UPVAL: /* captured variable mutation */
-            /* arg 0 is the container (already heap-escaped by being alive);
-             * arg 1+ is the stored value. */
-            return (arg_idx == 0) ? XI_ESC_HEAP : XI_ESC_HEAP;
-
-        /* ---- HEAP_ESCAPE: closure captures ---- */
-        case XI_CLOSURE_NEW:
-            /* Every CLOSURE_NEW arg is a captured value (the function itself
-             * is carried in aux, not args). All captures escape to the heap:
-             * they are stored in the closure's upvalue array. */
-            return XI_ESC_HEAP;
-
-        /* ---- HEAP_ESCAPE: tuple stores every element ---- */
-        case XI_TUPLE_NEW:
-            /* Every arg is a tuple element retained by the new tuple.
-             * Tuples are immutable, so this is the only writer. */
-            return XI_ESC_HEAP;
-
-        /* ---- ARG_ESCAPE: passed out of function ---- */
-        case XI_THROW: /* exception leaves the function */
-            return XI_ESC_ARG;
-
-        /* ---- Call arguments: conservative HEAP_ESCAPE ---- */
-        case XI_CALL:
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
-            /* Callee might store the argument in a heap object.
-             * A more precise analysis would use callee summaries. */
-            return XI_ESC_HEAP;
-
-        /* ---- Print consumes value but doesn't store it ---- */
-        case XI_PRINT:
-            return XI_ESC_NONE;
-
-        /* ---- Arithmetic / comparison: no escape ---- */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
-        case XI_NOT:
-        case XI_ISNULL:
-        case XI_IS:
-        case XI_AS:
-        case XI_CONVERT:
-        case XI_TYPEOF:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-            return XI_ESC_NONE;
-
-        /* ---- BOX / UNBOX: transparent ---- */
-        case XI_BOX:
-        case XI_UNBOX:
-        case XI_COPY:
-            return XI_ESC_NONE;
-
-        /* ---- Container reads: no escape of the key/index arg ---- */
-        case XI_INDEX_GET:
-        case XI_LOAD_FIELD:
-        case XI_STRUCT_GET:
-        case XI_JSON_GET_F:
-        case XI_TUPLE_GET:
-            return XI_ESC_NONE;
-
-        /* ---- Assertions: consume value for checking, no escape ---- */
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ASSERT_THROWS:
-            return XI_ESC_NONE;
-
-        /* ---- Iteration: iterator value stays local typically ---- */
-        case XI_ITER_NEW:
-        case XI_ITER_NEXT:
-        case XI_ITER_VALID:
-            return XI_ESC_NONE;
-
-        /* ---- Slice / range: creates new value but doesn't escape arg ---- */
-        case XI_SLICE:
-        case XI_RANGE:
-            return XI_ESC_NONE;
-
-        /* ---- Await: result comes back, arg is the awaited task ---- */
-        case XI_AWAIT:
-            return XI_ESC_NONE;
-
-        /* ---- Channel receive / scope / defer ---- */
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-        case XI_CHAN_NEW:
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-        case XI_DEFER:
-        case XI_YIELD:
-            return XI_ESC_NONE;
-
-        /* ---- PHI / structural: handled in fixpoint ---- */
-        case XI_PHI:
-        case XI_PARAM:
-        case XI_CONST:
-        case XI_GET_SHARED:
-        case XI_LOAD_UPVAL:
-        case XI_GET_BUILTIN:
-        case XI_IMPORT_REF:
-            return XI_ESC_NONE;
-
-        /* ---- Exception handling ---- */
-        case XI_TRY:
-        case XI_CATCH:
-        case XI_END_TRY:
-            return XI_ESC_NONE;
-
-        /* ---- Containers: args are elements stored in heap ---- */
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-        case XI_JSON_NEW:
-            return XI_ESC_NONE; /* args are capacity hints, not stored */
-
-        case XI_STR_CONCAT:
-            return XI_ESC_NONE; /* inputs consumed, new string produced */
-
-        case XI_STRUCT_NEW: /* args[0] = class ref, not stored */
-        case XI_CLASS_CREATE:
-        case XI_REGEX_COMPILE:
-            return XI_ESC_NONE;
-
-        default:
-            /* Unknown op: conservative — assume it escapes to heap */
-            return XI_ESC_HEAP;
-    }
+    (void) arg_idx;
+    return xi_op_use_escape_level(user->op);
 }
 
 /* ========== Return Escape ========== */
