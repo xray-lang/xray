@@ -1554,6 +1554,13 @@ VALID_XI_RESULT_KINDS = {
     'dynamic',
 }
 
+VALID_XI_RESULT_OWNERSHIPS = {
+    'borrowed',
+    'call-result',
+    'none',
+    'owned',
+}
+
 VALID_XI_BACKEND_REWRITES = {
     'none',
     'builtin',
@@ -1606,6 +1613,7 @@ class XiOpDef:
     observable: list
     targets: list
     result_kind: str
+    result_ownership: str
     result_native_type: str
     jit_policy: str
     lowering_policy: str
@@ -1782,6 +1790,10 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         result_kind = _xi_get_kw_str(form, ':result-kind', 'value')
         if result_kind not in VALID_XI_RESULT_KINDS:
             die(f"{path}: Xi op '{name}' uses unknown result kind '{result_kind}'")
+        result_ownership = _xi_get_kw_str(form, ':result-ownership', 'owned')
+        if result_ownership not in VALID_XI_RESULT_OWNERSHIPS:
+            die(f"{path}: Xi op '{name}' uses unknown result ownership "
+                f"'{result_ownership}'")
         if result_kind == 'void' and result_native_type != 'none':
             die(f"{path}: Xi op '{name}' cannot combine void result kind with "
                 f"result native type '{result_native_type}'")
@@ -1836,6 +1848,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
                            result_kind=result_kind,
+                           result_ownership=result_ownership,
                            result_native_type=result_native_type,
                            jit_policy=jit_policy,
                            lowering_policy=lowering_policy,
@@ -1936,6 +1949,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_RESULT_DYNAMIC = 2,')
     lines.append('    XI_GEN_RESULT__COUNT')
     lines.append('} XiGeneratedResultKind;')
+    lines.append('')
+    lines.append('/* ========== Result Ownership Policies ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_RESULT_OWNERSHIP_OWNED = 0,')
+    lines.append('    XI_GEN_RESULT_OWNERSHIP_BORROWED = 1,')
+    lines.append('    XI_GEN_RESULT_OWNERSHIP_NONE = 2,')
+    lines.append('    XI_GEN_RESULT_OWNERSHIP_CALL_RESULT = 3,')
+    lines.append('    XI_GEN_RESULT_OWNERSHIP__COUNT')
+    lines.append('} XiGeneratedResultOwnership;')
     lines.append('')
     lines.append('/* ========== Lowering Policies ========== */')
     lines.append('')
@@ -2040,6 +2063,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t operand_count;')
     lines.append('    uint8_t result_count;')
     lines.append('    uint8_t result_kind;')
+    lines.append('    uint8_t result_ownership;')
     lines.append('    uint8_t lowering_policy;')
     lines.append('    uint8_t speculation;')
     lines.append('    uint8_t value_numbering;')
@@ -2067,6 +2091,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         flags = _xi_effect_flag_expr(op.effects)
         native_type = 'NULL' if op.result_native_type == 'none' else f'"{op.result_native_type}"'
         result_kind = f'XI_GEN_RESULT_{_xi_c_ident(op.result_kind)}'
+        result_ownership = f'XI_GEN_RESULT_OWNERSHIP_{_xi_c_ident(op.result_ownership)}'
         lowering_policy = f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)}'
         speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
         vn_kind = f'XI_GEN_VN_{_xi_c_ident(op.vn_kind)}'
@@ -2084,8 +2109,8 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
-            f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
-            f'{speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
+            f'{len(op.operands)}, {len(op.results)}, {result_kind}, {result_ownership}, '
+            f'{lowering_policy}, {speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
             f'{escape_alloc}, {own_use}, {negated_op}, {flags}, {algebraic_traits}, {effects}, '
             f'{targets}, {backend_rewrite_name}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
@@ -2126,6 +2151,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_RESULT_VALUE;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(
+            f'        case XI_{op.ident}: return XI_GEN_RESULT_OWNERSHIP_{_xi_c_ident(op.result_ownership)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_RESULT_OWNERSHIP_OWNED;')
     lines.append('}')
     lines.append('')
     lines.append('static inline const char *xi_generated_op_result_native_type(uint16_t op) {')
@@ -7733,6 +7768,7 @@ def _test_xi_ops_parser():
       :class memory
       :operands ((address $addr :type pointer))
       :results ((value $result))
+      :result-ownership borrowed
       :effects (memory-read may-throw)
       :tbaa-group array
       :requires (valid-address)
@@ -7754,6 +7790,7 @@ def _test_xi_ops_parser():
       :class memory-write
       :arity 2
       :result-kind void
+      :result-ownership none
       :effects (side-effect memory-write)
       :tbaa-group field
       :escape-use heap
@@ -7821,10 +7858,12 @@ def _test_xi_ops_parser():
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
     assert ops[1].result_kind == 'value'
+    assert ops[1].result_ownership == 'borrowed'
     assert ops[1].lowering_policy == 'pass-local'
     assert ops[1].tbaa_group == 'array'
     assert ops[2].result_native_type == 'i8'
     assert ops[3].result_kind == 'void'
+    assert ops[3].result_ownership == 'none'
     assert ops[3].tbaa_group == 'field'
     assert ops[3].escape_use == 'heap'
     assert ops[3].own_use == 'stored-value'
@@ -7843,6 +7882,9 @@ def _test_xi_ops_parser():
     assert 'case XI_MEM_LOAD: return XI_GEN_CLASS_MEMORY;' in header
     assert 'xi_generated_op_result_kind' in header
     assert 'case XI_STORE_FIELD: return XI_GEN_RESULT_VOID;' in header
+    assert 'xi_generated_op_result_ownership' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_RESULT_OWNERSHIP_BORROWED;' in header
+    assert 'case XI_STORE_FIELD: return XI_GEN_RESULT_OWNERSHIP_NONE;' in header
     assert 'xi_generated_op_result_native_type' in header
     assert 'case XI_NARROW_I8: return "i8";' in header
     assert 'xi_generated_op_lowering_policy' in header

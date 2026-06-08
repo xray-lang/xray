@@ -30,6 +30,7 @@
 #include "xi_arc.h"
 #include "xi_own.h"
 #include "xi_escape.h"
+#include "xi_effect.h"
 #include "xi_analysis.h"
 #include "xi_core_api.h"
 #include "../runtime/value/xtype.h"
@@ -84,81 +85,26 @@ typedef struct {
     uint32_t order; /* sort key: (rpo << 16) | index_in_block */
 } ConsumeSite;
 
-/* Does this op PRODUCE a fresh owning RC reference as its result?
- * Side-effecting ops (stores, print, assert, control) have no meaningful
- * RC result even if their static type is RC-ish, so they must not be
- * tracked for dup/drop (otherwise a phantom drop is inserted). */
-static bool op_produces_owned_value(uint16_t op) {
-    switch (op) {
-        /* Stores / sets: side effects, no owning result. */
-        case XI_STORE_FIELD:
-        case XI_STRUCT_SET:
-        case XI_INDEX_SET:
-        case XI_JSON_INIT_F:
-        case XI_JSON_SET_F:
-        case XI_STORE_UPVAL:
-        case XI_SET_SHARED:
-        case XI_SET_GLOBAL:
-        /* Consumers / effects with no usable RC result. */
-        case XI_PRINT:
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ASSERT_THROWS:
-        case XI_THROW:
-        case XI_CHAN_SEND:
-        case XI_CHAN_TRY_SEND:
-        case XI_GO:
-        case XI_YIELD:
-        case XI_DEFER:
-        case XI_RETAIN:
-        case XI_RELEASE:
-        case XI_DROP_REUSE:
-        case XI_MOVE:
-        case XI_BOUNDS_CHECK:
-            return false;
-        default:
-            return true;
-    }
+/* Side-effecting ops can have RC-ish static types while carrying no usable
+ * result. Borrowed loads and unknown call results need distinct ARC modes. */
+static uint8_t op_result_ownership(uint16_t op) {
+    return xi_op_result_ownership(op);
 }
 
-/* Does this op produce a BORROWED reference — i.e. a value loaded from a
- * location the current function does not own (shared/global/upvalue slot,
- * or a field/element of some other object)? Such a value must get neither
- * dup nor drop: the function only borrows it; the real owner is the slot or
- * the container. Dropping it would free an object still owned elsewhere
- * (use-after-free). Missing a dup at most leaks (safe), never UAFs. */
+static bool op_has_trackable_result(uint16_t op) {
+    return op_result_ownership(op) != XI_GEN_RESULT_OWNERSHIP_NONE;
+}
+
+/* A borrowed reference is loaded from a location owned by another object or
+ * module slot. Dropping it would free storage still owned elsewhere. */
 static bool op_produces_borrow(uint16_t op) {
-    switch (op) {
-        case XI_GET_SHARED:  /* read module-level shared slot */
-        case XI_GET_GLOBAL:  /* read top-level global (REPL) */
-        case XI_LOAD_UPVAL:  /* read captured upvalue */
-        case XI_IMPORT_REF:  /* cross-module import reference */
-        case XI_GET_BUILTIN: /* builtin global */
-        case XI_LOAD_FIELD:  /* obj.field — owned by obj */
-        case XI_STRUCT_GET:
-        case XI_INDEX_GET: /* arr[i] / map[k] — owned by the container */
-        case XI_JSON_GET_F:
-        case XI_TUPLE_GET:
-            return true;
-        default:
-            return false;
-    }
+    return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_BORROWED;
 }
 
 /* Is this op a call whose result ownership we cannot determine without a
  * per-callee return-ownership summary? */
 static bool op_is_call(uint16_t op) {
-    switch (op) {
-        case XI_CALL:
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
-            return true;
-        default:
-            return false;
-    }
+    return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
 }
 
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
@@ -168,7 +114,7 @@ static bool tracks_rc(const XiValue *v) {
         return false;
     if (v->op == XI_STACK_ALLOC)
         return false; /* frame lifetime, no RC */
-    if (v->op != XI_PARAM && !op_produces_owned_value(v->op))
+    if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
     /* Call results: a callee may return either a fresh (+1) reference or an
      * alias of one of its arguments (e.g. `arr.push(x)` returns `self`).

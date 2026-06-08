@@ -104,6 +104,23 @@ static void test_optimization_traits(void) {
     ASSERT_TRUE(xi_op_negated_comparison(XI_ADD) == XI_OP_COUNT, "ADD has no negated cmp");
 }
 
+static void test_result_ownership_traits(void) {
+    ASSERT_TRUE(xi_op_result_ownership(XI_ARRAY_NEW) == XI_GEN_RESULT_OWNERSHIP_OWNED,
+                "ARRAY_NEW produces an owned result");
+    ASSERT_TRUE(xi_op_result_ownership(XI_LOAD_FIELD) == XI_GEN_RESULT_OWNERSHIP_BORROWED,
+                "LOAD_FIELD produces a borrowed result");
+    ASSERT_TRUE(xi_op_result_ownership(XI_GET_SHARED) == XI_GEN_RESULT_OWNERSHIP_BORROWED,
+                "GET_SHARED produces a borrowed result");
+    ASSERT_TRUE(xi_op_result_ownership(XI_STORE_FIELD) == XI_GEN_RESULT_OWNERSHIP_NONE,
+                "STORE_FIELD produces no tracked result");
+    ASSERT_TRUE(xi_op_result_ownership(XI_PRINT) == XI_GEN_RESULT_OWNERSHIP_NONE,
+                "PRINT produces no tracked result");
+    ASSERT_TRUE(xi_op_result_ownership(XI_CALL) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT,
+                "CALL result ownership is summary-dependent");
+    ASSERT_TRUE(xi_op_result_ownership(XI_CALL_METHOD) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT,
+                "CALL_METHOD result ownership is summary-dependent");
+}
+
 static void test_speculation_traits(void) {
     ASSERT_TRUE(xi_op_can_speculate(XI_SELECT), "SELECT is safe to speculate");
     ASSERT_TRUE(xi_op_can_speculate(XI_COPY), "COPY is safe to speculate");
@@ -118,6 +135,7 @@ int main(void) {
     test_suspend_ops();
     test_mem_ops();
     test_optimization_traits();
+    test_result_ownership_traits();
     test_speculation_traits();
 
     printf("\n=== test_xi_effect: %d passed, %d failed ===\n", g_passed, g_failed);
