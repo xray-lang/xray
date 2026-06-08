@@ -1507,6 +1507,12 @@ VALID_XI_RESULT_NATIVE_TYPES = {
     'bool',
 }
 
+VALID_XI_RESULT_KINDS = {
+    'value',
+    'void',
+    'dynamic',
+}
+
 
 @dataclass
 class XiOperandDef:
@@ -1534,6 +1540,7 @@ class XiOpDef:
     requires: list
     observable: list
     targets: list
+    result_kind: str
     result_native_type: str
     jit_policy: str
 
@@ -1681,12 +1688,19 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if result_native_type != 'none' and result_native_type not in VALID_XI_RESULT_NATIVE_TYPES:
             die(f"{path}: Xi op '{name}' uses unknown result native type "
                 f"'{result_native_type}'")
+        result_kind = _xi_get_kw_str(form, ':result-kind', 'value')
+        if result_kind not in VALID_XI_RESULT_KINDS:
+            die(f"{path}: Xi op '{name}' uses unknown result kind '{result_kind}'")
+        if result_kind == 'void' and result_native_type != 'none':
+            die(f"{path}: Xi op '{name}' cannot combine void result kind with "
+                f"result native type '{result_native_type}'")
         jit_policy = _xi_get_kw_str(form, ':jit-policy', 'catch-up')
         if jit_policy not in VALID_XI_JIT_POLICIES:
             die(f"{path}: Xi op '{name}' uses unknown jit policy '{jit_policy}'")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
+                           result_kind=result_kind,
                            result_native_type=result_native_type,
                            jit_policy=jit_policy))
     return ops
@@ -1753,6 +1767,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_CLASS__COUNT')
     lines.append('} XiGeneratedOpClass;')
     lines.append('')
+    lines.append('/* ========== Result Kinds ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_RESULT_VALUE = 0,')
+    lines.append('    XI_GEN_RESULT_VOID = 1,')
+    lines.append('    XI_GEN_RESULT_DYNAMIC = 2,')
+    lines.append('    XI_GEN_RESULT__COUNT')
+    lines.append('} XiGeneratedResultKind;')
+    lines.append('')
     lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
     lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
     lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
@@ -1767,6 +1790,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t arity;')
     lines.append('    uint8_t operand_count;')
     lines.append('    uint8_t result_count;')
+    lines.append('    uint8_t result_kind;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t effects;')
     lines.append('    uint32_t targets;')
@@ -1782,11 +1806,12 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         targets = _xi_bit_expr('XI_TARGET', op.targets)
         flags = _xi_effect_flag_expr(op.effects)
         native_type = 'NULL' if op.result_native_type == 'none' else f'"{op.result_native_type}"'
+        result_kind = f'XI_GEN_RESULT_{_xi_c_ident(op.result_kind)}'
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
-            f'{len(op.operands)}, {len(op.results)}, {flags}, {effects}, {targets}, '
-            f'{native_type}, "{op.jit_policy}"){suffix}')
+            f'{len(op.operands)}, {len(op.results)}, {result_kind}, {flags}, {effects}, '
+            f'{targets}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -1816,6 +1841,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_CLASS__COUNT;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_result_kind(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_RESULT_{_xi_c_ident(op.result_kind)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_RESULT_VALUE;')
     lines.append('}')
     lines.append('')
     lines.append('static inline const char *xi_generated_op_result_native_type(uint16_t op) {')
@@ -7131,15 +7165,25 @@ def _test_xi_ops_parser():
     (define-xi-op xi.narrow.i8
       :class conversion
       :arity 1
+      :result-kind value
       :result-native-type i8
       :effects ()
       :requires ()
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
       :jit-policy catch-up)
+    (define-xi-op xi.store.field
+      :class memory-write
+      :arity 2
+      :result-kind void
+      :effects (side-effect memory-write)
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy catch-up)
     '''
     ops = parse_xi_ops_def(text)
-    assert len(ops) == 3
+    assert len(ops) == 4
     assert ops[0].name == 'xi.add'
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
@@ -7147,7 +7191,9 @@ def _test_xi_ops_parser():
     assert ops[1].ident == 'MEM_LOAD'
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
+    assert ops[1].result_kind == 'value'
     assert ops[2].result_native_type == 'i8'
+    assert ops[3].result_kind == 'void'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -7156,6 +7202,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_arity' in header
     assert 'xi_generated_op_class' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_CLASS_MEMORY;' in header
+    assert 'xi_generated_op_result_kind' in header
+    assert 'case XI_STORE_FIELD: return XI_GEN_RESULT_VOID;' in header
     assert 'xi_generated_op_result_native_type' in header
     assert 'case XI_NARROW_I8: return "i8";' in header
     assert 'xi_generated_op_default_flags' in header
