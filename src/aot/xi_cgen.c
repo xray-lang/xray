@@ -1301,38 +1301,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-            /* ============ Stack Allocation ============ */
-
-        case XI_STACK_ALLOC: {
-            int32_t orig_op = v->aux_int;
-            if (orig_op == XI_ARRAY_NEW) {
-                int64_t cap = (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
-                                  ? v->args[0]->aux_int
-                                  : 4;
-                fprintf(out, "xrt_array_stack_new(%" PRId64 ")", cap);
-            } else if (orig_op == XI_MAP_NEW) {
-                /* map: fallback to heap (stack map not yet implemented) */
-                int64_t cap = (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
-                                  ? v->args[0]->aux_int
-                                  : 8;
-                if (!emit_typed_map_new_expr(out, v, cap))
-                    fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
-            } else if (orig_op == XI_SET_NEW) {
-                int64_t cap = (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
-                                  ? v->args[0]->aux_int
-                                  : 8;
-                if (!emit_typed_set_new_expr(out, v, cap))
-                    fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
-            } else if (orig_op == XI_STR_CONCAT) {
-                emit_str_concat_expr(out, v);
-            } else if (orig_op == XI_CLOSURE_NEW) {
-                emit_closure_new_expr(ctx, out, prefix, v);
-            } else {
-                emit_codegen_abort_expr(out);
-            }
-            break;
-        }
-
         /* ============ Exception Handling ============ */
 
         /* TRY/END_TRY: handled structurally in emit_value_stmt */
