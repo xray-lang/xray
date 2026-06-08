@@ -174,6 +174,8 @@ XR_FUNC XrJitResult xr_jit_rt_map_new(struct XrCoroutine *coro, int64_t capacity
 XR_FUNC XrJitResult xr_jit_newrange(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_range_unpack(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_newset(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_tuple_new(struct XrCoroutine *coro, int64_t arity);
+XR_FUNC XrJitResult xr_jit_tuple_get(struct XrCoroutine *coro, int64_t index);
 XR_FUNC XrJitResult xr_jit_slice(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_bytes_new(struct XrCoroutine *coro, int64_t extra_arg);
 

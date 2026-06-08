@@ -23,6 +23,7 @@
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
+static XrType stub_tuple = {.kind = XR_KIND_TUPLE, .id = 4, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 
 static int tests_passed = 0;
@@ -1113,6 +1114,104 @@ TEST(lower_set_new) {
     xi_func_free(f);
 }
 
+TEST(lower_tuple_new) {
+    XiFunc *f = make_func("tuple_new", &stub_tuple);
+    XiBlock *entry = f->entry;
+
+    XiValue *a = xi_param(f, entry, 0, &stub_int);
+    XiValue *b = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {a, b};
+    register_func_params(f, params, 2);
+
+    XiValue *tuple = xi_value_new(f, entry, XI_TUPLE_NEW, &stub_tuple, 2);
+    tuple->args[0] = a;
+    tuple->args[1] = b;
+    xi_block_set_return(entry, tuple);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL && "tuple.new lowering should succeed");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op != XM_CALL_C || blk0->ins[i].args[0] == XM_NONE)
+            continue;
+        uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+        uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
+        assert(fn_ci < xm->nconst);
+        assert(extra_ci < xm->nconst);
+        if (xm->consts[fn_ci].val.ptr != (void *) xr_jit_tuple_new)
+            continue;
+        assert(xm->consts[extra_ci].val.i64 == 2);
+        assert((blk0->ins[i].flags & XM_FLAG_MAY_GC) != 0);
+        assert((blk0->ins[i].flags & XM_FLAG_SAFEPOINT) != 0);
+        assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_tuple_new));
+        uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+        assert(vi < xm->nvreg);
+        assert(xm->vregs[vi].call_nargs == 2);
+        found = true;
+    }
+    assert(found && "tuple.new should lower through xr_jit_tuple_new");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_tuple_get) {
+    XiFunc *f = make_func("tuple_get", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *tuple_param = xi_param(f, entry, 0, &stub_tuple);
+    XiValue *params[1] = {tuple_param};
+    register_func_params(f, params, 1);
+
+    XiValue *get = xi_value_new(f, entry, XI_TUPLE_GET, &stub_int, 1);
+    get->args[0] = tuple_param;
+    get->aux_int = 1;
+    xi_block_set_return(entry, get);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL && "tuple.get lowering should succeed");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op != XM_CALL_C || blk0->ins[i].args[0] == XM_NONE)
+            continue;
+        uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+        uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
+        assert(fn_ci < xm->nconst);
+        assert(extra_ci < xm->nconst);
+        if (xm->consts[fn_ci].val.ptr != (void *) xr_jit_tuple_get)
+            continue;
+        assert(xm->consts[extra_ci].val.i64 == 1);
+        assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_tuple_get));
+        uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+        assert(vi < xm->nvreg);
+        assert(xm->vregs[vi].call_nargs == 1);
+        found = true;
+    }
+    assert(found && "tuple.get should lower through xr_jit_tuple_get");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(reject_tuple_new_above_jit_call_arg_limit) {
+    XiFunc *f = make_func("tuple_limit", &stub_tuple);
+    XiBlock *entry = f->entry;
+
+    XiValue *tuple = xi_value_new(f, entry, XI_TUPLE_NEW, &stub_tuple, 16);
+    for (uint16_t i = 0; i < 16; i++)
+        tuple->args[i] = xi_const_int(f, entry, (int64_t) i, &stub_int);
+    xi_block_set_return(entry, tuple);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm == NULL && "tuple.new beyond JIT helper call args must reject");
+
+    xi_func_free(f);
+}
+
 TEST(lower_str_concat) {
     XiFunc *f = make_func("str_concat", &stub_int);
     XiBlock *entry = f->entry;
@@ -1268,6 +1367,9 @@ int main(void) {
     run_lower_array_new();
     run_lower_map_new();
     run_lower_set_new();
+    run_lower_tuple_new();
+    run_lower_tuple_get();
+    run_reject_tuple_new_above_jit_call_arg_limit();
     run_lower_str_concat();
     run_lower_reuse_helpers();
     run_reject_bytes_memory_ops_until_jit_driver_exists();

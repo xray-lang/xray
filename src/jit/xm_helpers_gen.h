@@ -96,30 +96,32 @@ typedef enum {
     XM_HELPER_newrange = 59,
     XM_HELPER_range_unpack = 60,
     XM_HELPER_newset = 61,
-    XM_HELPER_slice = 62,
-    XM_HELPER_bytes_new = 63,
-    XM_HELPER_enum_access = 64,
-    XM_HELPER_enum_name = 65,
-    XM_HELPER_enum_convert = 66,
-    XM_HELPER_print = 67,
-    XM_HELPER_dump = 68,
-    XM_HELPER_assert = 69,
-    XM_HELPER_assert_eq = 70,
-    XM_HELPER_assert_ne = 71,
-    XM_HELPER_chan_new = 72,
-    XM_HELPER_chan_close = 73,
-    XM_HELPER_chan_is_closed = 74,
-    XM_HELPER_chan_try_send = 75,
-    XM_HELPER_chan_try_recv = 76,
-    XM_HELPER_chan_send = 77,
-    XM_HELPER_chan_send_block = 78,
-    XM_HELPER_chan_recv = 79,
-    XM_HELPER_chan_recv_block = 80,
-    XM_HELPER_scope_enter = 81,
-    XM_HELPER_scope_exit = 82,
-    XM_HELPER_go = 83,
-    XM_HELPER_await = 84,
-    XM_HELPER_await_block = 85,
+    XM_HELPER_tuple_new = 62,
+    XM_HELPER_tuple_get = 63,
+    XM_HELPER_slice = 64,
+    XM_HELPER_bytes_new = 65,
+    XM_HELPER_enum_access = 66,
+    XM_HELPER_enum_name = 67,
+    XM_HELPER_enum_convert = 68,
+    XM_HELPER_print = 69,
+    XM_HELPER_dump = 70,
+    XM_HELPER_assert = 71,
+    XM_HELPER_assert_eq = 72,
+    XM_HELPER_assert_ne = 73,
+    XM_HELPER_chan_new = 74,
+    XM_HELPER_chan_close = 75,
+    XM_HELPER_chan_is_closed = 76,
+    XM_HELPER_chan_try_send = 77,
+    XM_HELPER_chan_try_recv = 78,
+    XM_HELPER_chan_send = 79,
+    XM_HELPER_chan_send_block = 80,
+    XM_HELPER_chan_recv = 81,
+    XM_HELPER_chan_recv_block = 82,
+    XM_HELPER_scope_enter = 83,
+    XM_HELPER_scope_exit = 84,
+    XM_HELPER_go = 85,
+    XM_HELPER_await = 86,
+    XM_HELPER_await_block = 87,
     XM_HELPER__COUNT
 } XmHelperId;
 
@@ -460,6 +462,16 @@ typedef struct {
 #define XM_HELPER_FLAGS_newset (XM_HF_GC | XM_HF_STACKMAP)
 #define XM_HELPER_POINTER_TRUST_newset XM_HPT_GC
 #define XM_HELPER_POST_CALL_newset 0
+#define XM_HELPER_RET_REP_tuple_new XR_REP_PTR
+#define XM_HELPER_NARGS_tuple_new 0
+#define XM_HELPER_FLAGS_tuple_new (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_tuple_new XM_HPT_GC
+#define XM_HELPER_POST_CALL_tuple_new 0
+#define XM_HELPER_RET_REP_tuple_get XR_REP_TAGGED
+#define XM_HELPER_NARGS_tuple_get 1
+#define XM_HELPER_FLAGS_tuple_get 0
+#define XM_HELPER_POINTER_TRUST_tuple_get XM_HPT_GC
+#define XM_HELPER_POST_CALL_tuple_get 0
 #define XM_HELPER_RET_REP_slice XR_REP_PTR
 #define XM_HELPER_NARGS_slice 0
 #define XM_HELPER_FLAGS_slice (XM_HF_GC | XM_HF_STACKMAP)
@@ -670,6 +682,8 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     [XM_HELPER_newrange] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_range_unpack] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_newset] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_tuple_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_tuple_get] = {XR_REP_TAGGED, 1, 0, XM_HPT_GC, 0},
     [XM_HELPER_slice] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_bytes_new] = {XR_REP_PTR, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_enum_access] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
@@ -774,6 +788,8 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(newrange)                                                                                    \
     _(range_unpack)                                                                                \
     _(newset)                                                                                      \
+    _(tuple_new)                                                                                   \
+    _(tuple_get)                                                                                   \
     _(slice)                                                                                       \
     _(bytes_new)                                                                                   \
     _(enum_access)                                                                                 \
