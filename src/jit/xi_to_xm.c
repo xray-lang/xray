@@ -414,49 +414,20 @@ static XmRef coerce_to_f64(LowerCtx *ctx, XmBlock *blk, XmRef ref) {
     return xm_emit_unary(ctx->xm_func, blk, XM_UNBOX_F64, XR_REP_F64, ref);
 }
 
-static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+static XmRef lower_binary_arith_with_ops(LowerCtx *ctx, XmBlock *blk, XiValue *v, uint16_t int_op,
+                                         uint16_t float_op) {
     XR_DCHECK(v->nargs == 2, "binary arith: expected 2 args");
     XmRef lhs = get_ref(ctx, v->args[0]);
     XmRef rhs = get_ref(ctx, v->args[1]);
     bool is_float = (v->rep == XR_REP_F64);
     uint8_t rep = v->rep;
 
-    uint16_t xm_op;
-    switch (v->op) {
-        case XI_ADD:
-            xm_op = is_float ? XM_FADD : XM_ADD;
-            break;
-        case XI_SUB:
-            xm_op = is_float ? XM_FSUB : XM_SUB;
-            break;
-        case XI_MUL:
-            xm_op = is_float ? XM_FMUL : XM_MUL;
-            break;
-        case XI_DIV:
-            xm_op = is_float ? XM_FDIV : XM_DIV;
-            break;
-        case XI_MOD:
-            xm_op = XM_MOD;
-            break;
-        case XI_BAND:
-            xm_op = XM_AND;
-            break;
-        case XI_BOR:
-            xm_op = XM_OR;
-            break;
-        case XI_BXOR:
-            xm_op = XM_XOR;
-            break;
-        case XI_SHL:
-            xm_op = XM_SHL;
-            break;
-        case XI_SHR:
-            xm_op = XM_SHR;
-            break;
-        default:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
+    if (is_float && float_op == XM_OP_COUNT) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
     }
+
+    uint16_t xm_op = is_float ? float_op : int_op;
 
     /* Float operations require F64 operands; coerce if needed
      * (e.g. Json property access returns I64/TAGGED). */
@@ -468,24 +439,19 @@ static XmRef lower_binary_arith(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_fold_emit(ctx->xm_func, blk, xm_op, rep, lhs, rhs);
 }
 
-static XmRef lower_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+static XmRef lower_unary_with_ops(LowerCtx *ctx, XmBlock *blk, XiValue *v, uint16_t int_op,
+                                  uint16_t float_op) {
     XR_DCHECK(v->nargs == 1, "unary: expected 1 arg");
     XmRef arg = get_ref(ctx, v->args[0]);
     bool is_float = (v->rep == XR_REP_F64);
     uint8_t rep = v->rep;
 
-    uint16_t xm_op;
-    switch (v->op) {
-        case XI_NEG:
-            xm_op = is_float ? XM_FNEG : XM_NEG;
-            break;
-        case XI_BNOT:
-            xm_op = XM_NOT;
-            break;
-        default:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
+    if (is_float && float_op == XM_OP_COUNT) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
     }
+
+    uint16_t xm_op = is_float ? float_op : int_op;
 
     /* Float unary needs F64 operand */
     if (is_float)
@@ -532,13 +498,13 @@ static XmRef lower_select_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 /* ========== Comparison Lowering ========== */
 
-static XmRef lower_comparison(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+static XmRef lower_comparison_with_ops(LowerCtx *ctx, XmBlock *blk, XiValue *v, uint16_t int_op,
+                                       uint16_t float_op, bool reverse_operands, bool is_eq,
+                                       bool is_ne) {
     XR_DCHECK(v->nargs == 2, "comparison: expected 2 args");
     XmRef lhs = get_ref(ctx, v->args[0]);
     XmRef rhs = get_ref(ctx, v->args[1]);
 
-    bool is_eq = (v->op == XI_EQ || v->op == XI_EQ_STRICT);
-    bool is_ne = (v->op == XI_NE || v->op == XI_NE_STRICT);
     bool lhs_null = v->args[0]->type && v->args[0]->type->kind == XR_KIND_NULL;
     bool rhs_null = v->args[1]->type && v->args[1]->type->kind == XR_KIND_NULL;
     if ((is_eq || is_ne) && (lhs_null || rhs_null)) {
@@ -554,39 +520,14 @@ static XmRef lower_comparison(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     /* Determine if operands are float (check arg type, not result type) */
     bool is_float = is_float_type(v->args[0]->type);
 
-    uint16_t xm_op;
-    switch (v->op) {
-        case XI_EQ:
-            xm_op = is_float ? XM_FEQ : XM_EQ;
-            break;
-        case XI_NE:
-            xm_op = is_float ? XM_FNE : XM_NE;
-            break;
-        case XI_LT:
-            xm_op = is_float ? XM_FLT : XM_LT;
-            break;
-        case XI_LE:
-            xm_op = is_float ? XM_FLE : XM_LE;
-            break;
-        case XI_GT:
-            xm_op = is_float ? XM_FLT : XM_LT;
-            break;
-        case XI_GE:
-            xm_op = is_float ? XM_FLE : XM_LE;
-            break;
-        case XI_EQ_STRICT:
-            xm_op = XM_EQ;
-            break;
-        case XI_NE_STRICT:
-            xm_op = XM_NE;
-            break;
-        default:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
+    if (is_float && float_op == XM_OP_COUNT) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
     }
 
-    /* GT/GE: swap operands (Xm only has LT/LE) */
-    if (v->op == XI_GT || v->op == XI_GE) {
+    uint16_t xm_op = is_float ? float_op : int_op;
+
+    if (reverse_operands) {
         XmRef tmp = lhs;
         lhs = rhs;
         rhs = tmp;
@@ -1079,45 +1020,33 @@ static XmRef xi2xm_move(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_identity(ctx, blk, v);
 }
 
-static XmRef xi2xm_add(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+#define XI2XM_BINARY_DRIVER(name, int_op, float_op)                                                \
+    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
+        return lower_binary_arith_with_ops(ctx, blk, v, int_op, float_op);                         \
+    }
 
-static XmRef xi2xm_sub(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+XI2XM_BINARY_DRIVER(add, XM_ADD, XM_FADD)
+XI2XM_BINARY_DRIVER(sub, XM_SUB, XM_FSUB)
+XI2XM_BINARY_DRIVER(mul, XM_MUL, XM_FMUL)
+XI2XM_BINARY_DRIVER(div, XM_DIV, XM_FDIV)
+XI2XM_BINARY_DRIVER(mod, XM_MOD, XM_OP_COUNT)
+XI2XM_BINARY_DRIVER(band, XM_AND, XM_OP_COUNT)
+XI2XM_BINARY_DRIVER(bor, XM_OR, XM_OP_COUNT)
+XI2XM_BINARY_DRIVER(bxor, XM_XOR, XM_OP_COUNT)
+XI2XM_BINARY_DRIVER(shl, XM_SHL, XM_OP_COUNT)
+XI2XM_BINARY_DRIVER(shr, XM_SHR, XM_OP_COUNT)
 
-static XmRef xi2xm_mul(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+#undef XI2XM_BINARY_DRIVER
 
-static XmRef xi2xm_div(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+#define XI2XM_UNARY_DRIVER(name, int_op, float_op)                                                 \
+    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
+        return lower_unary_with_ops(ctx, blk, v, int_op, float_op);                                \
+    }
 
-static XmRef xi2xm_mod(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+XI2XM_UNARY_DRIVER(neg, XM_NEG, XM_FNEG)
+XI2XM_UNARY_DRIVER(bnot, XM_NOT, XM_OP_COUNT)
 
-static XmRef xi2xm_neg(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_unary(ctx, blk, v);
-}
-
-static XmRef xi2xm_band(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
-
-static XmRef xi2xm_bor(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
-
-static XmRef xi2xm_bxor(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
-
-static XmRef xi2xm_bnot(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_unary(ctx, blk, v);
-}
+#undef XI2XM_UNARY_DRIVER
 
 static XmRef xi2xm_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_logical_not(ctx, blk, v);
@@ -1207,45 +1136,22 @@ static XmRef xi2xm_alloc_at(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return emit_helper_call(ctx, blk, XM_HELPER_rc_alloc_at, extra_ref, args, 1);
 }
 
-static XmRef xi2xm_shl(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+#define XI2XM_CMP_DRIVER(name, int_op, float_op, reverse, eq_like, ne_like)                        \
+    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
+        return lower_comparison_with_ops(ctx, blk, v, int_op, float_op, reverse, eq_like,          \
+                                         ne_like);                                                 \
+    }
 
-static XmRef xi2xm_shr(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_binary_arith(ctx, blk, v);
-}
+XI2XM_CMP_DRIVER(eq, XM_EQ, XM_FEQ, false, true, false)
+XI2XM_CMP_DRIVER(ne, XM_NE, XM_FNE, false, false, true)
+XI2XM_CMP_DRIVER(eq_strict, XM_EQ, XM_EQ, false, true, false)
+XI2XM_CMP_DRIVER(ne_strict, XM_NE, XM_NE, false, false, true)
+XI2XM_CMP_DRIVER(lt, XM_LT, XM_FLT, false, false, false)
+XI2XM_CMP_DRIVER(le, XM_LE, XM_FLE, false, false, false)
+XI2XM_CMP_DRIVER(gt, XM_LT, XM_FLT, true, false, false)
+XI2XM_CMP_DRIVER(ge, XM_LE, XM_FLE, true, false, false)
 
-static XmRef xi2xm_eq(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_ne(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_eq_strict(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_ne_strict(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_lt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_le(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_gt(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
-
-static XmRef xi2xm_ge(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_comparison(ctx, blk, v);
-}
+#undef XI2XM_CMP_DRIVER
 
 static XmRef xi2xm_zero_extend(LowerCtx *ctx, XmBlock *blk, XiValue *v, int64_t mask) {
     XmRef a = get_ref(ctx, v->args[0]);
