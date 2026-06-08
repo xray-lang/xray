@@ -74,7 +74,8 @@ if require_file tools/xisagen/xisagen.py &&
             src/ir/xi_emit_vm_gen.h \
             src/jit/xi_to_xm_dispatch_gen.h \
             src/aot/xi_to_c_dispatch_gen.h \
-            src/aot/xi_to_c_stmt_dispatch_gen.h
+            src/aot/xi_to_c_stmt_dispatch_gen.h \
+            tests/unit/ir/test_xi_lowering_gen.c
     fi
 fi
 

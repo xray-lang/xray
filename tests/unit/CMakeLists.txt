@@ -154,6 +154,7 @@ add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
 
 add_xray_unit_test(test_xi ir/test_xi.c)
 add_xray_unit_test(test_xi_lower ir/test_xi_lower.c)
+add_xray_unit_test(test_xi_lowering_gen ir/test_xi_lowering_gen.c)
 add_xray_unit_test(test_xi_opt ir/test_xi_opt.c)
 add_xray_unit_test(test_xi_analysis ir/test_xi_analysis.c)
 add_xray_unit_test(test_xi_cfg_edit ir/test_xi_cfg_edit.c)
