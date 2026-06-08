@@ -270,7 +270,8 @@ static inline uint32_t xi_lowering_generated_targets(uint16_t op) {
         case XI_BYTES_COPY_WITHIN: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_BYTES_COPY_FROM: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;
         case XI_BYTES_REPEAT_FROM: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;
-        case XI_OP_COUNT: break;
+        case XI_OP_COUNT: return 0;
+        default: return 0;
     }
     return 0;
 }
@@ -401,7 +402,8 @@ static inline uint32_t xi_lowering_required_targets(uint16_t op) {
         case XI_BYTES_COPY_WITHIN: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C;
         case XI_BYTES_COPY_FROM: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C;
         case XI_BYTES_REPEAT_FROM: return XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C;
-        case XI_OP_COUNT: break;
+        case XI_OP_COUNT: return 0;
+        default: return 0;
     }
     return 0;
 }
@@ -532,7 +534,8 @@ static inline uint32_t xi_lowering_rejected_targets(uint16_t op) {
         case XI_BYTES_COPY_WITHIN: return XI_LOWER_TARGET_JIT_XM;
         case XI_BYTES_COPY_FROM: return XI_LOWER_TARGET_JIT_XM;
         case XI_BYTES_REPEAT_FROM: return XI_LOWER_TARGET_JIT_XM;
-        case XI_OP_COUNT: break;
+        case XI_OP_COUNT: return 0;
+        default: return 0;
     }
     return 0;
 }
