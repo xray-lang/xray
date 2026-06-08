@@ -163,6 +163,7 @@
   :speculation safe
   :vn-kind pure
   :algebraic (commutative)
+  :negates-to xi.ne
   :effects ()
   :requires ()
   :observable ()
@@ -175,6 +176,7 @@
   :speculation safe
   :vn-kind pure
   :algebraic (commutative)
+  :negates-to xi.eq
   :effects ()
   :requires ()
   :observable ()
@@ -186,6 +188,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
+  :negates-to xi.ge
   :effects ()
   :requires ()
   :observable ()
@@ -197,6 +200,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
+  :negates-to xi.gt
   :effects ()
   :requires ()
   :observable ()
@@ -208,6 +212,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
+  :negates-to xi.le
   :effects ()
   :requires ()
   :observable ()
@@ -219,6 +224,7 @@
   :arity 2
   :speculation safe
   :vn-kind pure
+  :negates-to xi.lt
   :effects ()
   :requires ()
   :observable ()

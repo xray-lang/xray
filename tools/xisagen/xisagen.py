@@ -1604,6 +1604,7 @@ class XiOpDef:
     backend_rewrite: str
     backend_rewrite_name: Optional[str]
     escape_use: str
+    negated_op: Optional[str]
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1799,6 +1800,10 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if escape_use not in VALID_XI_ESCAPE_USES:
             die(f"{path}: Xi op '{name}' uses unknown escape-use "
                 f"'{escape_use}'")
+        negated_op = _xi_get_kw_str(form, ':negates-to')
+        if negated_op and not negated_op.startswith('xi.'):
+            die(f"{path}: Xi op '{name}' has invalid negates-to target "
+                f"'{negated_op}'")
         backend_rewrite, backend_rewrite_name = _xi_parse_backend_rewrite(
             _xi_get_kw_list(form, ':backend-rewrite'),
             f"{name}:backend-rewrite")
@@ -1818,7 +1823,22 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            tbaa_group=tbaa_group,
                            backend_rewrite=backend_rewrite,
                            backend_rewrite_name=backend_rewrite_name,
-                           escape_use=escape_use))
+                           escape_use=escape_use,
+                           negated_op=negated_op if negated_op else None))
+    op_by_name = {op.name: op for op in ops}
+    for op in ops:
+        if op.negated_op is None:
+            continue
+        target = op_by_name.get(op.negated_op)
+        if target is None:
+            die(f"{path}: Xi op '{op.name}' negates to unknown op "
+                f"'{op.negated_op}'")
+        if op.cls != 'comparison' or target.cls != 'comparison':
+            die(f"{path}: Xi op '{op.name}' negates-to must connect "
+                "comparison ops")
+        if target.negated_op != op.name:
+            die(f"{path}: Xi op '{op.name}' negates-to relation is not "
+                f"symmetric with '{target.name}'")
     return ops
 
 
@@ -1984,6 +2004,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t tbaa_group;')
     lines.append('    uint8_t backend_rewrite;')
     lines.append('    uint8_t escape_use;')
+    lines.append('    uint16_t negated_op;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t algebraic_traits;')
     lines.append('    uint32_t effects;')
@@ -2008,6 +2029,9 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         tbaa_group = f'XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)}'
         backend_rewrite = f'XI_GEN_BACKEND_REWRITE_{_xi_c_ident(op.backend_rewrite)}'
         escape_use = f'XI_GEN_ESCAPE_USE_{_xi_c_ident(op.escape_use)}'
+        negated_op = 'XI_OP_COUNT'
+        if op.negated_op is not None:
+            negated_op = f'XI_{_xi_op_ident(op.negated_op)}'
         backend_rewrite_name = (
             'NULL' if op.backend_rewrite_name is None else f'"{op.backend_rewrite_name}"')
         algebraic_traits = _xi_bit_expr('XI_GEN_ALGEBRAIC', op.algebraic)
@@ -2016,8 +2040,8 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
             f'{speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
-            f'{flags}, {algebraic_traits}, {effects}, {targets}, {backend_rewrite_name}, '
-            f'{native_type}, "{op.jit_policy}"){suffix}')
+            f'{negated_op}, {flags}, {algebraic_traits}, {effects}, {targets}, '
+            f'{backend_rewrite_name}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -2142,6 +2166,18 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_ESCAPE_USE_HEAP;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline XiOp xi_generated_op_negates_to(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        negated_op = 'XI_OP_COUNT'
+        if op.negated_op is not None:
+            negated_op = f'XI_{_xi_op_ident(op.negated_op)}'
+        lines.append(f'        case XI_{op.ident}: return {negated_op};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_OP_COUNT;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {')
@@ -7668,9 +7704,33 @@ def _test_xi_ops_parser():
       :targets (vm-bytecode jit-xm aot-verify)
       :backend-rewrite (builtin "iter_new")
       :jit-policy catch-up)
+    (define-xi-op xi.eq
+      :class comparison
+      :arity 2
+      :speculation safe
+      :vn-kind pure
+      :algebraic (commutative)
+      :negates-to xi.ne
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy catch-up)
+    (define-xi-op xi.ne
+      :class comparison
+      :arity 2
+      :speculation safe
+      :vn-kind pure
+      :algebraic (commutative)
+      :negates-to xi.eq
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy catch-up)
     '''
     ops = parse_xi_ops_def(text)
-    assert len(ops) == 5
+    assert len(ops) == 7
     assert ops[0].name == 'xi.add'
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
@@ -7690,6 +7750,8 @@ def _test_xi_ops_parser():
     assert ops[3].escape_use == 'heap'
     assert ops[4].backend_rewrite == 'builtin'
     assert ops[4].backend_rewrite_name == 'iter_new'
+    assert ops[5].negated_op == 'xi.ne'
+    assert ops[6].negated_op == 'xi.eq'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -7719,6 +7781,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_backend_legal' in header
     assert 'xi_generated_op_escape_use' in header
     assert 'case XI_STORE_FIELD: return XI_GEN_ESCAPE_USE_HEAP;' in header
+    assert 'xi_generated_op_negates_to' in header
+    assert 'case XI_EQ: return XI_NE;' in header
     assert 'xi_generated_op_algebraic_traits' in header
     assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_ASSOCIATIVE | XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
     assert 'xi_generated_op_default_flags' in header

@@ -99,6 +99,9 @@ static void test_optimization_traits(void) {
     ASSERT_TRUE(xi_op_is_associative(XI_BAND), "BAND is associative");
     ASSERT_TRUE(!xi_op_is_associative(XI_SUB), "SUB is not associative");
     ASSERT_TRUE(!xi_op_is_associative(XI_EQ), "EQ is not associative");
+    ASSERT_TRUE(xi_op_negated_comparison(XI_EQ) == XI_NE, "EQ negates to NE");
+    ASSERT_TRUE(xi_op_negated_comparison(XI_LT) == XI_GE, "LT negates to GE");
+    ASSERT_TRUE(xi_op_negated_comparison(XI_ADD) == XI_OP_COUNT, "ADD has no negated cmp");
 }
 
 static void test_speculation_traits(void) {
