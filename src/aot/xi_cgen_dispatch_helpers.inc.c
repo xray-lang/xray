@@ -587,22 +587,35 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_codegen_abort_expr(out);
 }
 
+static void xicgen_emit_print_expr(FILE *out, const XiValue *v) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
+    int flags = (int) v->aux_int;
+    bool add_space = (flags & 1) != 0;
+    bool newline = (flags & 2) != 0;
+    if (add_space)
+        fprintf(out, "(putchar(' '), ");
+    fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ")");
+    if (add_space)
+        fprintf(out, ")");
+}
+
+static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    xicgen_emit_print_expr(out, v);
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     (void) prefix;
     const char *bn = v->aux ? (const char *) v->aux : "";
 
     if (strcmp(bn, "print") == 0) {
-        int flags = (int) v->aux_int;
-        bool add_space = (flags & 1) != 0;
-        bool newline = (flags & 2) != 0;
-        if (add_space)
-            fprintf(out, "(putchar(' '), ");
-        fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ")");
-        if (add_space)
-            fprintf(out, ")");
+        xicgen_emit_print_expr(out, v);
     } else if (strcmp(bn, "str_concat") == 0) {
         emit_str_concat_expr(out, v);
     } else if (strcmp(bn, "array_new") == 0) {

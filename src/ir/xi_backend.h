@@ -14,10 +14,11 @@
  * Design principle: BACKEND ops are either:
  *   (a) Primitive (arithmetic, bitwise, comparison, control flow)
  *   (b) Explicit runtime dispatch (XI_CALL, XI_CALL_METHOD, XI_CALL_BUILTIN)
- *   (c) Structural (PHI, COPY, SELECT, BOX, UNBOX, CONVERT)
+ *   (c) Target-specific semantic ops with generated lowering drivers
+ *   (d) Structural (PHI, COPY, SELECT, BOX, UNBOX, CONVERT)
  *
- * High-level semantic ops (PRINT, ITER_*, ARRAY_NEW, STR_CONCAT, etc.)
- * are syntactic sugar that must be lowered to (b) before backend.
+ * Ops that cannot be lowered directly by every required target are
+ * rewritten before backend stage.
  */
 
 #ifndef XI_BACKEND_H
@@ -154,6 +155,7 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_COPY:
         case XI_ISNULL:
         case XI_MULTI_RET:
+        case XI_PRINT:
 
         /* OOP & scope */
         case XI_CLASS_CREATE:
@@ -199,7 +201,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
             return true;
 
         /* --- Non-legal (must be lowered before BACKEND) --- */
-        /* XI_PRINT         → XI_CALL_BUILTIN(print)          */
         /* XI_STR_CONCAT    → XI_CALL_BUILTIN(str_concat)     */
         /* XI_ARRAY_NEW     → XI_CALL_BUILTIN(array_new)      */
         /* XI_MAP_NEW       → XI_CALL_BUILTIN(map_new)        */

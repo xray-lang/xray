@@ -683,6 +683,7 @@
 (define-xi-op xi.print
   :class side-effect
   :arity variadic
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()

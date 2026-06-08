@@ -9,6 +9,9 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_backend.h"
+#include "../../../src/ir/xi_backend_lower.h"
+#include "../../../src/ir/xi_effect.h"
 #include "../../../src/ir/xi_pass.h"
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_pipeline.h"
@@ -181,6 +184,36 @@ static void test_verify_with_stage(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_lower_preserves_print(void) {
+    printf("--- test_backend_lower_preserves_print ---\n");
+
+    XiFunc *f = xi_func_new("backend_print_fn", &stub_void);
+    assert(f != NULL);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *arg = xi_const_int(f, entry, 1, &stub_int);
+    assert(arg != NULL);
+
+    XiValue *print = xi_value_new(f, entry, XI_PRINT, &stub_void, 1);
+    assert(print != NULL);
+    print->args[0] = arg;
+    print->flags = xi_op_default_effects(XI_PRINT);
+    print->aux_int = 2;
+
+    xi_backend_lower(f);
+
+    assert(f->stage == XI_STAGE_BACKEND);
+    assert(print->op == XI_PRINT);
+    assert(xi_op_is_backend_legal(print->op));
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Test 6: Stage monotonicity ========== */
 
 static void test_stage_monotonicity(void) {
@@ -254,6 +287,7 @@ int main(void) {
     test_stage_after_lowering();
     test_pass_desc_fields();
     test_verify_with_stage();
+    test_backend_lower_preserves_print();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

@@ -171,8 +171,7 @@ static bool cg_is_void_like(const XiValue *v) {
         case XI_CALL_BUILTIN:
             if (v->aux) {
                 const char *n = (const char *) v->aux;
-                if (strcmp(n, "print") == 0 || strcmp(n, "json_init_f") == 0 ||
-                    strcmp(n, "json_set_f") == 0)
+                if (strcmp(n, "json_init_f") == 0 || strcmp(n, "json_set_f") == 0)
                     return true;
             }
             return false;
