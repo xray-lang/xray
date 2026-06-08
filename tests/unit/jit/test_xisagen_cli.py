@@ -273,6 +273,7 @@ def main() -> int:
             out_root / "src/ir/xi_emit_vm_gen.h",
             out_root / "src/jit/xi_to_xm_dispatch_gen.h",
             out_root / "src/aot/xi_to_c_dispatch_gen.h",
+            out_root / "src/aot/xi_to_c_stmt_dispatch_gen.h",
         ]
         missing_outputs = [str(path) for path in expected_outputs if not path.exists()]
         if missing_outputs:

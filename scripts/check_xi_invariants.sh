@@ -197,7 +197,8 @@ if [ -f tools/xisagen/xisagen.py ] && [ -f xisa/xi/ops.def ] && [ -f xisa/xi/low
             src/ir/xi_lowering_coverage_gen.h \
             src/ir/xi_emit_vm_gen.h \
             src/jit/xi_to_xm_dispatch_gen.h \
-            src/aot/xi_to_c_dispatch_gen.h
+            src/aot/xi_to_c_dispatch_gen.h \
+            src/aot/xi_to_c_stmt_dispatch_gen.h
         do
             if ! diff -u "$rel" "$GEN_TMP/$rel" >/dev/null; then
                 GEN_DIFF="${GEN_DIFF}${rel}\n"

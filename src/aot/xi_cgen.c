@@ -21,6 +21,7 @@
 #include "xaot_abi_gen.h"
 #include "xaot_layout_gen.h"
 #include "xi_to_c_dispatch_gen.h"
+#include "xi_to_c_stmt_dispatch_gen.h"
 #include "../ir/xi_analysis.h"
 #include "../ir/xi_backend_lower.h"
 #include "../ir/xi_op_name.h"
@@ -828,53 +829,9 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     if (xi_to_c_emit_generated(ctx, out, f, v, prefix))
         return;
 
-    switch (v->op) {
-        /* ============ Exception Handling ============ */
-
-        /* TRY/END_TRY: handled structurally in emit_value_stmt */
-        case XI_TRY:
-        case XI_END_TRY:
-            fprintf(out, "XR_NULL_VAL");
-            break;
-
-        /* CATCH: destination receives caught exception from the frame.
-         * Find the matching XI_TRY to use the correct _efN. */
-        case XI_CATCH: {
-            uint32_t try_id = 0;
-            for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-                const XiBlock *blk2 = f->blocks[bi];
-                if (!blk2)
-                    continue;
-                for (uint32_t vi2 = 0; vi2 < blk2->nvalues; vi2++) {
-                    const XiValue *tv = blk2->values[vi2];
-                    if (tv && tv->op == XI_TRY)
-                        try_id = tv->id;
-                }
-            }
-            fprintf(out, "_ef%u.exception", try_id);
-            break;
-        }
-
-        /* Defer: no-op in emit_value_rhs — actual calls are emitted
-         * before RETURN terminators in emit_block(). */
-        case XI_DEFER:
-            fprintf(out, "XR_NULL_VAL");
-            break;
-
-        case XI_ERR_CHECK:
-            if (cg_rep(v) == XR_REP_I64)
-                fprintf(out, "0");
-            else
-                fprintf(out, "XR_NULL_VAL");
-            break;
-
-        default:
-            fprintf(stderr, "[xi_cgen] ERROR: unsupported Xi op %s (%d)\n", xi_op_name(v->op),
-                    v->op);
-            emit_codegen_abort_expr(out);
-            ctx->error = true;
-            break;
-    }
+    fprintf(stderr, "[xi_cgen] ERROR: unsupported Xi op %s (%d)\n", xi_op_name(v->op), v->op);
+    emit_codegen_abort_expr(out);
+    ctx->error = true;
 }
 
 static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
@@ -921,6 +878,8 @@ static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc 
     else
         fprintf(out, "0");
 }
+
+#include "xi_cgen_stmt_dispatch_helpers.inc.c"
 
 /* Emit a complete value statement: type vN = <rhs>; */
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1014,117 +973,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     }
 
-    /* XI_TRY: emit setjmp/longjmp exception frame setup.
-     * The exception frame must be declared at function scope so it
-     * survives across goto labels.  Use the value ID for uniqueness. */
-    if (v->op == XI_TRY) {
-        const XiBlock *catch_blk = (const XiBlock *) v->aux;
-        fprintf(out, "    XrtExcFrame _ef%u;\n", v->id);
-        fprintf(out, "    _ef%u.prev = xrt_exc_top;\n", v->id);
-        fprintf(out, "    xrt_exc_top = &_ef%u;\n", v->id);
-        if (catch_blk) {
-            fprintf(out,
-                    "    if (setjmp(_ef%u.buf) != 0) {"
-                    " xrt_exc_top = _ef%u.prev; goto L%u; }\n",
-                    v->id, v->id, catch_blk->id);
-        } else {
-            fprintf(out,
-                    "    if (setjmp(_ef%u.buf) != 0) {"
-                    " xrt_exc_top = _ef%u.prev; }\n",
-                    v->id, v->id);
-        }
+    if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
         return;
-    }
-
-    /* XI_END_TRY: pop the exception frame.
-     * Finds the matching XI_TRY by scanning earlier blocks. */
-    if (v->op == XI_END_TRY) {
-        /* Find the TRY value ID for the matching _efN variable */
-        uint32_t try_id = 0;
-        for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-            const XiBlock *blk = f->blocks[bi];
-            if (!blk)
-                continue;
-            for (uint32_t vi2 = 0; vi2 < blk->nvalues; vi2++) {
-                const XiValue *tv = blk->values[vi2];
-                if (tv && tv->op == XI_TRY)
-                    try_id = tv->id;
-            }
-        }
-        fprintf(out, "    xrt_exc_top = _ef%u.prev;\n", try_id);
-        return;
-    }
-
-    if (v->op == XI_ERR_SET) {
-        XR_DCHECK(v->nargs >= 1, "XI_ERR_SET: missing error value");
-        fprintf(out, "    xrt_pending_error = ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ";\n");
-        return;
-    }
-
-    if (v->op == XI_ERR_RETURN) {
-        XR_DCHECK(v->nargs >= 1, "XI_ERR_RETURN: missing error value");
-        fprintf(out, "    xrt_pending_error = ");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ";\n");
-        emit_class_field_cache_flush(ctx, out);
-        emit_deferred_calls(ctx, out, f, prefix);
-        fprintf(out, "    return ");
-        emit_default_return_for_abi(ctx, out, f);
-        fprintf(out, ";\n");
-        return;
-    }
-
-    if (v->op == XI_ERR_CHECK && cg_value_type_is_bool(v)) {
-        XrRep rep = cg_rep(v);
-        fprintf(out, "    ");
-        if (!ctx->pre_decl_all) {
-            fprintf(out, "%s ", ctype_str(rep));
-            emit_vref(out, v);
-            fprintf(out, " = ");
-        } else {
-            emit_vref(out, v);
-            fprintf(out, " = ");
-        }
-        if (rep == XR_REP_TAGGED)
-            fprintf(out, "XR_FROM_BOOL(xrt_has_pending_error());\n");
-        else
-            fprintf(out, "xrt_has_pending_error();\n");
-        return;
-    }
-
-    if (v->op == XI_ERR_CHECK && (cg_array_err_check_after_unchecked_fill_push(ctx, f, v) ||
-                                  cg_array_err_check_after_typed_push(ctx, f, v) ||
-                                  cg_array_err_check_after_inline_hof(ctx, f, prefix, v) ||
-                                  cg_class_native_err_check_after_nothrow_call(ctx, f, v)))
-        return;
-
-    if (v->op == XI_ERR_CHECK) {
-        fprintf(out, "    if (xrt_has_pending_error()) {\n");
-        emit_class_field_cache_flush(ctx, out);
-        emit_deferred_calls(ctx, out, f, prefix);
-        fprintf(out, "        return ");
-        emit_default_return_for_abi(ctx, out, f);
-        fprintf(out, ";\n");
-        fprintf(out, "    }\n");
-        return;
-    }
-
-    if (v->op == XI_ERR_CATCH) {
-        fprintf(out, "    ");
-        if (!ctx->pre_decl_all) {
-            fprintf(out, "%s ", ctype_str(cg_rep(v)));
-            emit_vref(out, v);
-            fprintf(out, " = ");
-        } else {
-            emit_vref(out, v);
-            fprintf(out, " = ");
-        }
-        fprintf(out, "xrt_pending_error;\n");
-        fprintf(out, "    xrt_pending_error = XR_NULL_VAL;\n");
-        return;
-    }
 
     if (emit_typed_array_map_inline_stmt(ctx, out, f, prefix, v) ||
         emit_typed_array_filter_inline_stmt(ctx, out, f, prefix, v))

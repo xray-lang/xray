@@ -1807,6 +1807,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
 
 VALID_XI_LOWERING_TARGETS = {
     'aot-c',
+    'aot-c-stmt',
     'aot-verify',
     'jit-xm',
     'vm-bytecode',
@@ -2010,6 +2011,10 @@ def write_xi_lowering_outputs(output_root: str, entries: list[XiLoweringDef]) ->
         ('src/aot/xi_to_c_dispatch_gen.h',
          generate_xi_target_dispatch_header(entries, 'aot-c', 'XI_TO_C_DISPATCH_GEN_H',
                                             'XI_TO_C_LOWERING_DRIVERS')),
+        ('src/aot/xi_to_c_stmt_dispatch_gen.h',
+         generate_xi_target_dispatch_header(entries, 'aot-c-stmt',
+                                            'XI_TO_C_STMT_DISPATCH_GEN_H',
+                                            'XI_TO_C_STMT_LOWERING_DRIVERS')),
     ]
     written = []
     for relpath, content in outputs:
@@ -7127,10 +7132,11 @@ def _test_xi_lowering_parser():
       :aot-c (driver xicgen_add))
     (lower xi.copy
       :match ()
-      :required-targets (vm-bytecode jit-xm aot-c)
+      :required-targets (vm-bytecode jit-xm aot-c aot-c-stmt)
       :vm-bytecode (driver xi_emit_copy)
       :jit-xm (reject xi2xm_copy_reject)
-      :aot-c (driver xicgen_copy))
+      :aot-c (driver xicgen_copy)
+      :aot-c-stmt (driver xicgen_stmt_copy))
     '''
     ops = parse_xi_ops_def(ops_text)
     entries = parse_xi_lowering_def(lowering_text, ops)
@@ -7139,6 +7145,7 @@ def _test_xi_lowering_parser():
     assert entries[0].targets == ['aot-c', 'jit-xm', 'vm-bytecode']
     assert entries[0].target_drivers['jit-xm'] == 'xi2xm_add'
     assert entries[1].target_rejects['jit-xm'] == 'xi2xm_copy_reject'
+    assert entries[1].target_drivers['aot-c-stmt'] == 'xicgen_stmt_copy'
     header = generate_xi_lowering_coverage_header(entries)
     assert 'XI_LOWERING_ENTRY_COUNT = 2' in header
     assert 'case XI_ADD: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;' in header
@@ -7149,6 +7156,9 @@ def _test_xi_lowering_parser():
     jit_header = generate_xi_target_dispatch_header(entries, 'jit-xm', 'TEST_JIT_H', 'TEST_JIT')
     assert 'X(ADD, "xi.add", xi2xm_add)' in jit_header
     assert 'X(COPY, "xi.copy", xi2xm_copy_reject)' in jit_header
+    stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
+                                                     'TEST_STMT')
+    assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header
     try:
         parse_xi_lowering_def('''
         (lower xi.add
