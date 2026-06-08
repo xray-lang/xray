@@ -146,4 +146,22 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
     return false;
 }
 
+static inline bool xi_emit_vm_uses_raw_cell_args(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_CLOSURE_NEW: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
+static inline bool xi_emit_vm_handles_cell_dst(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_CLOSURE_NEW: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
 #endif  /* XI_EMIT_VM_GEN_H */

@@ -137,7 +137,7 @@
 (lower xi.closure.new
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
-  :vm-bytecode (driver xi_emit_closure_new)
+  :vm-bytecode (driver xi_emit_closure_new :raw-cell-args yes :handles-cell-dst yes)
   :jit-xm (driver xi2xm_closure_new)
   :aot-c (driver xicgen_closure_new))
 
