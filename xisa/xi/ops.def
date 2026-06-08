@@ -615,7 +615,8 @@
   :requires ()
   :observable ()
   :targets (aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy verifier-only)
 
 (define-xi-op xi.closure.new
   :class allocation
@@ -934,7 +935,8 @@
   :requires ()
   :observable ()
   :targets (aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy verifier-only)
 
 (define-xi-op xi.isnull
   :class type
@@ -952,7 +954,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy special)
 
 (define-xi-op xi.select
   :class pure
@@ -1105,7 +1108,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.retain
   :class ownership
@@ -1180,7 +1184,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.vec.load
   :class vector
@@ -1189,7 +1194,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.vec.store
   :class vector
@@ -1198,7 +1204,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.vec.add
   :class vector
@@ -1207,7 +1214,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.vec.sub
   :class vector
@@ -1216,7 +1224,8 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
 
 (define-xi-op xi.vec.mul
   :class vector
@@ -1225,4 +1234,5 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
+  :jit-policy none
+  :lowering-policy pass-local)
