@@ -174,8 +174,11 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_ASSERT_NE:
         case XI_ASSERT_THROWS:
 
-        /* Json (XI_JSON_NEW/DECODE: aux carries field_names pointer) */
+        /* Json object and field ops */
         case XI_JSON_NEW:
+        case XI_JSON_INIT_F:
+        case XI_JSON_GET_F:
+        case XI_JSON_SET_F:
         case XI_JSON_DECODE:
 
         /* Builtin global load (aux carries name string) */
@@ -205,9 +208,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         /* XI_ARRAY_NEW     → XI_CALL_BUILTIN(array_new)      */
         /* XI_MAP_NEW       → XI_CALL_BUILTIN(map_new)        */
         /* XI_SET_NEW       → XI_CALL_BUILTIN(set_new)        */
-        /* XI_JSON_INIT_F   → XI_CALL_BUILTIN(json_init_f)    */
-        /* XI_JSON_GET_F    → XI_CALL_BUILTIN(json_get_f)     */
-        /* XI_JSON_SET_F    → XI_CALL_BUILTIN(json_set_f)     */
         /* XI_ITER_NEW      → XI_CALL_BUILTIN(iter_new)       */
         /* XI_ITER_NEXT     → XI_CALL_BUILTIN(iter_next)      */
         /* XI_ITER_VALID    → XI_CALL_BUILTIN(iter_valid)     */

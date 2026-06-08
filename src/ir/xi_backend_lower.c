@@ -55,18 +55,6 @@ static bool lower_value(XiValue *v) {
             rewrite_to_builtin(v, "set_new");
             break;
 
-        case XI_JSON_INIT_F:
-            rewrite_to_builtin(v, "json_init_f");
-            break;
-
-        case XI_JSON_GET_F:
-            rewrite_to_builtin(v, "json_get_f");
-            break;
-
-        case XI_JSON_SET_F:
-            rewrite_to_builtin(v, "json_set_f");
-            break;
-
         case XI_ITER_NEW:
             rewrite_to_builtin(v, "iter_new");
             break;
