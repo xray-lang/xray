@@ -238,6 +238,7 @@
 (define-xi-op xi.narrow.i8
   :class conversion
   :arity 1
+  :result-native-type i8
   :effects ()
   :requires ()
   :observable ()
@@ -247,6 +248,7 @@
 (define-xi-op xi.narrow.u8
   :class conversion
   :arity 1
+  :result-native-type u8
   :effects ()
   :requires ()
   :observable ()
@@ -256,6 +258,7 @@
 (define-xi-op xi.narrow.i16
   :class conversion
   :arity 1
+  :result-native-type i16
   :effects ()
   :requires ()
   :observable ()
@@ -265,6 +268,7 @@
 (define-xi-op xi.narrow.u16
   :class conversion
   :arity 1
+  :result-native-type u16
   :effects ()
   :requires ()
   :observable ()
@@ -274,6 +278,7 @@
 (define-xi-op xi.narrow.i32
   :class conversion
   :arity 1
+  :result-native-type i32
   :effects ()
   :requires ()
   :observable ()
@@ -283,6 +288,7 @@
 (define-xi-op xi.narrow.u32
   :class conversion
   :arity 1
+  :result-native-type u32
   :effects ()
   :requires ()
   :observable ()
@@ -292,6 +298,7 @@
 (define-xi-op xi.narrow.f32
   :class conversion
   :arity 1
+  :result-native-type f32
   :effects ()
   :requires ()
   :observable ()

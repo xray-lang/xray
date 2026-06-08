@@ -51,12 +51,37 @@ static uint16_t xi_narrow_op_for_native_type(uint8_t native_type) {
     }
 }
 
-static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
-                                                 uint8_t native_type) {
+static struct XrType *xi_lower_native_result_type(XiLower *l, struct XrType *fallback,
+                                                  uint8_t native_type) {
+    struct XrType *type = NULL;
+    if (!l || !l->isolate)
+        return fallback;
+    switch (native_type) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+            type = xr_type_new_int_width(l->isolate, native_type);
+            break;
+        case XR_NATIVE_F32:
+            type = xr_type_new_float_width(l->isolate, native_type);
+            break;
+        default:
+            return fallback;
+    }
+    return type ? type : fallback;
+}
+
+static XiValue *xi_lower_narrow_for_native_type(XiLower *l, AstNode *node, XiValue *val,
+                                                struct XrType *target_type, uint8_t native_type) {
     uint16_t narrow_op = xi_narrow_op_for_native_type(native_type);
     if (!narrow_op || !val)
         return val;
-    XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, val->type, 1);
+    struct XrType *result_type =
+        target_type ? target_type : xi_lower_native_result_type(l, val->type, native_type);
+    XiValue *n = xi_value_new(l->func, l->cur_block, narrow_op, result_type, 1);
     if (!n)
         return val;
     n->args[0] = val;
@@ -64,11 +89,16 @@ static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiVa
     return n;
 }
 
+static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
+                                                 uint8_t native_type) {
+    return xi_lower_narrow_for_native_type(l, node, val, NULL, native_type);
+}
+
 static XiValue *xi_lower_narrow_for_static_type(XiLower *l, AstNode *node, XiValue *val,
                                                 struct XrType *target_type) {
     if (!target_type || !val)
         return val;
-    return xi_lower_narrow_for_native_field(l, node, val, target_type->native_width);
+    return xi_lower_narrow_for_native_type(l, node, val, target_type, target_type->native_width);
 }
 
 static void xi_lower_narrow_map_method_args(XiLower *l, AstNode *node, const char *method,

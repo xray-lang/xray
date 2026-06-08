@@ -10,6 +10,7 @@
 #include "../../../src/ir/xi_lower.h"
 #include "../../../src/frontend/canonical/xcanon.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xstruct_layout.h"
 #include "../../../src/frontend/parser/xast_nodes.h"
 #include "../../../src/frontend/parser/xast_types.h"
 #include "../../../src/frontend/parser/xparse.h"
@@ -108,6 +109,26 @@ static int func_tree_has_op(XiFunc *f, uint16_t op) {
             return 1;
     }
     return 0;
+}
+
+static XiValue *func_tree_find_op(XiFunc *f, uint16_t op) {
+    if (!f)
+        return NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            if (blk->values[i] && blk->values[i]->op == op)
+                return blk->values[i];
+        }
+    }
+    for (uint16_t i = 0; i < f->nchildren; i++) {
+        XiValue *v = func_tree_find_op(f->children[i], op);
+        if (v)
+            return v;
+    }
+    return NULL;
 }
 
 static int func_tree_has_builtin_name(XiFunc *f, const char *name) {
@@ -854,6 +875,10 @@ TEST(struct_field_store_narrows_native_width) {
     assert(f != NULL);
     assert(func_tree_has_op(f, XI_NARROW_U8) &&
            "uint8 struct field writes should narrow before storage");
+    XiValue *narrow = func_tree_find_op(f, XI_NARROW_U8);
+    assert(narrow && narrow->type && narrow->type->kind == XR_KIND_INT &&
+           narrow->type->native_width == XR_NATIVE_U8 &&
+           "NARROW_U8 result type should carry the target native width");
     assert(func_tree_has_op(f, XI_STRUCT_SET) && "struct field writes should use STRUCT_SET");
     xi_func_free(f);
 }
