@@ -491,7 +491,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
             ctx->expected_type = saved_expected;
         }
     } else {
-        // Multi-value return: create tuple type
+        // Legacy AST multi-expression return is treated as a tuple type.
         XrType **element_types = xr_malloc(sizeof(XrType *) * ret->value_count);
         for (int i = 0; i < ret->value_count; i++) {
             if (ret->values[i]) {
@@ -500,7 +500,7 @@ void xa_visit_return_stmt(XaInferContext *ctx, AstNode *node) {
                 element_types[i] = xr_type_new_unknown(NULL);
             }
         }
-        // Create tuple type for multi-value return
+        // Create tuple type for the legacy AST shape.
         return_type = xr_type_new_tuple(ctx->analyzer->isolate, element_types, ret->value_count);
 
         // Store return type info in the analyzer side table.

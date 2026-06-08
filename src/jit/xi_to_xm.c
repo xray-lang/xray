@@ -1336,27 +1336,6 @@ static XmRef xi2xm_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_call(ctx, blk, v);
 }
 
-static XmRef xi2xm_extract(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    (void) blk;
-    XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
-    if (v->aux_int != 0) {
-        ctx->error = true;
-        return xm_const_i64(ctx->xm_func, 0);
-    }
-    return get_ref(ctx, v->args[0]);
-}
-
-static XmRef xi2xm_multi_ret(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    (void) blk;
-    if (v->nargs > 1) {
-        ctx->error = true;
-        return xm_const_i64(ctx->xm_func, 0);
-    }
-    if (v->nargs == 1)
-        return get_ref(ctx, v->args[0]);
-    return xm_const_i64(ctx->xm_func, 0);
-}
-
 static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }

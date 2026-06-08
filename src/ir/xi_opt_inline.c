@@ -18,7 +18,7 @@
  *      d. Replace callee RETURN blocks with JMP to continuation.
  *   4. Split caller's call_block at the call site.
  *   5. Wire: pre_call → callee_entry, callee_returns → continuation.
- *   6. Create phi in continuation for return value (if multiple returns).
+ *   6. Create phi in continuation when control-flow paths merge a return value.
  *
  * LIMITATIONS:
  *   - Single-level inlining per pass invocation (no recursive inlining).
@@ -192,12 +192,11 @@ static XiValue *clone_value(XiFunc *caller, XiBlock *dst_blk, const XiValue *src
     return cloned;
 }
 
-static bool callee_result_shape(const XiFunc *callee, bool *out_multi_ret, uint16_t *out_elems) {
-    if (!callee || !out_multi_ret || !out_elems)
+static bool callee_result_shape(const XiFunc *callee, uint16_t *out_elems) {
+    if (!callee || !out_elems)
         return false;
 
     bool seen_return = false;
-    bool multi_ret = false;
     uint16_t elems = 0;
 
     for (uint32_t b = 0; b < callee->nblocks; b++) {
@@ -206,46 +205,20 @@ static bool callee_result_shape(const XiFunc *callee, bool *out_multi_ret, uint1
             continue;
 
         const XiValue *ret = blk->control;
-        bool cur_multi_ret = ret && ret->op == XI_MULTI_RET;
         uint16_t cur_elems = ret ? 1 : 0;
-        if (cur_multi_ret)
-            cur_elems = ret->nargs;
 
         if (cur_elems > 16)
             return false;
         if (!seen_return) {
             seen_return = true;
-            multi_ret = cur_multi_ret;
             elems = cur_elems;
             continue;
         }
-        if (multi_ret != cur_multi_ret || elems != cur_elems)
+        if (elems != cur_elems)
             return false;
     }
 
-    *out_multi_ret = multi_ret;
     *out_elems = elems;
-    return true;
-}
-
-static bool call_extracts_fit_result_shape(const XiFunc *caller, const XiValue *call_val,
-                                           uint16_t nresult_elems) {
-    if (!caller || !call_val)
-        return false;
-
-    for (uint32_t b = 0; b < caller->nblocks; b++) {
-        const XiBlock *blk = caller->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            const XiValue *v = blk->values[i];
-            if (!v || v->op != XI_EXTRACT || v->nargs < 1 || v->args[0] != call_val)
-                continue;
-            if ((uint32_t) v->aux_int >= nresult_elems)
-                return false;
-        }
-    }
-
     return true;
 }
 
@@ -256,11 +229,8 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     if (callee->entry && callee->entry->npreds != 0)
         return false;
 
-    bool shape_multi_ret = false;
     uint16_t shape_elems = 0;
-    if (!callee_result_shape(callee, &shape_multi_ret, &shape_elems))
-        return false;
-    if (!call_extracts_fit_result_shape(caller, call_val, shape_elems))
+    if (!callee_result_shape(callee, &shape_elems))
         return false;
 
     uint32_t callee_max_id = callee->next_value_id;
@@ -453,9 +423,8 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
     for (uint32_t r = 0; r < nret; r++)
         xi_block_add_pred(cont_blk, ret_blocks[r]);
 
-    bool is_multi_ret = shape_multi_ret;
     uint16_t nresult_elems = shape_elems;
-    XR_DCHECK(nresult_elems <= 16, "inline: too many multi-return elements");
+    XR_DCHECK(nresult_elems <= 1, "inline: unexpected multi-result shape");
 
     /* Build per-element result values.
      * Single return block  → use value directly.
@@ -467,15 +436,15 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
         if (nret == 0) {
             results[ei] = NULL;
         } else if (nret == 1) {
-            results[ei] = is_multi_ret ? ret_values[0]->args[ei] : ret_values[0];
+            results[ei] = ret_values[0];
         } else {
             /* Multiple return paths: merge via phi in cont_blk. */
-            XiValue *first = is_multi_ret ? ret_values[0]->args[ei] : ret_values[0];
+            XiValue *first = ret_values[0];
             struct XrType *phi_type = first ? first->type : call_val->type;
             XiPhi *join = phi_type ? xi_phi_new(caller, cont_blk, phi_type, (uint16_t) nret) : NULL;
             if (join) {
                 for (uint32_t r = 0; r < nret; r++) {
-                    join->value.args[r] = is_multi_ret ? ret_values[r]->args[ei] : ret_values[r];
+                    join->value.args[r] = ret_values[r];
                 }
                 results[ei] = &join->value;
             } else {
@@ -484,31 +453,13 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
         }
     }
 
-    /* Replace uses of call_val and its XI_EXTRACT dependents.
-     *
-     * For multi-return: XI_EXTRACT(call_val, idx) → results[idx],
-     *                   direct uses of call_val   → results[0].
-     * For single-return: all uses of call_val     → results[0]. */
+    /* Replace uses of call_val with the inlined result. */
     for (uint32_t b = 0; b < caller->nblocks; b++) {
         XiBlock *blk = caller->blocks[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-
-            /* Rewrite XI_EXTRACT into XI_COPY forwarding the element value.
-             * DCE will clean up the now-redundant copy. */
-            if (v->op == XI_EXTRACT && v->nargs >= 1 && v->args[0] == call_val) {
-                uint32_t idx = (uint32_t) v->aux_int;
-                XiValue *elem = (idx < nresult_elems) ? results[idx] : NULL;
-                if (elem) {
-                    v->op = XI_COPY;
-                    v->args[0] = elem;
-                    v->nargs = 1;
-                    v->aux_int = 0;
-                }
-                continue;
-            }
 
             for (uint16_t a = 0; a < v->nargs; a++) {
                 if (v->args[a] == call_val && results[0])

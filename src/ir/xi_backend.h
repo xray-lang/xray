@@ -119,7 +119,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_CALL_METHOD_DIRECT:
         case XI_TAIL_CALL:
         case XI_CALL_BUILTIN:
-        case XI_EXTRACT:
 
         /* Closure & upvalue */
         case XI_CLOSURE_NEW:
@@ -160,7 +159,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_SELECT:
         case XI_COPY:
         case XI_ISNULL:
-        case XI_MULTI_RET:
         case XI_PRINT:
         case XI_TYPEOF:
         case XI_SLICE:

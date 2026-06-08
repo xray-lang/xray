@@ -614,7 +614,7 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :targets (aot-verify)
   :jit-policy catch-up)
 
 (define-xi-op xi.closure.new
@@ -933,7 +933,7 @@
   :effects ()
   :requires ()
   :observable ()
-  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :targets (aot-verify)
   :jit-policy catch-up)
 
 (define-xi-op xi.isnull

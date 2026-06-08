@@ -38,8 +38,6 @@
     X(CALL_METHOD, "xi.call.method", xi2xm_call) \
     X(CALL_METHOD_DIRECT, "xi.call.method.direct", xi2xm_call) \
     X(CALL_BUILTIN, "xi.call.builtin", xi2xm_call_builtin) \
-    X(EXTRACT, "xi.extract", xi2xm_extract) \
-    X(MULTI_RET, "xi.multi.ret", xi2xm_multi_ret) \
     X(THROW, "xi.throw", xi2xm_throw) \
     X(TRY, "xi.try", xi2xm_try) \
     X(CATCH, "xi.catch", xi2xm_catch) \
