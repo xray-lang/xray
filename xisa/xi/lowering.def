@@ -486,30 +486,35 @@
 
 (lower xi.bytes.load.u32.le
   :match ()
-  :required-targets (vm-bytecode aot-c)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_bytes_load_u32_le)
+  :jit-xm (reject xi2xm_reject_unsupported)
   :aot-c (driver xicgen_bytes_load_u32_le))
 
 (lower xi.bytes.load.u64.le
   :match ()
-  :required-targets (vm-bytecode aot-c)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_bytes_load_u64_le)
+  :jit-xm (reject xi2xm_reject_unsupported)
   :aot-c (driver xicgen_bytes_load_u64_le))
 
 (lower xi.bytes.copy.within
   :match ()
-  :required-targets (vm-bytecode aot-c)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_bytes_copy_within)
+  :jit-xm (reject xi2xm_reject_unsupported)
   :aot-c (driver xicgen_bytes_copy_within))
 
 (lower xi.bytes.copy.from
   :match ()
-  :required-targets (vm-bytecode aot-c)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_bytes_copy_from)
+  :jit-xm (reject xi2xm_reject_unsupported)
   :aot-c (driver xicgen_bytes_copy_from))
 
 (lower xi.bytes.repeat.from
   :match ()
-  :required-targets (vm-bytecode aot-c)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_bytes_repeat_from)
+  :jit-xm (reject xi2xm_reject_unsupported)
   :aot-c (driver xicgen_bytes_repeat_from))
