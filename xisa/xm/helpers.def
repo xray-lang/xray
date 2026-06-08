@@ -116,6 +116,8 @@ XM_HELPER(rt_map_new,          0, PTR,    GC|STACKMAP,                          
 XM_HELPER(newrange,            0, PTR,    GC|STACKMAP,                              GC,   NONE)
 XM_HELPER(range_unpack,        0, VOID,   NONE,                                     NONE, NONE)
 XM_HELPER(newset,              0, PTR,    GC|STACKMAP,                              GC,   NONE)
+XM_HELPER(tuple_new,           0, PTR,    GC|STACKMAP,                              GC,   NONE)
+XM_HELPER(tuple_get,           1, TAGGED, NONE,                                     GC,   NONE)
 XM_HELPER(slice,               0, PTR,    GC|STACKMAP,                              GC,   NONE)
 XM_HELPER(bytes_new,           0, PTR,    GC|STACKMAP,                              GC,   NONE)
 

@@ -111,6 +111,8 @@
     X(STRUCT_SET, "xi.struct.set", xi2xm_reject_unsupported) \
     X(SCOPE_ENTER, "xi.scope.enter", xi2xm_reject_unsupported) \
     X(SCOPE_EXIT, "xi.scope.exit", xi2xm_reject_unsupported) \
+    X(TUPLE_NEW, "xi.tuple.new", xi2xm_tuple_new) \
+    X(TUPLE_GET, "xi.tuple.get", xi2xm_tuple_get) \
     X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xi2xm_reject_unsupported) \
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xi2xm_reject_unsupported) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xi2xm_reject_unsupported) \

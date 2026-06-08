@@ -43,6 +43,7 @@
 /* ========== Lowering Context ========== */
 
 #define XI2XM_MAX_TRY_DEPTH 8
+#define XI2XM_MAX_HELPER_CALL_ARGS 15
 
 typedef struct {
     XiFunc *xi_func;
@@ -1357,6 +1358,33 @@ static XmRef xi2xm_map_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 static XmRef xi2xm_set_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XmRef cap = (v->nargs >= 1) ? get_ref(ctx, v->args[0]) : xm_const_i64(ctx->xm_func, 0);
     return xm_emit_unary(ctx->xm_func, blk, XM_RT_MAP_NEW, XR_REP_I64, cap);
+}
+
+static XmRef xi2xm_tuple_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (v->nargs > XI2XM_MAX_HELPER_CALL_ARGS) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+
+    XmRef args[XI2XM_MAX_HELPER_CALL_ARGS];
+    for (uint16_t i = 0; i < v->nargs; i++)
+        args[i] = get_ref(ctx, v->args[i]);
+
+    XmRef arity = xm_const_i64(ctx->xm_func, (int64_t) v->nargs);
+    return emit_helper_call(ctx, blk, XM_HELPER_tuple_new, arity, args, v->nargs);
+}
+
+static XmRef xi2xm_tuple_get(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XR_DCHECK(v->nargs == 1, "tuple_get: expected tuple arg");
+    if (v->aux_int < 0 || v->aux_int > UINT16_MAX) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+
+    XmRef tuple = get_ref(ctx, v->args[0]);
+    XmRef index = xm_const_i64(ctx->xm_func, v->aux_int);
+    XmRef args[1] = {tuple};
+    return emit_helper_call(ctx, blk, XM_HELPER_tuple_get, index, args, 1);
 }
 
 static XmRef xi2xm_str_concat(LowerCtx *ctx, XmBlock *blk, XiValue *v) {

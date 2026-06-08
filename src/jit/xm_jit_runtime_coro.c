@@ -28,6 +28,7 @@
 #include "../runtime/object/xjson.h"
 #include "../runtime/object/xrange.h"
 #include "../runtime/object/xset.h"
+#include "../runtime/object/xtuple.h"
 #include "../runtime/object/xexception.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/class/xclass.h"
@@ -838,6 +839,37 @@ XrJitResult xr_jit_rt_map_new(XrCoroutine *coro, int64_t capacity) {
     (void) capacity;
     XrMap *map = xr_map_new(coro);
     return XR_JIT_PTR(map);
+}
+
+// Called from JIT via CALL_C for xi.tuple.new.
+// call_args[0..arity-1] = element payloads.
+XrJitResult xr_jit_tuple_new(XrCoroutine *coro, int64_t arity) {
+    if (!coro || arity < 0 || arity > 15)
+        return XR_JIT_NULL();
+
+    XrValue values[15];
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    for (int64_t i = 0; i < arity; i++) {
+        values[i] = jit_value_from_tag(scratch->call_args[i], scratch->call_arg_tags[i]);
+    }
+
+    XrTuple *tuple = xr_tuple_from_values(coro, values, (uint16_t) arity);
+    return XR_JIT_PTR(tuple);
+}
+
+// Called from JIT via CALL_C for xi.tuple.get.
+// call_args[0] = tuple payload.
+XrJitResult xr_jit_tuple_get(XrCoroutine *coro, int64_t index) {
+    if (!coro || index < 0 || index > UINT16_MAX)
+        return XR_JIT_NULL();
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    XrValue tuple_value = jit_value_from_tag(scratch->call_args[0], scratch->call_arg_tags[0]);
+    if (!xr_value_is_tuple(tuple_value))
+        return XR_JIT_NULL();
+
+    XrValue result = xr_tuple_get((XrTuple *) XR_TO_PTR(tuple_value), (uint16_t) index);
+    return XR_JIT_VAL(result);
 }
 
 // Called from JIT via CALL_C for polymorphic OP_ADD.
