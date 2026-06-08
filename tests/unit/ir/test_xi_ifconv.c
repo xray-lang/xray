@@ -212,6 +212,26 @@ TEST(rejects_side_effect_arm) {
     xi_func_free(f);
 }
 
+/* ========== Test: zero-effect op without speculation policy is rejected ========== */
+
+TEST(rejects_unspeculatable_zero_effect_arm) {
+    XiFunc *f = make_func();
+    XiBlock *entry, *then_b, *else_b, *join;
+    XiPhi *phi;
+    XiValue *cond, *tv, *ev;
+    build_diamond(f, &entry, &then_b, &else_b, &join, &phi, &cond, &tv, &ev);
+
+    tv->op = XI_EQ_STRICT;
+
+    XiPassChange chg = xi_opt_ifconv(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(entry->kind == XI_BLOCK_IF);
+    ASSERT(then_b->kind == XI_BLOCK_PLAIN);
+    ASSERT(join->phis == phi);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: join with a third predecessor is rejected ========== */
 
 TEST(rejects_three_pred_join) {
@@ -266,6 +286,7 @@ int main(void) {
     run_basic_diamond();
     run_rejects_oversized_arm();
     run_rejects_side_effect_arm();
+    run_rejects_unspeculatable_zero_effect_arm();
     run_rejects_three_pred_join();
     run_no_phi_no_change();
 

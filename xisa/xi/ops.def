@@ -4,6 +4,7 @@
 (define-xi-op xi.const
   :class constant
   :arity 0
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -22,6 +23,7 @@
 (define-xi-op xi.add
   :class arithmetic
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -31,6 +33,7 @@
 (define-xi-op xi.sub
   :class arithmetic
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -40,6 +43,7 @@
 (define-xi-op xi.mul
   :class arithmetic
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -49,6 +53,7 @@
 (define-xi-op xi.div
   :class arithmetic
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -58,6 +63,7 @@
 (define-xi-op xi.mod
   :class arithmetic
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -67,6 +73,7 @@
 (define-xi-op xi.neg
   :class arithmetic
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -76,6 +83,7 @@
 (define-xi-op xi.band
   :class bitwise
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -85,6 +93,7 @@
 (define-xi-op xi.bor
   :class bitwise
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -94,6 +103,7 @@
 (define-xi-op xi.bxor
   :class bitwise
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -103,6 +113,7 @@
 (define-xi-op xi.bnot
   :class bitwise
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -112,6 +123,7 @@
 (define-xi-op xi.shl
   :class bitwise
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -121,6 +133,7 @@
 (define-xi-op xi.shr
   :class bitwise
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -130,6 +143,7 @@
 (define-xi-op xi.eq
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -139,6 +153,7 @@
 (define-xi-op xi.ne
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -148,6 +163,7 @@
 (define-xi-op xi.lt
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -157,6 +173,7 @@
 (define-xi-op xi.le
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -166,6 +183,7 @@
 (define-xi-op xi.gt
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -175,6 +193,7 @@
 (define-xi-op xi.ge
   :class comparison
   :arity 2
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -202,6 +221,7 @@
 (define-xi-op xi.not
   :class type
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -211,6 +231,7 @@
 (define-xi-op xi.convert
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -220,6 +241,7 @@
 (define-xi-op xi.box
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -229,6 +251,7 @@
 (define-xi-op xi.unbox
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -239,6 +262,7 @@
   :class conversion
   :arity 1
   :result-native-type i8
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -249,6 +273,7 @@
   :class conversion
   :arity 1
   :result-native-type u8
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -259,6 +284,7 @@
   :class conversion
   :arity 1
   :result-native-type i16
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -269,6 +295,7 @@
   :class conversion
   :arity 1
   :result-native-type u16
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -279,6 +306,7 @@
   :class conversion
   :arity 1
   :result-native-type i32
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -289,6 +317,7 @@
   :class conversion
   :arity 1
   :result-native-type u32
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -299,6 +328,7 @@
   :class conversion
   :arity 1
   :result-native-type f32
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -308,6 +338,7 @@
 (define-xi-op xi.widen.i8
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -317,6 +348,7 @@
 (define-xi-op xi.widen.u8
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -326,6 +358,7 @@
 (define-xi-op xi.widen.i16
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -335,6 +368,7 @@
 (define-xi-op xi.widen.u16
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -344,6 +378,7 @@
 (define-xi-op xi.widen.i32
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -353,6 +388,7 @@
 (define-xi-op xi.widen.u32
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -362,6 +398,7 @@
 (define-xi-op xi.widen.f32
   :class conversion
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -941,6 +978,7 @@
 (define-xi-op xi.isnull
   :class type
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -960,6 +998,7 @@
 (define-xi-op xi.select
   :class pure
   :arity 3
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()
@@ -969,6 +1008,7 @@
 (define-xi-op xi.copy
   :class pure
   :arity 1
+  :speculation safe
   :effects ()
   :requires ()
   :observable ()

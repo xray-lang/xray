@@ -1502,6 +1502,11 @@ VALID_XI_LOWERING_POLICIES = {
     'verifier-only',
 }
 
+VALID_XI_SPECULATION_POLICIES = {
+    'never',
+    'safe',
+}
+
 VALID_XI_RESULT_NATIVE_TYPES = {
     'i8',
     'u8',
@@ -1553,6 +1558,7 @@ class XiOpDef:
     result_native_type: str
     jit_policy: str
     lowering_policy: str
+    speculation: str
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1711,13 +1717,18 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if lowering_policy not in VALID_XI_LOWERING_POLICIES:
             die(f"{path}: Xi op '{name}' uses unknown lowering policy "
                 f"'{lowering_policy}'")
+        speculation = _xi_get_kw_str(form, ':speculation', 'never')
+        if speculation not in VALID_XI_SPECULATION_POLICIES:
+            die(f"{path}: Xi op '{name}' uses unknown speculation policy "
+                f"'{speculation}'")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
                            result_kind=result_kind,
                            result_native_type=result_native_type,
                            jit_policy=jit_policy,
-                           lowering_policy=lowering_policy))
+                           lowering_policy=lowering_policy,
+                           speculation=speculation))
     return ops
 
 
@@ -1801,6 +1812,14 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_LOWERING__COUNT')
     lines.append('} XiGeneratedLoweringPolicy;')
     lines.append('')
+    lines.append('/* ========== Speculation Policies ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_SPECULATION_NEVER = 0,')
+    lines.append('    XI_GEN_SPECULATION_SAFE = 1,')
+    lines.append('    XI_GEN_SPECULATION__COUNT')
+    lines.append('} XiGeneratedSpeculationPolicy;')
+    lines.append('')
     lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
     lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
     lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
@@ -1817,6 +1836,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t result_count;')
     lines.append('    uint8_t result_kind;')
     lines.append('    uint8_t lowering_policy;')
+    lines.append('    uint8_t speculation;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t effects;')
     lines.append('    uint32_t targets;')
@@ -1834,11 +1854,13 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         native_type = 'NULL' if op.result_native_type == 'none' else f'"{op.result_native_type}"'
         result_kind = f'XI_GEN_RESULT_{_xi_c_ident(op.result_kind)}'
         lowering_policy = f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)}'
+        speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
-            f'{flags}, {effects}, {targets}, {native_type}, "{op.jit_policy}"){suffix}')
+            f'{speculation}, {flags}, {effects}, {targets}, {native_type}, '
+            f'"{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -1899,6 +1921,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_LOWERING__COUNT;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_speculation(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return '
+                     f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_SPECULATION_NEVER;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint8_t xi_generated_op_default_flags(uint16_t op) {')
@@ -7366,6 +7398,7 @@ def _test_xi_ops_parser():
       :class pure
       :operands ((value $lhs :type int) (value $rhs :type int))
       :results ((value $result :type int))
+      :speculation safe
       :effects ()
       :requires (same-numeric-type)
       :observable (integer-wrap)
@@ -7407,6 +7440,7 @@ def _test_xi_ops_parser():
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
     assert ops[0].operands[0].attrs['type'] == 'int'
+    assert ops[0].speculation == 'safe'
     assert ops[1].ident == 'MEM_LOAD'
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
@@ -7428,6 +7462,9 @@ def _test_xi_ops_parser():
     assert 'case XI_NARROW_I8: return "i8";' in header
     assert 'xi_generated_op_lowering_policy' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_LOWERING_PASS_LOCAL;' in header
+    assert 'xi_generated_op_speculation' in header
+    assert 'case XI_ADD: return XI_GEN_SPECULATION_SAFE;' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_SPECULATION_NEVER;' in header
     assert 'xi_generated_op_default_flags' in header
     assert 'xi_generated_op_effects' in header
     assert 'case XI_MEM_LOAD: return XI_EFFECT_MEMORY_READ | XI_EFFECT_MAY_THROW;' in header
