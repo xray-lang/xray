@@ -33,7 +33,8 @@ Options:
   -h, --help         Show this help
 
 Default mode reports current distance from the target without failing on
-performance or generated-code shape.  Build, run, and output mismatches still
+performance or generated-code shape.  With --gate, ratio and generated-code
+shape expectations fail immediately.  Build, run, and output mismatches still
 fail.
 EOF
 }
@@ -275,10 +276,20 @@ while IFS= read -r xr_file; do
         continue
     fi
 
+    audit_args=()
+    if $GATE; then
+        audit_args+=(--strict)
+    fi
     if [ -f "$expect_file" ]; then
-        "$REPO_ROOT/scripts/check_aot_codegen_invariants.sh" --expect "$expect_file" "$gen_c" > "$audit_out"
-    else
-        "$REPO_ROOT/scripts/check_aot_codegen_invariants.sh" "$gen_c" > "$audit_out"
+        audit_args+=(--expect "$expect_file")
+    fi
+    "$REPO_ROOT/scripts/check_aot_codegen_invariants.sh" "${audit_args[@]}" "$gen_c" > "$audit_out"
+    audit_rc=$?
+    if [ "$audit_rc" -ne 0 ]; then
+        echo "FAIL: AOT generated-code audit failed"
+        grep '^expectation_failure=' "$audit_out" | sed 's/^/  /' || true
+        FAIL=$((FAIL + 1))
+        continue
     fi
 
     c_times=()
