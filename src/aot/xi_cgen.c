@@ -62,23 +62,11 @@ static const char *cg_native_int_ctype(uint8_t native_width) {
     return xaot_c_type_for_native_int_type(native_width);
 }
 
-static uint8_t cg_narrow_int_native_width(uint16_t op) {
-    switch (op) {
-        case XI_NARROW_I8:
-            return XR_NATIVE_I8;
-        case XI_NARROW_U8:
-            return XR_NATIVE_U8;
-        case XI_NARROW_I16:
-            return XR_NATIVE_I16;
-        case XI_NARROW_U16:
-            return XR_NATIVE_U16;
-        case XI_NARROW_I32:
-            return XR_NATIVE_I32;
-        case XI_NARROW_U32:
-            return XR_NATIVE_U32;
-        default:
-            return 0;
-    }
+static uint8_t cg_narrow_int_native_width(const XiValue *v) {
+    if (!v || !xi_generated_op_result_native_type(v->op) || !v->type ||
+        v->type->kind != XR_KIND_INT || v->type->native_width == 0)
+        return 0;
+    return v->type->native_width;
 }
 
 static bool cg_const_int_fits_native_width(int64_t value, uint8_t native_width) {
@@ -90,7 +78,7 @@ static bool cg_value_narrow_local_native_width(const XiValue *v, uint8_t depth,
     if (!v || cg_rep(v) != XR_REP_I64 || depth > 8)
         return false;
 
-    uint8_t op_width = cg_narrow_int_native_width(v->op);
+    uint8_t op_width = cg_narrow_int_native_width(v);
     if (op_width != 0) {
         if (out_native_width)
             *out_native_width = op_width;
