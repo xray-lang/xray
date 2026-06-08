@@ -143,6 +143,15 @@ TEST(ic_kind_helpers) {
     ASSERT(!xi_ic_is_mega(&mono));
 }
 
+TEST(generated_ic_site_policy) {
+    ASSERT(xi_ic_site_kind(XI_CALL_METHOD) == XI_GEN_IC_SITE_METHOD);
+    ASSERT(xi_ic_site_kind(XI_CALL_METHOD_DIRECT) == XI_GEN_IC_SITE_METHOD);
+    ASSERT(xi_ic_site_kind(XI_LOAD_FIELD) == XI_GEN_IC_SITE_FIELD);
+    ASSERT(xi_ic_site_kind(XI_STORE_FIELD) == XI_GEN_IC_SITE_FIELD);
+    ASSERT(xi_ic_site_kind(XI_CALL) == XI_GEN_IC_SITE_NONE);
+    ASSERT(xi_ic_site_kind(XI_OP_COUNT) == XI_GEN_IC_SITE_NONE);
+}
+
 /* ========== Verifier Integration ========== */
 
 TEST(verifier_rejects_ic_bit_without_table) {
@@ -188,6 +197,7 @@ int main(void) {
     run_table_free_null_safe();
     run_reattach_replaces_table();
     run_ic_kind_helpers();
+    run_generated_ic_site_policy();
     run_verifier_rejects_ic_bit_without_table();
     run_verifier_accepts_ic_bit_with_table();
 

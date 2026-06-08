@@ -82,14 +82,6 @@ static XiIcKind classify_field_ic(const XrICField *ic) {
 
 /* ========== Attach Pass ========== */
 
-static bool is_method_call_site(uint16_t op) {
-    return op == XI_CALL_METHOD || op == XI_CALL_METHOD_DIRECT;
-}
-
-static bool is_field_access_site(uint16_t op) {
-    return op == XI_LOAD_FIELD || op == XI_STORE_FIELD;
-}
-
 static void attach_method_ic(XiIcTable *table, const XiValue *v,
                              const XrICMethodTable *ic_methods) {
     if (!ic_methods)
@@ -178,9 +170,10 @@ XR_FUNC bool xi_ic_attach(XiFunc *f, struct XrICFieldTable *ic_fields,
             XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            if (is_method_call_site(v->op))
+            uint8_t ic_site = xi_ic_site_kind(v->op);
+            if (ic_site == XI_GEN_IC_SITE_METHOD)
                 attach_method_ic(table, v, ic_methods);
-            else if (is_field_access_site(v->op))
+            else if (ic_site == XI_GEN_IC_SITE_FIELD)
                 attach_field_ic(table, v, ic_fields);
         }
     }

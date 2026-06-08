@@ -1585,6 +1585,12 @@ VALID_XI_OWN_USES = {
     'stored-value',
 }
 
+VALID_XI_IC_SITES = {
+    'field',
+    'method',
+    'none',
+}
+
 
 @dataclass
 class XiOperandDef:
@@ -1626,6 +1632,7 @@ class XiOpDef:
     escape_use: str
     escape_alloc: str
     own_use: str
+    ic_site: str
     negated_op: Optional[str]
 
 
@@ -1834,6 +1841,10 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if own_use not in VALID_XI_OWN_USES:
             die(f"{path}: Xi op '{name}' uses unknown own-use "
                 f"'{own_use}'")
+        ic_site = _xi_get_kw_str(form, ':ic-site', 'none')
+        if ic_site not in VALID_XI_IC_SITES:
+            die(f"{path}: Xi op '{name}' uses unknown ic-site "
+                f"'{ic_site}'")
         negated_op = _xi_get_kw_str(form, ':negates-to')
         if negated_op and not negated_op.startswith('xi.'):
             die(f"{path}: Xi op '{name}' has invalid negates-to target "
@@ -1861,6 +1872,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            escape_use=escape_use,
                            escape_alloc=escape_alloc,
                            own_use=own_use,
+                           ic_site=ic_site,
                            negated_op=negated_op if negated_op else None))
     op_by_name = {op.name: op for op in ops}
     for op in ops:
@@ -2042,6 +2054,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_OWN_USE__COUNT')
     lines.append('} XiGeneratedOwnUse;')
     lines.append('')
+    lines.append('/* ========== Inline Cache Site Policies ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_IC_SITE_NONE = 0,')
+    lines.append('    XI_GEN_IC_SITE_METHOD = 1,')
+    lines.append('    XI_GEN_IC_SITE_FIELD = 2,')
+    lines.append('    XI_GEN_IC_SITE__COUNT')
+    lines.append('} XiGeneratedIcSite;')
+    lines.append('')
     lines.append('/* ========== Algebraic Trait Flags ========== */')
     lines.append('')
     lines.append('#define XI_GEN_ALGEBRAIC_NONE 0')
@@ -2072,6 +2093,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t escape_use;')
     lines.append('    uint8_t escape_alloc;')
     lines.append('    uint8_t own_use;')
+    lines.append('    uint8_t ic_site;')
     lines.append('    uint16_t negated_op;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t algebraic_traits;')
@@ -2100,6 +2122,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         escape_use = f'XI_GEN_ESCAPE_USE_{_xi_c_ident(op.escape_use)}'
         escape_alloc = f'XI_GEN_ESCAPE_ALLOC_{_xi_c_ident(op.escape_alloc)}'
         own_use = f'XI_GEN_OWN_USE_{_xi_c_ident(op.own_use)}'
+        ic_site = f'XI_GEN_IC_SITE_{_xi_c_ident(op.ic_site)}'
         negated_op = 'XI_OP_COUNT'
         if op.negated_op is not None:
             negated_op = f'XI_{_xi_op_ident(op.negated_op)}'
@@ -2111,7 +2134,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {result_ownership}, '
             f'{lowering_policy}, {speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
-            f'{escape_alloc}, {own_use}, {negated_op}, {flags}, {algebraic_traits}, {effects}, '
+            f'{escape_alloc}, {own_use}, {ic_site}, {negated_op}, {flags}, {algebraic_traits}, {effects}, '
             f'{targets}, {backend_rewrite_name}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
@@ -2266,6 +2289,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_OWN_USE_CONSUME;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_ic_site(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_IC_SITE_{_xi_c_ident(op.ic_site)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_IC_SITE_NONE;')
     lines.append('}')
     lines.append('')
     lines.append('static inline XiOp xi_generated_op_negates_to(uint16_t op) {')
@@ -7795,6 +7827,7 @@ def _test_xi_ops_parser():
       :tbaa-group field
       :escape-use heap
       :own-use stored-value
+      :ic-site field
       :requires ()
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
@@ -7867,6 +7900,7 @@ def _test_xi_ops_parser():
     assert ops[3].tbaa_group == 'field'
     assert ops[3].escape_use == 'heap'
     assert ops[3].own_use == 'stored-value'
+    assert ops[3].ic_site == 'field'
     assert ops[4].backend_rewrite == 'builtin'
     assert ops[4].backend_rewrite_name == 'iter_new'
     assert ops[5].negated_op == 'xi.ne'
@@ -7909,6 +7943,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_own_use' in header
     assert 'case XI_ADD: return XI_GEN_OWN_USE_BORROW;' in header
     assert 'case XI_STORE_FIELD: return XI_GEN_OWN_USE_STORED_VALUE;' in header
+    assert 'xi_generated_op_ic_site' in header
+    assert 'case XI_STORE_FIELD: return XI_GEN_IC_SITE_FIELD;' in header
     assert 'xi_generated_op_negates_to' in header
     assert 'case XI_EQ: return XI_NE;' in header
     assert 'xi_generated_op_algebraic_traits' in header

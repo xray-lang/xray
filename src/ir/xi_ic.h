@@ -13,8 +13,9 @@
  *   can query call-site type profiles.
  *
  *   The metadata is attached as a side table on XiFunc, keyed by
- *   value ID.  Only call-site ops (XI_CALL_METHOD, XI_LOAD_FIELD,
- *   XI_STORE_FIELD) carry meaningful IC entries.
+ *   value ID.  Only call-site ops (XI_CALL_METHOD,
+ *   XI_CALL_METHOD_DIRECT, XI_LOAD_FIELD, XI_STORE_FIELD) carry
+ *   meaningful IC entries.
  *
  * LIFECYCLE:
  *   xi_ic_attach() reads IC snapshots and populates func->ic_table.
@@ -30,6 +31,7 @@
 #define XI_IC_H
 
 #include "xi.h"
+#include "xi_ops_gen.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -90,6 +92,10 @@ XR_FUNC const XiIcMeta *xi_ic_lookup(const XiFunc *f, uint32_t value_id);
 XR_FUNC void xi_ic_table_free(XiIcTable *table);
 
 /* Query helpers for speculative passes. */
+static inline uint8_t xi_ic_site_kind(uint16_t op) {
+    return xi_generated_op_ic_site(op);
+}
+
 static inline bool xi_ic_is_mono(const XiIcMeta *meta) {
     return meta && meta->kind == XI_IC_MONO;
 }
