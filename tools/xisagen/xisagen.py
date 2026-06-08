@@ -1975,6 +1975,19 @@ def _xi_validate_lowering_policy(entries: list[XiLoweringDef], ops: list[XiOpDef
         if op.lowering_policy != 'generated':
             die(f"{path}: Xi op '{entry.op_name}' has lowering-policy "
                 f"'{op.lowering_policy}' but also has a lowering entry")
+    for entry in entries:
+        op = op_by_name[entry.op_name]
+        op_targets = {target for target in op.targets if target != 'aot-verify'}
+        lowering_targets = {
+            'aot-c' if target == 'aot-c-stmt' else target
+            for target in entry.targets
+            if target != 'aot-verify'
+        }
+        if op_targets != lowering_targets:
+            expected = ', '.join(sorted(op_targets)) if op_targets else 'none'
+            actual = ', '.join(sorted(lowering_targets)) if lowering_targets else 'none'
+            die(f"{path}: lowering '{entry.op_name}' target mismatch with ops.def: "
+                f"expected {expected}, got {actual}")
 
 
 def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') -> list[XiLoweringDef]:
@@ -7414,6 +7427,27 @@ def _test_xi_lowering_parser():
           :vm-bytecode (driver xi_emit_phi))
         ''', ops)
         assert False, "special lowering policy should reject normal lowering entries"
+    except SystemExit:
+        pass
+    mismatch_ops_text = '''
+    (define-xi-op xi.add
+      :class arithmetic
+      :arity 2
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode aot-c aot-verify)
+      :jit-policy required)
+    '''
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        ''', parse_xi_ops_def(mismatch_ops_text))
+        assert False, "lowering target mismatch should be rejected"
     except SystemExit:
         pass
     print(" PASS", file=sys.stderr)

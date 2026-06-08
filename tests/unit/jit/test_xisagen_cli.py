@@ -132,6 +132,17 @@ def main() -> int:
             "  :jit-policy none\n"
             "  :lowering-policy special)\n",
         )
+        xi_ops_target_mismatch = write(
+            tmp / "xi_ops_target_mismatch.def",
+            "(define-xi-op xi.add\n"
+            "  :class arithmetic\n"
+            "  :arity 2\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode aot-c)\n"
+            "  :jit-policy required)\n",
+        )
         bad_xi_lowering = write(
             tmp / "bad_xi_lowering.def",
             "(lower xi.add\n"
@@ -300,6 +311,11 @@ def main() -> int:
             ns.xisagen,
             ["xi-lowering", str(xi_ops_missing_lowering), str(good_xi_lowering), str(tmp)],
             "missing lowering entry for generated Xi op(s): xi.sub",
+        )
+        expect_fail(
+            ns.xisagen,
+            ["xi-lowering", str(xi_ops_target_mismatch), str(good_xi_lowering), str(tmp)],
+            "target mismatch with ops.def",
         )
         out_root = tmp / "xi_lowering_out"
         proc = subprocess.run(
