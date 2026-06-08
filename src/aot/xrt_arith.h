@@ -165,7 +165,8 @@ static inline void xrt_println(XrValue v) {
 
 /* typeof(x) — return integer type ID matching VM XrTypeId.
  * XR_TID_INT=8, XR_TID_FLOAT=11, XR_TID_BOOL=1, XR_TID_NULL=0,
- * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_MAP=16. */
+ * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
+ * XR_TID_MAP=16. */
 static inline int64_t xrt_typeof_id(XrValue v) {
     switch (v.tag) {
         case XR_TAG_I64:
@@ -181,10 +182,14 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 12; /* XR_TID_STRING */
         case XR_TAG_ARRAY:
             return 14; /* XR_TID_ARRAY */
+        case XR_TAG_SET:
+            return 15; /* XR_TID_SET */
         case XR_TAG_MAP:
             return 16; /* XR_TID_MAP */
         case XR_TAG_CLOSURE:
             return 13; /* XR_TID_FUNCTION */
+        case XR_TAG_STRBUF:
+            return 20; /* XR_TID_STRINGBUILDER */
         default:
             return 17; /* XR_TID_INSTANCE */
     }
@@ -205,11 +210,17 @@ static inline XrValue xrt_typeof_str(XrValue v) {
         case XR_TAG_STR_ARC:
             return xr_box_str("string");
         case XR_TAG_ARRAY:
-            return xr_box_str("array");
+            return xr_box_str("Array");
+        case XR_TAG_SET:
+            return xr_box_str("Set");
         case XR_TAG_MAP:
-            return xr_box_str("map");
+            return xr_box_str("Map");
         case XR_TAG_CLOSURE:
             return xr_box_str("function");
+        case XR_TAG_STRBUF:
+            return xr_box_str("StringBuilder");
+        case XR_TAG_TUPLE:
+            return xr_box_str("tuple");
         default:
             return xr_box_str("object");
     }

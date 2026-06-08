@@ -7,7 +7,7 @@
  *
  * xi_backend_lower.c - Lower high-level Xi IR ops to backend-legal form
  *
- * Rewrites remaining semantic sugar ops (XI_ITER_*, XI_SLICE, etc.) into
+ * Rewrites remaining semantic sugar ops (XI_ITER_*, XI_RANGE, etc.) into
  * XI_CALL_BUILTIN or XI_CALL_METHOD so that the function satisfies the
  * STAGE_BACKEND contract.
  *
@@ -51,16 +51,8 @@ static bool lower_value(XiValue *v) {
             rewrite_to_builtin(v, "iter_valid");
             break;
 
-        case XI_SLICE:
-            rewrite_to_builtin(v, "slice");
-            break;
-
         case XI_RANGE:
             rewrite_to_builtin(v, "range");
-            break;
-
-        case XI_TYPEOF:
-            rewrite_to_builtin(v, "typeof");
             break;
 
         case XI_REGEX_COMPILE:

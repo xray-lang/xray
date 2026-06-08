@@ -70,6 +70,9 @@ static bool cg_array_value_storage_info_depth(XiCgenCtx *ctx, const XiFunc *f,
         return true;
     if (cg_class_native_receiver_ref_field(ctx, f, v, XR_NATIVE_ARRAY_REF, NULL, NULL))
         return true;
+    if (use == CG_ARRAY_STORAGE_READ && v->op == XI_SLICE && v->nargs >= 1)
+        return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, CG_ARRAY_STORAGE_READ,
+                                                 depth + 1);
     if (v->op == XI_CALL_BUILTIN) {
         const char *name = (const char *) v->aux;
         if (name &&
@@ -950,6 +953,8 @@ static bool cg_array_is_slice_result(const XiValue *value) {
         const char *name = (const char *) v->aux;
         return name && strcmp(name, "slice") == 0 && v->nargs >= 1;
     }
+    if (v->op == XI_SLICE)
+        return v->nargs >= 1;
     if (v->op == XI_CALL_METHOD) {
         const char *method = (const char *) v->aux;
         return method && strcmp(method, "slice") == 0 && v->nargs >= 1;
