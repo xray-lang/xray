@@ -222,21 +222,21 @@
 (lower xi.call
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
-  :vm-bytecode (driver xi_emit_call)
+  :vm-bytecode (driver xi_emit_call :fresh-dst yes)
   :jit-xm (driver xi2xm_call)
   :aot-c (driver xicgen_call))
 
 (lower xi.call.method
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
-  :vm-bytecode (driver xi_emit_call_method)
+  :vm-bytecode (driver xi_emit_call_method :fresh-dst yes)
   :jit-xm (driver xi2xm_call)
   :aot-c (driver xicgen_call_method))
 
 (lower xi.call.method.direct
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
-  :vm-bytecode (driver xi_emit_call_method_direct)
+  :vm-bytecode (driver xi_emit_call_method_direct :fresh-dst yes)
   :jit-xm (driver xi2xm_call)
   :aot-c (driver xicgen_call_method))
 
@@ -636,7 +636,7 @@
 (lower xi.go
   :match ()
   :required-targets (vm-bytecode jit-xm)
-  :vm-bytecode (driver xi_emit_go)
+  :vm-bytecode (driver xi_emit_go :fresh-dst yes)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.await
@@ -666,7 +666,7 @@
 (lower xi.chan.try.recv
   :match ()
   :required-targets (vm-bytecode jit-xm)
-  :vm-bytecode (driver xi_emit_chan_try_recv)
+  :vm-bytecode (driver xi_emit_chan_try_recv :fresh-dst yes)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.is.closed
@@ -684,7 +684,7 @@
 (lower xi.select.block
   :match ()
   :required-targets (vm-bytecode jit-xm)
-  :vm-bytecode (driver xi_emit_select_block)
+  :vm-bytecode (driver xi_emit_select_block :fresh-dst yes)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.yield

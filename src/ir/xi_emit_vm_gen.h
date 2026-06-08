@@ -4,6 +4,10 @@
 #ifndef XI_EMIT_VM_GEN_H
 #define XI_EMIT_VM_GEN_H
 
+#include <stdbool.h>
+#include <stdint.h>
+#include "xi.h"
+
 #define XI_EMIT_VM_LOWERING_HANDLERS(X) \
     X(CONST, emit_const) \
     X(PARAM, emit_param) \
@@ -127,5 +131,19 @@
     X(BYTES_COPY_FROM, xi_emit_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, xi_emit_bytes_repeat_from)
 
+
+static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_CALL: return true;
+        case XI_CALL_METHOD: return true;
+        case XI_CALL_METHOD_DIRECT: return true;
+        case XI_GO: return true;
+        case XI_CHAN_TRY_RECV: return true;
+        case XI_SELECT_BLOCK: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
 
 #endif  /* XI_EMIT_VM_GEN_H */
