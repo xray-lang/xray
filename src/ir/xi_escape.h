@@ -44,19 +44,7 @@ typedef enum {
 /* Check whether an op is a heap-allocating instruction.
  * Only these ops produce values that benefit from escape analysis. */
 static inline bool xi_op_is_heap_alloc(uint16_t op) {
-    switch (op) {
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_TUPLE_NEW:
-        case XI_SET_NEW:
-        case XI_JSON_NEW:
-        case XI_CLOSURE_NEW:
-        case XI_STR_CONCAT:
-        case XI_REGEX_COMPILE:
-            return true;
-        default:
-            return false;
-    }
+    return xi_generated_op_escape_alloc(op) == XI_GEN_ESCAPE_ALLOC_HEAP;
 }
 
 /* Query the escape level imposed on arguments at a use site. */

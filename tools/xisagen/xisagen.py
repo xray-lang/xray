@@ -1566,6 +1566,11 @@ VALID_XI_ESCAPE_USES = {
     'none',
 }
 
+VALID_XI_ESCAPE_ALLOCS = {
+    'heap',
+    'none',
+}
+
 
 @dataclass
 class XiOperandDef:
@@ -1604,6 +1609,7 @@ class XiOpDef:
     backend_rewrite: str
     backend_rewrite_name: Optional[str]
     escape_use: str
+    escape_alloc: str
     negated_op: Optional[str]
 
 
@@ -1800,6 +1806,10 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if escape_use not in VALID_XI_ESCAPE_USES:
             die(f"{path}: Xi op '{name}' uses unknown escape-use "
                 f"'{escape_use}'")
+        escape_alloc = _xi_get_kw_str(form, ':escape-alloc', 'none')
+        if escape_alloc not in VALID_XI_ESCAPE_ALLOCS:
+            die(f"{path}: Xi op '{name}' uses unknown escape-alloc "
+                f"'{escape_alloc}'")
         negated_op = _xi_get_kw_str(form, ':negates-to')
         if negated_op and not negated_op.startswith('xi.'):
             die(f"{path}: Xi op '{name}' has invalid negates-to target "
@@ -1824,6 +1834,7 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            backend_rewrite=backend_rewrite,
                            backend_rewrite_name=backend_rewrite_name,
                            escape_use=escape_use,
+                           escape_alloc=escape_alloc,
                            negated_op=negated_op if negated_op else None))
     op_by_name = {op.name: op for op in ops}
     for op in ops:
@@ -1977,6 +1988,14 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_ESCAPE_USE__COUNT')
     lines.append('} XiGeneratedEscapeUse;')
     lines.append('')
+    lines.append('/* ========== Escape Allocation Policies ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_ESCAPE_ALLOC_NONE = 0,')
+    lines.append('    XI_GEN_ESCAPE_ALLOC_HEAP = 1,')
+    lines.append('    XI_GEN_ESCAPE_ALLOC__COUNT')
+    lines.append('} XiGeneratedEscapeAlloc;')
+    lines.append('')
     lines.append('/* ========== Algebraic Trait Flags ========== */')
     lines.append('')
     lines.append('#define XI_GEN_ALGEBRAIC_NONE 0')
@@ -2004,6 +2023,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t tbaa_group;')
     lines.append('    uint8_t backend_rewrite;')
     lines.append('    uint8_t escape_use;')
+    lines.append('    uint8_t escape_alloc;')
     lines.append('    uint16_t negated_op;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t algebraic_traits;')
@@ -2029,6 +2049,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         tbaa_group = f'XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)}'
         backend_rewrite = f'XI_GEN_BACKEND_REWRITE_{_xi_c_ident(op.backend_rewrite)}'
         escape_use = f'XI_GEN_ESCAPE_USE_{_xi_c_ident(op.escape_use)}'
+        escape_alloc = f'XI_GEN_ESCAPE_ALLOC_{_xi_c_ident(op.escape_alloc)}'
         negated_op = 'XI_OP_COUNT'
         if op.negated_op is not None:
             negated_op = f'XI_{_xi_op_ident(op.negated_op)}'
@@ -2040,8 +2061,8 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
             f'{speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {escape_use}, '
-            f'{negated_op}, {flags}, {algebraic_traits}, {effects}, {targets}, '
-            f'{backend_rewrite_name}, {native_type}, "{op.jit_policy}"){suffix}')
+            f'{escape_alloc}, {negated_op}, {flags}, {algebraic_traits}, {effects}, '
+            f'{targets}, {backend_rewrite_name}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -2166,6 +2187,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_ESCAPE_USE_HEAP;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(
+            f'        case XI_{op.ident}: return XI_GEN_ESCAPE_ALLOC_{_xi_c_ident(op.escape_alloc)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_ESCAPE_ALLOC_NONE;')
     lines.append('}')
     lines.append('')
     lines.append('static inline XiOp xi_generated_op_negates_to(uint16_t op) {')
@@ -7728,9 +7759,18 @@ def _test_xi_ops_parser():
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
       :jit-policy catch-up)
+    (define-xi-op xi.array.new
+      :class allocation
+      :arity variadic
+      :escape-alloc heap
+      :effects (side-effect memory-write allocates)
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy catch-up)
     '''
     ops = parse_xi_ops_def(text)
-    assert len(ops) == 7
+    assert len(ops) == 8
     assert ops[0].name == 'xi.add'
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
@@ -7752,6 +7792,7 @@ def _test_xi_ops_parser():
     assert ops[4].backend_rewrite_name == 'iter_new'
     assert ops[5].negated_op == 'xi.ne'
     assert ops[6].negated_op == 'xi.eq'
+    assert ops[7].escape_alloc == 'heap'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -7781,6 +7822,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_backend_legal' in header
     assert 'xi_generated_op_escape_use' in header
     assert 'case XI_STORE_FIELD: return XI_GEN_ESCAPE_USE_HEAP;' in header
+    assert 'xi_generated_op_escape_alloc' in header
+    assert 'case XI_ARRAY_NEW: return XI_GEN_ESCAPE_ALLOC_HEAP;' in header
     assert 'xi_generated_op_negates_to' in header
     assert 'case XI_EQ: return XI_NE;' in header
     assert 'xi_generated_op_algebraic_traits' in header

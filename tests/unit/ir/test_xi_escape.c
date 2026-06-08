@@ -232,6 +232,9 @@ static void test_heap_alloc_check(void) {
     ASSERT_EQ(xi_op_is_heap_alloc(XI_ADD), 0, "ADD is not heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CONST), 0, "CONST is not heap alloc");
     ASSERT_EQ(xi_op_is_heap_alloc(XI_CALL), 0, "CALL is not heap alloc");
+    ASSERT_EQ(xi_op_is_heap_alloc(XI_STRUCT_NEW), 0, "STRUCT_NEW is not escape heap alloc");
+    ASSERT_EQ(xi_op_is_heap_alloc(XI_CHAN_NEW), 0, "CHAN_NEW is not escape heap alloc");
+    ASSERT_EQ(xi_op_is_heap_alloc(XI_CLASS_CREATE), 0, "CLASS_CREATE is not escape heap alloc");
 }
 
 /* ========== Test: generated use-site escape policy ========== */
