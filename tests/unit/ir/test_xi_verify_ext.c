@@ -19,6 +19,8 @@ static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 4, .frozen = true};
 static XrType stub_i8 = {
     .kind = XR_KIND_INT, .id = 5, .frozen = true, .native_width = XR_NATIVE_I8};
+static XrType stub_u16 = {
+    .kind = XR_KIND_INT, .id = 11, .frozen = true, .native_width = XR_NATIVE_U16};
 static XrType stub_u64 = {
     .kind = XR_KIND_INT, .id = 6, .frozen = true, .native_width = XR_NATIVE_U64};
 static XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 9, .frozen = true};
@@ -538,6 +540,26 @@ TEST(typed_array_store_with_narrow_passes) {
     xi_func_free(f);
 }
 
+TEST(typed_array_store_with_wrong_narrow_fails) {
+    XiFunc *f = make_func("typed_store_wrong_narrow");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *arr = xi_param(f, entry, 0, &stub_array_i8);
+    XiValue *idx = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *val = xi_const_int(f, entry, 257, &stub_int);
+    XiValue *narrow = xi_value_new(f, entry, XI_NARROW_U16, &stub_u16, 1);
+    narrow->args[0] = val;
+    XiValue *store = xi_value_new(f, entry, XI_INDEX_SET, &stub_int, 3);
+    store->args[0] = arr;
+    store->args[1] = idx;
+    store->args[2] = narrow;
+    xi_block_set_return(entry, store);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+}
+
 TEST(typed_array_store_u64_without_narrow_passes) {
     XiFunc *f = make_func("typed_store_u64");
     ASSERT(f != NULL);
@@ -1049,6 +1071,7 @@ int main(void) {
     run_call_method_direct_zero_args_fails();
     run_typed_array_store_without_narrow_fails();
     run_typed_array_store_with_narrow_passes();
+    run_typed_array_store_with_wrong_narrow_fails();
     run_typed_array_store_u64_without_narrow_passes();
     run_duplicate_value_id_fails();
     run_phi_arg_count_mismatch_fails();

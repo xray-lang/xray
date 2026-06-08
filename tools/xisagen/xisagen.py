@@ -1911,6 +1911,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    return 0;')
     lines.append('}')
     lines.append('')
+    lines.append('static inline uint32_t xi_generated_op_effects(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        effects = _xi_bit_expr('XI_EFFECT', op.effects)
+        lines.append(f'        case XI_{op.ident}: return {effects};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
     lines.append('#endif  /* XI_OPS_GEN_H */')
     lines.append('')
     return '\n'.join(lines)
@@ -7419,6 +7429,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_lowering_policy' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_LOWERING_PASS_LOCAL;' in header
     assert 'xi_generated_op_default_flags' in header
+    assert 'xi_generated_op_effects' in header
+    assert 'case XI_MEM_LOAD: return XI_EFFECT_MEMORY_READ | XI_EFFECT_MAY_THROW;' in header
     print(" PASS", file=sys.stderr)
 
 def _test_xi_lowering_parser():
