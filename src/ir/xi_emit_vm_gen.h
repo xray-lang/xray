@@ -75,6 +75,31 @@
     X(MAP_NEW, xi_emit_map_new) \
     X(SET_NEW, xi_emit_set_new) \
     X(STR_CONCAT, xi_emit_str_concat) \
+    X(ITER_NEW, xi_emit_iter) \
+    X(ITER_NEXT, xi_emit_iter) \
+    X(ITER_VALID, xi_emit_iter) \
+    X(GO, xi_emit_go) \
+    X(AWAIT, xi_emit_await) \
+    X(CHAN_SEND, xi_emit_chan_send) \
+    X(CHAN_RECV, xi_emit_chan_recv) \
+    X(CHAN_TRY_SEND, xi_emit_chan_try_send) \
+    X(CHAN_TRY_RECV, xi_emit_chan_try_recv) \
+    X(CHAN_IS_CLOSED, xi_emit_chan_is_closed) \
+    X(TIME_AFTER, xi_emit_time_after) \
+    X(SELECT_BLOCK, xi_emit_select_block) \
+    X(YIELD, xi_emit_yield) \
+    X(CHAN_NEW, xi_emit_chan_new) \
+    X(DEFER, xi_emit_defer) \
+    X(JSON_NEW, xi_emit_json_new) \
+    X(JSON_INIT_F, xi_emit_json_init_f) \
+    X(JSON_GET_F, xi_emit_json_get_f) \
+    X(JSON_SET_F, xi_emit_json_set_f) \
+    X(JSON_DECODE, xi_emit_json_decode) \
+    X(STRUCT_NEW, xi_emit_struct_new) \
+    X(STRUCT_GET, xi_emit_struct_get) \
+    X(STRUCT_SET, xi_emit_struct_set) \
+    X(SCOPE_ENTER, xi_emit_scope_enter) \
+    X(SCOPE_EXIT, xi_emit_scope_exit) \
     X(TUPLE_NEW, xi_emit_tuple_new) \
     X(TUPLE_GET, xi_emit_tuple_get) \
     X(BYTES_LOAD_U32_LE, xi_emit_bytes_load_u32_le) \
