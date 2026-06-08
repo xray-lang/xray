@@ -380,6 +380,7 @@
 (define-xi-op xi.store.field
   :class memory-write
   :arity 2
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -398,6 +399,7 @@
 (define-xi-op xi.index.set
   :class memory-write
   :arity 3
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -470,6 +472,7 @@
 (define-xi-op xi.struct.set
   :class memory-write
   :arity 2
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -596,6 +599,7 @@
 (define-xi-op xi.call.builtin
   :class call
   :arity variadic
+  :result-kind dynamic
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -632,6 +636,7 @@
 (define-xi-op xi.store.upval
   :class memory-write
   :arity 1
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -650,6 +655,7 @@
 (define-xi-op xi.set.shared
   :class memory-write
   :arity 1
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -776,6 +782,7 @@
 (define-xi-op xi.throw
   :class exception
   :arity 1
+  :result-kind void
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1100,6 +1107,7 @@
 (define-xi-op xi.retain
   :class ownership
   :arity 1
+  :result-kind void
   :effects (side-effect retains)
   :requires ()
   :observable ()
@@ -1109,6 +1117,7 @@
 (define-xi-op xi.release
   :class ownership
   :arity 1
+  :result-kind void
   :effects (side-effect releases)
   :requires ()
   :observable ()
@@ -1154,6 +1163,7 @@
 (define-xi-op xi.coro.op
   :class coroutine
   :arity variadic
+  :result-kind dynamic
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()

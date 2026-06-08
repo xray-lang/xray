@@ -156,16 +156,15 @@ static bool cg_ownership_op_is_noop(const XiValue *v) {
 /* Check whether an op is void-like (produces no named result).
  * At STAGE_BACKEND, XI_PRINT etc. are XI_CALL_BUILTIN with aux name. */
 static bool cg_is_void_like(const XiValue *v) {
+    if (!v)
+        return false;
+    uint8_t result_kind = xi_generated_op_result_kind(v->op);
+    if (result_kind == XI_GEN_RESULT_VOID)
+        return true;
+    if (result_kind != XI_GEN_RESULT_DYNAMIC)
+        return false;
+
     switch (v->op) {
-        case XI_SET_SHARED:
-        case XI_STORE_UPVAL:
-        case XI_STORE_FIELD:
-        case XI_STRUCT_SET:
-        case XI_INDEX_SET:
-        case XI_THROW:
-        case XI_RETAIN:
-        case XI_RELEASE:
-            return true;
         case XI_CORO_OP:
             return v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
                    v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL;
