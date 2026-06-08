@@ -66,6 +66,21 @@ static void test_type_is_rc(void) {
     ASSERT_EQ(xi_own_type_is_rc(NULL), true, "NULL type is conservatively RC");
 }
 
+/* ========== Test: generated use-site ownership policy ========== */
+
+static void test_use_policy(void) {
+    ASSERT_EQ(xi_own_use_is_consuming(XI_ADD, 0), false, "ADD borrows operands");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_INDEX_GET, 0), false, "INDEX_GET borrows base");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 0), false, "STORE_FIELD borrows receiver");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_STORE_FIELD, 1), true,
+              "STORE_FIELD consumes stored value");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL_METHOD, 0), false, "CALL_METHOD borrows receiver");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL_METHOD, 1), true,
+              "CALL_METHOD consumes non-receiver args");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 0), true, "CALL consumes args");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_OP_COUNT, 0), true, "unknown op conservatively consumes");
+}
+
 /* ========== Test: dead value → drop at definition ========== */
 
 /*
@@ -278,6 +293,7 @@ static void test_scalar_not_tracked(void) {
 
 int main(void) {
     test_type_is_rc();
+    test_use_policy();
     test_dead_value();
     test_borrow_only();
     test_consumed_return();

@@ -28,6 +28,7 @@
 #include "xi_defuse.h"
 #include "xi_analysis.h"
 #include "xi_escape.h"
+#include "xi_ops_gen.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -77,110 +78,28 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
  *
  * Mirrors the owned/borrowed split in Koka Parc.hs and Roc inc_dec.rs.
  * Call arguments are conservatively owned until borrow signature inference
- * refines the contract. */
+ * refines the contract. The per-op policy lives in generated Xi metadata
+ * so ownership analysis and ARC rewriting share the same semantic table. */
 static bool use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
     return xi_own_use_is_consuming(user_op, arg_idx);
 }
 
 XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
-    switch (user_op) {
-        /* ---- Escape to heap / global / another coroutine: consume ---- */
-        case XI_STORE_FIELD:
-        case XI_STRUCT_SET:
-        case XI_INDEX_SET:
-        case XI_JSON_INIT_F:
-        case XI_JSON_SET_F:
-        case XI_STORE_UPVAL:
-            /* arg 0 = container (borrowed receiver); arg 1+ = stored value */
+    switch (xi_generated_op_own_use(user_op)) {
+        case XI_GEN_OWN_USE_BORROW:
+            return false;
+        case XI_GEN_OWN_USE_CONSUME:
+            return true;
+        case XI_GEN_OWN_USE_STORED_VALUE:
+            /* arg 0 = container/receiver; arg 1+ = stored value. */
             return arg_idx != 0;
-
-        case XI_SET_SHARED:
-        case XI_SET_GLOBAL:
-        case XI_GO:
-        case XI_CHAN_SEND:
-        case XI_CHAN_TRY_SEND:
-            return true;
-
-        /* ---- Aggregate constructors retain every element ---- */
-        case XI_TUPLE_NEW:
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-            return true;
-
-        /* ---- Closure captures consume the captured value ---- */
-        case XI_CLOSURE_NEW:
-            /* Every CLOSURE_NEW arg is a captured value (the function itself
-             * is carried in aux, not args). All captures are consumed: the
-             * closure stores an owning reference in its upvalue array. */
-            return true;
-
-        /* ---- Throw moves the error value out ---- */
-        case XI_THROW:
-            return true;
-
-        /* ---- Calls: conservatively consume args (refined by borrow sig) ----
-         * The receiver of a method call (arg 0) is borrowed. */
-        case XI_CALL:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
-            return true;
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-            return arg_idx != 0; /* receiver borrowed, other args consumed */
-
-        /* ---- Pure reads / tests: borrow ---- */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
-        case XI_NOT:
-        case XI_ISNULL:
-        case XI_IS:
-        case XI_AS:
-        case XI_CONVERT:
-        case XI_TYPEOF:
-        case XI_PRINT:
-        case XI_INDEX_GET:
-        case XI_LOAD_FIELD:
-        case XI_STRUCT_GET:
-        case XI_JSON_GET_F:
-        case XI_TUPLE_GET:
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ITER_NEW:
-        case XI_ITER_NEXT:
-        case XI_ITER_VALID:
-        case XI_SLICE:
-        case XI_RANGE:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-            return false;
-
-        /* ---- COPY/BOX/UNBOX/PHI are transparent; treat as borrow here.
-         * Flow through them is handled by liveness, not consumption. ---- */
-        case XI_COPY:
-        case XI_BOX:
-        case XI_UNBOX:
-        case XI_PHI:
-            return false;
-
-        default:
-            /* Unknown op: conservatively consume (safe: at worst an extra
-             * dup/drop, never a missing drop). */
+        case XI_GEN_OWN_USE_METHOD_ARGS:
+            /* arg 0 = method receiver; arg 1+ = ordinary call args. */
+            return arg_idx != 0;
+        case XI_GEN_OWN_USE__COUNT:
             return true;
     }
+    return true;
 }
 
 /* ========== Last-Use Computation ========== */

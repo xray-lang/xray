@@ -23,6 +23,7 @@
 (define-xi-op xi.add
   :class arithmetic
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :algebraic (associative commutative)
@@ -35,6 +36,7 @@
 (define-xi-op xi.sub
   :class arithmetic
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -46,6 +48,7 @@
 (define-xi-op xi.mul
   :class arithmetic
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :algebraic (associative commutative)
@@ -58,6 +61,7 @@
 (define-xi-op xi.div
   :class arithmetic
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -69,6 +73,7 @@
 (define-xi-op xi.mod
   :class arithmetic
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -80,6 +85,7 @@
 (define-xi-op xi.neg
   :class arithmetic
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -160,6 +166,7 @@
 (define-xi-op xi.eq
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :algebraic (commutative)
@@ -173,6 +180,7 @@
 (define-xi-op xi.ne
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :algebraic (commutative)
@@ -186,6 +194,7 @@
 (define-xi-op xi.lt
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :negates-to xi.ge
@@ -198,6 +207,7 @@
 (define-xi-op xi.le
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :negates-to xi.gt
@@ -210,6 +220,7 @@
 (define-xi-op xi.gt
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :negates-to xi.le
@@ -222,6 +233,7 @@
 (define-xi-op xi.ge
   :class comparison
   :arity 2
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :negates-to xi.lt
@@ -234,6 +246,7 @@
 (define-xi-op xi.eq.strict
   :class comparison
   :arity 2
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -243,6 +256,7 @@
 (define-xi-op xi.ne.strict
   :class comparison
   :arity 2
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -252,6 +266,7 @@
 (define-xi-op xi.not
   :class type
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -263,6 +278,7 @@
 (define-xi-op xi.convert
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -274,6 +290,7 @@
 (define-xi-op xi.box
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :effects ()
   :requires ()
@@ -284,6 +301,7 @@
 (define-xi-op xi.unbox
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :effects ()
   :requires ()
@@ -455,6 +473,7 @@
 (define-xi-op xi.load.field
   :class memory-read
   :arity 1
+  :own-use borrow
   :vn-kind memory-read
   :tbaa-group field
   :effects (memory-read)
@@ -469,6 +488,7 @@
   :result-kind void
   :tbaa-group field
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -478,6 +498,7 @@
 (define-xi-op xi.index.get
   :class memory-read
   :arity 2
+  :own-use borrow
   :vn-kind memory-read
   :tbaa-group array
   :effects (memory-read)
@@ -492,6 +513,7 @@
   :result-kind void
   :tbaa-group array
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -555,6 +577,7 @@
 (define-xi-op xi.struct.get
   :class memory-read
   :arity 1
+  :own-use borrow
   :vn-kind memory-read
   :tbaa-group struct
   :effects (memory-read)
@@ -569,6 +592,7 @@
   :result-kind void
   :tbaa-group struct
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -591,6 +615,7 @@
   :result-kind void
   :tbaa-group json
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -600,6 +625,7 @@
 (define-xi-op xi.json.get.f
   :class memory-read
   :arity 1
+  :own-use borrow
   :vn-kind memory-read
   :tbaa-group json
   :effects (memory-read)
@@ -614,6 +640,7 @@
   :result-kind void
   :tbaa-group json
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -663,6 +690,7 @@
 (define-xi-op xi.tuple.get
   :class memory-read
   :arity 1
+  :own-use borrow
   :vn-kind memory-read
   :tbaa-group tuple
   :effects (memory-read)
@@ -687,6 +715,7 @@
   :arity variadic
   :tbaa-group top
   :escape-use heap
+  :own-use method-args
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -698,6 +727,7 @@
   :arity variadic
   :tbaa-group top
   :escape-use heap
+  :own-use method-args
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -765,6 +795,7 @@
   :result-kind void
   :tbaa-group upval
   :escape-use heap
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -820,6 +851,7 @@
   :class side-effect
   :arity variadic
   :result-kind void
+  :own-use borrow
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -891,6 +923,7 @@
   :class coroutine
   :arity 1
   :tbaa-group chan
+  :own-use borrow
   :effects (side-effect memory-read)
   :requires ()
   :observable ()
@@ -901,6 +934,7 @@
   :class coroutine
   :arity 1
   :tbaa-group chan
+  :own-use borrow
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -976,6 +1010,7 @@
 (define-xi-op xi.iter.new
   :class iterator
   :arity 1
+  :own-use borrow
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -986,6 +1021,7 @@
 (define-xi-op xi.iter.next
   :class iterator
   :arity 1
+  :own-use borrow
   :effects (side-effect memory-read memory-write)
   :requires ()
   :observable ()
@@ -996,6 +1032,7 @@
 (define-xi-op xi.iter.valid
   :class iterator
   :arity 1
+  :own-use borrow
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -1044,6 +1081,7 @@
 (define-xi-op xi.is
   :class type
   :arity 2
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -1053,6 +1091,7 @@
 (define-xi-op xi.as
   :class type
   :arity 1
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -1062,6 +1101,7 @@
 (define-xi-op xi.slice
   :class sequence
   :arity 3
+  :own-use borrow
   :effects (memory-read memory-write)
   :requires ()
   :observable ()
@@ -1071,6 +1111,7 @@
 (define-xi-op xi.range
   :class sequence
   :arity 2
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -1090,6 +1131,7 @@
 (define-xi-op xi.isnull
   :class type
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -1101,6 +1143,7 @@
 (define-xi-op xi.phi
   :class pure
   :arity variadic
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
@@ -1121,6 +1164,7 @@
 (define-xi-op xi.copy
   :class pure
   :arity 1
+  :own-use borrow
   :speculation safe
   :effects ()
   :requires ()
@@ -1185,6 +1229,7 @@
 (define-xi-op xi.assert
   :class side-effect
   :arity 1
+  :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1194,6 +1239,7 @@
 (define-xi-op xi.assert.eq
   :class side-effect
   :arity 2
+  :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1203,6 +1249,7 @@
 (define-xi-op xi.assert.ne
   :class side-effect
   :arity 2
+  :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1221,6 +1268,7 @@
 (define-xi-op xi.typeof
   :class type
   :arity 1
+  :own-use borrow
   :effects ()
   :requires ()
   :observable ()
