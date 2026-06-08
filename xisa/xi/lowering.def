@@ -498,127 +498,152 @@
 
 (lower xi.iter.new
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_iter)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.iter.next
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_iter)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.iter.valid
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_iter)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.go
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_go)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.await
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_await)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.send
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_send)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.recv
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_recv)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.try.send
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_try_send)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.try.recv
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_try_recv)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.is.closed
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_is_closed)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.time.after
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_time_after)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.select.block
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_select_block)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.yield
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_yield)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.chan.new
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_new)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.defer
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_defer)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.json.new
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_json_new)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.json.init.f
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_json_init_f)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.json.get.f
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_json_get_f)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.json.set.f
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_json_set_f)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.json.decode
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_json_decode)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.struct.new
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_struct_new)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.struct.get
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_struct_get)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.struct.set
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_struct_set)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.scope.enter
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_scope_enter)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.scope.exit
   :match ()
-  :required-targets (jit-xm)
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_scope_exit)
   :jit-xm (reject xi2xm_reject_unsupported))
 
 (lower xi.tuple.new
