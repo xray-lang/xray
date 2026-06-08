@@ -321,8 +321,8 @@ static void test_backend_lower_preserves_collection_ops(void) {
     printf("  PASS\n");
 }
 
-static void test_backend_lower_preserves_type_and_slice_ops(void) {
-    printf("--- test_backend_lower_preserves_type_and_slice_ops ---\n");
+static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
+    printf("--- test_backend_lower_preserves_type_slice_and_range_ops ---\n");
 
     XiFunc *f = xi_func_new("backend_type_slice_fn", &stub_void);
     assert(f != NULL);
@@ -359,15 +359,23 @@ static void test_backend_lower_preserves_type_and_slice_ops(void) {
     slice_v->args[2] = end;
     slice_v->flags = xi_op_default_effects(XI_SLICE);
 
+    XiValue *range_v = xi_value_new(f, entry, XI_RANGE, &stub_array, 2);
+    assert(range_v != NULL);
+    range_v->args[0] = start;
+    range_v->args[1] = end;
+    range_v->flags = xi_op_default_effects(XI_RANGE);
+
     xi_backend_lower(f);
 
     assert(f->stage == XI_STAGE_BACKEND);
     assert(typeof_v->op == XI_TYPEOF);
     assert(as_v->op == XI_AS);
     assert(slice_v->op == XI_SLICE);
+    assert(range_v->op == XI_RANGE);
     assert(xi_op_is_backend_legal(typeof_v->op));
     assert(xi_op_is_backend_legal(as_v->op));
     assert(xi_op_is_backend_legal(slice_v->op));
+    assert(xi_op_is_backend_legal(range_v->op));
 
     xi_func_free(f);
     printf("  PASS\n");
@@ -449,7 +457,7 @@ int main(void) {
     test_backend_lower_preserves_print();
     test_backend_lower_preserves_json_field_ops();
     test_backend_lower_preserves_collection_ops();
-    test_backend_lower_preserves_type_and_slice_ops();
+    test_backend_lower_preserves_type_slice_and_range_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

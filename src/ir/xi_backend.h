@@ -164,6 +164,7 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_PRINT:
         case XI_TYPEOF:
         case XI_SLICE:
+        case XI_RANGE:
 
         /* OOP & scope */
         case XI_CLASS_CREATE:
@@ -215,7 +216,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         /* XI_ITER_NEW      → XI_CALL_BUILTIN(iter_new)       */
         /* XI_ITER_NEXT     → XI_CALL_BUILTIN(iter_next)      */
         /* XI_ITER_VALID    → XI_CALL_BUILTIN(iter_valid)     */
-        /* XI_RANGE         → XI_CALL_BUILTIN(range)          */
         /* XI_REGEX_COMPILE → XI_CALL_BUILTIN(regex_compile)  */
         default:
             return false;

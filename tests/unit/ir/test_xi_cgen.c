@@ -1396,6 +1396,30 @@ TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
     xi_func_free(ir);
 }
 
+TEST(cgen_range_uses_direct_aot_driver) {
+    const char *src = "let r = 2..6\n"
+                      "print(r)\n"
+                      "print(typeof(r))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "range direct driver should generate");
+
+    assert(contains(code, "xrt_range_from_i64(") &&
+           "range expression must use the direct AOT range helper");
+    assert(contains(code, "xrt_typeof_str(") && "typeof(range) must use direct typeof helper");
+    assert(!contains(code, "xrt_range(XR_FROM_INT") &&
+           "range creation must not box start/end before the AOT helper");
+
+    printf("  Generated range direct driver %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
     const char *src = "fn sum(n: int) -> int {\n"
                       "    let bytes: Array<uint8> = []\n"
@@ -3084,6 +3108,7 @@ int main(void) {
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typeof_as_and_slice_use_direct_drivers();
+    run_cgen_range_uses_direct_aot_driver();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();
     run_cgen_typed_array_filter_preserves_raw_storage_fast_path();

@@ -14,6 +14,7 @@
 #include "xrt_value.h"
 #include "xrt_arc.h"        // xrt_str_concat used by xrt_add
 #include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
+#include "xrt_range.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
@@ -152,6 +153,12 @@ static inline void xrt_print(XrValue v) {
         case XR_TAG_NULL:
             printf("null");
             break;
+        case XR_TAG_RANGE: {
+            char buf[96];
+            xrt_range_format_buf((const xrt_range_t *) v.ptr, buf, sizeof(buf));
+            fputs(buf, stdout);
+            break;
+        }
         default:
             printf("<object@%p>", v.ptr);
             break;
@@ -190,6 +197,8 @@ static inline int64_t xrt_typeof_id(XrValue v) {
             return 13; /* XR_TID_FUNCTION */
         case XR_TAG_STRBUF:
             return 20; /* XR_TID_STRINGBUILDER */
+        case XR_TAG_RANGE:
+            return 31; /* XR_TID_RANGE */
         default:
             return 17; /* XR_TID_INSTANCE */
     }
@@ -221,6 +230,8 @@ static inline XrValue xrt_typeof_str(XrValue v) {
             return xr_box_str("StringBuilder");
         case XR_TAG_TUPLE:
             return xr_box_str("tuple");
+        case XR_TAG_RANGE:
+            return xr_box_str("Range");
         default:
             return xr_box_str("object");
     }

@@ -13,6 +13,7 @@
 
 #include "xrt_value.h"
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
+#include "xrt_range.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_typed_ops.h"
 
