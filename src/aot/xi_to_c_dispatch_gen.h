@@ -33,6 +33,9 @@
     X(TYPEOF, "xi.typeof", xicgen_typeof) \
     X(GET_BUILTIN, "xi.get.builtin", xicgen_get_builtin) \
     X(CLASS_CREATE, "xi.class.create", xicgen_class_create) \
+    X(CALL, "xi.call", xicgen_call) \
+    X(CALL_METHOD, "xi.call.method", xicgen_call_method) \
+    X(CALL_METHOD_DIRECT, "xi.call.method.direct", xicgen_call_method) \
     X(CALL_BUILTIN, "xi.call.builtin", xicgen_call_builtin) \
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \

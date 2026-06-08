@@ -505,6 +505,88 @@ static void xicgen_get_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 }
 
+static bool xicgen_call_is_shared_class(const XiCgenCtx *ctx, const XiValue *callee) {
+    if (!ctx || !callee)
+        return false;
+    if (callee->op == XI_GET_SHARED) {
+        int slot = (int) callee->aux_int;
+        return slot >= 0 && slot < CG_MAX_SHARED && ctx->shared_class[slot];
+    }
+    if ((callee->op == XI_BOX || callee->op == XI_UNBOX) && callee->nargs >= 1)
+        return xicgen_call_is_shared_class(ctx, callee->args[0]);
+    return false;
+}
+
+static bool xicgen_resolve_direct_class_ctor(const XiFunc *f, const XiValue *callee,
+                                             const XiFunc **target) {
+    if (!callee)
+        return false;
+    if (callee->op == XI_CLASS_CREATE && callee->aux) {
+        const XiFunc *ctor = cg_find_constructor(f, (const XiClassData *) callee->aux);
+        if (ctor) {
+            *target = ctor;
+            return true;
+        }
+    }
+    if (callee->op == XI_BOX && callee->nargs >= 1)
+        return xicgen_resolve_direct_class_ctor(f, callee->args[0], target);
+    return false;
+}
+
+static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                        const char *prefix) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
+    XiValue *callee = v->args[0];
+    CgStaticFunctionCall static_call = cg_resolve_static_function_call(ctx, f, callee);
+    const XiFunc *target = static_call.func;
+    const char *call_prefix = static_call.prefix;
+    bool is_class_call = static_call.is_class_constructor ||
+                         xicgen_call_is_shared_class(ctx, callee) ||
+                         xicgen_resolve_direct_class_ctor(f, callee, &target);
+
+    if (target && cg_func_needs_aot_coro(target)) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
+                target->name ? target->name : "?");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+
+    if (target && is_class_call) {
+        if (emit_class_native_constructor_boxed_expr(ctx, out, f, prefix, v, target, call_prefix))
+            return;
+        fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+        emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
+        fprintf(out, "(NULL, _inst");
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+        }
+        fprintf(out, "); _inst; })");
+        return;
+    }
+
+    if (target) {
+        XrRep actual_rep = cg_func_return_abi_rep(ctx, target);
+        bool wrapped = emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
+        emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
+        fprintf(out, "(");
+        emit_call_hidden_closure(out, f, target, callee);
+        for (uint16_t a = 1; a < v->nargs; a++) {
+            fprintf(out, ", ");
+            emit_value_as_rep(out, v->args[a],
+                              cg_func_param_abi_rep(ctx, target, (uint16_t) (a - 1)));
+        }
+        fprintf(out, ")");
+        emit_conversion_suffix(out, wrapped);
+        return;
+    }
+
+    ctx->error = true;
+    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT indirect call\n");
+    emit_codegen_abort_expr(out);
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     (void) prefix;
@@ -638,6 +720,239 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_codegen_abort_expr(out);
         ctx->error = true;
     }
+}
+
+static const XiFunc *xicgen_lookup_super_method(XiCgenCtx *ctx, const XiFunc *f, const char *method,
+                                                const char **method_prefix) {
+    if (!ctx || !ctx->module)
+        return NULL;
+    const char *parent_class = NULL;
+    XiModule *mod = ctx->module;
+    for (uint16_t s = 0; s < mod->nslots && !parent_class; s++) {
+        const XiClassData *cd = mod->slot_classes ? mod->slot_classes[s] : NULL;
+        if (!cd || !cd->super_name)
+            continue;
+        for (uint16_t ci = 0; ci < cd->ninst + cd->nstat; ci++) {
+            if (cd->child_idx && cd->child_idx[ci] < mod->init->nchildren &&
+                mod->init->children[cd->child_idx[ci]] == f) {
+                parent_class = cd->super_name;
+                break;
+            }
+        }
+    }
+    if (!parent_class)
+        return NULL;
+    if (method && strcmp(method, "constructor") == 0)
+        return cg_lookup_class_ctor(ctx, parent_class);
+    return cg_lookup_method(ctx, method, parent_class, method_prefix);
+}
+
+static const XiFunc *xicgen_lookup_receiver_method(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue *v, const char *method,
+                                                   const char **method_prefix) {
+    const char *recv_class = cg_class_native_receiver_class_name(ctx, f, v->args[0]);
+    if (v->op == XI_CALL_METHOD_DIRECT)
+        return cg_lookup_method_by_index(ctx, recv_class, (int) v->aux_int, method_prefix);
+    return cg_lookup_method(ctx, method, recv_class, method_prefix);
+}
+
+static bool xicgen_emit_time_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v) {
+    if (!cg_is_time_module_call_ctx(ctx, f, v))
+        return false;
+    const char *method = (const char *) v->aux;
+    const char *time_helper = cg_time_module_helper_ctx(ctx, f, v);
+    if (!time_helper) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT time method '%s'\n",
+                method ? method : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (cg_rep(v) == XR_REP_I64)
+        fprintf(out, "XR_TO_INT(");
+    else if (cg_rep(v) == XR_REP_F64)
+        fprintf(out, "XR_TO_FLOAT(");
+    fprintf(out, "%s()", time_helper);
+    if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+        fprintf(out, ")");
+    return true;
+}
+
+static bool xicgen_emit_typed_array_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, const char *prefix, const char *method,
+                                           uint16_t nargs) {
+    if (nargs == 0 && method && strcmp(method, "length") == 0 &&
+        emit_typed_array_length_expr(ctx, out, f, prefix, v))
+        return true;
+    if (nargs == 1 && method && strcmp(method, "push") == 0 &&
+        emit_typed_array_push_expr(ctx, out, f, prefix, v, v->args[0], v->args[1]))
+        return true;
+    if (!method)
+        return false;
+    return (nargs == 1 && strcmp(method, "map") == 0 &&
+            emit_typed_array_map_expr(ctx, out, f, prefix, v)) ||
+           (nargs == 1 && strcmp(method, "filter") == 0 &&
+            emit_typed_array_filter_expr(ctx, out, f, prefix, v)) ||
+           (nargs == 2 && strcmp(method, "reduce") == 0 &&
+            emit_typed_array_reduce_expr(ctx, out, f, prefix, v));
+}
+
+static bool xicgen_emit_enum_method(XiCgenCtx *ctx, FILE *out, const XiValue *v,
+                                    const char *method) {
+    const XiEnumData *recv_enum = cg_enum_for_shared_value(ctx, v->args[0]);
+    int enum_member = cg_enum_member_index(recv_enum, method);
+    if (!recv_enum || enum_member < 0)
+        return false;
+    if (recv_enum->is_adt && recv_enum->members &&
+        recv_enum->members[enum_member].payload_count > 0) {
+        emit_adt_enum_construct_expr(out, enum_member, v);
+    } else {
+        fprintf(out, "xrt_map_get((xrt_map_t*)");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ".ptr, xr_box_str(");
+        emit_c_string_literal(out, method);
+        fprintf(out, "))");
+    }
+    return true;
+}
+
+static bool xicgen_emit_task_method(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *method,
+                                    uint16_t nargs) {
+    if (v->op != XI_CALL_METHOD || !cg_value_type_is_task(v->args[0]))
+        return false;
+    if (nargs == 0 && method && strcmp(method, "cancel") == 0) {
+        if (cg_rep(v) == XR_REP_I64)
+            fprintf(out, "XR_TO_INT(");
+        else if (cg_rep(v) == XR_REP_F64)
+            fprintf(out, "XR_TO_FLOAT(");
+        fprintf(out, "xr_aot_task_cancel(NULL, ");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+            fprintf(out, ")");
+    } else {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT Task method '%s'\n",
+                method ? method : "?");
+        emit_codegen_abort_expr(out);
+    }
+    return true;
+}
+
+static bool xicgen_emit_direct_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                      const char *prefix, const XiFunc *mfunc,
+                                      const char *method_prefix) {
+    if (!mfunc)
+        return false;
+    if (cg_func_needs_aot_coro(mfunc)) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: unsupported AOT sync method call to suspendable function '%s'\n",
+                mfunc->name ? mfunc->name : "?");
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    if (emit_class_native_method_call_expr(ctx, out, f, prefix, v, mfunc, method_prefix))
+        return true;
+    XrRep actual_rep = cg_func_return_abi_rep(ctx, mfunc);
+    bool wrapped = emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
+    emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
+    fprintf(out, "(NULL");
+    for (uint16_t a = 0; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, mfunc, (uint16_t) a));
+    }
+    fprintf(out, ")");
+    emit_conversion_suffix(out, wrapped);
+    return true;
+}
+
+static bool xicgen_emit_stringbuilder_append(FILE *out, const XiValue *v, const char *method,
+                                             uint16_t nargs) {
+    const XrType *recv_type = v->nargs > 0 && v->args[0] ? v->args[0]->type : NULL;
+    bool recv_is_stringbuilder = recv_type && recv_type->kind == XR_KIND_INSTANCE &&
+                                 recv_type->instance.class_name &&
+                                 strcmp(recv_type->instance.class_name, "StringBuilder") == 0;
+    if (!recv_is_stringbuilder || !method || strcmp(method, "append") != 0 || nargs != 1)
+        return false;
+    fprintf(out, "(xrt_strbuf_append(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, "), ");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ")");
+    return true;
+}
+
+static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                       const char *method, uint16_t nargs) {
+    int sym = cg_method_sym(method);
+    if (sym < 0 && xicgen_emit_stringbuilder_append(out, v, method, nargs))
+        return;
+    if (sym < 0) {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method '%s'\n", method ? method : "?");
+        emit_codegen_abort_expr(out);
+        return;
+    }
+    if (emit_class_native_map_method_call_expr(ctx, out, f, v))
+        return;
+    if (emit_class_native_set_method_call_expr(ctx, out, f, v))
+        return;
+    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+    if (nargs == 0) {
+        fprintf(out, "xrt_method_0(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %d)", sym);
+    } else if (nargs == 1) {
+        fprintf(out, "xrt_method_1(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else if (nargs == 2) {
+        fprintf(out, "xrt_method_2(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", %d, ", sym);
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+        fprintf(out, ")");
+    } else {
+        ctx->error = true;
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT method call with %u args\n",
+                (unsigned) nargs);
+        emit_codegen_abort_expr(out);
+    }
+    emit_conversion_suffix(out, wrapped);
+}
+
+static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
+    const char *method = (const char *) v->aux;
+    bool is_super = v->op == XI_CALL_METHOD && (v->aux_int & 1) != 0;
+    const XiFunc *mfunc = NULL;
+    const char *method_prefix = NULL;
+
+    if (xicgen_emit_time_method(ctx, out, f, v))
+        return;
+    if (is_super)
+        mfunc = xicgen_lookup_super_method(ctx, f, method, &method_prefix);
+    else
+        mfunc = xicgen_lookup_receiver_method(ctx, f, v, method, &method_prefix);
+
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
+    if (xicgen_emit_typed_array_method(ctx, out, f, v, prefix, method, nargs))
+        return;
+    if (xicgen_emit_enum_method(ctx, out, v, method))
+        return;
+    if (xicgen_emit_task_method(ctx, out, v, method, nargs))
+        return;
+    if (xicgen_emit_direct_method(ctx, out, f, v, prefix, mfunc, method_prefix))
+        return;
+    xicgen_emit_runtime_method(ctx, out, f, v, method, nargs);
 }
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
