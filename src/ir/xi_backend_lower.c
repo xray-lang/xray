@@ -7,9 +7,9 @@
  *
  * xi_backend_lower.c - Lower high-level Xi IR ops to backend-legal form
  *
- * Rewrites semantic sugar ops (XI_STR_CONCAT, XI_ITER_*, XI_ARRAY_NEW,
- * etc.) into XI_CALL_BUILTIN or XI_CALL_METHOD so that the function
- * satisfies the STAGE_BACKEND contract.
+ * Rewrites remaining semantic sugar ops (XI_ITER_*, XI_SLICE, etc.) into
+ * XI_CALL_BUILTIN or XI_CALL_METHOD so that the function satisfies the
+ * STAGE_BACKEND contract.
  *
  * This pass runs after select_rep (STAGE_REPPED) and advances the
  * function to STAGE_BACKEND.  It does NOT allocate new values — it
@@ -39,22 +39,6 @@ static bool lower_value(XiValue *v) {
         return false;
 
     switch ((XiOp) v->op) {
-        case XI_STR_CONCAT:
-            rewrite_to_builtin(v, "str_concat");
-            break;
-
-        case XI_ARRAY_NEW:
-            rewrite_to_builtin(v, "array_new");
-            break;
-
-        case XI_MAP_NEW:
-            rewrite_to_builtin(v, "map_new");
-            break;
-
-        case XI_SET_NEW:
-            rewrite_to_builtin(v, "set_new");
-            break;
-
         case XI_ITER_NEW:
             rewrite_to_builtin(v, "iter_new");
             break;

@@ -77,6 +77,10 @@
     X(STORE_FIELD, "xi.store.field", xicgen_store_field) \
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
+    X(ARRAY_NEW, "xi.array.new", xicgen_array_new) \
+    X(MAP_NEW, "xi.map.new", xicgen_map_new) \
+    X(SET_NEW, "xi.set.new", xicgen_set_new) \
+    X(STR_CONCAT, "xi.str.concat", xicgen_str_concat) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \

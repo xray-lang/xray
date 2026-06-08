@@ -27,6 +27,10 @@
 /* Minimal XrType stubs */
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_NULL, .id = 2, .frozen = true};
+static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
+static XrType stub_array = {.kind = XR_KIND_ARRAY, .id = 4, .frozen = true};
+static XrType stub_map = {.kind = XR_KIND_MAP, .id = 5, .frozen = true};
+static XrType stub_set = {.kind = XR_KIND_SET, .id = 6, .frozen = true};
 
 /* ========== Test 1: XiStage enum and names ========== */
 
@@ -266,6 +270,57 @@ static void test_backend_lower_preserves_json_field_ops(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_lower_preserves_collection_ops(void) {
+    printf("--- test_backend_lower_preserves_collection_ops ---\n");
+
+    XiFunc *f = xi_func_new("backend_collection_fn", &stub_void);
+    assert(f != NULL);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *cap = xi_const_int(f, entry, 2, &stub_int);
+    assert(cap != NULL);
+
+    XiValue *array_new = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_array, 1);
+    assert(array_new != NULL);
+    array_new->args[0] = cap;
+    array_new->flags = xi_op_default_effects(XI_ARRAY_NEW);
+
+    XiValue *map_new = xi_value_new(f, entry, XI_MAP_NEW, &stub_map, 1);
+    assert(map_new != NULL);
+    map_new->args[0] = cap;
+    map_new->flags = xi_op_default_effects(XI_MAP_NEW);
+
+    XiValue *set_new = xi_value_new(f, entry, XI_SET_NEW, &stub_set, 1);
+    assert(set_new != NULL);
+    set_new->args[0] = cap;
+    set_new->flags = xi_op_default_effects(XI_SET_NEW);
+
+    XiValue *concat = xi_value_new(f, entry, XI_STR_CONCAT, &stub_string, 2);
+    assert(concat != NULL);
+    concat->args[0] = cap;
+    concat->args[1] = cap;
+    concat->flags = xi_op_default_effects(XI_STR_CONCAT);
+
+    xi_backend_lower(f);
+
+    assert(f->stage == XI_STAGE_BACKEND);
+    assert(array_new->op == XI_ARRAY_NEW);
+    assert(map_new->op == XI_MAP_NEW);
+    assert(set_new->op == XI_SET_NEW);
+    assert(concat->op == XI_STR_CONCAT);
+    assert(xi_op_is_backend_legal(array_new->op));
+    assert(xi_op_is_backend_legal(map_new->op));
+    assert(xi_op_is_backend_legal(set_new->op));
+    assert(xi_op_is_backend_legal(concat->op));
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Test 6: Stage monotonicity ========== */
 
 static void test_stage_monotonicity(void) {
@@ -341,6 +396,7 @@ int main(void) {
     test_verify_with_stage();
     test_backend_lower_preserves_print();
     test_backend_lower_preserves_json_field_ops();
+    test_backend_lower_preserves_collection_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

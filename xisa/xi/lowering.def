@@ -580,27 +580,31 @@
 
 (lower xi.array.new
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_array_new)
-  :jit-xm (driver xi2xm_array_new))
+  :jit-xm (driver xi2xm_array_new)
+  :aot-c (driver xicgen_array_new))
 
 (lower xi.map.new
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_map_new)
-  :jit-xm (driver xi2xm_map_new))
+  :jit-xm (driver xi2xm_map_new)
+  :aot-c (driver xicgen_map_new))
 
 (lower xi.set.new
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_set_new)
-  :jit-xm (driver xi2xm_set_new))
+  :jit-xm (driver xi2xm_set_new)
+  :aot-c (driver xicgen_set_new))
 
 (lower xi.str.concat
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_str_concat)
-  :jit-xm (driver xi2xm_str_concat))
+  :jit-xm (driver xi2xm_str_concat)
+  :aot-c (driver xicgen_str_concat))
 
 (lower xi.as
   :match ()
