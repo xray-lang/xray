@@ -461,6 +461,8 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         return;
 
     bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op);
+    bool raw_cell_args = xi_emit_vm_uses_raw_cell_args(v->op);
+    bool handles_cell_dst = xi_emit_vm_handles_cell_dst(v->op);
     uint8_t dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -469,20 +471,19 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
  * capture, reading its register returns the XrCell object, not the value.
  * Emit CELL_GET to a temp register for each such arg and temporarily
  * redirect reg_map so the handler sees the unwrapped value.
- * Closure captures access cells via captures[] (not v->args), so they
- * correctly get the cell itself. */
+ * Some handlers consume cell objects directly and opt out through the
+ * generated VM lowering metadata. */
 #define CELL_UNWRAP_MAX 8
     uint32_t saved_ids[CELL_UNWRAP_MAX];
     uint8_t saved_regs[CELL_UNWRAP_MAX];
     uint8_t temp_regs[CELL_UNWRAP_MAX];
     int nsaved = 0;
 
-    bool skip_unwrap = (v->op == XI_CLOSURE_NEW);
     for (uint16_t ai = 0; ai < v->nargs && nsaved < CELL_UNWRAP_MAX; ai++) {
         XiValue *arg = v->args[ai];
         if (!arg || arg->id >= ctx->reg_map_size)
             continue;
-        if (skip_unwrap)
+        if (raw_cell_args)
             continue;
         if (!ctx->cell_wrapped[arg->id] &&
             !(arg->var_id != 0xFF && ctx->cell_side_reg[arg->var_id] != NO_REG))
@@ -506,9 +507,9 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     }
 #undef CELL_UNWRAP_MAX
 
-    /* If the destination register is cell-wrapped and this is not a closure
-     * (closures handle cell-set internally), redirect the handler to write
-     * into a temp register and then CELL_SET into the real cell register.
+    /* If the destination register is cell-wrapped and the handler does not
+     * handle cell writes itself, redirect the handler to write into a temp
+     * register and then CELL_SET into the real cell register.
      * This prevents overwriting cell pointers when a variable is re-assigned
      * after being cell-wrapped by a hoisted function's capture.
      *
@@ -517,7 +518,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     uint8_t real_dst = dst;
     bool need_cell_set = false;
     bool need_cell_new = false;
-    if (v->op != XI_CLOSURE_NEW && v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+    if (!handles_cell_dst && v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
         if (!ctx->cell_created[v->var_id]) {
             /* First definition: emit value to dst, then wrap with CELL_NEW */
             need_cell_new = true;
