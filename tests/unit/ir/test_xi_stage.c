@@ -214,6 +214,58 @@ static void test_backend_lower_preserves_print(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_lower_preserves_json_field_ops(void) {
+    printf("--- test_backend_lower_preserves_json_field_ops ---\n");
+
+    XiFunc *f = xi_func_new("backend_json_field_fn", &stub_void);
+    assert(f != NULL);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *json = xi_value_new(f, entry, XI_JSON_NEW, &stub_int, 0);
+    assert(json != NULL);
+    json->flags = xi_op_default_effects(XI_JSON_NEW);
+
+    XiValue *value = xi_const_int(f, entry, 7, &stub_int);
+    assert(value != NULL);
+
+    XiValue *init = xi_value_new(f, entry, XI_JSON_INIT_F, &stub_void, 2);
+    assert(init != NULL);
+    init->args[0] = json;
+    init->args[1] = value;
+    init->flags = xi_op_default_effects(XI_JSON_INIT_F);
+    init->aux_int = 0;
+
+    XiValue *get = xi_value_new(f, entry, XI_JSON_GET_F, &stub_int, 1);
+    assert(get != NULL);
+    get->args[0] = json;
+    get->flags = xi_op_default_effects(XI_JSON_GET_F);
+    get->aux_int = 0;
+
+    XiValue *set = xi_value_new(f, entry, XI_JSON_SET_F, &stub_void, 2);
+    assert(set != NULL);
+    set->args[0] = json;
+    set->args[1] = get;
+    set->flags = xi_op_default_effects(XI_JSON_SET_F);
+    set->aux_int = 0;
+
+    xi_backend_lower(f);
+
+    assert(f->stage == XI_STAGE_BACKEND);
+    assert(init->op == XI_JSON_INIT_F);
+    assert(get->op == XI_JSON_GET_F);
+    assert(set->op == XI_JSON_SET_F);
+    assert(xi_op_is_backend_legal(init->op));
+    assert(xi_op_is_backend_legal(get->op));
+    assert(xi_op_is_backend_legal(set->op));
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Test 6: Stage monotonicity ========== */
 
 static void test_stage_monotonicity(void) {
@@ -288,6 +340,7 @@ int main(void) {
     test_pass_desc_fields();
     test_verify_with_stage();
     test_backend_lower_preserves_print();
+    test_backend_lower_preserves_json_field_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

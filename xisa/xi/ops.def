@@ -491,6 +491,7 @@
 (define-xi-op xi.json.init.f
   :class memory-write
   :arity 2
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -509,6 +510,7 @@
 (define-xi-op xi.json.set.f
   :class memory-write
   :arity 2
+  :result-kind void
   :effects (side-effect memory-write)
   :requires ()
   :observable ()

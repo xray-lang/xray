@@ -78,6 +78,9 @@
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
+    X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
+    X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \
+    X(JSON_SET_F, "xi.json.set.f", xicgen_json_set_f) \
     X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
     X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
     X(STRUCT_SET, "xi.struct.set", xicgen_struct_set) \

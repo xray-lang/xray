@@ -153,8 +153,7 @@ static bool cg_ownership_op_is_noop(const XiValue *v) {
     return arg && cg_type_has_no_aot_arc_header(arg->type);
 }
 
-/* Check whether an op is void-like (produces no named result).
- * At STAGE_BACKEND, XI_PRINT etc. are XI_CALL_BUILTIN with aux name. */
+/* Check whether an op is void-like (produces no named result). */
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
         return false;
@@ -168,13 +167,6 @@ static bool cg_is_void_like(const XiValue *v) {
         case XI_CORO_OP:
             return v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
                    v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL;
-        case XI_CALL_BUILTIN:
-            if (v->aux) {
-                const char *n = (const char *) v->aux;
-                if (strcmp(n, "json_init_f") == 0 || strcmp(n, "json_set_f") == 0)
-                    return true;
-            }
-            return false;
         default:
             return false;
     }

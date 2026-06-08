@@ -725,21 +725,24 @@
 
 (lower xi.json.init.f
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_json_init_f)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_json_init_f))
 
 (lower xi.json.get.f
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_json_get_f)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_json_get_f))
 
 (lower xi.json.set.f
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_json_set_f)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_json_set_f))
 
 (lower xi.json.decode
   :match ()

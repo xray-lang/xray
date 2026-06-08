@@ -609,6 +609,42 @@ static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     xicgen_emit_print_expr(out, v);
 }
 
+static void xicgen_emit_json_set_field_expr(FILE *out, const XiValue *v) {
+    XR_DCHECK(v->nargs >= 2, "xicgen_emit_json_set_field_expr: missing operands");
+    fprintf(out, "xrt_json_set_field(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ", %d, ", (int) v->aux_int);
+    emit_vref(out, v->args[1]);
+    fprintf(out, ")");
+}
+
+static void xicgen_json_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    xicgen_emit_json_set_field_expr(out, v);
+}
+
+static void xicgen_json_get_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_json_get_f: missing object");
+    fprintf(out, "xrt_json_get_field(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ", %d)", (int) v->aux_int);
+}
+
+static void xicgen_json_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    xicgen_emit_json_set_field_expr(out, v);
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     (void) prefix;
@@ -670,11 +706,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
         fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
-        fprintf(out, "xrt_json_set_field(");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", %d, ", (int) v->aux_int);
-        emit_vref(out, v->args[1]);
-        fprintf(out, ")");
+        xicgen_emit_json_set_field_expr(out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
