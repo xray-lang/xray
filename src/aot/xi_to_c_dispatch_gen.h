@@ -69,6 +69,8 @@
     X(CONVERT, "xi.convert", xicgen_convert) \
     X(BOX, "xi.box", xicgen_box) \
     X(UNBOX, "xi.unbox", xicgen_unbox) \
+    X(LOAD_FIELD, "xi.load.field", xicgen_load_field) \
+    X(STORE_FIELD, "xi.store.field", xicgen_store_field) \
     X(INDEX_GET, "xi.index.get", xicgen_index_get) \
     X(INDEX_SET, "xi.index.set", xicgen_index_set) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
