@@ -107,6 +107,12 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
         case XI_TUPLE_NEW:
         case XI_TUPLE_GET:
 
+        /* Collections and strings */
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+        case XI_STR_CONCAT:
+
         /* Call family (the universal lowering target) */
         case XI_CALL:
         case XI_CALL_METHOD:
@@ -204,10 +210,6 @@ static inline bool xi_op_is_backend_legal(uint16_t op) {
             return true;
 
         /* --- Non-legal (must be lowered before BACKEND) --- */
-        /* XI_STR_CONCAT    → XI_CALL_BUILTIN(str_concat)     */
-        /* XI_ARRAY_NEW     → XI_CALL_BUILTIN(array_new)      */
-        /* XI_MAP_NEW       → XI_CALL_BUILTIN(map_new)        */
-        /* XI_SET_NEW       → XI_CALL_BUILTIN(set_new)        */
         /* XI_ITER_NEW      → XI_CALL_BUILTIN(iter_new)       */
         /* XI_ITER_NEXT     → XI_CALL_BUILTIN(iter_next)      */
         /* XI_ITER_VALID    → XI_CALL_BUILTIN(iter_valid)     */

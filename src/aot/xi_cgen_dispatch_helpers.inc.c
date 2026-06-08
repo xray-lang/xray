@@ -645,23 +645,62 @@ static void xicgen_json_set_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     xicgen_emit_json_set_field_expr(out, v);
 }
 
+static int64_t xicgen_capacity_arg_or_default(const XiValue *v, int64_t fallback) {
+    if (v && v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST)
+        return v->args[0]->aux_int;
+    return fallback;
+}
+
+static void xicgen_array_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                             const char *prefix) {
+    (void) prefix;
+    int64_t cap = xicgen_capacity_arg_or_default(v, 4);
+    if (cg_array_value_uses_native_local(ctx, f, v)) {
+        if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, cap))
+            fprintf(out, "(xrt_array_t*)xrt_array_new(%" PRId64 ").ptr", cap);
+    } else if (!emit_typed_array_new_expr(ctx, out, f, v, cap)) {
+        fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
+    }
+}
+
+static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    int64_t cap = xicgen_capacity_arg_or_default(v, 8);
+    if (!emit_typed_map_new_expr(out, v, cap))
+        fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+}
+
+static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                           const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    int64_t cap = xicgen_capacity_arg_or_default(v, 8);
+    if (!emit_typed_set_new_expr(out, v, cap))
+        fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+}
+
+static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    emit_str_concat_expr(out, v);
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
-    (void) prefix;
     const char *bn = v->aux ? (const char *) v->aux : "";
 
     if (strcmp(bn, "print") == 0) {
         xicgen_emit_print_expr(out, v);
     } else if (strcmp(bn, "str_concat") == 0) {
-        emit_str_concat_expr(out, v);
+        xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {
-        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 4;
-        if (cg_array_value_uses_native_local(ctx, f, v)) {
-            if (!emit_typed_array_new_ptr_expr(ctx, out, f, v, cap))
-                fprintf(out, "(xrt_array_t*)xrt_array_new(%" PRId64 ").ptr", cap);
-        } else if (!emit_typed_array_new_expr(ctx, out, f, v, cap)) {
-            fprintf(out, "xrt_array_new(%" PRId64 ")", cap);
-        }
+        xicgen_array_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "Bytes") == 0) {
         if (cg_array_value_uses_native_local(ctx, f, v)) {
             if (!emit_bytes_new_native_local_expr(out, v)) {
@@ -695,13 +734,9 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "StringBuilder") == 0) {
         fprintf(out, "xrt_strbuf_new()");
     } else if (strcmp(bn, "map_new") == 0) {
-        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
-        if (!emit_typed_map_new_expr(out, v, cap))
-            fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+        xicgen_map_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "set_new") == 0) {
-        int64_t cap = (v->nargs >= 1 && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
-        if (!emit_typed_set_new_expr(out, v, cap))
-            fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+        xicgen_set_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "json_new") == 0) {
         int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
         fprintf(out, "xrt_json_new(%" PRId64 ")", fc);

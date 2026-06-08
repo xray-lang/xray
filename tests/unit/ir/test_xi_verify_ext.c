@@ -743,15 +743,15 @@ TEST(stage_invariant_mask_missing_bits_fails) {
 
 /* ========== Backend legality ========== */
 
-TEST(backend_rejects_unlowered_alloc) {
-    XiFunc *f = make_func("backend_illegal");
+TEST(backend_rejects_unlowered_iter_op) {
+    XiFunc *f = make_func("backend_unlowered_iter_op");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
 
-    XiValue *size = xi_const_int(f, entry, 4, &stub_int);
-    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_int, 1);
-    arr->args[0] = size;
-    xi_block_set_return(entry, arr);
+    XiValue *source = xi_const_int(f, entry, 4, &stub_int);
+    XiValue *iter = xi_value_new(f, entry, XI_ITER_NEW, &stub_int, 1);
+    iter->args[0] = source;
+    xi_block_set_return(entry, iter);
     f->stage = XI_STAGE_BACKEND;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
@@ -759,15 +759,17 @@ TEST(backend_rejects_unlowered_alloc) {
     xi_func_free(f);
 }
 
-TEST(backend_rejects_high_level_builtin) {
-    XiFunc *f = make_func("backend_high_level_builtin");
+TEST(backend_rejects_unlowered_range_op) {
+    XiFunc *f = make_func("backend_unlowered_range_op");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
 
-    XiValue *size = xi_const_int(f, entry, 4, &stub_int);
-    XiValue *arr = xi_value_new(f, entry, XI_ARRAY_NEW, &stub_int, 1);
-    arr->args[0] = size;
-    xi_block_set_return(entry, arr);
+    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *end = xi_const_int(f, entry, 4, &stub_int);
+    XiValue *range = xi_value_new(f, entry, XI_RANGE, &stub_int, 2);
+    range->args[0] = start;
+    range->args[1] = end;
+    xi_block_set_return(entry, range);
     f->stage = XI_STAGE_BACKEND;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
@@ -971,7 +973,7 @@ TEST(backend_accepts_print_op) {
     xi_func_free(f);
 }
 
-TEST(backend_rejects_map_new) {
+TEST(backend_accepts_map_new) {
     XiFunc *f = make_func("backend_map_new");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
@@ -981,11 +983,11 @@ TEST(backend_rejects_map_new) {
     f->stage = XI_STAGE_BACKEND;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
-    ASSERT(verify_fail(f));
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
-TEST(backend_rejects_str_concat) {
+TEST(backend_accepts_str_concat) {
     XiFunc *f = make_func("backend_str_concat");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
@@ -999,7 +1001,7 @@ TEST(backend_rejects_str_concat) {
     f->stage = XI_STAGE_BACKEND;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
-    ASSERT(verify_fail(f));
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
@@ -1044,8 +1046,8 @@ int main(void) {
     run_closed_stage_rejects_bad_upval_index();
     run_repped_stage_rejects_box_i64_rep();
     run_stage_invariant_mask_missing_bits_fails();
-    run_backend_rejects_unlowered_alloc();
-    run_backend_rejects_high_level_builtin();
+    run_backend_rejects_unlowered_iter_op();
+    run_backend_rejects_unlowered_range_op();
     run_backend_rejects_unlowered_call_method();
 
     printf("\n--- CFG Mutation Negatives ---\n");
@@ -1063,8 +1065,8 @@ int main(void) {
 
     printf("\n--- Backend Direct Ops And Negatives ---\n");
     run_backend_accepts_print_op();
-    run_backend_rejects_map_new();
-    run_backend_rejects_str_concat();
+    run_backend_accepts_map_new();
+    run_backend_accepts_str_concat();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
