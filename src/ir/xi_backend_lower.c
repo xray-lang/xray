@@ -7,9 +7,8 @@
  *
  * xi_backend_lower.c - Lower high-level Xi IR ops to backend-legal form
  *
- * Rewrites remaining semantic sugar ops (XI_ITER_*, etc.) into
- * XI_CALL_BUILTIN or XI_CALL_METHOD so that the function satisfies the
- * STAGE_BACKEND contract.
+ * Rewrites remaining semantic sugar ops according to generated backend
+ * rewrite metadata so that the function satisfies the STAGE_BACKEND contract.
  *
  * This pass runs after select_rep (STAGE_REPPED) and advances the
  * function to STAGE_BACKEND.  It does NOT allocate new values — it
@@ -38,25 +37,21 @@ static bool lower_value(XiValue *v) {
     if (xi_op_is_backend_legal(v->op))
         return false;
 
-    switch ((XiOp) v->op) {
-        case XI_ITER_NEW:
-            rewrite_to_builtin(v, "iter_new");
+    uint8_t rewrite = xi_op_backend_rewrite(v->op);
+    switch (rewrite) {
+        case XI_GEN_BACKEND_REWRITE_BUILTIN: {
+            const char *name = xi_op_backend_rewrite_name(v->op);
+            if (!name || !name[0])
+                return false;
+            rewrite_to_builtin(v, name);
             break;
+        }
 
-        case XI_ITER_NEXT:
-            rewrite_to_builtin(v, "iter_next");
-            break;
-
-        case XI_ITER_VALID:
-            rewrite_to_builtin(v, "iter_valid");
-            break;
-
-        case XI_REGEX_COMPILE:
-            rewrite_to_builtin(v, "regex_compile");
-            break;
+        case XI_GEN_BACKEND_REWRITE_NONE:
+        case XI_GEN_BACKEND_REWRITE__COUNT:
+            return false;
 
         default:
-            /* Unknown non-legal op — leave as-is (verifier will catch it). */
             return false;
     }
 

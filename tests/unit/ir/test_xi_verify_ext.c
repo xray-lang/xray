@@ -5,6 +5,7 @@
 
 #include "../../../src/ir/xi_verify.h"
 #include "../../../src/ir/xi_tbaa.h"
+#include "../../../src/ir/xi_backend.h"
 #include "../../../src/ir/xi.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
@@ -794,8 +795,8 @@ TEST(backend_rejects_unlowered_iter_op) {
     xi_func_free(f);
 }
 
-TEST(backend_rejects_unlowered_call_method) {
-    XiFunc *f = make_func("backend_unlowered_call_method");
+TEST(backend_rejects_malformed_call_method) {
+    XiFunc *f = make_func("backend_malformed_call_method");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
 
@@ -807,6 +808,7 @@ TEST(backend_rejects_unlowered_call_method) {
     f->stage = XI_STAGE_BACKEND;
     f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
+    ASSERT(xi_op_is_backend_legal(XI_CALL_METHOD));
     ASSERT(verify_fail(f));
     xi_func_free(f);
 }
@@ -1083,7 +1085,7 @@ int main(void) {
     run_repped_stage_rejects_box_i64_rep();
     run_stage_invariant_mask_missing_bits_fails();
     run_backend_rejects_unlowered_iter_op();
-    run_backend_rejects_unlowered_call_method();
+    run_backend_rejects_malformed_call_method();
 
     printf("\n--- CFG Mutation Negatives ---\n");
     run_cfg_entry_with_predecessors_fails();
