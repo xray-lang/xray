@@ -1089,12 +1089,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Json object: flat field array with O(1) indexed access */
-        case XI_JSON_NEW: {
-            int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
-            fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
-            break;
-        }
         /* ============ Method Call ============ */
 
         /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string.
