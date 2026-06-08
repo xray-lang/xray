@@ -758,6 +758,15 @@ static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 }
 
+static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    int64_t field_count = v->aux_int > 0 ? v->aux_int : 0;
+    fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");
