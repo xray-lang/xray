@@ -1876,6 +1876,43 @@ TEST(cgen_unsupported_coroutine_ops_fail_fast) {
     xi_func_free(ir);
 }
 
+TEST(cgen_reuse_ops_use_aot_arc_helpers) {
+    XrType stub_unknown = {.kind = XR_KIND_UNKNOWN, .id = 106, .frozen = true};
+    XiFunc *ir = xi_func_new("main", &stub_unknown);
+    assert(ir != NULL);
+
+    XiBlock *entry = xi_block_new(ir);
+    assert(entry != NULL);
+
+    XiValue *obj = xi_param(ir, entry, 0, &stub_unknown);
+    assert(obj != NULL);
+    ir->params = xr_calloc(1, sizeof(XiValue *));
+    assert(ir->params != NULL);
+    ir->params[0] = obj;
+    ir->nparams = 1;
+
+    XiValue *drop = xi_value_new(ir, entry, XI_DROP_REUSE, &stub_unknown, 1);
+    assert(drop != NULL);
+    drop->args[0] = obj;
+    XiValue *alloc = xi_value_new(ir, entry, XI_ALLOC_AT, &stub_unknown, 1);
+    assert(alloc != NULL);
+    alloc->args[0] = drop;
+    alloc->aux_int = (INT64_C(7) << 16) | 64;
+    xi_block_set_return(entry, alloc);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL);
+
+    assert(!had_error && "AOT cgen should accept backend reuse ops");
+    assert(contains(code, "xrt_drop_reuse(") && "drop.reuse should call AOT ARC helper");
+    assert(contains(code, "xrt_alloc_at(") && "alloc.at should call AOT ARC helper");
+    assert(contains(code, ", 7, 64)") && "alloc.at should unpack aux_int constants");
+
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_unresolved_import_fails_fast) {
     XrType stub_unit = {.kind = XR_KIND_UNIT, .id = 102, .frozen = true};
     XrType stub_string = {.kind = XR_KIND_STRING, .id = 103, .frozen = true};
@@ -3026,6 +3063,7 @@ int main(void) {
     run_cgen_typed_array_reduce_captured_callback_uses_runtime_helper();
     run_cgen_int_const_div_mod_uses_native_ops();
     run_cgen_unsupported_coroutine_ops_fail_fast();
+    run_cgen_reuse_ops_use_aot_arc_helpers();
     run_cgen_unresolved_import_fails_fast();
     run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_wrapper_aborts();

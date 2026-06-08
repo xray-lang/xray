@@ -1301,23 +1301,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        case XI_DROP_REUSE:
-            XR_DCHECK(v->nargs >= 1, "XI_DROP_REUSE: need arg");
-            fprintf(out, "xrt_drop_reuse(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-            break;
-
-        case XI_ALLOC_AT: {
-            XR_DCHECK(v->nargs >= 1, "XI_ALLOC_AT: need token arg");
-            uint8_t gc_type = (uint8_t) ((v->aux_int >> 16) & 0xFF);
-            uint32_t alloc_sz = (uint32_t) (v->aux_int & 0xFFFF);
-            fprintf(out, "xrt_alloc_at(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ", %u, %u)", (unsigned) gc_type, (unsigned) alloc_sz);
-            break;
-        }
-
             /* ============ Stack Allocation ============ */
 
         case XI_STACK_ALLOC: {

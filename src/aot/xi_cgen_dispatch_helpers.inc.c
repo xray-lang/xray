@@ -712,6 +712,24 @@ static void xicgen_release(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_release");
 }
 
+static void xicgen_drop_reuse(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    xicgen_ownership_call(ctx, out, f, v, prefix, "xrt_drop_reuse");
+}
+
+static void xicgen_alloc_at(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                            const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_alloc_at: need token arg");
+    uint8_t gc_type = (uint8_t) ((v->aux_int >> 16) & 0xFF);
+    uint32_t alloc_sz = (uint32_t) (v->aux_int & 0xFFFF);
+    fprintf(out, "xrt_alloc_at(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ", %u, %u)", (unsigned) gc_type, (unsigned) alloc_sz);
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");
