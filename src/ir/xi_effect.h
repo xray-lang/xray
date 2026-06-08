@@ -15,7 +15,7 @@
  * Consumers:
  *   - xi_lower*.c    : seed value->flags from the table
  *   - xi_verify.c    : assert flags are superset of opcode defaults
- *   - xi_opt*.c      : query whether an op reads/writes memory
+ *   - xi_opt*.c      : query effects and speculation policy
  *   - xi_pipeline.c  : compute per-function effect summary
  */
 
@@ -57,6 +57,10 @@ static inline bool xi_op_is_pure(uint16_t op) {
 
 static inline bool xi_op_allocates(uint16_t op) {
     return (xi_op_semantic_effects(op) & XI_EFFECT_ALLOCATES) != 0;
+}
+
+static inline bool xi_op_can_speculate(uint16_t op) {
+    return xi_generated_op_speculation(op) == XI_GEN_SPECULATION_SAFE;
 }
 
 #endif  // XI_EFFECT_H

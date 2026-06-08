@@ -25,66 +25,24 @@
 
 #include "xi_opt_ifconv.h"
 #include "../base/xchecks.h"
+#include "xi_effect.h"
 
 #define IFCONV_MAX_INS 2
 #define IFCONV_MAX_PHIS 2
 
 /* ========== Helpers ========== */
 
-/* Check if a value is pure (safe to speculate past a branch). */
-static bool ifconv_is_pure(const XiValue *v) {
+/* Check if a value can be speculated past a branch. */
+static bool ifconv_can_speculate(const XiValue *v) {
     if (!v)
         return false;
-    if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
+    if (v->flags &
+        (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND | XI_FLAG_WRITES_MEM))
         return false;
-    switch (v->op) {
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_NOT:
-        case XI_ISNULL:
-        case XI_CONVERT:
-        case XI_COPY:
-        case XI_BOX:
-        case XI_UNBOX:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-        case XI_CONST:
-        case XI_SELECT:
-            return true;
-        default:
-            return false;
-    }
+    return xi_op_can_speculate(v->op);
 }
 
-/* Check if a branch arm block is eligible: PLAIN, ≤N pure values,
+/* Check if a branch arm block is eligible: PLAIN, ≤N speculatable values,
  * single successor. */
 static bool ifconv_ok_arm(const XiBlock *blk) {
     if (!blk)
@@ -98,7 +56,7 @@ static bool ifconv_ok_arm(const XiBlock *blk) {
             continue;
         if (v->op == XI_COPY)
             continue; /* copies are free */
-        if (!ifconv_is_pure(v))
+        if (!ifconv_can_speculate(v))
             return false;
         n++;
     }
