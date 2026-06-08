@@ -447,17 +447,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
 #define XI_VM_HANDLER_ENTRY(op, handler) [XI_##op] = handler,
     XI_EMIT_VM_LOWERING_HANDLERS(XI_VM_HANDLER_ENTRY)
 #undef XI_VM_HANDLER_ENTRY
-        [XI_TAIL_CALL] = xi_emit_tail_call,
-    [XI_GET_GLOBAL] = xi_emit_get_global,
-    [XI_SET_GLOBAL] = xi_emit_set_global,
-    [XI_ERR_SET] = xi_emit_err_set,
-    [XI_ERR_RETURN] = xi_emit_err_return,
-    [XI_ERR_CHECK] = xi_emit_err_check,
-    [XI_ERR_CATCH] = xi_emit_err_catch,
-    [XI_CORO_OP] = xi_emit_coro_op,
-    [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
-    [XI_ASSERT_THROWS] = xi_emit_assert_throws,
-    [XI_REGEX_COMPILE] = xi_emit_regex_compile,
+        [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
 };
 
 /* ========== Instruction Selection ========== */
