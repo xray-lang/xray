@@ -33,6 +33,10 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
     return xi_generated_op_default_flags(op);
 }
 
+static inline uint32_t xi_op_semantic_effects(uint16_t op) {
+    return xi_generated_op_effects(op);
+}
+
 /* Query helpers for optimization passes */
 
 static inline bool xi_op_may_suspend(uint16_t op) {
@@ -49,6 +53,10 @@ static inline bool xi_op_writes_mem(uint16_t op) {
 
 static inline bool xi_op_is_pure(uint16_t op) {
     return xi_op_default_effects(op) == 0;
+}
+
+static inline bool xi_op_allocates(uint16_t op) {
+    return (xi_op_semantic_effects(op) & XI_EFFECT_ALLOCATES) != 0;
 }
 
 #endif  // XI_EFFECT_H

@@ -878,23 +878,6 @@ static void verify_closed(VerifyCtx *ctx, const XiFunc *f) {
     }
 }
 
-/* Helper: check if an op is a heap-allocating instruction. */
-static bool verify_is_heap_alloc(uint16_t op) {
-    switch (op) {
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_TUPLE_NEW:
-        case XI_SET_NEW:
-        case XI_JSON_NEW:
-        case XI_CLOSURE_NEW:
-        case XI_STR_CONCAT:
-        case XI_REGEX_COMPILE:
-            return true;
-        default:
-            return false;
-    }
-}
-
 /* OWNED: escape analysis has run; every allocation op carries a
  * valid escape annotation; XI_MOVE ownership semantics are sound. */
 static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
@@ -914,7 +897,7 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
 
             /* Allocation ops must have escape level in [0,3] */
-            if (verify_is_heap_alloc(v->op)) {
+            if (xi_op_allocates(v->op)) {
                 if (v->escape > 3) {
                     verr(ctx,
                          "func '%s': v%u %s in b%u has invalid escape "
@@ -960,12 +943,6 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
 
 /* ========== Check 17: NARROW Required Before Typed-Array Store ========== */
 
-/* Return true if the op is a narrowing truncation instruction. */
-static bool is_narrow_op(uint16_t op) {
-    return op == XI_NARROW_I8 || op == XI_NARROW_U8 || op == XI_NARROW_I16 || op == XI_NARROW_U16 ||
-           op == XI_NARROW_I32 || op == XI_NARROW_U32 || op == XI_NARROW_F32;
-}
-
 static bool native_width_needs_narrow(uint8_t native_width) {
     switch (native_width) {
         case XR_NATIVE_I8:
@@ -981,10 +958,37 @@ static bool native_width_needs_narrow(uint8_t native_width) {
     }
 }
 
+static const char *native_width_result_name(uint8_t native_width) {
+    switch (native_width) {
+        case XR_NATIVE_I8:
+            return "i8";
+        case XR_NATIVE_U8:
+            return "u8";
+        case XR_NATIVE_I16:
+            return "i16";
+        case XR_NATIVE_U16:
+            return "u16";
+        case XR_NATIVE_I32:
+            return "i32";
+        case XR_NATIVE_U32:
+            return "u32";
+        case XR_NATIVE_F32:
+            return "f32";
+        default:
+            return NULL;
+    }
+}
+
+static bool value_has_native_width_result(const XiValue *v, uint8_t native_width) {
+    const char *expected = native_width_result_name(native_width);
+    const char *actual = v ? xi_generated_op_result_native_type(v->op) : NULL;
+    return expected && actual && strcmp(expected, actual) == 0;
+}
+
 /* XI_INDEX_SET on a sub-width typed array (Array<int8>, Array<uint16>, etc.)
- * must have a NARROW_* op feeding its value argument (args[2]).
- * Without narrowing, a full-width int64/f64 is stored into a narrow slot,
- * silently losing high bits at the VM/JIT level but not at AOT. */
+ * must have a value argument whose op declares the matching native result width.
+ * Without width-specific narrowing, a full-width int64/f64 can be stored into a
+ * narrow slot, silently losing high bits at the VM/JIT level but not at AOT. */
 static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1010,15 +1014,18 @@ static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
             if (!elem || !native_width_needs_narrow(elem->native_width))
                 continue;
 
-            /* Sub-width element — args[2] must be a NARROW_* op */
+            /* Sub-width element: args[2] must produce the exact native width. */
             XiValue *val = v->args[2];
             XR_DCHECK(val != NULL, "verify: INDEX_SET val arg is NULL");
-            if (!is_narrow_op(val->op)) {
+            const char *expected = native_width_result_name(elem->native_width);
+            const char *actual = xi_generated_op_result_native_type(val->op);
+            if (!value_has_native_width_result(val, elem->native_width)) {
                 verr(ctx,
                      "func '%s': XI_INDEX_SET v%u in b%u stores to "
-                     "sub-width typed array (native_width=%u) but "
-                     "value v%u (op %s) is not a NARROW_* op",
-                     f->name, v->id, blk->id, elem->native_width, val->id, xi_op_name(val->op));
+                     "sub-width typed array (native_width=%u, expected %s) but "
+                     "value v%u (op %s, native result %s) does not match",
+                     f->name, v->id, blk->id, elem->native_width, expected ? expected : "none",
+                     val->id, xi_op_name(val->op), actual ? actual : "none");
                 return;
             }
         }
