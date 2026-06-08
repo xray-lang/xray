@@ -1353,6 +1353,27 @@ static XmRef xi2xm_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_call_builtin(ctx, blk, v);
 }
 
+static XmRef xi2xm_extract(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
+    if (v->aux_int != 0) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    return get_ref(ctx, v->args[0]);
+}
+
+static XmRef xi2xm_multi_ret(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    if (v->nargs > 1) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    if (v->nargs == 1)
+        return get_ref(ctx, v->args[0]);
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
 static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_deopt_to_vm(ctx, blk, v);
 }
@@ -1426,20 +1447,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
             return lower_call(ctx, blk, v);
-
-        /* Extract i-th result from a multi-return call.  aux_int is the
-         * zero-based result index.  Index 0 aliases the call's primary
-         * x0/x1 result.  Indices >= 1 require pulling from
-         * xr_coro_jit_state(coro)->scratch->ret_vals[] — codegen does not emit those reads
-         * yet, so bail out and let the VM run the function. */
-        case XI_EXTRACT: {
-            XR_DCHECK(v->nargs == 1, "extract: expected 1 arg");
-            if (v->aux_int != 0) {
-                ctx->error = true;
-                return xm_const_i64(ctx->xm_func, 0);
-            }
-            return get_ref(ctx, v->args[0]);
-        }
 
         /* Field access — class-based dynamic-layout dispatch handles the
          * fast path in the VM; JIT bails to OP_GETPROP for property reads. */
@@ -1549,17 +1556,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_SLICE:
         case XI_RANGE:
             return lower_call(ctx, blk, v);
-
-        /* Multi-return packaging.  Codegen RET only emits x0/x1, so
-         * extra values would be dropped — bail out for now. */
-        case XI_MULTI_RET:
-            if (v->nargs > 1) {
-                ctx->error = true;
-                return xm_const_i64(ctx->xm_func, 0);
-            }
-            if (v->nargs == 1)
-                return get_ref(ctx, v->args[0]);
-            return xm_const_i64(ctx->xm_func, 0);
 
         case XI_STRUCT_NEW:
         case XI_STRUCT_GET:

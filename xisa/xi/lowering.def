@@ -210,6 +210,18 @@
   :jit-xm (driver xi2xm_call_builtin)
   :aot-c (driver xicgen_call_builtin))
 
+(lower xi.extract
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_extract)
+  :jit-xm (driver xi2xm_extract))
+
+(lower xi.multi.ret
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_multi_ret)
+  :jit-xm (driver xi2xm_multi_ret))
+
 (lower xi.throw
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
