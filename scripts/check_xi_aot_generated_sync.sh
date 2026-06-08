@@ -63,13 +63,17 @@ compare_artifacts() {
 section "Xi semantic generated artifacts"
 if require_file tools/xisagen/xisagen.py &&
    require_file xisa/xi/ops.def &&
-   require_file xisa/xi/lowering.def; then
+   require_file xisa/xi/lowering.def &&
+   require_file xisa/xi/verifier.def; then
     if run_gen python3 tools/xisagen/xisagen.py xi-ops \
             xisa/xi/ops.def "${TMP_ROOT}/src/ir/xi_ops_gen.h" &&
+       run_gen python3 tools/xisagen/xisagen.py xi-verify \
+            xisa/xi/ops.def xisa/xi/verifier.def "${TMP_ROOT}/src/ir/xi_verify_gen.h" &&
        run_gen python3 tools/xisagen/xisagen.py xi-lowering \
             xisa/xi/ops.def xisa/xi/lowering.def "${TMP_ROOT}"; then
         compare_artifacts "Xi" \
             src/ir/xi_ops_gen.h \
+            src/ir/xi_verify_gen.h \
             src/ir/xi_lowering_coverage_gen.h \
             src/ir/xi_emit_vm_gen.h \
             src/jit/xi_to_xm_dispatch_gen.h \

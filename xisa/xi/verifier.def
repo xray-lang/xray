@@ -1,0 +1,47 @@
+; Xi verifier rule source.
+; Entries describe op-level verifier contracts consumed by xi_verify.c.
+
+(verify-xi-op xi.extract
+  :checks (obsolete))
+
+(verify-xi-op xi.multi.ret
+  :checks (obsolete))
+
+(verify-xi-op xi.eq
+  :checks (bool-result))
+
+(verify-xi-op xi.ne
+  :checks (bool-result))
+
+(verify-xi-op xi.lt
+  :checks (bool-result))
+
+(verify-xi-op xi.le
+  :checks (bool-result))
+
+(verify-xi-op xi.gt
+  :checks (bool-result))
+
+(verify-xi-op xi.ge
+  :checks (bool-result))
+
+(verify-xi-op xi.eq.strict
+  :checks (bool-result))
+
+(verify-xi-op xi.ne.strict
+  :checks (bool-result))
+
+(verify-xi-op xi.not
+  :checks (bool-result))
+
+(verify-xi-op xi.is
+  :checks (bool-result))
+
+(verify-xi-op xi.isnull
+  :checks (bool-result))
+
+(verify-xi-op xi.iter.valid
+  :checks (bool-result))
+
+(verify-xi-op xi.select
+  :checks (select-contract))
