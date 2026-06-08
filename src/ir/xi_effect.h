@@ -67,6 +67,10 @@ static inline bool xi_op_is_comparison(uint16_t op) {
     return xi_op_class(op) == XI_GEN_CLASS_COMPARISON;
 }
 
+static inline XiOp xi_op_negated_comparison(uint16_t op) {
+    return xi_generated_op_negates_to(op);
+}
+
 static inline bool xi_op_can_speculate(uint16_t op) {
     return xi_generated_op_speculation(op) == XI_GEN_SPECULATION_SAFE;
 }

@@ -56,31 +56,10 @@ static bool cmp_keys_equal(const CmpKey *a, const CmpKey *b) {
     return a->lhs_id == b->lhs_id && a->rhs_id == b->rhs_id;
 }
 
-/* Check if two cmp keys test the same operands with negated relation.
- * e.g. LT(x,y) vs GE(x,y), EQ(x,y) vs NE(x,y). */
-static XiOp negate_cmp(XiOp op) {
-    switch (op) {
-        case XI_EQ:
-            return XI_NE;
-        case XI_NE:
-            return XI_EQ;
-        case XI_LT:
-            return XI_GE;
-        case XI_LE:
-            return XI_GT;
-        case XI_GT:
-            return XI_LE;
-        case XI_GE:
-            return XI_LT;
-        default:
-            return XI_OP_COUNT; /* sentinel: not a cmp */
-    }
-}
-
 static bool cmp_keys_negated(const CmpKey *a, const CmpKey *b) {
     if (a->lhs_id != b->lhs_id || a->rhs_id != b->rhs_id)
         return false;
-    return negate_cmp(a->op) == b->op;
+    return xi_op_negated_comparison(a->op) == b->op;
 }
 
 /* ========== Threading Logic ========== */
