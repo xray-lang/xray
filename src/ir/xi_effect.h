@@ -63,4 +63,20 @@ static inline bool xi_op_can_speculate(uint16_t op) {
     return xi_generated_op_speculation(op) == XI_GEN_SPECULATION_SAFE;
 }
 
+static inline uint8_t xi_op_value_numbering_kind(uint16_t op) {
+    return xi_generated_op_value_numbering(op);
+}
+
+static inline bool xi_op_value_numberable(uint16_t op) {
+    return xi_op_value_numbering_kind(op) != XI_GEN_VN_NONE;
+}
+
+static inline bool xi_op_value_numbering_reads_mem(uint16_t op) {
+    return xi_op_value_numbering_kind(op) == XI_GEN_VN_MEMORY_READ;
+}
+
+static inline bool xi_op_is_commutative(uint16_t op) {
+    return (xi_generated_op_algebraic_traits(op) & XI_GEN_ALGEBRAIC_COMMUTATIVE) != 0;
+}
+
 #endif  // XI_EFFECT_H

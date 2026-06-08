@@ -50,88 +50,23 @@
 static bool gvn_is_eligible(const XiValue *v) {
     if (!v)
         return false;
+    uint8_t vn_kind = xi_op_value_numbering_kind(v->op);
+    if (vn_kind == XI_GEN_VN_NONE)
+        return false;
     /* 0-arg memory loads (shared/global/upval) use aux_int, not args. */
-    if (v->nargs == 0 && !xi_is_memory_load(v->op))
+    if (v->nargs == 0 && vn_kind != XI_GEN_VN_MEMORY_READ)
         return false;
     if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW))
         return false;
-
-    switch (v->op) {
-        /* Arithmetic (binary) */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        /* Bitwise (binary) */
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_SHL:
-        case XI_SHR:
-        /* Comparison (binary) */
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        /* Unary */
-        case XI_NEG:
-        case XI_NOT:
-        case XI_BNOT:
-        case XI_ISNULL:
-        case XI_CONVERT:
-        /* Narrow / Widen */
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-            return true;
-
-        /* Memory loads participate if TBAA is active. */
-        case XI_LOAD_FIELD:
-        case XI_INDEX_GET:
-        case XI_STRUCT_GET:
-        case XI_JSON_GET_F:
-        case XI_TUPLE_GET:
-        case XI_GET_SHARED:
-        case XI_GET_GLOBAL:
-        case XI_LOAD_UPVAL:
-            return true;
-
-        default:
-            return false;
-    }
+    return true;
 }
 
 static bool gvn_is_commutative(uint16_t op) {
-    switch (op) {
-        case XI_ADD:
-        case XI_MUL:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_EQ:
-        case XI_NE:
-            return true;
-        default:
-            return false;
-    }
+    return xi_op_is_commutative(op);
 }
 
 static bool gvn_is_load(uint16_t op) {
-    return xi_is_memory_load(op);
+    return xi_op_value_numbering_reads_mem(op);
 }
 
 /* ========== Value Number Table ========== */
@@ -565,11 +500,8 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
 
             /* Include aux_int in the key for field/slot disambiguation. */
             int64_t aux_key = 0;
-            if (gvn_is_load(v->op) || v->op == XI_LOAD_FIELD || v->op == XI_STRUCT_GET ||
-                v->op == XI_JSON_GET_F || v->op == XI_TUPLE_GET || v->op == XI_GET_SHARED ||
-                v->op == XI_GET_GLOBAL || v->op == XI_LOAD_UPVAL) {
+            if (gvn_is_load(v->op))
                 aux_key = v->aux_int;
-            }
 
             XiValue *leader = NULL;
             uint32_t this_vn = vn_lookup(&vn, v->op, vn0, vn1, aux_key, v, bi, &leader);
