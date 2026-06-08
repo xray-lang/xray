@@ -77,6 +77,31 @@
     X(MAP_NEW, "xi.map.new", xi2xm_map_new) \
     X(SET_NEW, "xi.set.new", xi2xm_set_new) \
     X(STR_CONCAT, "xi.str.concat", xi2xm_str_concat) \
+    X(ITER_NEW, "xi.iter.new", xi2xm_reject_unsupported) \
+    X(ITER_NEXT, "xi.iter.next", xi2xm_reject_unsupported) \
+    X(ITER_VALID, "xi.iter.valid", xi2xm_reject_unsupported) \
+    X(GO, "xi.go", xi2xm_reject_unsupported) \
+    X(AWAIT, "xi.await", xi2xm_reject_unsupported) \
+    X(CHAN_SEND, "xi.chan.send", xi2xm_reject_unsupported) \
+    X(CHAN_RECV, "xi.chan.recv", xi2xm_reject_unsupported) \
+    X(CHAN_TRY_SEND, "xi.chan.try.send", xi2xm_reject_unsupported) \
+    X(CHAN_TRY_RECV, "xi.chan.try.recv", xi2xm_reject_unsupported) \
+    X(CHAN_IS_CLOSED, "xi.chan.is.closed", xi2xm_reject_unsupported) \
+    X(TIME_AFTER, "xi.time.after", xi2xm_reject_unsupported) \
+    X(SELECT_BLOCK, "xi.select.block", xi2xm_reject_unsupported) \
+    X(YIELD, "xi.yield", xi2xm_reject_unsupported) \
+    X(CHAN_NEW, "xi.chan.new", xi2xm_reject_unsupported) \
+    X(DEFER, "xi.defer", xi2xm_reject_unsupported) \
+    X(JSON_NEW, "xi.json.new", xi2xm_reject_unsupported) \
+    X(JSON_INIT_F, "xi.json.init.f", xi2xm_reject_unsupported) \
+    X(JSON_GET_F, "xi.json.get.f", xi2xm_reject_unsupported) \
+    X(JSON_SET_F, "xi.json.set.f", xi2xm_reject_unsupported) \
+    X(JSON_DECODE, "xi.json.decode", xi2xm_reject_unsupported) \
+    X(STRUCT_NEW, "xi.struct.new", xi2xm_reject_unsupported) \
+    X(STRUCT_GET, "xi.struct.get", xi2xm_reject_unsupported) \
+    X(STRUCT_SET, "xi.struct.set", xi2xm_reject_unsupported) \
+    X(SCOPE_ENTER, "xi.scope.enter", xi2xm_reject_unsupported) \
+    X(SCOPE_EXIT, "xi.scope.exit", xi2xm_reject_unsupported) \
     X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xi2xm_reject_unsupported) \
     X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xi2xm_reject_unsupported) \
     X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xi2xm_reject_unsupported) \

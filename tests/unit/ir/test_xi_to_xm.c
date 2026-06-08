@@ -1246,6 +1246,29 @@ TEST(reject_bytes_memory_ops_until_jit_driver_exists) {
     xi_func_free(f);
 }
 
+TEST(reject_unsupported_semantic_ops_until_jit_driver_exists) {
+    static const struct {
+        XiOp op;
+        const char *name;
+    } cases[] = {
+        {XI_ITER_NEW, "iter_new"},     {XI_GO, "go"},
+        {XI_DEFER, "defer"},           {XI_JSON_NEW, "json_new"},
+        {XI_STRUCT_NEW, "struct_new"}, {XI_SCOPE_ENTER, "scope_enter"},
+    };
+
+    for (size_t i = 0; i < sizeof(cases) / sizeof(cases[0]); i++) {
+        XiFunc *f = make_func(cases[i].name, &stub_int);
+        XiBlock *entry = f->entry;
+        XiValue *v = xi_value_new(f, entry, cases[i].op, &stub_int, 0);
+        xi_block_set_return(entry, v);
+
+        XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+        assert(xm == NULL && "unsupported semantic ops must explicitly reject JIT");
+
+        xi_func_free(f);
+    }
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1288,6 +1311,7 @@ int main(void) {
     run_reject_multi_ret_with_extra_results();
     run_reject_extract_extra_result();
     run_reject_bytes_memory_ops_until_jit_driver_exists();
+    run_reject_unsupported_semantic_ops_until_jit_driver_exists();
 
     printf("\n=== %d/%d tests passed ===\n", tests_passed, tests_passed);
     return 0;
