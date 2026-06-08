@@ -11,8 +11,9 @@
  *   For each loop (innermost-first via XiLoopInfo):
  *     1. Build a per-block membership bitmap from the loop body.
  *     2. Build a value→block mapping (def_block[value_id] = block_index).
- *     3. For each pure value in the loop body: if all operands are
- *        defined outside the loop, move the value to the preheader.
+ *     3. For each speculatable pure value in the loop body: if all
+ *        operands are defined outside the loop, move the value to the
+ *        preheader.
  *     4. Iterate to handle chain-invariant propagation (a value
  *        whose operand was just hoisted becomes hoistable).
  *
@@ -21,13 +22,14 @@
  *   The value pointer itself stays valid (arena-allocated).
  *
  * LIMITATIONS:
- *   - Hoists pure arithmetic/comparison/bitwise values.
+ *   - Hoists pure values whose op declares safe speculation.
  *   - Hoists loads that are provably alias-free with all stores
  *     and calls inside the loop body (using TBAA).
  *   - Requires a unique preheader; skips loops without one.
  */
 
 #include "xi_opt_licm.h"
+#include "xi_effect.h"
 #include "xi_loop.h"
 #include "xi_tbaa.h"
 #include "xi_analysis.h"
@@ -37,57 +39,15 @@
 
 #define LICM_MAX_ITERATIONS 8
 
-/* ========== Pure-Op Classification ========== */
+/* ========== Pure-Value Classification ========== */
 
-static bool licm_is_pure(const XiValue *v) {
+static bool licm_is_speculatable_value(const XiValue *v) {
     if (!v)
         return false;
-    if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_WRITES_MEM))
+    if (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND |
+                    XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM))
         return false;
-    switch (v->op) {
-        case XI_CONST:
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_NOT:
-        case XI_ISNULL:
-        case XI_CONVERT:
-        case XI_COPY:
-        case XI_BOX:
-        case XI_UNBOX:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-            return true;
-        default:
-            return false;
-    }
+    return xi_op_can_speculate(v->op);
 }
 
 /* Forward declarations for helpers used across sections. */
@@ -122,17 +82,17 @@ static bool load_is_alias_safe(const XiValue *load, const XiLoop *L) {
     return true;
 }
 
-/* Combined hoistability check: pure ops OR alias-safe loads. */
+/* Combined hoistability check: speculatable pure values OR alias-safe loads. */
 static bool licm_can_hoist_value(const XiValue *v, const uint32_t *def_blk, uint32_t max_id,
                                  const bool *in_loop, uint32_t nblocks, const XiLoop *L) {
     if (!v)
         return false;
 
-    bool is_pure_op = licm_is_pure(v);
-    bool is_safe_load = !is_pure_op && xi_is_memory_load(v->op) &&
+    bool is_speculatable = licm_is_speculatable_value(v);
+    bool is_safe_load = !is_speculatable && xi_is_memory_load(v->op) &&
                         !(v->flags & XI_FLAG_SIDE_EFFECT) && load_is_alias_safe(v, L);
 
-    if (!is_pure_op && !is_safe_load)
+    if (!is_speculatable && !is_safe_load)
         return false;
 
     /* All operands must be defined outside the loop. */

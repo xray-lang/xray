@@ -93,6 +93,13 @@ static void test_optimization_traits(void) {
     ASSERT_TRUE(!xi_op_is_commutative(XI_SUB), "SUB is not commutative");
 }
 
+static void test_speculation_traits(void) {
+    ASSERT_TRUE(xi_op_can_speculate(XI_SELECT), "SELECT is safe to speculate");
+    ASSERT_TRUE(xi_op_can_speculate(XI_COPY), "COPY is safe to speculate");
+    ASSERT_TRUE(!xi_op_can_speculate(XI_EQ_STRICT), "EQ_STRICT is not safe to speculate");
+    ASSERT_TRUE(!xi_op_can_speculate(XI_LOAD_FIELD), "LOAD_FIELD is not safe to speculate");
+}
+
 int main(void) {
     test_all_opcodes_covered();
     test_pure_ops();
@@ -100,6 +107,7 @@ int main(void) {
     test_suspend_ops();
     test_mem_ops();
     test_optimization_traits();
+    test_speculation_traits();
 
     printf("\n=== test_xi_effect: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

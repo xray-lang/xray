@@ -183,6 +183,115 @@ TEST(hoist_const_operand_before_dependent_value) {
     xi_func_free(f);
 }
 
+/* ========== Test: hoist generated speculatable select ========== */
+
+TEST(hoist_generated_speculatable_select) {
+    /*
+     * XI_SELECT is not part of LICM itself; hoistability comes from
+     * generated op speculation metadata.
+     */
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+
+    entry->kind = XI_BLOCK_PLAIN;
+    wire(entry, header, 0);
+
+    header->kind = XI_BLOCK_IF;
+    wire(header, body, 0);
+    wire(header, exit_blk, 1);
+
+    body->kind = XI_BLOCK_PLAIN;
+    wire(body, header, 0);
+
+    exit_blk->kind = XI_BLOCK_RETURN;
+
+    XiValue *cond = xi_value_new(f, entry, XI_CONST, &stub_bool, 0);
+    cond->aux_int = 1;
+    XiValue *lhs = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    lhs->aux_int = 11;
+    XiValue *rhs = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    rhs->aux_int = 22;
+    header->control = cond;
+
+    XiValue *sel = xi_value_new(f, body, XI_SELECT, &stub_int, 3);
+    sel->args[0] = cond;
+    sel->args[1] = lhs;
+    sel->args[2] = rhs;
+
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    XiPassChange chg = xi_opt_licm(f);
+    ASSERT(chg.values_changed);
+    ASSERT(sel->block == entry);
+
+    bool found_in_body = false;
+    for (uint32_t i = 0; i < body->nvalues; i++) {
+        if (body->values[i] == sel)
+            found_in_body = true;
+    }
+    ASSERT(!found_in_body);
+
+    char errbuf[256];
+    ASSERT(xi_verify(f, errbuf, sizeof(errbuf)));
+
+    xi_func_free(f);
+}
+
+/* ========== Test: do NOT hoist zero-effect op without safe speculation ========== */
+
+TEST(no_hoist_unspeculatable_zero_effect) {
+    /*
+     * XI_EQ_STRICT has no declared effects, but it is not marked safe
+     * for speculation. LICM must obey the generated policy boundary.
+     */
+    XiFunc *f = make_func();
+    XiBlock *entry = f->entry;
+
+    XiBlock *header = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+
+    entry->kind = XI_BLOCK_PLAIN;
+    wire(entry, header, 0);
+
+    header->kind = XI_BLOCK_IF;
+    wire(header, body, 0);
+    wire(header, exit_blk, 1);
+
+    body->kind = XI_BLOCK_PLAIN;
+    wire(body, header, 0);
+
+    exit_blk->kind = XI_BLOCK_RETURN;
+
+    XiValue *cond = xi_value_new(f, entry, XI_CONST, &stub_bool, 0);
+    cond->aux_int = 1;
+    XiValue *lhs = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    lhs->aux_int = 11;
+    XiValue *rhs = xi_value_new(f, entry, XI_CONST, &stub_int, 0);
+    rhs->aux_int = 11;
+    header->control = cond;
+
+    XiValue *strict_eq = xi_value_new(f, body, XI_EQ_STRICT, &stub_bool, 2);
+    strict_eq->args[0] = lhs;
+    strict_eq->args[1] = rhs;
+
+    header->sealed = true;
+    body->sealed = true;
+    exit_blk->sealed = true;
+
+    XiPassChange chg = xi_opt_licm(f);
+    ASSERT(!chg.values_changed);
+    ASSERT(strict_eq->block == body);
+
+    xi_func_free(f);
+}
+
 /* ========== Test: hoist alias-safe load (const memory) ========== */
 
 TEST(hoist_const_load) {
@@ -700,6 +809,8 @@ int main(void) {
 
     run_hoist_pure_add();
     run_hoist_const_operand_before_dependent_value();
+    run_hoist_generated_speculatable_select();
+    run_no_hoist_unspeculatable_zero_effect();
     run_hoist_const_load();
     run_hoist_disjoint_load();
     run_no_hoist_aliasing_load();
