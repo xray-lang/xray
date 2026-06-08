@@ -72,6 +72,8 @@
     X(CONVERT, xi_emit_convert) \
     X(BOX, xi_emit_box) \
     X(UNBOX, xi_emit_unbox) \
+    X(LOAD_FIELD, xi_emit_load_field) \
+    X(STORE_FIELD, xi_emit_store_field) \
     X(INDEX_GET, xi_emit_index_get) \
     X(INDEX_SET, xi_emit_index_set) \
     X(ARRAY_NEW, xi_emit_array_new) \
