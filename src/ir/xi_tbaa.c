@@ -41,6 +41,13 @@ XR_FUNC bool xi_is_memory_store(uint16_t op) {
     return op_has_direct_tbaa_access(op) && (effects & XI_EFFECT_MEMORY_WRITE) != 0;
 }
 
+/* Memory clobber ops write through an unknown top-level boundary. */
+XR_FUNC bool xi_is_memory_clobber(uint16_t op) {
+    uint32_t effects = xi_generated_op_effects(op);
+    return xi_generated_op_tbaa_group(op) == XI_GEN_TBAA_TOP &&
+           (effects & XI_EFFECT_MEMORY_WRITE) != 0;
+}
+
 /* Any memory-accessing op (load or store). */
 XR_FUNC bool xi_is_memory_op(uint16_t op) {
     return xi_is_memory_load(op) || xi_is_memory_store(op);

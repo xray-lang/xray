@@ -92,6 +92,9 @@ XR_FUNC bool xi_is_memory_load(uint16_t op);
 /* Returns true if the op is a memory store (writes). */
 XR_FUNC bool xi_is_memory_store(uint16_t op);
 
+/* Returns true if the op may clobber any tracked memory group. */
+XR_FUNC bool xi_is_memory_clobber(uint16_t op);
+
 /* Returns true if the op accesses memory at all (load or store). */
 XR_FUNC bool xi_is_memory_op(uint16_t op);
 
