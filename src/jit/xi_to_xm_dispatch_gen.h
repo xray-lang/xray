@@ -41,6 +41,9 @@
     X(EXTRACT, "xi.extract", xi2xm_extract) \
     X(MULTI_RET, "xi.multi.ret", xi2xm_multi_ret) \
     X(THROW, "xi.throw", xi2xm_throw) \
+    X(TRY, "xi.try", xi2xm_try) \
+    X(CATCH, "xi.catch", xi2xm_catch) \
+    X(END_TRY, "xi.end.try", xi2xm_end_try) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \
     X(DROP_REUSE, "xi.drop.reuse", xi2xm_drop_reuse) \
