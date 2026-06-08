@@ -8,7 +8,7 @@
 #   - New a64_buf_emit(..., 0x...) calls (inline ARM64 bitfield)
 #   - New 'case XM_' entries (hand-written opcode handling)
 #   - New 'void x64_' / 'void a64_' function definitions (new emit helpers)
-#   - New 'case XI_' entries in Xi-to-target lowering roots
+#   - New semantic 'case XI_' entries in Xi-to-target lowering roots
 #
 # This script compares the quarantine baseline counts against the current
 # source and fails if any count increases.
@@ -39,6 +39,15 @@ XI_LOWERING_QUARANTINE_FILES=(
 BASELINE_FILE="scripts/codegen_quarantine_baseline.txt"
 FAIL=0
 
+count_xi_semantic_cases() {
+    local file="$1"
+    awk '
+        /case[[:space:]]+XI_[A-Z0-9_]+[[:space:]]*:/ &&
+        !/case[[:space:]]+XI_(BLOCK_|OP_COUNT)/ { count++ }
+        END { print count + 0 }
+    ' "$file" 2>/dev/null
+}
+
 if [ "${1:-}" = "--update-baseline" ]; then
     echo "# Codegen quarantine baseline (auto-generated)" > "$BASELINE_FILE"
     echo "# Format: filename metric_name count" >> "$BASELINE_FILE"
@@ -54,7 +63,7 @@ if [ "${1:-}" = "--update-baseline" ]; then
     done
     for f in "${XI_LOWERING_QUARANTINE_FILES[@]}"; do
         if [ ! -f "$f" ]; then continue; fi
-        case_count=$(grep -Ec 'case[[:space:]]+XI_[A-Z0-9_]+[[:space:]]*:' "$f" 2>/dev/null || true)
+        case_count=$(count_xi_semantic_cases "$f")
         : "${case_count:=0}"
         echo "$f case_xi $case_count" >> "$BASELINE_FILE"
     done
@@ -85,7 +94,7 @@ while IFS=' ' read -r file metric baseline_count; do
             current=$(grep -c 'case XM_' "$file" 2>/dev/null || true); : "${current:=0}"
             ;;
         case_xi)
-            current=$(grep -Ec 'case[[:space:]]+XI_[A-Z0-9_]+[[:space:]]*:' "$file" 2>/dev/null || true); : "${current:=0}"
+            current=$(count_xi_semantic_cases "$file"); : "${current:=0}"
             ;;
         func_def)
             current=$(grep -c '^void x64_\|^void a64_\|^XR_FUNC void x64_\|^XR_FUNC void a64_' "$file" 2>/dev/null || true); : "${current:=0}"
