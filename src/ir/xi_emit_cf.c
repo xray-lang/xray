@@ -317,14 +317,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
             if (ctx->status != XI_EMIT_OK)
                 return;
 
-            if (blk->control && blk->control->op == XI_MULTI_RET) {
-                /* Multi-value return: values in consecutive regs */
-                uint8_t base = reg_of(ctx, blk->control);
-                if (ctx->status != XI_EMIT_OK)
-                    return;
-                uint8_t nret = (uint8_t) blk->control->nargs;
-                emit_inst(ctx, CREATE_ABC(OP_RETURN, base, nret, 0));
-            } else if (blk->control) {
+            if (blk->control) {
                 uint8_t r = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK)
                     return;

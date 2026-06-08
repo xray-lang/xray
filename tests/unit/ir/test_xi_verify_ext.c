@@ -373,18 +373,31 @@ TEST(if_with_unit_control_fails) {
     xi_func_free(f);
 }
 
-TEST(extract_from_non_call_fails) {
-    XiFunc *f = make_func("extract_bad_source");
+TEST(obsolete_multi_return_ops_fail) {
+    XiFunc *f = make_func("obsolete_extract_op");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
 
-    /* EXTRACT must take a call/multi_ret as its source. A const int
-     * is illegal and the verifier must report it. */
-    XiValue *src = xi_const_int(f, entry, 7, &stub_int);
+    XiValue *src = xi_const_int(f, entry, 1, &stub_int);
     XiValue *ext = xi_value_new(f, entry, XI_EXTRACT, &stub_int, 1);
+    ASSERT(src != NULL);
+    ASSERT(ext != NULL);
     ext->args[0] = src;
-    ext->aux_int = 0;
     xi_block_set_return(entry, ext);
+
+    ASSERT(verify_fail(f));
+    xi_func_free(f);
+
+    f = make_func("obsolete_multi_ret_op");
+    ASSERT(f != NULL);
+    entry = f->entry;
+
+    src = xi_const_int(f, entry, 2, &stub_int);
+    XiValue *mret = xi_value_new(f, entry, XI_MULTI_RET, &stub_int, 1);
+    ASSERT(src != NULL);
+    ASSERT(mret != NULL);
+    mret->args[0] = src;
+    xi_block_set_return(entry, mret);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -1027,7 +1040,7 @@ int main(void) {
     run_if_with_null_condition_passes();
     run_select_with_incompatible_arm_fails();
     run_if_with_unit_control_fails();
-    run_extract_from_non_call_fails();
+    run_obsolete_multi_return_ops_fail();
     run_comparison_must_produce_bool_fails();
     run_call_method_missing_aux_fails();
     run_call_method_zero_args_fails();

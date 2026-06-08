@@ -1774,21 +1774,8 @@ static void lower_return(XiLower *l, AstNode *node) {
             }
         }
     } else if (ret->value_count > 1) {
-        /* Multi-value return: evaluate all expressions first, then package */
-        int n = ret->value_count;
-        XiValue *vals[16];
-        XR_DCHECK(n <= 16, "multi-return exceeds local limit");
-        for (int i = 0; i < n && i < 16; i++) {
-            vals[i] = xi_lower_expr(l, ret->values[i]);
-        }
-        XiValue *mret =
-            xi_value_new(l->func, l->cur_block, XI_MULTI_RET, l->type_any, (uint16_t) n);
-        if (mret) {
-            for (int i = 0; i < n; i++) {
-                mret->args[i] = vals[i];
-            }
-            val = mret;
-        }
+        XR_CHECK(false, "obsolete multi-value return reached Xi lowering");
+        return;
     }
 
     xi_block_set_return(l->cur_block, val);

@@ -173,7 +173,6 @@ XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
         case XI_COPY:
         case XI_BOX:
         case XI_UNBOX:
-        case XI_EXTRACT:
         case XI_PHI:
             return false;
 

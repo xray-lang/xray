@@ -18,7 +18,6 @@ static int tests_passed = 0;
 static int tests_failed = 0;
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
-static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 3, .frozen = true};
 
 #define ASSERT(cond)                                                                               \
@@ -53,65 +52,6 @@ static XiFunc *make_func(const char *name, XrType *ret_type) {
     return f;
 }
 
-static XiValue *make_multi_ret_value(XiFunc *f, XiBlock *blk, uint16_t nret, int64_t base) {
-    XiValue *vals[4];
-    if (nret > 4)
-        return NULL;
-    for (uint16_t i = 0; i < nret; i++) {
-        vals[i] = xi_const_int(f, blk, base + i, &stub_int);
-        if (!vals[i])
-            return NULL;
-    }
-    XiValue *ret = xi_value_new(f, blk, XI_MULTI_RET, &stub_int, nret);
-    if (!ret)
-        return NULL;
-    for (uint16_t i = 0; i < nret; i++)
-        ret->args[i] = vals[i];
-    return ret;
-}
-
-static XiFunc *make_multi_ret_callee(uint16_t nret) {
-    XiFunc *callee = make_func("multi_ret_callee", &stub_int);
-    if (!callee)
-        return NULL;
-    XiValue *ret = make_multi_ret_value(callee, callee->entry, nret, 10);
-    if (!ret) {
-        xi_func_free(callee);
-        return NULL;
-    }
-    xi_block_set_return(callee->entry, ret);
-    return callee;
-}
-
-static XiFunc *make_branch_multi_ret_callee(void) {
-    XiFunc *callee = make_func("branch_multi_ret_callee", &stub_int);
-    if (!callee)
-        return NULL;
-    XiBlock *entry = callee->entry;
-    XiBlock *then_blk = xi_block_new(callee);
-    XiBlock *else_blk = xi_block_new(callee);
-    if (!then_blk || !else_blk) {
-        xi_func_free(callee);
-        return NULL;
-    }
-    XiValue *cond = xi_const_bool(callee, entry, true, &stub_bool);
-    if (!cond) {
-        xi_func_free(callee);
-        return NULL;
-    }
-    xi_block_set_if(entry, cond, then_blk, else_blk);
-
-    XiValue *then_ret = make_multi_ret_value(callee, then_blk, 2, 10);
-    XiValue *else_ret = make_multi_ret_value(callee, else_blk, 2, 20);
-    if (!then_ret || !else_ret) {
-        xi_func_free(callee);
-        return NULL;
-    }
-    xi_block_set_return(then_blk, then_ret);
-    xi_block_set_return(else_blk, else_ret);
-    return callee;
-}
-
 static XiValue *add_known_call(XiFunc *caller, XiFunc *callee) {
     XiBlock *entry = caller->entry;
     XiValue *closure = xi_value_new(caller, entry, XI_CLOSURE_NEW, &stub_func, 0);
@@ -123,48 +63,6 @@ static XiValue *add_known_call(XiFunc *caller, XiFunc *callee) {
         return NULL;
     call->args[0] = closure;
     return call;
-}
-
-static bool run_inline_multi_ret_arity(uint16_t nret) {
-    XiFunc *callee = make_multi_ret_callee(nret);
-    XiFunc *caller = make_func("multi_ret_caller", &stub_int);
-    if (!callee || !caller) {
-        xi_func_free(caller);
-        xi_func_free(callee);
-        return false;
-    }
-
-    XiValue *call = add_known_call(caller, callee);
-    XiValue *extracts[4];
-    if (!call || nret > 4) {
-        xi_func_free(caller);
-        xi_func_free(callee);
-        return false;
-    }
-    for (uint16_t i = 0; i < nret; i++) {
-        extracts[i] = xi_value_new(caller, caller->entry, XI_EXTRACT, &stub_int, 1);
-        if (!extracts[i]) {
-            xi_func_free(caller);
-            xi_func_free(callee);
-            return false;
-        }
-        extracts[i]->args[0] = call;
-        extracts[i]->aux_int = i;
-    }
-    xi_block_set_return(caller->entry, extracts[nret - 1]);
-
-    XiPassChange chg = xi_opt_inline(caller);
-    bool ok = chg.cfg_changed && chg.values_changed;
-    char errbuf[512];
-    ok = ok && xi_verify(caller, errbuf, sizeof(errbuf));
-    for (uint16_t i = 0; ok && i < nret; i++) {
-        ok = extracts[i]->op == XI_COPY && extracts[i]->nargs == 1 && extracts[i]->args[0] &&
-             extracts[i]->args[0]->op == XI_CONST && extracts[i]->args[0]->aux_int == 10 + i;
-    }
-
-    xi_func_free(caller);
-    xi_func_free(callee);
-    return ok;
 }
 
 /* ========== Test: small callee, positive benefit ========== */
@@ -376,113 +274,6 @@ TEST(budget_large_caller) {
     ASSERT(xi_inline_budget(1000) == XI_INLINE_MAX_PER_PASS - 2);
 }
 
-TEST(inlines_multi_return_two_values) {
-    ASSERT(run_inline_multi_ret_arity(2));
-}
-
-TEST(inlines_multi_return_three_values) {
-    ASSERT(run_inline_multi_ret_arity(3));
-}
-
-TEST(inlines_multi_return_four_values) {
-    ASSERT(run_inline_multi_ret_arity(4));
-}
-
-TEST(inlines_multi_return_multiple_paths) {
-    XiFunc *callee = make_branch_multi_ret_callee();
-    XiFunc *caller = make_func("branch_multi_ret_caller", &stub_int);
-    ASSERT(callee != NULL);
-    ASSERT(caller != NULL);
-
-    XiValue *call = add_known_call(caller, callee);
-    ASSERT(call != NULL);
-    XiValue *extract0 = xi_value_new(caller, caller->entry, XI_EXTRACT, &stub_int, 1);
-    XiValue *extract1 = xi_value_new(caller, caller->entry, XI_EXTRACT, &stub_int, 1);
-    ASSERT(extract0 != NULL);
-    ASSERT(extract1 != NULL);
-    extract0->args[0] = call;
-    extract0->aux_int = 0;
-    extract1->args[0] = call;
-    extract1->aux_int = 1;
-    xi_block_set_return(caller->entry, extract1);
-
-    XiPassChange chg = xi_opt_inline(caller);
-    ASSERT(chg.cfg_changed && chg.values_changed);
-    char errbuf[512];
-    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
-    ASSERT(extract0->op == XI_COPY);
-    ASSERT(extract1->op == XI_COPY);
-    ASSERT(extract0->args[0] && extract0->args[0]->op == XI_PHI);
-    ASSERT(extract1->args[0] && extract1->args[0]->op == XI_PHI);
-    ASSERT(extract0->args[0]->nargs == 2);
-    ASSERT(extract1->args[0]->nargs == 2);
-    ASSERT(extract0->args[0]->args[0]->op == XI_CONST);
-    ASSERT(extract0->args[0]->args[1]->op == XI_CONST);
-    ASSERT(extract1->args[0]->args[0]->op == XI_CONST);
-    ASSERT(extract1->args[0]->args[1]->op == XI_CONST);
-    ASSERT(extract0->args[0]->args[0]->aux_int == 10);
-    ASSERT(extract0->args[0]->args[1]->aux_int == 20);
-    ASSERT(extract1->args[0]->args[0]->aux_int == 11);
-    ASSERT(extract1->args[0]->args[1]->aux_int == 21);
-
-    xi_func_free(caller);
-    xi_func_free(callee);
-}
-
-TEST(rejects_multi_return_extract_out_of_range) {
-    XiFunc *callee = make_multi_ret_callee(2);
-    XiFunc *caller = make_func("bad_extract_caller", &stub_int);
-    ASSERT(callee != NULL);
-    ASSERT(caller != NULL);
-
-    XiValue *call = add_known_call(caller, callee);
-    ASSERT(call != NULL);
-    XiValue *extract = xi_value_new(caller, caller->entry, XI_EXTRACT, &stub_int, 1);
-    ASSERT(extract != NULL);
-    extract->args[0] = call;
-    extract->aux_int = 2;
-    xi_block_set_return(caller->entry, extract);
-
-    XiPassChange chg = xi_opt_inline(caller);
-    ASSERT(!chg.cfg_changed && !chg.values_changed && !chg.types_changed);
-    ASSERT(call->op == XI_CALL);
-    ASSERT(extract->op == XI_EXTRACT);
-    ASSERT(extract->args[0] == call);
-
-    xi_func_free(caller);
-    xi_func_free(callee);
-}
-
-TEST(inlines_direct_multi_return_use_as_first_value) {
-    XiFunc *callee = make_multi_ret_callee(2);
-    XiFunc *caller = make_func("direct_multi_ret_use_caller", &stub_int);
-    ASSERT(callee != NULL);
-    ASSERT(caller != NULL);
-
-    XiValue *call = add_known_call(caller, callee);
-    ASSERT(call != NULL);
-    XiValue *one = xi_const_int(caller, caller->entry, 1, &stub_int);
-    XiValue *sum = xi_value_new(caller, caller->entry, XI_ADD, &stub_int, 2);
-    ASSERT(one != NULL);
-    ASSERT(sum != NULL);
-    sum->args[0] = call;
-    sum->args[1] = one;
-    xi_block_set_return(caller->entry, sum);
-
-    XiPassChange chg = xi_opt_inline(caller);
-    ASSERT(chg.cfg_changed && chg.values_changed);
-    char errbuf[512];
-    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
-    ASSERT(sum->args[0] != call);
-    ASSERT(sum->args[0] != NULL);
-    ASSERT(sum->args[0]->op == XI_CONST);
-    ASSERT(sum->args[0]->aux_int == 10);
-    ASSERT(sum->args[1] == one);
-
-    xi_func_free(caller);
-    xi_func_free(callee);
-}
-
 TEST(inlines_unannotated_callee_under_tbaa_invariant) {
     XiFunc *callee = make_func("shared_load_callee", &stub_int);
     XiFunc *caller = make_func("shared_load_caller", &stub_int);
@@ -530,12 +321,6 @@ int main(void) {
     run_budget_small_caller();
     run_budget_medium_caller();
     run_budget_large_caller();
-    run_inlines_multi_return_two_values();
-    run_inlines_multi_return_three_values();
-    run_inlines_multi_return_four_values();
-    run_inlines_multi_return_multiple_paths();
-    run_rejects_multi_return_extract_out_of_range();
-    run_inlines_direct_multi_return_use_as_first_value();
     run_inlines_unannotated_callee_under_tbaa_invariant();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);

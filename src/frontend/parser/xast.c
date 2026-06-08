@@ -603,7 +603,7 @@ AstNode *xr_ast_call_expr_generic(XrayIsolate *X, AstNode *callee, AstNode **arg
     return node;
 }
 
-// Create return statement node (multi-value return)
+// Create return statement node.
 // values: return value expression array
 // count: return value count (0 means no return value)
 AstNode *xr_ast_return_stmt(XrayIsolate *X, AstNode **values, int count, int line) {

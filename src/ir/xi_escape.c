@@ -159,7 +159,6 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_BOX:
         case XI_UNBOX:
         case XI_COPY:
-        case XI_EXTRACT:
             return XI_ESC_NONE;
 
         /* ---- Container reads: no escape of the key/index arg ---- */
@@ -213,7 +212,6 @@ static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
         case XI_LOAD_UPVAL:
         case XI_GET_BUILTIN:
         case XI_IMPORT_REF:
-        case XI_MULTI_RET:
             return XI_ESC_NONE;
 
         /* ---- Exception handling ---- */
@@ -333,7 +331,7 @@ static bool propagate_transparent(XiFunc *f) {
             if (!v)
                 continue;
             /* Transparent ops: output escape ≥ input escape, and vice versa */
-            if (v->op == XI_COPY || v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_EXTRACT) {
+            if (v->op == XI_COPY || v->op == XI_BOX || v->op == XI_UNBOX) {
                 if (v->nargs < 1 || !v->args[0])
                     continue;
                 XiValue *src = v->args[0];

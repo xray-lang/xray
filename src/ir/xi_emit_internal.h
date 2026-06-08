@@ -198,8 +198,6 @@ XR_FUNC void xi_emit_typeof(EmitCtx *ctx, XiValue *v, uint8_t dst);
 
 /* ========== Handler Declarations (xi_emit_call.c) ========== */
 XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst);
-XR_FUNC void xi_emit_extract(EmitCtx *ctx, XiValue *v, uint8_t dst);
-XR_FUNC void xi_emit_multi_ret(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, uint8_t dst);
 XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, uint8_t dst);

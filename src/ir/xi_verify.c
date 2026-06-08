@@ -500,6 +500,12 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
                 continue;
             uint16_t op = v->op;
 
+            if (op == XI_EXTRACT || op == XI_MULTI_RET) {
+                verr(ctx, "func '%s': obsolete multi-return op %u in b%u; use tuple values instead",
+                     f->name, op, blk->id);
+                return;
+            }
+
             /* Comparisons and boolean ops must produce bool type */
             if (is_bool_producing_op(op)) {
                 XrTypeKind kind = v->type->kind;
@@ -540,20 +546,6 @@ static void verify_types(VerifyCtx *ctx, const XiFunc *f) {
                          "func '%s': XI_SELECT v%u in b%u false arm v%u "
                          "is not assignable to result type",
                          f->name, v->id, blk->id, v->args[2]->id);
-                    return;
-                }
-            }
-
-            /* XI_EXTRACT: arg[0] must be a call or multi-ret */
-            if (op == XI_EXTRACT && v->nargs == 1 && v->args[0]) {
-                uint16_t src_op = v->args[0]->op;
-                if (src_op != XI_CALL && src_op != XI_CALL_METHOD &&
-                    src_op != XI_CALL_METHOD_DIRECT && src_op != XI_CALL_BUILTIN &&
-                    src_op != XI_MULTI_RET) {
-                    verr(ctx,
-                         "func '%s': XI_EXTRACT v%u in b%u extracts from "
-                         "v%u (op %u) which is not a call/multi_ret",
-                         f->name, v->id, blk->id, v->args[0]->id, src_op);
                     return;
                 }
             }
@@ -1109,7 +1101,7 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
         verify_effect_flags(&ctx, f);
     }
 
-    /* Type contracts (bool-producing ops, XI_SELECT cond, XI_EXTRACT source) */
+    /* Type contracts for bool-producing ops and XI_SELECT operands. */
     if (!ctx.failed) {
         verify_types(&ctx, f);
     }

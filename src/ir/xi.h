@@ -153,7 +153,7 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_CALL_METHOD   method name (char*)  (global_symbol_id << 1) | is_super
  *  XI_CALL_METHOD_DIRECT method name      method index
  *  XI_CALL_BUILTIN  —                    builtin_id
- *  XI_EXTRACT       —                    result index (zero-based)
+ *  XI_EXTRACT       —                    obsolete; verifier rejects it
  *  XI_LOAD_UPVAL    —                    upvalue index
  *  XI_STORE_UPVAL   —                    upvalue index
  *  XI_GET_SHARED    —                    shared slot index (relative)
@@ -283,8 +283,7 @@ typedef enum {
                       * transferring control.  aux_int mirrors XI_CALL encoding.
                       * Lowered to OP_TAILCALL (function) or OP_INVOKE_TAIL (method). */
     XI_CALL_BUILTIN, /* builtin call: aux_int=builtin_id, args[0..n]=params */
-    XI_EXTRACT,      /* extract i-th result from multi-return call:
-                      * args[0]=call_value, aux_int=result_index (zero-based offset) */
+    XI_EXTRACT,      /* obsolete multi-return extraction marker; verifier-only reject */
 
     /* Closure / upvalue */
     XI_CLOSURE_NEW, /* create closure: aux=proto, args=captures */
@@ -349,8 +348,8 @@ typedef enum {
     XI_SLICE, /* slice: args[0]=source, args[1]=start, args[2]=end */
     XI_RANGE, /* range: args[0]=start, args[1]=end */
 
-    /* Multi-value return packaging */
-    XI_MULTI_RET, /* args[0..n]=return values, placed in consecutive regs */
+    /* Obsolete multi-value return packaging; verifier-only reject */
+    XI_MULTI_RET,
 
     /* Null check */
     XI_ISNULL, /* args[0]=value, returns bool (true if null) */

@@ -23,7 +23,7 @@
  *      Phi arg[i] dominated by pred[i].
  *   9. Operand arity: nargs matches static expectation per XiOp.
  *  10. Type contracts: comparisons produce bool, XI_SELECT condition
- *      is bool, XI_EXTRACT source is call/multi_ret.
+ *      is bool and XI_SELECT operands are type-compatible.
  *  11. Side-effect flags: store/throw/print/etc. must carry
  *      XI_FLAG_SIDE_EFFECT.
  *

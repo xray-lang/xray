@@ -1191,44 +1191,6 @@ TEST(lower_reuse_helpers) {
     xi_func_free(f);
 }
 
-TEST(reject_multi_ret_with_extra_results) {
-    XiFunc *f = make_func("multi_ret_extra", &stub_int);
-    XiBlock *entry = f->entry;
-
-    XiValue *a = xi_const_int(f, entry, 1, &stub_int);
-    XiValue *b = xi_const_int(f, entry, 2, &stub_int);
-    XiValue *ret = xi_value_new(f, entry, XI_MULTI_RET, &stub_int, 2);
-    ret->args[0] = a;
-    ret->args[1] = b;
-    xi_block_set_return(entry, ret);
-
-    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
-    assert(xm == NULL && "multi-return with extra values should not lower to Xm yet");
-
-    xi_func_free(f);
-}
-
-TEST(reject_extract_extra_result) {
-    XiFunc *f = make_func("extract_extra", &stub_int);
-    XiBlock *entry = f->entry;
-
-    XiValue *callee = xi_param(f, entry, 0, &stub_int);
-    XiValue *arg = xi_param(f, entry, 1, &stub_int);
-    XiValue *call = xi_value_new(f, entry, XI_CALL, &stub_int, 2);
-    call->args[0] = callee;
-    call->args[1] = arg;
-
-    XiValue *extract = xi_value_new(f, entry, XI_EXTRACT, &stub_int, 1);
-    extract->args[0] = call;
-    extract->aux_int = 1;
-    xi_block_set_return(entry, extract);
-
-    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
-    assert(xm == NULL && "extracting secondary call results should not lower to Xm yet");
-
-    xi_func_free(f);
-}
-
 TEST(reject_bytes_memory_ops_until_jit_driver_exists) {
     XiFunc *f = make_func("bytes_mem", &stub_int);
     XiBlock *entry = f->entry;
@@ -1308,8 +1270,6 @@ int main(void) {
     run_lower_set_new();
     run_lower_str_concat();
     run_lower_reuse_helpers();
-    run_reject_multi_ret_with_extra_results();
-    run_reject_extract_extra_result();
     run_reject_bytes_memory_ops_until_jit_driver_exists();
     run_reject_unsupported_semantic_ops_until_jit_driver_exists();
 

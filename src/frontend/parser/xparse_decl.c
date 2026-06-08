@@ -1288,11 +1288,11 @@ AstNode *xr_parse_declaration(Parser *parser) {
     /* Variable declaration
      *
      * Syntax design:
-     * 1. let a, b, c          - No initialization, all null
-     * 2. let a, b = 1, 2      - Multi-value declaration, counts must match
-     * 3. let a, b = foo()     - Multi-value declaration, receive function multi-return
-     * 4. let a = 1            - Single variable declaration
-     * 5. let a=1, b=2         - Forbidden! Must write on separate lines
+     * 1. let a                - No initialization, null
+     * 2. let a = 1            - Single variable declaration
+     * 3. let (a, b) = value   - Tuple destructuring declaration
+     * 4. let a, b = ...       - Forbidden obsolete multi-value declaration
+     * 5. let a=1, b=2         - Forbidden; write separate declarations
      */
     if (xr_parser_match(parser, TK_LET)) {
         // Check if destructure declaration

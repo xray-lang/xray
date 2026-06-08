@@ -42,8 +42,6 @@
     X(CALL_METHOD_DIRECT, xi_emit_call_method_direct) \
     X(TAIL_CALL, xi_emit_tail_call) \
     X(CALL_BUILTIN, xi_emit_call_builtin) \
-    X(EXTRACT, xi_emit_extract) \
-    X(MULTI_RET, xi_emit_multi_ret) \
     X(THROW, xi_emit_throw) \
     X(TRY, xi_emit_try) \
     X(CATCH, xi_emit_catch) \
