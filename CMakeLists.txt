@@ -73,6 +73,7 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_emit_vm_gen.h
     ${CMAKE_SOURCE_DIR}/src/jit/xi_to_xm_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
+    ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_stmt_dispatch_gen.h
 )
 
 set(XRAY_GEN_AOT_METADATA_DEPS
@@ -91,7 +92,7 @@ add_custom_command(
 )
 
 add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/ir/xi_lowering_coverage_gen.h
+    OUTPUT  ${XRAY_GEN_XI_LOWERING_DEPS}
     COMMAND ${XRAY_PYTHON} ${XISAGEN} xi-lowering
             ${CMAKE_SOURCE_DIR}/xisa/xi/ops.def
             ${CMAKE_SOURCE_DIR}/xisa/xi/lowering.def

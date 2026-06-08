@@ -272,41 +272,48 @@
 
 (lower xi.try
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c-stmt)
   :vm-bytecode (driver xi_emit_try)
-  :jit-xm (driver xi2xm_try))
+  :jit-xm (driver xi2xm_try)
+  :aot-c-stmt (driver xicgen_stmt_try))
 
 (lower xi.catch
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c-stmt)
   :vm-bytecode (driver xi_emit_catch)
-  :jit-xm (driver xi2xm_catch))
+  :jit-xm (driver xi2xm_catch)
+  :aot-c-stmt (driver xicgen_stmt_catch))
 
 (lower xi.end.try
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c-stmt)
   :vm-bytecode (driver xi_emit_end_try)
-  :jit-xm (driver xi2xm_end_try))
+  :jit-xm (driver xi2xm_end_try)
+  :aot-c-stmt (driver xicgen_stmt_end_try))
 
 (lower xi.err.set
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_err_set))
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_err_set)
+  :aot-c-stmt (driver xicgen_stmt_err_set))
 
 (lower xi.err.return
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_err_return))
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_err_return)
+  :aot-c-stmt (driver xicgen_stmt_err_return))
 
 (lower xi.err.check
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_err_check))
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_err_check)
+  :aot-c-stmt (driver xicgen_stmt_err_check))
 
 (lower xi.err.catch
   :match ()
-  :required-targets (vm-bytecode)
-  :vm-bytecode (driver xi_emit_err_catch))
+  :required-targets (vm-bytecode aot-c-stmt)
+  :vm-bytecode (driver xi_emit_err_catch)
+  :aot-c-stmt (driver xicgen_stmt_err_catch))
 
 (lower xi.retain
   :match ()
@@ -703,9 +710,10 @@
 
 (lower xi.defer
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c-stmt)
   :vm-bytecode (driver xi_emit_defer)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c-stmt (driver xicgen_stmt_defer))
 
 (lower xi.json.new
   :match ()
