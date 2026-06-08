@@ -1517,6 +1517,22 @@ VALID_XI_ALGEBRAIC_TRAITS = {
     'commutative',
 }
 
+VALID_XI_TBAA_GROUPS = {
+    'array',
+    'chan',
+    'const',
+    'field',
+    'global',
+    'json',
+    'none',
+    'shared',
+    'struct',
+    'tls',
+    'top',
+    'tuple',
+    'upval',
+}
+
 VALID_XI_RESULT_NATIVE_TYPES = {
     'i8',
     'u8',
@@ -1571,6 +1587,7 @@ class XiOpDef:
     speculation: str
     vn_kind: str
     algebraic: list
+    tbaa_group: str
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1743,6 +1760,10 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
             if trait not in VALID_XI_ALGEBRAIC_TRAITS:
                 die(f"{path}: Xi op '{name}' uses unknown algebraic trait "
                     f"'{trait}'")
+        tbaa_group = _xi_get_kw_str(form, ':tbaa-group', 'none')
+        if tbaa_group not in VALID_XI_TBAA_GROUPS:
+            die(f"{path}: Xi op '{name}' uses unknown TBAA group "
+                f"'{tbaa_group}'")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
@@ -1752,7 +1773,8 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            lowering_policy=lowering_policy,
                            speculation=speculation,
                            vn_kind=vn_kind,
-                           algebraic=algebraic))
+                           algebraic=algebraic,
+                           tbaa_group=tbaa_group))
     return ops
 
 
@@ -1853,6 +1875,25 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_VN__COUNT')
     lines.append('} XiGeneratedValueNumberingKind;')
     lines.append('')
+    lines.append('/* ========== TBAA Groups ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_TBAA_NONE = 0,')
+    lines.append('    XI_GEN_TBAA_TOP = 1,')
+    lines.append('    XI_GEN_TBAA_CONST = 2,')
+    lines.append('    XI_GEN_TBAA_FIELD = 3,')
+    lines.append('    XI_GEN_TBAA_ARRAY = 4,')
+    lines.append('    XI_GEN_TBAA_STRUCT = 5,')
+    lines.append('    XI_GEN_TBAA_SHARED = 6,')
+    lines.append('    XI_GEN_TBAA_GLOBAL = 7,')
+    lines.append('    XI_GEN_TBAA_UPVAL = 8,')
+    lines.append('    XI_GEN_TBAA_TLS = 9,')
+    lines.append('    XI_GEN_TBAA_JSON = 10,')
+    lines.append('    XI_GEN_TBAA_TUPLE = 11,')
+    lines.append('    XI_GEN_TBAA_CHAN = 12,')
+    lines.append('    XI_GEN_TBAA__COUNT')
+    lines.append('} XiGeneratedTbaaGroup;')
+    lines.append('')
     lines.append('/* ========== Algebraic Trait Flags ========== */')
     lines.append('')
     lines.append('#define XI_GEN_ALGEBRAIC_NONE 0')
@@ -1877,6 +1918,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t lowering_policy;')
     lines.append('    uint8_t speculation;')
     lines.append('    uint8_t value_numbering;')
+    lines.append('    uint8_t tbaa_group;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t algebraic_traits;')
     lines.append('    uint32_t effects;')
@@ -1897,12 +1939,13 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         lowering_policy = f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)}'
         speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
         vn_kind = f'XI_GEN_VN_{_xi_c_ident(op.vn_kind)}'
+        tbaa_group = f'XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)}'
         algebraic_traits = _xi_bit_expr('XI_GEN_ALGEBRAIC', op.algebraic)
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
-            f'{speculation}, {vn_kind}, {flags}, {algebraic_traits}, {effects}, '
+            f'{speculation}, {vn_kind}, {tbaa_group}, {flags}, {algebraic_traits}, {effects}, '
             f'{targets}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
@@ -1983,6 +2026,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_VN_NONE;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_TBAA_NONE;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {')
@@ -7473,6 +7525,7 @@ def _test_xi_ops_parser():
       :operands ((address $addr :type pointer))
       :results ((value $result))
       :effects (memory-read may-throw)
+      :tbaa-group array
       :requires (valid-address)
       :observable (load-width)
       :targets (jit-xm aot-c aot-verify)
@@ -7493,6 +7546,7 @@ def _test_xi_ops_parser():
       :arity 2
       :result-kind void
       :effects (side-effect memory-write)
+      :tbaa-group field
       :requires ()
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
@@ -7512,8 +7566,10 @@ def _test_xi_ops_parser():
     assert ops[1].effects == ['memory-read', 'may-throw']
     assert ops[1].result_kind == 'value'
     assert ops[1].lowering_policy == 'pass-local'
+    assert ops[1].tbaa_group == 'array'
     assert ops[2].result_native_type == 'i8'
     assert ops[3].result_kind == 'void'
+    assert ops[3].tbaa_group == 'field'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -7534,6 +7590,8 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_value_numbering' in header
     assert 'case XI_ADD: return XI_GEN_VN_PURE;' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_VN_NONE;' in header
+    assert 'xi_generated_op_tbaa_group' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_TBAA_ARRAY;' in header
     assert 'xi_generated_op_algebraic_traits' in header
     assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
     assert 'xi_generated_op_default_flags' in header

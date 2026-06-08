@@ -16,52 +16,29 @@
  */
 
 #include "xi_tbaa.h"
+#include "xi_ops_gen.h"
 #include "xi_pass.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 
-/* ========== Op Classification Tables ========== */
+/* ========== Op Classification Metadata ========== */
 
-/* Memory load ops: read memory but do not write. */
-XR_FUNC bool xi_is_memory_load(uint16_t op) {
-    switch (op) {
-        case XI_LOAD_FIELD:
-        case XI_INDEX_GET:
-        case XI_STRUCT_GET:
-        case XI_JSON_GET_F:
-        case XI_TUPLE_GET:
-        case XI_LOAD_UPVAL:
-        case XI_GET_SHARED:
-        case XI_GET_GLOBAL:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_SELECT_BLOCK:
-        case XI_GET_BUILTIN:
-            return true;
-        default:
-            return false;
-    }
+static bool op_has_direct_tbaa_access(uint16_t op) {
+    uint8_t group = xi_generated_op_tbaa_group(op);
+    return group != XI_GEN_TBAA_NONE && group != XI_GEN_TBAA_TOP;
 }
 
-/* Memory store ops: write to memory. */
+/* Memory load ops: read a concrete TBAA group but do not write. */
+XR_FUNC bool xi_is_memory_load(uint16_t op) {
+    uint32_t effects = xi_generated_op_effects(op);
+    return op_has_direct_tbaa_access(op) && (effects & XI_EFFECT_MEMORY_READ) != 0 &&
+           (effects & XI_EFFECT_MEMORY_WRITE) == 0;
+}
+
+/* Memory store ops: write to a concrete TBAA group. */
 XR_FUNC bool xi_is_memory_store(uint16_t op) {
-    switch (op) {
-        case XI_STORE_FIELD:
-        case XI_INDEX_SET:
-        case XI_STRUCT_SET:
-        case XI_JSON_SET_F:
-        case XI_JSON_INIT_F:
-        case XI_STORE_UPVAL:
-        case XI_SET_SHARED:
-        case XI_SET_GLOBAL:
-        case XI_CHAN_SEND:
-        case XI_CHAN_TRY_SEND:
-        case XI_TIME_AFTER:
-            return true;
-        default:
-            return false;
-    }
+    uint32_t effects = xi_generated_op_effects(op);
+    return op_has_direct_tbaa_access(op) && (effects & XI_EFFECT_MEMORY_WRITE) != 0;
 }
 
 /* Any memory-accessing op (load or store). */
@@ -69,77 +46,43 @@ XR_FUNC bool xi_is_memory_op(uint16_t op) {
     return xi_is_memory_load(op) || xi_is_memory_store(op);
 }
 
-/* ========== TBAA Group Assignment ==========
- *
- * Determines the mem_group for a given op.  This is the core classification
- * that drives the alias query.  Conservative: unknown ops get XI_MEM_TOP. */
-static XiMemGroup classify_op(uint16_t op) {
-    switch (op) {
-        /* Object field access */
-        case XI_LOAD_FIELD:
-        case XI_STORE_FIELD:
-            return XI_MEM_FIELD;
+/* ========== TBAA Group Assignment ========== */
 
-        /* Array / collection indexing */
-        case XI_INDEX_GET:
-        case XI_INDEX_SET:
-            return XI_MEM_ARRAY;
-
-        /* Struct typed field access */
-        case XI_STRUCT_GET:
-        case XI_STRUCT_SET:
-            return XI_MEM_STRUCT;
-
-        /* JSON object fields */
-        case XI_JSON_GET_F:
-        case XI_JSON_SET_F:
-        case XI_JSON_INIT_F:
-            return XI_MEM_JSON;
-
-        /* Tuple element access */
-        case XI_TUPLE_GET:
-            return XI_MEM_TUPLE;
-
-        /* Closure upvalue slots */
-        case XI_LOAD_UPVAL:
-        case XI_STORE_UPVAL:
-            return XI_MEM_UPVAL;
-
-        /* Module shared variable array */
-        case XI_GET_SHARED:
-        case XI_SET_SHARED:
-            return XI_MEM_SHARED;
-
-        /* REPL global dict */
-        case XI_GET_GLOBAL:
-        case XI_SET_GLOBAL:
-            return XI_MEM_GLOBAL;
-
-        /* Channel buffer */
-        case XI_CHAN_SEND:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_SEND:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-            return XI_MEM_CHAN;
-
-        /* Builtins may access any memory — conservative. */
-        case XI_GET_BUILTIN:
-            return XI_MEM_CONST;
-
-        /* Calls clobber everything (conservative). */
-        case XI_CALL:
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
+static XiMemGroup generated_group_to_mem_group(uint8_t group) {
+    switch (group) {
+        case XI_GEN_TBAA_TOP:
             return XI_MEM_TOP;
-
-        default:
+        case XI_GEN_TBAA_CONST:
+            return XI_MEM_CONST;
+        case XI_GEN_TBAA_FIELD:
+            return XI_MEM_FIELD;
+        case XI_GEN_TBAA_ARRAY:
+            return XI_MEM_ARRAY;
+        case XI_GEN_TBAA_STRUCT:
+            return XI_MEM_STRUCT;
+        case XI_GEN_TBAA_SHARED:
+            return XI_MEM_SHARED;
+        case XI_GEN_TBAA_GLOBAL:
+            return XI_MEM_GLOBAL;
+        case XI_GEN_TBAA_UPVAL:
+            return XI_MEM_UPVAL;
+        case XI_GEN_TBAA_TLS:
+            return XI_MEM_TLS;
+        case XI_GEN_TBAA_JSON:
+            return XI_MEM_JSON;
+        case XI_GEN_TBAA_TUPLE:
+            return XI_MEM_TUPLE;
+        case XI_GEN_TBAA_CHAN:
+            return XI_MEM_CHAN;
+        case XI_GEN_TBAA_NONE:
+        case XI_GEN_TBAA__COUNT:
             return XI_MEM_NONE;
     }
+    return XI_MEM_NONE;
+}
+
+static XiMemGroup classify_op(uint16_t op) {
+    return generated_group_to_mem_group(xi_generated_op_tbaa_group(op));
 }
 
 /* ========== Alias Query ========== */

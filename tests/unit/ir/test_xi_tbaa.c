@@ -55,9 +55,15 @@ TEST(is_memory_load) {
     assert(xi_is_memory_load(XI_GET_SHARED));
     assert(xi_is_memory_load(XI_GET_GLOBAL));
     assert(xi_is_memory_load(XI_CHAN_RECV));
+    assert(xi_is_memory_load(XI_CHAN_TRY_RECV));
+    assert(xi_is_memory_load(XI_CHAN_IS_CLOSED));
+    assert(xi_is_memory_load(XI_SELECT_BLOCK));
+    assert(xi_is_memory_load(XI_GET_BUILTIN));
     assert(!xi_is_memory_load(XI_ADD));
     assert(!xi_is_memory_load(XI_CONST));
     assert(!xi_is_memory_load(XI_CALL));
+    assert(!xi_is_memory_load(XI_IMPORT_REF));
+    assert(!xi_is_memory_load(XI_BYTES_LOAD_U32_LE));
 }
 
 TEST(is_memory_store) {
@@ -65,12 +71,18 @@ TEST(is_memory_store) {
     assert(xi_is_memory_store(XI_INDEX_SET));
     assert(xi_is_memory_store(XI_STRUCT_SET));
     assert(xi_is_memory_store(XI_JSON_SET_F));
+    assert(xi_is_memory_store(XI_JSON_INIT_F));
     assert(xi_is_memory_store(XI_STORE_UPVAL));
     assert(xi_is_memory_store(XI_SET_SHARED));
     assert(xi_is_memory_store(XI_SET_GLOBAL));
     assert(xi_is_memory_store(XI_CHAN_SEND));
+    assert(xi_is_memory_store(XI_CHAN_TRY_SEND));
+    assert(xi_is_memory_store(XI_TIME_AFTER));
     assert(!xi_is_memory_store(XI_ADD));
     assert(!xi_is_memory_store(XI_LOAD_FIELD));
+    assert(!xi_is_memory_store(XI_CALL));
+    assert(!xi_is_memory_store(XI_TUPLE_NEW));
+    assert(!xi_is_memory_store(XI_BYTES_COPY_WITHIN));
 }
 
 TEST(is_memory_op) {
@@ -79,6 +91,8 @@ TEST(is_memory_op) {
     assert(!xi_is_memory_op(XI_ADD));
     assert(!xi_is_memory_op(XI_CONST));
     assert(!xi_is_memory_op(XI_PHI));
+    assert(!xi_is_memory_op(XI_CALL));
+    assert(!xi_is_memory_op(XI_IMPORT_REF));
 }
 
 /* ========== TBAA Disjointness Tests ========== */
@@ -1023,6 +1037,12 @@ TEST(store_upval_is_store) {
     assert(!xi_is_memory_load(XI_STORE_UPVAL));
 }
 
+TEST(call_is_top_but_not_direct_memory_op) {
+    assert(!xi_is_memory_load(XI_CALL));
+    assert(!xi_is_memory_store(XI_CALL));
+    assert(!xi_is_memory_op(XI_CALL));
+}
+
 /* ========== Annotate Pass Coverage Tests ========== */
 
 TEST(annotate_field_store_sets_group) {
@@ -1148,6 +1168,47 @@ TEST(annotate_upval_sets_upval) {
     xi_tbaa_annotate(f);
 
     assert(load->mem_group == XI_MEM_UPVAL);
+    xi_func_free(f);
+}
+
+TEST(annotate_builtin_sets_const) {
+    XiFunc *f = make_func("ann_builtin");
+    XiBlock *blk = f->entry;
+
+    XiValue *load = xi_value_new(f, blk, XI_GET_BUILTIN, &stub_any, 0);
+
+    xi_block_set_return(blk, load);
+    xi_tbaa_annotate(f);
+
+    assert(load->mem_group == XI_MEM_CONST);
+    xi_func_free(f);
+}
+
+TEST(annotate_call_sets_top) {
+    XiFunc *f = make_func("ann_call");
+    XiBlock *blk = f->entry;
+    XiValue *callee = xi_param(f, blk, 0, &stub_any);
+
+    XiValue *call = xi_value_new(f, blk, XI_CALL, &stub_any, 1);
+    call->args[0] = callee;
+
+    xi_block_set_return(blk, call);
+    xi_tbaa_annotate(f);
+
+    assert(call->mem_group == XI_MEM_TOP);
+    xi_func_free(f);
+}
+
+TEST(annotate_import_ref_stays_none) {
+    XiFunc *f = make_func("ann_import_ref");
+    XiBlock *blk = f->entry;
+
+    XiValue *load = xi_value_new(f, blk, XI_IMPORT_REF, &stub_any, 0);
+
+    xi_block_set_return(blk, load);
+    xi_tbaa_annotate(f);
+
+    assert(load->mem_group == XI_MEM_NONE);
     xi_func_free(f);
 }
 
@@ -1847,7 +1908,7 @@ int main(void) {
     run_field_id_vs_array_no_alias();
     run_field_id_vs_struct_no_alias();
 
-    /* Load/Store classification edge cases (8) */
+    /* Load/Store classification edge cases (9) */
     run_struct_set_is_store();
     run_json_get_is_load();
     run_tuple_get_is_load();
@@ -1856,8 +1917,9 @@ int main(void) {
     run_set_global_is_store();
     run_get_global_is_load();
     run_store_upval_is_store();
+    run_call_is_top_but_not_direct_memory_op();
 
-    /* Annotate pass coverage (8) */
+    /* Annotate pass coverage (11) */
     run_annotate_field_store_sets_group();
     run_annotate_index_get_sets_array();
     run_annotate_struct_get_sets_struct();
@@ -1866,6 +1928,9 @@ int main(void) {
     run_annotate_chan_recv_sets_chan();
     run_annotate_global_get_sets_global();
     run_annotate_upval_sets_upval();
+    run_annotate_builtin_sets_const();
+    run_annotate_call_sets_top();
+    run_annotate_import_ref_stays_none();
 
     /* MemSSA advanced (15) */
     run_memssa_two_stores_same_slot();
