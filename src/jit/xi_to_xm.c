@@ -1512,58 +1512,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             return val;
         }
 
-        /* Iteration — lower as generic calls (runtime handles protocol).
-         * The iterator object lives in args[0], not a closure callee, so
-         * lower_call's xr_jit_call_func bridge mis-routes the dispatch.
-         * Bail until a dedicated helper wiring exists. */
-        case XI_ITER_NEW:
-        case XI_ITER_NEXT:
-        case XI_ITER_VALID:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-
-        /* Coroutine ops — same hazard as struct/iter: args[0] is a
-         * channel ptr / buffer size / task ptr, not a closure callee.
-         * Bail until xi_to_xm wires the xr_jit_chan_* / xr_jit_go /
-         * xr_jit_await helpers with their CALL_C argument layout. */
-        case XI_GO:
-        case XI_AWAIT:
-        case XI_CHAN_SEND:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_SEND:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-        case XI_YIELD:
-        case XI_CHAN_NEW:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-
-        /* Defer — JIT codegen doesn't yet schedule the deferred body
-         * onto the cleanup chain.  Silently dropping it (the previous
-         * behaviour) caused observable output divergence vs the VM, so
-         * bail out and let the VM run functions that contain `defer`. */
-        case XI_DEFER:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-
-        /* Json allocation requires a Shape (XrClass) built from field names
-         * via xr_class_build_json_chain — that touches isolate state and is
-         * unsafe on the JIT background thread.  No dedicated runtime helper
-         * exists yet, and lower_call would mis-route the op through
-         * xr_jit_call_func (which expects a callee in args[0]) and surface
-         * as a stale 0xDEAD0001 deopt marker leaking into downstream
-         * INDEX_GET/SET helpers.  Bail until a proper xr_jit_rt_json_*
-         * helper is wired. */
-        case XI_JSON_NEW:
-        case XI_JSON_INIT_F:
-        case XI_JSON_GET_F:
-        case XI_JSON_SET_F:
-        case XI_JSON_DECODE:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-
         /* Type casts lower as generic calls until cast-specific JIT support exists. */
         case XI_AS:
             return lower_call(ctx, blk, v);
@@ -1572,25 +1520,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         case XI_SLICE:
         case XI_RANGE:
             return lower_call(ctx, blk, v);
-
-        case XI_STRUCT_NEW:
-        case XI_STRUCT_GET:
-        case XI_STRUCT_SET:
-            /* Struct ops use a non-closure argument layout (struct_ptr +
-             * field_idx + value), and lower_call would mis-route them
-             * through xr_jit_call_func.  Bail out until they have proper
-             * lowering via the xr_jit_new_struct / xr_jit_struct_*
-             * runtime helpers. */
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-
-        /* Structured concurrency scope — same hazard as iter/coroutine
-         * ops: lower_call would mis-route the call_args layout through
-         * xr_jit_call_func, silently dropping the scope body.  Bail. */
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
 
         /* Exception handling */
         case XI_TRY: {

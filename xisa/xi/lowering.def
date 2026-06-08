@@ -496,6 +496,131 @@
   :vm-bytecode (driver xi_emit_str_concat)
   :jit-xm (driver xi2xm_str_concat))
 
+(lower xi.iter.new
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.iter.next
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.iter.valid
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.go
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.await
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.send
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.recv
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.try.send
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.try.recv
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.is.closed
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.time.after
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.select.block
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.yield
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.new
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.defer
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.json.new
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.json.init.f
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.json.get.f
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.json.set.f
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.json.decode
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.struct.new
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.struct.get
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.struct.set
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.scope.enter
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.scope.exit
+  :match ()
+  :required-targets (jit-xm)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
 (lower xi.tuple.new
   :match ()
   :required-targets (vm-bytecode aot-c)
