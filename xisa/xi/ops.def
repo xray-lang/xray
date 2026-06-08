@@ -740,7 +740,7 @@
   :jit-policy catch-up)
 
 (define-xi-op xi.time.after
-  :class allocation
+  :class coroutine
   :arity 1
   :effects (side-effect memory-write allocates)
   :requires ()
@@ -848,7 +848,7 @@
   :jit-policy catch-up)
 
 (define-xi-op xi.chan.new
-  :class allocation
+  :class coroutine
   :arity variadic
   :effects (side-effect memory-write allocates)
   :requires ()

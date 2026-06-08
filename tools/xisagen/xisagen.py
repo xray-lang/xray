@@ -1786,6 +1786,15 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    return XI_OP_ARITY_VARIADIC;')
     lines.append('}')
     lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_class(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_CLASS_{_xi_c_ident(op.cls)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_CLASS__COUNT;')
+    lines.append('}')
+    lines.append('')
     lines.append('static inline uint8_t xi_generated_op_default_flags(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for op in ops:
@@ -7100,6 +7109,8 @@ def _test_xi_ops_parser():
     assert 'XI_EFFECT_MAY_THROW' in header
     assert 'XI_TARGET_AOT_C' in header
     assert 'xi_generated_op_arity' in header
+    assert 'xi_generated_op_class' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_CLASS_MEMORY;' in header
     assert 'xi_generated_op_default_flags' in header
     print(" PASS", file=sys.stderr)
 
