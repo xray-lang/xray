@@ -1172,6 +1172,82 @@ static void xicgen_is(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue 
     }
 }
 
+static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_load_field: need object");
+    if (emit_class_cached_field_load_expr(ctx, out, v))
+        return;
+    if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))
+        return;
+    const char *field = (const char *) v->aux;
+    if (!field && v->aux_int >= 0) {
+        fprintf(out, "xrt_index_get(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", XR_FROM_INT(%" PRId64 "))", v->aux_int);
+        return;
+    }
+    const char *task_helper =
+        cg_value_type_is_task(v->args[0]) ? cg_task_field_helper(field) : NULL;
+    if (task_helper) {
+        if (cg_rep(v) == XR_REP_I64)
+            fprintf(out, "XR_TO_INT(");
+        else if (cg_rep(v) == XR_REP_F64)
+            fprintf(out, "XR_TO_FLOAT(");
+        if (cg_task_field_needs_xrt_bridge(field))
+            fprintf(out, "xr_aot_bridge_value_to_xrt(");
+        fprintf(out, "%s(NULL, ", task_helper);
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+        if (cg_task_field_needs_xrt_bridge(field))
+            fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
+            fprintf(out, ")");
+        return;
+    }
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_class_native_map_length_expr(ctx, out, f, v))
+        return;
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_class_native_set_length_expr(ctx, out, f, v))
+        return;
+    if (field && (strcmp(field, "length") == 0 || strcmp(field, "size") == 0) &&
+        emit_typed_array_length_expr(ctx, out, f, prefix, v))
+        return;
+    int sym = cg_method_sym(field);
+    if (sym >= 0) {
+        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_getprop(");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ", %d)", sym);
+        emit_conversion_suffix(out, wrapped);
+    } else {
+        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "xrt_map_get((xrt_map_t*)");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ".ptr, xr_box_str(\"%s\"))", field ? field : "?");
+        emit_conversion_suffix(out, wrapped);
+    }
+}
+
+static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                               const char *prefix) {
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 2, "xicgen_store_field: need object and value");
+    if (emit_class_cached_field_store_expr(ctx, out, v))
+        return;
+    if (emit_class_native_receiver_field_store_expr(ctx, out, f, v))
+        return;
+    const char *field = (const char *) v->aux;
+    fprintf(out, "(xrt_map_set((xrt_map_t*)");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ".ptr, xr_box_str(\"%s\"), ", field ? field : "?");
+    emit_boxed_value_ref(out, v->args[1]);
+    fprintf(out, "), ");
+    emit_vref(out, v->args[1]);
+    fprintf(out, ")");
+}
+
 static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                              const char *prefix) {
     XR_DCHECK(v->nargs >= 2, "xicgen_index_get: need obj and key");
