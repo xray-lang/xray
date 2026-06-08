@@ -10,6 +10,7 @@
 
 #include "xi_opt_loop_rotate.h"
 #include "xi_cfg_edit.h"
+#include "xi_effect.h"
 #include "xi_loop.h"
 #include "../base/xchecks.h"
 
@@ -69,49 +70,7 @@ static bool value_can_clone_in_guard(const XiValue *v) {
         return false;
     if ((v->flags & XI_ROTATE_CLONE_EFFECT_MASK) != 0)
         return false;
-    switch (v->op) {
-        case XI_CONST:
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_NEG:
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
-        case XI_NOT:
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-        case XI_IS:
-        case XI_ISNULL:
-        case XI_SELECT:
-        case XI_COPY:
-            return true;
-        default:
-            return false;
-    }
+    return xi_op_can_speculate(v->op);
 }
 
 static bool header_value_available_before(const XiBlock *header, const XiValue *v, uint32_t limit) {
