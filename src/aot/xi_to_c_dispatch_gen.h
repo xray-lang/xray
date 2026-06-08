@@ -81,6 +81,8 @@
     X(MAP_NEW, "xi.map.new", xicgen_map_new) \
     X(SET_NEW, "xi.set.new", xicgen_set_new) \
     X(STR_CONCAT, "xi.str.concat", xicgen_str_concat) \
+    X(AS, "xi.as", xicgen_as) \
+    X(SLICE, "xi.slice", xicgen_slice) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \

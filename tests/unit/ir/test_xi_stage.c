@@ -321,6 +321,58 @@ static void test_backend_lower_preserves_collection_ops(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_lower_preserves_type_and_slice_ops(void) {
+    printf("--- test_backend_lower_preserves_type_and_slice_ops ---\n");
+
+    XiFunc *f = xi_func_new("backend_type_slice_fn", &stub_void);
+    assert(f != NULL);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *value = xi_const_int(f, entry, 7, &stub_int);
+    assert(value != NULL);
+    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
+    assert(start != NULL);
+    XiValue *end = xi_const_int(f, entry, 1, &stub_int);
+    assert(end != NULL);
+
+    XiValue *typeof_v = xi_value_new(f, entry, XI_TYPEOF, &stub_string, 1);
+    assert(typeof_v != NULL);
+    typeof_v->args[0] = value;
+    typeof_v->flags = xi_op_default_effects(XI_TYPEOF);
+    typeof_v->aux_int = 1;
+
+    XiValue *as_v = xi_value_new(f, entry, XI_AS, &stub_int, 1);
+    assert(as_v != NULL);
+    as_v->args[0] = value;
+    as_v->flags = xi_op_default_effects(XI_AS);
+    as_v->aux_int = ((int64_t) (uint32_t) 8 << 1);
+    as_v->aux = (void *) "int";
+
+    XiValue *slice_v = xi_value_new(f, entry, XI_SLICE, &stub_array, 3);
+    assert(slice_v != NULL);
+    slice_v->args[0] = value;
+    slice_v->args[1] = start;
+    slice_v->args[2] = end;
+    slice_v->flags = xi_op_default_effects(XI_SLICE);
+
+    xi_backend_lower(f);
+
+    assert(f->stage == XI_STAGE_BACKEND);
+    assert(typeof_v->op == XI_TYPEOF);
+    assert(as_v->op == XI_AS);
+    assert(slice_v->op == XI_SLICE);
+    assert(xi_op_is_backend_legal(typeof_v->op));
+    assert(xi_op_is_backend_legal(as_v->op));
+    assert(xi_op_is_backend_legal(slice_v->op));
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Test 6: Stage monotonicity ========== */
 
 static void test_stage_monotonicity(void) {
@@ -397,6 +449,7 @@ int main(void) {
     test_backend_lower_preserves_print();
     test_backend_lower_preserves_json_field_ops();
     test_backend_lower_preserves_collection_ops();
+    test_backend_lower_preserves_type_and_slice_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

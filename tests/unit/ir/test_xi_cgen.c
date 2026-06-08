@@ -1364,6 +1364,38 @@ TEST(cgen_typed_array_slice_preserves_raw_storage_fast_path) {
     xi_func_free(ir);
 }
 
+TEST(cgen_typeof_as_and_slice_use_direct_drivers) {
+    const char *src = "fn run() -> int {\n"
+                      "    let arr: Array<int> = [1, 2, 3]\n"
+                      "    let s = arr[0:2]\n"
+                      "    let label = 42 as string\n"
+                      "    if (typeof(s) == \"Array\" && label == \"42\") {\n"
+                      "        return s.length\n"
+                      "    }\n"
+                      "    return 0\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "typeof/as/slice direct drivers should generate");
+
+    assert(contains(code, "xrt_typeof_str(") && "typeof() must use the direct AOT typename helper");
+    assert(contains(code, "xrt_to_string(") &&
+           "unsafe as string must use the direct AOT conversion helper");
+    assert(contains(code, "xrt_slice(") && "slice expression must use the direct AOT slice helper");
+    assert(!contains(code, "xr_typename(") && !contains(code, "xr_typeof_id(") &&
+           "AOT code must not reference stale typeof helper names");
+
+    printf("  Generated typeof/as/slice direct drivers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load) {
     const char *src = "fn sum(n: int) -> int {\n"
                       "    let bytes: Array<uint8> = []\n"
@@ -3051,6 +3083,7 @@ int main(void) {
     run_cgen_class_bool_key_map_uses_specialized_direct_helpers();
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
+    run_cgen_typeof_as_and_slice_use_direct_drivers();
     run_cgen_typed_array_slice_loop_uses_guarded_unchecked_raw_load();
     run_cgen_typed_array_branchy_fill_loop_uses_preallocated_raw_store();
     run_cgen_typed_array_filter_preserves_raw_storage_fast_path();

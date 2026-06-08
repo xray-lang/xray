@@ -480,12 +480,12 @@ static void xicgen_typeof(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVa
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_typeof: need arg");
     if (v->aux_int == 1) {
-        fprintf(out, "xr_typename(");
-        emit_vref(out, v->args[0]);
+        fprintf(out, "xrt_typeof_str(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
     } else {
-        fprintf(out, "XR_FROM_INT(xr_typeof_id(");
-        emit_vref(out, v->args[0]);
+        fprintf(out, "XR_FROM_INT(xrt_typeof_id(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, "))");
     }
 }
@@ -691,6 +691,77 @@ static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     emit_str_concat_expr(out, v);
 }
 
+static void xicgen_as(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                      const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 1, "xicgen_as: need arg");
+
+    bool is_safe = (v->aux_int & 1) != 0;
+    int32_t tid = (int32_t) (v->aux_int >> 1);
+    if (tid < 0) {
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        return;
+    }
+
+    if (!is_safe) {
+        switch (tid) {
+            case 8:
+                fprintf(out, "xrt_to_int(");
+                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+                return;
+            case 11:
+                fprintf(out, "xrt_to_float(");
+                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+                return;
+            case 12:
+                fprintf(out, "xrt_to_string(");
+                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+                return;
+            case 1:
+                fprintf(out, "xrt_to_bool(");
+                emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+                fprintf(out, ")");
+                return;
+            default:
+                break;
+        }
+    }
+
+    const char *tname = v->aux ? (const char *) v->aux : "unknown";
+    char err_buf[128];
+    snprintf(err_buf, sizeof(err_buf), "Type cast failed: expected %s", tname);
+    fprintf(out, "({ XrValue _as = ");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, "; (xrt_typeof_id(_as) == %" PRId32 ") ? _as : ", tid);
+    if (is_safe) {
+        fprintf(out, "XR_NULL_VAL; })");
+    } else {
+        fprintf(out, "(xrt_throw_exc(xr_box_str(");
+        emit_c_string_literal(out, err_buf);
+        fprintf(out, ")), XR_NULL_VAL); })");
+    }
+}
+
+static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 3, "xicgen_slice: need source, start, and end");
+    fprintf(out, "xrt_slice(");
+    emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
+    fprintf(out, ")");
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     const char *bn = v->aux ? (const char *) v->aux : "";
@@ -762,32 +833,16 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", XRT_SYM_NEXT);
     } else if (strcmp(bn, "slice") == 0) {
-        XR_DCHECK(v->nargs >= 3, "builtin slice: need 3 args");
-        fprintf(out, "xrt_slice(");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_vref(out, v->args[1]);
-        fprintf(out, ", ");
-        emit_vref(out, v->args[2]);
-        fprintf(out, ")");
+        xicgen_slice(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "range") == 0) {
         XR_DCHECK(v->nargs >= 2, "builtin range: need 2 args");
         fprintf(out, "xrt_range(");
-        emit_vref(out, v->args[0]);
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");
-        emit_vref(out, v->args[1]);
+        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
     } else if (strcmp(bn, "typeof") == 0) {
-        XR_DCHECK(v->nargs >= 1, "builtin typeof: need arg");
-        if (v->aux_int == 1) {
-            fprintf(out, "xr_typename(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, ")");
-        } else {
-            fprintf(out, "XR_FROM_INT(xr_typeof_id(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, "))");
-        }
+        xicgen_typeof(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "regex_compile") == 0) {
         XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
         fprintf(out, "xr_regex_compile_literal(iso, ");
