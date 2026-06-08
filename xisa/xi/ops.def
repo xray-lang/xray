@@ -477,6 +477,7 @@
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group field
+  :ic-site field
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -491,6 +492,7 @@
   :tbaa-group field
   :escape-use heap
   :own-use stored-value
+  :ic-site field
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -728,6 +730,7 @@
   :tbaa-group top
   :escape-use heap
   :own-use method-args
+  :ic-site method
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
@@ -741,6 +744,7 @@
   :tbaa-group top
   :escape-use heap
   :own-use method-args
+  :ic-site method
   :effects (side-effect may-throw memory-read memory-write)
   :requires ()
   :observable ()
