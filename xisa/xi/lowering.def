@@ -735,21 +735,24 @@
 
 (lower xi.struct.new
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_struct_new)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_struct_new))
 
 (lower xi.struct.get
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_struct_get)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_struct_get))
 
 (lower xi.struct.set
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_struct_set)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_struct_set))
 
 (lower xi.scope.enter
   :match ()

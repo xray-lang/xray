@@ -1050,45 +1050,6 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             break;
         }
 
-        /* Struct native ops — inlined C struct for non-escaping instances,
-         * runtime fallback for escaping ones. */
-        case XI_STRUCT_NEW: {
-            XR_DCHECK(v->nargs >= 1, "XI_STRUCT_NEW: need class arg");
-            if (cg_struct_can_inline(f, v)) {
-                /* Handled in emit_value_stmt — this RHS is never reached */
-                fprintf(out, "XR_NULL_VAL");
-            } else {
-                emit_struct_fallback_new_expr(out, (XrStructLayout *) v->aux, prefix);
-            }
-            break;
-        }
-        case XI_STRUCT_GET: {
-            XR_DCHECK(v->nargs >= 1, "XI_STRUCT_GET: need struct arg");
-            const XiValue *origin = cg_trace_struct_new(v->args[0]);
-            if (origin && cg_struct_can_inline(f, origin)) {
-                emit_struct_inline_field_get_expr(out, (XrStructLayout *) origin->aux, origin,
-                                                  v->aux_int);
-            } else {
-                XrStructLayout *sl = (XrStructLayout *) v->aux;
-                emit_struct_fallback_field_get(ctx, out, f, sl, v->aux_int, v->args[0], v->type,
-                                               cg_rep(v), prefix);
-            }
-            break;
-        }
-        case XI_STRUCT_SET: {
-            XR_DCHECK(v->nargs >= 2, "XI_STRUCT_SET: need struct + val");
-            const XiValue *origin = cg_trace_struct_new(v->args[0]);
-            if (origin && cg_struct_can_inline(f, origin)) {
-                emit_struct_inline_field_set_expr(out, (XrStructLayout *) origin->aux, origin,
-                                                  v->aux_int, v->args[1]);
-            } else {
-                XrStructLayout *sl = (XrStructLayout *) v->aux;
-                emit_struct_fallback_field_set(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1],
-                                               prefix);
-            }
-            break;
-        }
-
         /* ============ Method Call ============ */
 
         /* Method dispatch: args[0]=recv, args[1..n]=params, aux=name string.
