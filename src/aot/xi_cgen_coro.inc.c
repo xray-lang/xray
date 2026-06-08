@@ -173,10 +173,6 @@ static bool cg_coro_value_has_storage(const XiFunc *f, const XiValue *v) {
         return false;
     if (v->op == XI_YIELD || v->op == XI_TRY || v->op == XI_END_TRY)
         return false;
-    if (v->op == XI_CORO_OP &&
-        (v->aux_int == XI_CORO_SUB_LOCK_THREAD || v->aux_int == XI_CORO_SUB_UNLOCK_THREAD ||
-         v->aux_int == XI_CORO_SUB_SET_LOCAL))
-        return false;
     if (cg_is_void_like(v))
         return false;
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))

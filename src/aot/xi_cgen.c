@@ -157,19 +157,13 @@ static bool cg_ownership_op_is_noop(const XiValue *v) {
 static bool cg_is_void_like(const XiValue *v) {
     if (!v)
         return false;
+    if (v->type && XR_TYPE_IS_UNIT(v->type))
+        return true;
+
     uint8_t result_kind = xi_generated_op_result_kind(v->op);
     if (result_kind == XI_GEN_RESULT_VOID)
         return true;
-    if (result_kind != XI_GEN_RESULT_DYNAMIC)
-        return false;
-
-    switch (v->op) {
-        case XI_CORO_OP:
-            return v->aux_int == XI_CORO_SUB_LOCK_THREAD ||
-                   v->aux_int == XI_CORO_SUB_UNLOCK_THREAD || v->aux_int == XI_CORO_SUB_SET_LOCAL;
-        default:
-            return false;
-    }
+    return false;
 }
 
 static bool cg_is_unsupported_coroutine_op(uint16_t op) {
@@ -906,6 +900,9 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_typed_array_class_field_alloc_store_stmt(ctx, out, f, v))
         return;
 
+    if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
+        return;
+
     bool void_like = cg_is_void_like(v);
 
     if (void_like) {
@@ -914,9 +911,6 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         fprintf(out, ";\n");
         return;
     }
-
-    if (xi_to_c_emit_stmt_generated(ctx, out, f, v, prefix))
-        return;
 
     if (emit_typed_array_map_inline_stmt(ctx, out, f, prefix, v) ||
         emit_typed_array_filter_inline_stmt(ctx, out, f, prefix, v))
