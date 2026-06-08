@@ -1507,6 +1507,16 @@ VALID_XI_SPECULATION_POLICIES = {
     'safe',
 }
 
+VALID_XI_VN_KINDS = {
+    'memory-read',
+    'none',
+    'pure',
+}
+
+VALID_XI_ALGEBRAIC_TRAITS = {
+    'commutative',
+}
+
 VALID_XI_RESULT_NATIVE_TYPES = {
     'i8',
     'u8',
@@ -1559,6 +1569,8 @@ class XiOpDef:
     jit_policy: str
     lowering_policy: str
     speculation: str
+    vn_kind: str
+    algebraic: list
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1721,6 +1733,16 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if speculation not in VALID_XI_SPECULATION_POLICIES:
             die(f"{path}: Xi op '{name}' uses unknown speculation policy "
                 f"'{speculation}'")
+        vn_kind = _xi_get_kw_str(form, ':vn-kind', 'none')
+        if vn_kind not in VALID_XI_VN_KINDS:
+            die(f"{path}: Xi op '{name}' uses unknown value-numbering kind "
+                f"'{vn_kind}'")
+        algebraic = _xi_parse_atom_list(_xi_get_kw_list(form, ':algebraic'),
+                                        f"{name}:algebraic")
+        for trait in algebraic:
+            if trait not in VALID_XI_ALGEBRAIC_TRAITS:
+                die(f"{path}: Xi op '{name}' uses unknown algebraic trait "
+                    f"'{trait}'")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
@@ -1728,7 +1750,9 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            result_native_type=result_native_type,
                            jit_policy=jit_policy,
                            lowering_policy=lowering_policy,
-                           speculation=speculation))
+                           speculation=speculation,
+                           vn_kind=vn_kind,
+                           algebraic=algebraic))
     return ops
 
 
@@ -1820,6 +1844,21 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_SPECULATION__COUNT')
     lines.append('} XiGeneratedSpeculationPolicy;')
     lines.append('')
+    lines.append('/* ========== Value Numbering Kinds ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_VN_NONE = 0,')
+    lines.append('    XI_GEN_VN_PURE = 1,')
+    lines.append('    XI_GEN_VN_MEMORY_READ = 2,')
+    lines.append('    XI_GEN_VN__COUNT')
+    lines.append('} XiGeneratedValueNumberingKind;')
+    lines.append('')
+    lines.append('/* ========== Algebraic Trait Flags ========== */')
+    lines.append('')
+    lines.append('#define XI_GEN_ALGEBRAIC_NONE 0')
+    for i, trait in enumerate(sorted(VALID_XI_ALGEBRAIC_TRAITS)):
+        lines.append(f'#define XI_GEN_ALGEBRAIC_{_xi_c_ident(trait)} (1u << {i})')
+    lines.append('')
     lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
     lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
     lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
@@ -1837,7 +1876,9 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t result_kind;')
     lines.append('    uint8_t lowering_policy;')
     lines.append('    uint8_t speculation;')
+    lines.append('    uint8_t value_numbering;')
     lines.append('    uint8_t default_flags;')
+    lines.append('    uint32_t algebraic_traits;')
     lines.append('    uint32_t effects;')
     lines.append('    uint32_t targets;')
     lines.append('    const char *result_native_type;')
@@ -1855,12 +1896,14 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         result_kind = f'XI_GEN_RESULT_{_xi_c_ident(op.result_kind)}'
         lowering_policy = f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)}'
         speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
+        vn_kind = f'XI_GEN_VN_{_xi_c_ident(op.vn_kind)}'
+        algebraic_traits = _xi_bit_expr('XI_GEN_ALGEBRAIC', op.algebraic)
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
-            f'{speculation}, {flags}, {effects}, {targets}, {native_type}, '
-            f'"{op.jit_policy}"){suffix}')
+            f'{speculation}, {vn_kind}, {flags}, {algebraic_traits}, {effects}, '
+            f'{targets}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -1931,6 +1974,25 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_SPECULATION_NEVER;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return XI_GEN_VN_{_xi_c_ident(op.vn_kind)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_VN_NONE;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        algebraic_traits = _xi_bit_expr('XI_GEN_ALGEBRAIC', op.algebraic)
+        lines.append(f'        case XI_{op.ident}: return {algebraic_traits};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint8_t xi_generated_op_default_flags(uint16_t op) {')
@@ -7399,6 +7461,8 @@ def _test_xi_ops_parser():
       :operands ((value $lhs :type int) (value $rhs :type int))
       :results ((value $result :type int))
       :speculation safe
+      :vn-kind pure
+      :algebraic (commutative)
       :effects ()
       :requires (same-numeric-type)
       :observable (integer-wrap)
@@ -7441,6 +7505,8 @@ def _test_xi_ops_parser():
     assert ops[0].arity == 2
     assert ops[0].operands[0].attrs['type'] == 'int'
     assert ops[0].speculation == 'safe'
+    assert ops[0].vn_kind == 'pure'
+    assert ops[0].algebraic == ['commutative']
     assert ops[1].ident == 'MEM_LOAD'
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
@@ -7465,6 +7531,11 @@ def _test_xi_ops_parser():
     assert 'xi_generated_op_speculation' in header
     assert 'case XI_ADD: return XI_GEN_SPECULATION_SAFE;' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_SPECULATION_NEVER;' in header
+    assert 'xi_generated_op_value_numbering' in header
+    assert 'case XI_ADD: return XI_GEN_VN_PURE;' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_VN_NONE;' in header
+    assert 'xi_generated_op_algebraic_traits' in header
+    assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
     assert 'xi_generated_op_default_flags' in header
     assert 'xi_generated_op_effects' in header
     assert 'case XI_MEM_LOAD: return XI_EFFECT_MEMORY_READ | XI_EFFECT_MAY_THROW;' in header

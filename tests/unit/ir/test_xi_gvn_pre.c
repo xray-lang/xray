@@ -1254,6 +1254,21 @@ TEST(const_same_value_not_gvnd) {
     xi_func_free(f);
 }
 
+TEST(zero_effect_op_without_vn_policy_not_eliminated) {
+    XiFunc *f = make_func("strict_not_vn", &stub_bool);
+    XiBlock *entry = f->entry;
+    XiValue *x = xi_param(f, entry, 0, &stub_int);
+    XiValue *y = xi_param(f, entry, 1, &stub_int);
+    XiValue *e1 = xi_binary(f, entry, XI_EQ_STRICT, &stub_bool, x, y);
+    XiValue *e2 = xi_binary(f, entry, XI_EQ_STRICT, &stub_bool, x, y);
+    xi_block_set_return(entry, e2);
+
+    xi_opt_gvn_pre(f);
+    assert(e1->op == XI_EQ_STRICT && "first strict compare should remain");
+    assert(e2->op == XI_EQ_STRICT && "strict compare needs explicit VN policy");
+    xi_func_free(f);
+}
+
 /* ========== 8. Verifier integration ========== */
 
 TEST(verify_after_full_re) {
@@ -1707,6 +1722,7 @@ int main(void) {
     run_single_value_noop();
     run_phi_not_eliminated();
     run_const_same_value_not_gvnd();
+    run_zero_effect_op_without_vn_policy_not_eliminated();
 
     /* 8. Verifier integration */
     run_verify_after_full_re();

@@ -82,12 +82,24 @@ static void test_mem_ops(void) {
     ASSERT_TRUE(!xi_op_writes_mem(XI_ADD), "ADD should not write mem");
 }
 
+static void test_optimization_traits(void) {
+    ASSERT_TRUE(xi_op_value_numbering_kind(XI_ADD) == XI_GEN_VN_PURE, "ADD is VN-pure");
+    ASSERT_TRUE(xi_op_value_numbering_kind(XI_LOAD_FIELD) == XI_GEN_VN_MEMORY_READ,
+                "LOAD_FIELD is VN memory-read");
+    ASSERT_TRUE(!xi_op_value_numberable(XI_CONST), "CONST is not value-numbered by GVN");
+    ASSERT_TRUE(!xi_op_value_numberable(XI_EQ_STRICT), "EQ_STRICT is not value-numbered by GVN");
+    ASSERT_TRUE(xi_op_is_commutative(XI_ADD), "ADD is commutative");
+    ASSERT_TRUE(xi_op_is_commutative(XI_EQ), "EQ is commutative");
+    ASSERT_TRUE(!xi_op_is_commutative(XI_SUB), "SUB is not commutative");
+}
+
 int main(void) {
     test_all_opcodes_covered();
     test_pure_ops();
     test_side_effect_ops();
     test_suspend_ops();
     test_mem_ops();
+    test_optimization_traits();
 
     printf("\n=== test_xi_effect: %d passed, %d failed ===\n", g_passed, g_failed);
     return g_failed > 0 ? 1 : 0;

@@ -24,6 +24,8 @@
   :class arithmetic
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -34,6 +36,7 @@
   :class arithmetic
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -44,6 +47,8 @@
   :class arithmetic
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -54,6 +59,7 @@
   :class arithmetic
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -64,6 +70,7 @@
   :class arithmetic
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -74,6 +81,7 @@
   :class arithmetic
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -84,6 +92,8 @@
   :class bitwise
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -94,6 +104,8 @@
   :class bitwise
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -104,6 +116,8 @@
   :class bitwise
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -114,6 +128,7 @@
   :class bitwise
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -124,6 +139,7 @@
   :class bitwise
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -134,6 +150,7 @@
   :class bitwise
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -144,6 +161,8 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -154,6 +173,8 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
+  :algebraic (commutative)
   :effects ()
   :requires ()
   :observable ()
@@ -164,6 +185,7 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -174,6 +196,7 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -184,6 +207,7 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -194,6 +218,7 @@
   :class comparison
   :arity 2
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -222,6 +247,7 @@
   :class type
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -232,6 +258,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -263,6 +290,7 @@
   :arity 1
   :result-native-type i8
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -274,6 +302,7 @@
   :arity 1
   :result-native-type u8
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -285,6 +314,7 @@
   :arity 1
   :result-native-type i16
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -296,6 +326,7 @@
   :arity 1
   :result-native-type u16
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -307,6 +338,7 @@
   :arity 1
   :result-native-type i32
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -318,6 +350,7 @@
   :arity 1
   :result-native-type u32
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -329,6 +362,7 @@
   :arity 1
   :result-native-type f32
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -339,6 +373,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -349,6 +384,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -359,6 +395,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -369,6 +406,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -379,6 +417,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -389,6 +428,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -399,6 +439,7 @@
   :class conversion
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
@@ -408,6 +449,7 @@
 (define-xi-op xi.load.field
   :class memory-read
   :arity 1
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -427,6 +469,7 @@
 (define-xi-op xi.index.get
   :class memory-read
   :arity 2
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -500,6 +543,7 @@
 (define-xi-op xi.struct.get
   :class memory-read
   :arity 1
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -538,6 +582,7 @@
 (define-xi-op xi.json.get.f
   :class memory-read
   :arity 1
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -593,6 +638,7 @@
 (define-xi-op xi.tuple.get
   :class memory-read
   :arity 1
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -667,6 +713,7 @@
 (define-xi-op xi.load.upval
   :class memory-read
   :arity 0
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -686,6 +733,7 @@
 (define-xi-op xi.get.shared
   :class memory-read
   :arity 0
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -705,6 +753,7 @@
 (define-xi-op xi.get.global
   :class memory-read
   :arity 0
+  :vn-kind memory-read
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -979,6 +1028,7 @@
   :class type
   :arity 1
   :speculation safe
+  :vn-kind pure
   :effects ()
   :requires ()
   :observable ()
