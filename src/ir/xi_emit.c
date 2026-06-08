@@ -447,9 +447,7 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
 #define XI_VM_HANDLER_ENTRY(op, handler) [XI_##op] = handler,
     XI_EMIT_VM_LOWERING_HANDLERS(XI_VM_HANDLER_ENTRY)
 #undef XI_VM_HANDLER_ENTRY
-        [XI_LOAD_FIELD] = xi_emit_load_field,
-    [XI_STORE_FIELD] = xi_emit_store_field,
-    [XI_TAIL_CALL] = xi_emit_tail_call,
+        [XI_TAIL_CALL] = xi_emit_tail_call,
     [XI_GET_GLOBAL] = xi_emit_get_global,
     [XI_SET_GLOBAL] = xi_emit_set_global,
     [XI_ERR_SET] = xi_emit_err_set,
