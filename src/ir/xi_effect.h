@@ -33,6 +33,10 @@ static inline uint8_t xi_op_default_effects(uint16_t op) {
     return xi_generated_op_default_flags(op);
 }
 
+static inline uint8_t xi_op_result_ownership(uint16_t op) {
+    return xi_generated_op_result_ownership(op);
+}
+
 static inline uint32_t xi_op_semantic_effects(uint16_t op) {
     return xi_generated_op_effects(op);
 }

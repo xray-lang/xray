@@ -473,6 +473,7 @@
 (define-xi-op xi.load.field
   :class memory-read
   :arity 1
+  :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group field
@@ -486,6 +487,7 @@
   :class memory-write
   :arity 2
   :result-kind void
+  :result-ownership none
   :tbaa-group field
   :escape-use heap
   :own-use stored-value
@@ -498,6 +500,7 @@
 (define-xi-op xi.index.get
   :class memory-read
   :arity 2
+  :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group array
@@ -511,6 +514,7 @@
   :class memory-write
   :arity 3
   :result-kind void
+  :result-ownership none
   :tbaa-group array
   :escape-use heap
   :own-use stored-value
@@ -577,6 +581,7 @@
 (define-xi-op xi.struct.get
   :class memory-read
   :arity 1
+  :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group struct
@@ -590,6 +595,7 @@
   :class memory-write
   :arity 2
   :result-kind void
+  :result-ownership none
   :tbaa-group struct
   :escape-use heap
   :own-use stored-value
@@ -613,6 +619,7 @@
   :class memory-write
   :arity 2
   :result-kind void
+  :result-ownership none
   :tbaa-group json
   :escape-use heap
   :own-use stored-value
@@ -625,6 +632,7 @@
 (define-xi-op xi.json.get.f
   :class memory-read
   :arity 1
+  :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group json
@@ -638,6 +646,7 @@
   :class memory-write
   :arity 2
   :result-kind void
+  :result-ownership none
   :tbaa-group json
   :escape-use heap
   :own-use stored-value
@@ -690,6 +699,7 @@
 (define-xi-op xi.tuple.get
   :class memory-read
   :arity 1
+  :result-ownership borrowed
   :own-use borrow
   :vn-kind memory-read
   :tbaa-group tuple
@@ -702,6 +712,7 @@
 (define-xi-op xi.call
   :class call
   :arity variadic
+  :result-ownership call-result
   :tbaa-group top
   :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
@@ -713,6 +724,7 @@
 (define-xi-op xi.call.method
   :class call
   :arity variadic
+  :result-ownership call-result
   :tbaa-group top
   :escape-use heap
   :own-use method-args
@@ -725,6 +737,7 @@
 (define-xi-op xi.call.method.direct
   :class call
   :arity variadic
+  :result-ownership call-result
   :tbaa-group top
   :escape-use heap
   :own-use method-args
@@ -737,6 +750,7 @@
 (define-xi-op xi.tail.call
   :class call
   :arity variadic
+  :result-ownership call-result
   :tbaa-group top
   :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
@@ -749,6 +763,7 @@
   :class call
   :arity variadic
   :result-kind dynamic
+  :result-ownership call-result
   :tbaa-group top
   :escape-use heap
   :effects (side-effect may-throw memory-read memory-write)
@@ -781,6 +796,7 @@
 (define-xi-op xi.load.upval
   :class memory-read
   :arity 0
+  :result-ownership borrowed
   :vn-kind memory-read
   :tbaa-group upval
   :effects (memory-read)
@@ -793,6 +809,7 @@
   :class memory-write
   :arity 1
   :result-kind void
+  :result-ownership none
   :tbaa-group upval
   :escape-use heap
   :own-use stored-value
@@ -805,6 +822,7 @@
 (define-xi-op xi.get.shared
   :class memory-read
   :arity 0
+  :result-ownership borrowed
   :vn-kind memory-read
   :tbaa-group shared
   :effects (memory-read)
@@ -817,6 +835,7 @@
   :class memory-write
   :arity 1
   :result-kind void
+  :result-ownership none
   :tbaa-group shared
   :escape-use global
   :effects (side-effect memory-write)
@@ -828,6 +847,7 @@
 (define-xi-op xi.get.global
   :class memory-read
   :arity 0
+  :result-ownership borrowed
   :vn-kind memory-read
   :tbaa-group global
   :effects (memory-read)
@@ -839,6 +859,7 @@
 (define-xi-op xi.set.global
   :class memory-write
   :arity 1
+  :result-ownership none
   :tbaa-group global
   :escape-use global
   :effects (side-effect memory-write)
@@ -851,6 +872,7 @@
   :class side-effect
   :arity variadic
   :result-kind void
+  :result-ownership none
   :own-use borrow
   :effects (side-effect memory-write)
   :requires ()
@@ -861,6 +883,7 @@
 (define-xi-op xi.go
   :class coroutine
   :arity variadic
+  :result-ownership none
   :escape-use global
   :effects (side-effect memory-write)
   :requires ()
@@ -880,6 +903,7 @@
 (define-xi-op xi.chan.send
   :class coroutine
   :arity 2
+  :result-ownership none
   :tbaa-group chan
   :escape-use global
   :effects (side-effect may-suspend memory-write)
@@ -901,6 +925,7 @@
 (define-xi-op xi.chan.try.send
   :class coroutine
   :arity 2
+  :result-ownership none
   :tbaa-group chan
   :escape-use global
   :effects (side-effect memory-write)
@@ -954,6 +979,7 @@
 (define-xi-op xi.yield
   :class coroutine
   :arity 0
+  :result-ownership none
   :effects (side-effect may-suspend)
   :requires ()
   :observable ()
@@ -964,6 +990,7 @@
   :class exception
   :arity 1
   :result-kind void
+  :result-ownership none
   :escape-use arg
   :effects (side-effect may-throw)
   :requires ()
@@ -1043,6 +1070,7 @@
 (define-xi-op xi.defer
   :class side-effect
   :arity variadic
+  :result-ownership none
   :effects (side-effect)
   :requires ()
   :observable ()
@@ -1229,6 +1257,7 @@
 (define-xi-op xi.assert
   :class side-effect
   :arity 1
+  :result-ownership none
   :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
@@ -1239,6 +1268,7 @@
 (define-xi-op xi.assert.eq
   :class side-effect
   :arity 2
+  :result-ownership none
   :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
@@ -1249,6 +1279,7 @@
 (define-xi-op xi.assert.ne
   :class side-effect
   :arity 2
+  :result-ownership none
   :own-use borrow
   :effects (side-effect may-throw)
   :requires ()
@@ -1259,6 +1290,7 @@
 (define-xi-op xi.assert.throws
   :class side-effect
   :arity 1
+  :result-ownership none
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1278,6 +1310,7 @@
 (define-xi-op xi.get.builtin
   :class memory-read
   :arity 0
+  :result-ownership borrowed
   :tbaa-group const
   :effects (memory-read)
   :requires ()
@@ -1288,6 +1321,7 @@
 (define-xi-op xi.import.ref
   :class memory-read
   :arity 0
+  :result-ownership borrowed
   :effects (memory-read)
   :requires ()
   :observable ()
@@ -1308,6 +1342,7 @@
 (define-xi-op xi.bounds.check
   :class guard
   :arity 2
+  :result-ownership none
   :effects (side-effect may-throw)
   :requires ()
   :observable ()
@@ -1319,6 +1354,7 @@
   :class ownership
   :arity 1
   :result-kind void
+  :result-ownership none
   :effects (side-effect retains)
   :requires ()
   :observable ()
@@ -1329,6 +1365,7 @@
   :class ownership
   :arity 1
   :result-kind void
+  :result-ownership none
   :effects (side-effect releases)
   :requires ()
   :observable ()
@@ -1338,6 +1375,7 @@
 (define-xi-op xi.move
   :class pure
   :arity 1
+  :result-ownership none
   :effects ()
   :requires ()
   :observable ()
@@ -1347,6 +1385,7 @@
 (define-xi-op xi.drop.reuse
   :class ownership
   :arity 1
+  :result-ownership none
   :effects (side-effect)
   :requires ()
   :observable ()
