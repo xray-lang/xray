@@ -1820,28 +1820,32 @@ class XiLoweringDef:
     required_targets: list
     targets: list
     target_drivers: dict
+    target_rejects: dict
     match: Optional[SList] = None
 
 
-def _xi_lowering_driver(form: SList, target: str, op_name: str) -> Optional[str]:
+def _xi_lowering_target_entry(form: SList, target: str, op_name: str) -> tuple[Optional[str], bool]:
     value = _xi_get_kw(form, ':' + target)
     if value is None:
-        return None
+        return None, False
     if not isinstance(value, SList) or len(value.children) != 2:
-        die(f"{op_name}:{target}: expected (driver name)")
+        die(f"{op_name}:{target}: expected (driver name) or (reject name)")
     kind = _sexpr_atom_value(value.children[0], f"{op_name}:{target}")
-    if kind != 'driver':
-        die(f"{op_name}:{target}: expected driver entry")
-    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}")
+    if kind not in {'driver', 'reject'}:
+        die(f"{op_name}:{target}: expected driver or reject entry")
+    return _sexpr_atom_value(value.children[1], f"{op_name}:{target}"), kind == 'reject'
 
 
-def _xi_lowering_target_drivers(form: SList, op_name: str) -> dict:
+def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict]:
     drivers = {}
+    rejects = {}
     for target in sorted(VALID_XI_LOWERING_TARGETS):
-        driver = _xi_lowering_driver(form, target, op_name)
+        driver, reject = _xi_lowering_target_entry(form, target, op_name)
         if driver is not None:
             drivers[target] = driver
-    return drivers
+            if reject:
+                rejects[target] = driver
+    return drivers, rejects
 
 
 def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') -> list[XiLoweringDef]:
@@ -1869,7 +1873,7 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
         for target in required:
             if target not in VALID_XI_LOWERING_TARGETS:
                 die(f"{path}: lowering '{op_name}' uses unknown required target '{target}'")
-        target_drivers = _xi_lowering_target_drivers(form, op_name)
+        target_drivers, target_rejects = _xi_lowering_target_entries(form, op_name)
         targets = sorted(target_drivers.keys())
         if not targets:
             die(f"{path}: lowering '{op_name}' has no target emit")
@@ -1878,6 +1882,7 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
             die(f"{path}: lowering '{op_name}' missing required target(s): {', '.join(missing)}")
         entries.append(XiLoweringDef(op_name=op_name, ident=ident, required_targets=required,
                                      targets=targets, target_drivers=target_drivers,
+                                     target_rejects=target_rejects,
                                      match=_xi_get_kw_list(form, ':match')))
     return entries
 
@@ -1904,8 +1909,9 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
     for i, entry in enumerate(entries):
         target_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.targets)
         required_bits = _xi_bit_expr('XI_LOWER_TARGET', entry.required_targets)
+        reject_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_rejects.keys()))
         suffix = ' \\' if i + 1 < len(entries) else ''
-        lines.append(f'    X({entry.ident}, "{entry.op_name}", {target_bits}, {required_bits}){suffix}')
+        lines.append(f'    X({entry.ident}, "{entry.op_name}", {target_bits}, {required_bits}, {reject_bits}){suffix}')
     lines.append('')
     lines.append('')
     lines.append('static inline uint32_t xi_lowering_generated_targets(uint16_t op) {')
@@ -1928,8 +1934,22 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
     lines.append('    return 0;')
     lines.append('}')
     lines.append('')
+    lines.append('static inline uint32_t xi_lowering_rejected_targets(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in entries:
+        reject_bits = _xi_bit_expr('XI_LOWER_TARGET', sorted(entry.target_rejects.keys()))
+        lines.append(f'        case XI_{entry.ident}: return {reject_bits};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
     lines.append('static inline bool xi_lowering_has_target(uint16_t op, uint32_t target) {')
     lines.append('    return (xi_lowering_generated_targets(op) & target) == target;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xi_lowering_target_is_rejected(uint16_t op, uint32_t target) {')
+    lines.append('    return (xi_lowering_rejected_targets(op) & target) == target;')
     lines.append('}')
     lines.append('')
     lines.append('#endif  /* XI_LOWERING_COVERAGE_GEN_H */')
@@ -7107,8 +7127,9 @@ def _test_xi_lowering_parser():
       :aot-c (driver xicgen_add))
     (lower xi.copy
       :match ()
-      :required-targets (vm-bytecode aot-c)
+      :required-targets (vm-bytecode jit-xm aot-c)
       :vm-bytecode (driver xi_emit_copy)
+      :jit-xm (reject xi2xm_copy_reject)
       :aot-c (driver xicgen_copy))
     '''
     ops = parse_xi_ops_def(ops_text)
@@ -7117,13 +7138,17 @@ def _test_xi_lowering_parser():
     assert entries[0].ident == 'ADD'
     assert entries[0].targets == ['aot-c', 'jit-xm', 'vm-bytecode']
     assert entries[0].target_drivers['jit-xm'] == 'xi2xm_add'
+    assert entries[1].target_rejects['jit-xm'] == 'xi2xm_copy_reject'
     header = generate_xi_lowering_coverage_header(entries)
     assert 'XI_LOWERING_ENTRY_COUNT = 2' in header
     assert 'case XI_ADD: return XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE;' in header
+    assert 'xi_lowering_rejected_targets' in header
+    assert 'case XI_COPY: return XI_LOWER_TARGET_JIT_XM;' in header
     vm_header = generate_xi_vm_dispatch_header(entries)
     assert 'X(ADD, xi_emit_add)' in vm_header
     jit_header = generate_xi_target_dispatch_header(entries, 'jit-xm', 'TEST_JIT_H', 'TEST_JIT')
     assert 'X(ADD, "xi.add", xi2xm_add)' in jit_header
+    assert 'X(COPY, "xi.copy", xi2xm_copy_reject)' in jit_header
     try:
         parse_xi_lowering_def('''
         (lower xi.add

@@ -72,7 +72,12 @@
     X(ARRAY_NEW, "xi.array.new", xi2xm_array_new) \
     X(MAP_NEW, "xi.map.new", xi2xm_map_new) \
     X(SET_NEW, "xi.set.new", xi2xm_set_new) \
-    X(STR_CONCAT, "xi.str.concat", xi2xm_str_concat)
+    X(STR_CONCAT, "xi.str.concat", xi2xm_str_concat) \
+    X(BYTES_LOAD_U32_LE, "xi.bytes.load.u32.le", xi2xm_reject_unsupported) \
+    X(BYTES_LOAD_U64_LE, "xi.bytes.load.u64.le", xi2xm_reject_unsupported) \
+    X(BYTES_COPY_WITHIN, "xi.bytes.copy.within", xi2xm_reject_unsupported) \
+    X(BYTES_COPY_FROM, "xi.bytes.copy.from", xi2xm_reject_unsupported) \
+    X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xi2xm_reject_unsupported)
 
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */

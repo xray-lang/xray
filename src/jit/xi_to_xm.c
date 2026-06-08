@@ -1387,6 +1387,13 @@ static XmRef xi2xm_str_concat(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return acc;
 }
 
+static XmRef xi2xm_reject_unsupported(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    (void) v;
+    ctx->error = true;
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
 static bool xi_to_xm_lower_generated(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmRef *out) {
     XR_DCHECK(out != NULL, "xi_to_xm_lower_generated: NULL out");
     switch (v->op) {
@@ -1481,14 +1488,6 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             sf->flags |= XM_FLAG_SIDE_EFFECT;
             return val;
         }
-
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_COPY_FROM:
-        case XI_BYTES_REPEAT_FROM:
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
 
         /* Iteration — lower as generic calls (runtime handles protocol).
          * The iterator object lives in args[0], not a closure callee, so
