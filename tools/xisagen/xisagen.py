@@ -1493,6 +1493,13 @@ VALID_XI_JIT_POLICIES = {
     'required',
 }
 
+VALID_XI_LOWERING_POLICIES = {
+    'generated',
+    'pass-local',
+    'special',
+    'verifier-only',
+}
+
 VALID_XI_RESULT_NATIVE_TYPES = {
     'i8',
     'u8',
@@ -1543,6 +1550,7 @@ class XiOpDef:
     result_kind: str
     result_native_type: str
     jit_policy: str
+    lowering_policy: str
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1697,12 +1705,17 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         jit_policy = _xi_get_kw_str(form, ':jit-policy', 'catch-up')
         if jit_policy not in VALID_XI_JIT_POLICIES:
             die(f"{path}: Xi op '{name}' uses unknown jit policy '{jit_policy}'")
+        lowering_policy = _xi_get_kw_str(form, ':lowering-policy', 'generated')
+        if lowering_policy not in VALID_XI_LOWERING_POLICIES:
+            die(f"{path}: Xi op '{name}' uses unknown lowering policy "
+                f"'{lowering_policy}'")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
                            result_kind=result_kind,
                            result_native_type=result_native_type,
-                           jit_policy=jit_policy))
+                           jit_policy=jit_policy,
+                           lowering_policy=lowering_policy))
     return ops
 
 
@@ -1776,6 +1789,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_RESULT__COUNT')
     lines.append('} XiGeneratedResultKind;')
     lines.append('')
+    lines.append('/* ========== Lowering Policies ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_LOWERING_GENERATED = 0,')
+    lines.append('    XI_GEN_LOWERING_PASS_LOCAL = 1,')
+    lines.append('    XI_GEN_LOWERING_SPECIAL = 2,')
+    lines.append('    XI_GEN_LOWERING_VERIFIER_ONLY = 3,')
+    lines.append('    XI_GEN_LOWERING__COUNT')
+    lines.append('} XiGeneratedLoweringPolicy;')
+    lines.append('')
     lines.append(f'enum {{ XI_GEN_OP_COUNT = {len(ops)} }};')
     lines.append('typedef char xi_generated_op_count_must_match_XiOp[')
     lines.append('    ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];')
@@ -1791,6 +1814,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t operand_count;')
     lines.append('    uint8_t result_count;')
     lines.append('    uint8_t result_kind;')
+    lines.append('    uint8_t lowering_policy;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t effects;')
     lines.append('    uint32_t targets;')
@@ -1807,11 +1831,12 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         flags = _xi_effect_flag_expr(op.effects)
         native_type = 'NULL' if op.result_native_type == 'none' else f'"{op.result_native_type}"'
         result_kind = f'XI_GEN_RESULT_{_xi_c_ident(op.result_kind)}'
+        lowering_policy = f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)}'
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
-            f'{len(op.operands)}, {len(op.results)}, {result_kind}, {flags}, {effects}, '
-            f'{targets}, {native_type}, "{op.jit_policy}"){suffix}')
+            f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
+            f'{flags}, {effects}, {targets}, {native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -1862,6 +1887,16 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return NULL;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return '
+                     f'XI_GEN_LOWERING_{_xi_c_ident(op.lowering_policy)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_LOWERING__COUNT;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint8_t xi_generated_op_default_flags(uint16_t op) {')
@@ -1927,6 +1962,21 @@ def _xi_lowering_target_entries(form: SList, op_name: str) -> tuple[dict, dict]:
     return drivers, rejects
 
 
+def _xi_validate_lowering_policy(entries: list[XiLoweringDef], ops: list[XiOpDef],
+                                 path: str) -> None:
+    entry_names = {entry.op_name for entry in entries}
+    missing = [op.name for op in ops
+               if op.lowering_policy == 'generated' and op.name not in entry_names]
+    if missing:
+        die(f"{path}: missing lowering entry for generated Xi op(s): {', '.join(missing)}")
+    op_by_name = {op.name: op for op in ops}
+    for entry in entries:
+        op = op_by_name[entry.op_name]
+        if op.lowering_policy != 'generated':
+            die(f"{path}: Xi op '{entry.op_name}' has lowering-policy "
+                f"'{op.lowering_policy}' but also has a lowering entry")
+
+
 def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') -> list[XiLoweringDef]:
     known_ops = {op.name for op in ops}
     forms = parse_sexpr(tokenize_sexpr(text, path), path)
@@ -1963,6 +2013,7 @@ def parse_xi_lowering_def(text: str, ops: list[XiOpDef], path: str = '<input>') 
                                      targets=targets, target_drivers=target_drivers,
                                      target_rejects=target_rejects,
                                      match=_xi_get_kw_list(form, ':match')))
+    _xi_validate_lowering_policy(entries, ops, path)
     return entries
 
 
@@ -7191,7 +7242,8 @@ def _test_xi_ops_parser():
       :requires (valid-address)
       :observable (load-width)
       :targets (jit-xm aot-c aot-verify)
-      :jit-policy catch-up)
+      :jit-policy catch-up
+      :lowering-policy pass-local)
     (define-xi-op xi.narrow.i8
       :class conversion
       :arity 1
@@ -7222,6 +7274,7 @@ def _test_xi_ops_parser():
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
     assert ops[1].result_kind == 'value'
+    assert ops[1].lowering_policy == 'pass-local'
     assert ops[2].result_native_type == 'i8'
     assert ops[3].result_kind == 'void'
     header = generate_xi_ops_header(ops)
@@ -7236,6 +7289,8 @@ def _test_xi_ops_parser():
     assert 'case XI_STORE_FIELD: return XI_GEN_RESULT_VOID;' in header
     assert 'xi_generated_op_result_native_type' in header
     assert 'case XI_NARROW_I8: return "i8";' in header
+    assert 'xi_generated_op_lowering_policy' in header
+    assert 'case XI_MEM_LOAD: return XI_GEN_LOWERING_PASS_LOCAL;' in header
     assert 'xi_generated_op_default_flags' in header
     print(" PASS", file=sys.stderr)
 
@@ -7258,6 +7313,33 @@ def _test_xi_lowering_parser():
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
       :jit-policy required)
+    (define-xi-op xi.phi
+      :class pure
+      :arity variadic
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy none
+      :lowering-policy special)
+    (define-xi-op xi.extract
+      :class call
+      :arity 1
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (aot-verify)
+      :jit-policy none
+      :lowering-policy verifier-only)
+    (define-xi-op xi.vec.add
+      :class vector
+      :arity 2
+      :effects ()
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-c aot-verify)
+      :jit-policy none
+      :lowering-policy pass-local)
     '''
     lowering_text = '''
     (lower xi.add
@@ -7302,6 +7384,36 @@ def _test_xi_lowering_parser():
           :vm-bytecode (driver xi_emit_add))
         ''', ops)
         assert False, "missing required lowering target should be rejected"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        ''', ops)
+        assert False, "missing generated lowering entry should be rejected"
+    except SystemExit:
+        pass
+    try:
+        parse_xi_lowering_def('''
+        (lower xi.add
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_add)
+          :jit-xm (driver xi2xm_add)
+          :aot-c (driver xicgen_add))
+        (lower xi.copy
+          :required-targets (vm-bytecode jit-xm aot-c)
+          :vm-bytecode (driver xi_emit_copy)
+          :jit-xm (driver xi2xm_copy)
+          :aot-c (driver xicgen_copy))
+        (lower xi.phi
+          :required-targets (vm-bytecode)
+          :vm-bytecode (driver xi_emit_phi))
+        ''', ops)
+        assert False, "special lowering policy should reject normal lowering entries"
     except SystemExit:
         pass
     print(" PASS", file=sys.stderr)

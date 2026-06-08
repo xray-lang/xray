@@ -93,6 +93,45 @@ def main() -> int:
             "  :targets (vm-bytecode jit-xm aot-c)\n"
             "  :jit-policy required)\n",
         )
+        xi_ops_missing_lowering = write(
+            tmp / "xi_ops_missing_lowering.def",
+            "(define-xi-op xi.add\n"
+            "  :class arithmetic\n"
+            "  :arity 2\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode jit-xm aot-c)\n"
+            "  :jit-policy required)\n"
+            "(define-xi-op xi.sub\n"
+            "  :class arithmetic\n"
+            "  :arity 2\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode jit-xm aot-c)\n"
+            "  :jit-policy required)\n",
+        )
+        xi_ops_special_policy = write(
+            tmp / "xi_ops_special_policy.def",
+            "(define-xi-op xi.add\n"
+            "  :class arithmetic\n"
+            "  :arity 2\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode jit-xm aot-c)\n"
+            "  :jit-policy required)\n"
+            "(define-xi-op xi.phi\n"
+            "  :class pure\n"
+            "  :arity variadic\n"
+            "  :effects ()\n"
+            "  :requires ()\n"
+            "  :observable ()\n"
+            "  :targets (vm-bytecode jit-xm aot-c)\n"
+            "  :jit-policy none\n"
+            "  :lowering-policy special)\n",
+        )
         bad_xi_lowering = write(
             tmp / "bad_xi_lowering.def",
             "(lower xi.add\n"
@@ -257,6 +296,11 @@ def main() -> int:
             ["xi-lowering", str(xi_ops), str(bad_xi_lowering), str(tmp)],
             "missing required target",
         )
+        expect_fail(
+            ns.xisagen,
+            ["xi-lowering", str(xi_ops_missing_lowering), str(good_xi_lowering), str(tmp)],
+            "missing lowering entry for generated Xi op(s): xi.sub",
+        )
         out_root = tmp / "xi_lowering_out"
         proc = subprocess.run(
             [sys.executable, str(ns.xisagen), "xi-lowering", str(xi_ops),
@@ -282,6 +326,17 @@ def main() -> int:
         vm_dispatch = (out_root / "src/ir/xi_emit_vm_gen.h").read_text()
         if "X(ADD, xi_emit_arith)" not in vm_dispatch:
             raise AssertionError(f"missing VM lowering driver entry: {vm_dispatch}")
+        special_out_root = tmp / "xi_lowering_special_out"
+        proc = subprocess.run(
+            [sys.executable, str(ns.xisagen), "xi-lowering", str(xi_ops_special_policy),
+             str(good_xi_lowering), str(special_out_root)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        if proc.returncode != 0:
+            raise AssertionError(f"xi-lowering special-policy path failed: {proc.stderr}")
         expect_fail(
             ns.xisagen,
             ["aot-rep", str(bad_aot_rep), str(tmp / "xaot_rep_gen.h")],
