@@ -1041,6 +1041,13 @@ TEST(call_is_top_but_not_direct_memory_op) {
     assert(!xi_is_memory_load(XI_CALL));
     assert(!xi_is_memory_store(XI_CALL));
     assert(!xi_is_memory_op(XI_CALL));
+    assert(xi_is_memory_clobber(XI_CALL));
+    assert(xi_is_memory_clobber(XI_CALL_METHOD));
+    assert(xi_is_memory_clobber(XI_CALL_METHOD_DIRECT));
+    assert(xi_is_memory_clobber(XI_TAIL_CALL));
+    assert(xi_is_memory_clobber(XI_CALL_BUILTIN));
+    assert(!xi_is_memory_clobber(XI_PRINT));
+    assert(!xi_is_memory_clobber(XI_BYTES_COPY_WITHIN));
 }
 
 /* ========== Annotate Pass Coverage Tests ========== */

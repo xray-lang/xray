@@ -222,8 +222,7 @@ static bool has_aliasing_store_between(const XiFunc *f, const XiValue *leader,
             continue;
 
         /* Check if this instruction is a store that may alias current. */
-        if (xi_is_memory_store(v->op) || v->op == XI_CALL || v->op == XI_CALL_METHOD ||
-            v->op == XI_CALL_METHOD_DIRECT || v->op == XI_CALL_BUILTIN) {
+        if (xi_is_memory_store(v->op) || xi_is_memory_clobber(v->op)) {
             if (xi_tbaa_may_alias(v, current))
                 return true;
         }
