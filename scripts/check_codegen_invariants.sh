@@ -336,6 +336,17 @@ else
     EXIT=1
 fi
 
+section "5B. Xi/AOT generated artifact freshness"
+
+XI_AOT_SYNC_LOG="${TMPDIR_PATH}/xi_aot_sync.log"
+if scripts/check_xi_aot_generated_sync.sh >"${XI_AOT_SYNC_LOG}" 2>&1; then
+    green "OK: generated Xi/AOT artifacts match xisa sources."
+else
+    red "FAIL: generated Xi/AOT artifacts drifted from xisa sources:"
+    sed 's/^/  /' "${XI_AOT_SYNC_LOG}"
+    EXIT=1
+fi
+
 section "6. helper CALL_C metadata path"
 
 manual_callc=$(awk '
