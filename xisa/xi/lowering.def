@@ -622,9 +622,10 @@
 
 (lower xi.range
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_range)
-  :jit-xm (driver xi2xm_call))
+  :jit-xm (driver xi2xm_call)
+  :aot-c (driver xicgen_range))
 
 (lower xi.iter.new
   :match ()

@@ -38,5 +38,12 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(!sb || sb->len == 0);
     }
+    if (obj.tag == XR_TAG_RANGE) {
+        xrt_range_t *r = (xrt_range_t *) obj.ptr;
+        if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
+            return XR_FROM_INT(xrt_range_length_ptr(r));
+        if (symbol_id == XRT_SYM_IS_EMPTY)
+            return XR_FROM_BOOL(xrt_range_length_ptr(r) == 0);
+    }
     return XR_NULL_VAL;
 }

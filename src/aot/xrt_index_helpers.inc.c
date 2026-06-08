@@ -174,6 +174,10 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
             return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
+    } else if (obj.tag == XR_TAG_RANGE && key.tag == XR_TAG_I64) {
+        bool ok = false;
+        int64_t value = xrt_range_index_ptr((const xrt_range_t *) obj.ptr, key.i, &ok);
+        return ok ? XR_FROM_INT(value) : XR_NULL_VAL;
     } else if (obj.tag == XR_TAG_MAP) {
         return xrt_map_get((xrt_map_t *) obj.ptr, key);
     }

@@ -762,6 +762,19 @@ static void xicgen_slice(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     fprintf(out, ")");
 }
 
+static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                         const char *prefix) {
+    (void) ctx;
+    (void) f;
+    (void) prefix;
+    XR_DCHECK(v->nargs >= 2, "xicgen_range: need start and end");
+    fprintf(out, "xrt_range_from_i64(");
+    emit_value_as_rep(out, v->args[0], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep(out, v->args[1], XR_REP_I64);
+    fprintf(out, ")");
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     const char *bn = v->aux ? (const char *) v->aux : "";
@@ -835,12 +848,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "slice") == 0) {
         xicgen_slice(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "range") == 0) {
-        XR_DCHECK(v->nargs >= 2, "builtin range: need 2 args");
-        fprintf(out, "xrt_range(");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-        fprintf(out, ", ");
-        emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
-        fprintf(out, ")");
+        xicgen_range(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "typeof") == 0) {
         xicgen_typeof(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "regex_compile") == 0) {

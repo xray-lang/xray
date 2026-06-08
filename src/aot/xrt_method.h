@@ -19,9 +19,12 @@
 #include "xrt_arc.h"   // xrt_str_concat, xrt_str_alloc
 #include "xrt_coll.h"  // xrt_array_t, xrt_map_t, xrt_strbuf_finish, xrt_array_push
 #include "xrt_array_hof.h"
+#include "xrt_range.h"
 
 /* Builtin method symbol IDs. */
 #include "xrt_method_symbols.h"
+
+#include "xrt_range_methods.inc.c"
 
 /* toString helper. */
 
@@ -57,6 +60,8 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
     }
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC)
         return val;
+    if (val.tag == XR_TAG_RANGE)
+        return xrt_range_to_string(val);
     if (val.tag == XR_TAG_NULL)
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
@@ -307,6 +312,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_TOSTRING)
             return xrt_strbuf_finish(recv);
     }
+    if (recv.tag == XR_TAG_RANGE)
+        return xrt_range_method_0(recv, sym);
     if (recv.tag == XR_TAG_I64) {
         if (sym == XRT_SYM_ABS)
             return XR_FROM_INT(recv.i < 0 ? -recv.i : recv.i);
@@ -624,6 +631,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_DELETE)
             return XR_FROM_BOOL(xrt_set_delete(s, arg0));
     }
+    if (recv.tag == XR_TAG_RANGE)
+        return xrt_range_method_1(recv, sym, arg0);
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_POW) {
         double exp = (arg0.tag == XR_TAG_F64) ? arg0.f : (double) arg0.i;
         return XR_FROM_FLOAT(pow(recv.f, exp));

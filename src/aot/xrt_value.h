@@ -78,6 +78,7 @@ typedef struct XrValue {
 #define XR_TAG_CELL 20    /* AOT mutable closure cell */
 #define XR_TAG_TUPLE 21   /* AOT tuple */
 #define XR_TAG_SET 22     /* AOT set */
+#define XR_TAG_RANGE 23   /* AOT range */
 
 /* Native field tags mirror XrNativeType for standalone generated C. */
 #define XR_NATIVE_I64 0

@@ -759,24 +759,6 @@ TEST(backend_rejects_unlowered_iter_op) {
     xi_func_free(f);
 }
 
-TEST(backend_rejects_unlowered_range_op) {
-    XiFunc *f = make_func("backend_unlowered_range_op");
-    ASSERT(f != NULL);
-    XiBlock *entry = f->entry;
-
-    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
-    XiValue *end = xi_const_int(f, entry, 4, &stub_int);
-    XiValue *range = xi_value_new(f, entry, XI_RANGE, &stub_int, 2);
-    range->args[0] = start;
-    range->args[1] = end;
-    xi_block_set_return(entry, range);
-    f->stage = XI_STAGE_BACKEND;
-    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
-
-    ASSERT(verify_fail(f));
-    xi_func_free(f);
-}
-
 TEST(backend_rejects_unlowered_call_method) {
     XiFunc *f = make_func("backend_unlowered_call_method");
     ASSERT(f != NULL);
@@ -1005,6 +987,24 @@ TEST(backend_accepts_str_concat) {
     xi_func_free(f);
 }
 
+TEST(backend_accepts_range_op) {
+    XiFunc *f = make_func("backend_range_op");
+    ASSERT(f != NULL);
+    XiBlock *entry = f->entry;
+
+    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *end = xi_const_int(f, entry, 4, &stub_int);
+    XiValue *range = xi_value_new(f, entry, XI_RANGE, &stub_int, 2);
+    range->args[0] = start;
+    range->args[1] = end;
+    xi_block_set_return(entry, range);
+    f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
+
+    ASSERT(verify_ok(f));
+    xi_func_free(f);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -1047,7 +1047,6 @@ int main(void) {
     run_repped_stage_rejects_box_i64_rep();
     run_stage_invariant_mask_missing_bits_fails();
     run_backend_rejects_unlowered_iter_op();
-    run_backend_rejects_unlowered_range_op();
     run_backend_rejects_unlowered_call_method();
 
     printf("\n--- CFG Mutation Negatives ---\n");
@@ -1067,6 +1066,7 @@ int main(void) {
     run_backend_accepts_print_op();
     run_backend_accepts_map_new();
     run_backend_accepts_str_concat();
+    run_backend_accepts_range_op();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;
