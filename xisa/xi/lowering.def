@@ -247,6 +247,24 @@
   :jit-xm (driver xi2xm_throw)
   :aot-c (driver xicgen_throw))
 
+(lower xi.try
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_try)
+  :jit-xm (driver xi2xm_try))
+
+(lower xi.catch
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_catch)
+  :jit-xm (driver xi2xm_catch))
+
+(lower xi.end.try
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_end_try)
+  :jit-xm (driver xi2xm_end_try))
+
 (lower xi.retain
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)

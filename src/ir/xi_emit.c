@@ -456,9 +456,6 @@ const XiEmitHandler xi_emit_handlers[XI_OP_COUNT] = {
     [XI_ERR_CATCH] = xi_emit_err_catch,
     [XI_CORO_OP] = xi_emit_coro_op,
     [XI_PHI] = NULL, /* handled separately by emit_phi_moves */
-    [XI_TRY] = xi_emit_try,
-    [XI_CATCH] = xi_emit_catch,
-    [XI_END_TRY] = xi_emit_end_try,
     [XI_ASSERT_THROWS] = xi_emit_assert_throws,
     [XI_REGEX_COMPILE] = xi_emit_regex_compile,
 };

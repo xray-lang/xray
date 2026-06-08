@@ -1155,6 +1155,34 @@ static XmRef xi2xm_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_throw(ctx, blk, v);
 }
 
+static XmRef xi2xm_try(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) blk;
+    XiBlock *catch_xi = (XiBlock *) v->aux;
+    XR_DCHECK(catch_xi != NULL, "XI_TRY: missing catch block");
+    XmBlock *catch_xm = get_block(ctx, catch_xi);
+    if (ctx->try_depth < XI2XM_MAX_TRY_DEPTH) {
+        ctx->try_stack[ctx->try_depth].handler = catch_xm;
+        ctx->try_depth++;
+    }
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
+static XmRef xi2xm_catch(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) v;
+    XmRef exc = xm_emit_unary(ctx->xm_func, blk, XM_CATCH, XR_REP_I64, XM_NONE);
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    return exc;
+}
+
+static XmRef xi2xm_end_try(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    (void) v;
+    if (ctx->try_depth > 0)
+        ctx->try_depth--;
+    xm_emit(ctx->xm_func, blk, XM_TRY_END, XR_REP_I64, XM_NONE, XM_NONE);
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    return xm_const_i64(ctx->xm_func, 0);
+}
+
 static XmRef xi2xm_retain(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_ownership_helper(ctx, blk, v, XM_HELPER_rc_dup, "retain");
 }
@@ -1487,42 +1515,8 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (xi_to_xm_lower_generated(ctx, blk, v, &generated))
         return generated;
 
-    switch (v->op) {
-        /* Exception handling */
-        case XI_TRY: {
-            /* aux = catch XiBlock*, aux_int = has_finally flag.
-             * Push handler onto try stack; exception_handler is set
-             * on blocks in the propagation pass after lowering. */
-            XiBlock *catch_xi = (XiBlock *) v->aux;
-            XR_DCHECK(catch_xi != NULL, "XI_TRY: missing catch block");
-            XmBlock *catch_xm = get_block(ctx, catch_xi);
-            if (ctx->try_depth < XI2XM_MAX_TRY_DEPTH) {
-                ctx->try_stack[ctx->try_depth].handler = catch_xm;
-                ctx->try_depth++;
-            }
-            return xm_const_i64(ctx->xm_func, 0);
-        }
-
-        case XI_CATCH: {
-            /* Load exception from xr_coro_jit_state(coro)->scratch->exception, clear it */
-            XmRef exc = xm_emit_unary(ctx->xm_func, blk, XM_CATCH, XR_REP_I64, XM_NONE);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            return exc;
-        }
-
-        case XI_END_TRY: {
-            if (ctx->try_depth > 0)
-                ctx->try_depth--;
-            xm_emit(ctx->xm_func, blk, XM_TRY_END, XR_REP_I64, XM_NONE, XM_NONE);
-            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-            return xm_const_i64(ctx->xm_func, 0);
-        }
-
-        default:
-            /* Truly unknown op — mark error, return dummy */
-            ctx->error = true;
-            return xm_const_i64(ctx->xm_func, 0);
-    }
+    ctx->error = true;
+    return xm_const_i64(ctx->xm_func, 0);
 }
 
 /* ========== Block Lowering ========== */

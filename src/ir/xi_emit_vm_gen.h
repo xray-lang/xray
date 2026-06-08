@@ -41,6 +41,9 @@
     X(EXTRACT, xi_emit_extract) \
     X(MULTI_RET, xi_emit_multi_ret) \
     X(THROW, xi_emit_throw) \
+    X(TRY, xi_emit_try) \
+    X(CATCH, xi_emit_catch) \
+    X(END_TRY, xi_emit_end_try) \
     X(RETAIN, xi_emit_retain) \
     X(RELEASE, xi_emit_release) \
     X(SHL, xi_emit_arith) \
