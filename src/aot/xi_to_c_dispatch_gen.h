@@ -32,6 +32,7 @@
     X(ASSERT_NE, "xi.assert.ne", xicgen_assert_ne) \
     X(TYPEOF, "xi.typeof", xicgen_typeof) \
     X(GET_BUILTIN, "xi.get.builtin", xicgen_get_builtin) \
+    X(PRINT, "xi.print", xicgen_print) \
     X(CLASS_CREATE, "xi.class.create", xicgen_class_create) \
     X(CALL, "xi.call", xicgen_call) \
     X(CALL_METHOD, "xi.call.method", xicgen_call_method) \

@@ -753,6 +753,7 @@ TEST(backend_rejects_unlowered_alloc) {
     arr->args[0] = size;
     xi_block_set_return(entry, arr);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -768,6 +769,7 @@ TEST(backend_rejects_high_level_builtin) {
     arr->args[0] = size;
     xi_block_set_return(entry, arr);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -784,6 +786,7 @@ TEST(backend_rejects_unlowered_call_method) {
     call->args[1] = xi_const_int(f, entry, 0, &stub_int);
     xi_block_set_return(entry, call);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -951,7 +954,7 @@ TEST(tbaa_upval_load_requires_mem_group) {
 
 /* ========== Backend Negative Tests (additional) ========== */
 
-TEST(backend_rejects_print_op) {
+TEST(backend_accepts_print_op) {
     XiFunc *f = make_func("backend_print");
     ASSERT(f != NULL);
     XiBlock *entry = f->entry;
@@ -962,8 +965,9 @@ TEST(backend_rejects_print_op) {
     print->flags |= XI_FLAG_SIDE_EFFECT;
     xi_block_set_return(entry, arg);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
-    ASSERT(verify_fail(f));
+    ASSERT(verify_ok(f));
     xi_func_free(f);
 }
 
@@ -975,6 +979,7 @@ TEST(backend_rejects_map_new) {
     XiValue *map = xi_value_new(f, entry, XI_MAP_NEW, &stub_int, 0);
     xi_block_set_return(entry, map);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -992,6 +997,7 @@ TEST(backend_rejects_str_concat) {
     concat->args[1] = b;
     xi_block_set_return(entry, concat);
     f->stage = XI_STAGE_BACKEND;
+    f->invariant_mask = xi_stage_invariants(XI_STAGE_BACKEND);
 
     ASSERT(verify_fail(f));
     xi_func_free(f);
@@ -1055,8 +1061,8 @@ int main(void) {
     run_tbaa_field_store_requires_mem_group();
     run_tbaa_upval_load_requires_mem_group();
 
-    printf("\n--- Backend Negatives (additional) ---\n");
-    run_backend_rejects_print_op();
+    printf("\n--- Backend Direct Ops And Negatives ---\n");
+    run_backend_accepts_print_op();
     run_backend_rejects_map_new();
     run_backend_rejects_str_concat();
 
