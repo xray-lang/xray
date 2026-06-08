@@ -83,6 +83,9 @@ static void test_mem_ops(void) {
 }
 
 static void test_optimization_traits(void) {
+    ASSERT_TRUE(xi_op_is_comparison(XI_EQ), "EQ is a comparison op");
+    ASSERT_TRUE(xi_op_is_comparison(XI_EQ_STRICT), "EQ_STRICT is a comparison op");
+    ASSERT_TRUE(!xi_op_is_comparison(XI_ADD), "ADD is not a comparison op");
     ASSERT_TRUE(xi_op_value_numbering_kind(XI_ADD) == XI_GEN_VN_PURE, "ADD is VN-pure");
     ASSERT_TRUE(xi_op_value_numbering_kind(XI_LOAD_FIELD) == XI_GEN_VN_MEMORY_READ,
                 "LOAD_FIELD is VN memory-read");

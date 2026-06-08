@@ -20,6 +20,7 @@
 
 #include "xi_opt_jump_thread.h"
 #include "xi_cfg_edit.h"
+#include "xi_effect.h"
 #include "../base/xchecks.h"
 
 /* ========== Condition Matching ========== */
@@ -33,22 +34,18 @@ typedef struct {
 
 /* Extract comparison key from a value, or return false if not a cmp. */
 static bool extract_cmp_key(const XiValue *v, CmpKey *out) {
-    if (!v || v->nargs < 2)
+    if (!v || !out || v->nargs < 2 || !v->args[0] || !v->args[1])
         return false;
-    switch (v->op) {
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-            break;
-        default:
-            return false;
-    }
+    if (!xi_op_is_comparison(v->op))
+        return false;
     out->op = v->op;
     out->lhs_id = v->args[0]->id;
     out->rhs_id = v->args[1]->id;
+    if (xi_op_is_commutative(v->op) && out->lhs_id > out->rhs_id) {
+        uint32_t tmp = out->lhs_id;
+        out->lhs_id = out->rhs_id;
+        out->rhs_id = tmp;
+    }
     return true;
 }
 

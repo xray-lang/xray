@@ -59,6 +59,14 @@ static inline bool xi_op_allocates(uint16_t op) {
     return (xi_op_semantic_effects(op) & XI_EFFECT_ALLOCATES) != 0;
 }
 
+static inline uint8_t xi_op_class(uint16_t op) {
+    return xi_generated_op_class(op);
+}
+
+static inline bool xi_op_is_comparison(uint16_t op) {
+    return xi_op_class(op) == XI_GEN_CLASS_COMPARISON;
+}
+
 static inline bool xi_op_can_speculate(uint16_t op) {
     return xi_generated_op_speculation(op) == XI_GEN_SPECULATION_SAFE;
 }

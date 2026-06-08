@@ -176,6 +176,64 @@ TEST(thread_else_side) {
     xi_func_free(f);
 }
 
+TEST(thread_commutative_eq_swapped_operands) {
+    /*
+     * A: if (x == y) goto B else goto C
+     * B: goto D
+     * D: if (y == x) goto E else goto F
+     * => B's edge to D redirected to E.  EQ is declared commutative in
+     * generated op metadata, so jump threading canonicalizes operands.
+     */
+    XiFunc *f = make_func();
+    XiBlock *A = f->entry;
+    XiBlock *B = xi_block_new(f);
+    B->sealed = true;
+    XiBlock *C = xi_block_new(f);
+    C->sealed = true;
+    XiBlock *D = xi_block_new(f);
+    D->sealed = true;
+    XiBlock *E = xi_block_new(f);
+    E->sealed = true;
+    XiBlock *F = xi_block_new(f);
+    F->sealed = true;
+
+    XiValue *x = xi_const_int(f, A, 1, &stub_int);
+    XiValue *y = xi_const_int(f, A, 2, &stub_int);
+
+    A->kind = XI_BLOCK_IF;
+    A->control = make_cmp(f, A, XI_EQ, x, y);
+    A->succs[0] = B;
+    A->succs[1] = C;
+    xi_block_add_pred(B, A);
+    xi_block_add_pred(C, A);
+
+    B->kind = XI_BLOCK_PLAIN;
+    B->succs[0] = D;
+    xi_block_add_pred(D, B);
+
+    C->kind = XI_BLOCK_RETURN;
+    C->control = NULL;
+
+    D->kind = XI_BLOCK_IF;
+    D->control = make_cmp(f, D, XI_EQ, y, x);
+    D->succs[0] = E;
+    D->succs[1] = F;
+    xi_block_add_pred(E, D);
+    xi_block_add_pred(F, D);
+
+    E->kind = XI_BLOCK_RETURN;
+    E->control = NULL;
+    F->kind = XI_BLOCK_RETURN;
+    F->control = NULL;
+
+    XiPassChange chg = xi_opt_jump_thread(f);
+
+    ASSERT(chg.cfg_changed);
+    ASSERT(B->succs[0] == E);
+
+    xi_func_free(f);
+}
+
 /* ========== Negated-Condition Threading ========== */
 
 TEST(thread_negated_lt_ge) {
@@ -460,6 +518,7 @@ int main(void) {
     /* Same condition */
     run_thread_same_eq();
     run_thread_else_side();
+    run_thread_commutative_eq_swapped_operands();
 
     /* Negated condition */
     run_thread_negated_lt_ge();
