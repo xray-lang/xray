@@ -767,6 +767,44 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);
 }
 
+static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    (void) ctx;
+    XR_DCHECK(v->nargs >= 1, "xicgen_struct_new: need class arg");
+    if (cg_struct_can_inline(f, v)) {
+        /* Inlined struct initialization is emitted by the statement path. */
+        fprintf(out, "XR_NULL_VAL");
+    } else {
+        emit_struct_fallback_new_expr(out, (XrStructLayout *) v->aux, prefix);
+    }
+}
+
+static void xicgen_struct_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    XR_DCHECK(v->nargs >= 1, "xicgen_struct_get: need struct arg");
+    const XiValue *origin = cg_trace_struct_new(v->args[0]);
+    if (origin && cg_struct_can_inline(f, origin)) {
+        emit_struct_inline_field_get_expr(out, (XrStructLayout *) origin->aux, origin, v->aux_int);
+    } else {
+        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        emit_struct_fallback_field_get(ctx, out, f, sl, v->aux_int, v->args[0], v->type, cg_rep(v),
+                                       prefix);
+    }
+}
+
+static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                              const char *prefix) {
+    XR_DCHECK(v->nargs >= 2, "xicgen_struct_set: need struct + value");
+    const XiValue *origin = cg_trace_struct_new(v->args[0]);
+    if (origin && cg_struct_can_inline(f, origin)) {
+        emit_struct_inline_field_set_expr(out, (XrStructLayout *) origin->aux, origin, v->aux_int,
+                                          v->args[1]);
+    } else {
+        XrStructLayout *sl = (XrStructLayout *) v->aux;
+        emit_struct_fallback_field_set(ctx, out, f, sl, v->aux_int, v->args[0], v->args[1], prefix);
+    }
+}
+
 static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
     xicgen_bitwise_binop(ctx, out, f, v, prefix, "<<");
