@@ -87,4 +87,8 @@ static inline bool xi_op_is_commutative(uint16_t op) {
     return (xi_generated_op_algebraic_traits(op) & XI_GEN_ALGEBRAIC_COMMUTATIVE) != 0;
 }
 
+static inline bool xi_op_is_associative(uint16_t op) {
+    return (xi_generated_op_algebraic_traits(op) & XI_GEN_ALGEBRAIC_ASSOCIATIVE) != 0;
+}
+
 #endif  // XI_EFFECT_H

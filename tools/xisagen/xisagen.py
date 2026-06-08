@@ -1514,6 +1514,7 @@ VALID_XI_VN_KINDS = {
 }
 
 VALID_XI_ALGEBRAIC_TRAITS = {
+    'associative',
     'commutative',
 }
 
@@ -7586,7 +7587,7 @@ def _test_xi_ops_parser():
       :results ((value $result :type int))
       :speculation safe
       :vn-kind pure
-      :algebraic (commutative)
+      :algebraic (associative commutative)
       :effects ()
       :requires (same-numeric-type)
       :observable (integer-wrap)
@@ -7641,7 +7642,7 @@ def _test_xi_ops_parser():
     assert ops[0].operands[0].attrs['type'] == 'int'
     assert ops[0].speculation == 'safe'
     assert ops[0].vn_kind == 'pure'
-    assert ops[0].algebraic == ['commutative']
+    assert ops[0].algebraic == ['associative', 'commutative']
     assert ops[1].ident == 'MEM_LOAD'
     assert ops[1].arity == 1
     assert ops[1].effects == ['memory-read', 'may-throw']
@@ -7681,7 +7682,7 @@ def _test_xi_ops_parser():
     assert 'case XI_ITER_NEW: return "iter_new";' in header
     assert 'xi_generated_op_backend_legal' in header
     assert 'xi_generated_op_algebraic_traits' in header
-    assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
+    assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_ASSOCIATIVE | XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
     assert 'xi_generated_op_default_flags' in header
     assert 'xi_generated_op_effects' in header
     assert 'case XI_MEM_LOAD: return XI_EFFECT_MEMORY_READ | XI_EFFECT_MAY_THROW;' in header
