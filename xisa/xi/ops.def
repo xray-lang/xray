@@ -578,6 +578,7 @@
 (define-xi-op xi.json.new
   :class allocation
   :arity 0
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -631,6 +632,7 @@
 (define-xi-op xi.array.new
   :class allocation
   :arity variadic
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -640,6 +642,7 @@
 (define-xi-op xi.map.new
   :class allocation
   :arity variadic
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -650,6 +653,7 @@
   :class allocation
   :arity variadic
   :escape-use heap
+  :escape-alloc heap
   :effects (memory-write allocates)
   :requires ()
   :observable ()
@@ -737,6 +741,7 @@
   :class allocation
   :arity variadic
   :escape-use heap
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1019,6 +1024,7 @@
 (define-xi-op xi.set.new
   :class allocation
   :arity variadic
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
@@ -1028,6 +1034,7 @@
 (define-xi-op xi.str.concat
   :class sequence
   :arity variadic
+  :escape-alloc heap
   :effects (memory-read memory-write)
   :requires ()
   :observable ()
@@ -1242,6 +1249,7 @@
 (define-xi-op xi.regex.compile
   :class allocation
   :arity 2
+  :escape-alloc heap
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
