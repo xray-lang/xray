@@ -32,6 +32,16 @@ static XrType stub_array = {.kind = XR_KIND_ARRAY, .id = 4, .frozen = true};
 static XrType stub_map = {.kind = XR_KIND_MAP, .id = 5, .frozen = true};
 static XrType stub_set = {.kind = XR_KIND_SET, .id = 6, .frozen = true};
 
+static void assert_rewritten_builtin(XiValue *v, const char *name) {
+    assert(v != NULL);
+    assert(v->op == XI_CALL_BUILTIN);
+    assert(v->aux != NULL);
+    assert(strcmp((const char *) v->aux, name) == 0);
+    assert(xi_op_is_backend_legal(v->op));
+    assert((v->flags & xi_op_default_effects(XI_CALL_BUILTIN)) ==
+           xi_op_default_effects(XI_CALL_BUILTIN));
+}
+
 /* ========== Test 1: XiStage enum and names ========== */
 
 static void test_stage_enum(void) {
@@ -381,6 +391,85 @@ static void test_backend_lower_preserves_type_slice_and_range_ops(void) {
     printf("  PASS\n");
 }
 
+static void test_backend_policy_generated_metadata(void) {
+    printf("--- test_backend_policy_generated_metadata ---\n");
+
+    assert(xi_op_is_backend_legal(XI_ERR_SET));
+    assert(xi_op_is_backend_legal(XI_ERR_RETURN));
+    assert(xi_op_is_backend_legal(XI_ERR_CATCH));
+    assert(xi_op_is_backend_legal(XI_DROP_REUSE));
+    assert(xi_op_is_backend_legal(XI_ALLOC_AT));
+    assert(xi_op_is_backend_legal(XI_BOUNDS_CHECK));
+    assert(xi_op_is_backend_legal(XI_GUARD_TYPE));
+
+    assert(!xi_op_is_backend_legal(XI_EXTRACT));
+    assert(!xi_op_is_backend_legal(XI_MULTI_RET));
+
+    assert(!xi_op_is_backend_legal(XI_ITER_NEW));
+    assert(!xi_op_is_backend_legal(XI_ITER_NEXT));
+    assert(!xi_op_is_backend_legal(XI_ITER_VALID));
+    assert(!xi_op_is_backend_legal(XI_REGEX_COMPILE));
+
+    assert(xi_op_backend_rewrite(XI_ITER_NEW) == XI_GEN_BACKEND_REWRITE_BUILTIN);
+    assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEW), "iter_new") == 0);
+    assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_NEXT), "iter_next") == 0);
+    assert(strcmp(xi_op_backend_rewrite_name(XI_ITER_VALID), "iter_valid") == 0);
+    assert(strcmp(xi_op_backend_rewrite_name(XI_REGEX_COMPILE), "regex_compile") == 0);
+
+    printf("  PASS\n");
+}
+
+static void test_backend_lower_rewrites_generated_builtin_ops(void) {
+    printf("--- test_backend_lower_rewrites_generated_builtin_ops ---\n");
+
+    XiFunc *f = xi_func_new("backend_generated_rewrite_fn", &stub_void);
+    assert(f != NULL);
+    f->stage = XI_STAGE_REPPED;
+    f->invariant_mask |= xi_stage_invariants(XI_STAGE_REPPED);
+
+    XiBlock *entry = xi_block_new(f);
+    assert(entry != NULL);
+
+    XiValue *source = xi_const_int(f, entry, 4, &stub_int);
+    assert(source != NULL);
+
+    XiValue *iter_new = xi_value_new(f, entry, XI_ITER_NEW, &stub_int, 1);
+    assert(iter_new != NULL);
+    iter_new->args[0] = source;
+    iter_new->flags = xi_op_default_effects(XI_ITER_NEW);
+
+    XiValue *iter_next = xi_value_new(f, entry, XI_ITER_NEXT, &stub_int, 1);
+    assert(iter_next != NULL);
+    iter_next->args[0] = iter_new;
+    iter_next->flags = xi_op_default_effects(XI_ITER_NEXT);
+
+    XiValue *iter_valid = xi_value_new(f, entry, XI_ITER_VALID, &stub_int, 1);
+    assert(iter_valid != NULL);
+    iter_valid->args[0] = iter_new;
+    iter_valid->flags = xi_op_default_effects(XI_ITER_VALID);
+
+    XiValue *pattern = xi_const_str(f, entry, "x+", &stub_string);
+    assert(pattern != NULL);
+    XiValue *flags = xi_const_int(f, entry, 0, &stub_int);
+    assert(flags != NULL);
+    XiValue *regex = xi_value_new(f, entry, XI_REGEX_COMPILE, &stub_int, 2);
+    assert(regex != NULL);
+    regex->args[0] = pattern;
+    regex->args[1] = flags;
+    regex->flags = xi_op_default_effects(XI_REGEX_COMPILE);
+
+    xi_backend_lower(f);
+
+    assert(f->stage == XI_STAGE_BACKEND);
+    assert_rewritten_builtin(iter_new, "iter_new");
+    assert_rewritten_builtin(iter_next, "iter_next");
+    assert_rewritten_builtin(iter_valid, "iter_valid");
+    assert_rewritten_builtin(regex, "regex_compile");
+
+    xi_func_free(f);
+    printf("  PASS\n");
+}
+
 /* ========== Test 6: Stage monotonicity ========== */
 
 static void test_stage_monotonicity(void) {
@@ -458,6 +547,8 @@ int main(void) {
     test_backend_lower_preserves_json_field_ops();
     test_backend_lower_preserves_collection_ops();
     test_backend_lower_preserves_type_slice_and_range_ops();
+    test_backend_policy_generated_metadata();
+    test_backend_lower_rewrites_generated_builtin_ops();
     test_stage_monotonicity();
     test_pass_order_and_invariants();
 

@@ -1553,6 +1553,11 @@ VALID_XI_RESULT_KINDS = {
     'dynamic',
 }
 
+VALID_XI_BACKEND_REWRITES = {
+    'none',
+    'builtin',
+}
+
 
 @dataclass
 class XiOperandDef:
@@ -1588,6 +1593,8 @@ class XiOpDef:
     vn_kind: str
     algebraic: list
     tbaa_group: str
+    backend_rewrite: str
+    backend_rewrite_name: Optional[str]
 
 
 def _xi_c_ident(token: str) -> str:
@@ -1691,6 +1698,21 @@ def _xi_parse_value_defs(expr: Optional[SList], context: str, result: bool) -> l
     return values
 
 
+def _xi_parse_backend_rewrite(expr: Optional[SList],
+                              context: str) -> tuple[str, Optional[str]]:
+    if expr is None:
+        return 'none', None
+    if len(expr.children) != 2:
+        die(f"{context}: expected (builtin name)")
+    kind = _sexpr_atom_value(expr.children[0], context)
+    if kind not in VALID_XI_BACKEND_REWRITES or kind == 'none':
+        die(f"{context}: unknown backend rewrite '{kind}'")
+    name = _sexpr_atom_value(expr.children[1], context)
+    if not name:
+        die(f"{context}: backend rewrite name cannot be empty")
+    return kind, name
+
+
 def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
     forms = parse_sexpr(tokenize_sexpr(text, path), path)
     ops = []
@@ -1764,6 +1786,12 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
         if tbaa_group not in VALID_XI_TBAA_GROUPS:
             die(f"{path}: Xi op '{name}' uses unknown TBAA group "
                 f"'{tbaa_group}'")
+        backend_rewrite, backend_rewrite_name = _xi_parse_backend_rewrite(
+            _xi_get_kw_list(form, ':backend-rewrite'),
+            f"{name}:backend-rewrite")
+        if backend_rewrite != 'none' and lowering_policy == 'verifier-only':
+            die(f"{path}: Xi op '{name}' cannot combine backend rewrite with "
+                "verifier-only lowering")
         ops.append(XiOpDef(name=name, ident=ident, cls=cls, arity=arity, operands=operands,
                            results=results, effects=effects, requires=requires,
                            observable=observable, targets=targets,
@@ -1774,7 +1802,9 @@ def parse_xi_ops_def(text: str, path: str = '<input>') -> list[XiOpDef]:
                            speculation=speculation,
                            vn_kind=vn_kind,
                            algebraic=algebraic,
-                           tbaa_group=tbaa_group))
+                           tbaa_group=tbaa_group,
+                           backend_rewrite=backend_rewrite,
+                           backend_rewrite_name=backend_rewrite_name))
     return ops
 
 
@@ -1808,6 +1838,7 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('#ifndef XI_OPS_GEN_H')
     lines.append('#define XI_OPS_GEN_H')
     lines.append('')
+    lines.append('#include <stdbool.h>')
     lines.append('#include <stddef.h>')
     lines.append('#include <stdint.h>')
     lines.append('#include "xi.h"')
@@ -1894,6 +1925,14 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    XI_GEN_TBAA__COUNT')
     lines.append('} XiGeneratedTbaaGroup;')
     lines.append('')
+    lines.append('/* ========== Backend Rewrite Kinds ========== */')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XI_GEN_BACKEND_REWRITE_NONE = 0,')
+    lines.append('    XI_GEN_BACKEND_REWRITE_BUILTIN = 1,')
+    lines.append('    XI_GEN_BACKEND_REWRITE__COUNT')
+    lines.append('} XiGeneratedBackendRewrite;')
+    lines.append('')
     lines.append('/* ========== Algebraic Trait Flags ========== */')
     lines.append('')
     lines.append('#define XI_GEN_ALGEBRAIC_NONE 0')
@@ -1919,10 +1958,12 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('    uint8_t speculation;')
     lines.append('    uint8_t value_numbering;')
     lines.append('    uint8_t tbaa_group;')
+    lines.append('    uint8_t backend_rewrite;')
     lines.append('    uint8_t default_flags;')
     lines.append('    uint32_t algebraic_traits;')
     lines.append('    uint32_t effects;')
     lines.append('    uint32_t targets;')
+    lines.append('    const char *backend_rewrite_name;')
     lines.append('    const char *result_native_type;')
     lines.append('    const char *jit_policy;')
     lines.append('} XiGeneratedOpInfo;')
@@ -1940,13 +1981,17 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
         speculation = f'XI_GEN_SPECULATION_{_xi_c_ident(op.speculation)}'
         vn_kind = f'XI_GEN_VN_{_xi_c_ident(op.vn_kind)}'
         tbaa_group = f'XI_GEN_TBAA_{_xi_c_ident(op.tbaa_group)}'
+        backend_rewrite = f'XI_GEN_BACKEND_REWRITE_{_xi_c_ident(op.backend_rewrite)}'
+        backend_rewrite_name = (
+            'NULL' if op.backend_rewrite_name is None else f'"{op.backend_rewrite_name}"')
         algebraic_traits = _xi_bit_expr('XI_GEN_ALGEBRAIC', op.algebraic)
         suffix = ' \\' if i + 1 < len(ops) else ''
         lines.append(
             f'    X({op.ident}, "{op.name}", XI_GEN_CLASS_{_xi_c_ident(op.cls)}, {arity}, '
             f'{len(op.operands)}, {len(op.results)}, {result_kind}, {lowering_policy}, '
-            f'{speculation}, {vn_kind}, {tbaa_group}, {flags}, {algebraic_traits}, {effects}, '
-            f'{targets}, {native_type}, "{op.jit_policy}"){suffix}')
+            f'{speculation}, {vn_kind}, {tbaa_group}, {backend_rewrite}, {flags}, '
+            f'{algebraic_traits}, {effects}, {targets}, {backend_rewrite_name}, '
+            f'{native_type}, "{op.jit_policy}"){suffix}')
     lines.append('')
     lines.append('')
 
@@ -2035,6 +2080,33 @@ def generate_xi_ops_header(ops: list[XiOpDef]) -> str:
     lines.append('        case XI_OP_COUNT: break;')
     lines.append('    }')
     lines.append('    return XI_GEN_TBAA_NONE;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        lines.append(f'        case XI_{op.ident}: return '
+                     f'XI_GEN_BACKEND_REWRITE_{_xi_c_ident(op.backend_rewrite)};')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return XI_GEN_BACKEND_REWRITE__COUNT;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for op in ops:
+        if op.backend_rewrite_name is None:
+            lines.append(f'        case XI_{op.ident}: return NULL;')
+        else:
+            lines.append(f'        case XI_{op.ident}: return "{op.backend_rewrite_name}";')
+    lines.append('        case XI_OP_COUNT: break;')
+    lines.append('    }')
+    lines.append('    return NULL;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xi_generated_op_backend_legal(uint16_t op) {')
+    lines.append('    return xi_generated_op_backend_rewrite(op) == XI_GEN_BACKEND_REWRITE_NONE &&')
+    lines.append('           xi_generated_op_lowering_policy(op) != XI_GEN_LOWERING_VERIFIER_ONLY;')
     lines.append('}')
     lines.append('')
     lines.append('static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {')
@@ -7551,9 +7623,18 @@ def _test_xi_ops_parser():
       :observable ()
       :targets (vm-bytecode jit-xm aot-c aot-verify)
       :jit-policy catch-up)
+    (define-xi-op xi.iter.new
+      :class iterator
+      :arity 1
+      :effects (side-effect memory-read memory-write)
+      :requires ()
+      :observable ()
+      :targets (vm-bytecode jit-xm aot-verify)
+      :backend-rewrite (builtin "iter_new")
+      :jit-policy catch-up)
     '''
     ops = parse_xi_ops_def(text)
-    assert len(ops) == 4
+    assert len(ops) == 5
     assert ops[0].name == 'xi.add'
     assert ops[0].ident == 'ADD'
     assert ops[0].arity == 2
@@ -7570,6 +7651,8 @@ def _test_xi_ops_parser():
     assert ops[2].result_native_type == 'i8'
     assert ops[3].result_kind == 'void'
     assert ops[3].tbaa_group == 'field'
+    assert ops[4].backend_rewrite == 'builtin'
+    assert ops[4].backend_rewrite_name == 'iter_new'
     header = generate_xi_ops_header(ops)
     assert 'case XI_ADD: return "ADD";' in header
     assert 'case XI_MEM_LOAD: return 1;' in header
@@ -7592,6 +7675,11 @@ def _test_xi_ops_parser():
     assert 'case XI_MEM_LOAD: return XI_GEN_VN_NONE;' in header
     assert 'xi_generated_op_tbaa_group' in header
     assert 'case XI_MEM_LOAD: return XI_GEN_TBAA_ARRAY;' in header
+    assert 'xi_generated_op_backend_rewrite' in header
+    assert 'case XI_ITER_NEW: return XI_GEN_BACKEND_REWRITE_BUILTIN;' in header
+    assert 'xi_generated_op_backend_rewrite_name' in header
+    assert 'case XI_ITER_NEW: return "iter_new";' in header
+    assert 'xi_generated_op_backend_legal' in header
     assert 'xi_generated_op_algebraic_traits' in header
     assert 'case XI_ADD: return XI_GEN_ALGEBRAIC_COMMUTATIVE;' in header
     assert 'xi_generated_op_default_flags' in header

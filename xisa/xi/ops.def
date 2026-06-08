@@ -950,6 +950,7 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-verify)
+  :backend-rewrite (builtin "iter_new")
   :jit-policy catch-up)
 
 (define-xi-op xi.iter.next
@@ -959,6 +960,7 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-verify)
+  :backend-rewrite (builtin "iter_next")
   :jit-policy catch-up)
 
 (define-xi-op xi.iter.valid
@@ -968,6 +970,7 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-verify)
+  :backend-rewrite (builtin "iter_valid")
   :jit-policy catch-up)
 
 (define-xi-op xi.defer
@@ -1218,6 +1221,7 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode aot-verify)
+  :backend-rewrite (builtin "regex_compile")
   :jit-policy catch-up)
 
 (define-xi-op xi.bounds.check

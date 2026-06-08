@@ -5,219 +5,35 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_backend.h - Backend-legal op classification
+ * xi_backend.h - Backend-stage op classification
  *
- * Defines which XiOp opcodes are legal at XI_STAGE_BACKEND.
- * Any op NOT in the whitelist must be expanded by xi_backend_lower()
- * before code generation.
+ * The Xi op descriptions define which opcodes are legal at XI_STAGE_BACKEND
+ * and which pre-backend rewrites must run before code generation.
  *
- * Design principle: BACKEND ops are either:
- *   (a) Primitive (arithmetic, bitwise, comparison, control flow)
- *   (b) Explicit runtime dispatch (XI_CALL, XI_CALL_METHOD, XI_CALL_BUILTIN)
- *   (c) Target-specific semantic ops with generated lowering drivers
- *   (d) Structural (PHI, COPY, SELECT, BOX, UNBOX, CONVERT)
- *
- * Ops that cannot be lowered directly by every required target are
- * rewritten before backend stage.
+ * Ops with verifier-only lowering are never backend-legal. Ops with a
+ * generated backend rewrite must be rewritten by xi_backend_lower().
  */
 
 #ifndef XI_BACKEND_H
 #define XI_BACKEND_H
 
-#include "xi.h"
+#include "xi_ops_gen.h"
 #include <stdbool.h>
+#include <stdint.h>
 
-/* Returns true if the opcode is legal at STAGE_BACKEND.
- * Non-legal ops must be eliminated by xi_backend_lower(). */
+/* Returns true if the opcode is legal at STAGE_BACKEND. */
 static inline bool xi_op_is_backend_legal(uint16_t op) {
-    switch ((XiOp) op) {
-        /* Constants & parameters */
-        case XI_CONST:
-        case XI_PARAM:
-
-        /* Arithmetic (polymorphic int/float via rep) */
-        case XI_ADD:
-        case XI_SUB:
-        case XI_MUL:
-        case XI_DIV:
-        case XI_MOD:
-        case XI_NEG:
-
-        /* Bitwise */
-        case XI_BAND:
-        case XI_BOR:
-        case XI_BXOR:
-        case XI_BNOT:
-        case XI_SHL:
-        case XI_SHR:
-
-        /* Comparison */
-        case XI_EQ:
-        case XI_NE:
-        case XI_LT:
-        case XI_LE:
-        case XI_GT:
-        case XI_GE:
-        case XI_EQ_STRICT:
-        case XI_NE_STRICT:
-
-        /* Logical */
-        case XI_NOT:
-
-        /* Type conversion & representation */
-        case XI_CONVERT:
-        case XI_BOX:
-        case XI_UNBOX:
-
-        /* Explicit narrowing/widening (native-width truncation/extension) */
-        case XI_NARROW_I8:
-        case XI_NARROW_U8:
-        case XI_NARROW_I16:
-        case XI_NARROW_U16:
-        case XI_NARROW_I32:
-        case XI_NARROW_U32:
-        case XI_NARROW_F32:
-        case XI_WIDEN_I8:
-        case XI_WIDEN_U8:
-        case XI_WIDEN_I16:
-        case XI_WIDEN_U16:
-        case XI_WIDEN_I32:
-        case XI_WIDEN_U32:
-        case XI_WIDEN_F32:
-
-        /* Field/index access (direct runtime dispatch) */
-        case XI_LOAD_FIELD:
-        case XI_STORE_FIELD:
-        case XI_INDEX_GET:
-        case XI_INDEX_SET:
-
-        /* Typed byte memory ops (target-specific lowering drivers) */
-        case XI_BYTES_LOAD_U32_LE:
-        case XI_BYTES_LOAD_U64_LE:
-        case XI_BYTES_COPY_WITHIN:
-        case XI_BYTES_COPY_FROM:
-        case XI_BYTES_REPEAT_FROM:
-
-        /* Struct native storage (direct bytecode: OP_NEW_STRUCT/STRUCT_GET/SET) */
-        case XI_STRUCT_NEW:
-        case XI_STRUCT_GET:
-        case XI_STRUCT_SET:
-
-        /* Tuple native storage (direct bytecode: OP_NEWTUPLE / OP_TUPLE_GET) */
-        case XI_TUPLE_NEW:
-        case XI_TUPLE_GET:
-
-        /* Collections and strings */
-        case XI_ARRAY_NEW:
-        case XI_MAP_NEW:
-        case XI_SET_NEW:
-        case XI_STR_CONCAT:
-
-        /* Call family (the universal lowering target) */
-        case XI_CALL:
-        case XI_CALL_METHOD:
-        case XI_CALL_METHOD_DIRECT:
-        case XI_TAIL_CALL:
-        case XI_CALL_BUILTIN:
-
-        /* Closure & upvalue */
-        case XI_CLOSURE_NEW:
-        case XI_LOAD_UPVAL:
-        case XI_STORE_UPVAL:
-
-        /* Module-level state */
-        case XI_GET_SHARED:
-        case XI_SET_SHARED:
-        case XI_GET_GLOBAL:
-        case XI_SET_GLOBAL:
-
-        /* Coroutine (low-level runtime ops) */
-        case XI_GO:
-        case XI_AWAIT:
-        case XI_YIELD:
-        case XI_CHAN_SEND:
-        case XI_CHAN_RECV:
-        case XI_CHAN_TRY_SEND:
-        case XI_CHAN_TRY_RECV:
-        case XI_CHAN_IS_CLOSED:
-        case XI_TIME_AFTER:
-        case XI_SELECT_BLOCK:
-        case XI_CHAN_NEW:
-        case XI_CORO_OP:
-
-        /* Exception handling */
-        case XI_THROW:
-        case XI_TRY:
-        case XI_CATCH:
-        case XI_END_TRY:
-
-        /* Value-return error channel propagation check */
-        case XI_ERR_CHECK:
-
-        /* Control flow / SSA structural */
-        case XI_PHI:
-        case XI_SELECT:
-        case XI_COPY:
-        case XI_ISNULL:
-        case XI_PRINT:
-        case XI_TYPEOF:
-        case XI_SLICE:
-        case XI_RANGE:
-
-        /* OOP & scope */
-        case XI_CLASS_CREATE:
-        case XI_SCOPE_ENTER:
-        case XI_SCOPE_EXIT:
-        case XI_DEFER:
-
-        /* Type ops (runtime dispatch) */
-        case XI_IS:
-        case XI_AS:
-
-        /* Assertions (aux carries location string — cannot rewrite to
-         * XI_CALL_BUILTIN without losing the string). */
-        case XI_ASSERT:
-        case XI_ASSERT_EQ:
-        case XI_ASSERT_NE:
-        case XI_ASSERT_THROWS:
-
-        /* Json object and field ops */
-        case XI_JSON_NEW:
-        case XI_JSON_INIT_F:
-        case XI_JSON_GET_F:
-        case XI_JSON_SET_F:
-        case XI_JSON_DECODE:
-
-        /* Builtin global load (aux carries name string) */
-        case XI_GET_BUILTIN:
-
-        /* Cross-module */
-        case XI_IMPORT_REF:
-
-        /* ARC / Ownership (inserted after escape analysis) */
-        case XI_RETAIN:
-        case XI_RELEASE:
-        case XI_MOVE:
-
-        /* Stack allocation (replaces heap alloc for NO_ESCAPE values) */
-        case XI_STACK_ALLOC:
-
-        /* Vector ops */
-        case XI_VEC_LOAD:
-        case XI_VEC_STORE:
-        case XI_VEC_ADD:
-        case XI_VEC_SUB:
-        case XI_VEC_MUL:
-            return true;
-
-        /* --- Non-legal (must be lowered before BACKEND) --- */
-        /* XI_ITER_NEW      → XI_CALL_BUILTIN(iter_new)       */
-        /* XI_ITER_NEXT     → XI_CALL_BUILTIN(iter_next)      */
-        /* XI_ITER_VALID    → XI_CALL_BUILTIN(iter_valid)     */
-        /* XI_REGEX_COMPILE → XI_CALL_BUILTIN(regex_compile)  */
-        default:
-            return false;
-    }
+    return xi_generated_op_backend_legal(op);
 }
 
-#endif  // XI_BACKEND_H
+/* Returns the generated backend rewrite kind for non-legal ops. */
+static inline uint8_t xi_op_backend_rewrite(uint16_t op) {
+    return xi_generated_op_backend_rewrite(op);
+}
+
+/* Returns the rewrite target name when the generated rewrite needs one. */
+static inline const char *xi_op_backend_rewrite_name(uint16_t op) {
+    return xi_generated_op_backend_rewrite_name(op);
+}
+
+#endif /* XI_BACKEND_H */
