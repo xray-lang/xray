@@ -2238,12 +2238,15 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
             IndexSetNode *is = &node->as.index_set;
             XrType *array_type = NULL;
             XrType *index_type = NULL;
+            XrType *element_type = NULL;
+            XrType *value_type = NULL;
+            const char *target_name = NULL;
             if (is->array)
                 array_type = xa_visit_infer_expr(ctx, is->array);
             if (is->index)
                 index_type = xa_visit_infer_expr(ctx, is->index);
             if (is->value)
-                xa_visit_infer_expr(ctx, is->value);
+                value_type = xa_visit_infer_expr(ctx, is->value);
             // Tuples are immutable: reject index-based assignment
             if (array_type && XR_TYPE_IS_TUPLE(array_type)) {
                 XrLocation loc = {
@@ -2270,6 +2273,10 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                    XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
                     }
+                    element_type = array_type->object.field_types
+                                       ? array_type->object.field_types[field_idx]
+                                       : NULL;
+                    target_name = "JSON field";
                 } else if (array_type->object.is_sealed) {
                     char msg[256];
                     snprintf(msg, sizeof(msg), "类型 '%s' 不允许添加字段 '%s'",
@@ -2277,19 +2284,25 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                     xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
                                                XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
                 }
-            } else if (array_type &&
-                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_STRING(array_type)) &&
-                       index_type && !XR_TYPE_IS_UNKNOWN(index_type) &&
-                       !XR_TYPE_IS_INT(index_type)) {
-                XrLocation loc = {
-                    .file = ctx->file_path, .line = node->line, .column = node->column};
-                char msg[256];
-                snprintf(msg, sizeof(msg),
-                         "Index type '%s' is not assignable to expected type 'int'",
-                         xr_type_to_string(index_type));
-                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                           XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+            } else if (array_type && index_type &&
+                       (XR_TYPE_IS_ARRAY(array_type) || XR_TYPE_IS_STRING(array_type))) {
+                if (!XR_TYPE_IS_UNKNOWN(index_type) && !XR_TYPE_IS_INT(index_type)) {
+                    XrLocation loc = {
+                        .file = ctx->file_path, .line = node->line, .column = node->column};
+                    char msg[256];
+                    snprintf(msg, sizeof(msg),
+                             "Index type '%s' is not assignable to expected type 'int'",
+                             xr_type_to_string(index_type));
+                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+                } else {
+                    element_type = array_type->fixed_array.element_type;
+                    target_name = "array element";
+                }
             }
+            if (element_type == NULL) break;
+            xa_assign_check_type(ctx, node, element_type, value_type,
+                target_name, NULL);
             break;
         }
         case AST_DEFER_STMT:
