@@ -680,6 +680,9 @@ typedef union {
     void *ptr;
 } XiAux;
 
+/* Defined in xi_own.h; XiFunc caches a pointer to one (arena-allocated). */
+struct XiBorrowSig;
+
 /*
  * Function: compilation unit for the new IR.
  * One XiFunc per source-level function or closure.
@@ -745,6 +748,13 @@ typedef struct XiFunc {
      * resolve top-level function closures loaded through XI_GET_SHARED. */
     struct XiFunc **shared_slot_funcs;
     uint16_t shared_slot_func_count;
+
+    /* Cached borrowed-parameter signature for ARC (xi_arc): which parameters
+     * this function only borrows. Computed once on the pre-ARC IR and consulted
+     * both by this function's own dup/drop placement and by its callers (so a
+     * borrowed argument is kept-and-dropped by the caller instead of moved into
+     * a callee that never releases it). Arena-allocated; NULL until computed. */
+    struct XiBorrowSig *arc_borrow_sig;
 
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */

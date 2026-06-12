@@ -170,6 +170,72 @@ static bool tracks_rc(const XiValue *v) {
     return xi_own_type_is_rc(v->type);
 }
 
+/* ========== Cross-function borrow signatures ==========
+ *
+ * A free function that only borrows an argument (reads it, never stores,
+ * returns, or forwards it) must not have that argument MOVED into it: the
+ * callee never releases a borrowed parameter (param_is_borrowed), so a moved-in
+ * reference would leak. The caller therefore keeps ownership of a borrowed
+ * argument and drops it at the argument's death point.
+ *
+ * Caller and callee read the SAME conservative signature (BORROWED only when
+ * proven), computed once per function on its pre-ARC IR and cached on the
+ * XiFunc, so the two sides always agree (callee does not drop, caller does). */
+
+/* Resolve a call's callee value to its XiFunc, or NULL when not statically
+ * known. Covers the cases ARC can use: a direct closure (XiFunc* in aux), a
+ * top-level function loaded from a shared slot, and identity COPY chains. */
+static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
+    if (!cv)
+        return NULL;
+    if (cv->op == XI_CLOSURE_NEW && cv->aux)
+        return (XiFunc *) cv->aux;
+    if (cv->op == XI_GET_SHARED) {
+        int64_t slot = cv->aux_int;
+        for (const XiFunc *fn = caller; fn; fn = fn->parent_func) {
+            if (fn->shared_slot_funcs && slot >= 0 && slot < (int64_t) fn->shared_slot_func_count &&
+                fn->shared_slot_funcs[slot])
+                return fn->shared_slot_funcs[slot];
+        }
+        return NULL;
+    }
+    if (cv->op == XI_COPY && cv->nargs >= 1)
+        return arc_resolve_callee(caller, cv->args[0]);
+    return NULL;
+}
+
+/* Return fn's cached borrow signature, computing it (on the pre-ARC IR) on
+ * first use. Arena-allocated on fn; lives until fn is destroyed. Returns NULL
+ * only on allocation failure, in which case callers conservatively treat
+ * parameters as owned. The pointer is cached before analysis so it also guards
+ * against unbounded recursion through the call graph. */
+static const XiBorrowSig *arc_get_borrow_sig(XiFunc *fn) {
+    if (!fn)
+        return NULL;
+    if (fn->arc_borrow_sig)
+        return fn->arc_borrow_sig;
+    XiBorrowSig *sig = (XiBorrowSig *) xi_func_arena_alloc(fn, sizeof(XiBorrowSig));
+    if (!sig)
+        return NULL;
+    memset(sig, 0, sizeof(*sig));
+    fn->arc_borrow_sig = sig;
+    xi_ensure_rpo(fn);
+    xi_ensure_dominators(fn);
+    XiOwnResult own;
+    if (xi_own_analyze(fn, &own)) {
+        *sig = own.sig;
+        xi_own_free(&own);
+    }
+    return sig;
+}
+
+/* Does `callee` only borrow its parameter `pidx`? Conservative: false unless
+ * proven borrowed (so the caller never wrongly skips a real consume). */
+static bool arc_callee_borrows_param(XiFunc *callee, uint16_t pidx) {
+    const XiBorrowSig *sig = arc_get_borrow_sig(callee);
+    return sig && sig->valid && pidx < sig->nparams && sig->param_own[pidx] == XI_OWN_BORROWED;
+}
+
 /* Collect consuming uses of `target` across the function, in program
  * order. Returns count; fills sites[] up to cap. */
 static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites, int cap) {
@@ -187,6 +253,15 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites,
                     continue;
                 if (!xi_own_use_is_consuming(user->op, a))
                     continue;
+                /* A call argument the callee only borrows is not consumed: the
+                 * caller keeps ownership and drops it at its death point (the
+                 * callee never releases a borrowed parameter). args[0] is the
+                 * callee, so user arg `a` maps to callee parameter `a - 1`. */
+                if (user->op == XI_CALL && a >= 1) {
+                    XiFunc *callee = arc_resolve_callee(f, user->args[0]);
+                    if (callee && arc_callee_borrows_param(callee, (uint16_t) (a - 1)))
+                        continue;
+                }
                 sites[n].blk = blk;
                 sites[n].user = user;
                 sites[n].order = (blk->rpo << 16) | (i & 0xFFFF);
@@ -785,26 +860,38 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
 
 /* Does the borrow signature prove parameter `pv` is only borrowed (never
  * stored/returned/forwarded)? Maps the param SSA value to its index via
- * f->params[], then reads own->sig.param_own[idx]. The signature is computed
- * by xi_own from real liveness + consume classification, fixed-pointed across
- * (mutually) recursive functions. Returns false when out of range or unproven
- * (conservative: treat as owned). */
-static bool param_is_borrowed(const XiFunc *f, const XiValue *pv, const XiOwnResult *own) {
-    if (!own || !own->sig.valid)
+ * f->params[], then reads sig->param_own[idx]. The signature is computed by
+ * xi_own from real liveness + consume classification. Returns false when out
+ * of range or unproven (conservative: treat as owned). */
+static bool param_is_borrowed(const XiFunc *f, const XiValue *pv, const XiBorrowSig *sig) {
+    if (!sig || !sig->valid)
         return false;
-    for (uint16_t p = 0; p < f->nparams && p < own->sig.nparams; p++) {
+    for (uint16_t p = 0; p < f->nparams && p < sig->nparams; p++) {
         if (f->params[p] == pv)
-            return own->sig.param_own[p] == XI_OWN_BORROWED;
+            return sig->param_own[p] == XI_OWN_BORROWED;
     }
     return false;
 }
 
-XR_FUNC void xi_arc_insert(XiFunc *f) {
-    XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
+/* Precompute and cache every reachable function's borrow signature on the
+ * PRE-ARC IR. A caller consults its callees' signatures (collect_consume_sites),
+ * but ARC mutates the IR (inserting RETAIN/RELEASE) as it processes each
+ * function, so callee signatures must be captured before any insertion. The
+ * cached pointer doubles as a visited marker, so call-graph cycles terminate. */
+static void arc_precompute_sigs(XiFunc *f) {
+    if (!f || f->arc_borrow_sig)
+        return;
+    arc_get_borrow_sig(f);
+    for (uint16_t i = 0; i < f->nchildren; i++)
+        arc_precompute_sigs(f->children[i]);
+    for (uint16_t i = 0; i < f->shared_slot_func_count; i++)
+        arc_precompute_sigs(f->shared_slot_funcs[i]);
+}
 
+static void arc_insert_rec(XiFunc *f) {
     for (uint16_t i = 0; i < f->nchildren; i++) {
         if (f->children[i])
-            xi_arc_insert(f->children[i]);
+            arc_insert_rec(f->children[i]);
     }
 
     /* RPO + dominators are needed to order consume sites across blocks and to
@@ -816,12 +903,10 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     /* Borrow signature: which parameters does this function only borrow (never
      * store/return/forward)? A borrowed parameter must NOT be dropped by the
      * callee — the caller retains ownership (Perceus borrowed-parameter rule).
-     * Without this, a function like `swap(arr, i, j)` that only indexes `arr`
-     * would drop it at exit, freeing an array the caller still uses after the
-     * call (1602_generic_container). This generalizes the ad-hoc
-     * receiver_borrowed / operator_borrowed flags to every parameter. */
-    XiOwnResult own;
-    bool have_own = xi_own_analyze(f, &own);
+     * Cached on the pre-ARC IR (arc_precompute_sigs) and shared with callers,
+     * which use it to keep ownership of a borrowed argument rather than moving
+     * it into a callee that never releases it. */
+    const XiBorrowSig *own_sig = arc_get_borrow_sig(f);
 
     /* Snapshot the set of tracked values first: we mutate blocks while
      * inserting, so collect targets up front. */
@@ -860,8 +945,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
             mode = OWN_BORROWED;
         } else if (f->operator_borrowed && targets[i]->op == XI_PARAM) {
             mode = OWN_BORROWED;
-        } else if (targets[i]->op == XI_PARAM && have_own &&
-                   param_is_borrowed(f, targets[i], &own)) {
+        } else if (targets[i]->op == XI_PARAM && param_is_borrowed(f, targets[i], own_sig)) {
             /* The borrow signature proved this parameter is only borrowed:
              * dup at consuming uses, never drop (caller keeps ownership). */
             mode = OWN_BORROWED;
@@ -877,9 +961,14 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
 
     if (cfg_changed)
         xi_cfg_invalidate(f);
+}
 
-    if (have_own)
-        xi_own_free(&own);
+XR_FUNC void xi_arc_insert(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_arc_insert: NULL func");
+    /* Cache all callee borrow signatures on the pre-ARC IR before any function
+     * is mutated, then insert dup/drop bottom-up. */
+    arc_precompute_sigs(f);
+    arc_insert_rec(f);
 }
 
 /* ========== Dup/Drop Elimination (copy→move optimization) ========== */
