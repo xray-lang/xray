@@ -1,4 +1,4 @@
-// Test task.monitor() API — completion notification via Channel
+// Test TaskResult API — explicit status observation
 
 enum MonitorErr { Msg(string) }
 
@@ -11,47 +11,43 @@ fn failing() -> int {
 }
 fn test_monitor_success() {
     let t = go compute()
-    let ch = t.monitor()
-    let r = await t
-    let (val, ok) = ch.tryRecv()
-    assert(ok, "monitor channel should have value after task completes")
-    assert(val.done, "monitor should receive completed task")
-    assert(val.result == 42, "monitor task should carry result")
-    ch.close()
+    let r = t.awaitResult()
+    match (r) {
+        TaskResult.Success(value) -> assert(value == 42, "TaskResult.Success should carry result")
+        _ -> assert(false, "successful task should return TaskResult.Success")
+    }
+    assert(t.done, "task should be done after awaitResult")
 }
 fn test_monitor_fail() {
     let t = go failing()
-    let ch = t.monitor()
-    await t
-    let (val, ok) = ch.tryRecv()
-    assert(ok, "monitor channel should have value after task fails")
-    assert(val.done, "monitor should receive completed task on failure")
-    assert(val.error != null, "monitor task should carry error")
-    ch.close()
+    let r = t.awaitResult()
+    match (r) {
+        TaskResult.Failed(_) -> assert(true, "failed task should return TaskResult.Failed")
+        _ -> assert(false, "failed task should not report success")
+    }
+    assert(t.done, "failed task should be done")
 }
 fn test_monitor_already_done() {
     let t = go compute()
     let r = await t
-    let ch = t.monitor()
-    let (val, ok) = ch.tryRecv()
-    assert(ok, "monitor on completed task should have immediate value")
-    assert(val.done, "monitor should receive completed task (already done)")
-    assert(val.result == 42, "monitor task should carry result (already done)")
-    ch.close()
+    let observed = t.poll()
+    match (observed) {
+        TaskResult.Success(value) -> assert(value == 42, "poll should observe completed result")
+        _ -> assert(false, "poll on completed task should return Success")
+    }
 }
 
 @test
 fn test_task_monitor() {
 
 
-    // Test 1: monitor a successful task
+    // Test 1: observe a successful task
 
-    // Test 2: monitor a failing task
+    // Test 2: observe a failing task
 
-    // Test 3: monitor an already-completed task
+    // Test 3: observe an already-completed task
 
     test_monitor_success()
     test_monitor_fail()
     test_monitor_already_done()
 }
-

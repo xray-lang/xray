@@ -25,6 +25,13 @@ print("任务总数:", TASKS)
 
 shared const result_ch = Channel(1000)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 fn fib(n: int) -> int {
     if (n <= 1) { return n }
     let a = 0
@@ -77,7 +84,7 @@ let submitter = go submit_tasks(TASKS)
 
 let total = 0
 for (let i = 0; i < TASKS; i++) {
-    total = total + result_ch.recv()
+    total = total + recv_int(result_ch, 0)
 }
 await submitter
 

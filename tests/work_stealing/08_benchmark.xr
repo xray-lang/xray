@@ -8,6 +8,13 @@
 import time
 print("========== 测试8：性能基准测试 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 /* 基准1：协程创建+执行吞吐量 */
 fn benchmark_throughput(coro_count, work_size) {
     let start = time.monotonic()
@@ -36,14 +43,14 @@ fn benchmark_switch_latency(iterations) {
     /* ping-pong 协程 */
     let pong = go fn() {
         for (let i = 0; i < iterations; i++) {
-            let v = ch.recv()
+            let v = recvValue(ch)
             ch.send(v + 1)
         }
     }
     let start = time.monotonic()
     for (let i = 0; i < iterations; i++) {
         ch.send(i)
-        ch.recv()
+        recvValue(ch)
     }
     let elapsed = time.monotonic() - start
     await pong
@@ -76,8 +83,8 @@ fn benchmark_speedup(work_size) {
     }
     let parallel_sum = 0
     for (let i = 0; i < tasks.length; i++) {
-        await tasks[i]
-        parallel_sum = parallel_sum + tasks[i].result
+        let value = await tasks[i]
+        parallel_sum = parallel_sum + value
     }
     let parallel_time = time.monotonic() - parallel_start
     return { "serial_time": serial_time, "parallel_time": parallel_time, "speedup": float(serial_time) / float(parallel_time) }

@@ -16,7 +16,13 @@ scope {
 
 let a = ch.recv()
 let b = ch.recv()
-print(a + b)
+print(match (a) {
+    Recv.Value(av) -> match (b) {
+        Recv.Value(bv) -> av + bv
+        _ -> -1
+    }
+    _ -> -1
+})
 ch.close()
 
 linked scope {

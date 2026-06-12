@@ -1,0 +1,5 @@
+# K3R runtime-library benchmark: gated against Rust std (primary)
+# and hand-written C (regression floor). Initial thresholds, recalibrate
+# after the first full --rust run on the reference machine.
+min_ratio=0.50
+min_rust_ratio=0.80

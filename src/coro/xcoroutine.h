@@ -102,14 +102,30 @@ typedef struct XrCoroExt {
 
     XrValue *recv_slot;
     XrSlotRef recv_slot_ref;
+    /* Resume-with-value delivery (untimed VM channel recv):
+     * chan_ok_slot_ref is the delivery capability registered at block time.
+     * When the waker hands over a value that needs no receive-side deep
+     * copy, it stores value+ok directly into the blocked coroutine's
+     * register slots and sets chan_resume_delivered; the resume fast path
+     * then skips the instruction replay and continues from the next
+     * instruction. Values that need a receive-side deep copy keep the
+     * replay/resume protocol (the copy must run on the receiver's own
+     * thread), so the waker leaves chan_resume_delivered false. */
+    XrSlotRef chan_ok_slot_ref;
+    bool chan_resume_delivered;
 
     struct XrCoroutine *chan_wait_next;
     struct XrCoroutine *chan_wait_prev;
     XrWaitQueue *chan_wait_queue;
     struct XrCoroutine *wait_link;
     struct XrCoroutine *wait_prev;
-    XrBlockedBucket *wait_bucket;
-    int wait_bucket_owner;
+    int64_t work_queue_hint;
+    /* Relaxed atomics: written by the owner worker when mirroring a timed
+     * channel wait into its blocked bucket; peeked by remote wakers to route
+     * the wake through the owner's inbox. Staleness only affects routing —
+     * the owner-side drain re-checks under its own ownership. */
+    _Atomic(XrBlockedBucket *) wait_bucket;
+    _Atomic int wait_bucket_owner;
     XrChannelWaitToken chan_wait_token;
     _Atomic(void *) wait_channel;
     bool wait_send;
@@ -119,7 +135,9 @@ typedef struct XrCoroExt {
     /* === Timer (only allocated on first sleep/timeout use) === */
     XrTWheelTimer timer;
     _Atomic bool timer_active;
-    int timer_wheel_owner;  // Worker ID that owns the timer (-1 = none)
+    /* Relaxed atomic: routing hint read by cross-worker cancel; the timer
+     * token CAS protocol is the authoritative arbitration. */
+    _Atomic int timer_wheel_owner;  // Worker ID that owns the timer (-1 = none)
     _Atomic uintptr_t timer_seq;
 
     /* === Select storage (reused across blocking select operations) === */
@@ -136,21 +154,27 @@ struct XrCoroutine {
     /* ================================================================
      * HOT ZONE (first 64 bytes) — accessed every schedule/yield cycle
      * ================================================================ */
-    XrGCHeader gc;                   // 16 bytes: GC header (must be first)
-    _Atomic uint32_t flags;          //  4 bytes: state flags (every dispatch)
-    int32_t reductions;              //  4 bytes: remaining before yield (JIT: check <= 0)
+    XrGCHeader gc;           // 16 bytes: GC header (must be first)
+    _Atomic uint32_t flags;  //  4 bytes: state flags (every dispatch)
+    /* Relaxed atomic: owner decrements on back-edges; preempt/cancel pokes
+     * it to 0 cross-thread (xr_coro_request_yield). A lost poke is benign —
+     * the atomic CANCEL_REQUESTED flag is the authoritative signal. JIT
+     * code accesses it by raw offset (same 4-byte layout). */
+    _Atomic int32_t reductions;      //  4 bytes: remaining before yield (JIT: check <= 0)
     struct XrCoroutine *sched_link;  //  8 bytes: MPSC/steal queue linkage
     struct XrCoroutine *next;        //  8 bytes: blocked/ready list linkage
     struct XrCoroutine *prev;        //  8 bytes: blocked/ready list linkage
     _Atomic int resume_status;       //  4 bytes: checked on every resume
     _Atomic int affinity_p;          //  4 bytes: preferred worker for wake (relaxed ok, hint only)
     int8_t schedule_count;           //  1 byte: schedule counter (max XR_RESCHEDULE_LOW=8)
-    _Atomic(uint8_t) coro_state;  //  1 byte: authoritative state (R4: replaces state bits in flags)
-    uint16_t gc_flags;            //  2 bytes: pool and backend lifetime flags
+    uint16_t gc_flags;               //  2 bytes: pool and backend lifetime flags
     // --- 64 bytes boundary ---
 
     /* === Work Stealing Freshness (set on enqueue, read on steal peek) === */
-    int64_t submit_time;  //  8 bytes: monotonic ms when enqueued to run queue
+    /* Atomic because steal-side freshness scans peek this field through the
+     * victim's deque without taking ownership; relaxed is enough — the value
+     * is a heuristic and tolerates staleness, it only needs tear-freedom. */
+    _Atomic int64_t submit_time;  //  8 bytes: monotonic ms when enqueued to run queue
 
     /* === Backend Execution State === */
     const XrCoroBackendVTable *backend;
@@ -167,16 +191,28 @@ struct XrCoroutine {
      * false: from the panic channel (div-zero, OOB, assert, …).  Drives how
      * a linked scope re-raises a child failure into the parent. */
     bool error_is_value;
-    int id;  // coroutine ID for diagnostics/debug protocol
+    int id;                      // coroutine ID for diagnostics/debug protocol
+    uint16_t spawn_burst_count;  // Consecutive same-parent spawn results.
 
     /* === Task Handle (GC-managed user-visible handle) === */
     struct XrTask *task;  // back-pointer to associated XrTask (NULL for main coro)
 
     /* === Per-Coroutine Scope Tracking === */
-    struct XrScopeContext *current_scope;
+    /* Atomic: the owner coroutine mutates current_scope as it enters/exits
+     * structured-concurrency scopes (on its own worker), while a sibling
+     * completion path on another worker reads it via
+     * wake_waiter_scope_owner_ready() to decide whether to wake the parked
+     * owner. Owner writes publish with release; the cross-worker read uses
+     * acquire. Same-thread reads use relaxed. */
+    _Atomic(struct XrScopeContext *) current_scope;
 
     /* === Cold Extension (io_buf, locals, watched_by — allocated on demand) === */
-    XrCoroExt *ext;
+    /* Atomic: lazily allocated by the owner and published with release;
+     * cross-thread observers (cancel, wakers, sysmon diagnostics) read it
+     * concurrently. Plain expression access compiles to a seq_cst load,
+     * which is acceptable off the hot paths; hot helpers use the relaxed
+     * accessors below. */
+    _Atomic(XrCoroExt *) ext;
 };
 
 static inline bool xr_coro_backend_is_vm(const XrCoroutine *coro) {
@@ -208,19 +244,50 @@ static inline bool xr_coro_backend_reset_reusable(XrCoroutine *coro) {
 
 #include "../base/xmalloc.h"
 
+static inline void xr_coro_ext_init(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    ext->locked_worker = -1;
+    ext->work_queue_hint = -1;
+    ext->wait_bucket_owner = -1;
+    ext->timer.slot = XR_TW_SLOT_INACTIVE;
+    ext->timer.timeout = NULL;
+    ext->timer.arg = NULL;
+    ext->timer.owner_worker_id = -1;
+    atomic_store_explicit(&ext->timer.state, XR_TIMER_STATE_ACTIVE, memory_order_relaxed);
+    atomic_store_explicit(&ext->timer.cancel_next, NULL, memory_order_relaxed);
+    atomic_store_explicit(&ext->timer_active, false, memory_order_relaxed);
+    ext->timer_wheel_owner = -1;
+    atomic_store_explicit(&ext->timer_seq, 0, memory_order_relaxed);
+}
+
+/* Owner-context read of the extension pointer (relaxed: the owner published
+ * it itself, or inherited it through a scheduling handoff that carries the
+ * happens-before edge). */
+static inline XrCoroExt *xr_coro_ext(const XrCoroutine *coro) {
+    return atomic_load_explicit(&((XrCoroutine *) coro)->ext, memory_order_relaxed);
+}
+
 static inline XrCoroExt *xr_coro_ensure_ext(XrCoroutine *coro) {
-    if (!coro->ext) {
-        coro->ext = (XrCoroExt *) xr_calloc(1, sizeof(XrCoroExt));
+    XrCoroExt *ext = xr_coro_ext(coro);
+    if (!ext) {
+        ext = (XrCoroExt *) xr_calloc(1, sizeof(XrCoroExt));
+        xr_coro_ext_init(ext);
+        /* Release: cross-thread observers that acquire-load ext must see
+         * the initialized contents. */
+        atomic_store_explicit(&coro->ext, ext, memory_order_release);
     }
-    return coro->ext;
+    return ext;
 }
 
 static inline XrCoroWaitState *xr_coro_wait_state(XrCoroutine *coro) {
-    return (coro && coro->ext) ? &coro->ext->wait : NULL;
+    XrCoroExt *ext = coro ? xr_coro_ext(coro) : NULL;
+    return ext ? &ext->wait : NULL;
 }
 
 static inline const XrCoroWaitState *xr_coro_wait_state_const(const XrCoroutine *coro) {
-    return (coro && coro->ext) ? &coro->ext->wait : NULL;
+    XrCoroExt *ext = coro ? xr_coro_ext(coro) : NULL;
+    return ext ? &ext->wait : NULL;
 }
 
 static inline XrCoroWaitState *xr_coro_ensure_wait_state(XrCoroutine *coro) {
@@ -351,16 +418,34 @@ XR_FUNC bool xr_coro_init_shell(XrCoroutine *coro, struct XrayIsolate *X, const 
                                 bool need_storage);
 XR_FUNC void xr_coro_discard_uninitialized(XrCoroutine *coro);
 
+/* Relaxed accessors for the reductions counter (see field doc). */
+static inline int32_t xr_coro_reds(const XrCoroutine *coro) {
+    return atomic_load_explicit(&((XrCoroutine *) coro)->reductions, memory_order_relaxed);
+}
+
+static inline void xr_coro_set_reds(XrCoroutine *coro, int32_t v) {
+    atomic_store_explicit(&coro->reductions, v, memory_order_relaxed);
+}
+
+/* Owner-side: subtract cost, return remaining. Plain load/store pair (not
+ * RMW) — the only cross-thread writer pokes 0, and losing that poke is
+ * benign. Keeps the hot back-edge free of atomic RMW cost. */
+static inline int32_t xr_coro_consume_reds(XrCoroutine *coro, int32_t cost) {
+    int32_t next = xr_coro_reds(coro) - cost;
+    xr_coro_set_reds(coro, next);
+    return next;
+}
+
 // Check if coroutine should yield (for JIT loop back-edges)
 // JIT only needs: load coro->reductions; cmp 0; jle yield_stub
 static inline bool xr_coro_should_yield(XrCoroutine *coro) {
-    return coro->reductions <= 0;
+    return xr_coro_reds(coro) <= 0;
 }
 
 // Request yield at next safepoint (preempt, GC, cancel)
 // Forces reductions to 0 so the single-check safepoint triggers
 static inline void xr_coro_request_yield(XrCoroutine *coro) {
-    coro->reductions = 0;
+    xr_coro_set_reds(coro, 0);
 }
 
 /* ========== Coroutine State (isolate-level coroutine bookkeeping) ========== */
@@ -404,6 +489,7 @@ XR_FUNC void xr_multicore_destroy(struct XrayIsolate *X);
 XR_FUNC void xr_coro_ready(struct XrayIsolate *X, XrCoroutine *gp, bool next);
 XR_FUNC XrCoroutine *xr_current_coro(struct XrayIsolate *X);
 XR_FUNC void xr_coro_wake_waiter(struct XrayIsolate *X, XrCoroutine *coro);
+XR_FUNC void xr_coro_wake_scope_waiter(struct XrayIsolate *X, XrCoroutine *coro);
 
 // Channel wake (auto fallback to single-thread mode)
 XR_FUNC XrCoroutine *xr_runtime_wake_channel(struct XrayIsolate *X, void *channel,

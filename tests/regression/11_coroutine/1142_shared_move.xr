@@ -9,6 +9,20 @@
 **   - 普通变量: 传递给协程时深拷贝
 */
 
+fn recvArray(ch: Channel<Array<int>>) -> Array<int> {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> []
+    }
+}
+
+fn recvJson(ch: Channel<Json>) -> Json {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> {}
+    }
+}
+
 // Test 1: shared const — concurrent read (zero-copy via refcount)
 @test
 fn test_shared_const() {
@@ -59,14 +73,14 @@ fn test_move_go() {
 fn test_move_channel_send() {
     print("=== Test move channel send ===")
 
-    shared const ch = new Channel(1)
+    shared const ch: Channel<Array<int>> = new Channel(1)
     shared let payload = [10, 20, 30]
 
     // send with move: transfers ownership through channel
     ch.send(move payload)
     // payload is no longer usable here (compile error if referenced)
 
-    let received = ch.recv()
+    let received = recvArray(ch)
     print("received:", received)   // [10, 20, 30]
     ch.close()
 }
@@ -94,7 +108,7 @@ fn test_normal_copy() {
 fn test_move_pipeline() {
     print("=== Test move pipeline ===")
 
-    shared const ch = new Channel(1)
+    shared const ch: Channel<Json> = new Channel(1)
     shared let msg = { step: 0 }
 
     // Stage 1: modify and move-send
@@ -109,7 +123,7 @@ fn test_move_pipeline() {
 
     // Stage 2: receive and process
     let t2 = go fn(c: Channel<Json>) -> int {
-        let d = c.recv()
+        let d = recvJson(c)
         d.step = d.step + 1
         print("stage2:", d.step)
         return d.step

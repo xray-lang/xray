@@ -6,6 +6,13 @@ fn wait_select_close(ch: Channel<int>, ready: Channel<int>, done: Channel<int>) 
     done.send(1)
 }
 
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
 @test
 fn test_select_wakes_on_channel_close() {
     shared const ch = new Channel<int>(0)
@@ -13,14 +20,22 @@ fn test_select_wakes_on_channel_close() {
     shared const done = new Channel<int>(1)
 
     go wait_select_close(ch, ready, done)
-    assert_eq(ready.recv(), 1)
+    assert_eq(recv_int(ready), 1)
 
     for (let i = 0; i < 16; i++) {
         yield
     }
 
     ch.close()
-    let (value, ok) = done.recvTimeout(2000)
+    let result = done.recvTimeout(2000)
+    let ok = match (result) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+    let value = match (result) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
     assert_eq(ok, true)
     assert_eq(value, 1)
     ready.close()

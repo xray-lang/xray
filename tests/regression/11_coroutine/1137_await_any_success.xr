@@ -34,7 +34,11 @@ fn test_await_any_success() {
     print("test3: skip failure")
     let t4 = go failing()
     let t5 = go success()
-    await t4
+    let failed = t4.awaitResult()
+    assert(match (failed) {
+        TaskResult.Failed(_) -> true
+        _ -> false
+    })
     await t5
     let r3 = await anySuccess [t4, t5]
     print("  result:", r3)

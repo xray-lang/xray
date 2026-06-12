@@ -15,8 +15,6 @@
 
 /* ========== Exception Handling ========== */
 
-#define XI_GO_AUX_LINK_MASK 0xff
-
 /* Throw */
 XR_FUNC void xi_emit_throw(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     (void) dst;
@@ -127,12 +125,15 @@ XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Two modes based on result type:
      * - bool type: used as IF condition (try body) → OP_ERR_HAS into dst
      * - unit type: unconditional propagation → OP_ERR_CHECK */
+    int pc = current_pc(ctx);
     if (v->type && v->type->kind == XR_KIND_BOOL) {
         emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, dst, 0, 0));
     } else {
         (void) dst;
         emit_inst(ctx, CREATE_ABC(OP_ERR_CHECK, 0, 0, 0));
     }
+    if (ctx->value_pc && v && v->id < ctx->reg_map_size)
+        ctx->value_pc[v->id] = pc;
 }
 
 XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, uint8_t dst) {
@@ -220,6 +221,9 @@ XR_FUNC void xi_emit_go(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (link_mode != 0) {
         emit_inst(ctx, CREATE_ABx(OP_NOP, 3, link_mode));
     }
+    if (v->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) {
+        emit_inst(ctx, CREATE_ABx(OP_NOP, 4, 1));
+    }
 }
 
 /* Await */
@@ -291,10 +295,24 @@ XR_FUNC void xi_emit_chan_send(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_CHAN_SEND, 0, ch, val));
+    emit_inst(ctx, CREATE_ABC(OP_CHAN_SEND, dst, ch, val));
 }
 
 /* Channel recv */
+static uint8_t chan_recv_protect_input(EmitCtx *ctx, uint8_t ch, uint8_t dst) {
+    if (ch != dst && ch != (uint8_t) (dst + 1))
+        return ch;
+    if (ctx->next_reg >= MAX_REGS - 1) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return ch;
+    }
+    uint8_t tmp = ctx->next_reg++;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, tmp, ch, 0));
+    return tmp;
+}
+
 XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -303,7 +321,29 @@ XR_FUNC void xi_emit_chan_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t ch = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
+    ch = chan_recv_protect_input(ctx, ch, dst);
+    if (ctx->status != XI_EMIT_OK)
+        return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_RECV, dst, ch, 0));
+    if (dst + 2 > ctx->next_reg)
+        ctx->next_reg = dst + 2;
+    if (ctx->next_reg > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg;
+}
+
+/* Project the adjacent status slot produced by OP_CHAN_RECV / OP_CHAN_TRY_RECV.
+ * The payload op reserves R[payload+1], so this is a register move only. */
+XR_FUNC void xi_emit_chan_recv_status(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t recv = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    uint8_t status = (uint8_t) (recv + 1);
+    if (dst != status)
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, status, 0));
 }
 
 /* Non-blocking channel try-send: returns bool (success/failure) */
@@ -328,6 +368,9 @@ XR_FUNC void xi_emit_chan_try_recv(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         return;
     }
     uint8_t ch = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    ch = chan_recv_protect_input(ctx, ch, dst);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_CHAN_TRY_RECV, dst, ch, 0));

@@ -10,6 +10,13 @@ print("========== 测试11：协程监控与调试 ==========")
 
 enum MonDebugErr { Msg(string) }
 
+fn tryRecvValue(ch) {
+    return match (ch.tryRecv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 // 测试1：协程状态查询
 fn test_coro_status_query() {
     let ch = new Channel(1)
@@ -22,7 +29,7 @@ fn test_coro_status_query() {
     // 启动后，未完成
     print("启动后 done:", t.done)
     assert_eq(t.done, false)
-    assert_eq(t.cancelled, false)
+    assert_eq(t.status == TaskStatus.Pending || t.status == TaskStatus.Running, true)
     // 发送信号让任务完成
     ch.send(1)
     await t
@@ -47,9 +54,14 @@ fn test_coro_cancel_status() {
     let t = go long_task()
     // 立即取消
     t.cancel()
-    await t
-    print("取消状态:", t.cancelled)
-    assert_eq(t.cancelled, true)
+    let result = t.awaitResult()
+    let cancelled = match (result) {
+        TaskResult.Cancelled -> true
+        TaskResult.Success(value) -> value == "was cancelled"
+        _ -> false
+    }
+    print("取消状态:", cancelled)
+    assert_eq(cancelled, true)
     print("✓ 协程取消状态测试通过")
 }
 
@@ -145,7 +157,7 @@ fn test_coro_named_batch() {
     // 收集完成顺序
     let order = []
     for (let i = 0; i < 3; i++) {
-        let id = results.tryRecv()
+        let id = tryRecvValue(results)
         if (id != null) {
             order.push(id)
         }
@@ -199,7 +211,7 @@ fn test_execution_trace() {
     // 收集追踪事件
     let events = []
     for (let i = 0; i < 6; i++) {
-        let evt = trace.tryRecv()
+        let evt = tryRecvValue(trace)
         if (evt != null) {
             events.push(evt)
         }

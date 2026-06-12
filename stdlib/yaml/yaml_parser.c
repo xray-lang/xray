@@ -954,7 +954,17 @@ static XrValue parse_value(YamlParser *p, int min_indent) {
         if (anchor_len >= 64)
             anchor_len = 63;
         memcpy(anchor_name, start, anchor_len);
+        if (anchor_len == 0) {
+            yaml_add_error(p, "invalid_anchor", "anchor name must not be empty");
+            p->depth--;
+            return xr_null();
+        }
         yaml_skip_ws(p);
+        if (p->ptr >= p->end || *p->ptr == '\n' || *p->ptr == '\r') {
+            yaml_add_error(p, "invalid_anchor", "anchor must be attached to a value");
+            p->depth--;
+            return xr_null();
+        }
         c = *p->ptr;
     }
 
@@ -968,7 +978,12 @@ static XrValue parse_value(YamlParser *p, int min_indent) {
             p->ptr++;
             p->col++;
         }
-        return find_anchor(p, start, p->ptr - start);
+        XrValue result = find_anchor(p, start, p->ptr - start);
+        if (anchor_len > 0) {
+            save_anchor(p, anchor_name, anchor_len, result);
+        }
+        p->depth--;
+        return result;
     }
 
     XrValue result;
@@ -1062,9 +1077,20 @@ XrArray *yaml_parser_parse_all(YamlParser *parser) {
             continue;
         }
 
+        const char *before = parser->ptr;
         XrValue doc = parse_document(parser);
         xr_array_push(docs, doc);
         parser->result.meta.documents++;
+        if (parser->ptr == before) {
+            yaml_add_error(parser, "parse_no_progress",
+                           "parser made no progress while parsing document");
+            if (parser->ptr < parser->end && *parser->ptr != '\n' && *parser->ptr != '\r') {
+                parser->ptr++;
+                parser->col++;
+            } else {
+                yaml_skip_newline(parser);
+            }
+        }
 
         yaml_skip_empty_lines(parser);
     }

@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 124);
+    assert(XI_LOWERING_ENTRY_COUNT == 125);
     assert(xi_lowering_generated_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CONST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_CONST) == (0));
@@ -267,8 +267,8 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_ERR_RETURN) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_ERR_RETURN) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_ERR_RETURN) == false);
-    assert(xi_lowering_generated_targets(XI_ERR_CHECK) == (XI_LOWER_TARGET_AOT_C_STMT | XI_LOWER_TARGET_VM_BYTECODE));
-    assert(xi_lowering_required_targets(XI_ERR_CHECK) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_AOT_C_STMT));
+    assert(xi_lowering_generated_targets(XI_ERR_CHECK) == (XI_LOWER_TARGET_AOT_C_STMT | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_ERR_CHECK) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C_STMT));
     assert(xi_lowering_rejected_targets(XI_ERR_CHECK) == (0));
     assert(xi_emit_vm_requires_fresh_dst(XI_ERR_CHECK) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_ERR_CHECK) == false);
@@ -588,9 +588,15 @@ int main(void) {
     assert(xi_lowering_generated_targets(XI_CHAN_RECV) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CHAN_RECV) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
     assert(xi_lowering_rejected_targets(XI_CHAN_RECV) == (XI_LOWER_TARGET_JIT_XM));
-    assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_RECV) == false);
+    assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_RECV) == true);
     assert(xi_emit_vm_uses_raw_cell_args(XI_CHAN_RECV) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_CHAN_RECV) == false);
+    assert(xi_lowering_generated_targets(XI_CHAN_RECV_STATUS) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_CHAN_RECV_STATUS) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_CHAN_RECV_STATUS) == (XI_LOWER_TARGET_JIT_XM));
+    assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_RECV_STATUS) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_CHAN_RECV_STATUS) == false);
+    assert(xi_emit_vm_handles_cell_dst(XI_CHAN_RECV_STATUS) == false);
     assert(xi_lowering_generated_targets(XI_CHAN_TRY_SEND) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CHAN_TRY_SEND) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
     assert(xi_lowering_rejected_targets(XI_CHAN_TRY_SEND) == (XI_LOWER_TARGET_JIT_XM));
@@ -635,7 +641,7 @@ int main(void) {
     assert(xi_emit_vm_handles_cell_dst(XI_CORO_OP) == false);
     assert(xi_lowering_generated_targets(XI_CHAN_NEW) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CHAN_NEW) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
-    assert(xi_lowering_rejected_targets(XI_CHAN_NEW) == (XI_LOWER_TARGET_JIT_XM));
+    assert(xi_lowering_rejected_targets(XI_CHAN_NEW) == (0));
     assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_NEW) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_CHAN_NEW) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_CHAN_NEW) == false);
@@ -669,9 +675,9 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_JSON_SET_F) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_JSON_SET_F) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_JSON_SET_F) == false);
-    assert(xi_lowering_generated_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
-    assert(xi_lowering_required_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
-    assert(xi_lowering_rejected_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_JIT_XM));
+    assert(xi_lowering_generated_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
+    assert(xi_lowering_rejected_targets(XI_JSON_DECODE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM));
     assert(xi_emit_vm_requires_fresh_dst(XI_JSON_DECODE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_JSON_DECODE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_JSON_DECODE) == false);

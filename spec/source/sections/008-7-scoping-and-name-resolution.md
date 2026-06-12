@@ -157,7 +157,10 @@ let t3 = go fn(b: Bytes) -> int {
 // 方法 4：Channel 通信（可被捕获）
 shared const ch = new Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
-    return c.recv()
+    return match (c.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
 }(ch)
 ch.send(42)
 ```
@@ -336,7 +339,10 @@ let t3 = go fn(b: Bytes) -> int {
 // Pattern 4: Channel communication (capturable)
 shared const ch = new Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
-    return c.recv()
+    return match (c.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
 }(ch)
 ch.send(42)
 ```

@@ -294,10 +294,11 @@ void x64_emit_deopt_id(X64CodegenCtx *ctx, XmIns *ins) {
 /* Record safepoint bitmap: which alloc_regs[] hold PTR vregs (reg_bitmap),
  * and which spill slots hold PTR vregs (spill_bitmap) at cur_ra_pos. */
 uint32_t x64_record_safepoint(X64CodegenCtx *ctx) {
-    if (ctx->nsmap >= XM_MAX_STACK_MAP_ENTRIES) {
-        xr_log_warning("x64-cg", "stack map table full (%u entries)", ctx->nsmap);
-        return ctx->nsmap > 0 ? ctx->nsmap - 1 : 0;
-    }
+    /* Fail-closed: a reused/wrong safepoint id makes GC scan the wrong
+     * bitmaps (missed roots → use-after-free). Bail out of compilation so
+     * the function stays on the interpreter instead. */
+    CODEGEN_CHECK(ctx, ctx->nsmap < XM_MAX_STACK_MAP_ENTRIES,
+                  "stack map table full: refusing unsound GC safepoint");
 
     int32_t pos = ctx->cur_ra_pos;
     uint32_t reg_bitmap = 0;

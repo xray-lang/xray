@@ -32,7 +32,7 @@
 
 /* ========== Enum Access ========== */
 
-/* Prelude enums (Ordering) have a single canonical XrEnumType bound
+/* Prelude enums have a single canonical XrEnumType bound
  * into a VM builtin slot; they are not per-module declarations.  Returns the
  * builtin global index, or -1 for ordinary user enums. */
 static int prelude_enum_builtin_index(const char *enum_name) {
@@ -40,6 +40,14 @@ static int prelude_enum_builtin_index(const char *enum_name) {
         return -1;
     if (strcmp(enum_name, "Ordering") == 0)
         return XR_GLOBAL_VAR_ORDERING;
+    if (strcmp(enum_name, "Recv") == 0)
+        return XR_GLOBAL_VAR_RECV;
+    if (strcmp(enum_name, "SendResult") == 0)
+        return XR_GLOBAL_VAR_SEND_RESULT;
+    if (strcmp(enum_name, "TaskResult") == 0)
+        return XR_GLOBAL_VAR_TASK_RESULT;
+    if (strcmp(enum_name, "TaskStatus") == 0)
+        return XR_GLOBAL_VAR_TASK_STATUS;
     return -1;
 }
 

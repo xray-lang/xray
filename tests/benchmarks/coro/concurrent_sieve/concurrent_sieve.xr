@@ -12,6 +12,13 @@ if (process.args.length > 0) {
 print("=== 并发素数筛测试 ===")
 print("目标素数数量:", N)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 数字生成器：向 channel 发送 2, 3, 4, ...
 fn generate(ch: Channel<int>, limit: int) {
     for (let i = 2; i <= limit; i++) {
@@ -23,8 +30,8 @@ fn generate(ch: Channel<int>, limit: int) {
 // 过滤器：过滤掉能被 prime 整除的数
 fn filter(in_ch: Channel<int>, out_ch: Channel<int>, prime: int) {
     while (true) {
-        let n = in_ch.recv()
-        if (n == null) {
+        let n = recv_int(in_ch, -1)
+        if (n < 0) {
             break
         }
         if (n % prime != 0) {
@@ -44,7 +51,7 @@ fn estimate_limit(n: int) -> int {
 let limit = estimate_limit(N)
 let start = time.monotonic()
 
-shared let channels = [Channel(100)]
+shared let channels: Array<Channel<int>> = [Channel(100)]
 let tasks: Array<Task> = []
 tasks.push(go generate(channels[0], limit))
 
@@ -53,8 +60,8 @@ let count = 0
 let cur = 0  // index into channels array
 
 while (count < N) {
-    let prime = channels[cur].recv()
-    if (prime == null) {
+    let prime = recv_int(channels[cur], -1)
+    if (prime < 0) {
         break
     }
     primes.push(prime)
@@ -70,8 +77,8 @@ while (count < N) {
 
 if (count >= N) {
     while (true) {
-        let ignored = channels[cur].recv()
-        if (ignored == null) {
+        let ignored = recv_int(channels[cur], -1)
+        if (ignored < 0) {
             break
         }
     }

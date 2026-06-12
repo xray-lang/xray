@@ -226,7 +226,15 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
 
     // Execute bytecode. run() may grow the stack via xr_coro_grow_stack,
     // invalidating saved_stack_top — re-derive from offset after return.
+    // Nested run() entry: a native caller frame sits between this run() and
+    // the worker loop, so in-dispatch direct switching must stay off here.
+    XrWorker *dsw_worker = xr_current_worker();
+    bool saved_direct_switch = dsw_worker ? dsw_worker->p.vm_direct_switch_ok : false;
+    if (dsw_worker)
+        dsw_worker->p.vm_direct_switch_ok = false;
     XrVMResult exec_result = run(isolate, ctx);
+    if (dsw_worker)
+        dsw_worker->p.vm_direct_switch_ok = saved_direct_switch;
 
     XrValue *result_slot = ctx->stack + stack_top_offset;
 
@@ -292,6 +300,12 @@ XrVMResult xr_vm_interpret_proto(XrayIsolate *isolate, XrProto *proto) {
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = 0;
 
+    /* API entry outside the worker dispatch protocol: no in-dispatch switch. */
+    {
+        XrWorker *dsw_worker = xr_current_worker();
+        if (dsw_worker)
+            dsw_worker->p.vm_direct_switch_ok = false;
+    }
     return run(isolate, ctx);
 }
 
@@ -347,7 +361,15 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     frame->u.l.pending_operator_check = false;
     ctx->frame_count = saved_frame_count + 1;
 
+    // Nested run() entry (module init under a native caller): direct
+    // switching must stay off, see xr_vm_call_closure.
+    XrWorker *dsw_worker = xr_current_worker();
+    bool saved_direct_switch = dsw_worker ? dsw_worker->p.vm_direct_switch_ok : false;
+    if (dsw_worker)
+        dsw_worker->p.vm_direct_switch_ok = false;
     XrVMResult result = run(isolate, ctx);
+    if (dsw_worker)
+        dsw_worker->p.vm_direct_switch_ok = saved_direct_switch;
 
     // run() may have grown the stack, so re-derive stack_top via offset.
     ctx->module_base_frame = saved_module_base;

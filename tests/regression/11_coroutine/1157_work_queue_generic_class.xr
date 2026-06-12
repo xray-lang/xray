@@ -22,9 +22,11 @@ class GenericQueue<T> {
     tryPop(worker_id: int) -> T? {
         for (let i = 0; i < this.workers; i++) {
             let idx = (worker_id + i) % this.workers
-            let (value, ok) = this.shards[idx].tryRecv()
-            if (ok) {
-                return value
+            match (this.shards[idx].tryRecv()) {
+                Recv.Value(value) -> {
+                    return value
+                }
+                _ -> {}
             }
         }
         return null

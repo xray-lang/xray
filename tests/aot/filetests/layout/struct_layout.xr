@@ -1,0 +1,15 @@
+struct Pair {
+    left: int
+    right: uint8
+    ok: bool
+}
+
+fn score() -> int {
+    let p = Pair{left: 40, right: 2, ok: true}
+    if (p.ok) {
+        return p.left + p.right
+    }
+    return 0
+}
+
+print(score())

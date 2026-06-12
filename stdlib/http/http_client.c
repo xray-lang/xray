@@ -334,6 +334,27 @@ static char *build_request(XrayIsolate *isolate, const XrHttpRequestConfig *conf
         buf_size += config->headers[i].name_len + config->headers[i].value_len + 4;
     }
 
+    /* Header injection guard: names/values containing CR/LF/NUL (or a colon
+     * inside the name) would let attacker-influenced strings splice extra
+     * headers or an entire smuggled request into the wire bytes. The URL
+     * path/host get the same check — they are interpolated into the request
+     * line below. Fail the request instead of sending a corrupted one. */
+    for (int i = 0; i < config->header_count; i++) {
+        const XrHttpHeader *h = &config->headers[i];
+        for (size_t k = 0; h->name && k < h->name_len; k++) {
+            char c = h->name[k];
+            if (c == '\r' || c == '\n' || c == '\0' || c == ':')
+                return NULL;
+        }
+        for (size_t k = 0; h->value && k < h->value_len; k++) {
+            char c = h->value[k];
+            if (c == '\r' || c == '\n' || c == '\0')
+                return NULL;
+        }
+    }
+    if (strpbrk(url->path, "\r\n ") || strpbrk(url->host, "\r\n /"))
+        return NULL;
+
     char *buf = (char *) xr_malloc(buf_size);
     if (!buf)
         return NULL;

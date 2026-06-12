@@ -34,8 +34,8 @@ fn spawn_chain(level, id) {
     /* 等待所有子协程 */
     let child_sum = 0
     for (let i = 0; i < children.length; i++) {
-        await children[i]
-        child_sum = child_sum + children[i].result.sum
+        let child_result = await children[i]
+        child_sum = child_sum + child_result.sum
     }
     return { "level": level, "id": id, "children": children.length, "sum": child_sum }
 }
@@ -44,9 +44,8 @@ fn spawn_chain(level, id) {
 print("启动链式创建（深度=" + string(CHAIN_DEPTH) + ", 分支=" + string(BRANCHES_PER_LEVEL) + "）...")
 let start_time = time.monotonic()
 let root_task = go spawn_chain(0, 0)
-await root_task
+let result = await root_task
 let total_time = time.monotonic() - start_time
-let result = root_task.result
 print("
 结果:")
 print("  根节点 level: " + string(result.level))

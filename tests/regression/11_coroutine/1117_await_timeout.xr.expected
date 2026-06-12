@@ -4,6 +4,5 @@ test2: immediate completion
   result: 42
 test3: already done task
   result: 42
-test4: timeout returns null
-  result: null
-all tests passed
+test4: timeout returns TaskResult.Timeout
+  timeout: true

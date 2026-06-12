@@ -4,6 +4,13 @@
 // 验证：经典并发模式正确工作
 print("========== 测试6：生产者-消费者模式 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 fn test_single_producer_consumer() {
     let ch = new Channel(5)
     fn producer() {
@@ -14,7 +21,7 @@ fn test_single_producer_consumer() {
     fn consumer() {
         let sum = 0
         for (let i = 0; i < 20; i++) {
-            let val = ch.recv()
+            let val = recvValue(ch)
             sum = sum + val
         }
         return sum
@@ -40,7 +47,7 @@ fn test_multi_producer() {
     fn consumer(expected) {
         let received = 0
         while (received < expected) {
-            let val = ch.recv()
+            let val = recvValue(ch)
             received = received + 1
         }
         return received
@@ -71,7 +78,7 @@ fn test_multi_consumer() {
     fn consumer(id) {
         let count = 0
         for (let i = 0; i < 10; i++) {
-            let val = ch.recv()
+            let val = recvValue(ch)
             count = count + 1
         }
         results.send(count)

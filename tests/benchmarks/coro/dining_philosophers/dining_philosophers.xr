@@ -26,7 +26,14 @@ for (let i = 0; i < N; i++) {
     forks[i].send(1)
 }
 
-shared const result_ch = Channel(100)
+shared const result_ch: Channel<int> = Channel(100)
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
 
 // Philosopher: alternates thinking and eating
 // Deadlock avoidance: last philosopher reverses fork order (break circular wait)
@@ -58,8 +65,7 @@ for (let i = 0; i < N; i++) {
 // 收集结果
 let total_meals = 0
 for (let i = 0; i < N; i++) {
-    let m = result_ch.recv()
-    total_meals = total_meals + (int(m) ?? 0)
+    total_meals = total_meals + recv_int(result_ch, 0)
 }
 
 for (t in tasks) {

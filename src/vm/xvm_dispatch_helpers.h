@@ -22,6 +22,7 @@
 #include "../coro/xcoro_snapshot.h"
 #include "../coro/xdeep_copy.h"
 #include "../coro/xworker.h"
+#include "../coro/xcoroutine.h"
 #include "../coro/xyieldable.h"
 #include "../coro/xcoro_registry.h"
 #include "../module/xmodule.h"
@@ -34,6 +35,8 @@
 #include "../coro/xtimer_wheel.h"
 #include "../os/os_thread.h"
 
+#define XR_VM_YIELDABLE_READY_REDUCTION_COST 64
+
 /* ========== Dispatch Action Enum ========== */
 
 /* Returned by dispatch helper functions to tell the VM loop what to do next. */
@@ -43,6 +46,9 @@ typedef enum {
     XR_DISP_RESTART,     /* Frame changed (call pushed); reload from startfunc */
     XR_DISP_RAISE,       /* Exception thrown; caller checks catch reachability */
     XR_DISP_BLOCKED,     /* Coroutine blocked on I/O or channel */
+    XR_DISP_SWITCH,      /* Blocked; dispatch loop may switch to a LIFO partner
+                          * in place (falls back to XR_VM_BLOCKED when no
+                          * admissible partner exists) */
     XR_DISP_YIELD,       /* Coroutine yielded voluntarily */
     XR_DISP_GO_CHILD,    /* Spawned child coroutine needs immediate execution */
     XR_DISP_FATAL,       /* Unrecoverable error; abort VM loop */
@@ -119,8 +125,27 @@ static inline XrDispatchAction vm_suspend_yield_replay_yielded(XrBcCallFrame *fr
     return XR_DISP_YIELD;
 }
 
+/* Reduction charge for a channel op that completed without blocking.
+ * Shared by the out-of-line helpers (xvm_chan_ops.c) and the inline
+ * buffered fast paths in the dispatch loop. */
+#define XR_VM_CHAN_READY_REDUCTION_COST 64
+
+static inline XrDispatchAction
+vm_ready_operation_next_or_yield(XrayIsolate *isolate, XrCoroutine *current, XrBcCallFrame *frame,
+                                 XrInstruction *pc, int reduction_cost) {
+    if (!current || !frame || reduction_cost <= 0)
+        return XR_DISP_NEXT;
+    if (xr_coro_consume_reds(current, reduction_cost) > 0)
+        return XR_DISP_NEXT;
+    xr_coro_set_reds(current, XR_CORO_REDUCTIONS);
+    if (XR_LIKELY(isolate && isolate->vm.runtime != NULL)) {
+        vm_suspend_continue_from_next(frame, pc);
+        return XR_DISP_YIELD;
+    }
+    return XR_DISP_NEXT;
+}
+
 /* ========== Stack Growth Helper for Dispatch Functions ========== */
-#include "../coro/xcoroutine.h"
 
 /* Ensure the VM stack has room for a frame whose registers will occupy
  * slots [caller_base_offset, caller_base_offset + a + 1 + callee_maxstack)
@@ -290,9 +315,10 @@ static inline XrClass *invoke_resolve_class(XrayIsolate *isolate, XrValue receiv
 XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm_ctx, XrChannel *ch,
                                            int method_symbol, int nargs, XrValue *base, int a,
                                            XrBcCallFrame *frame, XrInstruction *pc);
-XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver,
-                                               int method_symbol, int nargs, XrValue *base, int a,
-                                               XrBcCallFrame *frame, XrInstruction *pc);
+XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                               XrValue receiver, int method_symbol, int nargs,
+                                               XrValue *base, int a, XrBcCallFrame *frame,
+                                               XrInstruction *pc);
 XR_FUNC XrDispatchAction vm_invoke_coro_handle(XrayIsolate *isolate, XrValue receiver,
                                                int method_symbol, int nargs, XrValue *base, int a,
                                                XrBcCallFrame *frame, XrInstruction *pc);

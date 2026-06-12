@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xtask.h - GC-managed coroutine handle with structured concurrency support
+ * xtask.h - Runtime-managed coroutine handle with structured concurrency support
  *
  * KEY CONCEPT:
  *   XrTask is the user-visible handle returned by `go` expressions.
@@ -14,7 +14,8 @@
  *   state machine for precise lifecycle tracking.
  *
  * WHY THIS DESIGN:
- *   - Decouples user handle (GC-managed, ~96B) from executor (pool-managed, ~500B)
+ *   - Decouples user handle (runtime-managed, ~128B) from executor
+ *     (pool-managed VM/JIT/AOT execution context)
  *   - Parent-child hierarchy enables linked/monitored go and scope blocks
  *   - CompletionNode allows multiple listeners (monitor channels, callbacks)
  *   - 6-state machine tracks Completing/Cancelling transitions for children
@@ -43,6 +44,7 @@
 
 #include <stdatomic.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include "../runtime/gc/xgc_header.h"
 #include "../runtime/value/xvalue.h"
 #include "xwait_state.h"
@@ -53,6 +55,7 @@ struct XrCoroutine;
 struct XrArray;
 struct XrayIsolate;
 struct XrChannel;
+struct XrRuntime;
 
 /* ========== Task State (6-state machine) ========== */
 /*
@@ -97,9 +100,11 @@ typedef enum {
 
 /* ========== Task Flags ========== */
 
-#define XR_TASK_FLG_SUPERVISOR (1 << 0)  // child error doesn't propagate up
-#define XR_TASK_FLG_SCOPE_TASK (1 << 1)  // implicit task created by scope block
-#define XR_TASK_FLG_HAS_PARENT (1 << 2)  // attached to a parent task
+#define XR_TASK_FLG_SUPERVISOR (1 << 0)      // child error doesn't propagate up
+#define XR_TASK_FLG_SCOPE_TASK (1 << 1)      // implicit task created by scope block
+#define XR_TASK_FLG_HAS_PARENT (1 << 2)      // attached to a parent task
+#define XR_TASK_FLG_RUNTIME_OWNED (1 << 3)   // handle lives outside executor heap
+#define XR_TASK_FLG_ONE_SHOT_AWAIT (1 << 4)  // compiler-proven single await consumer
 
 /* ========== Completion Listener ========== */
 
@@ -127,7 +132,7 @@ typedef struct XrTaskLink {
     struct XrTaskLink *next;  // next link in this task's list
 } XrTaskLink;
 
-/* ========== XrTask - GC-managed coroutine handle ========== */
+/* ========== XrTask - runtime-managed coroutine handle ========== */
 
 typedef struct XrTask {
     // GC header (must be first field)
@@ -137,16 +142,26 @@ typedef struct XrTask {
     XrValue result;  // 16B
     XrValue error;   // 16B
 
-    // Back-pointer to executor (NULL after completion + recycle)
-    struct XrCoroutine *coro;  //  8B
+    // Back-pointer to executor (NULL after completion + recycle).
+    //
+    // Doubles as the executor-ownership claim point and the destroy latch:
+    // detach paths must claim it with atomic_exchange (only the winner may
+    // recycle the executor), and xr_task_runtime_try_destroy_detached
+    // refuses to free the task while it is still set — the completing
+    // worker keeps it set until it has finished every access to this task,
+    // then opens the latch with a release store.
+    _Atomic(struct XrCoroutine *) coro;  //  8B
 
     // State machine + flags
     _Atomic uint8_t state;  //  1B
     uint8_t flags;          //  1B
     uint8_t link_mode;      //  1B: XR_LINK_NONE/LINKED/MONITORED
-    uint8_t _pad1;          //  1B
-    uint16_t child_count;   //  2B
-    uint16_t _pad2;         //  2B
+    /* Set (release) by the completing worker after its last access to this
+     * task; one-shot destroy requires it (acquire) so the task is never
+     * freed under the completer's feet. */
+    _Atomic uint8_t completer_done;  //  1B
+    uint16_t child_count;            //  2B
+    uint16_t _pad2;                  //  2B
 
     // Parent-Child hierarchy (only used with linked go / scope)
     _Atomic bool child_lock;      //  1B: spinlock for child list
@@ -179,15 +194,41 @@ typedef struct XrTask {
     // Single await waiters. Multiple coroutines may await the same Task.
     _Atomic bool await_lock;
     XrTaskAwaitNode *await_waiters;
+
+    // Intrusive runtime registry link. Task handles are owned by XrRuntime,
+    // not by executor coroutine heaps.
+    struct XrTask *runtime_next;
 } XrTask;
-// ~128B total
+// ~136B total
+
+/* Heuristic read of the executor pointer (diagnostics, cancel targeting).
+ * The executor may be claimed/recycled concurrently; never recycle or
+ * destroy through this value — use xr_task_claim_executor for that. */
+static inline struct XrCoroutine *xr_task_executor_peek(const XrTask *task) {
+    return atomic_load_explicit(&((XrTask *) task)->coro, memory_order_relaxed);
+}
+
+/* Claim exclusive ownership of the executor for detach/recycle. Returns the
+ * executor if this caller won the claim, NULL if someone else already did
+ * (or the completer kept it). acq_rel: acquire pairs with the completer's
+ * release latch store; release publishes the claimer's prior writes. */
+static inline struct XrCoroutine *xr_task_claim_executor(XrTask *task) {
+    return atomic_exchange_explicit(&task->coro, (struct XrCoroutine *) NULL, memory_order_acq_rel);
+}
 
 /* ========== Task Lifecycle API ========== */
 
-/* Allocate a new task on executor's GC heap.
+/* Allocate a runtime-owned task handle.
  * Links task->coro = executor, executor->task = task. */
-XR_FUNC struct XrTask *xr_task_create(struct XrCoroutine *parent_coro,
+XR_FUNC struct XrTask *xr_task_create(struct XrRuntime *runtime, struct XrCoroutine *parent_coro,
                                       struct XrCoroutine *executor);
+XR_FUNC struct XrTask *xr_task_runtime_detach_all(struct XrRuntime *runtime, size_t *out_count);
+XR_FUNC bool xr_task_runtime_try_destroy_detached(struct XrRuntime *runtime, struct XrTask *task);
+XR_FUNC void xr_task_destroy_list(struct XrTask *task);
+XR_FUNC void xr_task_runtime_destroy_all(struct XrRuntime *runtime);
+XR_FUNC void xr_task_isolate_adopt_deferred(struct XrayIsolate *isolate, struct XrTask *tasks,
+                                            size_t count);
+XR_FUNC void xr_task_isolate_destroy_deferred(struct XrayIsolate *isolate);
 
 // Simple state setters (called from xworker.c on executor completion)
 XR_FUNC void xr_task_complete(struct XrTask *task, XrValue result);
@@ -219,6 +260,12 @@ XR_FUNC void xr_task_fail_with_propagation(struct XrTask *task, XrValue error);
 
 // Fire all completion listeners
 XR_FUNC void xr_task_fire_completion(struct XrTask *task);
+
+/* Read the completed task's result, deep-copying it into dst_coro's heap
+ * (and caching the copy) under the await lock. Serializes concurrent
+ * awaiters of the same task against torn 16-byte result writes. */
+XR_FUNC XrValue xr_task_consume_result_copy(struct XrayIsolate *X, struct XrTask *task,
+                                            struct XrCoroutine *dst_coro);
 
 // Bidirectional link: a fails → cancel b, b fails → cancel a
 XR_FUNC void xr_task_link(struct XrTask *a, struct XrTask *b);

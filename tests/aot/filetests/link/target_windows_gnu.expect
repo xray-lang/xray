@@ -1,0 +1,16 @@
+args=--target aarch64-windows-gnu
+contains=xaot-plan v0
+contains=  "target": {
+contains=    "name": "aarch64-windows-gnu"
+contains=    "arch": "aarch64"
+contains=    "os": "windows"
+contains=    "abi": "gnu"
+contains=    "object_format": "coff"
+contains=    "triple": "aarch64-windows-gnu"
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="system_libs": ["m"]
+contains="cc_flags": ["-ffunction-sections", "-fdata-sections"]
+contains="ld_flags": ["-Wl,--gc-sections"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains=-Wl,-dead_strip

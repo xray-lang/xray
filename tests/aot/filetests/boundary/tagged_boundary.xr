@@ -1,0 +1,19 @@
+class Counter {
+    value: int
+
+    constructor(value: int) {
+        this.value = value
+    }
+
+    bump() -> int {
+        this.value = this.value + 1
+        return this.value
+    }
+}
+
+fn read_counter(c: Counter) -> int {
+    return c.bump()
+}
+
+let c = Counter(41)
+print(read_counter(c))

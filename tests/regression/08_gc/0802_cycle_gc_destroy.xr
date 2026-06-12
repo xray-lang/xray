@@ -1,0 +1,151 @@
+// Test: cycle collector destroy semantics and root-tracking invariants.
+//
+// Covers the trial-deletion rewrite:
+//   1. White (dead-cycle) objects run their full type destructors —
+//      container side buffers are freed, no UAF (verified under ASan).
+//   2. Live objects referenced FROM a dead cycle keep an exact refcount
+//      and stay fully usable after the cycle is reclaimed.
+//   3. _rsv root-index restoration: survivors of one collect round can be
+//      re-tracked and reclaimed in a later round; stale indices must not
+//      corrupt the roots array of subsequent rounds.
+//   4. Set-mediated cycles are traversed and reclaimed.
+
+import gc
+
+class Node {
+    name: string
+    next: Node | null = null
+    items: Array<int> = []
+    table: Map<string, Node> = #{}
+
+    constructor(name: string) {
+        this.name = name
+    }
+}
+
+class Holder {
+    node: Node | null = null
+}
+
+// ===== 1. Dead cycle with container payloads =====
+
+@test
+fn test_cycle_with_containers_reclaimed() {
+    let a = new Node("A")
+    let b = new Node("B")
+    a.next = b
+    b.next = a
+    // Give both nodes heap payloads so the destroy path must free
+    // map nodes / array data, not just the instance block.
+    for (i in 0..50) {
+        a.items.push(i)
+        b.items.push(i * 2)
+    }
+    a.table.set("peer", b)
+    b.table.set("peer", a)
+    gc.collect()
+    assert(true) // no crash / no leak (ASan)
+}
+
+// ===== 2. Live object referenced from a dead cycle =====
+
+@test
+fn test_live_child_survives_dead_cycle() {
+    let keeper = new Node("keeper")
+    keeper.items.push(42)
+
+    // Build a dead cycle that references keeper.
+    let a = new Node("A")
+    let b = new Node("B")
+    a.next = b
+    b.next = a
+    a.table.set("kept", keeper)
+
+    gc.collect()
+
+    // keeper must still be fully usable: the cycle's destructor dropped
+    // exactly one reference (the table edge), not two.
+    assert_eq(keeper.name, "keeper")
+    assert_eq(keeper.items[0], 42)
+    keeper.items.push(43)
+    assert_eq(keeper.items.length, 2)
+}
+
+// ===== 3. Survivors are re-trackable across collect rounds =====
+
+@test
+fn test_survivor_retracked_after_collect() {
+    let h = new Holder()
+
+    // Cycle {a, b} externally held via h.node — survives round 1.
+    let a = new Node("A")
+    let b = new Node("B")
+    a.next = b
+    b.next = a
+    h.node = a
+
+    gc.collect() // a/b are scanned, survive (external ref), leave roots
+
+    // Drop the external reference: a must be re-added to cycle roots
+    // (requires _rsv to have been restored to the sentinel after round 1).
+    h.node = null
+
+    gc.collect() // round 2 reclaims the now-dead cycle
+    assert(true)
+}
+
+@test
+fn test_stale_root_index_does_not_corrupt() {
+    // Round 1: collect with survivors.
+    let h1 = new Holder()
+    let s1 = new Node("S1")
+    let s2 = new Node("S2")
+    s1.next = s2
+    s2.next = s1
+    h1.node = s1
+    gc.collect()
+
+    // Round 2: track fresh candidates, then mutate the survivors so their
+    // (formerly stale) root indices are exercised against the new array.
+    let c1 = new Node("C1")
+    let c2 = new Node("C2")
+    c1.next = c2
+    c2.next = c1
+    s1.next = null   // drops s2's in-cycle ref → s2 RC churn
+    h1.node = null   // drops s1
+    gc.collect()
+    assert(true)
+}
+
+// ===== 4. Set-mediated cycle =====
+
+class SetNode {
+    peers: Set<SetNode> = #[]
+}
+
+@test
+fn test_set_mediated_cycle_reclaimed() {
+    let x = new SetNode()
+    let y = new SetNode()
+    x.peers.add(y)
+    y.peers.add(x)
+    gc.collect()
+    assert(true)
+}
+
+// ===== 5. Repeated rounds stay stable =====
+
+@test
+fn test_many_collect_rounds() {
+    for (round in 0..10) {
+        let a = new Node("A")
+        let b = new Node("B")
+        let c = new Node("C")
+        a.next = b
+        b.next = c
+        c.next = a
+        a.items.push(round)
+        gc.collect()
+    }
+    assert(true)
+}

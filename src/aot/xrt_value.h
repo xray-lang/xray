@@ -27,6 +27,46 @@
 #include <stdarg.h>
 #include <math.h>
 
+#include "xrt_hash.h"
+
+/* =========================================================================
+ * Branch expectation and code-layout hints.
+ * Error / overflow / grow paths are annotated so the C compiler keeps the
+ * hot path straight-line and moves cold blocks out of the way.
+ * ========================================================================= */
+
+#if defined(__GNUC__) || defined(__clang__)
+#define XR_LIKELY(x) __builtin_expect(!!(x), 1)
+#define XR_UNLIKELY(x) __builtin_expect(!!(x), 0)
+#define XRT_COLD __attribute__((cold))
+/* Alignment promise for the optimizer. Only assert alignments that the
+ * allocation contract actually guarantees: array element buffers are
+ * XRT_DATA_ALIGN (32B) aligned via XRT_ALLOC_ALIGNED / xrt_array_data_grow
+ * (see xrt_arc.h / xrt_coll.h), and xrt_arc_alloc keeps object user data
+ * 16-byte aligned (see xrt_arc.h). */
+#define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
+/* Function purity attributes, emitted only when the AOT prepare pass proved
+ * the function effect-free (XaotFuncAttrPlan): CONST touches no memory,
+ * PURE reads memory but never writes / throws / suspends. */
+#define XRT_FN_CONST __attribute__((const))
+#define XRT_FN_PURE __attribute__((pure))
+/* Emitted only when the AOT prepare pass proved the pointer unique over its
+ * storage (XaotAliasPlan) — the Rust-noalias analogue for generated C. */
+#define XRT_RESTRICT __restrict__
+#else
+#define XR_LIKELY(x) (x)
+#define XR_UNLIKELY(x) (x)
+#define XRT_COLD
+#define XR_ASSUME_ALIGNED(p, n) (p)
+#define XRT_FN_CONST
+#define XRT_FN_PURE
+#if defined(_MSC_VER)
+#define XRT_RESTRICT __restrict
+#else
+#define XRT_RESTRICT
+#endif
+#endif
+
 /* =========================================================================
  * XrValue — 16 bytes, struct-of-unions, binary-compatible with VM XrValue.
  *
@@ -103,6 +143,73 @@ typedef struct XrValue {
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
 
 /* =========================================================================
+ * String object — every AOT string value points at an xrt_str_t header.
+ *
+ * XR_TAG_STR marks compiler-interned literals: the header is static const
+ * data with the content hash precomputed at C generation time.
+ * XR_TAG_STR_ARC marks runtime-allocated strings: header and bytes live in
+ * one bump/heap block, `data` points at the trailing bytes.
+ *
+ * `len` makes length O(1); `hash` caches the content hash for map keys and
+ * equality short-circuits (0 = not computed yet; real hashes are never 0).
+ * Bytes stay NUL-terminated so C interop (`xr_str_data`) remains free.
+ * ========================================================================= */
+
+#define XRT_STR_LITERAL 0x1u
+
+typedef struct {
+    int64_t len;   /* byte length, excluding NUL */
+    uint32_t hash; /* cached content hash, 0 = unset (literals: precomputed) */
+    uint32_t flags;
+    char *data; /* NUL-terminated bytes (trailing block for heap strings) */
+} xrt_str_t;
+
+static inline xrt_str_t *xr_str_hdr(XrValue v) {
+    return (xrt_str_t *) v.ptr;
+}
+
+static inline const char *xr_str_data(XrValue v) {
+    return ((const xrt_str_t *) v.ptr)->data;
+}
+
+/* Writable bytes of a freshly allocated (not yet shared) string. */
+static inline char *xr_str_buf(XrValue v) {
+    return ((xrt_str_t *) v.ptr)->data;
+}
+
+static inline int64_t xr_str_len(XrValue v) {
+    return ((const xrt_str_t *) v.ptr)->len;
+}
+
+/* Wrap a static literal header into a value. */
+static inline XrValue xr_str_lit(const xrt_str_t *hdr) {
+    XrValue r = {0};
+    r.tag = XR_TAG_STR;
+    r.ptr = (void *) hdr;
+    return r;
+}
+
+/* Define a static literal header for a C string literal.  hash stays 0
+ * (hand-written headers cannot precompute it); xrt_str_hash recomputes on
+ * demand without caching into const storage. */
+#define XRT_STR_LIT_DEF(name, s)                                                                   \
+    static const xrt_str_t name = {(int64_t) sizeof(s) - 1, 0, XRT_STR_LITERAL, (char *) (s)}
+
+/* Content hash of a string value, cached in the header when writable.
+ * The relaxed atomic store keeps concurrent lazy hashing well-defined:
+ * every writer stores the same value. */
+static inline uint32_t xrt_str_hash(XrValue v) {
+    xrt_str_t *h = (xrt_str_t *) v.ptr;
+    uint32_t cached = h->hash;
+    if (cached)
+        return cached;
+    uint32_t computed = xrt_str_hash_bytes(h->data, (size_t) h->len);
+    if (!(h->flags & XRT_STR_LITERAL))
+        __atomic_store_n(&h->hash, computed, __ATOMIC_RELAXED);
+    return computed;
+}
+
+/* =========================================================================
  * Internal helpers — construct XrValue with explicit tag
  * ========================================================================= */
 
@@ -143,18 +250,43 @@ static inline XrValue xr_mkf64(double v, uint8_t tag) {
 #define XR_TRUE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 1})
 #define XR_FALSE_VAL ((XrValue) {.tag = XR_TAG_BOOL, .i = 0})
 
-static inline XrValue xr_box_str(const char *s) {
-    XrValue r = {0};
-    r.tag = XR_TAG_STR;
-    r.ptr = (void *) s;
-    return r;
-}
-
 #define XR_TO_INT(v) ((v).i)
 #define XR_TO_FLOAT(v) ((v).f)
 
 static inline const char *xr_unbox_str(XrValue v) {
-    return (const char *) v.ptr;
+    return xr_str_data(v);
+}
+
+/* =========================================================================
+ * Value equality — single authoritative implementation for the AOT runtime.
+ * Mirrors the VM's xr_value_eq semantics: strings compare by content
+ * (XR_TAG_STR and XR_TAG_STR_ARC are interchangeable), numbers by value,
+ * other heap objects by identity. Used by ==, map/set key lookup, and
+ * array indexOf/includes — these must never diverge.
+ * ========================================================================= */
+
+static inline int64_t xrt_eq(XrValue a, XrValue b) {
+    /* Normalize STR_ARC to STR so literal and allocated strings compare. */
+    uint32_t ta = (a.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : a.tag;
+    uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
+    if (ta != tb)
+        return 0;
+    if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL)
+        return a.i == b.i;
+    if (ta == XR_TAG_F64)
+        return a.f == b.f;
+    if (ta == XR_TAG_STR) {
+        const xrt_str_t *sa = (const xrt_str_t *) a.ptr;
+        const xrt_str_t *sb = (const xrt_str_t *) b.ptr;
+        if (sa == sb)
+            return 1;
+        if (sa->len != sb->len)
+            return 0;
+        if (sa->hash && sb->hash && sa->hash != sb->hash)
+            return 0;
+        return memcmp(sa->data, sb->data, (size_t) sa->len) == 0;
+    }
+    return a.ptr == b.ptr;
 }
 
 /* =========================================================================
@@ -211,7 +343,7 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
     switch (v.tag) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            return (const char *) v.ptr;
+            return xr_str_data(v);
         case XR_TAG_I64:
             snprintf(buf, bufsz, "%lld", (long long) v.i);
             return buf;

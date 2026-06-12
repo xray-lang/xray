@@ -10,6 +10,9 @@
 
 #include "../../../src/ir/xi.h"
 #include "../../../src/aot/xi_cgen.h"
+#include "../../../src/aot/xaot_bundle.h"
+#include "../../../src/aot/xaot_prepare.h"
+#include "../../../src/aot/xaot_verify.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
 #include "../../../src/ir/xi_pipeline.h"
@@ -31,6 +34,11 @@
 static XrayIsolate *g_iso = NULL;
 static int tests_passed = 0;
 static int tests_failed = 0;
+
+typedef struct TestAotPlan {
+    XaotBundle bundle;
+    bool initialized;
+} TestAotPlan;
 
 #define TEST(name)                                                                                 \
     static void test_##name(void);                                                                 \
@@ -56,6 +64,26 @@ static void teardown(void) {
         xray_isolate_delete(g_iso);
         g_iso = NULL;
     }
+}
+
+static void test_aot_plan_prepare(TestAotPlan *plan, XiModule **modules, uint32_t nmodules,
+                                  uint32_t entry_module) {
+    char verify_err[256];
+
+    assert(plan != NULL);
+    memset(plan, 0, sizeof(*plan));
+    assert(xaot_bundle_init(&plan->bundle, modules, nmodules, entry_module) &&
+           "AOT bundle init failed");
+    plan->initialized = true;
+    assert(xaot_prepare_bundle(&plan->bundle, NULL) && "AOT prepare failed");
+    assert(
+        xaot_verify_bundle(&plan->bundle, XAOT_VERIFY_AOT_READY, verify_err, sizeof(verify_err)) &&
+        "AOT verify failed");
+}
+
+static void test_aot_plan_free(TestAotPlan *plan) {
+    if (plan && plan->initialized)
+        xaot_bundle_free(&plan->bundle);
 }
 
 /* Compile source to Xi IR (without emitting bytecode).
@@ -121,9 +149,13 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
         if (!mod->name)
             mod->name = module_name;
     }
+    XiModule *modules[] = {mod};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
 
     char *buf = NULL;
     size_t bufsz = 0;
@@ -139,6 +171,55 @@ static char *generate_c_with_status_and_stats(XiFunc *ir, const char *module_nam
         *coro_stats = xi_cgen_coro_frame_stats(ctx);
 
     xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
+    if (own_mod) {
+        mod->init = NULL; /* don't double-free ir */
+        xi_module_free(mod);
+    }
+
+    return buf;
+}
+
+static char *generate_c_with_status_and_cgen_stats(XiFunc *ir, const char *module_name,
+                                                   bool *had_error, XiCgenStats *cgen_stats) {
+    assert(ir != NULL);
+
+    XiRepPolicy policy = xi_rep_policy_native_boundary();
+    xi_opt_select_rep_with_policy(ir, &policy);
+
+    XiModule *mod = ir->module;
+    bool own_mod = false;
+    if (!mod) {
+        mod = xi_module_new("test.xr", module_name, ir);
+        assert(mod != NULL);
+        own_mod = true;
+    } else {
+        if (!mod->name)
+            mod->name = module_name;
+    }
+    XiModule *modules[] = {mod};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 1, 0);
+
+    XiCgenCtx *ctx = xi_cgen_ctx_new();
+    assert(ctx != NULL);
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
+
+    char *buf = NULL;
+    size_t bufsz = 0;
+    FILE *mem = xr_open_memstream(&buf, &bufsz);
+    assert(mem != NULL);
+
+    xi_cgen_program(ctx, mem, mod);
+    int rc = xr_close_memstream(mem, &buf, &bufsz);
+    assert(rc == 0);
+    if (had_error)
+        *had_error = xi_cgen_has_error(ctx);
+    if (cgen_stats)
+        *cgen_stats = xi_cgen_stats(ctx);
+
+    xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
     if (own_mod) {
         mod->init = NULL; /* don't double-free ir */
         xi_module_free(mod);
@@ -337,7 +418,9 @@ TEST(cgen_string_literal) {
     assert(code != NULL);
 
     assert(contains(code, "hello world") && "should contain string literal");
-    assert(contains(code, "xr_box_str") && "string should be boxed");
+    assert(contains(code, "static const xrt_str_t _xstr_") &&
+           "literal should have a static header with precomputed hash");
+    assert(contains(code, "xr_str_lit(&_xstr_") && "use site should reference the static header");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -365,6 +448,27 @@ TEST(cgen_function_call) {
     assert(contains(code, "return") && "add should have return");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_stats_tracks_native_abi) {
+    const char *src = "fn inc(x: int) -> int { return x + 1 }\n"
+                      "print(inc(41))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    XiCgenStats stats = {0};
+    char *code = generate_c_with_status_and_cgen_stats(ir, "test", &had_error, &stats);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "stats smoke program should generate");
+    assert(stats.functions_total >= 2 && "module init plus static function should be counted");
+    assert(stats.functions_native_abi >= 1 && "inc should use native scalar ABI");
+    assert(stats.functions_tagged_abi >= 1 && "module init remains a tagged boundary");
+    assert(stats.boxed_adapters >= 1 && "native function should expose a boxed adapter");
+
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1009,8 +1113,8 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
            "Set<int>.length/size should not box the native length field");
     assert(count_between(fn, fn_end, "xrt_add(") == 0 &&
            "Set<int>.length + size should use native integer arithmetic");
-    assert(count_between(fn, fn_end, " + ") > 0 &&
-           "Set<int>.length + size should emit a C integer add");
+    assert(count_between(fn, fn_end, "xrt_i64_add(") > 0 &&
+           "Set<int>.length + size should emit a native int64 add");
 
     printf("  Generated class Set<int> scalar length/size fast path %zu bytes of C code\n",
            strlen(code));
@@ -1174,8 +1278,13 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
            "Map<int,int>.set should use the typed integer direct helper");
     assert(count_between(scan, scan_end, "xrt_map_has_i64_typed(") == 1 &&
            "Map<int,int>.has should use the typed integer direct helper");
-    assert(count_between(scan, scan_end, "xrt_map_get_i64_i64_typed(") == 1 &&
-           "Map<int,int>.get should use the typed integer direct helper");
+    assert(count_between(scan, scan_end, "xrt_map_find_i64_typed(") == 1 &&
+           count_between(scan, scan_end, "xrt_map_get_i64_value_typed(") == 1 &&
+           "Map<int,int>.get guarded by has should use typed find plus typed value load");
+    assert(count_between(scan, scan_end, "\n    XrValue v") == 0 &&
+           count_between(scan, scan_end, "XR_FROM_INT(") == 0 &&
+           count_between(scan, scan_end, "xrt_add(") == 0 &&
+           "Map<int,int>.get guarded by has should avoid tagged result and arithmetic");
     assert(count_between(prune, prune_end, "xrt_map_delete_i64_typed(") == 1 &&
            "Map<int,int>.delete should use the typed integer direct helper");
     assert(count_between(fill, fill_end, "xrt_map_set(") == 0 &&
@@ -1215,13 +1324,14 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_F32)"));
     assert(count_between(code, code_end, "xrt_map_set_bool_f32_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_has_bool_f32_typed(") == 2 &&
-           count_between(code, code_end, "xrt_map_get_bool_f32_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_delete_bool_f32_typed(") == 1);
     assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_BOOL, XR_ELEM_I64)"));
     assert(count_between(code, code_end, "xrt_map_set_bool_i64_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_has_bool_i64_typed(") == 2 &&
-           count_between(code, code_end, "xrt_map_get_bool_i64_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_delete_bool_i64_typed(") == 1);
+    assert(count_between(code, code_end, "xrt_map_find_i64_typed(") == 4 &&
+           count_between(code, code_end, "xrt_map_get_f64_value_typed(") == 2 &&
+           count_between(code, code_end, "xrt_map_get_i64_value_typed(") == 2);
     assert(!contains(code, "xrt_map_set_i64_i64_typed(") &&
            !contains(code, "xrt_map_get_i64_i64_typed(") &&
            !contains(code, "xrt_map_set_i64_f64_typed(") &&
@@ -1229,6 +1339,67 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
            !contains(code, "xrt_map_get_i64_f64_typed(") &&
            !contains(code, "xrt_map_delete_i64_typed(") &&
            "bool-key Map class hot methods should not use generic i64 helpers");
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
+    const char *src =
+        "class Bag { values: Map<int, bool>\n"
+        "constructor() { this.values = #{} } "
+        "fill(n: int) -> int { let i = 0; while (i < n) { this.values.set(i, i % 3 == 0); "
+        "i = i + 1 }; return this.values.size } "
+        "count(n: int) -> int { let i = 0; let total = 0; while (i < n) { "
+        "if (this.values.has(i)) { if (this.values.get(i)) { total = total + 1 } }; "
+        "i = i + 1 }; return total }\n"
+        "} let bag = Bag(); print(bag.fill(8)); print(bag.count(8))\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    char *code = generate_c(ir, "test");
+    assert(code != NULL && "C code generation failed");
+    const char *code_end = code + strlen(code);
+    const char *count = strstr(code, "static int64_t test_count_");
+    assert(count != NULL && "count method should use typed ABI");
+    count = strstr(count + 1, "static int64_t test_count_");
+    assert(count != NULL && "count method definition should follow its declaration");
+    const char *count_end = strstr(count, "static XrValue test_count_");
+    assert(count_end != NULL && "boxed count adapter should follow typed method");
+    assert(count_between(code, code_end, "xrt_map_find_i64_typed(") >= 1 &&
+           count_between(code, code_end, "xrt_map_get_i64_value_typed(") >= 1 &&
+           "Map<int,bool>.get guarded by has should keep typed storage");
+    assert(count_between(count, count_end, "\n    XrValue v") == 0 &&
+           count_between(count, count_end, "XR_FROM_BOOL(") == 0 &&
+           count_between(count, count_end, "xr_truthy(") == 0 &&
+           "Map<int,bool>.get guarded by has should use a native bool condition");
+
+    printf("  Generated guarded bool map condition %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_class_map_bool_value_unguarded_condition_uses_truthy) {
+    const char *src = "class Bag { values: Map<int, bool>\n"
+                      "constructor() { this.values = #{}; this.values.set(1, true) } "
+                      "count() -> int { if (this.values.get(1)) { return 1 }; return 0 }\n"
+                      "} let bag = Bag(); print(bag.count())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    char *code = generate_c(ir, "test");
+    assert(code != NULL && "C code generation failed");
+    const char *count = strstr(code, "static int64_t test_count_");
+    assert(count != NULL && "count method should use typed ABI");
+    count = strstr(count + 1, "static int64_t test_count_");
+    assert(count != NULL && "count method definition should follow its declaration");
+    const char *count_end = strstr(count, "static XrValue test_count_");
+    assert(count_end != NULL && "boxed count adapter should follow typed method");
+    assert(count_between(count, count_end, "XrValue ") >= 1 &&
+           count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
+           count_between(count, count_end, "xr_truthy(") >= 1 &&
+           "unguarded Map<int,bool>.get must keep nullable tagged truthiness");
+
+    printf("  Generated unguarded bool map condition %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1282,9 +1453,9 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
     assert(contains(code, "&((p0)->base)") &&
            "super constructor should receive a pointer to the embedded base layout");
 
-    const char *area = strstr(code, "static int64_t test_area_");
+    const char *area = strstr(code, "int64_t test_area_");
     assert(area != NULL && "area method should use typed ABI");
-    area = strstr(area + 1, "static int64_t test_area_");
+    area = strstr(area + 1, "int64_t test_area_");
     assert(area != NULL && "area method definition should follow its declaration");
     const char *area_end = strstr(area, "static XrValue test_area_");
     assert(area_end != NULL && "boxed area adapter should follow typed method");
@@ -1297,7 +1468,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
            count_between(area, area_end, "xrt_map_set") == 0 &&
            "derived method body should not cross the map boundary");
 
-    const char *kind = strstr(area_end, "static int64_t test_kind_plus_");
+    const char *kind = strstr(area_end, "int64_t test_kind_plus_");
     assert(kind != NULL && "derived kind_plus method should follow area adapter");
     const char *kind_end = strstr(kind, "static XrValue test_kind_plus_");
     assert(kind_end != NULL && "boxed kind_plus adapter should follow typed method");
@@ -1311,7 +1482,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
            count_between(kind, kind_end, "xrt_map_set") == 0 &&
            "inherited field hot path should not cross the map boundary");
 
-    const char *score = strstr(kind_end, "static int64_t test_score_with_area_");
+    const char *score = strstr(kind_end, "int64_t test_score_with_area_");
     assert(score != NULL && "score_with_area method should follow kind_plus adapter");
     const char *score_end = strstr(score, "static XrValue test_score_with_area_");
     assert(score_end != NULL && "boxed score_with_area adapter should follow typed method");
@@ -2121,9 +2292,12 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
     XiModule *entry_mod = xi_module_new("main.xr", "main", entry);
     assert(dep_mod != NULL && entry_mod != NULL);
     XiModule *modules[] = {dep_mod, entry_mod};
+    TestAotPlan plan;
+    test_aot_plan_prepare(&plan, modules, 2, 1);
 
     XiCgenCtx *ctx = xi_cgen_ctx_new();
     assert(ctx != NULL);
+    xi_cgen_ctx_set_aot_bundle(ctx, &plan.bundle);
 
     char *buf = NULL;
     size_t bufsz = 0;
@@ -2142,6 +2316,7 @@ TEST(cgen_suspendable_dependency_init_fails_fast) {
     printf("  Generated rejected multi-module main %zu bytes of C code\n", strlen(buf));
     free(buf);
     xi_cgen_ctx_free(ctx);
+    test_aot_plan_free(&plan);
     xi_module_free(dep_mod);
     xi_module_free(entry_mod);
     xi_func_free(dep);
@@ -2557,7 +2732,7 @@ TEST(cgen_coro_await_clones_tagged_result) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_scalar_await_uses_typed_slot) {
+TEST(cgen_coro_scalar_await_uses_tagged_slot) {
     const char *src = "fn worker() -> int {\n"
                       "    yield\n"
                       "    return 41\n"
@@ -2584,7 +2759,7 @@ TEST(cgen_coro_scalar_await_uses_typed_slot) {
     const char *frame_end = strstr(frame, "} test_main_plus_");
     assert(frame_end != NULL && "main_plus coroutine frame should close");
     assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
-           "scalar await should reserve an unboxed frame slot");
+           "await Task<int> should reserve a native scalar frame slot");
 
     const char *resume = strstr(code, "static XrAotResult test_main_plus_");
     const char *trace = resume ? strstr(resume, "static void test_main_plus_") : NULL;
@@ -2593,10 +2768,10 @@ TEST(cgen_coro_scalar_await_uses_typed_slot) {
            "initial scalar await should use the slot bridge");
     assert(count_between(resume, trace, "xr_aot_await_task_resume(ctx,") == 1 &&
            "resumed scalar await should use the slot bridge");
-    assert(count_between(resume, trace, "xr_slot_aot_frame_offset") == 2 &&
-           "scalar await should pass a typed frame slot on start and resume");
-    assert(count_between(resume, trace, "XR_TO_INT(v") == 0 &&
-           "typed await should not unbox a tagged await value after resume");
+    assert(count_between(resume, trace, "xr_slot_aot_frame_offset") >= 2 &&
+           "scalar await should pass native AOT frame slots on start and resume");
+    assert(count_between(resume, trace, "xr_slot_xvalue_ptr(&") == 0 &&
+           "scalar await should not pass tagged result slots");
 
     printf("  Generated scalar await slot %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -2605,13 +2780,15 @@ TEST(cgen_coro_scalar_await_uses_typed_slot) {
 
 TEST(cgen_coro_await_timeout_passes_deadline) {
     const char *src = "fn worker(ch: Channel<int>) -> int {\n"
-                      "    let value = ch.recv()\n"
-                      "    return value\n"
+                      "    match (ch.recv()) {\n"
+                      "        Recv.Value(value) -> { return value }\n"
+                      "        _ -> { return -1 }\n"
+                      "    }\n"
                       "}\n"
                       "let ch = new Channel<int>(0)\n"
                       "let task = go worker(ch)\n"
-                      "let result = await(timeout: 25) task\n"
-                      "print(result == null)\n";
+                      "let result = task.awaitTimeout(25)\n"
+                      "print(result)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -2619,9 +2796,9 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT await timeout should generate");
-    const char *await_call = strstr(code, "xr_aot_await_task(ctx,");
-    assert(await_call != NULL && "timeout await must use the AOT await bridge");
+    assert(!had_error && "AOT task awaitTimeout should generate");
+    const char *await_call = strstr(code, "xr_aot_task_await_result(ctx,");
+    assert(await_call != NULL && "task awaitTimeout must use the AOT TaskResult bridge");
     const char *await_line_end = strchr(await_call, '\n');
     bool await_line_terminated = await_line_end != NULL;
     bool await_uses_infinite_wait =
@@ -2638,18 +2815,12 @@ TEST(cgen_coro_await_timeout_passes_deadline) {
 }
 
 TEST(cgen_tagged_null_equality_keeps_null_literal) {
-    const char *src = "import time\n"
-                      "\n"
-                      "fn sleeper() -> int {\n"
-                      "    time.sleep(1000)\n"
-                      "    return 7\n"
+    const char *src = "fn maybe() -> int? {\n"
+                      "    return null\n"
                       "}\n"
                       "\n"
-                      "let tasks: Array<Task> = []\n"
-                      "let task = go sleeper()\n"
-                      "tasks.push(task)\n"
-                      "task.cancel()\n"
-                      "let picked = tasks[0]\n"
+                      "let task = go maybe()\n"
+                      "let picked = task\n"
                       "let result = await picked\n"
                       "print(result == null)\n";
 
@@ -2690,8 +2861,8 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
            "initial channel recv must register a backend-neutral slot");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
            "channel recv must publish the AOT resume state before runtime blocking");
-    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), false);") &&
-           "channel recv resume must recover the slot from coroutine wait state");
+    assert(contains(code, "xr_aot_chan_recv_slot_resume(ctx, xr_slot_none(), true);") &&
+           "channel recv resume must recover the slot from coroutine wait state and store Recv");
     assert(!contains(code, "xr_aot_chan_recv_slot_resume(ctx, _chan_recv_slot_") &&
            "channel recv resume must not depend on a local slot variable");
 
@@ -2700,10 +2871,13 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
+TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
     const char *src = "fn recv_plus(ch: Channel<int>) -> int {\n"
                       "    let v = ch.recv()\n"
-                      "    return v + 1\n"
+                      "    return match (v) {\n"
+                      "        Recv.Value(n) -> n + 1\n"
+                      "        _ -> -1\n"
+                      "    }\n"
                       "}\n"
                       "let ch = new Channel<int>(1)\n"
                       "ch.send(9)\n"
@@ -2723,16 +2897,14 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
     assert(frame != NULL && "recv_plus coroutine frame should be emitted");
     const char *frame_end = strstr(frame, "} test_recv_plus_");
     assert(frame_end != NULL && "recv_plus coroutine frame should close");
-    assert(count_between(frame, frame_end, "int64_t v") >= 1 &&
-           "scalar recv should reserve an unboxed frame slot");
-    assert(count_between(frame, frame_end, "XrValue v") == 0 &&
-           "scalar-only recv should not reserve a tagged recv slot");
+    assert(count_between(frame, frame_end, "XrValue v") >= 1 &&
+           "channel recv should reserve a tagged frame slot for Recv<T>");
 
     const char *slot_ref = strstr(code, "xr_slot_aot_frame_offset");
     assert(slot_ref != NULL && "channel recv must create a backend-neutral slot ref");
-    assert(strstr(slot_ref, "), 0);\n    f->state = ") != NULL &&
+    assert(strstr(slot_ref, "), 3);\n    f->state = ") != NULL &&
            strstr(slot_ref, "XrAotResult _chan_recv_") != NULL &&
-           "channel recv slot should use XR_REP_I64 before publishing resume state");
+           "channel recv slot should use XR_REP_TAGGED before publishing resume state");
 
     const char *recv_call = strstr(code, "xr_aot_chan_recv_slot(ctx,");
     assert(recv_call != NULL && "channel recv must use the AOT recv slot bridge");
@@ -2742,56 +2914,70 @@ TEST(cgen_coro_scalar_channel_recv_uses_typed_slot) {
     const char *resume = strstr(code, "static XrAotResult test_recv_plus_");
     const char *trace = resume ? strstr(resume, "static void test_recv_plus_") : NULL;
     assert(resume != NULL && trace != NULL && "recv_plus resume function should be emitted");
-    assert(count_between(resume, trace, "XR_TO_INT(v") == 0 &&
-           "typed recv should not unbox a tagged receive value after resume");
-
     printf("  Generated scalar channel recv slot %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_scalar_channel_try_recv_uses_native_slot) {
-    XrType int_type = {.kind = XR_KIND_INT, .id = 120, .frozen = true};
-    XrType channel_type = {.kind = XR_KIND_CHANNEL, .id = 121, .frozen = true};
-    channel_type.container.element_type = &int_type;
+TEST(cgen_coro_channel_recv_null_check_keeps_tagged_slot) {
+    const char *src = "fn read_or_stop(ch: Channel<int>) {\n"
+                      "    let v = ch.recv()\n"
+                      "    match (v) {\n"
+                      "        Recv.Value(n) -> { print(n) }\n"
+                      "        Recv.Closed -> { print(\"closed\") }\n"
+                      "        _ -> { print(\"other\") }\n"
+                      "    }\n"
+                      "}\n"
+                      "let ch = new Channel<int>(1)\n"
+                      "ch.send(0)\n"
+                      "let task = go read_or_stop(ch)\n"
+                      "await task\n";
 
-    XiFunc *ir = xi_func_new("main", &int_type);
-    assert(ir != NULL);
-
-    XiBlock *entry = xi_block_new(ir);
-    assert(entry != NULL);
-
-    XiValue *cap = xi_const_int(ir, entry, 1, &int_type);
-    assert(cap != NULL);
-
-    XiValue *ch = xi_value_new(ir, entry, XI_CHAN_NEW, &channel_type, 1);
-    assert(ch != NULL);
-    ch->args[0] = cap;
-    ch->flags |= XI_FLAG_SIDE_EFFECT;
-
-    XiValue *recv = xi_value_new(ir, entry, XI_CHAN_TRY_RECV, &int_type, 1);
-    assert(recv != NULL);
-    recv->args[0] = ch;
-    recv->flags |= XI_FLAG_SIDE_EFFECT;
-
-    XiValue *unbox = xi_value_new(ir, entry, XI_UNBOX, &int_type, 1);
-    assert(unbox != NULL);
-    unbox->args[0] = recv;
-    xi_block_set_return(entry, unbox);
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
 
     bool had_error = false;
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
-    assert(!had_error && "AOT scalar channel tryRecv should generate");
-    assert(contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
-           "tryRecv must use the typed slot bridge");
-    assert(contains(code, "xr_slot_native_ptr(&v") &&
-           "tryRecv should write directly into an AOT native local slot");
-    assert(contains(code, ", 0));") && "int tryRecv slot should carry XR_REP_I64");
-    assert(!contains(code, "xr_aot_chan_try_recv_value(ctx,") &&
-           "scalar tryRecv must not allocate a temporary XrValue bridge result");
+    assert(!had_error && "AOT Recv channel recv should generate");
 
-    printf("  Generated scalar channel tryRecv slot %zu bytes of C code\n", strlen(code));
+    const char *frame = strstr(code, "typedef struct test_read_or_stop_");
+    assert(frame != NULL && "read_or_stop coroutine frame should be emitted");
+    const char *frame_end = strstr(frame, "} test_read_or_stop_");
+    assert(frame_end != NULL && "read_or_stop coroutine frame should close");
+    assert(count_between(frame, frame_end, "XrValue v") >= 1 &&
+           "Recv result should keep a tagged frame slot");
+
+    const char *slot_ref = strstr(code, "xr_slot_aot_frame_offset");
+    assert(slot_ref != NULL && "channel recv must create a backend-neutral slot ref");
+    assert(strstr(slot_ref, "), 3);\n    f->state = ") != NULL &&
+           strstr(slot_ref, "XrAotResult _chan_recv_") != NULL &&
+           "channel recv result slot should use XR_REP_TAGGED");
+
+    printf("  Generated Recv channel recv slot %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_scalar_channel_try_recv_returns_recv_enum) {
+    const char *src = "let ch = new Channel<int>(1)\n"
+                      "let recv = ch.tryRecv()\n"
+                      "print(recv)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT channel tryRecv should generate");
+    assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
+           "tryRecv must use the Recv<T> enum bridge");
+    assert(!contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
+           "tryRecv must not use the old typed slot bridge");
+    assert(!contains(code, "_chan_try_ok_") && "tryRecv must not expose an ok bit");
+
+    printf("  Generated channel tryRecv Recv enum %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2810,12 +2996,12 @@ TEST(cgen_coro_select_try_recv_uses_ready_bit) {
     char *code = generate_c_with_status(ir, "test", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "AOT select tryRecv should generate");
-    assert(contains(code, "xr_aot_chan_try_recv_slot(ctx,") &&
-           "select recv probe must use the AOT tryRecv slot bridge");
-    assert(contains(code, " = !_chan_try_ok_") &&
-           "select readiness must use the tryRecv ok bit instead of a null-value probe");
+    assert(contains(code, "xr_aot_chan_try_recv(ctx,") &&
+           "select recv probe must use the AOT Recv enum bridge");
+    assert(contains(code, " = xr_aot_recv_is_value(") &&
+           "select readiness must use the positive Recv.Value status projection");
 
-    printf("  Generated select tryRecv ready bit %zu bytes of C code\n", strlen(code));
+    printf("  Generated select tryRecv Recv.Value readiness %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2866,9 +3052,9 @@ TEST(cgen_coro_select_publishes_state_before_block) {
 TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
     const char *src = "let ch = new Channel<int>(0)\n"
                       "let sent = ch.sendTimeout(7, 10)\n"
-                      "let (value, ok) = ch.recvTimeout(10)\n"
+                      "let recv = ch.recvTimeout(10)\n"
                       "print(sent)\n"
-                      "print(ok)\n";
+                      "print(recv)\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3010,39 +3196,70 @@ TEST(cgen_coro_scope_exit_publishes_state_before_block) {
     xi_func_free(ir);
 }
 
+TEST(cgen_channel_fields_use_aot_helpers) {
+    const char *src = "let ch = new Channel<int>(2)\n"
+                      "print(ch.length)\n"
+                      "print(ch.capacity)\n"
+                      "print(ch.isClosed)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT Channel field reads should generate");
+    assert(contains(code, "xr_aot_chan_length(") &&
+           "Channel.length must read through the AOT channel helper");
+    assert(contains(code, "xr_aot_chan_capacity(") &&
+           "Channel.capacity must read through the AOT channel helper");
+    assert(contains(code, "xr_aot_chan_is_closed(") &&
+           "Channel.isClosed must read through the AOT channel helper");
+    assert(!contains(code, "xrt_map_get((xrt_map_t*)") &&
+           "AOT Channel fields must not fall back to map property dispatch");
+
+    printf("  Generated AOT channel field helpers %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_task_status_uses_task_bridge) {
     const char *src = "fn wait_for_value(ch: Channel<int>) -> int {\n"
-                      "    let value = ch.recv()\n"
-                      "    return value\n"
+                      "    match (ch.recv()) {\n"
+                      "        Recv.Value(value) -> { return value }\n"
+                      "        _ -> { return -1 }\n"
+                      "    }\n"
                       "}\n"
                       "fn quick_value(n: int) -> int {\n"
                       "    yield\n"
                       "    return n * 2\n"
                       "}\n"
-                      "fn task_done(task: Task) -> bool {\n"
+                      "fn task_done(task: Task<int>) -> bool {\n"
                       "    return task.done\n"
                       "}\n"
-                      "fn task_cancelled(task: Task) -> bool {\n"
-                      "    return task.cancelled\n"
+                      "fn task_status(task: Task<int>) -> TaskStatus {\n"
+                      "    return task.status\n"
                       "}\n"
-                      "fn task_result(task: Task) -> Json {\n"
-                      "    return task.result\n"
+                      "fn task_poll(task: Task<int>) -> TaskResult<int> {\n"
+                      "    return task.poll()\n"
                       "}\n"
                       "const ch = new Channel<int>(0)\n"
                       "let blocked = go wait_for_value(ch)\n"
                       "blocked.cancel()\n"
-                      "let cancelled_value = await blocked\n"
+                      "let cancelled_result = blocked.awaitResult()\n"
                       "print(blocked.done)\n"
-                      "print(blocked.cancelled)\n"
-                      "print(cancelled_value == null)\n"
+                      "print(blocked.status)\n"
+                      "print(cancelled_result)\n"
                       "let quick = go quick_value(21)\n"
                       "let quick_result = await quick\n"
                       "print(quick.done)\n"
-                      "print(quick.result)\n"
+                      "print(quick.status)\n"
+                      "print(quick.poll())\n"
+                      "print(quick.awaitResult())\n"
                       "print(quick_result)\n"
                       "print(task_done(quick))\n"
-                      "print(task_cancelled(quick))\n"
-                      "print(task_result(quick))\n";
+                      "print(task_status(quick))\n"
+                      "print(task_poll(quick))\n";
 
     XiFunc *ir = compile_to_ir(src);
     assert(ir != NULL && "IR compilation failed");
@@ -3053,15 +3270,16 @@ TEST(cgen_coro_task_status_uses_task_bridge) {
     assert(!had_error && "AOT Task status access should generate");
     assert(contains(code, "xr_aot_task_cancel(ctx,") && "Task.cancel must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_done(ctx,") && "Task.done must use the AOT Task bridge");
-    assert(contains(code, "xr_aot_task_cancelled(ctx,") &&
-           "Task.cancelled must use the AOT Task bridge");
-    assert(contains(code, "xr_aot_task_result(ctx,") && "Task.result must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_status(ctx,") && "Task.status must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_poll(ctx,") && "Task.poll must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_await_result(ctx,") &&
+           "Task.awaitResult must use the AOT TaskResult bridge");
     assert(contains(code, "xr_aot_task_done(NULL,") &&
            "sync AOT Task.done must use the AOT Task bridge");
-    assert(contains(code, "xr_aot_task_cancelled(NULL,") &&
-           "sync AOT Task.cancelled must use the AOT Task bridge");
-    assert(contains(code, "xr_aot_task_result(NULL,") &&
-           "sync AOT Task.result must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_status(NULL,") &&
+           "sync AOT Task.status must use the AOT Task bridge");
+    assert(contains(code, "xr_aot_task_poll(NULL,") &&
+           "sync AOT Task.poll must use the AOT Task bridge");
     assert(!contains(code, "xrt_method_0(v") &&
            "Task.cancel must not fall back to AOT dynamic method dispatch");
     assert(!contains(code, "xrt_getprop(v") &&
@@ -3086,6 +3304,7 @@ int main(void) {
     run_cgen_while_loop();
     run_cgen_string_literal();
     run_cgen_function_call();
+    run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
     run_cgen_recursive();
     run_cgen_for_loop();
@@ -3105,6 +3324,8 @@ int main(void) {
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
     run_cgen_class_bool_key_map_uses_specialized_direct_helpers();
+    run_cgen_class_map_bool_value_guarded_condition_uses_native();
+    run_cgen_class_map_bool_value_unguarded_condition_uses_truthy();
     run_cgen_inherited_class_uses_native_base_layout();
     run_cgen_typed_array_slice_preserves_raw_storage_fast_path();
     run_cgen_typeof_as_and_slice_use_direct_drivers();
@@ -3140,12 +3361,13 @@ int main(void) {
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
     run_cgen_coro_await_clones_tagged_result();
-    run_cgen_coro_scalar_await_uses_typed_slot();
+    run_cgen_coro_scalar_await_uses_tagged_slot();
     run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_tagged_null_equality_keeps_null_literal();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
-    run_cgen_coro_scalar_channel_recv_uses_typed_slot();
-    run_cgen_coro_scalar_channel_try_recv_uses_native_slot();
+    run_cgen_coro_scalar_channel_recv_uses_tagged_slot();
+    run_cgen_coro_channel_recv_null_check_keeps_tagged_slot();
+    run_cgen_coro_scalar_channel_try_recv_returns_recv_enum();
     run_cgen_coro_select_try_recv_uses_ready_bit();
     run_cgen_coro_sleep_publishes_state_before_block();
     run_cgen_coro_select_publishes_state_before_block();
@@ -3154,6 +3376,7 @@ int main(void) {
     run_cgen_coro_await_all_uses_aggregate_bridge();
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
+    run_cgen_channel_fields_use_aot_helpers();
     run_cgen_coro_task_status_uses_task_bridge();
 
     teardown();

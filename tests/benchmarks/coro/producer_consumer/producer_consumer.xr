@@ -24,6 +24,13 @@ print("总数量:", ITEMS)
 shared const queue = Channel(100)
 shared const done_ch = Channel(CONSUMERS)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 生产者
 fn producer(id: int, count: int) {
     for (let i = 0; i < count; i++) {
@@ -31,12 +38,12 @@ fn producer(id: int, count: int) {
     }
 }
 
-// 消费者（recv returns null when channel closed and empty）
+// 消费者
 fn consumer(id: int) {
     let consumed = 0
     while (true) {
-        let item = queue.recv()
-        if (item == null) {
+        let item = recv_int(queue, -1)
+        if (item < 0) {
             break
         }
         // 模拟处理
@@ -71,7 +78,7 @@ queue.close()
 // 等待所有消费者完成并统计
 let total_consumed = 0
 for (let i = 0; i < CONSUMERS; i++) {
-    total_consumed = total_consumed + done_ch.recv()
+    total_consumed = total_consumed + recv_int(done_ch, 0)
 }
 let elapsed = time.monotonic() - start
 done_ch.close()

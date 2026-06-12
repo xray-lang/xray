@@ -114,10 +114,91 @@ vmcase(OP_CHAN_NEW_NAMED) {
 
 vmcase(OP_CHAN_SEND) {
     TRACE_EXECUTION();
+    /* Inline buffered fast path: trylock hit + free slot + no waiters.
+     * Flattens the three-call helper chain for the dominant buffered case.
+     * Falls through to the out-of-line helper (the semantic authority) for
+     * every other shape: rendezvous, full buffer, waiting receiver, select
+     * waiters, deep-copy values, resume replay, dist channels, sched-stats
+     * runs (which need the instrumented counters). */
+    do {
+        XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
+        if (!_cur || xr_coro_resume_load(_cur) != 0)
+            break;
+        XrValue _chv = base[GETARG_B(i)];
+        if (!xr_value_is_channel(_chv))
+            break;
+        XrChannel *_ch = xr_value_to_channel(_chv);
+        if (_ch->buf_size == 0 || _ch->dist ||
+            atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+            break;
+        XrRuntime *_rt = (XrRuntime *) isolate->vm.runtime;
+        if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
+            break;
+        XrValue _v = base[GETARG_C(i)];
+        if (XR_IS_PTR(_v) && xr_value_needs_copy(_v))
+            break;
+        if (!xr_amutex_trylock(&_ch->lock))
+            break;
+        if (XR_UNLIKELY(atomic_load_explicit(&_ch->closed, memory_order_relaxed) ||
+                        _ch->recvq.first != NULL || _ch->buf_count >= _ch->buf_size ||
+                        xr_channel_select_waiter_mask(_ch) != 0)) {
+            xr_amutex_unlock(&_ch->lock);
+            break;
+        }
+        _ch->buffer[_ch->send_idx] = _v;
+        _ch->send_idx = _ch->send_idx + 1 >= _ch->buf_size ? 0 : _ch->send_idx + 1;
+        _ch->buf_count++;
+        xr_amutex_unlock(&_ch->lock);
+        base[GETARG_A(i)] = xr_null();
+        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_VM_CHAN_READY_REDUCTION_COST) <= 0) && _rt) {
+            xr_coro_set_reds(_cur, XR_CORO_REDUCTIONS);
+            frame->pc = pc;
+            return XR_VM_YIELD;
+        }
+        vmbreak;
+    } while (0);
     VM_DISPATCH(vm_chan_send(isolate, vm_ctx, i, base, frame, pc));
 }
 
 vmcase(OP_CHAN_RECV) {
+    /* Inline buffered fast path: mirror of the OP_CHAN_SEND fast path.
+     * Buffered pop with no blocked senders; everything else falls through
+     * to the out-of-line helper. */
+    do {
+        XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
+        if (!_cur || xr_coro_resume_load(_cur) != 0)
+            break;
+        XrValue _chv = base[GETARG_B(i)];
+        if (!xr_value_is_channel(_chv))
+            break;
+        XrChannel *_ch = xr_value_to_channel(_chv);
+        if (_ch->buf_size == 0 || _ch->dist ||
+            atomic_load_explicit(&_ch->is_timer, memory_order_relaxed))
+            break;
+        XrRuntime *_rt = (XrRuntime *) isolate->vm.runtime;
+        if (XR_UNLIKELY(_rt && _rt->sched_stats_enabled))
+            break;
+        if (!xr_amutex_trylock(&_ch->lock))
+            break;
+        if (XR_UNLIKELY(_ch->sendq.first != NULL || _ch->buf_count == 0)) {
+            xr_amutex_unlock(&_ch->lock);
+            break;
+        }
+        XrValue _v = _ch->buffer[_ch->recv_idx];
+        _ch->buffer[_ch->recv_idx] = xr_null();
+        _ch->recv_idx = _ch->recv_idx + 1 >= _ch->buf_size ? 0 : _ch->recv_idx + 1;
+        _ch->buf_count--;
+        xr_amutex_unlock(&_ch->lock);
+        _v = xr_chan_copy_recv(isolate, _v, _cur);
+        base[GETARG_A(i)] = _v;
+        base[GETARG_A(i) + 1] = xr_bool(true);
+        if (XR_UNLIKELY(xr_coro_consume_reds(_cur, XR_VM_CHAN_READY_REDUCTION_COST) <= 0) && _rt) {
+            xr_coro_set_reds(_cur, XR_CORO_REDUCTIONS);
+            frame->pc = pc;
+            return XR_VM_YIELD;
+        }
+        vmbreak;
+    } while (0);
     VM_DISPATCH(vm_chan_recv(isolate, vm_ctx, i, base, frame, pc));
 }
 
@@ -139,7 +220,7 @@ vmcase(OP_CHAN_TRY_SEND) {
 }
 
 vmcase(OP_CHAN_TRY_RECV) {
-    /* R[A], R[A+1] = R[B].tryRecv() — non-blocking receive (multi-return).
+    /* R[A] = R[B].tryRecv() — non-blocking receive result.
      * Canonical logic in xr_chan_try_recv (xchannel_ops.h). */
     int a = GETARG_A(i);
     int b = GETARG_B(i);

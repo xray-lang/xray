@@ -1,0 +1,11 @@
+// 033_class_field_missing_constructor_init.xr
+// Expected: Compile error - non-default class field is not initialized
+// Error should mention: must have an initializer or be assigned
+
+class User {
+    name: string
+
+    constructor() {
+    }
+}
+

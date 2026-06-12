@@ -87,6 +87,7 @@
 #define TYPE_NAME_TASK "Task"
 #define TYPE_NAME_ATOMIC "Atomic"
 #define TYPE_NAME_WORKQUEUE "WorkQueue"
+#define TYPE_NAME_RESULTGROUP "ResultGroup"
 
 /* ========== DateTime Types ========== */
 
@@ -166,9 +167,10 @@ typedef enum {
     XR_TID_NETLISTENER,    // 34
     XR_TID_ATOMIC,         // 35
     XR_TID_WORKQUEUE,      // 36
+    XR_TID_RESULTGROUP,    // 37
     // Analyzer-only type IDs (not returned by typeof at runtime)
-    XR_TID_WEAKMAP,  // 37
-    XR_TID_WEAKSET,  // 38
+    XR_TID_WEAKMAP,  // 38
+    XR_TID_WEAKSET,  // 39
     XR_TID_COUNT
 } XrTypeId;
 

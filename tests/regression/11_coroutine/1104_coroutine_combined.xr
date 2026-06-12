@@ -1,6 +1,13 @@
 // 综合测试：协程功能组合使用
 // 测试 Channel 参数传递、go/await、defer
 
+fn recv_value(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
+}
+
 // 生产者：向 Channel 发送数据（使用类型注解）
 fn producer(ch: Channel<int>) -> string {
     ch.trySend(1)
@@ -9,15 +16,12 @@ fn producer(ch: Channel<int>) -> string {
     return "producer done"
 }
 
-// 消费者：从 Channel 接收数据（使用多值返回）
+// 消费者：从 Channel 接收数据（使用 Recv<T>）
 fn consumer(ch: Channel<int>) -> int {
     let sum = 0
-    let (v1, ok1) = ch.tryRecv()
-    let (v2, ok2) = ch.tryRecv()
-    let (v3, ok3) = ch.tryRecv()
-    if (ok1) { sum = sum + v1 }
-    if (ok2) { sum = sum + v2 }
-    if (ok3) { sum = sum + v3 }
+    sum = sum + recv_value(ch.tryRecv())
+    sum = sum + recv_value(ch.tryRecv())
+    sum = sum + recv_value(ch.tryRecv())
     return sum
 }
 

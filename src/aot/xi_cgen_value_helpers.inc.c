@@ -150,7 +150,7 @@ static void emit_c_string_literal(FILE *out, const char *s) {
     fputc('"', out);
 }
 
-static void emit_enum_member_value_expr(FILE *out, const XiEnumMemberData *member) {
+static void emit_enum_member_value_expr(XiCgenCtx *ctx, FILE *out, const XiEnumMemberData *member) {
     if (!member) {
         fprintf(out, "XR_NULL_VAL");
         return;
@@ -166,9 +166,7 @@ static void emit_enum_member_value_expr(FILE *out, const XiEnumMemberData *membe
             fprintf(out, "XR_FROM_BOOL(%d)", member->bool_value ? 1 : 0);
             break;
         case XI_ENUM_LITERAL_STRING:
-            fprintf(out, "xr_box_str(");
-            emit_c_string_literal(out, member->string_value);
-            fprintf(out, ")");
+            cg_emit_str_value(ctx, out, member->string_value);
             break;
         case XI_ENUM_LITERAL_NULL:
         default:
@@ -177,7 +175,7 @@ static void emit_enum_member_value_expr(FILE *out, const XiEnumMemberData *membe
     }
 }
 
-static void emit_enum_type_expr(FILE *out, const XiEnumData *ed) {
+static void emit_enum_type_expr(XiCgenCtx *ctx, FILE *out, const XiEnumData *ed) {
     if (!ed) {
         fprintf(out, "XR_NULL_VAL");
         return;
@@ -186,13 +184,13 @@ static void emit_enum_type_expr(FILE *out, const XiEnumData *ed) {
     for (uint32_t i = 0; i < ed->member_count; i++) {
         const XiEnumMemberData *member = &ed->members[i];
         const char *name = member->name ? member->name : "";
-        fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, xr_box_str(");
-        emit_c_string_literal(out, name);
-        fprintf(out, "), ");
+        fprintf(out, "xrt_map_set((xrt_map_t*)_e.ptr, ");
+        cg_emit_str_value(ctx, out, name);
+        fprintf(out, ", ");
         if (ed->is_adt)
             fprintf(out, "XR_FROM_INT(%u)", (unsigned) i);
         else
-            emit_enum_member_value_expr(out, member);
+            emit_enum_member_value_expr(ctx, out, member);
         fprintf(out, "); ");
     }
     fprintf(out, "_e; })");
@@ -257,9 +255,9 @@ static void emit_call_hidden_closure(FILE *out, const XiFunc *current, const XiF
     fprintf(out, ".ptr");
 }
 
-static void emit_str_concat_expr(FILE *out, const XiValue *v) {
+static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     if (!v || v->nargs == 0) {
-        fprintf(out, "xr_box_str(\"\")");
+        cg_emit_str_value(ctx, out, "");
         return;
     }
     if (v->nargs == 1) {

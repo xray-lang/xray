@@ -689,25 +689,30 @@ static void emit_struct_field_boxed_value(FILE *out, const XrStructLayout *sl, i
     }
 }
 
-static void emit_struct_runtime_field_get(FILE *out, const XrStructLayout *sl, int64_t idx,
-                                          const XiValue *object, const XrType *result_type,
-                                          XrRep result_rep) {
+static void emit_struct_runtime_field_get(XiCgenCtx *ctx, FILE *out, const XrStructLayout *sl,
+                                          int64_t idx, const XiValue *object,
+                                          const XrType *result_type, XrRep result_rep) {
     const char *fname =
         (sl && sl->field_names && idx >= 0 && idx < sl->field_count) ? sl->field_names[idx] : NULL;
     bool wrapped = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
     fprintf(out, "xrt_map_get((xrt_map_t*)");
     emit_vref(out, object);
-    fprintf(out, ".ptr, xr_box_str(\"%s\"))", fname ? fname : "?");
+    fprintf(out, ".ptr, ");
+    cg_emit_str_value(ctx, out, fname ? fname : "?");
+    fprintf(out, ")");
     emit_conversion_suffix(out, wrapped);
 }
 
-static void emit_struct_runtime_field_set(FILE *out, const XrStructLayout *sl, int64_t idx,
-                                          const XiValue *object, const XiValue *value) {
+static void emit_struct_runtime_field_set(XiCgenCtx *ctx, FILE *out, const XrStructLayout *sl,
+                                          int64_t idx, const XiValue *object,
+                                          const XiValue *value) {
     const char *fname =
         (sl && sl->field_names && idx >= 0 && idx < sl->field_count) ? sl->field_names[idx] : NULL;
     fprintf(out, "(xrt_map_set((xrt_map_t*)");
     emit_vref(out, object);
-    fprintf(out, ".ptr, xr_box_str(\"%s\"), ", fname ? fname : "?");
+    fprintf(out, ".ptr, ");
+    cg_emit_str_value(ctx, out, fname ? fname : "?");
+    fprintf(out, ", ");
     emit_struct_field_boxed_value(out, sl, idx, value);
     fprintf(out, "), ");
     emit_value_as_rep(out, value, cg_rep(value));
@@ -817,7 +822,7 @@ static void emit_struct_fallback_field_get(XiCgenCtx *ctx, FILE *out, const XiFu
                                            XrRep result_rep, const char *prefix) {
     if (emit_struct_heap_field_get_expr(ctx, out, f, sl, idx, object, prefix))
         return;
-    emit_struct_runtime_field_get(out, sl, idx, object, result_type, result_rep);
+    emit_struct_runtime_field_get(ctx, out, sl, idx, object, result_type, result_rep);
 }
 
 static bool emit_struct_heap_field_set_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -864,7 +869,7 @@ static void emit_struct_fallback_field_set(XiCgenCtx *ctx, FILE *out, const XiFu
                                            const char *prefix) {
     if (emit_struct_heap_field_set_expr(ctx, out, f, sl, idx, object, value, prefix))
         return;
-    emit_struct_runtime_field_set(out, sl, idx, object, value);
+    emit_struct_runtime_field_set(ctx, out, sl, idx, object, value);
 }
 
 static const XiValue *cg_trace_fixed_array_field_ref(const XiValue *v) {

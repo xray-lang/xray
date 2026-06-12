@@ -1,0 +1,19 @@
+// EXPECTED: Recv.Value(42)
+// EXPECTED: Recv.Closed
+// Test: source-level Channel.send()/recv() JIT lowering and Recv<T> wrapping.
+
+fn channel_send_recv_methods() {
+    let ch: Channel<int> = new Channel(1)
+    let i = 0
+    while (i < 200) {
+        ch.send(i)
+        ch.recv()
+        i = i + 1
+    }
+    ch.send(42)
+    print(ch.recv())
+    ch.close()
+    print(ch.recv())
+}
+
+channel_send_recv_methods()

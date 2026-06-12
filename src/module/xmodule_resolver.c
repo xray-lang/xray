@@ -408,13 +408,17 @@ int xr_module_resolver_resolve(XrModuleResolver *r, const char *specifier, bool 
         rc = resolve_project_relative(r, specifier, importer_path, out_id, err_buf);
     }
 
-    /* Cache on success */
+    /* Cache on success. The cache is an optimization: on OOM just skip
+     * caching, resolution itself already succeeded. */
     if (rc == 0 && cache_key) {
         XrModuleId *to_cache = clone_module_id(out_id);
         if (to_cache) {
-            xr_hashmap_set(r->cache, cache_key, to_cache);
-            /* cache_key now owned by hashmap */
-            return 0;
+            if (xr_hashmap_set(r->cache, cache_key, to_cache)) {
+                /* cache_key now owned by hashmap */
+                return 0;
+            }
+            xr_module_id_cleanup(to_cache);
+            xr_free(to_cache);
         }
     }
 

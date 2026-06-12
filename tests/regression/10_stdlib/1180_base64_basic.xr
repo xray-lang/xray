@@ -68,7 +68,6 @@ fn test_encode_chinese() {
 fn test_encode_url_basic() {
     let original = "Hello, World!"
     let encoded = base64.encodeUrl(original)
-    assert(encoded != null)
     // URL-safe should not contain + or /
     assert_eq(encoded.includes("+"), false)
     assert_eq(encoded.includes("/"), false)

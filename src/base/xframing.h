@@ -27,6 +27,13 @@ typedef enum {
     XR_FRAME_ERROR    /* Malformed header (missing/invalid Content-Length) */
 } XrFrameStatus;
 
+/* Hard upper bound for a frame body. LSP/DAP transports allocate
+ * content_length bytes up front, so an unchecked header line like
+ * "Content-Length: 2000000000" from a misbehaving client would be a
+ * trivial OOM denial-of-service against the long-running server.
+ * 64 MiB comfortably exceeds any real LSP/DAP payload. */
+#define XR_FRAME_MAX_BODY (64 * 1024 * 1024)
+
 /*
  * Try to parse one Content-Length frame from buf[0..buf_len).
  *

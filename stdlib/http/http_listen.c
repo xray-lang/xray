@@ -235,6 +235,9 @@ static int build_response_header(char *buf, int status, const char *content_type
     // Slow path: snprintf for uncommon status codes / content types
     if (!content_type)
         content_type = "text/plain; charset=utf-8";
+    // Handler-supplied content type must not be able to splice headers.
+    if (strpbrk(content_type, "\r\n"))
+        content_type = "text/plain; charset=utf-8";
 
     int pos = snprintf(buf, 1024,
                        "HTTP/1.1 %d %s\r\n"
@@ -243,9 +246,25 @@ static int build_response_header(char *buf, int status, const char *content_type
                        status, status_reason(status), content_type, body_len);
 
     // Append user-supplied extra headers (each "Name: Value\r\n").
+    // Skip any header whose name/value contains CR, LF or NUL: handler code
+    // echoing attacker-controlled strings must not be able to inject extra
+    // headers or split the response.
     for (int i = 0; i < extra_count && pos < 900; i++) {
         const XrHttpHeader *h = &extra_headers[i];
         if (!h->name || h->name_len == 0)
+            continue;
+        bool unsafe = false;
+        for (size_t k = 0; k < h->name_len && !unsafe; k++) {
+            char c = h->name[k];
+            if (c == '\r' || c == '\n' || c == '\0' || c == ':')
+                unsafe = true;
+        }
+        for (size_t k = 0; h->value && k < h->value_len && !unsafe; k++) {
+            char c = h->value[k];
+            if (c == '\r' || c == '\n' || c == '\0')
+                unsafe = true;
+        }
+        if (unsafe)
             continue;
         int n = snprintf(buf + pos, 1024 - pos, "%.*s: %.*s\r\n", (int) h->name_len, h->name,
                          (int) h->value_len, h->value ? h->value : "");
@@ -710,6 +729,8 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
         XrJson *hdrs = xr_json_new(coro);
         ctx->content_length = -1;
         bool is_chunked = false;
+        bool seen_te = false;
+        bool framing_error = false;
         for (size_t i = 0; i < num_headers; i++) {
             char key_buf[128];
             size_t kl = headers[i].name_len;
@@ -720,12 +741,57 @@ static XrCFuncResult handle_dynamic_route(XrayIsolate *X, HttpConnCtx *ctx, XrVa
             XrValue val = make_string_val(X, headers[i].value, headers[i].value_len);
             xr_json_set_by_key(X, hdrs, key_buf, val);
             if (kl == 14 && strncasecmp(key_buf, "Content-Length", 14) == 0) {
-                ctx->content_length = atoi(headers[i].value);
+                /* Bounded digits-only parse (atoi accepted garbage and could
+                 * overflow). Duplicate Content-Length headers with differing
+                 * values are a request-smuggling vector: reject (RFC 9112). */
+                int64_t cl = 0;
+                bool ok = headers[i].value_len > 0;
+                for (size_t d = 0; d < headers[i].value_len; d++) {
+                    char c = headers[i].value[d];
+                    if (c < '0' || c > '9') {
+                        ok = false;
+                        break;
+                    }
+                    cl = cl * 10 + (c - '0');
+                    if (cl > INT32_MAX) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (!ok || (ctx->content_length >= 0 && ctx->content_length != (int) cl)) {
+                    framing_error = true;
+                } else {
+                    ctx->content_length = (int) cl;
+                }
             } else if (kl == 17 && strncasecmp(key_buf, "Transfer-Encoding", 17) == 0) {
-                if (headers[i].value_len >= 7 && strncasecmp(headers[i].value, "chunked", 7) == 0) {
+                seen_te = true;
+                /* Only "chunked" as the sole transfer coding is supported.
+                 * A list like "gzip, chunked" (or anything else) must be
+                 * rejected, not silently treated as an unframed body. */
+                const char *v = headers[i].value;
+                size_t vl = headers[i].value_len;
+                while (vl > 0 && (v[0] == ' ' || v[0] == '\t')) {
+                    v++;
+                    vl--;
+                }
+                while (vl > 0 && (v[vl - 1] == ' ' || v[vl - 1] == '\t')) {
+                    vl--;
+                }
+                if (vl == 7 && strncasecmp(v, "chunked", 7) == 0) {
                     is_chunked = true;
+                } else {
+                    framing_error = true;
                 }
             }
+        }
+        /* RFC 9112 §6.3: Content-Length together with Transfer-Encoding is
+         * the classic smuggling ambiguity — reject instead of guessing. */
+        if (seen_te && ctx->content_length >= 0) {
+            framing_error = true;
+        }
+        if (framing_error) {
+            return http_conn_start_write(X, ctx, RESP_400, sizeof(RESP_400) - 1,
+                                         http_conn_cleanup_cont, result);
         }
         xr_json_set_by_key(X, req, "headers", xr_json_value(hdrs));
 

@@ -59,6 +59,15 @@ TEST(spec_find_command_pkg) {
     ASSERT_GT(spec->subcommand_count, 0);
 }
 
+TEST(spec_find_command_toolchain) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("toolchain");
+    ASSERT_NOT_NULL(spec);
+    ASSERT_NOT_NULL(spec->subcommands);
+    ASSERT_EQ_INT(spec->subcommand_count, 2);
+    ASSERT_STR_EQ(spec->subcommands[0].name, "list");
+    ASSERT_STR_EQ(spec->subcommands[1].name, "doctor");
+}
+
 TEST(spec_find_command_unknown) {
     const XrCliCommandSpec *spec = xr_cli_find_command("nonexistent");
     ASSERT_NULL(spec);
@@ -305,6 +314,45 @@ TEST(parse_build_native_verbose) {
     xr_cli_invocation_free(&inv);
 }
 
+TEST(parse_build_cross_toolchain_options) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "--target", "x86_64-linux-musl",   "--toolchain", "zig",
+                    "--zig",    "/opt/zig", "--dump-link-command", "--keep-c",    "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 10, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "target", NULL), "x86_64-linux-musl");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "toolchain", NULL), "zig");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "dump-link-command"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "keep-c"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
+TEST(parse_toolchain_doctor_with_zig) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("toolchain");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"doctor", "--zig", "/opt/zig"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 3, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_EQ_INT(inv.positional_count, 1);
+    ASSERT_STR_EQ(inv.positionals[0], "doctor");
+    ASSERT_STR_EQ(xr_cli_opt_string(&inv.options, "zig", NULL), "/opt/zig");
+
+    xr_cli_invocation_free(&inv);
+}
+
 TEST(parse_cmd_long_option_with_value) {
     const XrCliCommandSpec *spec = xr_cli_find_command("compile");
     ASSERT_NOT_NULL(spec);
@@ -521,6 +569,7 @@ RUN_TEST(spec_find_command_run);
 RUN_TEST(spec_find_command_eval);
 RUN_TEST(spec_find_command_repl);
 RUN_TEST(spec_find_command_pkg);
+RUN_TEST(spec_find_command_toolchain);
 RUN_TEST(spec_find_command_unknown);
 RUN_TEST(spec_aliases_removed);
 RUN_TEST(spec_option_count);
@@ -554,6 +603,8 @@ RUN_TEST_SUITE("Command Parser");
 RUN_TEST(parse_cmd_simple_flag);
 RUN_TEST(parse_cmd_short_flag);
 RUN_TEST(parse_build_native_verbose);
+RUN_TEST(parse_build_cross_toolchain_options);
+RUN_TEST(parse_toolchain_doctor_with_zig);
 RUN_TEST(parse_cmd_long_option_with_value);
 RUN_TEST(parse_cmd_long_option_eq_form);
 RUN_TEST(parse_cmd_short_with_value);

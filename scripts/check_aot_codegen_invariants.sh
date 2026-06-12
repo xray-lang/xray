@@ -307,7 +307,7 @@ runtime_arith_calls=$(count_pattern 'xrt_(add|sub|mul|div|mod)[[:space:]]*\(')
 runtime_int_checked_arith_calls=$(count_pattern 'xrt_int_(div|mod)[[:space:]]*\(')
 typed_array_runtime_calls=$(count_pattern 'xr_typed_(get|set)[[:space:]]*\(')
 typed_array_bounds_check_count=$(count_pattern 'if[[:space:]]*\(_idx[[:space:]]*<[[:space:]]*0\)|_idx[[:space:]]*>=[[:space:]]*0[[:space:]]*&&[[:space:]]*_idx[[:space:]]*<[[:space:]]*_a->len')
-typed_array_capacity_check_count=$(count_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|XRT_REALLOC[[:space:]]*\(_a->data')
+typed_array_capacity_check_count=$(count_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|xrt_array_data_grow[[:space:]]*\(_a')
 typed_array_data_field_load_count=$(count_pattern '->data')
 typed_array_direct_data_index_count=$(count_pattern '->data\)\[')
 typed_array_per_iter_len_store_count=$(count_pattern '_a->len[[:space:]]*=')
@@ -317,6 +317,7 @@ runtime_set_calls=$(count_pattern 'xrt_set_[A-Za-z0-9_]*[[:space:]]*\(')
 runtime_property_calls=$(count_pattern 'xrt_(getprop|setprop)[[:space:]]*\(')
 dynamic_dispatch_calls=$(count_pattern 'xrt_(call_method|method|vcall|invoke|dispatch)[A-Za-z0-9_]*[[:space:]]*\(')
 pending_error_check_count=$(count_pattern 'xrt_has_pending_error[[:space:]]*\(')
+restrict_local_count=$(count_pattern '\*[[:space:]]*XRT_RESTRICT[[:space:]]+_ad')
 vm_jit_include_count=$(count_pattern '^#include[[:space:]]+["<].*(src/)?(vm|jit|xvm|xm_)')
 
 hot_function_count=0
@@ -331,7 +332,7 @@ hot_runtime_arith_calls=$(count_hot_pattern 'xrt_(add|sub|mul|div|mod)[[:space:]
 hot_runtime_int_checked_arith_calls=$(count_hot_pattern 'xrt_int_(div|mod)[[:space:]]*\(')
 hot_typed_array_runtime_calls=$(count_hot_pattern 'xr_typed_(get|set)[[:space:]]*\(')
 hot_typed_array_bounds_check_count=$(count_hot_pattern 'if[[:space:]]*\(_idx[[:space:]]*<[[:space:]]*0\)|_idx[[:space:]]*>=[[:space:]]*0[[:space:]]*&&[[:space:]]*_idx[[:space:]]*<[[:space:]]*_a->len')
-hot_typed_array_capacity_check_count=$(count_hot_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|XRT_REALLOC[[:space:]]*\(_a->data')
+hot_typed_array_capacity_check_count=$(count_hot_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|xrt_array_data_grow[[:space:]]*\(_a')
 hot_typed_array_data_field_load_count=$(count_hot_pattern '->data')
 hot_typed_array_direct_data_index_count=$(count_hot_pattern '->data\)\[')
 hot_typed_array_per_iter_len_store_count=$(count_hot_pattern '_a->len[[:space:]]*=')
@@ -344,6 +345,7 @@ hot_runtime_set_calls=$(count_hot_pattern 'xrt_set_[A-Za-z0-9_]*[[:space:]]*\(')
 hot_runtime_property_calls=$(count_hot_pattern 'xrt_(getprop|setprop)[[:space:]]*\(')
 hot_dynamic_dispatch_calls=$(count_hot_pattern 'xrt_(call_method|method|vcall|invoke|dispatch)[A-Za-z0-9_]*[[:space:]]*\(')
 hot_pending_error_check_count=$(count_hot_pattern 'xrt_has_pending_error[[:space:]]*\(')
+hot_restrict_local_count=$(count_hot_pattern '\*[[:space:]]*XRT_RESTRICT[[:space:]]+_ad')
 hot_region_count=0
 if [ "$HOT_REGION_FILE_COUNT" -gt 0 ]; then
     hot_region_count=$(count_hot_region_pattern "$HOT_REGION_START")
@@ -356,7 +358,7 @@ hot_region_runtime_arith_calls=$(count_hot_region_pattern 'xrt_(add|sub|mul|div|
 hot_region_runtime_int_checked_arith_calls=$(count_hot_region_pattern 'xrt_int_(div|mod)[[:space:]]*\(')
 hot_region_typed_array_runtime_calls=$(count_hot_region_pattern 'xr_typed_(get|set)[[:space:]]*\(')
 hot_region_typed_array_bounds_check_count=$(count_hot_region_pattern 'if[[:space:]]*\(_idx[[:space:]]*<[[:space:]]*0\)|_idx[[:space:]]*>=[[:space:]]*0[[:space:]]*&&[[:space:]]*_idx[[:space:]]*<[[:space:]]*_a->len')
-hot_region_typed_array_capacity_check_count=$(count_hot_region_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|XRT_REALLOC[[:space:]]*\(_a->data')
+hot_region_typed_array_capacity_check_count=$(count_hot_region_pattern '_a->len[[:space:]]*>=[[:space:]]*_a->cap|xrt_array_data_grow[[:space:]]*\(_a')
 hot_region_typed_array_data_field_load_count=$(count_hot_region_pattern '->data')
 hot_region_typed_array_direct_data_index_count=$(count_hot_region_pattern '->data\)\[')
 hot_region_typed_array_per_iter_len_store_count=$(count_hot_region_pattern '_a->len[[:space:]]*=')
@@ -387,6 +389,7 @@ metric_value() {
         runtime_property_calls) printf '%s\n' "$runtime_property_calls" ;;
         dynamic_dispatch_calls) printf '%s\n' "$dynamic_dispatch_calls" ;;
         pending_error_check_count) printf '%s\n' "$pending_error_check_count" ;;
+        restrict_local_count) printf '%s\n' "$restrict_local_count" ;;
         vm_jit_include_count) printf '%s\n' "$vm_jit_include_count" ;;
         hot_function_count) printf '%s\n' "$hot_function_count" ;;
         hot_xrvalue_count) printf '%s\n' "$hot_xrvalue_count" ;;
@@ -410,6 +413,7 @@ metric_value() {
         hot_runtime_property_calls) printf '%s\n' "$hot_runtime_property_calls" ;;
         hot_dynamic_dispatch_calls) printf '%s\n' "$hot_dynamic_dispatch_calls" ;;
         hot_pending_error_check_count) printf '%s\n' "$hot_pending_error_check_count" ;;
+        hot_restrict_local_count) printf '%s\n' "$hot_restrict_local_count" ;;
         hot_region_count) printf '%s\n' "$hot_region_count" ;;
         hot_region_xrvalue_count) printf '%s\n' "$hot_region_xrvalue_count" ;;
         hot_region_xrvalue_local_count) printf '%s\n' "$hot_region_xrvalue_local_count" ;;

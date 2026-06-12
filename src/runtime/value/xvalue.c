@@ -163,7 +163,7 @@ static const XrTypeId tag_to_typeid[8] = {
 };
 
 // XrObjType (GC header) → XrTypeId lookup table
-static const XrTypeId gctype_to_typeid[XR_TWORKQUEUE + 1] = {
+static const XrTypeId gctype_to_typeid[XR_TRESULTGROUP + 1] = {
     [XR_TNULL] = XR_TID_NULL,
     [XR_TBOOL] = XR_TID_BOOL,
     [XR_TINT] = XR_TID_INT,
@@ -185,6 +185,7 @@ static const XrTypeId gctype_to_typeid[XR_TWORKQUEUE + 1] = {
     [XR_TTASK] = XR_TID_TASK,
     [XR_TATOMIC] = XR_TID_ATOMIC,
     [XR_TWORKQUEUE] = XR_TID_WORKQUEUE,
+    [XR_TRESULTGROUP] = XR_TID_RESULTGROUP,
 };
 
 XrTypeId xr_value_typeid(XrValue v) {
@@ -275,6 +276,7 @@ XR_DATA const char *typeid_names[XR_TID_COUNT] = {
     [XR_TID_NETLISTENER] = TYPE_NAME_NETLISTENER,
     [XR_TID_ATOMIC] = TYPE_NAME_ATOMIC,
     [XR_TID_WORKQUEUE] = TYPE_NAME_WORKQUEUE,
+    [XR_TID_RESULTGROUP] = TYPE_NAME_RESULTGROUP,
 };
 
 const char *xr_typeid_name(XrTypeId tid) {

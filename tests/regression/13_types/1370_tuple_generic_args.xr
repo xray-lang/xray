@@ -7,8 +7,16 @@ fn test_channel_tuple_send_recv() {
     shared const ch: Channel<(int, string)> = new Channel(2)
     ch.send((1, "hello"))
     ch.send((2, "world"))
-    let (n1, s1) = ch.recv()
-    let (n2, s2) = ch.recv()
+    let t1 = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> (0, "")
+    }
+    let t2 = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> (0, "")
+    }
+    let (n1, s1) = t1
+    let (n2, s2) = t2
     assert_eq(n1, 1)
     assert_eq(s1, "hello")
     assert_eq(n2, 2)

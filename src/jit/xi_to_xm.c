@@ -26,12 +26,14 @@
 #include "xm_liveness2.h"
 #include "xm_offsets.h"
 #include "../ir/xi_opt.h"
+#include "../ir/xi_op_name.h"
 #include "../base/xdefs.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xchunk.h"
 #include "../runtime/object/xstring.h"
+#include "../runtime/symbol/xsymbol_table.h"
 #include "../vm/xic_field.h"
 #include "../vm/xic_field_table.h"
 #include "../vm/xic_method.h"
@@ -44,6 +46,8 @@
 
 #define XI2XM_MAX_TRY_DEPTH 8
 #define XI2XM_MAX_HELPER_CALL_ARGS 15
+#define XI2XM_NO_BC_SLOT 255
+#define XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG (1ULL << 40)
 
 typedef struct {
     XiFunc *xi_func;
@@ -83,6 +87,7 @@ typedef struct {
     bool cell_present[256];
 
     bool error;
+    uint16_t error_op;
 } LowerCtx;
 
 /* ========== Helpers ========== */
@@ -149,6 +154,24 @@ static XmRef emit_helper_call(LowerCtx *ctx, XmBlock *blk, XmHelperId id, XmRef 
     return result;
 }
 
+static XmRef emit_channel_suspend_call(LowerCtx *ctx, XmBlock *blk, XmHelperId helper,
+                                       XmHelperId block_helper, XmRef extra, const XmRef *args,
+                                       uint16_t nargs) {
+    XmRef call = emit_helper_call(ctx, blk, helper, extra, args, nargs);
+    XmRef discard = xm_const_i64(ctx->xm_func, 0);
+    XmRef suspend = xm_emit(ctx->xm_func, blk, XM_SUSPEND, helper_call_rep(helper), call, discard);
+    blk->ins[blk->nins - 1].ctype = helper_call_ctype(helper);
+    if (xm_ref_is_vreg(suspend)) {
+        uint32_t vi = XM_REF_INDEX(suspend);
+        if (vi < ctx->xm_func->nvreg) {
+            uint32_t sid = ctx->xm_func->vregs[vi].call_arg_start;
+            if (sid < XM_MAX_SUSPEND_ENTRIES)
+                ctx->xm_func->suspend_block_helpers[sid] = xm_helper_func(block_helper);
+        }
+    }
+    return suspend;
+}
+
 /* ========== Slot Map / Deopt Helpers ========== */
 
 /* Look up the bytecode instruction offset for a given Xi value ID.
@@ -161,6 +184,40 @@ static int slot_map_bc_pc(const LowerCtx *ctx, uint32_t value_id) {
     if (idx < 0)
         return -1;
     return (int) ctx->slot_map->entries[idx].bc_pc;
+}
+
+static void set_result_slot_metadata(LowerCtx *ctx, uint32_t value_id, XmRef ref) {
+    if (!ctx || !ctx->xm_func || !xm_ref_is_vreg(ref))
+        return;
+    if (!ctx->slot_idx || value_id >= ctx->slot_idx_size)
+        return;
+    int32_t si = ctx->slot_idx[value_id];
+    if (si < 0 || ctx->slot_map->entries[si].bc_slot == XI2XM_NO_BC_SLOT)
+        return;
+    uint32_t vi = XM_REF_INDEX(ref);
+    if (vi >= ctx->xm_func->nvreg)
+        return;
+    ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
+}
+
+static uint8_t xi_value_rep_or_tagged(const XiValue *v) {
+    return v ? v->rep : XR_REP_TAGGED;
+}
+
+static XrType *xi_static_type_for_value(const LowerCtx *ctx, const XiValue *v) {
+    if (v && v->type && v->type->kind != XR_KIND_UNKNOWN)
+        return v->type;
+    if (!ctx || !ctx->proto || !v || v->op != XI_PARAM || v->aux_int < 0)
+        return NULL;
+    uint32_t param_index = (uint32_t) v->aux_int;
+    if (!ctx->proto->param_types || param_index >= ctx->proto->param_types_count)
+        return NULL;
+    return ctx->proto->param_types[param_index];
+}
+
+static bool xi_value_is_static_channel(const LowerCtx *ctx, const XiValue *v) {
+    XrType *type = xi_static_type_for_value(ctx, v);
+    return type && type->kind == XR_KIND_CHANNEL;
 }
 
 /* Record a deopt snapshot at the current point for a guard instruction.
@@ -213,12 +270,14 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
             XmRef ref = ctx->ref_map[e->value_id];
             if (xm_ref_is_none(ref))
                 continue;
+            if (e->bc_slot == XI2XM_NO_BC_SLOT)
+                continue;
             latest_for_slot[e->bc_slot] = (int32_t) i;
         }
 
         /* Count unique live bc_slots */
         uint32_t live_count = 0;
-        for (int s = 0; s < 256; s++) {
+        for (int s = 0; s < XI2XM_NO_BC_SLOT; s++) {
             if (latest_for_slot[s] >= 0)
                 live_count++;
         }
@@ -236,7 +295,7 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
             (XmDeoptSlot *) xr_calloc(live_count ? live_count : 1, sizeof(XmDeoptSlot));
         if (slots) {
             uint16_t ns = 0;
-            for (int s = 0; s < 256; s++) {
+            for (int s = 0; s < XI2XM_NO_BC_SLOT; s++) {
                 if (latest_for_slot[s] < 0)
                     continue;
                 XiSlotMapEntry *e = &ctx->slot_map->entries[latest_for_slot[s]];
@@ -652,6 +711,91 @@ static XmRef lower_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_const_i64(ctx->xm_func, 0);
 }
 
+static bool lower_channel_method_call(LowerCtx *ctx, XmBlock *blk, XiValue *v,
+                                      const XmRef *call_args, uint16_t total, uint16_t nargs,
+                                      XmRef *out) {
+    if (!ctx || !blk || !v || !out || v->op != XI_CALL_METHOD || v->nargs < 1)
+        return false;
+    if ((v->aux_int & 1) != 0)
+        return false;
+    if (!xi_value_is_static_channel(ctx, v->args[0]))
+        return false;
+
+    int method_sym = (int) (v->aux_int >> 1);
+    XmHelperId helper = XM_HELPER__COUNT;
+    if (method_sym == SYMBOL_SEND && nargs == 1) {
+        int bc_pc = slot_map_bc_pc(ctx, v->id);
+        uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
+        if (did == 0xFFFF)
+            return false;
+        XmRef extra = xm_const_i64(ctx->xm_func, (int64_t) did);
+        XmRef result =
+            emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_send,
+                                      XM_HELPER_chan_method_send_block, extra, call_args, total);
+        set_result_slot_metadata(ctx, v->id, result);
+        *out = result;
+        return true;
+    }
+
+    if (method_sym == SYMBOL_RECV && nargs == 0) {
+        XmRef zero = xm_const_i64(ctx->xm_func, 0);
+        XmRef raw =
+            emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_recv,
+                                      XM_HELPER_chan_method_recv_block, zero, call_args, total);
+        XmRef wrap_args[1] = {raw};
+        XmRef result =
+            emit_helper_call(ctx, blk, XM_HELPER_chan_method_recv_wrap, zero, wrap_args, 1);
+        set_result_slot_metadata(ctx, v->id, result);
+        *out = result;
+        return true;
+    }
+
+    if (method_sym == SYMBOL_TRYSEND && nargs == 1) {
+        helper = XM_HELPER_chan_method_try_send;
+    } else if (method_sym == SYMBOL_TRYRECV && nargs == 0) {
+        helper = XM_HELPER_chan_method_try_recv;
+    } else if (method_sym == SYMBOL_CLOSE && nargs == 0) {
+        helper = XM_HELPER_chan_method_close;
+    } else if (method_sym == SYMBOL_IS_CLOSED && nargs == 0) {
+        helper = XM_HELPER_chan_method_is_closed;
+    }
+
+    if (helper == XM_HELPER__COUNT)
+        return false;
+
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
+    XmRef result = emit_helper_call(ctx, blk, helper, zero, call_args, total);
+    if (helper == XM_HELPER_chan_method_is_closed)
+        blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
+    set_result_slot_metadata(ctx, v->id, result);
+    *out = result;
+    return true;
+}
+
+static XmRef lower_chan_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    uint64_t extra = ((uint64_t) ((uint8_t) v->aux_int)) << 32;
+    XmRef args[1];
+    uint16_t nargs = 0;
+
+    if (v->nargs >= 1 && v->args[0]) {
+        XiValue *cap = v->args[0];
+        if (cap->op == XI_CONST && cap->type && cap->type->kind == XR_KIND_INT &&
+            cap->aux_int >= 0 && cap->aux_int <= MAXARG_Bx) {
+            extra |= (uint32_t) cap->aux_int;
+        } else {
+            extra |= XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG;
+            args[0] = get_ref(ctx, cap);
+            nargs = 1;
+        }
+    }
+
+    XmRef extra_ref = xm_const_i64(ctx->xm_func, (int64_t) extra);
+    XmRef result =
+        emit_helper_call(ctx, blk, XM_HELPER_chan_new, extra_ref, nargs ? args : NULL, nargs);
+    set_result_slot_metadata(ctx, v->id, result);
+    return result;
+}
+
 static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     /* Generic call lowering for XI_CALL and ops delegated to runtime.
      * For XI_CALL: args[0]=callee, args[1..n]=params.
@@ -690,6 +834,12 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 return result;
             }
         }
+    }
+
+    if (v->op == XI_CALL_METHOD) {
+        XmRef channel_result = XM_NONE;
+        if (lower_channel_method_call(ctx, blk, v, call_args, total, nargs, &channel_result))
+            return channel_result;
     }
 
     /* Method IC speculation: if call site is monomorphic, emit
@@ -773,7 +923,7 @@ generic_call:
          * reconstruct the correct bytecode register. */
         if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
             int32_t si = ctx->slot_idx[v->id];
-            if (si >= 0) {
+            if (si >= 0 && ctx->slot_map->entries[si].bc_slot != XI2XM_NO_BC_SLOT) {
                 uint32_t vi = XM_REF_INDEX(result);
                 if (vi < ctx->xm_func->nvreg)
                     ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
@@ -927,7 +1077,7 @@ static XmRef lower_get_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XmRef result = emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
     if (xm_ref_is_vreg(result) && ctx->slot_idx && v->id < ctx->slot_idx_size) {
         int32_t si = ctx->slot_idx[v->id];
-        if (si >= 0) {
+        if (si >= 0 && ctx->slot_map->entries[si].bc_slot != XI2XM_NO_BC_SLOT) {
             uint32_t vi = XM_REF_INDEX(result);
             if (vi < ctx->xm_func->nvreg)
                 ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
@@ -952,6 +1102,13 @@ static XmRef lower_import_ref(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     int64_t abs_idx = v->aux_int + so;
     XmRef idx = xm_const_i64(ctx->xm_func, abs_idx);
     return emit_helper_call(ctx, blk, XM_HELPER_get_shared, idx, NULL, 0);
+}
+
+static XmRef lower_get_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmRef extra = xm_const_i64(ctx->xm_func, v->aux_int);
+    XmRef result = emit_helper_call(ctx, blk, XM_HELPER_getbuiltin, extra, NULL, 0);
+    set_result_slot_metadata(ctx, v->id, result);
+    return result;
 }
 
 static bool lower_upval_needs_cell(const LowerCtx *ctx, const XiValue *v) {
@@ -989,6 +1146,7 @@ static XmRef lower_throw(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef lower_ownership_helper(LowerCtx *ctx, XmBlock *blk, XiValue *v, XmHelperId helper,
                                     const char *op_name) {
+    (void) op_name;
     XR_DCHECK_FMT(v->nargs >= 1, "%s: need value arg", op_name);
     XmRef val = get_ref(ctx, v->args[0]);
     XmRef extra = xm_const_i64(ctx->xm_func, 0);
@@ -1322,7 +1480,7 @@ static XmRef xi2xm_typeof(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 }
 
 static XmRef xi2xm_get_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_deopt_to_vm(ctx, blk, v);
+    return lower_get_builtin(ctx, blk, v);
 }
 
 static XmRef xi2xm_print(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1335,6 +1493,37 @@ static XmRef xi2xm_call_builtin(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_call(ctx, blk, v);
+}
+
+static XmRef xi2xm_chan_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    return lower_chan_new(ctx, blk, v);
+}
+
+static XmRef xi2xm_err_check(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
+    XmRef tag = emit_helper_call(ctx, blk, XM_HELPER_pending_error_tag, zero, NULL, 0);
+
+    if (v->type && v->type->kind == XR_KIND_BOOL) {
+        XmRef has_error = xm_fold_emit(ctx->xm_func, blk, XM_NE, XR_REP_I64, tag, zero);
+        blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
+        return has_error;
+    }
+
+    int bc_pc = slot_map_bc_pc(ctx, v->id);
+    uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
+    if (did == 0xFFFF) {
+        ctx->error = true;
+        ctx->error_op = v->op;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+
+    XmRef no_error = xm_fold_emit(ctx->xm_func, blk, XM_EQ, XR_REP_I64, tag, zero);
+    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
+    XmRef deopt_id = xm_const_i64(ctx->xm_func, (int64_t) did);
+    xm_emit(ctx->xm_func, blk, XM_GUARD_NONNULL, XR_REP_VOID, no_error, XM_NONE);
+    blk->ins[blk->nins - 1].dst = deopt_id;
+    blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    return xm_const_i64(ctx->xm_func, 0);
 }
 
 static XmRef xi2xm_class_create(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
@@ -1400,8 +1589,8 @@ static XmRef xi2xm_str_concat(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_reject_unsupported(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     (void) blk;
-    (void) v;
     ctx->error = true;
+    ctx->error_op = v ? v->op : XI_OP_COUNT;
     return xm_const_i64(ctx->xm_func, 0);
 }
 
@@ -1429,6 +1618,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         return generated;
 
     ctx->error = true;
+    ctx->error_op = v ? v->op : XI_OP_COUNT;
     return xm_const_i64(ctx->xm_func, 0);
 }
 
@@ -1438,7 +1628,7 @@ static XmRef lower_value(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 static void lower_phis(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) {
     for (XiPhi *phi = xi_blk->phis; phi; phi = phi->next) {
         XiValue *pv = &phi->value;
-        uint8_t rep = pv->rep ? pv->rep : XR_REP_TAGGED;
+        uint8_t rep = xi_value_rep_or_tagged(pv);
         XmPhi *xm_phi = xm_add_phi(ctx->xm_func, xm_blk, rep);
         XR_DCHECK(xm_phi != NULL, "lower_phis: xm_add_phi returned NULL");
         set_ref(ctx, pv->id, xm_phi->dst);
@@ -1475,6 +1665,8 @@ static void lower_block_values(LowerCtx *ctx, XiBlock *xi_blk, XmBlock *xm_blk) 
         if (!v)
             continue;
         XmRef ref = lower_value(ctx, xm_blk, v);
+        if (ctx->error && ctx->error_op == XI_OP_COUNT)
+            ctx->error_op = v->op;
         set_ref(ctx, v->id, ref);
     }
 }
@@ -1663,6 +1855,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     ctx.ic = ic;
     ctx.isolate = isolate;
     ctx.error = false;
+    ctx.error_op = XI_OP_COUNT;
 
     /* Allocate block map */
     ctx.block_map_size = xi_func->next_block_id;
@@ -1680,6 +1873,8 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
         xm_func_destroy(func);
         return NULL;
     }
+    for (uint32_t i = 0; i < ctx.ref_map_size; i++)
+        ctx.ref_map[i] = XM_NONE;
 
     /* Build direct-mapped index: value_id → slot_map entry.
      * Replaces O(n) linear scan with O(1) lookup per IC query. */
@@ -1704,7 +1899,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     func->num_params = xi_func->nparams;
     for (uint16_t i = 0; i < xi_func->nparams; i++) {
         XiValue *param = xi_func->params[i];
-        uint8_t rep = param ? (param->rep ? param->rep : XR_REP_TAGGED) : XR_REP_I64;
+        uint8_t rep = param ? xi_value_rep_or_tagged(param) : XR_REP_I64;
         XmRef vreg = xm_new_vreg(func, rep);
         if (param)
             set_ref(&ctx, param->id, vreg);
@@ -1818,6 +2013,9 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     xr_free(ctx.ref_map);
 
     if (ctx.error) {
+        if (ctx.error_op != XI_OP_COUNT) {
+            fprintf(stderr, "[xi_to_xm] lowering failed at %s\n", xi_op_name(ctx.error_op));
+        }
         xm_func_destroy(func);
         return NULL;
     }

@@ -41,6 +41,11 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f);
  * Single forward pass. O(n) in value count. */
 XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f);
 
+/* Mark one-shot awaits: if a non-linked XI_GO result is consumed only by one
+ * plain XI_AWAIT (possibly through identity COPY/MOVE nodes), annotate that
+ * await so the VM can eagerly detach/recycle the temporary Task handle. */
+XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f);
+
 /* Dead code elimination: remove values with zero uses.
  * Computes use counts, then iteratively removes dead values.
  * Values with XI_FLAG_SIDE_EFFECT are never removed.

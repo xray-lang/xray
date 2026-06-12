@@ -359,6 +359,12 @@ XrCoroutine *xr_worker_wake_one(XrWorker *worker, void *channel, bool wake_sende
     // coro is never double-pushed.
     if (xr_coro_claim_wake(coro)) {
         worker_prepare_channel_waiter_resume(worker, coro, XR_RESUME_CHANNEL);
+        XrRuntime *runtime = worker->p.runtime;
+        if (xr_sched_stats_enabled(runtime)) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_ready_wake_count);
+            xr_channel_record_ready_wake_metric(
+                runtime, xr_channel_logical_kind_snapshot((XrChannel *) channel), wake_sender);
+        }
         xr_worker_push_lifo(worker, coro);
     }
 
@@ -385,6 +391,12 @@ bool xr_worker_wake_one_detached(XrWorker *worker, void *channel, bool wake_send
 
     if (xr_coro_claim_wake(coro)) {
         worker_prepare_channel_waiter_resume(worker, coro, XR_RESUME_CHANNEL);
+        XrRuntime *runtime = worker->p.runtime;
+        if (xr_sched_stats_enabled(runtime)) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.chan_ready_wake_count);
+            xr_channel_record_ready_wake_metric(
+                runtime, xr_channel_logical_kind_snapshot((XrChannel *) channel), wake_sender);
+        }
         if (ready_out) {
             *ready_out = coro;
         }

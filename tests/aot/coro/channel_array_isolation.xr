@@ -1,5 +1,8 @@
 fn worker(ch: Channel<Array<int>>) -> int {
-    let xs = ch.recv()
+    let xs = match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> []
+    }
     xs.push(99)
     yield
     return xs.length

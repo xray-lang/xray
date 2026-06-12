@@ -20,6 +20,13 @@ print("最长持续时间:", DURATION_MS, "ms")
 
 shared const result_ch = Channel(SHORT_TASKS)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // CPU 密集型长任务：持续计算直到被取消
 fn cpu_hog() -> int {
     let count = 0
@@ -88,8 +95,7 @@ for (task in short_tasks) {
 }
 
 for (let i = 0; i < completed; i++) {
-    let latency = result_ch.recv()
-    let lat = int(latency) ?? 0
+    let lat = recv_int(result_ch, 0)
     total_latency = total_latency + lat
     if (lat > max_latency) {
         max_latency = lat

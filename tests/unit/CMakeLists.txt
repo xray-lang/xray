@@ -250,6 +250,7 @@ add_xray_unit_test(test_timer_wheel coro/test_timer_wheel.c)
 add_xray_unit_test(test_channel_close coro/test_channel_close.c)
 add_xray_unit_test(test_scope_wait coro/test_scope_wait.c)
 add_xray_unit_test(test_work_queue_wait coro/test_work_queue_wait.c)
+add_xray_unit_test(test_result_group coro/test_result_group.c)
 add_xray_unit_test(test_native_backend coro/test_native_backend.c)
 
 # ============================================================================
@@ -530,6 +531,16 @@ target_include_directories(test_cli_spec PRIVATE
 )
 target_link_libraries(test_cli_spec PRIVATE xray_core)
 add_test(NAME test_cli_spec COMMAND test_cli_spec)
+
+add_executable(test_cli_toolchain
+    cli/test_cli_toolchain.c
+    ${CMAKE_SOURCE_DIR}/src/app/cli/xcli_toolchain.c
+)
+target_include_directories(test_cli_toolchain PRIVATE
+    ${XRAY_COMMON_INCLUDES}
+    ${CMAKE_SOURCE_DIR}/src/app/cli
+)
+add_test(NAME test_cli_toolchain COMMAND test_cli_toolchain)
 
 # ============================================================================
 # test_harness/ — xray test runner self-tests

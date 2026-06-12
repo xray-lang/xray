@@ -62,6 +62,7 @@
 #include "../runtime/gc/xgc_header.h"
 #include "../base/xmalloc.h"
 #include "../base/xchecks.h"
+#include "xslot_ref.h"
 #include "xtimer_wheel.h"  // XrTWheelTimer (embedded in channel for timer wheel)
 
 /* ========== Forward Declarations ========== */
@@ -95,7 +96,12 @@ XR_FUNC void xr_waitq_enqueue(XrWaitQueue *q, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_waitq_dequeue(XrWaitQueue *q);
 
 struct XrChannel;
-XR_FUNC void xr_channel_remove_waiter(struct XrChannel *ch, XrCoroutine *coro);
+// Remove coro from the channel's wait queue under ch->lock.
+// Returns true when THIS call unlinked the coroutine — the caller now owns
+// the wake decision (Go sudog semantics: dequeue under lock = exclusive
+// ownership). Returns false when the coroutine was no longer queued, i.e.
+// a concurrent send/recv/close already dequeued and owns it.
+XR_FUNC bool xr_channel_remove_waiter(struct XrChannel *ch, XrCoroutine *coro);
 XR_FUNC void xr_channel_lock_observed(struct XrChannel *ch);
 
 /* ========== Distributed Channel Hooks ========== */
@@ -144,8 +150,8 @@ typedef struct XrChannel {
     uint32_t buf_count;  // Current item count
     uint32_t send_idx;   // Next write position
     uint32_t recv_idx;   // Next read position
-    XrChannelKind kind;  // Runtime specialization hint, never part of user semantics
-    XrChannelKind worker_kind;
+    _Atomic int kind;    // Runtime specialization hint, never part of user semantics
+    _Atomic int worker_kind;
     uint64_t producer_worker_mask;
     uint64_t consumer_worker_mask;
     int producer_coro_id;
@@ -286,6 +292,12 @@ static inline uint64_t xr_channel_preferred_wake_mask(XrChannel *ch, bool wake_s
     return mask;
 }
 
+XR_FUNC XrChannelKind xr_channel_logical_kind_snapshot(XrChannel *ch);
+XR_FUNC void xr_channel_record_ready_wake_metric(struct XrRuntime *runtime, XrChannelKind kind,
+                                                 bool wake_sender);
+XR_FUNC void xr_channel_record_ready_wake_retarget_metric(struct XrRuntime *runtime,
+                                                          XrChannelKind kind, bool wake_sender);
+
 /* ========== Channel API ========== */
 
 XR_FUNC XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size);
@@ -317,6 +329,19 @@ XR_FUNC XrChanResult xr_channel_send(XrChannel *ch, XrValue value, struct XrCoro
                                      int64_t timeout_ms);
 XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCoroutine *coro,
                                      int64_t timeout_ms);
+/* Blocking receive with waker-side delivery slots.
+ * recv_slot: where the waker stores the received value.
+ * ok_slot + deliver=true (untimed VM bytecode recv only) registers the
+ * delivery capability: when the woken value needs no receive-side deep
+ * copy, the waker also stores the ok flag and the coroutine resumes at
+ * the NEXT instruction — no instruction replay (kotlinx resume-with-value
+ * shape). Values that need a receive-side deep copy fall back to the
+ * replay/resume protocol per wake. deliver=false keeps that protocol
+ * contract for timeout variants, cfunc/JIT/AOT continuations and
+ * method-call paths. */
+XR_FUNC XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, struct XrCoroutine *coro,
+                                          int64_t timeout_ms, XrSlotRef recv_slot,
+                                          XrSlotRef ok_slot, bool deliver);
 
 /* ========== Diagnostics ========== */
 

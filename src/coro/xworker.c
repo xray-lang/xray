@@ -29,6 +29,7 @@
  *   per-coro-state fields.
  */
 #include "xworker_internal.h"
+#include "xtask.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
 #include "../runtime/gc/ximmix.h"
@@ -38,6 +39,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../os/os_thread.h"
+#include "../os/os_time.h"
 
 // Thread-local: current Worker and Machine pointers
 XR_THREAD_LOCAL XrWorker *tls_current_worker = NULL;
@@ -98,6 +100,11 @@ static double stats_percent_u64(uint64_t numerator, uint64_t denominator) {
     return 100.0 * stats_ratio_u64(numerator, denominator);
 }
 
+static uint64_t teardown_elapsed_ms(uint64_t start_ns) {
+    uint64_t now_ns = xr_time_monotonic_ns();
+    return (now_ns >= start_ns) ? (now_ns - start_ns) / 1000000ULL : 0;
+}
+
 static uint64_t runnable_wait_bucket_upper_ms(int bucket) {
     if (bucket <= 0)
         return 1;
@@ -141,6 +148,8 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     // Bind pre-allocated M (1:1 with Worker at startup)
     worker->m = &runtime->machines[id];
     xr_machine_init(worker->m, id, runtime);
+    atomic_store_explicit(&worker->p.current_m, worker->m, memory_order_release);
+    atomic_store_explicit(&worker->p.status, P_RUNNING, memory_order_release);
 
     // Initialize Chase-Lev deque run queue
     xr_runq_init(&worker->p.runq);
@@ -159,7 +168,7 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
 
     // Initialize Per-Worker Timer Wheel (lock-free, owner-private)
     worker->p.timer_wheel = xr_timer_wheel_create(runtime, id);
-    worker->p.last_timer_tick = xr_monotonic_ticks();
+    xr_proc_set_last_timer_tick(&worker->p, xr_monotonic_ticks());
 
     // Initialize MPSC inbox
     xr_mpsc_init(&worker->p.inbox);
@@ -288,16 +297,16 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     atomic_store(&runtime->spinning_count, 0);
     atomic_store(&runtime->wake_spinner, 0);
     atomic_store(&runtime->needspinning, 0);
-    atomic_store(&runtime->nonempty_p_mask, 0);
-    atomic_store(&runtime->stealable_p_mask, 0);
     atomic_store(&runtime->timer_p_mask, 0);
     atomic_store(&runtime->idle_p_mask, 0);
     atomic_store(&runtime->searching_count, 0);
     xr_injectq_init(runtime);
 
     // active_coros/spawned now tracked per-Worker, no global init needed
-    atomic_store(&runtime->total_inbox_len, 0);
     runtime->sched_stats_enabled = env_flag_enabled("XRAY_SCHED_STATS");
+    xr_mutex_init(&runtime->task_lock);
+    runtime->task_list = NULL;
+    runtime->task_count = 0;
 
     // main thread enqueues via inbox, no dedicated P needed
 
@@ -320,6 +329,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     // Allocate Machines (M) array — pre-allocated 1:1 with Workers
     runtime->machines = (XrMachine *) xr_calloc(num_workers, sizeof(XrMachine));
     if (!runtime->machines) {
+        xr_mutex_destroy(&runtime->task_lock);
         xr_free(runtime);
         return NULL;
     }
@@ -330,6 +340,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     size_t workers_size = (size_t) num_workers * sizeof(XrWorker);
     runtime->workers = (XrWorker *) xr_malloc_aligned(workers_size, XR_CACHE_LINE);
     if (!runtime->workers) {
+        xr_mutex_destroy(&runtime->task_lock);
         xr_free(runtime->machines);
         xr_free(runtime);
         return NULL;
@@ -366,10 +377,30 @@ void xr_runtime_destroy(XrRuntime *runtime) {
     if (!runtime)
         return;
 
+    uint64_t teardown_start_ns = xr_time_monotonic_ns();
+    uint64_t stage_start_ns = teardown_start_ns;
+    uint64_t stop_ms = 0;
+    uint64_t leak_check_ms = 0;
+    uint64_t channel_leak_check_ms = 0;
+    uint64_t timer_drain_ms = 0;
+    uint64_t stats_print_ms = 0;
+    uint64_t task_defer_ms = 0;
+    uint64_t inbox_drain_ms = 0;
+    uint64_t async_destroy_ms = 0;
+    uint64_t worker_destroy_ms = 0;
+    uint64_t inject_destroy_ms = 0;
+    uint64_t netpoll_cleanup_ms = 0;
+    uint64_t io_cleanup_ms = 0;
+    size_t deferred_task_count = 0;
+    uint64_t orphan_inbox_count = 0;
+
     // Stop running (internally calls xr_thread_join to wait for all Workers to exit)
+    stage_start_ns = xr_time_monotonic_ns();
     xr_runtime_stop(runtime);
+    stop_ms = teardown_elapsed_ms(stage_start_ns);
 
     // Leak detection: check for unreleased coroutines after all workers stopped
+    stage_start_ns = xr_time_monotonic_ns();
     int active = xr_runtime_active_coros(runtime);
     if (active > 0) {
         uint64_t spawned = 0;
@@ -391,8 +422,10 @@ void xr_runtime_destroy(XrRuntime *runtime) {
             }
         }
     }
+    leak_check_ms = teardown_elapsed_ms(stage_start_ns);
 
     // Channel leak detection: compare create vs close counts
+    stage_start_ns = xr_time_monotonic_ns();
     {
         uint64_t ch_closed = xr_channel_get_close_count(runtime->isolate);
         if (runtime->isolate && runtime->isolate->sys_heap) {
@@ -407,46 +440,90 @@ void xr_runtime_destroy(XrRuntime *runtime) {
             }
         }
     }
+    channel_leak_check_ms = teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     runtime_drain_timer_cancel_stacks(runtime);
+    timer_drain_ms = teardown_elapsed_ms(stage_start_ns);
 
     if (runtime->sched_stats_enabled) {
+        stage_start_ns = xr_time_monotonic_ns();
         xr_runtime_print_stats(runtime);
+        stats_print_ms = teardown_elapsed_ms(stage_start_ns);
     }
 
+    stage_start_ns = xr_time_monotonic_ns();
+    XrTask *deferred_tasks = xr_task_runtime_detach_all(runtime, &deferred_task_count);
+    xr_task_isolate_adopt_deferred(runtime->isolate, deferred_tasks, deferred_task_count);
+    xr_mutex_destroy(&runtime->task_lock);
+    task_defer_ms = teardown_elapsed_ms(stage_start_ns);
+
     // Drain all worker MPSC inboxes (coroutines pushed after running=false)
+    stage_start_ns = xr_time_monotonic_ns();
     for (int i = 0; i < runtime->worker_count; i++) {
         XrCoroutine *orphan = xr_mpsc_drain(&runtime->workers[i].p.inbox);
         while (orphan) {
             XrCoroutine *next = orphan->sched_link;
             orphan->sched_link = NULL;
+            orphan_inbox_count++;
             orphan = next;
         }
     }
+    inbox_drain_ms = teardown_elapsed_ms(stage_start_ns);
 
     // Destroy async thread pool
+    stage_start_ns = xr_time_monotonic_ns();
     if (runtime->async_pool) {
         xr_async_pool_destroy(runtime->async_pool);
         xr_free(runtime->async_pool);
         runtime->async_pool = NULL;
     }
+    async_destroy_ms = teardown_elapsed_ms(stage_start_ns);
 
     // Destroy Workers (also destroys bound M via xr_worker_destroy)
+    stage_start_ns = xr_time_monotonic_ns();
     for (int i = 0; i < runtime->worker_count; i++) {
         xr_worker_destroy(&runtime->workers[i]);
     }
+    worker_destroy_ms = teardown_elapsed_ms(stage_start_ns);
+
+    stage_start_ns = xr_time_monotonic_ns();
     xr_injectq_destroy(runtime);
+    inject_destroy_ms = teardown_elapsed_ms(stage_start_ns);
+
     xr_free_aligned(runtime->workers, XR_CACHE_LINE);
     xr_free(runtime->machines);
 
     // blocked queue cleaned up when Worker destroyed
 
     // Cleanup Netpoll
+    stage_start_ns = xr_time_monotonic_ns();
     xr_netpoll_cleanup(&runtime->netpoll);
+    netpoll_cleanup_ms = teardown_elapsed_ms(stage_start_ns);
 
     // Tear down IO runtime (DNS cache and any future IO state).
+    stage_start_ns = xr_time_monotonic_ns();
     xr_io_runtime_free(runtime->io);
     runtime->io = NULL;
+    io_cleanup_ms = teardown_elapsed_ms(stage_start_ns);
+
+    if (runtime->sched_stats_enabled) {
+        fprintf(stderr,
+                "Runtime teardown: stop_ms=%llu leak_check_ms=%llu "
+                "channel_leak_check_ms=%llu timer_drain_ms=%llu stats_print_ms=%llu "
+                "task_defer_ms=%llu deferred_tasks=%zu inbox_drain_ms=%llu "
+                "orphan_inbox=%llu async_destroy_ms=%llu worker_destroy_ms=%llu "
+                "inject_destroy_ms=%llu netpoll_cleanup_ms=%llu io_cleanup_ms=%llu "
+                "total_ms=%llu\n",
+                (unsigned long long) stop_ms, (unsigned long long) leak_check_ms,
+                (unsigned long long) channel_leak_check_ms, (unsigned long long) timer_drain_ms,
+                (unsigned long long) stats_print_ms, (unsigned long long) task_defer_ms,
+                deferred_task_count, (unsigned long long) inbox_drain_ms,
+                (unsigned long long) orphan_inbox_count, (unsigned long long) async_destroy_ms,
+                (unsigned long long) worker_destroy_ms, (unsigned long long) inject_destroy_ms,
+                (unsigned long long) netpoll_cleanup_ms, (unsigned long long) io_cleanup_ms,
+                (unsigned long long) teardown_elapsed_ms(teardown_start_ns));
+    }
 
     xr_free(runtime);
 }
@@ -492,11 +569,6 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
 
     // Start sysmon thread (heartbeat monitoring + stuck detection)
     xr_thread_create(&runtime->sysmon_thread, sysmon_thread_func, runtime);
-
-    // Start async pool threads
-    if (runtime->async_pool) {
-        xr_async_pool_start_threads(runtime->async_pool);
-    }
 
     // Worker threads need larger stack for nested run() calls (e.g. module import)
     // and ASan instrumentation which greatly inflates stack frame sizes.
@@ -551,7 +623,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
         while (idle) {
             atomic_store_explicit(&idle->park_state, XR_PARK_WOKEN, memory_order_release);
             xr_park_futex_wake(&idle->park_state);
-            idle = idle->idle_link;
+            idle = atomic_load_explicit(&idle->idle_link, memory_order_relaxed);
         }
     }
 
@@ -668,13 +740,20 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
     uint64_t total_steal_success = 0, total_steal_backoff = 0, total_local_pop = 0;
     uint64_t total_steal_no_candidate = 0, total_steal_fresh_reject = 0;
     uint64_t total_steal_candidate_scan = 0, total_steal_throttle_wait = 0;
+    uint64_t total_steal_throttle_wait_ms = 0, max_steal_throttle_wait_ms = 0;
     uint64_t total_steal_direct = 0;
+    uint64_t total_steal_batch_attempt = 0, total_steal_batch_empty = 0;
+    uint64_t total_steal_batch_fail = 0;
     uint64_t total_inject_pull = 0;
     uint64_t total_yield = 0;
+    uint64_t total_spawned = 0, total_spawn_inline = 0, total_spawn_shared = 0;
+    uint64_t total_spawn_burst_shared = 0, total_spawn_backlog_shared = 0;
+    uint64_t total_spawn_backlog_full_inline = 0;
     uint64_t total_cont = 0, total_lifo_hit = 0, total_lifo_flush = 0, total_inbox = 0;
     uint64_t total_lifo_gate_budget = 0, total_lifo_gate_backlog = 0;
     uint64_t total_fast_dispatch = 0, total_fast_dispatch_budget_stop = 0;
     uint64_t total_fast_dispatch_empty = 0;
+    uint64_t total_vm_direct_switch = 0;
     uint64_t total_pool_deferred_recycle = 0, total_pool_local_get = 0;
     uint64_t total_pool_global_free_get = 0, total_pool_arena_cache_get = 0;
     uint64_t total_pool_arena_batch_get = 0, total_pool_miss = 0;
@@ -718,8 +797,21 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_steal_fresh_reject += p->stats.steal_fresh_reject_count;
         total_steal_candidate_scan += p->stats.steal_candidate_scan_count;
         total_steal_throttle_wait += p->stats.steal_throttle_wait_count;
+        total_steal_throttle_wait_ms += p->stats.steal_throttle_wait_ms;
+        if (p->stats.steal_throttle_wait_max_ms > max_steal_throttle_wait_ms) {
+            max_steal_throttle_wait_ms = p->stats.steal_throttle_wait_max_ms;
+        }
         total_steal_direct += p->stats.steal_direct_dispatch_count;
+        total_steal_batch_attempt += p->stats.steal_batch_attempt_count;
+        total_steal_batch_empty += p->stats.steal_batch_empty_count;
+        total_steal_batch_fail += p->stats.steal_batch_fail_count;
         total_yield += p->stats.yielded_count;
+        total_spawned += p->stats.spawned_count;
+        total_spawn_inline += p->stats.spawn_inline_child_count;
+        total_spawn_shared += p->stats.spawn_shared_child_count;
+        total_spawn_burst_shared += p->stats.spawn_burst_shared_count;
+        total_spawn_backlog_shared += p->stats.spawn_backlog_shared_count;
+        total_spawn_backlog_full_inline += p->stats.spawn_backlog_full_inline_count;
         total_cont += p->stats.cont_steal_count;
         total_lifo_hit += p->stats.lifo_hit_count;
         total_lifo_flush += p->stats.lifo_flush_count;
@@ -728,6 +820,7 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
         total_fast_dispatch += p->stats.fast_dispatch_count;
         total_fast_dispatch_budget_stop += p->stats.fast_dispatch_budget_stop_count;
         total_fast_dispatch_empty += p->stats.fast_dispatch_empty_count;
+        total_vm_direct_switch += p->stats.vm_direct_switch_count;
         total_pool_deferred_recycle += p->stats.pool_deferred_recycle_count;
         total_pool_local_get += p->stats.pool_local_get_count;
         total_pool_global_free_get += p->stats.pool_global_free_get_count;
@@ -778,9 +871,20 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_inject_pull, (unsigned long long) total_steal,
             (unsigned long long) total_cont);
     fprintf(stderr,
+            "Spawn: total=%llu inline=%llu shared=%llu burst_shared=%llu backlog_shared=%llu "
+            "backlog_full_inline=%llu shared_ratio=%.2f%% burst_share_ratio=%.2f%%\n",
+            (unsigned long long) total_spawned, (unsigned long long) total_spawn_inline,
+            (unsigned long long) total_spawn_shared, (unsigned long long) total_spawn_burst_shared,
+            (unsigned long long) total_spawn_backlog_shared,
+            (unsigned long long) total_spawn_backlog_full_inline,
+            stats_percent_u64(total_spawn_shared, total_spawned),
+            stats_percent_u64(total_spawn_burst_shared, total_spawned));
+    fprintf(stderr,
             "Steal: attempts=%llu success=%llu success_ratio=%.2f%% stolen_items=%llu "
             "items_per_success=%.2f direct_dispatch=%llu skipped=%llu backoff=%llu "
             "no_candidate=%llu fresh_reject=%llu candidate_scans=%llu throttle_wait=%llu "
+            "throttle_wait_ms=%llu throttle_wait_max_ms=%llu throttle_wait_avg_ms=%.2f "
+            "batch_attempt=%llu batch_empty=%llu batch_fail=%llu batch_fail_ratio=%.2f%% "
             "scans_per_attempt=%.2f defer_ratio=%.2f%% skip_ratio=%.2f%%\n",
             (unsigned long long) total_steal_try, (unsigned long long) total_steal_success,
             stats_percent_u64(total_steal_success, total_steal_try),
@@ -790,6 +894,13 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) total_steal_fresh_reject,
             (unsigned long long) total_steal_candidate_scan,
             (unsigned long long) total_steal_throttle_wait,
+            (unsigned long long) total_steal_throttle_wait_ms,
+            (unsigned long long) max_steal_throttle_wait_ms,
+            stats_ratio_u64(total_steal_throttle_wait_ms, total_steal_throttle_wait),
+            (unsigned long long) total_steal_batch_attempt,
+            (unsigned long long) total_steal_batch_empty,
+            (unsigned long long) total_steal_batch_fail,
+            stats_percent_u64(total_steal_batch_fail, total_steal_batch_attempt),
             stats_ratio_u64(total_steal_candidate_scan, total_steal_try),
             stats_percent_u64(total_steal_backoff, total_steal_try + total_steal_backoff),
             stats_percent_u64(total_steal_skip, total_steal_try + total_steal_skip));
@@ -805,11 +916,14 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) lifo_gate_total, (unsigned long long) total_lifo_gate_budget,
             (unsigned long long) total_lifo_gate_backlog,
             stats_percent_u64(lifo_gate_total, lifo_gate_total + total_lifo_hit));
-    fprintf(stderr, "Fast dispatch: hits=%llu budget_stop=%llu empty=%llu hit_share=%.2f%%\n",
+    fprintf(stderr,
+            "Fast dispatch: hits=%llu budget_stop=%llu empty=%llu hit_share=%.2f%% "
+            "direct_switch=%llu\n",
             (unsigned long long) total_fast_dispatch,
             (unsigned long long) total_fast_dispatch_budget_stop,
             (unsigned long long) total_fast_dispatch_empty,
-            stats_percent_u64(total_fast_dispatch, total_lifo_hit));
+            stats_percent_u64(total_fast_dispatch, total_lifo_hit),
+            (unsigned long long) total_vm_direct_switch);
     fprintf(
         stderr,
         "Coro pool: deferred_recycle=%llu local_get=%llu global_free_get=%llu "
@@ -845,14 +959,15 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             stats_ratio_u64(wake_forward, wake_dispatch));
     fprintf(stderr,
             "Select: block=%llu register=%llu unregister=%llu wake=%llu close_wake=%llu "
-            "heap_alloc=%llu inline_alloc=%llu\n",
+            "heap_alloc=%llu inline_alloc=%llu probe_hit=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->select_block_count),
             (unsigned long long) xr_sched_metric_load(&s->select_register_count),
             (unsigned long long) xr_sched_metric_load(&s->select_unregister_count),
             (unsigned long long) xr_sched_metric_load(&s->select_wake_count),
             (unsigned long long) xr_sched_metric_load(&s->select_close_wake_count),
             (unsigned long long) xr_sched_metric_load(&s->select_heap_alloc_count),
-            (unsigned long long) xr_sched_metric_load(&s->select_inline_alloc_count));
+            (unsigned long long) xr_sched_metric_load(&s->select_inline_alloc_count),
+            (unsigned long long) xr_sched_metric_load(&s->vm_select_probe_hit_count));
     fprintf(stderr, "Timeout: yield_retry=%llu event_block=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->timeout_yield_retry_count),
             (unsigned long long) xr_sched_metric_load(&s->timeout_event_block_count));
@@ -870,6 +985,29 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->timer_cancel_drain_max_count));
     fprintf(stderr, "Channel hot path: no_waiter_buffer=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_buffer_no_waiter_count));
+    fprintf(stderr,
+            "VM fast path: chan_send_fast_no_ext=%llu chan_recv_fast_no_ext=%llu "
+            "await_done_fast=%llu select_probe_hit=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->vm_chan_send_fast_no_ext_count),
+            (unsigned long long) xr_sched_metric_load(&s->vm_chan_recv_fast_no_ext_count),
+            (unsigned long long) xr_sched_metric_load(&s->vm_await_done_fast_count),
+            (unsigned long long) xr_sched_metric_load(&s->vm_select_probe_hit_count));
+    fprintf(
+        stderr,
+        "Task lifecycle: one_shot_await=%llu one_shot_destroy_attempt=%llu "
+        "one_shot_destroy_success=%llu one_shot_destroy_fail_state=%llu "
+        "one_shot_destroy_fail_coro=%llu one_shot_destroy_fail_graph=%llu "
+        "one_shot_destroy_fail_listener=%llu one_shot_destroy_fail_waiter=%llu "
+        "one_shot_destroy_fail_unlinked=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_await_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_attempt_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_success_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_state_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_coro_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_graph_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_listener_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->task_one_shot_destroy_fail_unlinked_count));
     fprintf(stderr,
             "Channel logical shape transitions: spsc=%llu mpsc=%llu work_queue=%llu "
             "mpmc=%llu\n",
@@ -893,6 +1031,88 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_op_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_op_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_op_count));
+    fprintf(stderr,
+            "Channel logical send ops: generic=%llu rendezvous=%llu spsc=%llu mpsc=%llu "
+            "work_queue=%llu mpmc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_send_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_send_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_send_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_send_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_send_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_send_op_count));
+    fprintf(stderr,
+            "Channel logical recv ops: generic=%llu rendezvous=%llu spsc=%llu mpsc=%llu "
+            "work_queue=%llu mpmc=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_recv_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_recv_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_recv_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_recv_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_recv_op_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_recv_op_count));
+    fprintf(
+        stderr,
+        "Channel block send waiters: generic=%llu rendezvous=%llu spsc=%llu "
+        "mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_block_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_block_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_block_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_block_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_block_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_block_send_waiter_count));
+    fprintf(
+        stderr,
+        "Channel block recv waiters: generic=%llu rendezvous=%llu spsc=%llu "
+        "mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_block_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_block_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_block_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_block_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_block_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_block_recv_waiter_count));
+    fprintf(
+        stderr,
+        "Channel ready wake send waiters: generic=%llu rendezvous=%llu spsc=%llu "
+        "mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_wake_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_wake_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_wake_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_wake_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_wake_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_wake_send_waiter_count));
+    fprintf(
+        stderr,
+        "Channel ready wake recv waiters: generic=%llu rendezvous=%llu spsc=%llu "
+        "mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_wake_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_rendezvous_wake_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_wake_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_wake_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_work_queue_wake_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_wake_recv_waiter_count));
+    fprintf(
+        stderr,
+        "Channel ready wake retarget send waiters: generic=%llu rendezvous=%llu "
+        "spsc=%llu mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_retarget_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(
+            &s->chan_kind_rendezvous_retarget_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_retarget_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_retarget_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(
+            &s->chan_kind_work_queue_retarget_send_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_retarget_send_waiter_count));
+    fprintf(
+        stderr,
+        "Channel ready wake retarget recv waiters: generic=%llu rendezvous=%llu "
+        "spsc=%llu mpsc=%llu work_queue=%llu mpmc=%llu\n",
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_generic_retarget_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(
+            &s->chan_kind_rendezvous_retarget_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_spsc_retarget_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpsc_retarget_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(
+            &s->chan_kind_work_queue_retarget_recv_waiter_count),
+        (unsigned long long) xr_sched_metric_load(&s->chan_kind_mpmc_retarget_recv_waiter_count));
     fprintf(stderr,
             "Channel worker-shape ops: generic=%llu rendezvous=%llu spsc=%llu mpsc=%llu "
             "work_queue=%llu mpmc=%llu\n",
@@ -953,6 +1173,13 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
             (unsigned long long) xr_sched_metric_load(&s->chan_close_send_waiter_count),
             (unsigned long long) xr_sched_metric_load(&s->chan_close_recv_waiter_count));
     fprintf(stderr,
+            "Channel ownership: send_no_copy=%llu send_deep_copy=%llu recv_no_copy=%llu "
+            "recv_deep_copy=%llu\n",
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_no_copy_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_send_deep_copy_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_no_copy_count),
+            (unsigned long long) xr_sched_metric_load(&s->chan_recv_deep_copy_count));
+    fprintf(stderr,
             "Channel close fanout: deferred_send=%llu deferred_recv=%llu local_workers=%llu "
             "remote_workers=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->chan_close_deferred_send_waiter_count),
@@ -975,6 +1202,22 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 (unsigned long long) xr_sched_metric_load(&s->work_queue_wake_count),
                 (unsigned long long) xr_sched_metric_load(&s->work_queue_close_count),
                 (unsigned long long) xr_sched_metric_load(&s->work_queue_close_wake_count));
+    }
+    {
+        uint64_t rg_flush = xr_sched_metric_load(&s->result_group_flush_count);
+        uint64_t rg_flush_items = xr_sched_metric_load(&s->result_group_flush_item_count);
+        fprintf(stderr,
+                "ResultGroup: add=%llu flush=%llu flush_items=%llu items_per_flush=%.2f "
+                "recv=%llu recv_empty=%llu block=%llu wake=%llu close=%llu close_wake=%llu\n",
+                (unsigned long long) xr_sched_metric_load(&s->result_group_add_count),
+                (unsigned long long) rg_flush, (unsigned long long) rg_flush_items,
+                stats_ratio_u64(rg_flush_items, rg_flush),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_recv_count),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_recv_empty_count),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_block_count),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_wake_count),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_close_count),
+                (unsigned long long) xr_sched_metric_load(&s->result_group_close_wake_count));
     }
     fprintf(stderr, "Handoff: reuse=%llu create=%llu cap_hit=%llu create_fail=%llu\n",
             (unsigned long long) xr_sched_metric_load(&s->handoff_reuse_count),
@@ -1021,12 +1264,10 @@ void xr_runtime_print_stats(XrRuntime *runtime) {
                 stats_ratio_u64(inject_push, inject_push_batches),
                 stats_ratio_u64(inject_pop, inject_pop_batches));
     }
-    fprintf(
-        stderr, "Masks: runq=0x%llx stealable=0x%llx timer=0x%llx idle=0x%llx searching=%d\n",
-        (unsigned long long) atomic_load_explicit(&runtime->nonempty_p_mask, memory_order_relaxed),
-        (unsigned long long) atomic_load_explicit(&runtime->stealable_p_mask, memory_order_relaxed),
-        (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
-        (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
-        atomic_load_explicit(&runtime->searching_count, memory_order_relaxed));
+    fprintf(stderr, "Masks: stealable=0x%llx timer=0x%llx idle=0x%llx searching=%d\n",
+            (unsigned long long) xr_runtime_scan_stealable(runtime, 0),
+            (unsigned long long) atomic_load_explicit(&runtime->timer_p_mask, memory_order_relaxed),
+            (unsigned long long) atomic_load_explicit(&runtime->idle_p_mask, memory_order_relaxed),
+            atomic_load_explicit(&runtime->searching_count, memory_order_relaxed));
     fprintf(stderr, "===========================\n\n");
 }

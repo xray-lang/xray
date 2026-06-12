@@ -118,7 +118,7 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls);
 static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_instance_field_count,
                             int own_instance_fields, int total_own_fields,
                             int total_instance_field_count);
-static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
+static bool finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
                                       int parent_instance_field_count, int own_instance_fields,
                                       int total_instance_field_count);
 static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instance_method_count,
@@ -126,9 +126,9 @@ static bool finalize_methods(XrClassBuilder *b, XrClass *cls, int parent_instanc
 static bool finalize_static_fields(const XrClassBuilder *b, XrClass *cls);
 static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int flat_instance_count,
                                     int total_method_count);
-static void finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
-static void finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls);
-static void finalize_method_symbol_map(XrClass *cls);
+static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls);
+static bool finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls);
+static bool finalize_method_symbol_map(XrClass *cls);
 static void finalize_eager_reflection(XrClassBuilder *b, XrClass *cls);
 static void write_method_slot(XrMethod *method, XrMethodBuildItem *item, bool is_static);
 
@@ -172,13 +172,20 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         (builder->super != NULL) ? xr_class_instance_field_count(builder->super) : 0;
     int total_instance_field_count = parent_instance_field_count + own_instance_fields;
 
+    // Every stage below is all-or-nothing: a class with a missing symbol
+    // map, default values, interface list or itable would keep working
+    // but silently misbehave (invisible members, lost defaults, wrong
+    // `is` checks). OOM anywhere rolls the whole class back.
     if (!finalize_fields(builder, cls, parent_instance_field_count, own_instance_fields,
                          total_own_fields, total_instance_field_count)) {
         xr_class_free(cls);
         return NULL;
     }
-    finalize_field_symbol_map(builder, cls, parent_instance_field_count, own_instance_fields,
-                              total_instance_field_count);
+    if (!finalize_field_symbol_map(builder, cls, parent_instance_field_count, own_instance_fields,
+                                   total_instance_field_count)) {
+        xr_class_free(cls);
+        return NULL;
+    }
 
     // Method counts shared by finalize_methods / finalize_static_methods.
     int parent_instance_method_count = (builder->super != NULL) ? builder->super->method_count : 0;
@@ -208,11 +215,16 @@ XrClass *xr_class_builder_finalize(XrClassBuilder *builder) {
         return NULL;
     }
     finalize_static_methods(builder, cls, flat_instance_count, total_method_count);
-    finalize_interfaces(builder, cls);
-    finalize_abstract_methods(builder, cls);
-    finalize_method_symbol_map(cls);
+    if (!finalize_interfaces(builder, cls) || !finalize_abstract_methods(builder, cls) ||
+        !finalize_method_symbol_map(cls)) {
+        xr_class_free(cls);
+        return NULL;
+    }
 
-    xr_class_build_itable(cls);
+    if (xr_class_build_itable(cls) != 0) {
+        xr_class_free(cls);
+        return NULL;
+    }
     xr_class_compute_operator_flags(cls);
 
     finalize_eager_reflection(builder, cls);
@@ -309,8 +321,9 @@ static void finalize_basic_and_supers(const XrClassBuilder *b, XrClass *cls) {
 }
 
 // Populate cls->fields (instance + static descriptors), cls->instance_size,
-// and cls->field_default_values. Returns false on cls->fields alloc
-// failure (the only hard error in this stage).
+// and cls->field_default_values. Returns false on any alloc failure:
+// missing default values would silently null-initialize declared
+// defaults, so partial success is not acceptable here.
 static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_instance_field_count,
                             int own_instance_fields, int total_own_fields,
                             int total_instance_field_count) {
@@ -361,26 +374,27 @@ static bool finalize_fields(const XrClassBuilder *b, XrClass *cls, int parent_in
     if (total_instance_field_count > 0) {
         cls->field_default_values =
             (XrValue *) xr_malloc(total_instance_field_count * sizeof(XrValue));
-        if (cls->field_default_values != NULL) {
-            for (int i = 0; i < total_instance_field_count; i++) {
-                cls->field_default_values[i] = xr_null();
-            }
-            for (int i = 0; i < own_instance_fields; i++) {
-                int global_idx = parent_instance_field_count + i;
-                cls->field_default_values[global_idx] = b->fields[i].default_value;
-            }
+        if (cls->field_default_values == NULL)
+            return false;
+        for (int i = 0; i < total_instance_field_count; i++) {
+            cls->field_default_values[i] = xr_null();
+        }
+        for (int i = 0; i < own_instance_fields; i++) {
+            int global_idx = parent_instance_field_count + i;
+            cls->field_default_values[global_idx] = b->fields[i].default_value;
         }
     }
     return true;
 }
 
-// symbol -> field index map. Best-effort (xr_class_lookup_field walks
-// the super chain recursively if this map is missing).
-static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
+// symbol -> field index map. Returns false on alloc failure. The map is
+// mandatory: xr_class_lookup_field only walks the super chain after a
+// map miss, so a class without its own map would lose its own fields.
+static bool finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
                                       int parent_instance_field_count, int own_instance_fields,
                                       int total_instance_field_count) {
     if (cls->own_field_count == 0)
-        return;
+        return true;
 
     int max_symbol = 0;
     for (int i = 0; i < cls->own_field_count; i++) {
@@ -389,8 +403,10 @@ static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
     }
     cls->field_map_capacity = max_symbol + 1;
     cls->field_symbol_to_index = (int *) xr_malloc(cls->field_map_capacity * sizeof(int));
-    if (cls->field_symbol_to_index == NULL)
-        return;
+    if (cls->field_symbol_to_index == NULL) {
+        cls->field_map_capacity = 0;
+        return false;
+    }
 
     for (int i = 0; i < cls->field_map_capacity; i++) {
         cls->field_symbol_to_index[i] = -1;
@@ -403,6 +419,7 @@ static void finalize_field_symbol_map(const XrClassBuilder *b, XrClass *cls,
         int field_idx = own_instance_fields + i;
         cls->field_symbol_to_index[cls->fields[field_idx].symbol] = total_instance_field_count + i;
     }
+    return true;
 }
 
 // Copy one XrMethodBuildItem into an XrMethod slot. Keeps the dense
@@ -516,41 +533,45 @@ static void finalize_static_methods(const XrClassBuilder *b, XrClass *cls, int f
     cls->static_method_count = b->static_method_count;
 }
 
-// Interface pointer list. Allocation failure leaves cls->interfaces
-// NULL + interface_count == 0; implements_interface handles that
-// edge gracefully by returning false.
-static void finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
+// Interface pointer list. Returns false on alloc failure: a class that
+// silently drops its interfaces would flip `is`/interface dispatch
+// results, so partial finalize is not allowed.
+static bool finalize_interfaces(const XrClassBuilder *b, XrClass *cls) {
     if (b->interface_count == 0)
-        return;
+        return true;
 
     cls->interfaces = (XrClass **) xr_malloc(b->interface_count * sizeof(XrClass *));
     if (cls->interfaces == NULL)
-        return;
+        return false;
     memcpy(cls->interfaces, b->interfaces, b->interface_count * sizeof(XrClass *));
     cls->interface_count = b->interface_count;
+    return true;
 }
 
-// Abstract method symbol list. Same best-effort semantics as
-// interfaces -- consumers (xr_class_can_instantiate etc.) treat a
-// NULL abstract_methods + count == 0 as "no abstract methods".
-static void finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls) {
+// Abstract method symbol list. Returns false on alloc failure: dropping
+// the list would make an abstract class instantiable
+// (xr_class_can_instantiate treats count == 0 as "no abstract methods").
+static bool finalize_abstract_methods(const XrClassBuilder *b, XrClass *cls) {
     if (b->abstract_method_count == 0)
-        return;
+        return true;
 
     cls->abstract_methods = (int *) xr_malloc(b->abstract_method_count * sizeof(int));
     if (cls->abstract_methods == NULL)
-        return;
+        return false;
     memcpy(cls->abstract_methods, b->abstract_methods, b->abstract_method_count * sizeof(int));
     cls->abstract_method_count = b->abstract_method_count;
+    return true;
 }
 
 // symbol -> method index map. Built BEFORE xr_class_build_itable so
 // the itable builder can do O(1) interface method -> implementation
 // lookups via cls->method_symbol_to_index instead of a linear scan
-// through cls->methods[].
-static void finalize_method_symbol_map(XrClass *cls) {
+// through cls->methods[]. Returns false on alloc failure: the map is
+// mandatory — xr_class_lookup_method has no linear fallback, so a class
+// without it would lose every method it declares.
+static bool finalize_method_symbol_map(XrClass *cls) {
     if (cls->method_count == 0)
-        return;
+        return true;
 
     int max_symbol = 0;
     for (int i = 0; i < cls->method_count; i++) {
@@ -559,8 +580,10 @@ static void finalize_method_symbol_map(XrClass *cls) {
     }
     cls->method_map_capacity = max_symbol + 1;
     cls->method_symbol_to_index = (int *) xr_malloc(cls->method_map_capacity * sizeof(int));
-    if (cls->method_symbol_to_index == NULL)
-        return;
+    if (cls->method_symbol_to_index == NULL) {
+        cls->method_map_capacity = 0;
+        return false;
+    }
 
     for (int i = 0; i < cls->method_map_capacity; i++) {
         cls->method_symbol_to_index[i] = -1;
@@ -571,6 +594,7 @@ static void finalize_method_symbol_map(XrClass *cls) {
             cls->method_symbol_to_index[symbol] = i;
         }
     }
+    return true;
 }
 
 // Eagerly build reflect_cache + register type_metadata. Both outputs

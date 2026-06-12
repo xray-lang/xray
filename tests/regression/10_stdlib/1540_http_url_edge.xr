@@ -55,13 +55,13 @@ fn test_url_encode_ascii_passthrough() {
 @test
 fn test_url_encode_empty() {
     let encoded = http.urlEncode("")
-    assert(encoded == null || encoded == "")
+    assert_eq(encoded, "")
 }
 
 @test
 fn test_url_decode_empty() {
     let decoded = http.urlDecode("")
-    assert(decoded == null || decoded == "")
+    assert_eq(decoded, "")
 }
 
 // ===== Space encoding =====

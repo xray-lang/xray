@@ -30,9 +30,11 @@
 #include "xtask.h"
 #include "xcoro_pool.h"
 #include "xyieldable.h"
+#include "xresult_group.h"
 #include "xwork_queue.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xstring.h"
+#include "../os/os_time.h"
 
 // Note: blocked queue moved to XrRuntime, see xworker.c
 
@@ -47,7 +49,7 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
         return 0;
 
     // Reset reductions for next safepoint interval
-    coro->reductions = XR_CORO_REDUCTIONS;
+    xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
 
     xr_coro_backend_on_safepoint(coro);
 
@@ -219,12 +221,8 @@ static XrCoroRunResult native_backend_resume(XrCoroutine *coro, const XrCoroEven
     if (xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
         return xr_coro_run_done(coro->result);
 
-    uint32_t flags = xr_coro_flags_load(coro);
-    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
-    atomic_store_explicit(&coro->flags,
-                          (flags & ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
-                              XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
-                          memory_order_release);
+    xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED,
+                       XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
 
     state->func(state->arg);
     coro->result = xr_null();
@@ -309,6 +307,7 @@ static void coro_wait_state_reset(XrCoroExt *ext) {
     xr_timer_wait_token_reset(&ext->wait.timer_token);
     xr_io_wait_token_reset(&ext->wait.io_token);
     xr_work_queue_wait_token_reset(&ext->wait.work_queue_token);
+    xr_result_group_wait_token_reset(&ext->wait.result_group_token);
 }
 
 static void coro_wait_state_free(XrCoroExt *ext) {
@@ -327,6 +326,8 @@ static void coro_recv_slot_reset(XrCoroExt *ext) {
         return;
     ext->recv_slot = NULL;
     ext->recv_slot_ref = xr_slot_none();
+    ext->chan_ok_slot_ref = xr_slot_none();
+    ext->chan_resume_delivered = false;
 }
 
 static void coro_channel_wait_links_reset(XrCoroExt *ext) {
@@ -338,6 +339,7 @@ static void coro_channel_wait_links_reset(XrCoroExt *ext) {
     ext->chan_wait_queue = NULL;
     ext->wait_link = NULL;
     ext->wait_prev = NULL;
+    ext->work_queue_hint = -1;
     ext->wait_bucket = NULL;
     ext->wait_bucket_owner = -1;
     ext->wait_send = false;
@@ -350,6 +352,56 @@ static void coro_channel_wait_reset(XrCoroExt *ext) {
         return;
     xr_channel_wait_token_reset(&ext->chan_wait_token);
     coro_channel_wait_links_reset(ext);
+}
+
+static void coro_timer_state_reset(XrCoroExt *ext) {
+    if (!ext)
+        return;
+    atomic_store_explicit(&ext->timer_active, false, memory_order_relaxed);
+    ext->timer.prev = NULL;
+    ext->timer.next = NULL;
+    atomic_store_explicit(&ext->timer.cancel_next, NULL, memory_order_relaxed);
+    ext->timer.slot = XR_TW_SLOT_INACTIVE;
+    ext->timer.timeout = NULL;
+    ext->timer.arg = NULL;
+    ext->timer.owner_worker_id = -1;
+    atomic_store_explicit(&ext->timer.state, XR_TIMER_STATE_ACTIVE, memory_order_relaxed);
+    ext->timer_wheel_owner = -1;
+    atomic_store_explicit(&ext->timer_seq, 0, memory_order_relaxed);
+}
+
+static bool coro_timer_safe_for_recycle(XrWorker *worker, XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return true;
+
+    XrCoroExt *ext = coro->ext;
+    XrTWheelTimer *timer = &ext->timer;
+    if (atomic_load_explicit(&ext->timer_active, memory_order_relaxed)) {
+        xr_worker_cancel_timer(worker, coro);
+    }
+
+    XrTimerWheel *owner_tw = NULL;
+    if (worker && worker->p.runtime && timer->owner_worker_id >= 0 &&
+        timer->owner_worker_id < worker->p.runtime->worker_count) {
+        owner_tw = worker->p.runtime->workers[timer->owner_worker_id].p.timer_wheel;
+    }
+
+    if (owner_tw && worker && timer->owner_worker_id == worker->p.id) {
+        if (xr_timer_cancel_pending(owner_tw)) {
+            (void) xr_timer_process_canceled_queue(owner_tw);
+        }
+        if (timer->slot != XR_TW_SLOT_INACTIVE) {
+            xr_twheel_cancel_timer(owner_tw, timer);
+        }
+    }
+
+    if (timer->slot != XR_TW_SLOT_INACTIVE)
+        return false;
+    if (atomic_load_explicit(&timer->state, memory_order_acquire) == XR_TIMER_STATE_ZOMBIE)
+        return false;
+    if (atomic_load_explicit(&timer->cancel_next, memory_order_acquire) != NULL)
+        return false;
+    return true;
 }
 
 bool xr_coro_set_pending_spawn(XrCoroutine *coro, XrCoroutine *child) {
@@ -423,28 +475,24 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
             xr_coro_clear_debug_identity(coro);
             atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
             coro->ext->locked_worker = -1;
-            atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
-            coro->ext->timer.prev = NULL;
-            coro->ext->timer.next = NULL;
-            atomic_store_explicit(&coro->ext->timer.cancel_next, NULL, memory_order_relaxed);
-            coro->ext->timer.slot = XR_TW_SLOT_INACTIVE;
-            atomic_store_explicit(&coro->ext->timer.state, XR_TIMER_STATE_ACTIVE,
-                                  memory_order_relaxed);
-            coro->ext->timer_wheel_owner = -1;
-            atomic_store_explicit(&coro->ext->timer_seq, 0, memory_order_relaxed);
+            coro_timer_state_reset(coro->ext);
             coro_channel_wait_reset(coro->ext);
             coro_recv_slot_reset(coro->ext);
             coro_wait_state_reset(coro->ext);
             coro_select_storage_reset(coro->ext);
         }
     } else {
-        // Clear the clean bit (consumed)
-        coro->gc_flags &= ~XR_CORO_GC_RECYCLED_CLEAN;
+        // Consume the clean bit and drop per-lifetime bits, mirroring the
+        // fresh path which restores only allocation-provenance bits. A stale
+        // XR_CORO_GC_RECYCLABLE leaking from a previous lifetime (invoke /
+        // fire-and-forget coro) would let the deferred-recycle path reset
+        // this coroutine's heap while its Task result is still unread.
+        coro->gc_flags &=
+            (XR_CORO_GC_FROM_POOL | XR_CORO_GC_BACKEND_STATE_OWNED | XR_CORO_GC_LIGHTWEIGHT);
     }
 
     // Atomic fields
     atomic_store_explicit(&coro->flags, XR_CORO_FLG_READY, memory_order_relaxed);
-    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_READY, memory_order_relaxed);
     if (!is_clean) {
         // Fresh allocation: all atomic fields need explicit init
         atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
@@ -453,7 +501,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     // Clean path: recycle_local already zeroed all atomic fields via atomic_store
 
     // Set non-zero fields (always needed)
-    coro->reductions = XR_CORO_REDUCTIONS;
+    xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
 
     // Runtime-managed: a coroutine's lifetime is owned by the scheduler/pool,
     // not the compiler's per-coroutine RC. Mark here (covers every alloc path:
@@ -461,6 +509,7 @@ bool xr_coro_init_shell(XrCoroutine *coro, XrayIsolate *X, const char *name, boo
     // become no-ops for coroutine handles. See docs/design/706.
     XR_OBJ_SET_FLAG(&coro->gc, XR_OBJ_MANAGED);
     coro->schedule_count = 1;
+    coro->spawn_burst_count = 0;
     coro->isolate = X;
     if (!xr_coro_set_name(coro, name))
         return false;
@@ -612,11 +661,11 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_DONE), "recycle_local: coro not done");
     XR_DCHECK(!coro->coro_gc || !coro->coro_gc->in_gc, "recycle_local: GC active during recycle");
 
-    // Cancel timer using cross-worker cancellation
-    // This handles both local (direct) and cross-worker (async queue) cancellation
-    if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
-        xr_worker_cancel_timer(worker, coro);
-        // Note: ext->timer_active is set to false inside xr_worker_cancel_timer
+    // Timer nodes are intrusive wheel entries. Reuse is safe only after the
+    // owner wheel has physically unlinked any active/zombie node.
+    if (!coro_timer_safe_for_recycle(worker, coro)) {
+        coro->gc_flags &= ~XR_CORO_GC_RECYCLABLE;
+        return;
     }
     xr_task_cancel_await_waiters(coro);
     if (coro->ext)
@@ -638,21 +687,31 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     coro->result = xr_null();
     coro->error = xr_null();
     coro->task = NULL;
-    coro->current_scope = NULL;
+    atomic_store_explicit(&coro->current_scope, NULL, memory_order_relaxed);
     coro->sched_link = NULL;
     coro->next = NULL;
     coro->prev = NULL;
+    coro->spawn_burst_count = 0;
     coro_channel_wait_reset(coro->ext);
     coro_recv_slot_reset(coro->ext);
     coro_wait_state_reset(coro->ext);
     coro_select_storage_reset(coro->ext);
+    coro_timer_state_reset(coro->ext);
     coro_clear_scope_membership(coro);
     (void) xr_coro_set_pending_spawn(coro, NULL);
-    // ext fields (lock_count, locked_worker, locals, watched_by)
-    // are reset in xr_coro_init_shell dirty path; ext pointer preserved for io_buf reuse
+    // Recycled shells take the clean path in xr_coro_init_shell, which skips
+    // the dirty-path ext resets — so the per-lifetime ext fields must be
+    // dropped here. locals lives in this coroutine's heap, which
+    // xr_coro_gc_reset above just released: a stale pointer would be a UAF
+    // for the next lifetime's Coro.setLocal.
+    if (coro->ext) {
+        coro->ext->locals = NULL;
+        coro->ext->watched_by = NULL;
+        atomic_store_explicit(&coro->ext->lock_count, 0, memory_order_relaxed);
+        coro->ext->locked_worker = -1;
+    }
     xr_coro_clear_debug_identity(coro);
     atomic_store_explicit(&coro->flags, 0, memory_order_relaxed);
-    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
     atomic_store_explicit(&coro->resume_status, 0, memory_order_relaxed);
     atomic_store_explicit(&coro->affinity_p, 0, memory_order_relaxed);
     // timer fields live in ext; reset happens in xr_coro_init_shell dirty path
@@ -849,8 +908,12 @@ static bool coro_cancel_detach_channel_waiter(XrCoroutine *coro, XrWorker *curre
 
     XrCoroExt *ext = coro->ext;
     XrChannel *ch = (XrChannel *) atomic_load_explicit(&ext->wait_channel, memory_order_acquire);
-    if (ch)
-        xr_channel_remove_waiter(ch, coro);
+    if (ch) {
+        // Untimed waits were already unlinked by the arbitration step in
+        // xr_coro_cancel; timed waits are unlinked here (their wakers go
+        // through claim-wake, which bails once DONE is visible).
+        (void) xr_channel_remove_waiter(ch, coro);
+    }
 
     bool has_owner_bucket = ext->wait_bucket != NULL;
     if (!has_owner_bucket)
@@ -891,15 +954,34 @@ static bool coro_cancel_detach_select_waiter(XrCoroutine *coro, XrWorker *curren
 
 // Cancel coroutine
 // Cancel logic:
-// 1. Cancel timer if sleeping (must happen before flags change)
-// 2. Set CANCELLED and DONE flags
-// 3. Clear blocked state
+// 1. Untimed channel waits: arbitrate ownership by unlinking under ch->lock
+//    BEFORE the kill mark. The untimed wake fast path asserts exclusive
+//    ownership after dequeue, so a cancel that loses the unlink race must
+//    not force-kill — it degrades to cooperative CANCEL_REQUESTED and the
+//    coroutine dies at its next resume safepoint.
+// 2. Timed waits keep the original mark-first order: the timer fires without
+//    holding ch->lock and its claim-wake bails once DONE is visible.
+// 3. Cancel timer if sleeping (must happen before flags change)
+// 4. Set CANCELLED and DONE flags, then clear blocked bookkeeping
 void xr_coro_cancel(XrCoroutine *coro) {
     if (!coro || xr_coro_flags_has(coro, XR_CORO_FLG_DONE))
         return;
 
+    bool timed = coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed);
+
+    if (coro->ext && !timed) {
+        XrChannel *wait_ch =
+            (XrChannel *) atomic_load_explicit(&coro->ext->wait_channel, memory_order_acquire);
+        if (wait_ch && !xr_channel_remove_waiter(wait_ch, coro)) {
+            // A concurrent send/recv/close dequeued the waiter first and owns
+            // its wake. Cooperative cancellation only.
+            xr_coro_flags_set(coro, XR_CORO_FLG_CANCEL_REQUESTED);
+            return;
+        }
+    }
+
     // Cancel timer if active (e.g. time.sleep)
-    if (coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed)) {
+    if (timed) {
         XrWorker *worker = xr_current_worker();
         if (worker) {
             xr_worker_cancel_timer(worker, coro);
@@ -913,22 +995,33 @@ void xr_coro_cancel(XrCoroutine *coro) {
     xr_coro_flags_clear(coro, XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY);
 
     // Clear blocked info
-    if (coro->ext) {
+    XrCoroExt *cancel_ext = coro->ext;
+    if (cancel_ext) {
         XrWorker *current_worker = xr_current_worker();
-        bool channel_wait_detached = coro_cancel_detach_channel_waiter(coro, current_worker);
-        (void) coro_cancel_detach_select_waiter(coro, current_worker);
+        bool channel_owned = coro_cancel_detach_channel_waiter(coro, current_worker);
+        bool select_owned = coro_cancel_detach_select_waiter(coro, current_worker);
+        /* Token cancels are CAS state machines designed for cross-thread
+         * arbitration — safe even when the coro was handed to its owner
+         * worker via the inbox above. */
         xr_task_cancel_await_waiters(coro);
-        xr_await_wait_token_cancel(&coro->ext->wait.await_token);
-        xr_multi_await_wait_token_cancel(&coro->ext->wait.multi_await_token);
-        xr_scope_wait_token_cancel(&coro->ext->wait.scope_token);
-        xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
-        xr_io_wait_token_cancel(&coro->ext->wait.io_token);
+        xr_await_wait_token_cancel(&cancel_ext->wait.await_token);
+        xr_multi_await_wait_token_cancel(&cancel_ext->wait.multi_await_token);
+        xr_scope_wait_token_cancel(&cancel_ext->wait.scope_token);
+        xr_timer_wait_token_cancel(&cancel_ext->wait.timer_token);
+        xr_io_wait_token_cancel(&cancel_ext->wait.io_token);
         xr_work_queue_cancel_waiter(coro);
-        xr_channel_wait_token_cancel(&coro->ext->chan_wait_token);
-        if (channel_wait_detached)
-            coro_channel_wait_links_reset(coro->ext);
+        xr_result_group_cancel_waiter(coro);
+        xr_channel_wait_token_cancel(&cancel_ext->chan_wait_token);
+        /* Plain-field surgery requires full ownership: if either detach
+         * handed the coro to its owner worker (inbox), that worker finishes
+         * the blocked-side cleanup and touching the links here would race
+         * its inbox drain. */
+        if (channel_owned && select_owned)
+            coro_channel_wait_links_reset(cancel_ext);
     }
-    coro->result = xr_null();
+    /* No result write here: a cooperatively cancelled coro may still be
+     * running on its owner worker, and nothing consumes a cancelled
+     * coroutine's result slot. */
 }
 
 // ========== Scope Structured Concurrency ==========
@@ -945,7 +1038,7 @@ void xr_scope_add_coro(XrCoroState *sched, XrCoroutine *coro, XrCoroutine *paren
 
     // Per-coroutine scope (preferred)
     if (parent) {
-        scope = parent->current_scope;
+        scope = atomic_load_explicit(&parent->current_scope, memory_order_relaxed);
     }
 
     // Fallback: Runtime global (main thread)
@@ -1000,12 +1093,25 @@ void xr_multicore_destroy(XrayIsolate *X) {
         return;
 
     XrRuntime *runtime = (XrRuntime *) X->vm.runtime;
+    bool stats_enabled = xr_sched_stats_enabled(runtime);
+    uint64_t total_start_ns = xr_time_monotonic_ns();
+    uint64_t stage_start_ns = total_start_ns;
 
     // Stop Runtime (if started)
     xr_runtime_stop(runtime);
+    uint64_t stop_ms = (xr_time_monotonic_ns() - stage_start_ns) / 1000000ULL;
 
     // Free resources
+    stage_start_ns = xr_time_monotonic_ns();
     xr_runtime_destroy(runtime);
+    uint64_t destroy_ms = (xr_time_monotonic_ns() - stage_start_ns) / 1000000ULL;
+
+    if (stats_enabled) {
+        uint64_t total_ms = (xr_time_monotonic_ns() - total_start_ns) / 1000000ULL;
+        fprintf(stderr, "Multicore teardown: stop_ms=%llu destroy_ms=%llu total_ms=%llu\n",
+                (unsigned long long) stop_ms, (unsigned long long) destroy_ms,
+                (unsigned long long) total_ms);
+    }
 
     X->vm.runtime = NULL;
     X->vm.multicore_enabled = false;
@@ -1113,21 +1219,15 @@ static inline void scope_lock_release(XrScopeContext *scope) {
  * per policy mode. Caller must hold scope->child_lock so concurrent failing
  * children cannot race on first_error or errors[] updates.
  *
- * task->error may be either an Exception instance or a fallback string for
+ * coro->error may be either an Exception instance or a fallback string for
  * non-exception failures. Linked scope preserves the value as-is; supervisor
  * scope flattens to message strings to honor its Array<string> contract. */
 static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeContext *scope) {
-    /* coro->task is cleared by the scheduler when a sibling worker
-     * recycles the coroutine slot, and our caller's scope->child_lock
-     * does not pin that field. Loading the pointer once into a local
-     * is therefore necessary for correctness, not defensive: a second
-     * deref would re-read the field and UBSan flags the resulting NULL
-     * access on the LINKED-cancel race.
-     */
-    XrTask *task = coro->task;
-    if (scope->mode == XR_SCOPE_WAIT || !task)
+    if (scope->mode == XR_SCOPE_WAIT)
         return false;
-    XrValue err = task->error;
+    XrValue err = coro->error;
+    if (XR_IS_NULL(err) && coro->task)
+        err = coro->task->error;
     if (XR_IS_NULL(err))
         return false;
 
@@ -1191,7 +1291,8 @@ static void wake_waiter_cancel_linked_siblings_locked(XrScopeContext *scope) {
 }
 
 static bool wake_waiter_scope_owner_ready(const XrScopeContext *scope, const XrCoroutine *owner) {
-    if (!scope || !owner || owner->current_scope != scope)
+    if (!scope || !owner ||
+        atomic_load_explicit(&owner->current_scope, memory_order_acquire) != scope)
         return false;
     if (xr_coro_get_wait_reason(xr_coro_flags_load(owner)) !=
         (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
@@ -1234,6 +1335,22 @@ static void wake_waiter_notify_task(XrayIsolate *X, XrCoroutine *coro) {
     }
 }
 
+// xr_coro_wake_scope_waiter - Scope-side completion bookkeeping only.
+//
+// Split out for the worker completion path, which must run the scope part
+// before publishing the task state and the task part (xr_task_wake_waiter)
+// after — once COMPLETED is visible, a woken awaiter may recycle the
+// executor shell, so the coroutine must not be dereferenced anymore.
+void xr_coro_wake_scope_waiter(XrayIsolate *X, XrCoroutine *coro) {
+    if (!X || !coro)
+        return;
+
+    XrScopeContext *scope = xr_coro_parent_scope(coro);
+    if (scope) {
+        wake_waiter_handle_scope_completion(X, coro, scope);
+    }
+}
+
 // xr_coro_wake_waiter - Wake waiter when coroutine completes.
 //
 // All await coordination lives on XrTask. This function handles the
@@ -1244,10 +1361,6 @@ void xr_coro_wake_waiter(XrayIsolate *X, XrCoroutine *coro) {
     if (!X || !coro)
         return;
 
-    XrScopeContext *scope = xr_coro_parent_scope(coro);
-    if (scope) {
-        wake_waiter_handle_scope_completion(X, coro, scope);
-    }
-
+    xr_coro_wake_scope_waiter(X, coro);
     wake_waiter_notify_task(X, coro);
 }

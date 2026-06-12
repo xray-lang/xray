@@ -37,7 +37,7 @@ fn test_url_roundtrip_special() {
 @test
 fn test_url_encode_empty() {
     let e = http.urlEncode("")
-    assert(e == null || e == "")
+    assert_eq(e, "")
 }
 
 @test

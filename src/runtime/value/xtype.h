@@ -706,6 +706,15 @@ XR_FUNC const char *xr_type_to_string(XrType *type);
 // API: Type classification
 XR_FUNC bool xr_type_is_inherently_immutable(XrType *type);
 
+// API: Default-initializable check
+// A type is default-initializable if a variable of that type can be
+// declared without an explicit initializer (e.g. `let x: int`).
+// Default-initializable types: numeric primitives, bool, unit, nullable T?,
+// and structs where every field is itself default-initializable.
+// Non-default-initializable: class instance, string, containers, channel,
+// task, function, interface, non-nullable union, struct with non-default fields.
+XR_FUNC bool xr_type_is_default_initializable(const XrType *type);
+
 // API: Immutability
 XR_FUNC bool xr_type_is_const(XrType *type);
 XR_FUNC XrType *xr_type_make_const(XrayIsolate *X, XrType *base);

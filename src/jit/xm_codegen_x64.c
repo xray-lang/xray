@@ -852,6 +852,10 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
 
     X64CodegenCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    for (uint32_t i = 0; i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        ctx.suspend_result_bc_slots[i] = -1;
+        ctx.suspend_result_tag_offs[i] = -1;
+    }
     ctx.func = func;
     ctx.alloc = alloc;
     ctx.patches_cap = X64_INIT_PATCHES;

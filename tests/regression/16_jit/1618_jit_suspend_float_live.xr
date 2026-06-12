@@ -1,0 +1,83 @@
+// 1618_jit_suspend_float_live.xr
+// Float (FP-register) values must survive across coroutine suspend points
+// in JIT-compiled code.
+//
+// Regression for the XM_SUSPEND register-allocation contract: the suspend
+// bridge carries only GP registers + spill slots, and the non-blocking
+// inline-resume path calls a C block helper that may clobber caller-saved
+// XMM/D registers. Floats live across a suspend must therefore be placed
+// in spill slots by the register allocator. Without that, `f`/`g` below
+// come back corrupted after a channel op on the fast path.
+
+import time
+
+// ===== Non-blocking fast path (inline resume after block helper) =====
+
+@test
+fn test_float_live_across_nonblocking_recv() {
+    shared const ch: Channel<int> = new Channel(256)
+    // Pre-fill so every recv takes the non-blocking inline-resume path.
+    for (i in 0..200) {
+        ch.send(i)
+    }
+    let acc: float = 0.0
+    let sum: int = 0
+    for (i in 0..200) {
+        let f: float = 1.5   // live across the suspend point below
+        let g: float = 2.25  // second FP value to occupy another register
+        let got = match (ch.recv()) {
+            Recv.Value(v) -> v
+            _ -> -1
+        }
+        acc += f + g  // must still be 1.5 + 2.25 after the channel op
+        sum += got
+    }
+    assert_eq(acc, 750.0)  // 200 * 3.75
+    assert_eq(sum, 19900)  // 0 + 1 + ... + 199
+}
+
+// ===== Real suspension (frame torn down, cross-resume path) =====
+
+@test
+fn test_float_live_across_real_suspend() {
+    shared const ch: Channel<int> = new Channel(1)
+    // go-block capture of a channel const is the legal capture form.
+    let consumer = go {
+        let f: float = 3.25
+        let got = match (ch.recv()) {  // blocks until the send below
+            Recv.Value(v) -> v
+            _ -> -1
+        }
+        // f must survive the real suspension (old frame was abandoned).
+        return f + got
+    }
+    time.sleep(5)
+    ch.send(10)
+    let r = await consumer
+    assert_eq(r, 13.25)
+}
+
+// ===== Many floats live across a suspend (forces spill pressure) =====
+
+@test
+fn test_many_floats_across_suspend() {
+    shared const ch: Channel<int> = new Channel(64)
+    for (i in 0..50) {
+        ch.send(1)
+    }
+    let total: float = 0.0
+    for (i in 0..50) {
+        let f1: float = 0.5
+        let f2: float = 1.5
+        let f3: float = 2.5
+        let f4: float = 3.5
+        let f5: float = 4.5
+        let f6: float = 5.5
+        let got = match (ch.recv()) {
+            Recv.Value(v) -> v
+            _ -> 0
+        }
+        total += f1 + f2 + f3 + f4 + f5 + f6 + got
+    }
+    assert_eq(total, 950.0)  // 50 * (18.0 + 1)
+}

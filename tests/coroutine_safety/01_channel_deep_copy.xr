@@ -4,6 +4,13 @@
 // 验证：可变类型通过 Channel 传递时深拷贝，修改原值不影响接收方
 print("========== 测试1：Channel 深拷贝隔离 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 fn test_array_isolation() {
     let ch = new Channel(1)
     // 发送可变数组
@@ -13,7 +20,7 @@ fn test_array_isolation() {
     original.push(4)
     original.push(5)
     // 接收
-    let received = ch.recv()
+    let received = recvValue(ch)
     // 验证隔离：接收到的应该是 [1,2,3]，不是 [1,2,3,4,5]
     print("原数组长度:", original.length)
     // 应该是 5
@@ -33,7 +40,7 @@ fn test_map_isolation() {
     original.set("c", 3)
     original.set("d", 4)
     // 接收
-    let received = ch.recv()
+    let received = recvValue(ch)
     // 验证隔离
     print("原 Map 大小:", original.size)
     // 应该是 4
@@ -52,7 +59,7 @@ fn test_nested_isolation() {
     // 修改嵌套数组
     original.get("items").push(4)
     // 接收
-    let received = ch.recv()
+    let received = recvValue(ch)
     // 验证深层隔离
     let orig_items = original.get("items")
     let recv_items = received.get("items")

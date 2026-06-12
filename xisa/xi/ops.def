@@ -664,7 +664,7 @@
   :effects (side-effect memory-write allocates)
   :requires ()
   :observable ()
-  :targets (vm-bytecode jit-xm aot-verify)
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
   :jit-policy catch-up)
 
 (define-xi-op xi.array.new
@@ -926,6 +926,17 @@
   :targets (vm-bytecode jit-xm aot-verify)
   :jit-policy catch-up)
 
+(define-xi-op xi.chan.recv.status
+  :class coroutine
+  :arity 1
+  :result-ownership none
+  :own-use borrow
+  :effects ()
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
+  :jit-policy catch-up)
+
 (define-xi-op xi.chan.try.send
   :class coroutine
   :arity 2
@@ -1026,7 +1037,7 @@
   :effects (side-effect)
   :requires ()
   :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
+  :targets (vm-bytecode jit-xm aot-c aot-verify)
   :jit-policy catch-up)
 
 (define-xi-op xi.err.catch
@@ -1172,10 +1183,13 @@
   :targets (vm-bytecode jit-xm aot-c aot-verify)
   :jit-policy catch-up)
 
+;; phi consumes each incoming value on its edge (Perceus: ownership moves
+;; into the merged value). xi_own treats PHI_ARG uses as consuming and
+;; xi_arc attributes the consume to the predecessor edge.
 (define-xi-op xi.phi
   :class pure
   :arity variadic
-  :own-use borrow
+  :own-use consume
   :effects ()
   :requires ()
   :observable ()

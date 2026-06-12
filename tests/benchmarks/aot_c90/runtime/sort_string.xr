@@ -1,0 +1,20 @@
+fn run(n: int) -> int {
+    let values: Array<string> = []
+    let i = 0
+    while (i < n) {
+        values.push("item-" + ((i * 37) % 5000).toString() + "-tail")
+        i = i + 1
+    }
+
+    values.sort()
+
+    let checksum = values[0].length + values[n / 2].length + values[n - 1].length
+    i = 0
+    while (i < n) {
+        checksum = checksum + values[i].length
+        i = i + 997
+    }
+    return checksum
+}
+
+print(run(100000))

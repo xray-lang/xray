@@ -122,6 +122,7 @@ XR_FUNC void xr_gc_destroy_channel(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_coroutine(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_instance(XrGCHeader *obj, XrCoroGC *owning_gc);
 XR_FUNC void xr_gc_destroy_task(XrGCHeader *obj, XrCoroGC *owning_gc);
+XR_FUNC void xr_gc_destroy_result_group(XrGCHeader *obj, XrCoroGC *owning_gc);
 // NetConn / NetListener destroy handled by native body descriptors.
 
 /* ========== Debug API ========== */

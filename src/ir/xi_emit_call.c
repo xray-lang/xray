@@ -11,6 +11,31 @@
 
 #include "xi_emit_internal.h"
 
+static bool emit_shared_slot_is_function(EmitCtx *ctx, int64_t slot) {
+    if (!ctx || !ctx->func || slot < 0)
+        return false;
+
+    for (XiFunc *f = ctx->func; f; f = f->parent_func) {
+        if (!f->shared_slot_funcs || slot >= (int64_t) f->shared_slot_func_count)
+            continue;
+        if (f->shared_slot_funcs[slot])
+            return true;
+    }
+    return false;
+}
+
+static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
+    while (callee && callee->op == XI_COPY && callee->nargs >= 1)
+        callee = callee->args[0];
+    if (!callee)
+        return false;
+    if (callee->op == XI_CLOSURE_NEW)
+        return true;
+    if (callee->op == XI_GET_SHARED)
+        return emit_shared_slot_is_function(ctx, callee->aux_int);
+    return false;
+}
+
 /* Function call: args[0]=callee, args[1..n]=params
  * aux_int bits 0-7: flags (1=self_call)
  * aux_int bits 8-15: nresults (0 means 1) */
@@ -72,7 +97,10 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
         }
-        OpCode call_op = (v->flags & XI_FLAG_TAIL) ? OP_TAILCALL : OP_CALL;
+        OpCode call_op =
+            (v->flags & XI_FLAG_TAIL)
+                ? OP_TAILCALL
+                : (emit_callee_is_plain_closure(ctx, v->args[0]) ? OP_CALL_STATIC : OP_CALL);
         emit_inst(ctx, CREATE_ABC(call_op, dst, nargs, (uint8_t) nresults));
     }
 }

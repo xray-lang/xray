@@ -67,7 +67,7 @@ fn test_null_comparison() {
 @test
 fn test_null_vs_value() {
     let x = null
-    let y = 0
+    let y: int? = 0
     assert_eq(x == y, false)
     assert_eq(x != y, true)
 }

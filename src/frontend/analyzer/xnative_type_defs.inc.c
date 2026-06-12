@@ -30,16 +30,20 @@ static const char xr_native_def_bool[] =
     "bool {\n    toString() -> string\n}\n";
 
 static const char xr_native_def_channel[] =
-    "// Built-in Channel<T> type — implementation in "
-    "src/runtime/coro/xchannel_methods.c\n\n@native\nclass Channel<T> {\n    length: int\n    "
-    "capacity: int\n    isClosed: bool\n    send(value: T)\n    recv() -> T\n    trySend(value: T) "
-    "-> bool\n    tryRecv(): (T, bool)\n    sendTimeout(value: T, timeout: int) -> bool\n    "
-    "recvTimeout(timeout: int): (T, bool)\n    close()\n}\n";
+    "// Built-in Channel<T> type — implementation in src/runtime/coro/xchannel_methods.c\n\nenum "
+    "Recv<T> {\n    Value(T)\n    Empty\n    Timeout\n    Closed\n}\n\nenum SendResult {\n    "
+    "Sent\n    Full\n    Timeout\n    Closed\n}\n\n@native\nclass Channel<T> {\n    length: int\n  "
+    "  capacity: int\n    isClosed: bool\n\n    send(value: T)\n    recv() -> Recv<T>\n\n    "
+    "trySend(value: T) -> SendResult\n    tryRecv() -> Recv<T>\n\n    sendTimeout(value: T, "
+    "timeout: int) -> SendResult\n    recvTimeout(timeout: int) -> Recv<T>\n\n    close()\n}\n";
 
 static const char xr_native_def_coroutine[] =
-    "// Built-in Task type (coroutine handle) — implementation in "
-    "src/runtime/coro/\n\n@native\nclass Task {\n    done: bool\n    cancelled: bool\n    result: "
-    "Json\n    error: string?\n    cancel()\n}\n";
+    "// Built-in Task type (coroutine handle) — implementation in src/runtime/coro/\n\nenum "
+    "TaskResult<T> {\n    Success(T)\n    Failed(Exception)\n    Cancelled\n    Timeout\n    "
+    "Pending\n}\n\nenum TaskStatus {\n    Pending\n    Running\n    Success\n    Failed\n    "
+    "Cancelled\n}\n\n@native\nclass Task<T> {\n    done: bool\n    status: TaskStatus\n\n    "
+    "cancel()\n    poll() -> TaskResult<T>\n    awaitResult() -> TaskResult<T>\n    "
+    "awaitTimeout(timeout: int) -> TaskResult<T>\n}\n";
 
 static const char xr_native_def_enum[] =
     "// Built-in enum value/type runtime info\n\n@native\nclass EnumValue {\n    name: string\n    "
@@ -97,6 +101,12 @@ static const char xr_native_def_regex[] =
     "index: int) -> string?\n    findAll(text: string) -> Array<RegexMatch>\n    replace(text: "
     "string, replacement: string) -> string\n    split(text: string) -> Array<string>\n}\n";
 
+static const char xr_native_def_resultgroup[] =
+    "// Built-in ResultGroup type; implemented by the runtime.\n// First VM prototype supports "
+    "integer associative reduction.\n\n@native\nclass ResultGroup {\n    length: int\n    "
+    "pendingCount: int\n    batchSize: int\n    isClosed: bool\n    add(value: int) -> bool\n    "
+    "flush()\n    recv(): int?\n    tryRecv(): (int?, bool)\n    close()\n}\n";
+
 static const char xr_native_def_set[] =
     "// Built-in Set<T> type — implementation in "
     "src/runtime/object/xset_methods.c\n\n@native\nclass Set<T> {\n    length: int\n    size: "
@@ -147,6 +157,7 @@ static const char xr_native_def_workqueue[] =
     X("json", xr_native_def_json)                                                                  \
     X("map", xr_native_def_map)                                                                    \
     X("regex", xr_native_def_regex)                                                                \
+    X("resultgroup", xr_native_def_resultgroup)                                                    \
     X("set", xr_native_def_set)                                                                    \
     X("string", xr_native_def_string)                                                              \
     X("stringbuilder", xr_native_def_stringbuilder)                                                \

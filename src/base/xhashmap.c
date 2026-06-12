@@ -64,11 +64,15 @@ static XrHashMapEntry *find_entry(XrHashMap *map, const char *key, uint32_t hash
     return NULL;
 }
 
-static void resize(XrHashMap *map, uint32_t new_capacity) {
+// Grow the table. Returns false on allocation failure, leaving the old
+// table intact: the map keeps working above its load factor (degraded
+// probing), and xr_hashmap_set reports failure only once no free slot
+// is left.
+static bool resize(XrHashMap *map, uint32_t new_capacity) {
     if (map->is_arena_allocated) {
         XR_CHECK(false, "hashmap resize: arena-allocated map hit load factor, consider larger "
                         "initial capacity");
-        return;
+        return false;
     }
 
     XR_DCHECK(new_capacity >= map->capacity, "New capacity must be >= current capacity");
@@ -77,7 +81,7 @@ static void resize(XrHashMap *map, uint32_t new_capacity) {
     XrHashMapEntry *new_entries =
         (XrHashMapEntry *) xr_malloc(sizeof(XrHashMapEntry) * new_capacity);
     if (!new_entries)
-        return;
+        return false;
 
     memset(new_entries, 0, sizeof(XrHashMapEntry) * new_capacity);
 
@@ -105,6 +109,7 @@ static void resize(XrHashMap *map, uint32_t new_capacity) {
 
     XR_DCHECK(map->count <= map->capacity, "hashmap resize: count > capacity after rehash");
     xr_free(old_entries);
+    return true;
 }
 
 XrHashMap *xr_hashmap_new(void) {
@@ -155,26 +160,35 @@ void xr_hashmap_free(XrHashMap *map) {
         xr_free(map);
 }
 
-void xr_hashmap_set(XrHashMap *map, const char *key, void *value) {
+bool xr_hashmap_set(XrHashMap *map, const char *key, void *value) {
     XR_DCHECK(map != NULL, "Map must not be NULL");
     XR_DCHECK(key != NULL, "Key must not be NULL");
 
     // Load factor 75%: count * 4 >= capacity * 3
     if (map->count * 4 >= map->capacity * 3) {
-        resize(map, map->capacity * XR_HASHMAP_GROW_FACTOR);
+        (void) resize(map, map->capacity * XR_HASHMAP_GROW_FACTOR);
     }
 
     uint32_t hash = hash_string(key);
-    uint32_t index;
+    // Sentinel: capacity is a power of two <= 2^31, so UINT32_MAX can
+    // never be a valid slot. find_entry leaves out_index untouched only
+    // when the table is completely full (possible after a failed resize).
+    uint32_t index = UINT32_MAX;
     XrHashMapEntry *entry = find_entry(map, key, hash, &index);
 
     if (!entry) {
+        if (index >= map->capacity) {
+            // Table full and key absent: resize already failed under OOM.
+            // Report failure instead of writing through a bogus index.
+            return false;
+        }
         entry = &map->entries[index];
         entry->key = (char *) key;
         entry->hash = hash;
         map->count++;
     }
     entry->value = value;
+    return true;
 }
 
 void *xr_hashmap_get(XrHashMap *map, const char *key) {

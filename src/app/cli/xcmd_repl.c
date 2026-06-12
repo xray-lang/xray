@@ -327,7 +327,7 @@ static void print_help_coro(ReplState *state) {
     printf("  shared const ch = new Channel<int>()\n");
     printf("  shared const ch = new Channel<int>(10)\n");
     printf("  ch.send(value)         // blocking send\n");
-    printf("  let v = ch.recv()      // blocking receive\n");
+    printf("  match (ch.recv()) { Recv.Value(v) -> print(v); _ -> {} }\n");
     printf("  ch.close()             // close channel\n");
     printf("\n");
     print_colored(state, XR_CLR_BOLD, "Select:\n");

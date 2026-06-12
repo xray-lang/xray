@@ -1,0 +1,21 @@
+contains=xaot-plan v0
+contains=modules 2 entry 1
+contains=module 0 name=_math_lib
+contains=module 1 name=module_link
+contains=function 1 name=triple module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+contains=function 2 name=add_one module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+contains=function 3 name=<main> module=1 depth=0 abi=tagged boundary=module-init
+contains=stats functions=4 native=2 tagged=2 coro=0
+contains=  "target": {
+contains=    "name": "native"
+contains=    "arch": "native"
+contains=    "os": "native"
+contains=    "abi": "host"
+contains=    "object_format": "native"
+contains=    "triple": "native"
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+contains="cc_flags": []
+regex="ld_flags": \[

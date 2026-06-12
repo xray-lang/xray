@@ -80,6 +80,14 @@ XrJitResult xr_jit_call_self(XrCoroutine *coro, int64_t unused) {
 #endif
 }
 
+int64_t xr_jit_pending_error_tag(XrCoroutine *coro, int64_t unused) {
+    (void) unused;
+    if (!coro)
+        return XR_TAG_NULL;
+    XrVMContext *ctx = xr_coro_vm_ctx(coro);
+    return (int64_t) ctx->pending_error.tag;
+}
+
 /* ========== Method Invocation Bridge ========== */
 
 // Called from JIT code via CALL_C for OP_INVOKE.

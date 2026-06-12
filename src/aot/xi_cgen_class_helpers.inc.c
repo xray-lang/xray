@@ -191,7 +191,7 @@ static bool cg_class_field_cache_receiver_use_is_safe(CgClassFieldCache *cache, 
             if (arg_idx != 0)
                 return false;
             const char *field = (const char *) v->aux;
-            XrRep rep = cg_type_scalar_rep(v->type);
+            XrRep rep = cg_type_aot_storage_rep(v->type);
             if (field && rep != XR_REP_TAGGED)
                 cg_class_field_cache_add(cache, field, v->type, rep, false);
             return true;
@@ -201,7 +201,7 @@ static bool cg_class_field_cache_receiver_use_is_safe(CgClassFieldCache *cache, 
                 return false;
             const char *field = (const char *) v->aux;
             const XrType *type = (v->nargs >= 2 && v->args[1]) ? v->args[1]->type : v->type;
-            XrRep rep = cg_type_scalar_rep(type);
+            XrRep rep = cg_type_aot_storage_rep(type);
             if (field && rep != XR_REP_TAGGED)
                 cg_class_field_cache_add(cache, field, type, rep, true);
             return true;
@@ -387,7 +387,9 @@ static void emit_class_field_cache_decls(XiCgenCtx *ctx, FILE *out) {
             bool wrapped = emit_conversion_prefix(out, entry->type, XR_REP_TAGGED, entry->rep);
             fprintf(out, "xrt_map_get((xrt_map_t*)");
             emit_class_field_cache_receiver_expr(out, cache);
-            fprintf(out, ".ptr, xr_box_str(\"%s\"))", entry->name);
+            fprintf(out, ".ptr, ");
+            cg_emit_str_value(ctx, out, entry->name);
+            fprintf(out, ")");
             emit_conversion_suffix(out, wrapped);
         }
         fprintf(out, ";\n");
@@ -411,7 +413,9 @@ static void emit_class_field_cache_flush(XiCgenCtx *ctx, FILE *out) {
         } else {
             fprintf(out, "    xrt_map_set((xrt_map_t*)");
             emit_class_field_cache_receiver_expr(out, cache);
-            fprintf(out, ".ptr, xr_box_str(\"%s\"), ", entry->name);
+            fprintf(out, ".ptr, ");
+            cg_emit_str_value(ctx, out, entry->name);
+            fprintf(out, ", ");
             emit_class_field_cache_value_box(out, entry, i);
             fprintf(out, ");\n");
         }

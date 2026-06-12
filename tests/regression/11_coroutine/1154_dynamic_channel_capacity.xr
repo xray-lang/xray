@@ -1,17 +1,41 @@
+fn sent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
+fn recv_value(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn recv_ok(r: Recv<int>) -> bool {
+    return match (r) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
 @test
 fn test_dynamic_channel_capacity() {
     let n = 3
     const ch = new Channel<int>(n)
     assert_eq(ch.capacity, 3)
-    assert_eq(ch.trySend(1), true)
-    assert_eq(ch.trySend(2), true)
-    assert_eq(ch.trySend(3), true)
-    let (v1, ok1) = ch.tryRecv()
-    let (v2, ok2) = ch.tryRecv()
-    let (v3, ok3) = ch.tryRecv()
-    assert_eq(ok1, true)
-    assert_eq(ok2, true)
-    assert_eq(ok3, true)
+    assert_eq(sent(ch.trySend(1)), true)
+    assert_eq(sent(ch.trySend(2)), true)
+    assert_eq(sent(ch.trySend(3)), true)
+    let r1 = ch.tryRecv()
+    let r2 = ch.tryRecv()
+    let r3 = ch.tryRecv()
+    let v1 = recv_value(r1)
+    let v2 = recv_value(r2)
+    let v3 = recv_value(r3)
+    assert_eq(recv_ok(r1), true)
+    assert_eq(recv_ok(r2), true)
+    assert_eq(recv_ok(r3), true)
     assert_eq(v1 + v2 + v3, 6)
     ch.close()
 }
@@ -21,12 +45,14 @@ fn test_bare_dynamic_channel_capacity() {
     let n = 2
     const ch: Channel<int> = Channel(n)
     assert_eq(ch.capacity, 2)
-    assert_eq(ch.trySend(4), true)
-    assert_eq(ch.trySend(5), true)
-    let (v1, ok1) = ch.tryRecv()
-    let (v2, ok2) = ch.tryRecv()
-    assert_eq(ok1, true)
-    assert_eq(ok2, true)
+    assert_eq(sent(ch.trySend(4)), true)
+    assert_eq(sent(ch.trySend(5)), true)
+    let r1 = ch.tryRecv()
+    let r2 = ch.tryRecv()
+    let v1 = recv_value(r1)
+    let v2 = recv_value(r2)
+    assert_eq(recv_ok(r1), true)
+    assert_eq(recv_ok(r2), true)
     assert_eq(v1 + v2, 9)
     ch.close()
 }

@@ -304,6 +304,48 @@ TEST(inlines_unannotated_callee_under_tbaa_invariant) {
     xi_func_free(callee);
 }
 
+TEST(inlines_top_level_shared_function_load) {
+    XiFunc *program = make_func("program", &stub_int);
+    XiFunc *callee = make_func("recv_int", &stub_int);
+    XiFunc *caller = make_func("stage", &stub_int);
+    ASSERT(program != NULL);
+    ASSERT(callee != NULL);
+    ASSERT(caller != NULL);
+
+    program->nshared = 1;
+    program->shared_slot_func_count = 1;
+    program->shared_slot_funcs = (XiFunc **) xi_func_arena_alloc(program, sizeof(XiFunc *));
+    ASSERT(program->shared_slot_funcs != NULL);
+    program->shared_slot_funcs[0] = callee;
+    callee->parent_func = program;
+    caller->parent_func = program;
+
+    XiValue *ret = xi_const_int(callee, callee->entry, 42, &stub_int);
+    ASSERT(ret != NULL);
+    xi_block_set_return(callee->entry, ret);
+
+    XiValue *load = xi_value_new(caller, caller->entry, XI_GET_SHARED, &stub_func, 0);
+    ASSERT(load != NULL);
+    load->aux_int = 0;
+    XiValue *call = xi_value_new(caller, caller->entry, XI_CALL, &stub_int, 1);
+    ASSERT(call != NULL);
+    call->args[0] = load;
+    xi_block_set_return(caller->entry, call);
+
+    XiPassChange chg = xi_opt_inline(caller);
+    ASSERT(chg.cfg_changed && chg.values_changed);
+    char errbuf[512];
+    ASSERT(xi_verify(caller, errbuf, sizeof(errbuf)));
+    ASSERT(caller->entry->succs[0] != NULL);
+    XiBlock *inlined_entry = caller->entry->succs[0];
+    ASSERT(inlined_entry->nvalues == 1);
+    ASSERT(inlined_entry->values[0]->op == XI_CONST);
+
+    xi_func_free(caller);
+    xi_func_free(callee);
+    xi_func_free(program);
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -322,6 +364,7 @@ int main(void) {
     run_budget_medium_caller();
     run_budget_large_caller();
     run_inlines_unannotated_callee_under_tbaa_invariant();
+    run_inlines_top_level_shared_function_load();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

@@ -51,6 +51,7 @@
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../os/os_time.h"
+#include "../runtime/symbol/xsymbol_table.h"
 #include "../runtime/value/xtype.h"
 #include <string.h>
 #include <stdio.h>
@@ -408,6 +409,11 @@ static XiValue *resolve_copy(XiValue *v) {
         /* Stop at variable-domain boundaries (prevents register corruption) */
         if (v->var_id != 0xFF && src && src->var_id != 0xFF && v->var_id != src->var_id)
             break;
+        /* Stop at type-view boundaries. Nullable narrowing and native-width
+         * narrowing carry semantic type information even when the runtime
+         * payload is the same value. */
+        if (v->type && src && src->type && !xr_type_equals(v->type, src->type))
+            break;
         /* Stop at value-type copies — these become OP_COPY (deep copy) at
          * emit time and must not be propagated away */
         if (v->type && v->type->is_value_type)
@@ -504,6 +510,92 @@ static void compute_use_counts(XiFunc *f) {
         if (blk->control)
             blk->control->uses++;
     }
+}
+
+static XiValue *find_unique_arg_user(XiFunc *f, XiValue *needle) {
+    if (!f || !needle)
+        return NULL;
+    XiValue *found = NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] != needle)
+                    continue;
+                if (found)
+                    return NULL;
+                found = v;
+            }
+        }
+    }
+    return found;
+}
+
+static bool xi_await_is_plain_one_task(const XiValue *v) {
+    if (!v || v->op != XI_AWAIT || v->nargs != 1)
+        return false;
+    const int64_t variant_bits = XI_AWAIT_AUX_ANY | XI_AWAIT_AUX_ALL | XI_AWAIT_AUX_ANY_SUCCESS;
+    return (v->aux_int & variant_bits) == 0;
+}
+
+static bool xi_identity_keeps_task_view(const XiValue *from, const XiValue *to) {
+    if (!from || !to || (to->op != XI_COPY && to->op != XI_MOVE) || to->nargs != 1 ||
+        to->args[0] != from)
+        return false;
+    if (!from->type || !to->type)
+        return true;
+    return xr_type_equals(from->type, to->type);
+}
+
+static XiValue *find_one_shot_await_for_go(XiFunc *f, XiValue *go) {
+    XiValue *cur = go;
+    for (uint8_t depth = 0; depth < 8; depth++) {
+        if (!cur || cur->uses != 1)
+            return NULL;
+        XiValue *user = find_unique_arg_user(f, cur);
+        if (!user)
+            return NULL;
+        if (xi_await_is_plain_one_task(user) && user->args[0] == cur)
+            return user;
+        if (xi_identity_keeps_task_view(cur, user)) {
+            cur = user;
+            continue;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
+XR_FUNC XiPassChange xi_opt_mark_one_shot_await(XiFunc *f) {
+    XR_DCHECK(f != NULL, "xi_opt_mark_one_shot_await: NULL func");
+    XiPassChange chg = xi_pass_no_change();
+
+    compute_use_counts(f);
+
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            if (!v || v->op != XI_GO)
+                continue;
+            if (v->flags & XI_FLAG_FIRE_AND_FORGET)
+                continue;
+            if ((v->aux_int & 0xff) != 0)
+                continue;
+
+            XiValue *await = find_one_shot_await_for_go(f, v);
+            if (!await || (await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO))
+                continue;
+
+            await->aux_int |= XI_AWAIT_AUX_ONE_SHOT_GO;
+            v->aux_int |= XI_GO_AUX_ONE_SHOT_AWAIT;
+            chg.values_changed = true;
+            chg.n_added++;
+        }
+    }
+
+    return chg;
 }
 
 XR_FUNC XiPassChange xi_opt_dce(XiFunc *f) {
@@ -608,7 +700,7 @@ XR_FUNC XiPassChange xi_opt_phi_simplify(XiFunc *f) {
 static XrRep sr_type_scalar_rep(const struct XrType *type) {
     if (!type)
         return XR_REP_TAGGED;
-    XrRep r = xr_type_base_rep(type);
+    XrRep r = xr_type_rep(type);
     return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
 }
 
@@ -624,6 +716,27 @@ static bool sr_type_is_task_instance(const XrType *type) {
         }
     }
     return false;
+}
+
+static bool sr_type_is_channel(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_KIND_CHANNEL)
+        return true;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (sr_type_is_channel(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool sr_is_channel_recv_method(const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !sr_type_is_channel(v->args[0]->type))
+        return false;
+    const char *method = (const char *) v->aux;
+    return method && (strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0);
 }
 
 static bool sr_field_receiver_uses_native_rep(const XiValue *receiver) {
@@ -757,6 +870,186 @@ static bool sr_is_static_collection_length_field(const XiValue *v) {
            receiver->type->kind == XR_KIND_SET;
 }
 
+static bool sr_type_is_native_map_key(const XrType *type) {
+    return type && !type->is_nullable &&
+           (type->kind == XR_KIND_INT || type->kind == XR_KIND_FLOAT || type->kind == XR_KIND_BOOL);
+}
+
+static bool sr_type_is_native_map_value(const XrType *type) {
+    return sr_type_is_native_map_key(type);
+}
+
+static bool sr_type_native_map_value_rep(const XrType *type, XrRep *out_rep) {
+    if (!type || type->kind != XR_KIND_MAP || !sr_type_is_native_map_key(type->map.key_type) ||
+        !sr_type_is_native_map_value(type->map.value_type))
+        return false;
+    XrRep key_rep = sr_type_scalar_rep(type->map.key_type);
+    XrRep value_rep = sr_type_scalar_rep(type->map.value_type);
+    if ((key_rep != XR_REP_I64 && key_rep != XR_REP_F64) ||
+        (value_rep != XR_REP_I64 && value_rep != XR_REP_F64))
+        return false;
+    if (out_rep)
+        *out_rep = value_rep;
+    return true;
+}
+
+static bool sr_method_name_is(const XiValue *v, const char *name) {
+    const char *method = v && v->aux ? (const char *) v->aux : NULL;
+    if (method && strcmp(method, name) == 0)
+        return true;
+    if (!v || !name || v->aux_int < 0)
+        return false;
+
+    SymbolId symbol = (SymbolId) (v->aux_int >> 1);
+    if (strcmp(name, "has") == 0)
+        return symbol == SYMBOL_HAS;
+    if (strcmp(name, "get") == 0)
+        return symbol == SYMBOL_GET;
+    return false;
+}
+
+static bool sr_same_value_shape(const XiValue *a, const XiValue *b, uint8_t depth) {
+    a = sr_unwrap_identity_value(a);
+    b = sr_unwrap_identity_value(b);
+    if (a == b)
+        return true;
+    if (!a || !b || depth > 8 || a->op != b->op)
+        return false;
+
+    switch (a->op) {
+        case XI_CONST:
+            if (!a->type || !b->type || a->type->kind != b->type->kind)
+                return false;
+            if (a->type->kind == XR_KIND_STRING) {
+                const char *as = (const char *) a->aux;
+                const char *bs = (const char *) b->aux;
+                return as && bs && strcmp(as, bs) == 0;
+            }
+            return a->aux_int == b->aux_int;
+        case XI_PARAM:
+        case XI_GET_SHARED:
+        case XI_GET_GLOBAL:
+        case XI_LOAD_UPVAL:
+            return a->aux_int == b->aux_int;
+        case XI_LOAD_FIELD:
+            if (a->aux && b->aux) {
+                if (strcmp((const char *) a->aux, (const char *) b->aux) != 0)
+                    return false;
+            } else if (a->aux_int != b->aux_int) {
+                return false;
+            }
+            return a->nargs >= 1 && b->nargs >= 1 &&
+                   sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
+        case XI_STRUCT_GET:
+        case XI_TUPLE_GET:
+            return a->aux == b->aux && a->aux_int == b->aux_int && a->nargs >= 1 && b->nargs >= 1 &&
+                   sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
+        case XI_CONVERT:
+        case XI_NARROW_I8:
+        case XI_NARROW_U8:
+        case XI_NARROW_I16:
+        case XI_NARROW_U16:
+        case XI_NARROW_I32:
+        case XI_NARROW_U32:
+        case XI_WIDEN_I8:
+        case XI_WIDEN_U8:
+        case XI_WIDEN_I16:
+        case XI_WIDEN_U16:
+        case XI_WIDEN_I32:
+        case XI_WIDEN_U32:
+        case XI_NARROW_F32:
+        case XI_WIDEN_F32:
+            return a->nargs >= 1 && b->nargs >= 1 &&
+                   sr_same_value_shape(a->args[0], b->args[0], (uint8_t) (depth + 1));
+        default:
+            return false;
+    }
+}
+
+static bool sr_value_invalidates_map_guard(const XiValue *v) {
+    if (!v || v->op == XI_ERR_CHECK)
+        return false;
+    return (v->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM | XI_FLAG_MAY_THROW |
+                        XI_FLAG_MAY_SUSPEND)) != 0;
+}
+
+static bool sr_block_has_no_guard_invalidating_effect_before(const XiBlock *blk,
+                                                             const XiValue *target) {
+    if (!blk || !target)
+        return false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        const XiValue *v = blk->values[i];
+        if (!v)
+            continue;
+        if (v == target)
+            return true;
+        if (sr_value_invalidates_map_guard(v))
+            return false;
+    }
+    return false;
+}
+
+static bool sr_block_has_no_guard_invalidating_effect_after(const XiBlock *blk,
+                                                            const XiValue *start) {
+    bool seen = start == NULL;
+    bool found = false;
+    if (!blk)
+        return false;
+    for (uint32_t i = 0; i < blk->nvalues; i++) {
+        const XiValue *v = blk->values[i];
+        if (!v)
+            continue;
+        if (v == start) {
+            seen = true;
+            found = true;
+            continue;
+        }
+        if (seen && sr_value_invalidates_map_guard(v))
+            return false;
+    }
+    if (!found && start != NULL) {
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (sr_value_invalidates_map_guard(v))
+                return false;
+        }
+        return true;
+    }
+    return seen;
+}
+
+static bool sr_map_has_control_matches_get(const XiValue *control, const XiValue *get) {
+    const XiValue *has = sr_unwrap_identity_value(control);
+    if (!has || has->op != XI_CALL_METHOD || has->nargs != 2 || !sr_method_name_is(has, "has"))
+        return false;
+    if (!get || get->op != XI_CALL_METHOD || get->nargs != 2 || !sr_method_name_is(get, "get"))
+        return false;
+    return sr_same_value_shape(has->args[0], get->args[0], 0) &&
+           sr_same_value_shape(has->args[1], get->args[1], 0);
+}
+
+static bool sr_map_get_has_present_guard(const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs != 2 || !sr_method_name_is(v, "get") ||
+        !v->block || !v->args[0])
+        return false;
+    if (!sr_type_native_map_value_rep(v->args[0]->type, NULL))
+        return false;
+    if (!sr_block_has_no_guard_invalidating_effect_before(v->block, v))
+        return false;
+    if (v->block->npreds == 0)
+        return false;
+    for (uint16_t i = 0; i < v->block->npreds; i++) {
+        const XiBlock *pred = v->block->preds[i];
+        if (!pred || pred->kind != XI_BLOCK_IF || pred->succs[0] != v->block)
+            return false;
+        if (!sr_map_has_control_matches_get(pred->control, v))
+            return false;
+        if (!sr_block_has_no_guard_invalidating_effect_after(pred, pred->control))
+            return false;
+    }
+    return true;
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
@@ -800,9 +1093,20 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_SELECT: {
             return sr_type_scalar_rep(v->type);
         }
+        case XI_CHAN_RECV:
+        case XI_CHAN_TRY_RECV:
+            return XR_REP_TAGGED;
         case XI_CALL:
-        case XI_CALL_METHOD:
         case XI_CALL_METHOD_DIRECT:
+            return sr_type_scalar_rep(v->type);
+        case XI_CALL_METHOD:
+            if (sr_is_channel_recv_method(v))
+                return XR_REP_TAGGED;
+            if (sr_map_get_has_present_guard(v)) {
+                XrRep value_rep = XR_REP_TAGGED;
+                if (sr_type_native_map_value_rep(v->args[0]->type, &value_rep))
+                    return value_rep;
+            }
             return sr_type_scalar_rep(v->type);
         case XI_LOAD_FIELD:
             if (sr_is_typed_array_length_field(v) || sr_is_static_collection_length_field(v))
@@ -1251,6 +1555,8 @@ static const XiPassDesc xi_pass_table[] = {
     {"strength_reduce", xi_opt_strength_reduce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
      XI_STAGE_RAW, 0, 0},
     {"copy_prop", xi_opt_copy_prop, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
+    {"mark_one_shot_await", xi_opt_mark_one_shot_await, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW,
+     XI_STAGE_RAW, 0, 0},
     {"phi_simplify", xi_opt_phi_simplify, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
      0},
     {"dce", xi_opt_dce, XI_OPT_LIGHT, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
@@ -1358,7 +1664,8 @@ static const XiPassOrderConstraint xi_pass_constraints[] = {
      * Cross-level constraints (e.g. SCCP -> DCE) are not enforced
      * here because the fixed-point loop handles convergence. */
     {"constfold", "copy_prop", "constant folding enables more copy propagation"},
-    {"copy_prop", "dce", "copy propagation makes original values dead"},
+    {"copy_prop", "mark_one_shot_await", "copy propagation exposes local go/await pairs"},
+    {"mark_one_shot_await", "dce", "one-shot await marking must see live local task uses"},
     {"gvn", "licm", "GVN eliminates redundancies before LICM hoists"},
     {"loop_rotate", "licm", "loop rotation exposes a canonical loop body before hoisting"},
 };

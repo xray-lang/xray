@@ -15,10 +15,22 @@ select {
     _ -> { print("buffer full") }
 }
 
-let (v1, ok1) = ch.tryRecv()
-let (v2, ok2) = ch.tryRecv()
-print(v1)
-print(v2)
-print(ok1 && ok2)
+let r1 = ch.tryRecv()
+let r2 = ch.tryRecv()
+print(match (r1) {
+    Recv.Value(v) -> v
+    _ -> -1
+})
+print(match (r2) {
+    Recv.Value(v) -> v
+    _ -> -1
+})
+print(match (r1) {
+    Recv.Value(_) -> true
+    _ -> false
+} && match (r2) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 ch.close()
 print("done")

@@ -356,7 +356,8 @@ XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_type, const
 // Builds param_names from symbol links, resolves actual types (explicit or inferred),
 // then substitutes into return_type. Returns the substituted type.
 XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, XrType *callee_type,
-                                   XrType *return_type, CallExprNode *call, int arg_count) {
+                                   XrType *return_type, CallExprNode *call, int arg_count,
+                                   XrType **effective_arg_types) {
     XR_DCHECK(ctx != NULL, "substitute_generic_call: NULL ctx");
     XR_DCHECK(links != NULL, "substitute_generic_call: NULL links");
     int type_param_count = xa_symbol_links_get_type_param_count(links);
@@ -403,10 +404,13 @@ XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links, Xr
             const char *tp_name = param_names[i];
             for (int j = 0; j < param_count && j < arg_count; j++) {
                 XrType *pt = param_types ? param_types[j] : NULL;
-                // Use cached type if available (avoid re-evaluating lambdas
-                // which would lose callback context and trigger duplicate warnings)
-                XrType *cached = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[j]);
-                XrType *at = cached ? cached : xa_visit_infer_expr(ctx, call->arguments[j]);
+                XrType *at = effective_arg_types ? effective_arg_types[j] : NULL;
+                if (!at && j < call->arg_count) {
+                    // Use cached type if available (avoid re-evaluating lambdas
+                    // which would lose callback context and trigger duplicate warnings)
+                    XrType *cached = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[j]);
+                    at = cached ? cached : xa_visit_infer_expr(ctx, call->arguments[j]);
+                }
                 if (pt && at) {
                     actual_types[i] = xa_infer_type_param_from_arg(pt, at, tp_name, 0);
                     if (actual_types[i])

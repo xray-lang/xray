@@ -582,8 +582,8 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
 
 // Map coroutine state + wait reason to human-readable string
 static const char *coro_state_string(XrCoroutine *coro) {
-    uint8_t st = atomic_load_explicit(&coro->coro_state, memory_order_relaxed);
-    switch (st) {
+    uint32_t flags = atomic_load_explicit(&coro->flags, memory_order_relaxed);
+    switch (xr_flag_to_state(flags)) {
         case XR_CORO_STATE_RUNNING:
             return "running";
         case XR_CORO_STATE_READY:
@@ -591,7 +591,6 @@ static const char *coro_state_string(XrCoroutine *coro) {
         case XR_CORO_STATE_DONE:
             return "done";
         case XR_CORO_STATE_BLOCKED: {
-            uint32_t flags = atomic_load_explicit(&coro->flags, memory_order_relaxed);
             uint32_t wait = flags & XR_CORO_WAIT_MASK;
             switch (wait) {
                 case XR_CORO_WAIT_CHANNEL_SEND:

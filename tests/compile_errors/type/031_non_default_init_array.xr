@@ -1,0 +1,4 @@
+// 031_non_default_init_array.xr
+// Expected: Compile error - Array<int> is not default-initializable
+// Error should mention: not default-initializable, requires an explicit initializer
+let xs: Array<int>

@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+contains=function 1 name=add_i64 module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=  param 0 class=scalar kind=scalar rep=i64 c_type=int64_t
+contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
+contains=function 2 name=choose module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
+contains=  param 0 class=scalar kind=scalar rep=bool c_type=uint8_t
+contains=stats functions=3 native=2 tagged=1 coro=0

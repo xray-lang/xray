@@ -165,6 +165,7 @@ XR_FUNC bool xr_value_is_enum_value(XrValue v);
 #define XR_IS_CHANNEL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCHANNEL)
 #define XR_IS_COROPOOL(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TCOROPOOL)
 #define XR_IS_WORKQUEUE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TWORKQUEUE)
+#define XR_IS_RESULTGROUP(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TRESULTGROUP)
 /* Range is no longer a dedicated GC type; use xr_value_is_range(iso, v)
  * from xrange.h which walks the class super-chain. */
 #define XR_IS_MODULE(v) (XR_IS_PTR(v) && XR_HEAP_TYPE(v) == XR_TMODULE)
@@ -369,6 +370,21 @@ static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
     if (b == -1)
         return 0;
     return a % b;
+}
+
+/* Shift helpers: the language defines the shift count as taken mod 64
+ * (spec "Expressions": unlike C, xray shifts are always defined). This is
+ * also what JIT codegen produces for free (x64 SHL/SAR with CL, ARM64
+ * LSL/ASR, RISC-V SLL/SRA all mask the count to 6 bits) and what xi_opt /
+ * Xm constant folding implement, so the VM must match. Left shift goes
+ * through uint64_t because shifting into/past the sign bit is UB on signed
+ * in C; right shift is arithmetic (sign-extending — implementation-defined
+ * in C but guaranteed on every compiler xray supports). */
+static inline xr_Integer xr_int_shl_wrap(xr_Integer a, xr_Integer b) {
+    return (xr_Integer) ((uint64_t) a << ((uint64_t) b & 63));
+}
+static inline xr_Integer xr_int_shr_wrap(xr_Integer a, xr_Integer b) {
+    return a >> ((uint64_t) b & 63);
 }
 
 /* ========== Type Query ========== */

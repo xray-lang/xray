@@ -4,9 +4,9 @@ import http
 
 @test
 fn test_h2_apis_exist() {
-    assert(http.h2Get != null)
-    assert(http.h2Post != null)
-    assert(http.h2Request != null)
+    assert(typeof(http.h2Get) == "function")
+    assert(typeof(http.h2Post) == "function")
+    assert(typeof(http.h2Request) == "function")
 }
 
 @test
@@ -18,7 +18,7 @@ fn test_h2_options_object() {
         body: '{"key": "value"}'
     }
     assert_eq(opts.method, "POST")
-    assert(opts.headers != null)
+    assert_eq(opts.headers["Content-Type"], "application/json")
 }
 
 print("All http2 client tests passed")

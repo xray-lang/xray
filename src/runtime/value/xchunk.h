@@ -260,12 +260,6 @@ typedef struct XrProto {
     int test_timeout;   // test timeout (seconds)
     bool is_coro_safe;  // safe to call in coroutine
 
-    // Raw constant pool (uint64_t[]) for native-width values (int64/float64)
-    // Used by OP_LOADK_RAW to load raw 64-bit values without tagged union
-    uint64_t *raw_constants;
-    int raw_constant_count;
-    int raw_constant_capacity;
-
     /*
      * JIT/AOT metadata: type information preserved from compile-time analysis.
      *
@@ -390,7 +384,6 @@ XR_FUNC int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t stora
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,
                                     struct XrType *type_info);
 XR_FUNC int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol);
-XR_FUNC int xr_proto_add_raw_constant(XrProto *proto, uint64_t value);
 
 /* ========== Debug Helpers ========== */
 XR_FUNC const char *xr_opcode_name(OpCode op);

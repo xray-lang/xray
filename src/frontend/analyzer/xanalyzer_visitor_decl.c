@@ -153,6 +153,73 @@ XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body) {
     return result;
 }
 
+static XrClassInfo *xa_default_init_class_info(XaInferContext *ctx, XrType *type) {
+    if (!ctx || !ctx->analyzer || !type)
+        return NULL;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_ref) {
+        return type->instance.class_ref;
+    }
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
+
+    const char *name = type->instance.class_name;
+    if (!name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(ctx->analyzer, name);
+    if (!sym || sym->kind != XA_SYM_CLASS) {
+        sym = xa_analyzer_lookup_in_scope(ctx->analyzer, name, ctx->analyzer->global_scope);
+    }
+    if (!sym || sym->kind != XA_SYM_CLASS) {
+        sym = xa_analyzer_lookup_deep(ctx->analyzer, name);
+    }
+    if (!sym || sym->kind != XA_SYM_CLASS)
+        return NULL;
+
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return links ? links->class_info : NULL;
+}
+
+static bool xa_type_is_default_initializable_depth(XaInferContext *ctx, XrType *type, int depth) {
+    if (!type)
+        return false;
+    if (depth > 16)
+        return false;
+
+    if (xr_type_is_default_initializable(type))
+        return true;
+
+    if (type->kind == XR_KIND_FIXED_ARRAY) {
+        return type->fixed_array.length >= 0 && xa_type_is_default_initializable_depth(
+                                                    ctx, type->fixed_array.element_type, depth + 1);
+    }
+
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return false;
+
+    XrClassInfo *info = xa_default_init_class_info(ctx, type);
+    if (!info)
+        return false;
+
+    bool is_struct = type->is_value_type || info->struct_layout != NULL;
+    if (!is_struct)
+        return false;
+
+    for (int i = 0; i < info->field_count; i++) {
+        XaSymbol *field = info->fields[i];
+        XaSymbolLinks *links = field ? xa_analyzer_get_links(ctx->analyzer, field) : NULL;
+        if (!links || !links->type)
+            return false;
+        if (!xa_type_is_default_initializable_depth(ctx, links->type, depth + 1))
+            return false;
+    }
+    return true;
+}
+
+bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type) {
+    return xa_type_is_default_initializable_depth(ctx, type, 0);
+}
+
 // Phase 1: Collect function declaration only (symbol, not body).
 // Cross-TU: called from xa_visit_collect_statements_with_hoisting() in
 // xanalyzer_visitor.c during the hoisting pass.
@@ -743,6 +810,118 @@ static void validate_constructor_super_call(XaInferContext *ctx, ClassDeclNode *
     }
 }
 
+static bool expr_assigns_this_field(AstNode *expr, const char *field_name) {
+    if (!expr || !field_name)
+        return false;
+    if (expr->type != AST_MEMBER_SET)
+        return false;
+
+    MemberSetNode *set = &expr->as.member_set;
+    return set->object && set->object->type == AST_THIS_EXPR && set->member &&
+           strcmp(set->member, field_name) == 0;
+}
+
+static bool stmt_definitely_assigns_this_field(AstNode *stmt, const char *field_name) {
+    if (!stmt || !field_name)
+        return false;
+
+    switch (stmt->type) {
+        case AST_BLOCK: {
+            BlockNode *block = &stmt->as.block;
+            for (int i = 0; i < block->count; i++) {
+                if (stmt_definitely_assigns_this_field(block->statements[i], field_name))
+                    return true;
+            }
+            return false;
+        }
+        case AST_EXPR_STMT:
+            return expr_assigns_this_field(stmt->as.expr_stmt, field_name);
+        case AST_MEMBER_SET:
+            return expr_assigns_this_field(stmt, field_name);
+        case AST_IF_STMT:
+            return stmt->as.if_stmt.then_branch && stmt->as.if_stmt.else_branch &&
+                   stmt_definitely_assigns_this_field(stmt->as.if_stmt.then_branch, field_name) &&
+                   stmt_definitely_assigns_this_field(stmt->as.if_stmt.else_branch, field_name);
+        default:
+            return false;
+    }
+}
+
+static bool class_has_bodyless_constructor(ClassDeclNode *cls) {
+    if (!cls)
+        return false;
+    for (int i = 0; i < cls->method_count; i++) {
+        AstNode *method = cls->methods[i];
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        if (md->is_constructor && !md->body)
+            return true;
+    }
+    return false;
+}
+
+static bool class_constructors_assign_field(ClassDeclNode *cls, const char *field_name) {
+    if (!cls || !field_name)
+        return false;
+
+    bool saw_constructor = false;
+    for (int i = 0; i < cls->method_count; i++) {
+        AstNode *method = cls->methods[i];
+        if (!method || method->type != AST_METHOD_DECL)
+            continue;
+        MethodDeclNode *md = &method->as.method_decl;
+        if (!md->is_constructor)
+            continue;
+        saw_constructor = true;
+        if (!md->body)
+            continue;
+        if (!stmt_definitely_assigns_this_field(md->body, field_name))
+            return false;
+    }
+    return saw_constructor;
+}
+
+static void validate_class_field_default_initialization(XaInferContext *ctx, AstNode *node,
+                                                        ClassDeclNode *cls, XrClassInfo *info) {
+    if (!ctx || !node || !cls || !info)
+        return;
+    if (node->type != AST_CLASS_DECL)
+        return;
+    if (cls->is_native || class_has_bodyless_constructor(cls))
+        return;
+
+    for (int i = 0; i < cls->field_count; i++) {
+        AstNode *field_node = cls->fields[i];
+        if (!field_node || field_node->type != AST_FIELD_DECL)
+            continue;
+
+        FieldDeclNode *fd = &field_node->as.field_decl;
+        if (fd->initializer)
+            continue;
+
+        XaSymbol *field_sym = xa_class_info_lookup_member(info, fd->name);
+        XaSymbolLinks *links = field_sym ? xa_analyzer_get_links(ctx->analyzer, field_sym) : NULL;
+        XrType *field_type = links ? links->type : NULL;
+        if (!field_type || XR_TYPE_IS_UNKNOWN(field_type))
+            continue;
+        if (xa_type_is_default_initializable(ctx, field_type))
+            continue;
+        if (!fd->is_static && class_constructors_assign_field(cls, fd->name))
+            continue;
+
+        XrLocation loc = {.file = ctx->file_path, .line = field_node->line};
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "Field '%s' of class '%s' has type '%s' and must have an initializer or be "
+                 "assigned in every constructor",
+                 fd->name ? fd->name : "?", cls->name ? cls->name : "?",
+                 xr_type_to_string(field_type));
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+    }
+}
+
 // Register a user-defined interface as a class-shaped symbol so the rest of
 // the analyzer (constraint checks, conformance lookups, type-arg resolution)
 // can find it through xa_scope_lookup.  Method and property signatures are
@@ -1022,7 +1201,7 @@ skip_interfaces:
             // Try explicit type annotation first
             if (fd->field_type) {
                 field_links->type = fd->field_type
-                                        ? xr_tref_resolve(ctx->analyzer->isolate, fd->field_type)
+                                        ? xr_tref_resolve_in_analyzer(ctx->analyzer, fd->field_type)
                                         : xr_type_new_unknown(NULL);
             } else if (fd->initializer) {
                 // Infer type from initializer
@@ -1413,6 +1592,8 @@ skip_layout:
         }
     }
 
+    validate_class_field_default_initialization(ctx, node, cls, info);
+
     // Enter each method scope and add parameters + visit body for nested declarations.
     // This creates the function scopes that Pass 2 will reuse via ast_node matching,
     // ensuring method parameters are visible during type inference.
@@ -1488,8 +1669,9 @@ void xa_visit_collect_var_decl(XaInferContext *ctx, AstNode *node) {
     // Type will be inferred in pass 2
     // Keep NULL when no annotation (distinguishes "no annotation" from "annotated as any")
     XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
-    links->declared_type =
-        var->type_annotation ? xr_tref_resolve(ctx->analyzer->isolate, var->type_annotation) : NULL;
+    links->declared_type = var->type_annotation
+                               ? xr_tref_resolve_in_analyzer(ctx->analyzer, var->type_annotation)
+                               : NULL;
 
     // Mark const types as immutable for concurrency safety
     if (sym->is_shared && sym->is_const && links->declared_type) {

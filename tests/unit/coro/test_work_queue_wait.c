@@ -46,8 +46,7 @@ static void init_blocked_work_queue_coro(XrCoroutine *coro, XrCoroExt *ext, Xray
     coro->id = 700;
     coro->isolate = isolate;
     coro->ext = ext;
-    atomic_store(&coro->flags, XR_CORO_WAIT_WORKQUEUE);
-    atomic_store(&coro->coro_state, XR_CORO_STATE_BLOCKED);
+    atomic_store(&coro->flags, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_WORKQUEUE);
     atomic_store(&coro->affinity_p, 0);
 
     xr_work_queue_wait_token_prepare(&ext->wait.work_queue_token, q);
@@ -110,7 +109,7 @@ TEST(close_without_workers_keeps_waiter_blocked) {
     ASSERT_EQ_PTR(q->wait_first, &coro);
     ASSERT_EQ_PTR(q->wait_last, &coro);
     ASSERT_EQ_INT((int) atomic_load(&q->waiter_count), 1);
-    ASSERT_EQ_INT(atomic_load(&coro.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_flag_to_state(atomic_load(&coro.flags)), XR_CORO_STATE_BLOCKED);
     ASSERT_FALSE(xr_coro_flags_has(&coro, XR_CORO_FLG_READY));
     ASSERT_EQ_INT(atomic_load(&ext.wait.work_queue_token.state), XR_WORK_QUEUE_WAIT_REGISTERED);
 

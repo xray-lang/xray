@@ -1,0 +1,9 @@
+fn narrow(x: uint8) -> uint8 {
+    return x + 1
+}
+
+fn total(a: int, b: int) -> int {
+    return a + b + narrow(41)
+}
+
+print(total(1, 2))

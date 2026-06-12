@@ -69,7 +69,7 @@ static void idle_worker_push(XrRuntime *rt, XrMachine *m) {
     XrMachine *head;
     do {
         head = atomic_load_explicit(&rt->idle_worker_list, memory_order_relaxed);
-        m->idle_link = head;
+        atomic_store_explicit(&m->idle_link, head, memory_order_relaxed);
     } while (!atomic_compare_exchange_weak_explicit(&rt->idle_worker_list, &head, m,
                                                     memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&rt->idle_worker_count, 1, memory_order_relaxed);
@@ -84,10 +84,10 @@ static XrMachine *idle_worker_pop(XrRuntime *rt) {
         XrMachine *head = atomic_load_explicit(&rt->idle_worker_list, memory_order_acquire);
         if (!head)
             return NULL;
-        XrMachine *next = head->idle_link;
+        XrMachine *next = atomic_load_explicit(&head->idle_link, memory_order_relaxed);
         if (atomic_compare_exchange_weak_explicit(&rt->idle_worker_list, &head, next,
                                                   memory_order_acq_rel, memory_order_acquire)) {
-            head->idle_link = NULL;
+            atomic_store_explicit(&head->idle_link, NULL, memory_order_relaxed);
             atomic_store_explicit(&head->in_idle_worker_list, false, memory_order_release);
             atomic_fetch_sub_explicit(&rt->idle_worker_count, 1, memory_order_relaxed);
             XrProc *p = atomic_load_explicit(&head->current_p, memory_order_relaxed);
@@ -134,7 +134,7 @@ void xr_runtime_wake_idle_worker(XrRuntime *runtime) {
 
 // Wake Worker (simple futex wake via park_state)
 void worker_unpark(XrWorker *worker) {
-    XrMachine *m = worker->m;
+    XrMachine *m = atomic_load_explicit(&worker->p.current_m, memory_order_acquire);
     if (!m)
         return;  // M detached during handoff
     atomic_store_explicit(&m->park_state, XR_PARK_WOKEN, memory_order_release);
@@ -159,14 +159,14 @@ void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *cor
 
     // Step 1: Lock-free MPSC push
     xr_mpsc_push(&target->p.inbox, coro);
-    atomic_fetch_add_explicit(&runtime->total_inbox_len, 1, memory_order_relaxed);
 
     // Step 2: Dekker fence — ensure inbox push is visible before reading
     // target state.  Pairs with seq_cst store of M_PARKING in worker_park.
     atomic_thread_fence(memory_order_seq_cst);
 
-    // Step 3: Wake target worker if parked
-    if (atomic_load(&target->m->state) == M_PARKING) {
+    // Step 3: Wake target worker if parked and currently bound to an M.
+    XrMachine *target_m = atomic_load_explicit(&target->p.current_m, memory_order_acquire);
+    if (target_m && atomic_load_explicit(&target_m->state, memory_order_acquire) == M_PARKING) {
         worker_unpark(target);
     }
 }
@@ -181,10 +181,11 @@ void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutin
               "inbox_enqueue_batch: target_id out of range");
 
     XrWorker *target = &runtime->workers[target_id];
+    (void) count;
     xr_mpsc_push_batch(&target->p.inbox, first, last);
-    atomic_fetch_add_explicit(&runtime->total_inbox_len, count, memory_order_relaxed);
     atomic_thread_fence(memory_order_seq_cst);
-    if (atomic_load(&target->m->state) == M_PARKING) {
+    XrMachine *target_m = atomic_load_explicit(&target->p.current_m, memory_order_acquire);
+    if (target_m && atomic_load_explicit(&target_m->state, memory_order_acquire) == M_PARKING) {
         worker_unpark(target);
     }
 }
@@ -209,8 +210,6 @@ static void try_immigrate(XrWorker *worker) {
     if (stolen > 0) {
         xr_proc_local_runq_dec(&source->p, stolen);
         xr_proc_local_runq_inc(&worker->p, stolen);
-        xr_worker_refresh_runq_masks(source);
-        xr_worker_refresh_runq_masks(worker);
         mp->runq.target_worker = -1;
     }
 }
@@ -218,7 +217,7 @@ static void try_immigrate(XrWorker *worker) {
 // ========== Shared Scheduling Helpers ==========
 // Used by both worker_loop and xr_handoff_thread_entry to avoid duplication.
 
-// Drain MPSC inbox into P's local run queue, maintaining global inbox counter.
+// Drain MPSC inbox into P's local run queue.
 void worker_drain_inbox(XrWorker *worker) {
     XrCoroutine *list = xr_mpsc_drain(&worker->p.inbox);
     int count = 0;
@@ -227,19 +226,30 @@ void worker_drain_inbox(XrWorker *worker) {
     while (list) {
         XrCoroutine *next = list->sched_link;
         list->sched_link = NULL;
-        if (list->ext && list->ext->wait_bucket && list->ext->wait_bucket_owner == worker->p.id) {
-            xr_worker_unblock(worker, list);
-        }
         if (xr_coro_flags_has(list, XR_CORO_FLG_DONE)) {
             XrSelectWait *sw = xr_coro_select_wait(list);
             if (sw) {
                 xr_worker_unblock_select(worker, list);
                 xr_select_wait_cancel(sw);
                 xr_coro_clear_select_wait(list);
+                if (list->ext && list->ext->wait_bucket &&
+                    list->ext->wait_bucket_owner == worker->p.id) {
+                    xr_worker_unblock(worker, list);
+                }
+            } else {
+                xr_worker_unblock(worker, list);
             }
+            bool recycle_done = (list->gc_flags & XR_CORO_GC_RECYCLABLE) != 0 &&
+                                list->task == NULL && !xr_coro_flags_has(list, XR_CORO_FLG_MAIN);
+            XrCoroutine *done = list;
             list = next;
             count++;
+            if (recycle_done)
+                xr_coro_recycle_local(worker, done);
             continue;
+        }
+        if (list->ext && list->ext->wait_bucket && list->ext->wait_bucket_owner == worker->p.id) {
+            xr_worker_unblock(worker, list);
         }
         if (ready_last) {
             ready_last->sched_link = list;
@@ -255,7 +265,6 @@ void worker_drain_inbox(XrWorker *worker) {
     }
     if (count > 0 && worker->p.runtime) {
         worker->p.stats.inbox_drain_count++;
-        atomic_fetch_sub_explicit(&worker->p.runtime->total_inbox_len, count, memory_order_relaxed);
     }
 }
 
@@ -380,9 +389,8 @@ after_netpoll:
     // after ~100 timeouts per bump call (XR_TW_COST_TIMEOUT=100), so a
     // burst of 10000 timers requires ~100 iterations.
     int64_t now = xr_monotonic_ticks();
-    if (p->timer_wheel && (xr_timer_cancel_pending(p->timer_wheel) || now > p->last_timer_tick)) {
-        int32_t inbox_before =
-            atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed);
+    if (p->timer_wheel &&
+        (xr_timer_cancel_pending(p->timer_wheel) || now > xr_proc_last_timer_tick(p))) {
         int timer_passes = 0;
         do {
             xr_bump_timers(p->timer_wheel, now);
@@ -392,20 +400,23 @@ after_netpoll:
         if (timer_passes > 1) {
             p->stats.timer_burst_count++;
         }
-        if (now > p->last_timer_tick) {
-            p->last_timer_tick = now;
+        if (now > xr_proc_last_timer_tick(p)) {
+            xr_proc_set_last_timer_tick(p, now);
         }
-        // After timer batch: wake idle workers to help process burst.
-        // Wake count = min(new_items, idle_workers) — no point waking
-        // more workers than available work or idle capacity.
-        int32_t new_items =
-            atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) - inbox_before;
-        if (new_items > 0) {
+        // After timer batch: wake idle workers to help process the burst.
+        // Timer callbacks deliver wakes into per-worker inboxes; count the
+        // nonempty inboxes (bounded scan) and wake at most that many.
+        int pending_inboxes = 0;
+        for (int i = 0; i < runtime->worker_count; i++) {
+            if (!xr_mpsc_empty(&runtime->workers[i].p.inbox))
+                pending_inboxes++;
+        }
+        if (pending_inboxes > 0) {
             int idle_count =
                 atomic_load_explicit(&runtime->idle_worker_count, memory_order_relaxed);
             if (idle_count < 0)
                 idle_count = 0;
-            int wakes = new_items < idle_count ? new_items : idle_count;
+            int wakes = pending_inboxes < idle_count ? pending_inboxes : idle_count;
             if (wakes < 1)
                 wakes = 1;
             wake_idle_workers(runtime, wakes);
@@ -472,7 +483,12 @@ static void worker_sleep_timeout_callback(void *arg) {
         return;
     }
 
-    // Check if select wait (use CAS to prevent duplicate wake)
+    // Check if select wait (use CAS to prevent duplicate wake).
+    // Runs on the owning worker thread only: the timer wheel is
+    // owner-private and sysmon merely unparks the owner. See the select
+    // wake protocol doc on worker_detach_select_waiter_with_status
+    // (xworker_sysmon.c) for why a failed claim below must NOT roll back
+    // the triggered latch.
     XrSelectWait *sw = xr_coro_select_wait(coro);
     if (sw) {
         bool expected = false;
@@ -483,6 +499,8 @@ static void worker_sleep_timeout_callback(void *arg) {
             return;
         }
         if (!xr_coro_claim_wake(coro)) {
+            // Coro already woken elsewhere; triggered stays latched (safe:
+            // the select is about to resume and tear down its wait state).
             xr_timer_wait_token_cancel(&coro->ext->wait.timer_token);
             atomic_store_explicit(&coro->ext->timer_active, false, memory_order_relaxed);
             return;
@@ -516,8 +534,9 @@ static void worker_sleep_timeout_callback(void *arg) {
         }
         // Check if waiting on channel (sendTimeout/recvTimeout)
         if (ch) {
-            // Remove from channel wait queue
-            xr_channel_remove_waiter(ch, coro);
+            // Remove from channel wait queue (claim_wake already won the race,
+            // so the unlink outcome carries no extra ownership information).
+            (void) xr_channel_remove_waiter(ch, coro);
             xr_channel_wait_token_timeout(&coro->ext->chan_wait_token);
             atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
         }
@@ -570,7 +589,8 @@ void xr_worker_add_sleep_timer(XrWorker *worker, XrCoroutine *coro, int64_t dela
 
     // Mark timer active and record ownership
     atomic_store_explicit(&text->timer_active, true, memory_order_relaxed);
-    text->timer_wheel_owner = worker->p.id;  // Record which worker owns this timer
+    // Record which worker owns this timer (relaxed: routing hint)
+    atomic_store_explicit(&text->timer_wheel_owner, worker->p.id, memory_order_relaxed);
 
     // Set timer (must be called from owner worker)
     XR_DBG_TIMER("Worker set_timer: tw=%p, timeout_pos=%lld, tw->pos=%lld, owner=%d", (void *) tw,
@@ -594,7 +614,7 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
     if (!atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed))
         return;
 
-    int owner_id = coro->ext->timer_wheel_owner;
+    int owner_id = atomic_load_explicit(&coro->ext->timer_wheel_owner, memory_order_relaxed);
     XrRuntime *runtime = current_worker ? current_worker->p.runtime : NULL;
     if (!runtime)
         return;
@@ -640,10 +660,17 @@ void xr_worker_cancel_timer(XrWorker *current_worker, XrCoroutine *coro) {
 static bool runtime_has_work(XrRuntime *runtime) {
     if (atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return true;
-    if (atomic_load_explicit(&runtime->nonempty_p_mask, memory_order_acquire) != 0)
-        return true;
-    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
-        return true;
+    // Bounded read-only scan (cold path: park/last-spinner checks only).
+    // LIFO slots are excluded: only their owner can consume them, and an
+    // owner never parks with an occupied LIFO slot (xr_worker_pop drains
+    // or flushes it first).
+    for (int i = 0; i < runtime->worker_count; i++) {
+        XrProc *p = &runtime->workers[i].p;
+        if (xr_steal_queue_size(&p->runq.deque) > 0 || p->runq.overflow_len > 0 ||
+            xr_steal_queue_size(&p->cont_deque) > 0 || !xr_mpsc_empty(&p->inbox)) {
+            return true;
+        }
+    }
     return false;
 }
 
@@ -836,7 +863,7 @@ static bool worker_try_enter_search(XrRuntime *runtime) {
 }
 
 static uint64_t runtime_stealable_candidates(XrRuntime *runtime, uint64_t self_bit) {
-    return atomic_load_explicit(&runtime->stealable_p_mask, memory_order_acquire) & ~self_bit;
+    return xr_runtime_scan_stealable(runtime, self_bit);
 }
 
 static uint64_t worker_valid_mask(int worker_count) {
@@ -875,13 +902,17 @@ static void worker_wait_steal_delay(XrWorker *worker, XrRuntime *runtime, int64_
         return;
     if (atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return;
-    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+    if (xr_runtime_any_inbox_nonempty(runtime))
         return;
     if (delay_ms > XR_STEAL_BACKOFF_MAX_MS)
         delay_ms = XR_STEAL_BACKOFF_MAX_MS;
     if (delay_ms < 1)
         delay_ms = 1;
     worker->p.stats.steal_throttle_wait_count++;
+    worker->p.stats.steal_throttle_wait_ms += (uint64_t) delay_ms;
+    if ((uint64_t) delay_ms > worker->p.stats.steal_throttle_wait_max_ms) {
+        worker->p.stats.steal_throttle_wait_max_ms = (uint64_t) delay_ms;
+    }
     atomic_store_explicit(&worker->m->park_state, XR_PARK_IDLE, memory_order_release);
     xr_park_futex_wait(&worker->m->park_state, XR_PARK_IDLE, (uint32_t) delay_ms * 1000u);
 }
@@ -959,15 +990,16 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
             XrWorker *victim = &runtime->workers[i];
             int victim_len = xr_steal_queue_size(&victim->p.runq.deque);
             if (victim_len <= 0) {
-                xr_worker_refresh_runq_masks(victim);
                 continue;
             }
 
             XrCoroutine *oldest = xr_steal_queue_peek_top(&victim->p.runq.deque);
 
             int64_t freshness = worker_steal_freshness_ms(worker, runtime, victim_len);
+            int64_t oldest_submit =
+                oldest ? atomic_load_explicit(&oldest->submit_time, memory_order_relaxed) : 0;
             if (oldest && freshness > 0) {
-                int64_t age = steal_now - oldest->submit_time;
+                int64_t age = steal_now - oldest_submit;
                 if (age < freshness) {
                     int64_t delay = freshness - age;
                     if (*out_delay_hint == 0 || delay < *out_delay_hint) {
@@ -978,7 +1010,7 @@ static void worker_scan_steal_candidates(XrWorker *worker, XrRuntime *runtime,
                 }
             }
 
-            int64_t submit_time = oldest ? oldest->submit_time : steal_now;
+            int64_t submit_time = oldest ? oldest_submit : steal_now;
             if (steal_choice_should_replace(choice, victim_len, submit_time)) {
                 choice->worker_id = i;
                 choice->victim_len = victim_len;
@@ -1004,12 +1036,12 @@ static XrCoroutine *worker_try_steal_continuation(XrWorker *worker, XrRuntime *r
             worker->p.stats.steal_candidate_scan_count++;
 
             XrWorker *victim = &runtime->workers[i];
-            XrCoroutine *cont = xr_steal_queue_steal(&victim->p.cont_deque);
-            if (!cont)
+            XrCoroutine *cont = NULL;
+            XrStealQueueStatus status = xr_steal_queue_steal_status(&victim->p.cont_deque, &cont);
+            if (status != XR_STEAL_QUEUE_SUCCESS)
                 continue;
 
             worker->p.stats.cont_steal_count++;
-            xr_worker_refresh_runq_masks(victim);
             return cont;
         }
     }
@@ -1055,7 +1087,10 @@ XR_FUNC XrCoroutine *xr_worker_try_steal_once(XrWorker *worker, XrRuntime *runti
         if (choice.worker_id >= 0) {
             XrWorker *victim = &runtime->workers[choice.worker_id];
             XrCoroutine *direct = NULL;
-            int stolen = xr_runq_steal_direct(&victim->p.runq, &worker->p.runq, 50, &direct);
+            worker->p.stats.steal_batch_attempt_count++;
+            int stolen = 0;
+            XrRunqStealStatus steal_status =
+                xr_runq_steal_direct_status(&victim->p.runq, &worker->p.runq, 50, &stolen, &direct);
             if (stolen > 0) {
                 xr_proc_local_runq_dec(&victim->p, stolen);
                 int queued = direct ? stolen - 1 : stolen;
@@ -1064,8 +1099,6 @@ XR_FUNC XrCoroutine *xr_worker_try_steal_once(XrWorker *worker, XrRuntime *runti
                 }
                 worker->p.stats.stolen_count += stolen;
                 worker->p.stats.steal_success_count++;
-                xr_worker_refresh_runq_masks(victim);
-                xr_worker_refresh_runq_masks(worker);
                 if (direct) {
                     worker_record_direct_steal_dispatch(worker, direct, steal_now);
                     coro = direct;
@@ -1073,7 +1106,10 @@ XR_FUNC XrCoroutine *xr_worker_try_steal_once(XrWorker *worker, XrRuntime *runti
                     coro = xr_worker_pop(worker);
                 }
             } else {
-                xr_worker_refresh_runq_masks(victim);
+                if (steal_status == XR_RUNQ_STEAL_RETRY)
+                    worker->p.stats.steal_batch_fail_count++;
+                else
+                    worker->p.stats.steal_batch_empty_count++;
             }
         }
 
@@ -1118,11 +1154,11 @@ static XrCoroutine *worker_spin(XrWorker *worker, XrRuntime *runtime, _Atomic bo
             cached_now = xr_monotonic_ticks();
         }
         if (worker->p.timer_wheel && (xr_timer_cancel_pending(worker->p.timer_wheel) ||
-                                      cached_now > worker->p.last_timer_tick)) {
+                                      cached_now > xr_proc_last_timer_tick(&worker->p))) {
             xr_bump_timers(worker->p.timer_wheel, cached_now);
             worker->p.stats.timer_bump_count++;
-            if (cached_now > worker->p.last_timer_tick) {
-                worker->p.last_timer_tick = cached_now;
+            if (cached_now > xr_proc_last_timer_tick(&worker->p)) {
+                xr_proc_set_last_timer_tick(&worker->p, cached_now);
             }
         }
         coro = xr_worker_pop(worker);

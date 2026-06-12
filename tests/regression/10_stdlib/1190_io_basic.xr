@@ -7,7 +7,6 @@ import io
 @test
 fn test_temp_file() {
     let tmp = io.tempFile()!
-    assert(tmp != null)
     assert(io.exists(tmp))
     io.remove(tmp)
 }
@@ -96,7 +95,6 @@ fn test_read_dir() {
     io.writeFile(tmpDir + "/file1.txt", "f1")
     io.writeFile(tmpDir + "/file2.txt", "f2")
     let entries = io.readDir(tmpDir)
-    assert(entries != null)
     assert(entries.length >= 2)
     io.removeAll(tmpDir)
 }
@@ -144,7 +142,6 @@ fn test_touch() {
 @test
 fn test_cwd() {
     let cwd = io.cwd()
-    assert(cwd != null)
     assert(cwd.length > 0)
 }
 

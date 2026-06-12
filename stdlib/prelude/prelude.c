@@ -161,6 +161,39 @@ static void xr_prelude_register_builtin_enums(XrayIsolate *X) {
     if (ordering_et)
         X->vm.builtins[XR_GLOBAL_VAR_ORDERING] = XR_FROM_PTR(ordering_et);
 
+    static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
+    static const int recv_values[] = {0, 1, 2, 3};
+    static const int recv_payload_counts[] = {1, 0, 0, 0};
+    XrEnumType *recv_et =
+        make_prelude_enum(X, "Recv", recv_members, recv_values, 4, recv_payload_counts, true);
+    if (recv_et)
+        X->vm.builtins[XR_GLOBAL_VAR_RECV] = XR_FROM_PTR(recv_et);
+
+    static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
+    static const int send_result_values[] = {0, 1, 2, 3};
+    XrEnumType *send_result_et =
+        make_prelude_enum(X, "SendResult", send_result_members, send_result_values, 4, NULL, false);
+    if (send_result_et)
+        X->vm.builtins[XR_GLOBAL_VAR_SEND_RESULT] = XR_FROM_PTR(send_result_et);
+
+    static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
+                                                "Pending"};
+    static const int task_result_values[] = {0, 1, 2, 3, 4};
+    static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
+    XrEnumType *task_result_et =
+        make_prelude_enum(X, "TaskResult", task_result_members, task_result_values, 5,
+                          task_result_payload_counts, true);
+    if (task_result_et)
+        X->vm.builtins[XR_GLOBAL_VAR_TASK_RESULT] = XR_FROM_PTR(task_result_et);
+
+    static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
+                                                "Cancelled"};
+    static const int task_status_values[] = {0, 1, 2, 3, 4};
+    XrEnumType *task_status_et =
+        make_prelude_enum(X, "TaskStatus", task_status_members, task_status_values, 5, NULL, false);
+    if (task_status_et)
+        X->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS] = XR_FROM_PTR(task_status_et);
+
     if (X->vm.builtin_count < XR_USER_GLOBALS_START)
         X->vm.builtin_count = XR_USER_GLOBALS_START;
 }
@@ -193,6 +226,10 @@ void xr_prelude_register_all_native_types(XrayIsolate *isolate) {
     if (isolate->native_type_classes[XR_TWORKQUEUE]) {
         bind_class_global(isolate, XR_GLOBAL_VAR_WORKQUEUE,
                           isolate->native_type_classes[XR_TWORKQUEUE]);
+    }
+    if (isolate->native_type_classes[XR_TRESULTGROUP]) {
+        bind_class_global(isolate, XR_GLOBAL_VAR_RESULTGROUP,
+                          isolate->native_type_classes[XR_TRESULTGROUP]);
     }
 }
 

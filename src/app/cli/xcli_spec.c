@@ -87,10 +87,22 @@ static const XrCliOptionSpec build_options[] = {
     {"output", 'o', XR_CLI_VALUE_STRING, false, false, "FILE", "Output file path"},
     {"c-only", 'c', XR_CLI_VALUE_NONE, false, false, NULL, "Output C source only"},
     {"cc", 'C', XR_CLI_VALUE_STRING, false, false, "CC", "C compiler to use"},
-    {"opt", 'O', XR_CLI_VALUE_STRING, false, false, "LEVEL", "Optimization (0,1,2,3,s,fast)"},
+    {"opt", 'O', XR_CLI_VALUE_STRING, false, false, "LEVEL",
+     "Optimization (0,1,2,3,s,fast; default 3)"},
+    {"cpu", 0, XR_CLI_VALUE_STRING, false, false, "CPU",
+     "Tune for CPU via -march (e.g. native); host --native builds only"},
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR", "System root directory"},
     {"strip", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Strip debug symbols"},
     {"native", 'N', XR_CLI_VALUE_NONE, false, false, NULL, "Use AOT native backend"},
+    {"target", 0, XR_CLI_VALUE_STRING, false, false, "TRIPLE", "AOT target triple"},
+    {"toolchain", 0, XR_CLI_VALUE_STRING, false, false, "KIND",
+     "AOT toolchain: auto, host, zig, clang"},
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
+    {"dump-xaot-plan", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT prepare plan"},
+    {"dump-link-manifest", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Dump AOT link manifest"},
+    {"dump-link-command", 0, XR_CLI_VALUE_NONE, false, false, NULL,
+     "Dump resolved AOT link command"},
+    {"keep-c", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Keep generated temporary C source"},
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     XR_CLI_OPT_END};
 
@@ -99,6 +111,10 @@ static const XrCliOptionSpec deps_options[] = {
     {"shell", 's', XR_CLI_VALUE_NONE, false, false, NULL, "Shell script format"},
     {"json", 'j', XR_CLI_VALUE_NONE, false, false, NULL, "JSON format"},
     {"list", 'l', XR_CLI_VALUE_NONE, false, false, NULL, "Simple list format"},
+    XR_CLI_OPT_END};
+
+static const XrCliOptionSpec toolchain_options[] = {
+    {"zig", 0, XR_CLI_VALUE_STRING, false, false, "PATH", "Path to zig executable"},
     XR_CLI_OPT_END};
 
 static const XrCliOptionSpec pkg_options[] = {XR_CLI_OPT_END};
@@ -139,6 +155,13 @@ static const XrCliCommandSpec pkg_subcommands[] = {
     {"publish", "Publish package", NULL, empty_options, 0, 0, false, false, NULL, NULL, 0},
     {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
 
+static const XrCliCommandSpec toolchain_subcommands[] = {
+    {"list", "List AOT toolchains and supported targets", NULL, empty_options, 0, 0, false, false,
+     NULL, NULL, 0},
+    {"doctor", "Validate AOT cross-target toolchain setup", NULL, empty_options, 0, 0, false, false,
+     NULL, NULL, 0},
+    {NULL, NULL, NULL, NULL, 0, 0, false, false, NULL, NULL, 0}};
+
 /* ========== Top-level Command Table ========== */
 
 static XrCliCommandSpec cli_commands[] = {
@@ -155,6 +178,8 @@ static XrCliCommandSpec cli_commands[] = {
      0},
     {"build", "Compile to binary", NULL, build_options, 1, 1, false, false, NULL, NULL, 0},
     {"deps", "Analyze dependencies", NULL, deps_options, 1, 1, false, false, NULL, NULL, 0},
+    {"toolchain", "Inspect AOT toolchains", NULL, toolchain_options, 0, -1, false, false, NULL,
+     toolchain_subcommands, 2},
 
     /* Package management (has subcommands) */
     {"pkg", "Package management", NULL, pkg_options, 0, -1, false, false, NULL, pkg_subcommands, 8},

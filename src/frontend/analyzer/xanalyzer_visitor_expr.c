@@ -372,6 +372,31 @@ static XrType *binary_arith_distribute(XaInferContext *ctx, int op, XrType *left
     return acc ? acc : xr_type_new_unknown(NULL);
 }
 
+static bool xa_type_allows_null_comparison(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type))
+        return true;
+    return XR_TYPE_IS_NULL(type) || type->is_nullable || xr_type_intrinsically_includes_null(type);
+}
+
+static void xa_check_null_comparison(XaInferContext *ctx, AstNode *node, XrType *left,
+                                     XrType *right) {
+    bool left_null = left && XR_TYPE_IS_NULL(left);
+    bool right_null = right && XR_TYPE_IS_NULL(right);
+    if (left_null == right_null)
+        return;
+
+    XrType *other = left_null ? right : left;
+    if (xa_type_allows_null_comparison(other))
+        return;
+
+    XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+    char msg[256];
+    snprintf(msg, sizeof(msg), "Comparison: cannot compare non-nullable type '%s' with null",
+             xr_type_to_string(other));
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
     if (!ctx || !node)
         return xr_type_new_unknown(NULL);
@@ -386,6 +411,8 @@ XrType *xa_visit_binary(XaInferContext *ctx, AstNode *node) {
         case AST_BINARY_NE:
         case AST_BINARY_EQ_STRICT:
         case AST_BINARY_NE_STRICT:
+            xa_check_null_comparison(ctx, node, left, right);
+            return xr_type_new_bool(NULL);
         case AST_BINARY_LT:
         case AST_BINARY_LE:
         case AST_BINARY_GT:
@@ -658,11 +685,18 @@ XrType *xa_visit_member_access(XaInferContext *ctx, AstNode *node) {
             //   Array<T>/Set<T>/Channel<T>: T -> element_type
             //   Map<K,V>: K -> key_type, V -> value_type
             if (fn_type) {
+                XrType *single_type_arg = NULL;
                 if ((XR_TYPE_IS_ARRAY(obj_type) || obj_type->kind == XR_KIND_SET ||
                      obj_type->kind == XR_KIND_CHANNEL) &&
                     obj_type->container.element_type) {
+                    single_type_arg = obj_type->container.element_type;
+                } else if (xr_type_is_named_class(obj_type, "Task") &&
+                           obj_type->instance.type_arg_count > 0 && obj_type->instance.type_args) {
+                    single_type_arg = obj_type->instance.type_args[0];
+                }
+                if (single_type_arg) {
                     const char *names[] = {"T"};
-                    XrType *types[] = {obj_type->container.element_type};
+                    XrType *types[] = {single_type_arg};
                     fn_type = xr_type_substitute(ctx->analyzer->isolate, fn_type, names, types, 1);
                 } else if (XR_TYPE_IS_MAP(obj_type)) {
                     XrType *kt = obj_type->map.key_type;
@@ -2089,10 +2123,13 @@ XrType *xa_visit_await_expr(XaInferContext *ctx, AstNode *node) {
         }
 
         // Single await: extract result type from Task<T>
+        // Failed/cancelled tasks propagate via exception, not null.
         if (xr_type_is_named_class(expr_type, "Task")) {
             XrType *result_type =
                 (expr_type->instance.type_arg_count > 0) ? expr_type->instance.type_args[0] : NULL;
-            return result_type ? result_type : xr_type_new_unknown(NULL);
+            if (!result_type)
+                return xr_type_new_unknown(NULL);
+            return result_type;
         }
 
         // await [arr] is syntactic sugar for await all — treat array as Task array
@@ -2180,6 +2217,11 @@ XrType *xa_visit_move_expr(XaInferContext *ctx, AstNode *node) {
     if (var_type && xr_type_is_named_class(var_type, "WorkQueue")) {
         xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
                                    "cannot move WorkQueue (thread-safe, shared by reference)",
+                                   &loc);
+    }
+    if (var_type && xr_type_is_named_class(var_type, "ResultGroup")) {
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_ARG_TYPE,
+                                   "cannot move ResultGroup (thread-safe, shared by reference)",
                                    &loc);
     }
 

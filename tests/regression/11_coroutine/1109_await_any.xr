@@ -5,7 +5,10 @@ fn compute(n: int) -> int {
 }
 
 fn blocked(ch: Channel<int>) -> int {
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 @test

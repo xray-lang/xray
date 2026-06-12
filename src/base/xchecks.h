@@ -143,9 +143,8 @@
     do {                                                                                           \
         XrCoroutine *_c = xr_current_coro(X);                                                      \
         if (_c) {                                                                                  \
-            _c->reductions -= (cost);                                                              \
-            if (_c->reductions <= 0) {                                                             \
-                _c->reductions = XR_CORO_REDUCTIONS;                                               \
+            if (xr_coro_consume_reds(_c, (cost)) <= 0) {                                           \
+                xr_coro_set_reds(_c, XR_CORO_REDUCTIONS);                                          \
                 return XR_CFUNC_YIELD;                                                             \
             }                                                                                      \
         }                                                                                          \

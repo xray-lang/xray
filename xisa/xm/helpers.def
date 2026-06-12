@@ -85,6 +85,7 @@ XM_HELPER(rc_alloc_at,         1, PTR,    GC|STACKMAP,                          
 
 # ===== Exception =====
 XM_HELPER(throw,               1, VOID,   THROW|STACKMAP,                           NONE, THROW)
+XM_HELPER(pending_error_tag,   0, I64,    NONE,                                     NONE, NONE)
 
 # ===== Type Operations =====
 XM_HELPER(is_type,             1, I64,    NONE,                                     NONE, NONE)
@@ -139,6 +140,15 @@ XM_HELPER(chan_close,           0, VOID,   NONE,                                
 XM_HELPER(chan_is_closed,       0, I64,    NONE,                                     NONE, NONE)
 XM_HELPER(chan_try_send,        0, I64,    NONE,                                     NONE, NONE)
 XM_HELPER(chan_try_recv,        0, TAGGED, NONE,                                     GC,   NONE)
+XM_HELPER(chan_method_try_send,  0, TAGGED, GC|STACKMAP,                              GC,   NONE)
+XM_HELPER(chan_method_try_recv,  0, TAGGED, GC|STACKMAP,                              GC,   NONE)
+XM_HELPER(chan_method_close,     0, TAGGED, NONE,                                     GC,   NONE)
+XM_HELPER(chan_method_is_closed, 0, TAGGED, NONE,                                     NONE, NONE)
+XM_HELPER(chan_method_send,      0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,             GC,   SUSPEND)
+XM_HELPER(chan_method_send_block,0, VOID,   SUSPEND|ENTER_VM|STACKMAP,                NONE, SUSPEND)
+XM_HELPER(chan_method_recv,      0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,             GC,   SUSPEND)
+XM_HELPER(chan_method_recv_block,0, VOID,   SUSPEND|ENTER_VM|STACKMAP,                NONE, SUSPEND)
+XM_HELPER(chan_method_recv_wrap, 1, TAGGED, GC|STACKMAP,                              GC,   NONE)
 XM_HELPER(chan_send,            0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,             GC,   SUSPEND)
 XM_HELPER(chan_send_block,      0, VOID,   SUSPEND|ENTER_VM|STACKMAP,                NONE, SUSPEND)
 XM_HELPER(chan_recv,            0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,             GC,   SUSPEND)

@@ -263,21 +263,25 @@ vmcase(OP_SHL) {
     XrValue vb = R(b);
     XrValue vc = R(c);
 
-    // Fast path: integer left shift
+    // Fast path: integer left shift (count taken mod 64 per language spec;
+    // matches JIT hardware shifts, AOT xrt_i64_shl, and constant folding)
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer shift = XR_TO_INT(vc);
-        if (shift >= 0 && shift < XR_INT64_BITS) {
-            XR_SET_INT(R(a), XR_TO_INT(vb) << shift);
-        } else {
-            R(a) = xr_int(0);
-        }
+        XR_SET_INT(R(a), xr_int_shl_wrap(XR_TO_INT(vb), XR_TO_INT(vc)));
         vmbreak;
     }
-    // BigInt left shift
+    // BigInt left shift (arbitrary precision: count is NOT masked; negative
+    // counts are rejected — the old uint32 cast turned them into multi-GB
+    // allocations)
     if (XR_IS_BIGINT(vb) && XR_IS_INT(vc)) {
+        xr_Integer count = XR_TO_INT(vc);
+        if (count < 0 || count > UINT32_MAX) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "bigint shift count out of range");
+        }
         XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);
-        uint32_t shift = (uint32_t) XR_TO_INT(vc);
-        XrBigInt *result = xr_bigint_shl(VM_CURRENT_CORO, ba, shift);
+        XrBigInt *result = xr_bigint_shl(VM_CURRENT_CORO, ba, (uint32_t) count);
+        if (XR_UNLIKELY(result == NULL)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "bigint shift allocation failed");
+        }
         R(a) = XR_FROM_PTR(result);
         vmbreak;
     }
@@ -292,21 +296,24 @@ vmcase(OP_SHR) {
     XrValue vb = R(b);
     XrValue vc = R(c);
 
-    // Fast path: integer right shift
+    // Fast path: integer arithmetic right shift (count mod 64 per spec;
+    // matches JIT hardware shifts, AOT xrt_i64_shr, and constant folding)
     if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer shift = XR_TO_INT(vc);
-        if (shift >= 0 && shift < XR_INT64_BITS) {
-            R(a) = xr_int(XR_TO_INT(vb) >> shift);
-        } else {
-            R(a) = xr_int(0);  // Shift out of range returns 0
-        }
+        R(a) = xr_int(xr_int_shr_wrap(XR_TO_INT(vb), XR_TO_INT(vc)));
         vmbreak;
     }
-    // BigInt right shift
+    // BigInt right shift (arbitrary precision: count is NOT masked; reject
+    // negative counts instead of letting the uint32 cast wrap them)
     if (XR_IS_BIGINT(vb) && XR_IS_INT(vc)) {
+        xr_Integer count = XR_TO_INT(vc);
+        if (count < 0 || count > UINT32_MAX) {
+            VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "bigint shift count out of range");
+        }
         XrBigInt *ba = (XrBigInt *) XR_TO_PTR(vb);
-        uint32_t shift = (uint32_t) XR_TO_INT(vc);
-        XrBigInt *result = xr_bigint_shr(VM_CURRENT_CORO, ba, shift);
+        XrBigInt *result = xr_bigint_shr(VM_CURRENT_CORO, ba, (uint32_t) count);
+        if (XR_UNLIKELY(result == NULL)) {
+            VM_RUNTIME_ERROR(XR_ERR_OUT_OF_MEMORY, "bigint shift allocation failed");
+        }
         R(a) = XR_FROM_PTR(result);
         vmbreak;
     }

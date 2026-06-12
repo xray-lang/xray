@@ -6,7 +6,7 @@ import log
 fn test_child_logger_creation() {
     log.setLevel(log.DEBUG)
     let httpLog = log.child("module", "http", "version", "1.0")
-    assert(httpLog != null)
+    assert_eq(typeof(httpLog), "Logger")
 }
 
 @test
@@ -27,7 +27,7 @@ fn test_nested_child_logger() {
     log.setLevel(log.DEBUG)
     let httpLog = log.child("module", "http")
     let dbLog = httpLog.child("component", "database")
-    assert(dbLog != null)
+    assert_eq(typeof(dbLog), "Logger")
     dbLog.info("query executed", "table", "users")
 }
 

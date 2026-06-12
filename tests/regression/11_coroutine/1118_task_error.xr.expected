@@ -1,6 +1,0 @@
-t1.done: true
-t1.error: division by zero
-t1.result: null
-t2.done: true
-t2.error: null
-t2.result: 42

@@ -264,10 +264,15 @@ static SccpVal eval_ins(SccpCtx *ctx, XmIns *ins) {
             /* Propagate the argument cell unchanged. */
             return a;
 
-        /* --- Integer arithmetic --- */
+        /* --- Integer arithmetic ---
+         * Folds must mirror runtime semantics exactly (xi_opt fold, VM, and
+         * hardware): two's-complement wrap via uint64_t, INT64_MIN / -1 =
+         * INT64_MIN, INT64_MIN % -1 = 0, and arithmetic (sign-extending)
+         * right shift. Raw signed C ops here would be compile-time UB and
+         * could fold to values the generated code never produces. */
         case XM_NEG:
             if (a.kind == SCCP_CONST_I64)
-                return sccp_i64(-a.i64);
+                return sccp_i64((int64_t) (-(uint64_t) a.i64));
             if (a.kind == SCCP_CONST_F64)
                 return sccp_f64(-a.f64);
             return sccp_bot();
@@ -290,12 +295,18 @@ static SccpVal eval_ins(SccpCtx *ctx, XmIns *ins) {
                 return sccp_i64((int64_t) ((uint64_t) a.i64 * (uint64_t) b.i64));
             return sccp_bot();
         case XM_DIV:
-            if (both_i64(a, b) && b.i64 != 0)
+            if (both_i64(a, b) && b.i64 != 0) {
+                if (b.i64 == -1)
+                    return sccp_i64((int64_t) (-(uint64_t) a.i64));
                 return sccp_i64(a.i64 / b.i64);
+            }
             return sccp_bot();
         case XM_MOD:
-            if (both_i64(a, b) && b.i64 != 0)
+            if (both_i64(a, b) && b.i64 != 0) {
+                if (b.i64 == -1)
+                    return sccp_i64(0);
                 return sccp_i64(a.i64 % b.i64);
+            }
             return sccp_bot();
 
         case XM_AND:
@@ -315,8 +326,10 @@ static SccpVal eval_ins(SccpCtx *ctx, XmIns *ins) {
                 return sccp_i64((int64_t) ((uint64_t) a.i64 << b.i64));
             return sccp_bot();
         case XM_SHR:
+            /* XM_SHR is arithmetic (x64 SAR / arm64 ASR / riscv64 SRA);
+             * folding with a logical shift would flip negative results. */
             if (both_i64(a, b) && b.i64 >= 0 && b.i64 < 64)
-                return sccp_i64((int64_t) ((uint64_t) a.i64 >> b.i64));
+                return sccp_i64(a.i64 >> b.i64);
             return sccp_bot();
 
         /* --- Float arithmetic --- */

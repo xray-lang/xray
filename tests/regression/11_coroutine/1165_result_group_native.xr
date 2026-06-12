@@ -1,0 +1,29 @@
+shared const rg: ResultGroup = ResultGroup(2)
+
+@test
+fn test_result_group_native() {
+    assert_eq(rg.batchSize, 2)
+    assert_eq(rg.length, 0)
+    assert_false(rg.isClosed)
+
+    assert_true(rg.add(4))
+    assert_eq(rg.length, 0)
+    assert_eq(rg.pendingCount, 1)
+
+    assert_true(rg.add(5))
+    assert_eq(rg.length, 1)
+    assert_eq(rg.pendingCount, 2)
+    assert_eq(rg.recv(), 9)
+    assert_eq(rg.length, 0)
+    assert_eq(rg.pendingCount, 0)
+
+    let (_, empty_ok) = rg.tryRecv()
+    assert_false(empty_ok)
+
+    assert_true(rg.add(3))
+    rg.close()
+    assert_true(rg.isClosed)
+    assert_eq(rg.recv(), 3)
+    assert_eq(rg.recv(), null)
+    assert_false(rg.add(1))
+}

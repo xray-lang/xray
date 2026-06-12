@@ -27,11 +27,14 @@ Pattern ::= Identifier
 let x = 1                         // 类型推断为 int
 let name: string = "Alice"        // 显式类型
 let count: int                    // 仅声明无初值：使用零值
+let maybeName: string?            // OK：默认 null
+let empty: string = ""            // string 必须显式初始化
 ```
 
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
-- 无初值的情况下，初始值为类型的零值（`int` → `0`、`string` → `""`、`bool` → `false`、`T?` → `null`）。
+- 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。
 
 #### 5.1.2 `const` — 不可变绑定
 
@@ -803,11 +806,14 @@ Pattern ::= Identifier
 let x = 1                         // type inferred as int
 let name: string = "Alice"        // explicit type
 let count: int                    // no initializer: zero value used
+let maybeName: string?            // OK: defaults to null
+let empty: string = ""            // string requires an explicit initializer
 ```
 
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
-- Without an initializer, the value defaults to the type's zero value (`int` → `0`, `string` → `""`, `bool` → `false`, `T?` → `null`).
+- Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar reference-like values require an explicit initializer.
 
 #### 5.1.2 `const` — immutable binding
 

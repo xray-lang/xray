@@ -25,6 +25,8 @@
 
 #include "../base/xchecks.h"
 #include "xi_cgen.h"
+#include "xaot_link.h"
+#include "xaot_prepare.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -73,13 +75,17 @@ typedef struct {
 
 /* ========== Build API ========== */
 
-/* Result of xaot_build().  Caller must free c_source via xr_free(). */
+/* Result of xaot_build().  Caller must free owned strings via xr_free(). */
 typedef struct {
-    char *c_source;          /* generated C program (malloc'd, caller frees) */
+    char *c_source;  /* generated C program (malloc'd, caller frees) */
+    char *plan_dump; /* stable AOT prepare plan dump (malloc'd, caller frees) */
+    XaotLinkManifest link_manifest;
     int total_compiled;      /* number of functions successfully transpiled */
     int total_aot;           /* total AOT-eligible functions found */
     int nmodules;            /* number of modules in the bundle */
     XaotFeatureSet features; /* inferred feature set */
+    XaotPrepareStats prepare_stats;
+    XiCgenStats cgen_stats;
     XiCgenCoroFrameStats coro_frame_stats;
 } XaotBuildResult;
 
@@ -89,5 +95,6 @@ typedef struct {
  * On success, result->c_source is a complete C program.
  * Caller frees result->c_source via xr_free(). */
 XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result);
+XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

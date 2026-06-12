@@ -1,0 +1,132 @@
+// Work pool benchmark using ResultGroup for batched result aggregation.
+
+import time
+
+let WORKERS = 8
+let TASKS = 100000
+let BATCH = 64
+if (process.args.length > 0) {
+    WORKERS = int(process.args[0]) ?? WORKERS
+}
+if (process.args.length > 1) {
+    TASKS = int(process.args[1]) ?? TASKS
+}
+if (process.args.length > 2) {
+    BATCH = int(process.args[2]) ?? BATCH
+}
+if (WORKERS < 1) {
+    WORKERS = 1
+}
+if (TASKS < 0) {
+    TASKS = 0
+}
+if (BATCH < 1) {
+    BATCH = 1
+}
+
+print("=== Work Pool ResultGroup 测试 ===")
+print("Worker数:", WORKERS)
+print("任务总数:", TASKS)
+print("Result batch:", BATCH)
+
+shared const task_ch = Channel(1000)
+shared const result_group: ResultGroup = ResultGroup(BATCH)
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
+fn fib(n: int) -> int {
+    if (n <= 1) { return n }
+    let a = 0
+    let b = 1
+    for (let i = 2; i <= n; i++) {
+        let t = a + b
+        a = b
+        b = t
+    }
+    return b
+}
+
+fn expected_checksum(count: int) -> int {
+    let total = 0
+    for (let i = 0; i < count; i++) {
+        total = total + fib(i % 20)
+    }
+    return total
+}
+
+fn worker(id: int) -> int {
+    let processed = 0
+    while (true) {
+        let task = recv_int(task_ch, -1)
+        if (task < 0) { break }
+        result_group.add(fib(task % 20))
+        processed++
+    }
+    return processed
+}
+
+fn submit_tasks(count: int) {
+    for (let i = 0; i < count; i++) {
+        task_ch.send(i)
+    }
+    task_ch.close()
+}
+
+fn reduce_results() -> int {
+    let total = 0
+    while (true) {
+        let value = result_group.recv()
+        if (value == null) {
+            break
+        }
+        total = total + (value ?? 0)
+    }
+    return total
+}
+
+let start = time.monotonic()
+
+let reducer = go reduce_results()
+let workers: Array<Task> = []
+for (let i = 0; i < WORKERS; i++) {
+    workers.push(go worker(i))
+}
+
+let submitter = go submit_tasks(TASKS)
+await submitter
+
+let worker_loads: Array<int> = []
+for (w in workers) {
+    let processed = await w
+    worker_loads.push(processed)
+}
+result_group.close()
+let total = await reducer
+
+let elapsed = time.monotonic() - start
+let expected = expected_checksum(TASKS)
+let result_events = int((TASKS + BATCH - 1) / BATCH)
+
+print("结果校验和:", total)
+print("预期:", expected)
+print("正确:", total == expected)
+print("结果事件数:", result_events)
+print("时间:", elapsed, "ms")
+if (elapsed > 0) {
+    print("吞吐量:", int(TASKS * 1000 / elapsed), "tasks/sec")
+} else {
+    print("吞吐量: 太快无法测量")
+}
+
+let min_load = TASKS
+let max_load = 0
+for (load in worker_loads) {
+    if (load < min_load) { min_load = load }
+    if (load > max_load) { max_load = load }
+}
+print("负载均衡: min=", min_load, "max=", max_load, "ratio=", float(max_load) / float(min_load + 1))

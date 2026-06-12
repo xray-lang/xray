@@ -61,7 +61,6 @@ fn test_uptime() {
 @test
 fn test_loadavg() {
     let avg = os.loadavg()
-    assert(avg != null)
     assert_eq(avg.length, 3)
     // Load averages should be non-negative
     assert(avg[0] >= 0.0)
@@ -118,7 +117,7 @@ fn test_exec_command_output() {
         // Windows echo adds \r\n; printf not available
         let result = os.exec("echo abc")
         assert(result != null)
-        assert(result.stdout != null)
+        assert(result.stdout.length > 0)
     } else {
         let result = os.exec("printf 'abc'")
         assert(result != null)

@@ -14,8 +14,11 @@
 #include "xi_lower_internal.h"
 #include "xi.h"
 #include "xi_effect.h"
+#include "xi_lower_expr_helpers.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
+#include "../runtime/value/xstruct_layout.h"
+#include "../runtime/class/xclass_info.h"
 #include "../base/xchecks.h"
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
@@ -65,6 +68,133 @@ static XiValue *stmt_narrow_for_target_type(XiLower *l, AstNode *node, XiValue *
     return n;
 }
 
+static XaSymbol *stmt_lookup_class_symbol(XiLower *l, const char *name) {
+    if (!l || !l->analyzer || !name)
+        return NULL;
+    XaSymbol *sym = xa_analyzer_lookup(l->analyzer, name);
+    if (sym && sym->kind == XA_SYM_CLASS)
+        return sym;
+    sym = xa_analyzer_lookup_in_scope(l->analyzer, name, l->analyzer->global_scope);
+    if (sym && sym->kind == XA_SYM_CLASS)
+        return sym;
+    sym = xa_analyzer_lookup_deep(l->analyzer, name);
+    return (sym && sym->kind == XA_SYM_CLASS) ? sym : NULL;
+}
+
+static XrStructLayout *stmt_lookup_struct_layout(XiLower *l, const char *name) {
+    XaSymbol *sym = stmt_lookup_class_symbol(l, name);
+    if (!sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    return (links && links->class_info) ? links->class_info->struct_layout : NULL;
+}
+
+static XrClassInfo *stmt_class_info_for_type(XiLower *l, struct XrType *type) {
+    if (!l || !type)
+        return NULL;
+    if ((type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+        type->instance.class_ref) {
+        return type->instance.class_ref;
+    }
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
+    XaSymbol *sym = stmt_lookup_class_symbol(l, type->instance.class_name);
+    if (!sym)
+        return NULL;
+    XaSymbolLinks *links = xa_analyzer_get_links(l->analyzer, sym);
+    return links ? links->class_info : NULL;
+}
+
+static XiValue *stmt_load_class_value(XiLower *l, const char *class_name) {
+    if (!l || !class_name)
+        return NULL;
+
+    int class_var = xi_lower_var_find(l, 0, class_name);
+    if (class_var >= 0) {
+        if (l->is_program && l->shared_map[class_var] >= 0) {
+            XiTopBinding b;
+            b.slot = l->shared_map[class_var];
+            b.name = l->vars[class_var].name;
+            b.type = l->vars[class_var].type;
+            return xi_lower_emit_top_load(l, b, l->type_any);
+        }
+        return xi_lower_braun_read(l, class_var, l->cur_block);
+    }
+
+    XiTopBinding tb = xi_lower_find_top_binding(l, 0, class_name);
+    if (xi_top_binding_valid(tb))
+        return xi_lower_emit_top_load(l, tb, l->type_any);
+
+    struct XrType *upval_type = NULL;
+    int upval_idx = xi_lower_resolve_upvalue(l, 0, class_name, &upval_type);
+    if (upval_idx >= 0) {
+        XiValue *cls = xi_value_new(l->func, l->cur_block, XI_LOAD_UPVAL, l->type_any, 0);
+        if (cls)
+            cls->aux_int = upval_idx;
+        return cls;
+    }
+    return NULL;
+}
+
+static XiValue *stmt_default_struct_value_depth(XiLower *l, struct XrType *type, int line,
+                                                int depth) {
+    if (!l || !type || type->is_nullable)
+        return NULL;
+    if (depth > 16)
+        return NULL;
+    if (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE)
+        return NULL;
+
+    XrStructLayout *layout = xi_lower_struct_layout_of(type);
+    const char *class_name = type->instance.class_name;
+    if (!layout && class_name)
+        layout = stmt_lookup_struct_layout(l, class_name);
+    if (!layout || !class_name)
+        return NULL;
+
+    XiValue *cls = stmt_load_class_value(l, class_name);
+    if (!cls)
+        return NULL;
+
+    XiValue *inst = xi_value_new(l->func, l->cur_block, XI_STRUCT_NEW, type, 1);
+    if (!inst)
+        return NULL;
+    inst->args[0] = cls;
+    inst->aux = (void *) layout;
+    inst->flags |= XI_FLAG_SIDE_EFFECT;
+    inst->line = (uint32_t) line;
+
+    XrClassInfo *info = stmt_class_info_for_type(l, type);
+    if (info) {
+        int field_count =
+            info->field_count < layout->field_count ? info->field_count : layout->field_count;
+        for (int i = 0; i < field_count; i++) {
+            if (layout->fields[i].native_type != XR_NATIVE_STRUCT)
+                continue;
+            XaSymbol *field = info->fields[i];
+            XaSymbolLinks *links = field ? xa_analyzer_get_links(l->analyzer, field) : NULL;
+            struct XrType *field_type = links ? links->type : NULL;
+            XiValue *nested = stmt_default_struct_value_depth(l, field_type, line, depth + 1);
+            if (!nested)
+                continue;
+            XiValue *set = xi_value_new(l->func, l->cur_block, XI_STRUCT_SET, l->type_unit, 2);
+            if (!set)
+                continue;
+            set->args[0] = inst;
+            set->args[1] = nested;
+            set->aux = (void *) layout;
+            set->aux_int = i;
+            set->flags |= XI_FLAG_SIDE_EFFECT;
+            set->line = (uint32_t) line;
+        }
+    }
+    return inst;
+}
+
+static XiValue *stmt_default_struct_value(XiLower *l, struct XrType *type, int line) {
+    return stmt_default_struct_value_depth(l, type, line, 0);
+}
+
 /* ========== Select Statement ========== */
 
 static XiValue *lower_select_time_after(XiLower *l, SelectCaseNode *sc, int line) {
@@ -84,23 +214,45 @@ static XiValue *lower_select_time_after(XiLower *l, SelectCaseNode *sc, int line
     return timer;
 }
 
-static void lower_select_recv_ready_branch(XiLower *l, XiValue *recv, XiValue *chan,
-                                           XiBlock *body_blk, XiBlock *next_blk) {
-    XiValue *is_null = xi_value_new(l->func, l->cur_block, XI_ISNULL, l->type_bool, 1);
-    if (!is_null || !recv)
-        return;
-    is_null->args[0] = recv;
+static struct XrType *stmt_channel_element_type(struct XrType *type) {
+    if (!type)
+        return NULL;
+    if (type->kind == XR_KIND_CHANNEL)
+        return type->container.element_type;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            struct XrType *elem = stmt_channel_element_type(type->union_type.members[i]);
+            if (elem)
+                return elem;
+        }
+    }
+    return NULL;
+}
 
-    XiValue *not_null = xi_value_new(l->func, l->cur_block, XI_NOT, l->type_bool, 1);
+static bool stmt_type_is_channel(struct XrType *type) {
+    return type && (type->kind == XR_KIND_CHANNEL || stmt_channel_element_type(type) != NULL);
+}
+
+static XiValue *lower_chan_recv_status(XiLower *l, XiValue *recv) {
+    if (!recv)
+        return NULL;
+    XiValue *status = xi_value_new(l->func, l->cur_block, XI_CHAN_RECV_STATUS, l->type_bool, 1);
+    if (!status)
+        return NULL;
+    status->args[0] = recv;
+    status->line = recv->line;
+    return status;
+}
+
+static void lower_select_recv_ready_branch(XiLower *l, XiValue *recv_status, XiValue *chan,
+                                           XiBlock *body_blk, XiBlock *next_blk) {
     XiValue *is_closed = xi_value_new(l->func, l->cur_block, XI_CHAN_IS_CLOSED, l->type_bool, 1);
-    if (not_null)
-        not_null->args[0] = is_null;
     if (is_closed)
         is_closed->args[0] = chan;
-    if (!not_null || !is_closed)
+    if (!recv_status || !is_closed)
         return;
 
-    XiValue *ready = xi_binary(l->func, l->cur_block, XI_BOR, l->type_bool, not_null, is_closed);
+    XiValue *ready = xi_binary(l->func, l->cur_block, XI_BOR, l->type_bool, recv_status, is_closed);
     if (ready)
         xi_block_set_if(l->cur_block, ready, body_blk, next_blk);
 }
@@ -198,9 +350,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                         recv->args[0] = chan;
                         recv->flags |= XI_FLAG_SIDE_EFFECT;
                     }
-                    /* Try-recv returns null on empty channel. A closed
-                     * channel is also ready: recv() would return null. */
-                    lower_select_recv_ready_branch(l, recv, chan, body_blk, next_blk);
+                    XiValue *recv_status = lower_chan_recv_status(l, recv);
+                    lower_select_recv_ready_branch(l, recv_status, chan, body_blk, next_blk);
                     if (sc->var_name && recv) {
                         int var_id =
                             xi_lower_var_create(l, sc->var_symbol_id, sc->var_name, val_type);
@@ -534,8 +685,232 @@ static void lower_match_no_match_throw(XiLower *l, int line) {
     l->cur_block = NULL;
 }
 
+static bool match_recv_value_pattern(AstNode *pattern, AstNode **payload_out) {
+    if (payload_out)
+        *payload_out = NULL;
+    if (!pattern || pattern->type != AST_PATTERN_ADT)
+        return false;
+    PatternAdtNode *ap = &pattern->as.pattern_adt;
+    if (ap->count != 1 || !ap->variant || ap->variant->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &ap->variant->as.member_access;
+    if (!ma->name || strcmp(ma->name, "Value") != 0)
+        return false;
+    if (!ma->object || ma->object->type != AST_VARIABLE)
+        return false;
+    if (strcmp(ma->object->as.variable.name, "Recv") != 0)
+        return false;
+    if (payload_out)
+        *payload_out = ap->patterns ? ap->patterns[0] : NULL;
+    return true;
+}
+
+static bool match_pattern_is_wildcard(AstNode *pattern) {
+    return pattern && pattern->type == AST_PATTERN_WILDCARD;
+}
+
+static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan_expr_out,
+                                       bool *try_recv_out) {
+    if (chan_expr_out)
+        *chan_expr_out = NULL;
+    if (try_recv_out)
+        *try_recv_out = false;
+    if (!expr || expr->type != AST_CALL_EXPR)
+        return false;
+
+    CallExprNode *call = &expr->as.call_expr;
+    if (call->arg_count != 0 || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return false;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->object || !ma->name)
+        return false;
+
+    bool is_recv = strcmp(ma->name, "recv") == 0;
+    bool is_try_recv = strcmp(ma->name, "tryRecv") == 0;
+    if (!is_recv && !is_try_recv)
+        return false;
+
+    struct XrType *recv_type = xa_analyzer_get_node_type(l->analyzer, ma->object);
+    if (!stmt_type_is_channel(recv_type))
+        return false;
+
+    if (chan_expr_out)
+        *chan_expr_out = ma->object;
+    if (try_recv_out)
+        *try_recv_out = is_try_recv;
+    return true;
+}
+
+static bool match_channel_recv_fast_supported(MatchExprNode *m) {
+    bool saw_value = false;
+    int max_arms = m->arm_count > 32 ? 32 : m->arm_count;
+    for (int i = 0; i < max_arms; i++) {
+        AstNode *arm_node = m->arms[i];
+        if (!arm_node || arm_node->type != AST_MATCH_ARM)
+            return false;
+        MatchArmNode *arm = &arm_node->as.match_arm;
+        AstNode *payload = NULL;
+        if (match_recv_value_pattern(arm->pattern, &payload)) {
+            if (!pattern_is_irrefutable_binding(payload))
+                return false;
+            saw_value = true;
+            continue;
+        }
+        if (!match_pattern_is_wildcard(arm->pattern))
+            return false;
+    }
+    return saw_value;
+}
+
+static XiValue *lower_channel_recv_match_phi(XiLower *l, XiBlock *merge, struct XrType *result_type,
+                                             XiBlock **body_exits, XiValue **body_vals,
+                                             int exit_count) {
+    xi_lower_braun_seal(l, merge);
+    l->cur_block = (merge->npreds > 0) ? merge : NULL;
+    if (!l->cur_block)
+        return NULL;
+
+    if (merge->npreds == 1)
+        return (exit_count > 0) ? body_vals[0] : NULL;
+
+    XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
+    if (!phi)
+        return NULL;
+    for (uint16_t p = 0; p < merge->npreds; p++) {
+        phi->value.args[p] = xi_const_null(l->func, merge, l->type_null);
+        for (int j = 0; j < exit_count; j++) {
+            if (merge->preds[p] == body_exits[j]) {
+                phi->value.args[p] =
+                    body_vals[j] ? body_vals[j] : xi_const_null(l->func, merge, l->type_null);
+                break;
+            }
+        }
+    }
+    return &phi->value;
+}
+
+static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_value) {
+    if (out_value)
+        *out_value = NULL;
+    MatchExprNode *m = &node->as.match_expr;
+    AstNode *chan_expr = NULL;
+    bool is_try_recv = false;
+    if (!match_channel_recv_subject(l, m->expr, &chan_expr, &is_try_recv))
+        return false;
+    if (!match_channel_recv_fast_supported(m))
+        return false;
+
+    XiValue *chan = xi_lower_expr(l, chan_expr);
+    if (!chan || !l->cur_block)
+        return true;
+
+    struct XrType *payload_type = stmt_channel_element_type(chan->type);
+    if (!payload_type)
+        payload_type = l->type_any;
+
+    XiValue *recv = xi_value_new(l->func, l->cur_block,
+                                 is_try_recv ? XI_CHAN_TRY_RECV : XI_CHAN_RECV, payload_type, 1);
+    if (!recv)
+        return true;
+    recv->args[0] = chan;
+    recv->flags |= XI_FLAG_SIDE_EFFECT;
+    if (!is_try_recv)
+        recv->flags |= XI_FLAG_MAY_SUSPEND;
+    recv->line = (uint32_t) node->line;
+
+    XiValue *recv_status = lower_chan_recv_status(l, recv);
+    if (!recv_status)
+        return true;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
+    XiBlock *merge = xi_block_new(l->func);
+    XiBlock *body_exits[32];
+    XiValue *body_vals[32];
+    int exit_count = 0;
+    int max_arms = m->arm_count > 32 ? 32 : m->arm_count;
+
+    for (int i = 0; i < max_arms; i++) {
+        AstNode *arm_node = m->arms[i];
+        MatchArmNode *arm = &arm_node->as.match_arm;
+        AstNode *payload = NULL;
+        bool is_value_arm = match_recv_value_pattern(arm->pattern, &payload);
+
+        XiValue *test = NULL;
+        if (is_value_arm) {
+            lower_pattern_bindings(l, recv, payload);
+            test = recv_status;
+            if (arm->guard) {
+                XiValue *guard = xi_lower_expr(l, arm->guard);
+                if (guard)
+                    test = xi_binary(l->func, l->cur_block, XI_BAND, l->type_bool, test, guard);
+            }
+        } else if (arm->guard) {
+            test = xi_lower_expr(l, arm->guard);
+        }
+
+        if (!test) {
+            XiValue *val = NULL;
+            if (arm->body && arm->body->type == AST_BLOCK) {
+                xi_lower_stmt(l, arm->body);
+                if (l->cur_block)
+                    val = xi_const_null(l->func, l->cur_block, l->type_null);
+            } else {
+                val = xi_lower_expr(l, arm->body);
+            }
+            if (l->cur_block) {
+                if (exit_count < 32) {
+                    body_exits[exit_count] = l->cur_block;
+                    body_vals[exit_count] = val;
+                    exit_count++;
+                }
+                xi_block_set_jump(l->cur_block, merge);
+            }
+            l->cur_block = NULL;
+            break;
+        }
+
+        XiBlock *body_blk = xi_block_new(l->func);
+        XiBlock *next_blk = xi_block_new(l->func);
+        xi_block_set_if(l->cur_block, test, body_blk, next_blk);
+        xi_lower_braun_seal(l, body_blk);
+        xi_lower_braun_seal(l, next_blk);
+
+        l->cur_block = body_blk;
+        XiValue *val = NULL;
+        if (arm->body && arm->body->type == AST_BLOCK) {
+            xi_lower_stmt(l, arm->body);
+            if (l->cur_block)
+                val = xi_const_null(l->func, l->cur_block, l->type_null);
+        } else {
+            val = xi_lower_expr(l, arm->body);
+        }
+        if (l->cur_block) {
+            if (exit_count < 32) {
+                body_exits[exit_count] = l->cur_block;
+                body_vals[exit_count] = val;
+                exit_count++;
+            }
+            xi_block_set_jump(l->cur_block, merge);
+        }
+
+        l->cur_block = next_blk;
+    }
+
+    if (l->cur_block && l->cur_block != merge)
+        lower_match_no_match_throw(l, node->line);
+
+    if (out_value)
+        *out_value =
+            lower_channel_recv_match_phi(l, merge, result_type, body_exits, body_vals, exit_count);
+    return true;
+}
+
 XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     MatchExprNode *m = &node->as.match_expr;
+    XiValue *fast_value = NULL;
+    if (lower_channel_recv_match(l, node, &fast_value))
+        return fast_value;
+
     XiValue *subject = xi_lower_expr(l, m->expr);
     if (!subject)
         return NULL;
@@ -564,6 +939,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
          * based equality testing. */
         lower_pattern_bindings(l, subject, arm->pattern);
 
+        bool is_top_irrefutable = !arm->guard && pattern_is_irrefutable_binding(arm->pattern);
         bool is_top_binding = false;
         if (arm->pattern && arm->pattern->type == AST_PATTERN_LITERAL) {
             AstNode *pval = arm->pattern->as.pattern_literal.value;
@@ -572,8 +948,11 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         }
 
         XiValue *test;
-        if (is_top_binding) {
-            /* Bare-name pattern always matches; guard narrows. */
+        if (is_top_irrefutable) {
+            /* Top-level wildcard / bare binding without a guard always matches. */
+            test = NULL;
+        } else if (is_top_binding) {
+            /* Guarded bare-name pattern narrows with the guard expression. */
             test = arm->guard ? xi_lower_expr(l, arm->guard) : NULL;
         } else {
             test = xi_lower_pattern_test(l, subject, arm->pattern);
@@ -1622,15 +2001,17 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
     } else {
         /* Zero-value initialization for typed variables without initializer.
          * Nullable types (T?) default to null. Non-nullable primitives:
-         * int→0, float→0.0, bool→false, string→"", otherwise null. */
-        if (type && !type->is_nullable && type->kind == XR_KIND_INT)
+         * int→0, float→0.0, bool→false; default-initializable structs
+         * allocate a zero/default-filled struct value. */
+        init_val = stmt_default_struct_value(l, type, node->line);
+        if (init_val) {
+            /* Already built. */
+        } else if (type && !type->is_nullable && type->kind == XR_KIND_INT)
             init_val = xi_const_int(l->func, l->cur_block, 0, l->type_int);
         else if (type && !type->is_nullable && type->kind == XR_KIND_FLOAT)
             init_val = xi_const_float(l->func, l->cur_block, 0.0, l->type_float);
         else if (type && !type->is_nullable && type->kind == XR_KIND_BOOL)
             init_val = xi_const_bool(l->func, l->cur_block, false, l->type_bool);
-        else if (type && !type->is_nullable && type->kind == XR_KIND_STRING)
-            init_val = xi_const_str(l->func, l->cur_block, "", l->type_string);
         else
             init_val = xi_const_null(l->func, l->cur_block, l->type_null);
     }

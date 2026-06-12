@@ -64,6 +64,15 @@
  * coroutines when A and B bounce through a channel for ms-scale bursts. */
 #define XR_FAST_DISPATCH_BUDGET 64
 
+/* In-dispatch direct coroutine switch (VM interpreter): when a coroutine
+ * blocks on a channel/await op and a just-woken partner sits in the LIFO
+ * slot, the dispatch loop swaps vm_ctx and continues interpreting without
+ * exiting run(). 1 = enabled (default), 0 = always fall back to the worker
+ * fast-redispatch path (kill switch for bisection). */
+#ifndef XR_VM_DIRECT_SWITCH
+#define XR_VM_DIRECT_SWITCH 1
+#endif
+
 /* Number of local enqueue timestamps that may share one monotonic clock read.
  * Submit time is used as a millisecond-scale scheduling hint for aging,
  * freshness, and diagnostics; exact per-coro clock reads only add contention
@@ -90,10 +99,16 @@
  * wakes while still draining sustained global work. */
 #define XR_SPAWN_INLINE_GLOBAL_BACKLOG XR_INJECT_POP_BATCH
 
-/* Consecutive child-first spawns before one child is queued locally for
- * stealing. Lower values expose fan-out sooner; higher values preserve DFS
- * locality for short chains. */
-#define XR_SPAWN_SHARE_INTERVAL 16
+/* Same-parent spawn burst length before the scheduler starts queueing some
+ * children locally for stealing. This keeps chain_spawn child-first while
+ * exposing real fan-out loops once the parent has proven it is producing a
+ * batch rather than a single child to await. */
+#define XR_SPAWN_SHARE_BURST_THRESHOLD 2
+
+/* Share one child every N same-parent spawns after the burst threshold.
+ * Lower values expose CPU parallelism sooner; higher values preserve DFS
+ * locality and reduce local queue churn. */
+#define XR_SPAWN_SHARE_BURST_INTERVAL 1
 
 /* Maximum queued spawn-sharing backlog per worker. The effective limit is
  * clamped by the local queue capacity so sharing cannot force global spill

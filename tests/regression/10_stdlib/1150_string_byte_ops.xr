@@ -77,7 +77,7 @@ fn reverseComplement(seq: string) -> string {
     let len = seq.byteLength
     while (j < len) {
         let c = reversed.byteAt(j)
-        let comp = COMP[c]
+        let comp = COMP.get(c)
         if (comp != null) {
             sb.append(comp)
         } else {

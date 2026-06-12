@@ -27,6 +27,7 @@
 #include "xm_codegen.h"
 #include "xm_tfa.h"
 #include "xjit_compile_queue.h"
+#include <stdatomic.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include "../base/xdefs.h"
@@ -62,6 +63,16 @@ typedef struct XmJitState {
     uint32_t stats_disabled;      // protos permanently disabled (deopt_count >= 20)
     uint64_t stats_compile_ns;    // cumulative compile time (nanoseconds)
     uint64_t stats_code_bytes;    // total generated code bytes
+
+    // Runtime coroutine statistics (relaxed counters for --jit-stats diagnostics)
+    _Atomic uint64_t stats_coro_helper_count;
+    _Atomic uint64_t stats_suspend_count;
+    _Atomic uint64_t stats_resume_count;
+    _Atomic uint64_t stats_chan_try_hit_count;
+    _Atomic uint64_t stats_chan_try_miss_count;
+    _Atomic uint64_t stats_chan_block_count;
+    _Atomic uint64_t stats_await_done_fast_count;
+    _Atomic uint64_t stats_await_block_count;
 } XmJitState;
 
 /* ========== Deoptimization ========== */

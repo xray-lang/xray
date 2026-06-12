@@ -32,6 +32,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdatomic.h>
 #include "../../base/xdefs.h"
 
 /* ========== Type Feedback Flags (bitmask, OR-accumulated) ========== */
@@ -58,12 +59,16 @@
  * Lazily allocated when call_count exceeds XFB_ALLOC_THRESHOLD.
  * Stored in XrProto.type_feedback.
  */
+/* All fields are relaxed atomics: the profile is written concurrently by
+ * every worker executing the proto and read by JIT eligibility checks.
+ * It is heuristic data — cross-thread staleness is fine, but the accesses
+ * must be tear-free and the OR-accumulation must not drop bits. */
 typedef struct XmTypeFeedback {
-    uint8_t arg_types[XFB_MAX_PARAMS];  // observed param types (OR-accumulated)
-    uint8_t return_type;                // observed return type (OR-accumulated)
-    uint32_t sample_count;              // total samples collected
-    uint16_t stable_count;              // consecutive samples with no change
-    bool stable;                        // true if profile is considered stable
+    _Atomic uint8_t arg_types[XFB_MAX_PARAMS];  // observed param types (OR-accumulated)
+    _Atomic uint8_t return_type;                // observed return type (OR-accumulated)
+    _Atomic uint32_t sample_count;              // total samples collected
+    _Atomic uint16_t stable_count;              // consecutive samples with no change
+    _Atomic bool stable;                        // true if profile is considered stable
 } XmTypeFeedback;
 
 // Threshold: start collecting profile after this many calls
@@ -95,7 +100,9 @@ static inline void xfb_record_arg(XmTypeFeedback *fb, int idx, XrValue val) {
     if (!fb || idx >= XFB_MAX_PARAMS)
         return;
     uint8_t flag = xfb_value_type_flag(val);
-    fb->arg_types[idx] |= flag;
+    /* Avoid the RMW on the hot call path when the bit is already set. */
+    if ((atomic_load_explicit(&fb->arg_types[idx], memory_order_relaxed) & flag) != flag)
+        atomic_fetch_or_explicit(&fb->arg_types[idx], flag, memory_order_relaxed);
 }
 
 // Record return value type
@@ -103,22 +110,26 @@ static inline void xfb_record_return(XmTypeFeedback *fb, XrValue val) {
     if (!fb)
         return;
     uint8_t flag = xfb_value_type_flag(val);
-    uint8_t prev = fb->return_type;
-    fb->return_type = prev | flag;
+    uint8_t prev = atomic_load_explicit(&fb->return_type, memory_order_relaxed);
+    if ((prev | flag) != prev)
+        atomic_fetch_or_explicit(&fb->return_type, flag, memory_order_relaxed);
 
-    fb->sample_count++;
+    atomic_fetch_add_explicit(&fb->sample_count, 1, memory_order_relaxed);
 
-    // If no new type bits appeared, increment stability counter
+    // If no new type bits appeared, increment stability counter.
+    // Plain load/store pairs: concurrent updates may lose a step, which only
+    // delays (never corrupts) the stability verdict.
     if ((prev | flag) == prev) {
-        if (fb->stable_count < XFB_STABLE_THRESHOLD) {
-            fb->stable_count++;
-            if (fb->stable_count >= XFB_STABLE_THRESHOLD) {
-                fb->stable = true;
+        uint16_t sc = atomic_load_explicit(&fb->stable_count, memory_order_relaxed);
+        if (sc < XFB_STABLE_THRESHOLD) {
+            atomic_store_explicit(&fb->stable_count, (uint16_t) (sc + 1), memory_order_relaxed);
+            if (sc + 1 >= XFB_STABLE_THRESHOLD) {
+                atomic_store_explicit(&fb->stable, true, memory_order_relaxed);
             }
         }
     } else {
-        fb->stable_count = 0;
-        fb->stable = false;
+        atomic_store_explicit(&fb->stable_count, 0, memory_order_relaxed);
+        atomic_store_explicit(&fb->stable, false, memory_order_relaxed);
     }
 }
 

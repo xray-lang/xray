@@ -4,7 +4,7 @@ static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)
         cap = 0;
     xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (!a) {
+    if (XR_UNLIKELY(!a)) {
         fprintf(stderr, "xrt_array_new_typed_exact: out of memory\n");
         abort();
     }
@@ -13,8 +13,10 @@ static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     a->elem_type = etype;
     a->elem_size = XR_ELEM_SIZES[etype];
     a->is_slice = 0;
-    a->data = cap > 0 ? XRT_CALLOC((size_t) cap, (size_t) a->elem_size) : NULL;
-    if (cap > 0 && !a->data) {
+    a->adt_enum_name = NULL;
+    a->adt_member_name = NULL;
+    a->data = cap > 0 ? xrt_array_data_alloc_zeroed((size_t) cap * (size_t) a->elem_size) : NULL;
+    if (XR_UNLIKELY(cap > 0 && !a->data)) {
         fprintf(stderr, "xrt_array_new_typed_exact: out of memory\n");
         abort();
     }
@@ -24,18 +26,9 @@ static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
 static inline void xrt_array_reserve_raw(xrt_array_t *a, int64_t cap) {
     if (!a || a->is_slice || cap <= a->cap)
         return;
-    void *tmp = XRT_REALLOC(a->data, (size_t) cap * (size_t) a->elem_size);
-    if (!tmp) {
-        fprintf(stderr, "xrt_array_reserve: out of memory\n");
-        abort();
-    }
-    if (cap > a->cap) {
-        size_t old_bytes = (size_t) a->cap * (size_t) a->elem_size;
-        size_t new_bytes = (size_t) cap * (size_t) a->elem_size;
-        memset((uint8_t *) tmp + old_bytes, 0, new_bytes - old_bytes);
-    }
-    a->data = tmp;
-    a->cap = cap;
+    size_t old_bytes = (size_t) a->cap * (size_t) a->elem_size;
+    xrt_array_data_grow(a, cap);
+    memset((uint8_t *) a->data + old_bytes, 0, (size_t) cap * (size_t) a->elem_size - old_bytes);
 }
 
 static inline XrValue xrt_array_with_capacity_value(XrValue cap_value, uint8_t etype) {
@@ -181,3 +174,163 @@ static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst
     xrt_bytes_repeat_from_raw((xrt_array_t *) arr_value.ptr, dst, distance, count);
     return arr_value;
 }
+
+/* =========================================================================
+ * Typed array algorithm fast paths — avoid the per-element xr_typed_get /
+ * xr_typed_set switch in hot loops.  Semantics match the generic paths:
+ * fill coerces once like xr_typed_set; indexOf only matches when the boxed
+ * element tag would equal the needle tag (so an i64 needle never matches a
+ * float buffer and vice versa).  Return 0 to fall back to the generic loop.
+ * ========================================================================= */
+
+#define XRT_FILL_LOOP(T, val)                                                                      \
+    do {                                                                                           \
+        T *d = (T *) a->data;                                                                      \
+        T fv = (T) (val);                                                                          \
+        for (int64_t i = 0; i < a->len; i++)                                                       \
+            d[i] = fv;                                                                             \
+    } while (0)
+
+static inline int xrt_array_fill_typed_fast(xrt_array_t *a, XrValue v) {
+    switch (a->elem_type) {
+        case XR_ELEM_I8:
+        case XR_ELEM_U8: {
+            uint8_t b = (uint8_t) xr_value_to_int64_coerce(v);
+            memset(a->data, b, (size_t) a->len);
+            return 1;
+        }
+        case XR_ELEM_BOOL: {
+            int falsy = XR_IS_FALSE(v) || XR_IS_NULL(v) || (XR_IS_INT(v) && v.i == 0) ||
+                        (XR_IS_FLOAT(v) && v.f == 0.0);
+            memset(a->data, falsy ? 0 : 1, (size_t) a->len);
+            return 1;
+        }
+        case XR_ELEM_I16:
+            XRT_FILL_LOOP(int16_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_U16:
+            XRT_FILL_LOOP(uint16_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_I32:
+            XRT_FILL_LOOP(int32_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_U32:
+            XRT_FILL_LOOP(uint32_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_I64:
+            XRT_FILL_LOOP(int64_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_U64:
+            XRT_FILL_LOOP(uint64_t, xr_value_to_int64_coerce(v));
+            return 1;
+        case XR_ELEM_F32:
+            XRT_FILL_LOOP(float, xr_value_to_f64_coerce(v));
+            return 1;
+        case XR_ELEM_F64:
+            XRT_FILL_LOOP(double, xr_value_to_f64_coerce(v));
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+#undef XRT_FILL_LOOP
+
+#define XRT_INDEXOF_LOOP(T)                                                                        \
+    do {                                                                                           \
+        const T *d = (const T *) a->data;                                                          \
+        for (int64_t i = 0; i < a->len; i++)                                                       \
+            if ((int64_t) d[i] == needle)                                                          \
+                return i;                                                                          \
+        return -1;                                                                                 \
+    } while (0)
+
+/* Returns the match index, -1 for no match, or sets *handled = 0 when the
+ * combination requires the generic boxed loop. */
+static inline int64_t xrt_array_indexof_typed_fast(xrt_array_t *a, XrValue v, int *handled) {
+    *handled = 1;
+    switch (a->elem_type) {
+        case XR_ELEM_I8:
+        case XR_ELEM_U8: {
+            if (v.tag != XR_TAG_I64)
+                return -1; /* boxed elem is I64; other tags never match */
+            int64_t needle = v.i;
+            if (a->elem_type == XR_ELEM_U8) {
+                if (needle < 0 || needle > 255)
+                    return -1;
+                const void *p = memchr(a->data, (int) needle, (size_t) a->len);
+                return p ? (int64_t) ((const uint8_t *) p - (const uint8_t *) a->data) : -1;
+            }
+            XRT_INDEXOF_LOOP(int8_t);
+        }
+        case XR_ELEM_BOOL: {
+            if (v.tag != XR_TAG_BOOL)
+                return -1;
+            const void *p = memchr(a->data, v.i ? 1 : 0, (size_t) a->len);
+            return p ? (int64_t) ((const uint8_t *) p - (const uint8_t *) a->data) : -1;
+        }
+        case XR_ELEM_I16: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(int16_t);
+        }
+        case XR_ELEM_U16: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(uint16_t);
+        }
+        case XR_ELEM_I32: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(int32_t);
+        }
+        case XR_ELEM_U32: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(uint32_t);
+        }
+        case XR_ELEM_I64: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            XRT_INDEXOF_LOOP(int64_t);
+        }
+        case XR_ELEM_U64: {
+            if (v.tag != XR_TAG_I64)
+                return -1;
+            int64_t needle = v.i;
+            const uint64_t *d = (const uint64_t *) a->data;
+            for (int64_t i = 0; i < a->len; i++)
+                if ((int64_t) d[i] == needle)
+                    return i;
+            return -1;
+        }
+        case XR_ELEM_F32: {
+            if (v.tag != XR_TAG_F64)
+                return -1;
+            const float *d = (const float *) a->data;
+            for (int64_t i = 0; i < a->len; i++)
+                if ((double) d[i] == v.f)
+                    return i;
+            return -1;
+        }
+        case XR_ELEM_F64: {
+            if (v.tag != XR_TAG_F64)
+                return -1;
+            const double *d = (const double *) a->data;
+            for (int64_t i = 0; i < a->len; i++)
+                if (d[i] == v.f)
+                    return i;
+            return -1;
+        }
+        default:
+            *handled = 0;
+            return -1;
+    }
+}
+
+#undef XRT_INDEXOF_LOOP

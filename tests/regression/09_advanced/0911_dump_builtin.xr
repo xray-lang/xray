@@ -121,7 +121,7 @@ fn test_dump_in_loop() {
 
 @test
 fn test_dump_return_is_null() {
-    // dump() must return null so that `let x = dump(...)` does not crash.
+    // dump() is statically unit-valued; the runtime sentinel remains null.
     let r = dump(42)
-    assert_eq(r == null, true)
+    assert_eq(typeof(r), "null")
 }

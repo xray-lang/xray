@@ -25,6 +25,7 @@
 #include "xrt_method_symbols.h"
 
 #include "xrt_range_methods.inc.c"
+#include "xrt_sort.inc.c"
 
 /* toString helper. */
 
@@ -51,12 +52,12 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
                 tmp[n++] = rev[--r];
         }
         tmp[n] = 0;
-        return xrt_str_concat(tmp, "");
+        return xrt_str_from_cstr(tmp);
     }
     if (slot_hint == 2 || val.tag == XR_TAG_F64) {
         char tmp[64];
         xrt_format_float(tmp, sizeof(tmp), val.f);
-        return xrt_str_concat(tmp, "");
+        return xrt_str_from_cstr(tmp);
     }
     if (val.tag == XR_TAG_STR || val.tag == XR_TAG_STR_ARC)
         return val;
@@ -75,7 +76,7 @@ static XrValue xrt_to_int(XrValue val) {
     if (XR_IS_FLOAT(val))
         return XR_FROM_INT((int64_t) XR_TO_FLOAT(val));
     if (XR_IS_STR(val)) {
-        const char *p = (const char *) val.ptr;
+        const char *p = xr_str_data(val);
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
             p++;
         char *end = NULL;
@@ -93,7 +94,7 @@ static XrValue xrt_to_float(XrValue val) {
     if (XR_IS_INT(val))
         return XR_FROM_FLOAT((double) XR_TO_INT(val));
     if (XR_IS_STR(val)) {
-        const char *p = (const char *) val.ptr;
+        const char *p = xr_str_data(val);
         while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')
             p++;
         char *end = NULL;
@@ -119,7 +120,7 @@ static XrValue xrt_to_bool(XrValue val) {
     if (XR_IS_FLOAT(val))
         return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
     if (XR_IS_STR(val))
-        return XR_FROM_BOOL(((const char *) val.ptr)[0] != '\0');
+        return XR_FROM_BOOL((xr_str_data(val))[0] != '\0');
     if (val.tag == XR_TAG_ARRAY)
         return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->len > 0);
     if (val.tag == XR_TAG_MAP)
@@ -151,13 +152,13 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
                 end--;
         int64_t rlen = (int64_t) (end - start);
         XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy((char *) sv.ptr, start, (size_t) rlen);
-        ((char *) sv.ptr)[rlen] = 0;
+        memcpy(xr_str_buf(sv), start, (size_t) rlen);
+        xr_str_buf(sv)[rlen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_TOLOWER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         for (int64_t i = 0; i < slen; i++)
             r[i] = (s[i] >= 'A' && s[i] <= 'Z') ? (char) (s[i] + 32) : s[i];
         r[slen] = 0;
@@ -165,7 +166,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
     }
     if (sym == XRT_SYM_TOUPPER) {
         XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         for (int64_t i = 0; i < slen; i++)
             r[i] = (s[i] >= 'a' && s[i] <= 'z') ? (char) (s[i] - 32) : s[i];
         r[slen] = 0;
@@ -194,7 +195,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
         return XR_FROM_INT(slen > 0 ? (int64_t) (unsigned char) s[0] : 0);
     if (sym == XRT_SYM_REVERSE) {
         XrValue sv = xrt_str_alloc((size_t) slen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         for (int64_t i = 0; i < slen; i++)
             r[i] = s[slen - 1 - i];
         r[slen] = 0;
@@ -205,8 +206,7 @@ static inline XrValue xrt_str_method_0(const char *s, int64_t slen, XrValue recv
 
 static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (XR_IS_STR(recv)) {
-        return xrt_str_method_0((const char *) recv.ptr, (int64_t) strlen((const char *) recv.ptr),
-                                recv, sym);
+        return xrt_str_method_0(xr_str_data(recv), xr_str_len(recv), recv, sym);
     }
     if (recv.tag == XR_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
@@ -238,32 +238,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             }
             return recv;
         }
-        if (sym == XRT_SYM_SORT && a->len > 1) {
-            for (int64_t gap = a->len / 2; gap > 0; gap /= 2) {
-                for (int64_t i = gap; i < a->len; i++) {
-                    XrValue key = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                    int64_t j = i;
-                    while (j >= gap) {
-                        XrValue bv = xr_typed_get(a->data, (int32_t) (j - gap), a->elem_type);
-                        int cmp = 0;
-                        if (bv.tag == XR_TAG_I64 && key.tag == XR_TAG_I64)
-                            cmp = (bv.i > key.i) - (bv.i < key.i);
-                        else if (bv.tag == XR_TAG_F64 && key.tag == XR_TAG_F64)
-                            cmp = (bv.f > key.f) - (bv.f < key.f);
-                        else if (XR_IS_STR(bv) && XR_IS_STR(key))
-                            cmp = strcmp((const char *) bv.ptr, (const char *) key.ptr);
-                        else
-                            cmp = (int) bv.tag - (int) key.tag;
-                        if (cmp <= 0)
-                            break;
-                        xr_typed_set(a->data, (int32_t) j, bv, a->elem_type);
-                        j -= gap;
-                    }
-                    xr_typed_set(a->data, (int32_t) j, key, a->elem_type);
-                }
-            }
-            return recv;
-        }
+        if (sym == XRT_SYM_SORT)
+            return xrt_array_sort(recv, NULL);
     }
     if (recv.tag == XR_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
@@ -273,14 +249,16 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_BOOL(m->len == 0);
         if (sym == XRT_SYM_KEYS) {
             XrValue arr = xrt_array_new(m->len);
-            for (int64_t i = 0; i < m->len; i++)
-                xrt_array_push(arr, xrt_map_key_get(m, i));
+            for (int64_t slot = 0; slot < m->cap; slot++)
+                if (xrt_map_slot_is_full(m, slot))
+                    xrt_array_push(arr, xrt_map_slot_key(m, slot));
             return arr;
         }
         if (sym == XRT_SYM_VALUES) {
             XrValue arr = xrt_array_new(m->len);
-            for (int64_t i = 0; i < m->len; i++)
-                xrt_array_push(arr, xrt_map_value_get(m, i));
+            for (int64_t slot = 0; slot < m->cap; slot++)
+                if (xrt_map_slot_is_full(m, slot))
+                    xrt_array_push(arr, xrt_map_slot_value(m, slot));
             return arr;
         }
     }
@@ -322,7 +300,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_TOHEX) {
             char buf[32];
             snprintf(buf, sizeof(buf), "0x%02" PRIX64, (uint64_t) recv.i);
-            return xrt_str_concat(buf, "");
+            return xrt_str_from_cstr(buf);
         }
     }
     if (recv.tag == XR_TAG_F64) {
@@ -345,9 +323,9 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
 static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv, int sym,
                                        XrValue arg0) {
     if ((sym == XRT_SYM_CONTAINS || sym == XRT_SYM_INCLUDES) && XR_IS_STR(arg0))
-        return XR_FROM_BOOL(strstr(s, (const char *) arg0.ptr) ? 1 : 0);
+        return XR_FROM_BOOL(strstr(s, xr_str_data(arg0)) ? 1 : 0);
     if (sym == XRT_SYM_INDEXOF && XR_IS_STR(arg0)) {
-        const char *p = strstr(s, (const char *) arg0.ptr);
+        const char *p = strstr(s, xr_str_data(arg0));
         return XR_FROM_INT(p ? (int64_t) (p - s) : -1);
     }
     if (sym == XRT_SYM_SLICE && arg0.tag == XR_TAG_I64) {
@@ -357,45 +335,45 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         if (start < 0)
             start = 0;
         if (start >= slen)
-            return xr_box_str("");
+            return xrt_str_alloc(0);
         int64_t rlen = slen - start;
         XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy((char *) sv.ptr, s + start, (size_t) rlen);
-        ((char *) sv.ptr)[rlen] = 0;
+        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
+        xr_str_buf(sv)[rlen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_STARTSWITH && XR_IS_STR(arg0)) {
-        const char *p = (const char *) arg0.ptr;
-        size_t plen = strlen(p);
+        const char *p = xr_str_data(arg0);
+        size_t plen = (size_t) xr_str_len(arg0);
         return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s, p, plen) == 0);
     }
     if (sym == XRT_SYM_ENDSWITH && XR_IS_STR(arg0)) {
-        const char *p = (const char *) arg0.ptr;
-        size_t plen = strlen(p);
+        const char *p = xr_str_data(arg0);
+        size_t plen = (size_t) xr_str_len(arg0);
         return XR_FROM_BOOL((size_t) slen >= plen && memcmp(s + slen - plen, p, plen) == 0);
     }
     if (sym == XRT_SYM_CHARAT && arg0.tag == XR_TAG_I64) {
         int64_t idx = arg0.i;
         if (idx < 0 || idx >= slen)
-            return xr_box_str("");
+            return xrt_str_alloc(0);
         XrValue sv = xrt_str_alloc(1);
-        ((char *) sv.ptr)[0] = s[idx];
-        ((char *) sv.ptr)[1] = 0;
+        xr_str_buf(sv)[0] = s[idx];
+        xr_str_buf(sv)[1] = 0;
         return sv;
     }
     if (sym == XRT_SYM_CONCAT && XR_IS_STR(arg0)) {
-        const char *s2 = (const char *) arg0.ptr;
-        size_t s2len = strlen(s2);
+        const char *s2 = xr_str_data(arg0);
+        size_t s2len = (size_t) xr_str_len(arg0);
         size_t rlen = (size_t) slen + s2len;
         XrValue sv = xrt_str_alloc(rlen);
-        memcpy((char *) sv.ptr, s, (size_t) slen);
-        memcpy((char *) sv.ptr + slen, s2, s2len);
-        ((char *) sv.ptr)[rlen] = 0;
+        memcpy(xr_str_buf(sv), s, (size_t) slen);
+        memcpy(xr_str_buf(sv) + slen, s2, s2len);
+        xr_str_buf(sv)[rlen] = 0;
         return sv;
     }
     if (sym == XRT_SYM_LASTINDEXOF && XR_IS_STR(arg0)) {
-        const char *needle = (const char *) arg0.ptr;
-        size_t nlen = strlen(needle);
+        const char *needle = xr_str_data(arg0);
+        size_t nlen = (size_t) xr_str_len(arg0);
         if (nlen == 0)
             return XR_FROM_INT(slen);
         for (int64_t i = slen - (int64_t) nlen; i >= 0; i--) {
@@ -405,15 +383,15 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         return XR_FROM_INT(-1);
     }
     if (sym == XRT_SYM_SPLIT && XR_IS_STR(arg0)) {
-        const char *sep = (const char *) arg0.ptr;
-        size_t seplen = strlen(sep);
+        const char *sep = xr_str_data(arg0);
+        size_t seplen = (size_t) xr_str_len(arg0);
         XrValue arr = xrt_array_new(4);
         if (seplen == 0) {
             /* split by char */
             for (int64_t i = 0; i < slen; i++) {
                 XrValue ch = xrt_str_alloc(1);
-                ((char *) ch.ptr)[0] = s[i];
-                ((char *) ch.ptr)[1] = 0;
+                xr_str_buf(ch)[0] = s[i];
+                xr_str_buf(ch)[1] = 0;
                 xrt_array_push(arr, ch);
             }
         } else {
@@ -421,13 +399,16 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
             while (1) {
                 const char *found = strstr(cur, sep);
                 if (!found) {
-                    xrt_array_push(arr, xrt_str_concat(cur, ""));
+                    size_t tail = (size_t) (s + slen - cur);
+                    XrValue sv = xrt_str_alloc(tail);
+                    memcpy(xr_str_buf(sv), cur, tail);
+                    xrt_array_push(arr, sv);
                     break;
                 }
                 size_t part = (size_t) (found - cur);
                 XrValue sv = xrt_str_alloc(part);
-                memcpy((char *) sv.ptr, cur, part);
-                ((char *) sv.ptr)[part] = 0;
+                memcpy(xr_str_buf(sv), cur, part);
+                xr_str_buf(sv)[part] = 0;
                 xrt_array_push(arr, sv);
                 cur = found + seplen;
             }
@@ -437,10 +418,10 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     if (sym == XRT_SYM_REPEAT && arg0.tag == XR_TAG_I64) {
         int64_t n = arg0.i;
         if (n <= 0)
-            return xr_box_str("");
+            return xrt_str_alloc(0);
         size_t rlen = (size_t) (slen * n);
         XrValue sv = xrt_str_alloc(rlen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         for (int64_t i = 0; i < n; i++)
             memcpy(r + i * slen, s, (size_t) slen);
         r[rlen] = 0;
@@ -448,14 +429,14 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
     }
     if (sym == XRT_SYM_REPLACE && XR_IS_STR(arg0)) {
         /* replace(old) with empty string — 1-arg form */
-        const char *old_s = (const char *) arg0.ptr;
+        const char *old_s = xr_str_data(arg0);
         const char *found = strstr(s, old_s);
         if (!found)
             return recv;
-        size_t olen = strlen(old_s);
+        size_t olen = (size_t) xr_str_len(arg0);
         size_t rlen = (size_t) slen - olen;
         XrValue sv = xrt_str_alloc(rlen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         size_t pre = (size_t) (found - s);
         memcpy(r, s, pre);
         memcpy(r + pre, found + olen, (size_t) slen - pre - olen);
@@ -467,8 +448,8 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
         if (idx < 0 || idx >= slen)
             return XR_NULL_VAL;
         XrValue sv = xrt_str_alloc(1);
-        ((char *) sv.ptr)[0] = s[idx];
-        ((char *) sv.ptr)[1] = 0;
+        xr_str_buf(sv)[0] = s[idx];
+        xr_str_buf(sv)[1] = 0;
         return sv;
     }
     if (sym == XRT_SYM_CODEPOINT_AT && arg0.tag == XR_TAG_I64) {
@@ -510,8 +491,7 @@ static inline XrValue xrt_str_method_1(const char *s, int64_t slen, XrValue recv
 
 static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (XR_IS_STR(recv)) {
-        return xrt_str_method_1((const char *) recv.ptr, (int64_t) strlen((const char *) recv.ptr),
-                                recv, sym, arg0);
+        return xrt_str_method_1(xr_str_data(recv), xr_str_len(recv), recv, sym, arg0);
     }
     if (recv.tag == XR_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
@@ -538,43 +518,53 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             return XR_NULL_VAL;
         }
         if (sym == XRT_SYM_FILL) {
+            if (xrt_array_fill_typed_fast(a, arg0))
+                return recv;
             for (int64_t i = 0; i < a->len; i++)
                 xr_typed_set(a->data, (int32_t) i, arg0, a->elem_type);
             return recv;
         }
         if (sym == XRT_SYM_INDEXOF) {
+            int handled;
+            int64_t idx = xrt_array_indexof_typed_fast(a, arg0, &handled);
+            if (handled)
+                return XR_FROM_INT(idx);
             for (int64_t i = 0; i < a->len; i++) {
                 XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                if (elem.tag == arg0.tag && elem.i == arg0.i)
+                if (xrt_eq(elem, arg0))
                     return XR_FROM_INT(i);
             }
             return XR_FROM_INT(-1);
         }
         if (sym == XRT_SYM_INCLUDES) {
+            int handled;
+            int64_t idx = xrt_array_indexof_typed_fast(a, arg0, &handled);
+            if (handled)
+                return XR_FROM_BOOL(idx >= 0);
             for (int64_t i = 0; i < a->len; i++) {
                 XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
-                if (elem.tag == arg0.tag && elem.i == arg0.i)
+                if (xrt_eq(elem, arg0))
                     return XR_FROM_BOOL(1);
             }
             return XR_FROM_BOOL(0);
         }
         if (sym == XRT_SYM_JOIN && XR_IS_STR(arg0)) {
-            const char *sep = (const char *) arg0.ptr;
-            size_t seplen = strlen(sep);
+            const char *sep = xr_str_data(arg0);
+            size_t seplen = (size_t) xr_str_len(arg0);
             size_t total = 0;
             for (int64_t i = 0; i < a->len; i++) {
                 XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                total += strlen((const char *) sv.ptr);
+                total += (size_t) xr_str_len(sv);
                 if (i < a->len - 1)
                     total += seplen;
             }
             XrValue result = xrt_str_alloc(total);
-            char *r = (char *) result.ptr;
+            char *r = xr_str_buf(result);
             size_t pos = 0;
             for (int64_t i = 0; i < a->len; i++) {
                 XrValue sv = xrt_tostring(xr_typed_get(a->data, (int32_t) i, a->elem_type), 0);
-                const char *p = (const char *) sv.ptr;
-                size_t plen = strlen(p);
+                const char *p = xr_str_data(sv);
+                size_t plen = (size_t) xr_str_len(sv);
                 memcpy(r + pos, p, plen);
                 pos += plen;
                 if (i < a->len - 1) {
@@ -598,6 +588,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             xrt_closure_t *cl = (xrt_closure_t *) arg0.ptr;
             typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
             xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
+            if (sym == XRT_SYM_SORT)
+                return xrt_array_sort(recv, cl);
             if (sym == XRT_SYM_MAP) {
                 return xrt_array_map_typed(recv, arg0, XR_ELEM_ANY);
             }
@@ -641,7 +633,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (recv.tag == XR_TAG_F64 && sym == XRT_SYM_TOFIXED && arg0.tag == XR_TAG_I64) {
         char buf[64];
         snprintf(buf, sizeof(buf), "%.*f", (int) arg0.i, recv.f);
-        return xrt_str_concat(buf, "");
+        return xrt_str_from_cstr(buf);
     }
     /* max/min accept int or float operands. */
     if (sym == XRT_SYM_MAX) {
@@ -663,8 +655,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
 
 static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue arg1) {
     if (XR_IS_STR(recv) && (sym == XRT_SYM_SLICE || sym == XRT_SYM_SUBSTRING)) {
-        const char *s = (const char *) recv.ptr;
-        int64_t slen = (int64_t) strlen(s);
+        const char *s = xr_str_data(recv);
+        int64_t slen = xr_str_len(recv);
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : slen;
         if (start < 0)
@@ -676,19 +668,19 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         if (end > slen)
             end = slen;
         if (start >= end)
-            return xr_box_str("");
+            return xrt_str_alloc(0);
         int64_t rlen = end - start;
         XrValue sv = xrt_str_alloc((size_t) rlen);
-        memcpy((char *) sv.ptr, s + start, (size_t) rlen);
-        ((char *) sv.ptr)[rlen] = 0;
+        memcpy(xr_str_buf(sv), s + start, (size_t) rlen);
+        xr_str_buf(sv)[rlen] = 0;
         return sv;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACEALL && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
-        const char *s = (const char *) recv.ptr;
-        int64_t slen = (int64_t) strlen(s);
-        const char *old_s = (const char *) arg0.ptr;
-        const char *new_s = (const char *) arg1.ptr;
-        size_t olen = strlen(old_s), nlen = strlen(new_s);
+        const char *s = xr_str_data(recv);
+        int64_t slen = xr_str_len(recv);
+        const char *old_s = xr_str_data(arg0);
+        const char *new_s = xr_str_data(arg1);
+        size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
         if (olen == 0)
             return recv;
         /* Count occurrences before allocating the result. */
@@ -702,7 +694,7 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             return recv;
         size_t rlen = (size_t) slen + count * (nlen - olen);
         XrValue sv = xrt_str_alloc(rlen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         const char *cur = s;
         size_t pos = 0;
         while ((p = strstr(cur, old_s)) != NULL) {
@@ -713,24 +705,24 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             pos += nlen;
             cur = p + olen;
         }
-        memcpy(r + pos, cur, strlen(cur));
+        memcpy(r + pos, cur, (size_t) (s + slen - cur));
         r[rlen] = 0;
         return sv;
     }
     if (XR_IS_STR(recv) && (sym == XRT_SYM_PAD_START || sym == XRT_SYM_PAD_END) &&
         arg0.tag == XR_TAG_I64 && XR_IS_STR(arg1)) {
-        const char *s = (const char *) recv.ptr;
-        int64_t slen = (int64_t) strlen(s);
+        const char *s = xr_str_data(recv);
+        int64_t slen = xr_str_len(recv);
         int64_t target = arg0.i;
         if (target <= slen)
             return recv;
-        const char *pad = (const char *) arg1.ptr;
-        size_t plen = strlen(pad);
+        const char *pad = xr_str_data(arg1);
+        size_t plen = (size_t) xr_str_len(arg1);
         if (plen == 0)
             return recv;
         int64_t fill = target - slen;
         XrValue sv = xrt_str_alloc((size_t) target);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         if (sym == XRT_SYM_PAD_START) {
             for (int64_t i = 0; i < fill; i++)
                 r[i] = pad[i % plen];
@@ -744,17 +736,17 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         return sv;
     }
     if (XR_IS_STR(recv) && sym == XRT_SYM_REPLACE && XR_IS_STR(arg0) && XR_IS_STR(arg1)) {
-        const char *s = (const char *) recv.ptr;
-        int64_t slen = (int64_t) strlen(s);
-        const char *old_s = (const char *) arg0.ptr;
-        const char *new_s = (const char *) arg1.ptr;
+        const char *s = xr_str_data(recv);
+        int64_t slen = xr_str_len(recv);
+        const char *old_s = xr_str_data(arg0);
+        const char *new_s = xr_str_data(arg1);
         const char *found = strstr(s, old_s);
         if (!found)
             return recv;
-        size_t olen = strlen(old_s), nlen = strlen(new_s);
+        size_t olen = (size_t) xr_str_len(arg0), nlen = (size_t) xr_str_len(arg1);
         size_t rlen = (size_t) slen - olen + nlen;
         XrValue sv = xrt_str_alloc(rlen);
-        char *r = (char *) sv.ptr;
+        char *r = xr_str_buf(sv);
         size_t pre = (size_t) (found - s);
         memcpy(r, s, pre);
         memcpy(r + pre, new_s, nlen);

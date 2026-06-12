@@ -306,16 +306,17 @@ typedef enum {
     XI_PRINT, /* print: args[0..n]=values, aux_int=flags */
 
     /* Coroutine */
-    XI_GO,             /* go expr: args[0]=callee, args[1..n]=params */
-    XI_AWAIT,          /* await task: args[0]=task */
-    XI_CHAN_SEND,      /* ch.send(v): args[0]=chan, args[1]=val */
-    XI_CHAN_RECV,      /* ch.recv(): args[0]=chan */
-    XI_CHAN_TRY_SEND,  /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
-    XI_CHAN_TRY_RECV,  /* ch.tryRecv(): args[0]=chan — non-blocking, null on empty */
-    XI_CHAN_IS_CLOSED, /* ch.isClosed: args[0]=chan */
-    XI_TIME_AFTER,     /* time.after(ms): args[0]=timeout_ms, returns timer channel */
-    XI_SELECT_BLOCK,   /* blocking select wait: args[0..n]=channels */
-    XI_YIELD,          /* yield execution */
+    XI_GO,               /* go expr: args[0]=callee, args[1..n]=params */
+    XI_AWAIT,            /* await task: args[0]=task */
+    XI_CHAN_SEND,        /* ch.send(v): args[0]=chan, args[1]=val */
+    XI_CHAN_RECV,        /* raw recv payload: args[0]=chan; status in adjacent VM slot */
+    XI_CHAN_RECV_STATUS, /* bool status for XI_CHAN_RECV / XI_CHAN_TRY_RECV */
+    XI_CHAN_TRY_SEND,    /* ch.trySend(v): args[0]=chan, args[1]=val — non-blocking */
+    XI_CHAN_TRY_RECV,    /* raw tryRecv payload: args[0]=chan; status in adjacent VM slot */
+    XI_CHAN_IS_CLOSED,   /* ch.isClosed: args[0]=chan */
+    XI_TIME_AFTER,       /* time.after(ms): args[0]=timeout_ms, returns timer channel */
+    XI_SELECT_BLOCK,     /* blocking select wait: args[0..n]=channels */
+    XI_YIELD,            /* yield execution */
     /* Exception handling (legacy, retained for panic) */
     XI_THROW, /* throw exception: args[0]=value */
 
@@ -532,6 +533,10 @@ typedef enum {
 #define XI_AWAIT_AUX_ANY_SUCCESS (1 << 2)
 #define XI_AWAIT_AUX_ONE_SHOT_GO (1 << 3) /* await operand is a non-escaping XI_GO */
 
+/* XI_GO aux_int bits. Low 8 bits carry link mode. */
+#define XI_GO_AUX_LINK_MASK 0xff
+#define XI_GO_AUX_ONE_SHOT_AWAIT (1 << 8)
+
 /* ========== Upvalue Capture Info ========== */
 
 /* Source kinds matching the VM's UpvalInfo.source constants */
@@ -709,6 +714,7 @@ typedef struct XiFunc {
     struct XiArenaChunk *arena_cur;  /* current chunk for new allocations */
 
     /* Nested functions / closures lowered from this function */
+    struct XiFunc *parent_func; /* lexical parent, if this is a nested closure */
     struct XiFunc **children;
     uint16_t nchildren;
     uint16_t children_cap;
@@ -733,6 +739,12 @@ typedef struct XiFunc {
 
     /* Per-slot const flag, parallel to slot_owned_names. */
     uint8_t *slot_owned_consts; /* array of nshared bytes (arena-alloc'd) */
+
+    /* Program-level shared slot -> function mapping, populated during
+     * lowering before XiModule is assembled so optimization passes can
+     * resolve top-level function closures loaded through XI_GET_SHARED. */
+    struct XiFunc **shared_slot_funcs;
+    uint16_t shared_slot_func_count;
 
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */

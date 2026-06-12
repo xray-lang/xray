@@ -147,7 +147,7 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
 
 /* Box an object pointer into XrValue */
 static inline XrValue xrt_box_obj(void *obj) {
-    XrValue v;
+    XrValue v = {0};
     v.ptr = obj;
     v.tag = obj ? XR_TAG_PTR : XR_TAG_NULL;
     return v;

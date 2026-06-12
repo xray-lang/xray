@@ -390,3 +390,50 @@ XrType *xr_type_object_get_field(XrType *type, const char *field_name) {
     }
     return NULL;
 }
+
+bool xr_type_is_default_initializable(const XrType *type) {
+    if (!type)
+        return false;
+
+    /* Nullable types always default to null. */
+    if (type->is_nullable)
+        return true;
+
+    switch (type->kind) {
+        /* Numeric primitives default to 0 / 0.0. */
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+            return true;
+
+        /* Bool defaults to false. */
+        case XR_KIND_BOOL:
+            return true;
+
+        /* Unit defaults to (). */
+        case XR_KIND_UNIT:
+            return true;
+
+        /* Null kind is trivially default-initializable. */
+        case XR_KIND_NULL:
+            return true;
+
+        /* Non-default-initializable types require explicit initializer. */
+        case XR_KIND_STRING:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_CLASS:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_FUNCTION:
+        case XR_KIND_INTERFACE:
+        case XR_KIND_JSON:
+        case XR_KIND_ENUM:
+        case XR_KIND_TUPLE:
+        case XR_KIND_UNION:
+            return false;
+
+        default:
+            return false;
+    }
+}

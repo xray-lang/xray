@@ -42,6 +42,38 @@
 #endif
 #endif
 
+/* Alignment of array element storage (xrt_array_t.data). 32 bytes lets the
+ * C compiler use full-width AVX loads/stores in vectorized loops; generated
+ * _adN caches assert it via XR_ASSUME_ALIGNED(..., XRT_DATA_ALIGN).
+ * Buffers with this contract MUST be allocated with XRT_ALLOC_ALIGNED and
+ * released with XRT_FREE_ALIGNED — on Windows _aligned_malloc storage is not
+ * addressable through plain free(), and realloc would silently drop the
+ * alignment, so growth re-allocates + copies (see xrt_array_data_grow). */
+#ifndef XRT_DATA_ALIGN
+#define XRT_DATA_ALIGN 32
+#endif
+
+#ifndef XRT_ALLOC_ALIGNED
+#ifdef XRT_USE_XR_MALLOC
+#include "../base/xmalloc.h"
+#define XRT_ALLOC_ALIGNED(sz) xr_malloc_aligned((sz), XRT_DATA_ALIGN)
+#define XRT_FREE_ALIGNED(p) xr_free_aligned((p), XRT_DATA_ALIGN)
+#elif defined(_WIN32)
+#include <malloc.h>
+#define XRT_ALLOC_ALIGNED(sz) _aligned_malloc((sz), XRT_DATA_ALIGN)
+#define XRT_FREE_ALIGNED(p) _aligned_free(p)
+#else
+static inline void *xrt_alloc_aligned_impl(size_t size) {
+    void *p = NULL;
+    if (posix_memalign(&p, XRT_DATA_ALIGN, size) != 0)
+        return NULL;
+    return p;
+}
+#define XRT_ALLOC_ALIGNED(sz) xrt_alloc_aligned_impl(sz)
+#define XRT_FREE_ALIGNED(p) free(p)
+#endif
+#endif
+
 /* =========================================================================
  * Object header — precedes every bump-allocated object.
  *
@@ -57,6 +89,7 @@ typedef struct {
     uint16_t flags;    // XRT_ARC_* flags
     uint16_t type;     // object type tag for type-table dispatch
     int32_t refcount;  // ARC reference count (0 = unmanaged, >0 = live)
+    uint64_t _pad;     // keeps sizeof == 16 so user data stays 16-byte aligned
 } XrtArcHdr;
 
 #define XRT_ARC_HDR(p) ((XrtArcHdr *) ((char *) (p) - sizeof(XrtArcHdr)))
@@ -82,6 +115,7 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj);
 
 typedef struct XrtBumpBlock {
     struct XrtBumpBlock *next;
+    uint64_t _pad;  // data starts at offset 16: malloc base is 16-aligned, so data is too
     char data[];
 } XrtBumpBlock;
 
@@ -102,7 +136,7 @@ static void xrt_bump_new_block(size_t min_size) {
     if (min_size > bsize)
         bsize = min_size;
     XrtBumpBlock *b = (XrtBumpBlock *) XRT_MALLOC(sizeof(XrtBumpBlock) + bsize);
-    if (!b) {
+    if (XR_UNLIKELY(!b)) {
         fprintf(stderr, "xrt_bump: out of memory\n");
         abort();
     }
@@ -113,7 +147,7 @@ static void xrt_bump_new_block(size_t min_size) {
 }
 
 static inline void *xrt_bump_alloc(size_t size) {
-    if (__builtin_expect(xrt_bump_cursor + size <= xrt_bump_end, 1)) {
+    if (XR_LIKELY(xrt_bump_cursor + size <= xrt_bump_end)) {
         void *p = xrt_bump_cursor;
         xrt_bump_cursor += size;
         return p;
@@ -136,17 +170,21 @@ static void xrt_bump_destroy(void) {
     xrt_bump_end = NULL;
 }
 
+/* Alignment contract: returned user pointers are 16-byte aligned.
+ * Bump path: block data starts 16-aligned and every allocation advances the
+ * cursor by a multiple of 16. Heap path: calloc returns max_align_t (>= 16
+ * on 64-bit). XR_ASSUME_ALIGNED hints in generated code rely on this. */
 static inline void *xrt_arc_alloc(size_t obj_size) {
-    obj_size = (obj_size + 7u) & ~(size_t) 7u;
+    obj_size = (obj_size + 15u) & ~(size_t) 15u;
     size_t total = sizeof(XrtArcHdr) + obj_size;
     XrtArcHdr *hdr;
-    if (__builtin_expect(xrt_bump_enabled, 1)) {
+    if (XR_LIKELY(xrt_bump_enabled)) {
         hdr = (XrtArcHdr *) xrt_bump_alloc(total);
         memset(hdr, 0, total);
         hdr->flags = XRT_ARC_BUMP;  // mark as bump-allocated
     } else {
         hdr = (XrtArcHdr *) XRT_CALLOC(1, total);
-        if (!hdr) {
+        if (XR_UNLIKELY(!hdr)) {
             fprintf(stderr, "xrt_arc_alloc: out of memory\n");
             abort();
         }
@@ -227,18 +265,59 @@ static inline void xrt_arc_init(void) {
         xrt_bump_new_block(0);
 }
 
-// Allocate a heap string via bump allocator
+/* =========================================================================
+ * String constructors — header + bytes in one bump block.
+ * Layout: [XrtArcHdr][xrt_str_t][len+1 bytes]; data points at the tail.
+ * Callers fill the bytes via xr_str_buf() after xrt_str_alloc().
+ * ========================================================================= */
+
 static inline XrValue xrt_str_alloc(size_t len) {
-    char *p = (char *) xrt_arc_alloc(len + 1);
-    return xr_mkptr(p, XR_TAG_STR_ARC);
+    xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t) + len + 1);
+    h->len = (int64_t) len;
+    h->hash = 0;
+    h->flags = 0;
+    h->data = (char *) (h + 1);
+    h->data[len] = 0;
+    return xr_mkptr(h, XR_TAG_STR_ARC);
+}
+
+/* Wrap a NUL-terminated C string with static storage duration (literals,
+ * argv, environment) without copying the bytes. */
+static inline XrValue xr_box_str(const char *s) {
+    xrt_str_t *h = (xrt_str_t *) xrt_arc_alloc(sizeof(xrt_str_t));
+    h->len = (int64_t) strlen(s);
+    h->hash = 0;
+    h->flags = 0;
+    h->data = (char *) s;
+    return xr_mkptr(h, XR_TAG_STR_ARC);
+}
+
+/* Copy a transient C buffer (stack scratch, number formatting) into a fresh
+ * heap string. */
+static inline XrValue xrt_str_from_cstr(const char *s) {
+    size_t len = strlen(s);
+    XrValue v = xrt_str_alloc(len);
+    memcpy(xr_str_buf(v), s, len);
+    return v;
 }
 
 static inline XrValue xrt_str_concat(const char *sa, const char *sb) {
     size_t la = strlen(sa), lb = strlen(sb);
     XrValue v = xrt_str_alloc(la + lb);
-    char *r = (char *) v.ptr;
+    char *r = xr_str_buf(v);
     memcpy(r, sa, la);
     memcpy(r + la, sb, lb + 1);
+    return v;
+}
+
+/* Fast path for string + string: lengths come from the headers. */
+static inline XrValue xrt_str_concat_value(XrValue a, XrValue b) {
+    size_t la = (size_t) xr_str_len(a);
+    size_t lb = (size_t) xr_str_len(b);
+    XrValue v = xrt_str_alloc(la + lb);
+    char *r = xr_str_buf(v);
+    memcpy(r, xr_str_data(a), la);
+    memcpy(r + la, xr_str_data(b), lb);
     return v;
 }
 

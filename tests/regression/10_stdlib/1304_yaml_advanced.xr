@@ -207,7 +207,6 @@ fn test_escape_sequences() {
 fn test_stringify_json() {
     let config = {name: "xray", version: 1, debug: false}
     let result = yaml.stringify(config)
-    assert(result != null)
     assert(result.length > 0)
     // Roundtrip: parse the stringified result
     let parsed = yaml.parse(result)
@@ -226,7 +225,6 @@ fn test_stringify_nested_json() {
         features: ["auth", "logging"]
     }
     let result = yaml.stringify(data)
-    assert(result != null)
     assert(result.length > 0)
 }
 
@@ -247,7 +245,6 @@ fn test_stringify_json_roundtrip() {
 fn test_stringify_map() {
     let m = #{"key1": "val1", "key2": 42}
     let result = yaml.stringify(m)
-    assert(result != null)
     assert(result.length > 0)
 }
 

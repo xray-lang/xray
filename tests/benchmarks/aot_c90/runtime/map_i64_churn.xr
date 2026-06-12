@@ -1,0 +1,38 @@
+fn run(n: int) -> int {
+    let m: Map<int, int> = #{}
+
+    let i = 0
+    while (i < n) {
+        m.set((i * 17) % n, i * 3 + 1)
+        i = i + 1
+    }
+
+    let sum = 0
+    i = 0
+    while (i < n * 2) {
+        if (m.has(i)) {
+            sum = sum + m.get(i)
+        }
+        i = i + 1
+    }
+
+    i = 0
+    while (i < n) {
+        if (i % 2 == 0) {
+            m.delete(i)
+        }
+        i = i + 1
+    }
+
+    i = 0
+    while (i < n) {
+        if (m.has(i)) {
+            sum = sum + 1
+        }
+        i = i + 1
+    }
+
+    return sum + m.size
+}
+
+print(run(200000))

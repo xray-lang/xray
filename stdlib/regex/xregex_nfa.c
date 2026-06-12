@@ -233,6 +233,9 @@ XR_FUNC bool xr_re_check_empty_width(uint32_t flags, const char *text, const cha
 static void add_thread(XrThreadList *list, XrSparseSet *visited, XrProg *prog, int pc,
                        const char **caps, const char *text, const char *p, const char *end,
                        int ncaps) {
+    if (pc < 0 || pc >= prog->inst_count)
+        return;
+
     // Prevent duplicate visits
     if (xr_sparse_set_contains(visited, pc))
         return;
@@ -253,10 +256,14 @@ static void add_thread(XrThreadList *list, XrSparseSet *visited, XrProg *prog, i
             break;
 
         case XR_OP_CAPTURE: {
-            const char *new_caps[XR_RE_MAX_CAPTURES * 2];
-            memcpy(new_caps, caps, caps_size);
-            new_caps[ip->cap] = p;
-            add_thread(list, visited, prog, XR_INST_OUT(ip), new_caps, text, p, end, ncaps);
+            if (ip->cap >= 0 && ip->cap < ncaps) {
+                const char *new_caps[XR_RE_MAX_CAPTURES * 2];
+                memcpy(new_caps, caps, caps_size);
+                new_caps[ip->cap] = p;
+                add_thread(list, visited, prog, XR_INST_OUT(ip), new_caps, text, p, end, ncaps);
+            } else {
+                add_thread(list, visited, prog, XR_INST_OUT(ip), caps, text, p, end, ncaps);
+            }
             break;
         }
 
@@ -464,6 +471,8 @@ XR_FUNC bool xr_nfa_match(XrProg *prog, const char *text, int len, const char **
     XrSparseSet *visited = &ctx->visited;
 
     // Clamp ncaptures to max
+    if (ncaptures < 0)
+        ncaptures = 0;
     if (ncaptures > XR_RE_MAX_CAPTURES * 2)
         ncaptures = XR_RE_MAX_CAPTURES * 2;
     size_t caps_size = ncaptures * sizeof(const char *);
@@ -823,6 +832,8 @@ XR_FUNC bool xr_nfa_search(XrProg *prog, const char *text, int len, const char *
     XrSparseSet *visited = &ctx->visited;
 
     // Clamp ncaptures to max
+    if (ncaptures < 0)
+        ncaptures = 0;
     if (ncaptures > XR_RE_MAX_CAPTURES * 2)
         ncaptures = XR_RE_MAX_CAPTURES * 2;
     size_t caps_size = ncaptures * sizeof(const char *);

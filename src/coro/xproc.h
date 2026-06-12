@@ -103,28 +103,39 @@ typedef struct XrProcStats {
     // trailing __attribute__((aligned)) on the typedef name;
     // MSVC's __declspec(align) cannot legally appear there.
     _Alignas(XR_CACHE_LINE) uint64_t executed_count;
-    uint64_t stolen_count;                 // Coros the owner has stolen from peers
-    uint64_t steal_attempt_count;          // Steal scans started by this worker
-    uint64_t steal_success_count;          // Steal scans that moved at least one coro
-    uint64_t steal_backoff_count;          // Steal scans deferred by freshness backoff
-    uint64_t steal_skip_count;             // Steal scans skipped by the search gate
-    uint64_t steal_no_candidate_count;     // Steal checks with no visible candidates
-    uint64_t steal_fresh_reject_count;     // Victims rejected by freshness delay
-    uint64_t steal_candidate_scan_count;   // Candidate victim deques inspected
-    uint64_t steal_throttle_wait_count;    // Short waits after freshness deferral
-    uint64_t steal_direct_dispatch_count;  // Stolen coros executed without a local pop
-    uint64_t yielded_count;                // Voluntary yields
-    uint64_t cont_steal_count;             // Continuations stolen (owner as stealer)
-    uint64_t completed_count;              // Coros that finished
-    uint64_t spawned_count;                // Coros spawned by this worker
-    uint64_t local_runq_pop_count;         // Coros consumed from the local run queue
-    uint64_t lifo_hit_count;               // Coros consumed from the run-next slot
-    uint64_t lifo_flush_count;             // Run-next occupants forced back to queues
+    uint64_t stolen_count;                     // Coros the owner has stolen from peers
+    uint64_t steal_attempt_count;              // Steal scans started by this worker
+    uint64_t steal_success_count;              // Steal scans that moved at least one coro
+    uint64_t steal_backoff_count;              // Steal scans deferred by freshness backoff
+    uint64_t steal_skip_count;                 // Steal scans skipped by the search gate
+    uint64_t steal_no_candidate_count;         // Steal checks with no visible candidates
+    uint64_t steal_fresh_reject_count;         // Victims rejected by freshness delay
+    uint64_t steal_candidate_scan_count;       // Candidate victim deques inspected
+    uint64_t steal_throttle_wait_count;        // Short waits after freshness deferral
+    uint64_t steal_throttle_wait_ms;           // Total milliseconds spent in steal throttle waits
+    uint64_t steal_throttle_wait_max_ms;       // Longest steal throttle wait
+    uint64_t steal_direct_dispatch_count;      // Stolen coros executed without a local pop
+    uint64_t steal_batch_attempt_count;        // Batch steal CAS attempts against chosen victims
+    uint64_t steal_batch_empty_count;          // Chosen victims that were empty by steal time
+    uint64_t steal_batch_fail_count;           // Batch steal attempts that lost the CAS/race
+    uint64_t yielded_count;                    // Voluntary yields
+    uint64_t cont_steal_count;                 // Continuations stolen (owner as stealer)
+    uint64_t completed_count;                  // Coros that finished
+    uint64_t spawned_count;                    // Coros spawned by this worker
+    uint64_t spawn_inline_child_count;         // Spawn children executed child-first
+    uint64_t spawn_shared_child_count;         // Spawn children queued for stealing
+    uint64_t spawn_burst_shared_count;         // Shared because parent is in a spawn burst
+    uint64_t spawn_backlog_shared_count;       // Shared because local/global backlog is visible
+    uint64_t spawn_backlog_full_inline_count;  // Share backlog full; forced child-first
+    uint64_t local_runq_pop_count;             // Coros consumed from the local run queue
+    uint64_t lifo_hit_count;                   // Coros consumed from the run-next slot
+    uint64_t lifo_flush_count;                 // Run-next occupants forced back to queues
     uint64_t lifo_gate_budget_count;
     uint64_t lifo_gate_backlog_count;
     uint64_t fast_dispatch_count;
     uint64_t fast_dispatch_budget_stop_count;
     uint64_t fast_dispatch_empty_count;
+    uint64_t vm_direct_switch_count;  // In-dispatch coroutine switches inside run()
     uint64_t pool_deferred_recycle_count;
     uint64_t pool_local_get_count;
     uint64_t pool_global_free_get_count;
@@ -158,9 +169,10 @@ static inline void xr_proc_stats_record_runnable_wait(XrProcStats *stats, XrCoro
                                                       int64_t now) {
     if (!stats || !coro)
         return;
-    if (coro->submit_time <= 0)
+    int64_t submit_time = atomic_load_explicit(&coro->submit_time, memory_order_relaxed);
+    if (submit_time <= 0)
         return;
-    int64_t wait_ms = now - coro->submit_time;
+    int64_t wait_ms = now - submit_time;
     if (wait_ms <= 0)
         return;
     uint64_t wait = (uint64_t) wait_ms;
@@ -185,8 +197,16 @@ XR_FUNC void xr_runq_destroy(XrRunQueue *rq);
 XR_FUNC void xr_runq_enqueue(XrRunQueue *rq, XrCoroutine *coro);
 XR_FUNC XrCoroutine *xr_runq_dequeue(XrRunQueue *rq);
 XR_FUNC int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal);
-XR_FUNC int xr_runq_steal_direct(XrRunQueue *src, XrRunQueue *dst, int max_steal,
-                                 XrCoroutine **out_direct);
+
+typedef enum XrRunqStealStatus {
+    XR_RUNQ_STEAL_EMPTY = 0,
+    XR_RUNQ_STEAL_RETRY = 1,
+    XR_RUNQ_STEAL_SUCCESS = 2,
+} XrRunqStealStatus;
+
+XR_FUNC XrRunqStealStatus xr_runq_steal_direct_status(XrRunQueue *src, XrRunQueue *dst,
+                                                      int max_steal, int *out_stolen,
+                                                      XrCoroutine **out_direct);
 
 static inline int xr_runq_len(XrRunQueue *rq) {
     return xr_steal_queue_size(&rq->deque) + rq->overflow_len;
@@ -218,7 +238,9 @@ typedef struct XrProc {
 
     /* === Per-P Timer Wheel === */
     struct XrTimerWheel *timer_wheel;
-    int64_t last_timer_tick;
+    /* Relaxed atomic: owner read-modify-writes it on every poll; sysmon
+     * peeks it to decide whether a parked owner has overdue timers. */
+    _Atomic int64_t last_timer_tick;
 
     /* === MPSC Inbox (cross-thread coroutine delivery) === */
     XrMPSCQueue inbox;
@@ -281,6 +303,26 @@ typedef struct XrProc {
     int yield_streak;         // Consecutive yields without block/completion (detect compute-bound)
     int64_t steal_backoff_until;
 
+    /* === In-Dispatch Direct Switch (VM interpreter) ===
+     * All three fields are owner-thread only (never written across workers,
+     * unlike per-coroutine VM contexts which can be re-owned the instant a
+     * blocked coroutine is re-readied).
+     *
+     * vm_direct_switch_ok: true only while the worker executes a TOP-LEVEL
+     * run() dispatch (no native caller frame between run() and the worker
+     * loop). Nested run() entries (xr_call_closure, module exec) clear and
+     * restore it so a blocked op there can never switch away — the next
+     * coroutine would otherwise return through a foreign native frame.
+     *
+     * direct_switch_budget bounds consecutive in-run() switches per
+     * scheduler visit (refilled on worker dispatch entry).
+     *
+     * vm_settled_coro is published by the VM backend after run() so worker
+     * result handling can rebind to the coroutine that actually ran last. */
+    bool vm_direct_switch_ok;
+    int direct_switch_budget;
+    XrCoroutine *vm_settled_coro;
+
     /* === Per-Worker I/O Poll (kqueue/epoll fd per worker) === */
     XrLocalPoll local_poll;  // Per-worker kqueue/epoll for IO event collection
 
@@ -292,9 +334,8 @@ typedef struct XrProc {
     uint32_t io_poll_ewma;  // EWMA of I/O event frequency (0-256 fixed-point, 256=always busy)
 
     /* === Scheduler Timestamp Cache === */
-    int64_t sched_time_cache;      // Cached monotonic ms for local enqueue timestamps
-    uint32_t sched_time_budget;    // Remaining local enqueues allowed to reuse the cache
-    uint32_t spawn_share_counter;  // Owner-only fan-out sharing interval counter
+    int64_t sched_time_cache;    // Cached monotonic ms for local enqueue timestamps
+    uint32_t sched_time_budget;  // Remaining local enqueues allowed to reuse the cache
 
     /* === Per-Worker Active Coro Counter (replaces global atomic active_coros) === */
     int local_active_coros;
@@ -319,8 +360,17 @@ typedef struct XrProc {
     struct XrRuntime *runtime;
 
     /* === Idle P linkage === */
-    struct XrProc *idle_link;  // Idle P list link
+    /* Relaxed atomic: Treiber-stack link, same contract as XrMachine. */
+    _Atomic(struct XrProc *) idle_link;  // Idle P list link
 } XrProc;
+
+static inline int64_t xr_proc_last_timer_tick(const XrProc *p) {
+    return atomic_load_explicit(&((XrProc *) p)->last_timer_tick, memory_order_relaxed);
+}
+
+static inline void xr_proc_set_last_timer_tick(XrProc *p, int64_t v) {
+    atomic_store_explicit(&p->last_timer_tick, v, memory_order_relaxed);
+}
 
 static inline int xr_proc_local_runq_len(XrProc *p) {
     if (!p)

@@ -8,12 +8,40 @@
 // - 死锁预防：超时机制
 print("========== 测试10：死锁场景与检测 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
+fn tryRecvValue(ch) {
+    return match (ch.tryRecv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
+fn recvTimeoutValue(ch, timeout_ms) {
+    return match (ch.recvTimeout(timeout_ms)) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
+fn isSent(r: SendResult) -> bool {
+    return match (r) {
+        SendResult.Sent -> true
+        _ -> false
+    }
+}
+
 // 测试1：使用超时接收避免永久阻塞
 fn test_channel_timeout_prevention() {
     let ch = new Channel()
     // 无缓冲 Channel
     // 测试超时接收（无发送者）
-    let received = ch.recvTimeout(100)
+    let received = recvTimeoutValue(ch, 100)
     // 100ms 超时
     // 接收应该返回 null（超时，因为没有发送者）
     print("接收结果（应为 null）:", received)
@@ -30,11 +58,11 @@ fn test_non_blocking_operations() {
     // 应该失败，缓冲区满
     print("第一次发送:", sent1)
     print("第二次发送:", sent2)
-    assert_eq(sent1, true)
-    assert_eq(sent2, false)
+    assert_eq(isSent(sent1), true)
+    assert_eq(isSent(sent2), false)
     // 非阻塞接收
-    let val1 = ch.tryRecv()
-    let val2 = ch.tryRecv()
+    let val1 = tryRecvValue(ch)
+    let val2 = tryRecvValue(ch)
     // 应该返回 null
     print("第一次接收:", val1)
     print("第二次接收:", val2)
@@ -53,7 +81,7 @@ fn test_producer_competition() {
         for (let i = 0; i < 10; i++) {
             // 使用超时发送，避免死锁
             let sent = ch.sendTimeout({ "id" => id, "seq" => i }, 50)
-            if (sent) {
+            if (isSent(sent)) {
                 sent_count = sent_count + 1
             }
         }
@@ -90,7 +118,7 @@ fn test_balanced_producer_consumer() {
     fn consumer() {
         let count = 0
         for (let i = 0; i < 20; i++) {
-            let val = ch.recv()
+            let val = recvValue(ch)
             count = count + 1
         }
         done.send(count)
@@ -99,7 +127,7 @@ fn test_balanced_producer_consumer() {
     let p = go producer()
     let c = go consumer()
     await [p, c]
-    let consumed = done.recv()
+    let consumed = recvValue(done)
     print("消费数量:", consumed)
     assert_eq(consumed, 20)
     print("✓ 生产者-消费者平衡测试通过")
@@ -118,7 +146,7 @@ fn test_semaphore_pattern() {
     // 当前活跃数
     fn worker(id) {
         // 获取令牌
-        let token = sem.recv()
+        let token = recvValue(sem)
         // 模拟工作
         let sum = 0
         for (let i = 0; i < 1000; i++) {
@@ -139,7 +167,7 @@ fn test_semaphore_pattern() {
     // 所有 worker 应该都完成
     let completed = 0
     for (let i = 0; i < 5; i++) {
-        let r = results.tryRecv()
+        let r = tryRecvValue(results)
         if (r != null) {
             completed = completed + 1
         }
@@ -157,10 +185,10 @@ fn test_deadlock_pattern_detection() {
     fn task_a() {
         // 先发 ch1，再收 ch2（但使用超时）
         let sent = ch1.sendTimeout(1, 100)
-        if (!sent) {
+        if (!isSent(sent)) {
             return "a_timeout_send"
         }
-        let val = ch2.recvTimeout(100)
+        let val = recvTimeoutValue(ch2, 100)
         if (val == null) {
             return "a_timeout_recv"
         }
@@ -169,10 +197,10 @@ fn test_deadlock_pattern_detection() {
     fn task_b() {
         // 先发 ch2，再收 ch1（但使用超时）
         let sent = ch2.sendTimeout(2, 100)
-        if (!sent) {
+        if (!isSent(sent)) {
             return "b_timeout_send"
         }
-        let val = ch1.recvTimeout(100)
+        let val = recvTimeoutValue(ch1, 100)
         if (val == null) {
             return "b_timeout_recv"
         }
@@ -196,14 +224,14 @@ fn test_bidirectional_communication() {
     let request = new Channel(1)
     let response = new Channel(1)
     fn server() {
-        let req = request.recv()
+        let req = recvValue(request)
         let resp = req * 2
         response.send(resp)
         return "server done"
     }
     fn client() {
         request.send(21)
-        let resp = response.recv()
+        let resp = recvValue(response)
         return resp
     }
     let s = go server()

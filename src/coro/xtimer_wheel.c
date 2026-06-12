@@ -219,7 +219,7 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
                 // Set to current pos to force full scan on next find_next_timeout
                 tw->soon.min_tpos = tw->pos;
             }
-            if (tw->true_next_timeout_time && p->timeout_pos == tw->next_timeout_pos &&
+            if (tw->true_next_timeout_time && p->timeout_pos == xr_tw_next_pos(tw) &&
                 tw->yield_slot == XR_TW_SLOT_INACTIVE) {
                 tw->true_next_timeout_time = 0;
             }
@@ -230,7 +230,7 @@ static inline void remove_timer(XrTimerWheel *tw, XrTWheelTimer *p) {
                 int64_t tpos = tw->later.min_tpos;
                 tpos &= XR_TW_LATER_WHEEL_POS_MASK;
                 tpos -= XR_TW_LATER_WHEEL_SLOT_SIZE;
-                if (tpos == tw->next_timeout_pos && tw->yield_slot == XR_TW_SLOT_INACTIVE)
+                if (tpos == xr_tw_next_pos(tw) && tw->yield_slot == XR_TW_SLOT_INACTIVE)
                     tw->true_next_timeout_time = 0;
             }
             if (--tw->later.nto == 0) {
@@ -397,7 +397,7 @@ done: {
         true_min_timeout = 0;
     }
 
-    tw->next_timeout_pos = min_timeout_pos;
+    xr_tw_set_next_pos(tw, min_timeout_pos);
     tw->next_timeout_time = min_timeout_pos;
     tw->true_next_timeout_time = true_min_timeout;
 
@@ -672,8 +672,8 @@ XrTimerWheel *xr_timer_wheel_create(XrRuntime *runtime, int owner_worker_id) {
     tw->later.nto = 0;
     tw->yield_slot = XR_TW_SLOT_INACTIVE;
     tw->true_next_timeout_time = 0;
-    tw->next_timeout_pos = tw->pos + XR_TW_TICKS_WEEK;
-    tw->next_timeout_time = tw->next_timeout_pos;
+    xr_tw_set_next_pos(tw, tw->pos + XR_TW_TICKS_WEEK);
+    tw->next_timeout_time = xr_tw_next_pos(tw);
     tw->sentinel.next = &tw->sentinel;
     tw->sentinel.prev = &tw->sentinel;
     atomic_store_explicit(&tw->sentinel.cancel_next, NULL, memory_order_relaxed);
@@ -751,10 +751,10 @@ bool xr_twheel_set_timer(XrTimerWheel *tw, XrTWheelTimer *p, XrTimeoutProc timeo
 
     insert_timer_into_slot(tw, slot, p);
 
-    if (timeout_pos <= tw->next_timeout_pos) {
+    if (timeout_pos <= xr_tw_next_pos(tw)) {
         tw->true_next_timeout_time = 1;
-        if (timeout_pos < tw->next_timeout_pos) {
-            tw->next_timeout_pos = timeout_pos;
+        if (timeout_pos < xr_tw_next_pos(tw)) {
+            xr_tw_set_next_pos(tw, timeout_pos);
             tw->next_timeout_time = timeout_pos;
         }
     }
@@ -825,7 +825,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
         restarted = 0;
         bump_to = curr_time;
         tw->true_next_timeout_time = 1;
-        tw->next_timeout_pos = bump_to;
+        xr_tw_set_next_pos(tw, bump_to);
         tw->next_timeout_time = bump_to;
 
         while (1) {
@@ -834,8 +834,8 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
             if (tw->nto == 0) {
             empty_wheel:
                 tw->true_next_timeout_time = 0;
-                tw->next_timeout_pos = bump_to + XR_TW_TICKS_WEEK;
-                tw->next_timeout_time = tw->next_timeout_pos;
+                xr_tw_set_next_pos(tw, bump_to + XR_TW_TICKS_WEEK);
+                tw->next_timeout_time = xr_tw_next_pos(tw);
                 tw->pos = bump_to;
                 tw->later.pos = bump_to + XR_TW_SOON_WHEEL_SIZE;
                 tw->later.pos &= XR_TW_LATER_WHEEL_POS_MASK;
@@ -931,7 +931,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
             slot = soon_slot(tw->pos + 1);
             tw->pos = bump_to;
 
-            tw->next_timeout_pos = bump_to;
+            xr_tw_set_next_pos(tw, bump_to);
             tw->next_timeout_time = bump_to;
 
             scnt_ix = scnt_get_ix(slot);
@@ -1027,7 +1027,7 @@ void xr_bump_timers(XrTimerWheel *tw, int64_t curr_time) {
     } while (restarted);
 
     tw->true_next_timeout_time = 0;
-    XR_TW_ASSERT(tw->next_timeout_pos == bump_to);
+    XR_TW_ASSERT(xr_tw_next_pos(tw) == bump_to);
 
     (void) find_next_timeout(tw);
     timer_refresh_runtime_mask(tw);
@@ -1040,11 +1040,11 @@ int64_t xr_check_next_timeout_time(XrTimerWheel *tw) {
 
     // No mutex needed - owner worker exclusive access
 
-    XR_TW_ASSERT(tw->next_timeout_time == tw->next_timeout_pos);
+    XR_TW_ASSERT(tw->next_timeout_time == xr_tw_next_pos(tw));
 
     if (tw->true_next_timeout_time) {
         time = tw->next_timeout_time;
-    } else if (tw->next_timeout_pos > tw->pos + XR_TW_SOON_WHEEL_SIZE) {
+    } else if (xr_tw_next_pos(tw) > tw->pos + XR_TW_SOON_WHEEL_SIZE) {
         time = tw->next_timeout_time;
     } else {
         time = find_next_timeout(tw);

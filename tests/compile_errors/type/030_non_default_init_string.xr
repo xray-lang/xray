@@ -1,0 +1,4 @@
+// 030_non_default_init_string.xr
+// Expected: Compile error - string is not default-initializable
+// Error should mention: not default-initializable, requires an explicit initializer
+let s: string

@@ -1,0 +1,4 @@
+import time
+
+time.sleep(0)
+print(7)

@@ -558,10 +558,11 @@ static void xr_log_write_ex(XrLogState *ls, XrLogger *logger, XrLogLevel level, 
     // Async: transfer buffer ownership to queue; Sync: write and free.
     // The mutex prevents setOutput() from closing the FILE* between our
     // read of logger->output and the fwrite/fflush that uses it.
-    if (logger->async_mode && ls && ls->async_initialized) {
+    xr_mutex_lock(&ls->mutex);
+    if (logger->async_mode && ls->async_initialized) {
         async_log_write(ls, b.data);  // ownership transferred
+        xr_mutex_unlock(&ls->mutex);
     } else {
-        xr_mutex_lock(&ls->mutex);
         FILE *out = logger->output ? logger->output : stderr;
         fwrite(b.data, 1, b.len, out);
         // Flush immediately for WARN+ to avoid buffered loss on crash
@@ -692,8 +693,10 @@ static XrValue xr_log_fatal(XrayIsolate *isolate, XrValue *args, int nargs) {
     log_with_source(isolate, XR_LOG_FATAL, msg, attrs, nattrs);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(isolate);
+    xr_mutex_lock(&ls->mutex);
     if (ls->async_initialized)
         async_queue_flush(ls);
+    xr_mutex_unlock(&ls->mutex);
     exit(1);
     return xr_null();  // Unreachable
 }
@@ -744,9 +747,11 @@ static XrValue xr_log_flush(XrayIsolate *isolate, XrValue *args, int nargs) {
 
     XrLogState *ls = log_state_get(isolate);
     XrLogger *logger = &ls->default_logger;
+    xr_mutex_lock(&ls->mutex);
     if (logger->async_mode) {
         async_queue_flush(ls);
     }
+    xr_mutex_unlock(&ls->mutex);
 
     return xr_null();
 }
@@ -820,13 +825,24 @@ static XrValue xr_log_set_output(XrayIsolate *isolate, XrValue *args, int nargs)
     }
 
     xr_mutex_lock(&ls->mutex);
+    bool restart_async = logger->async_mode && ls->async_initialized;
+    if (restart_async) {
+        async_queue_flush(ls);
+        async_queue_stop(ls);
+    }
+
     FILE *old_out = logger->output;
     logger->output = new_out;
+    if (restart_async) {
+        async_queue_init(ls, logger->output);
+        if (!ls->async_initialized) {
+            logger->async_mode = false;
+        }
+    }
     xr_mutex_unlock(&ls->mutex);
 
-    // Close the previous file handle only after the swap so any in-flight
-    // log write that already sampled the old pointer can finish draining
-    // its buffer on stderr-fallback cleanly.
+    // The old async queue has been joined before the swap, and sync writers
+    // are serialized by ls->mutex, so no writer can still hold old_out here.
     if (old_out != NULL && old_out != stderr && old_out != stdout) {
         fclose(old_out);
     }
@@ -1024,8 +1040,10 @@ static XrValue xr_logger_fatal(XrayIsolate *X, XrValue self, XrValue *args, int 
     logger_log_at(X, self, args, n, XR_LOG_FATAL);
     // Flush async queue before exit
     XrLogState *ls = log_state_get(X);
+    xr_mutex_lock(&ls->mutex);
     if (ls->async_initialized)
         async_queue_flush(ls);
+    xr_mutex_unlock(&ls->mutex);
     exit(1);
     return xr_null();
 }

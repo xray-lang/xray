@@ -81,15 +81,19 @@ fn long_task() {
 
 ```xray
 // 使用超时避免死锁
-let sent = ch.sendTimeout(value, 1000)  // 1秒超时
-if (!sent) {
-    print("发送超时，可能存在死锁")
+match (ch.sendTimeout(value, 1000)) {
+    SendResult.Sent -> print("发送成功")
+    SendResult.Timeout -> print("发送超时，可能存在死锁")
+    SendResult.Closed -> print("Channel 已关闭")
+    SendResult.Full -> print("Channel 已满")
 }
 
 // 非阻塞尝试
-let val = ch.tryRecv()
-if (val == null) {
-    print("Channel 为空")
+match (ch.tryRecv()) {
+    Recv.Value(val) -> print("收到:", val)
+    Recv.Empty -> print("Channel 为空")
+    Recv.Closed -> print("Channel 已关闭")
+    Recv.Timeout -> print("接收超时")
 }
 ```
 
@@ -97,8 +101,9 @@ if (val == null) {
 
 监控协程状态：
 - `task.done` - 是否完成
-- `task.cancelled` - 是否被取消
-- `task.result` - 获取结果
+- `task.status` - 当前 `TaskStatus`
+- `task.awaitResult()` - 获取 `TaskResult<T>` 状态值
+- `await task` - 成功时直接返回 `T`，失败或取消时抛异常
 - 使用命名协程便于调试：`go(name: "worker-1") task()`
 
 ```xray
@@ -109,7 +114,7 @@ if (!t.done) {
     print("任务仍在运行")
 }
 
-// 获取结果
-await t
-print("结果:", t.result)
+// 获取成功结果
+let result = await t
+print("结果:", result)
 ```

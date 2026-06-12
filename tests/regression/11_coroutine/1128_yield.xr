@@ -51,8 +51,8 @@ fn test_yield() {
     let w1 = go worker(1)
     let w2 = go worker(2)
     let w3 = go worker(3)
-    await all [w1, w2, w3]
-    print("test3:", w1.result, w2.result, w3.result)
+    let worker_results = await all [w1, w2, w3]
+    print("test3:", worker_results[0], worker_results[1], worker_results[2])
 
     // Test 4: yield inside loop
     let t4 = go loop_yield(5)
@@ -63,8 +63,8 @@ fn test_yield() {
     let t5a = go intensive_yield(10)
     let t5b = go intensive_yield(10)
     let t5c = go intensive_yield(10)
-    await all [t5a, t5b, t5c]
-    print("test5: sums =", t5a.result, t5b.result, t5c.result)
+    let sums = await all [t5a, t5b, t5c]
+    print("test5: sums =", sums[0], sums[1], sums[2])
 }
 
 // 期望输出：

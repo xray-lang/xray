@@ -805,6 +805,8 @@ static bool compile_repeat(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
  */
 static bool compile_capture(XrCompiler *c, XrAstNode *node, XrFragment *frag) {
     int index = node->capture.index;
+    if (index < 0 || index >= XR_RE_MAX_CAPTURES - 1)
+        return false;
 
     // Start capture (+1 because caps[0,1] is full match)
     int cap_start_idx = (index + 1) * 2;

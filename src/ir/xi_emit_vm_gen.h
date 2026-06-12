@@ -103,6 +103,7 @@
     X(AWAIT, xi_emit_await) \
     X(CHAN_SEND, xi_emit_chan_send) \
     X(CHAN_RECV, xi_emit_chan_recv) \
+    X(CHAN_RECV_STATUS, xi_emit_chan_recv_status) \
     X(CHAN_TRY_SEND, xi_emit_chan_try_send) \
     X(CHAN_TRY_RECV, xi_emit_chan_try_recv) \
     X(CHAN_IS_CLOSED, xi_emit_chan_is_closed) \
@@ -138,6 +139,7 @@ static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
         case XI_CALL_METHOD: return true;
         case XI_CALL_METHOD_DIRECT: return true;
         case XI_GO: return true;
+        case XI_CHAN_RECV: return true;
         case XI_CHAN_TRY_RECV: return true;
         case XI_SELECT_BLOCK: return true;
         case XI_OP_COUNT: return false;

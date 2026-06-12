@@ -78,7 +78,9 @@ bool xr_global_register_class(XrGlobalObject *global, const char *name, XrClass 
         return false;
     }
 
-    xr_hashmap_set(global->properties, name, (void *) klass);
+    if (!xr_hashmap_set(global->properties, name, (void *) klass)) {
+        return false;
+    }
 
     global->registered_class_count++;
     return true;

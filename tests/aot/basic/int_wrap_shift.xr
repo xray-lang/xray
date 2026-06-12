@@ -1,0 +1,50 @@
+// VM-AOT diff test: integer wrap and shift semantics must match exactly.
+//
+// AOT-generated C must not rely on raw signed +,-,*,<<,>> (UB on overflow /
+// out-of-range counts). The xrt_i64_* helpers implement the language
+// semantics: two's-complement wrap, shift count mod 64, arithmetic right
+// shift. Any divergence from the VM shows up as a diff failure here.
+
+let max: int = 9223372036854775807
+let min: int = -9223372036854775807 - 1
+
+// Wrap on overflow
+print(max + 1)        // INT64_MIN
+print(min - 1)        // INT64_MAX
+print(max * 2)        // -2
+print(-min)           // INT64_MIN (negate wraps)
+print(min / -1)       // INT64_MIN
+print(min % -1)       // 0
+
+// Shift count mod 64
+let x: int = 12345
+print(x << 64)        // 12345
+print(x << 65)        // 24690
+print(x >> 64)        // 12345
+print(x >> 70)        // 192
+
+// Negative shift count: -1 & 63 == 63
+let one: int = 1
+print(one << -1)      // INT64_MIN
+
+// Arithmetic right shift on negatives
+let neg: int = -8
+print(neg >> 1)       // -4
+print(-1 >> 63)       // -1
+print(min >> 63)      // -1
+
+// Left shift through the sign bit wraps
+print(one << 63)      // INT64_MIN
+print(3 << 63)        // INT64_MIN (only bit 63 survives)
+print(-1 << 1)        // -2
+
+// Runtime-variable counts (defeat constant folding so the emitted
+// arithmetic path is exercised, not just the folded constants)
+let n64: int = 64
+let n65: int = 65
+let nneg: int = -1
+print(x << n64)       // 12345
+print(x << n65)       // 24690
+print(x >> n64)       // 12345
+print(one << nneg)    // INT64_MIN
+print(neg >> (n65 - n64))  // -4

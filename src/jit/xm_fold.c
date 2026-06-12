@@ -201,33 +201,36 @@ static bool fold_int_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, Xm
         }
     }
 
-    // Rule 4: constant folding (both operands known)
+    // Rule 4: constant folding (both operands known).
+    // Must mirror runtime semantics exactly (xi_opt fold, VM, hardware):
+    // uint64 wrap for add/sub/mul/shl, INT64_MIN / -1 = INT64_MIN,
+    // INT64_MIN % -1 = 0, arithmetic right shift, count mod 64.
     if (a_const && b_const) {
         int64_t r = 0;
         bool ok = true;
         switch (op) {
             case XM_ADD:
-                r = va + vb;
+                r = (int64_t) ((uint64_t) va + (uint64_t) vb);
                 break;
             case XM_SUB:
-                r = va - vb;
+                r = (int64_t) ((uint64_t) va - (uint64_t) vb);
                 break;
             case XM_MUL:
-                r = va * vb;
+                r = (int64_t) ((uint64_t) va * (uint64_t) vb);
                 break;
             case XM_DIV:
                 if (vb == 0) {
                     ok = false;
                     break;
                 }
-                r = va / vb;
+                r = (vb == -1) ? (int64_t) (-(uint64_t) va) : va / vb;
                 break;
             case XM_MOD:
                 if (vb == 0) {
                     ok = false;
                     break;
                 }
-                r = va % vb;
+                r = (vb == -1) ? 0 : va % vb;
                 break;
             case XM_AND:
                 r = va & vb;
@@ -239,10 +242,11 @@ static bool fold_int_binary(XmFunc *func, XmBlock *blk, uint16_t op, XmRef a, Xm
                 r = va ^ vb;
                 break;
             case XM_SHL:
-                r = va << (vb & 63);
+                r = (int64_t) ((uint64_t) va << (vb & 63));
                 break;
             case XM_SHR:
-                r = (int64_t) ((uint64_t) va >> (vb & 63));
+                // Arithmetic shift (x64 SAR / arm64 ASR / riscv64 SRA).
+                r = va >> (vb & 63);
                 break;
             case XM_EQ:
                 r = (va == vb) ? 1 : 0;

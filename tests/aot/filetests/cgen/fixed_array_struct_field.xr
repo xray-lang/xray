@@ -1,0 +1,18 @@
+struct Buf {
+    data: [4]uint8
+    bias: int
+}
+
+let buf = Buf{data: [1, 2, 3, 4], bias: 5}
+
+fn run(n: int) -> int {
+    let i = 0
+    while (i < n) {
+        buf.data[0] = i
+        buf.data[1] = buf.data[0]
+        i = i + 1
+    }
+    return buf.data[1]
+}
+
+print(run(10))

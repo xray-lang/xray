@@ -490,7 +490,9 @@ void xr_module_register_native(XrayIsolate *isolate, const char *name, NativeMod
     }
 
     // Store loader function pointer
-    xr_hashmap_set(registry->native_loaders, name, (void *) loader);
+    if (!xr_hashmap_set(registry->native_loaders, name, (void *) loader)) {
+        xr_log_warning("module", "out of memory registering native loader '%s'", name);
+    }
 }
 
 /* ========== Path Resolution ========== */
@@ -632,9 +634,15 @@ static bool load_script_extension(XrayIsolate *isolate, XrModule *module, const 
 
     /*
      * Temporarily register module to cache, so import <module_name> in extension script
-     * can get the module being loaded (containing C layer exports)
+     * can get the module being loaded (containing C layer exports).
+     * On OOM the extension could re-enter the loader and recurse, so skip
+     * the extension layer entirely (C exports remain usable).
      */
-    xr_hashmap_set(registry->loaded_modules, module_name, module);
+    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
+        xr_log_warning("module", "out of memory caching module '%s'; skipping script extension",
+                       module_name);
+        return false;
+    }
 
     // Set current module context (export will be added to this module)
     XrModule *prev_module = xr_isolate_get_current_module(isolate);
@@ -771,9 +779,13 @@ static XrModule *load_native_module(XrayIsolate *isolate, const char *module_nam
 
     // 2. Add to cache BEFORE loading script extension
     //    This prevents circular dependency when extension imports itself (e.g., "import ws as
-    //    _native")
+    //    _native"). An uncached module would break module identity (later
+    //    imports would re-run the loader), so treat OOM here as load failure.
     module->loading = true;
-    xr_hashmap_set(registry->loaded_modules, module_name, module);
+    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
+        xr_log_warning("module", "out of memory caching native module '%s'", module_name);
+        return NULL;
+    }
 
     // 3. Load xray script extension layer (optional)
     if (!load_script_extension(isolate, module, module_name)) {
@@ -995,11 +1007,15 @@ static XrModule *try_load_native_package(XrayIsolate *isolate, const char *modul
     // their own per-module context pointers.
     module->native_handle = (void *) handle;
 
-    // 9. Cache and finalize
+    // 9. Cache and finalize. An uncached module breaks identity for later
+    // imports (the loader would run again), so OOM fails the load.
     XrModuleRegistry *registry = (XrModuleRegistry *) xr_isolate_get_module_registry(isolate);
     XR_DCHECK(registry != NULL, "try_load_native_package: NULL registry");
     module->loading = true;
-    xr_hashmap_set(registry->loaded_modules, module_name, module);
+    if (!xr_hashmap_set(registry->loaded_modules, module_name, module)) {
+        xr_log_warning("module", "out of memory caching native package '%s'", module_name);
+        return NULL;
+    }
     xr_module_build_export_index(module);
     module->loading = false;
     module->loaded = true;
@@ -1122,9 +1138,15 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
         /*
          * Use absolute path as cache key
          * Note: hashmap doesn't copy key, so path ownership transfers to hashmap
-         * Don't free path, it will be freed with hashmap when module system is destroyed
+         * Don't free path, it will be freed with hashmap when module system is destroyed.
+         * The cache entry is the circular-import breaker: without it a
+         * self-import would recurse forever, so OOM fails the import.
          */
-        xr_hashmap_set(registry->loaded_modules, path, module);
+        if (!xr_hashmap_set(registry->loaded_modules, path, module)) {
+            xr_log_warning("module", "out of memory caching module '%s'", module_name);
+            xr_free(path);
+            return xr_null();
+        }
 
         XrModule *loaded = load_script_module(isolate, module, path);
 
@@ -1133,8 +1155,10 @@ XrValue xr_module_import(XrayIsolate *isolate, const char *module_name) {
             // path now owned by hashmap, do not free
             return xr_value_from_module(module);
         } else {
-            // Loading failed, remove from cache and free path
-            xr_hashmap_set(registry->loaded_modules, path, NULL);
+            // Loading failed: remove the entry (delete clears the key
+            // pointer; a value-NULL overwrite would leave the soon-freed
+            // path dangling inside the map) and free the path.
+            xr_hashmap_delete(registry->loaded_modules, path);
             xr_free(path);
             return xr_null();
         }

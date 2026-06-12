@@ -112,7 +112,7 @@ XR_FUNC void xi_pass_close(XiFunc *f);
 typedef struct {
     uint32_t value_id; /* Xi IR value ID (XiValue.id) */
     uint32_t bc_pc;    /* bytecode PC where this assignment takes effect */
-    uint8_t bc_slot;   /* bytecode register R[0..255] */
+    uint8_t bc_slot;   /* bytecode register R[0..254], or 255 for PC-only anchors */
     uint8_t xr_tag;    /* XR_TAG_* (NULL=0, BOOL=1, I64=3, F64=4, PTR=5) */
 } XiSlotMapEntry;
 

@@ -20,6 +20,13 @@ print("任务总数:", TASKS)
 shared const task_ch = Channel(1000)
 shared const result_ch = Channel(1000)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 模拟 CPU 工作：计算斐波那契（小规模）
 fn fib(n: int) -> int {
     if (n <= 1) { return n }
@@ -45,8 +52,8 @@ fn expected_checksum(count: int) -> int {
 fn worker(id: int) -> int {
     let processed = 0
     while (true) {
-        let task = task_ch.recv()
-        if (task == null) { break }
+        let task = recv_int(task_ch, -1)
+        if (task < 0) { break }
         // task 是一个整数，计算 fib(task % 20)
         let result = fib(task % 20)
         result_ch.send(result)
@@ -77,7 +84,7 @@ let submitter = go submit_tasks(TASKS)
 // 收集结果
 let total = 0
 for (let i = 0; i < TASKS; i++) {
-    total = total + result_ch.recv()
+    total = total + recv_int(result_ch, 0)
 }
 await submitter
 

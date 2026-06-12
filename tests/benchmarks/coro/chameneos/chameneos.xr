@@ -36,24 +36,41 @@ fn complement(c1: int, c2: int) -> int {
 // The request channel can hold one pending request per participant so the
 // broker can stop everyone without depending on close waking blocked senders.
 shared const request_ch = Channel(N_CHAMENEOS)   // chameneo sends: [id, color, reply]
-shared const done_ch = Channel(100)    // report results
+shared const done_ch: Channel<int> = Channel(100)    // report results
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
 
 // Broker: pairs up chameneos for N meetings
 fn broker(meetings: int, participants: int) {
     for (let i = 0; i < meetings; i++) {
-        let first = request_ch.recv()
-        let second = request_ch.recv()
-        if (first == null || second == null) { break }
-        // Exchange colors via their response channels
-        first[2].send(second[1])
-        second[2].send(first[1])
+        let first_result = request_ch.recv()
+        let second_result = request_ch.recv()
+        match (first_result) {
+            Recv.Value(first) -> {
+                match (second_result) {
+                    Recv.Value(second) -> {
+                        // Exchange colors via their response channels
+                        first[2].send(second[1])
+                        second[2].send(first[1])
+                    }
+                    _ -> { break }
+                }
+            }
+            _ -> { break }
+        }
     }
 
     // Ask every participant to stop after it submits its next request.
     for (let i = 0; i < participants; i++) {
-        let req = request_ch.recv()
-        if (req == null) { break }
-        req[2].send(-1)
+        match (request_ch.recv()) {
+            Recv.Value(req) -> req[2].send(-1)
+            _ -> { break }
+        }
     }
     request_ch.close()
 }
@@ -62,7 +79,7 @@ fn broker(meetings: int, participants: int) {
 fn chameneo(id: int, initial_color: int) {
     let color = initial_color
     let meetings = 0
-    shared const reply_ch = Channel(1)
+    shared const reply_ch: Channel<int> = Channel(1)
 
     while (true) {
         try {
@@ -70,7 +87,7 @@ fn chameneo(id: int, initial_color: int) {
         } catch (e) {
             break  // channel closed by broker
         }
-        let partner_color = int(reply_ch.recv()) ?? -1
+        let partner_color = recv_int(reply_ch, -1)
         if (partner_color < 0) { break }
         color = complement(color, partner_color)
         meetings++
@@ -96,8 +113,7 @@ for (let i = 0; i < N_CHAMENEOS; i++) {
 // Collect results
 let total_meetings = 0
 for (let i = 0; i < N_CHAMENEOS; i++) {
-    let m = done_ch.recv()
-    total_meetings = total_meetings + (int(m) ?? 0)
+    total_meetings = total_meetings + recv_int(done_ch, 0)
 }
 
 await broker_task

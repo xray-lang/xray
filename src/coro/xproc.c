@@ -14,6 +14,7 @@
 
 #include "xproc.h"
 #include "../base/xchecks.h"
+#include "xcoro_tuning.h"
 #include "xmachine.h"
 #include "xworker.h"
 #include "xtimer_wheel.h"
@@ -43,7 +44,7 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
 
     // Timer wheel created later (needs runtime fully initialized)
     p->timer_wheel = NULL;
-    p->last_timer_tick = 0;
+    atomic_store_explicit(&p->last_timer_tick, 0, memory_order_relaxed);
 
     // Load balancing
     p->check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
@@ -65,11 +66,16 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
     xr_steal_queue_init(&p->cont_deque, 64);
     p->yield_streak = 0;
 
+    // In-dispatch direct switch (refilled on every worker dispatch entry)
+    p->vm_direct_switch_ok = false;
+    p->direct_switch_budget = XR_FAST_DISPATCH_BUDGET;
+    p->vm_settled_coro = NULL;
+
     // Statistics
     memset(&p->stats, 0, sizeof(p->stats));
     // RNG seed set later when runtime is fully initialized
 
-    p->idle_link = NULL;
+    atomic_store_explicit(&p->idle_link, NULL, memory_order_relaxed);
 }
 
 void xr_proc_destroy(XrProc *p) {
@@ -135,10 +141,10 @@ XrProc *xr_get_idle_p(struct XrRuntime *runtime) {
         XrProc *head = atomic_load_explicit(&runtime->idle_p_head, memory_order_acquire);
         if (!head)
             return NULL;
-        XrProc *next = head->idle_link;
+        XrProc *next = atomic_load_explicit(&head->idle_link, memory_order_relaxed);
         if (atomic_compare_exchange_weak_explicit(&runtime->idle_p_head, &head, next,
                                                   memory_order_acq_rel, memory_order_acquire)) {
-            head->idle_link = NULL;
+            atomic_store_explicit(&head->idle_link, NULL, memory_order_relaxed);
             atomic_fetch_sub_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);
             return head;
         }
@@ -156,7 +162,7 @@ void xr_put_idle_p(struct XrRuntime *runtime, XrProc *p) {
     XrProc *head;
     do {
         head = atomic_load_explicit(&runtime->idle_p_head, memory_order_relaxed);
-        p->idle_link = head;
+        atomic_store_explicit(&p->idle_link, head, memory_order_relaxed);
     } while (!atomic_compare_exchange_weak_explicit(&runtime->idle_p_head, &head, p,
                                                     memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&runtime->idle_p_count, 1, memory_order_relaxed);

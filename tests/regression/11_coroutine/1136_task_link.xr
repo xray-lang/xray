@@ -1,4 +1,4 @@
-// Test task.link() / task.unlink() bidirectional association
+// Test plain await and TaskResult status for failed/cancelled tasks
 
 import time
 
@@ -9,40 +9,32 @@ fn failing() -> int {
     return 0
 }
 fn slow_work() -> int {
-    // Park on a cooperative cancel point. The peer task throws almost
-    // immediately, and the resulting xr_task_cancel_tree must be able to
-    // unblock us so that `await` observes a cancelled (null) result.
-    // A tight CPU loop without a cancel point would let us race past the
-    // peer's failure and finish normally — the assertion below would then
-    // observe the body's return value instead of the cancellation signal.
     time.sleep(50)
     return 1
 }
 fn ok() -> int {
     return 42
 }
-fn test_link_cancel() {
-    let t1 = go slow_work()
-    let t2 = go failing()
-    t1.link(t2)
-    let r1 = await t1
-    let r2 = await t2
-    assert(r1 == null, "linked peer should be cancelled when other fails")
+fn test_cancel_result() {
+    let t = go slow_work()
+    t.cancel()
+    let r = t.awaitResult()
+    match (r) {
+        TaskResult.Cancelled -> assert(true, "cancelled task should return TaskResult.Cancelled")
+        _ -> assert(false, "cancelled task should not return a value")
+    }
 }
-fn test_unlink() {
+fn test_failed_result() {
+    let t = go failing()
+    let r = t.awaitResult()
+    match (r) {
+        TaskResult.Failed(_) -> assert(true, "failed task should return TaskResult.Failed")
+        _ -> assert(false, "failed task should not return success")
+    }
+}
+fn test_both_ok() {
     let t1 = go ok()
     let t2 = go ok()
-    t1.link(t2)
-    t1.unlink(t2)
-    let r1 = await t1
-    let r2 = await t2
-    assert(r1 == 42, "unlinked tasks should complete normally")
-    assert(r2 == 42)
-}
-fn test_link_both_ok() {
-    let t1 = go ok()
-    let t2 = go ok()
-    t1.link(t2)
     let r1 = await t1
     let r2 = await t2
     assert(r1 == 42)
@@ -54,14 +46,13 @@ fn test_task_link() {
 
 
 
-    // Test 1: task.link() — when one fails, linked peer gets cancelled
+    // Test 1: explicit cancellation reports TaskResult.Cancelled
 
-    // Test 2: task.unlink() — basic API works without crash
+    // Test 2: failure reports TaskResult.Failed
 
-    // Test 3: both succeed — link has no effect
+    // Test 3: both succeed
 
-    test_link_cancel()
-    test_unlink()
-    test_link_both_ok()
+    test_cancel_result()
+    test_failed_result()
+    test_both_ok()
 }
-

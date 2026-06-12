@@ -188,7 +188,7 @@ TEST(aot_coroutine_maps_block_error_and_cancel_to_common_run_results) {
     };
     XrCoroRunResult block_result = blocked->backend->resume(blocked, NULL, &run_ctx);
     ASSERT_EQ_INT(block_result.kind, XR_CORO_RUN_BLOCKED);
-    ASSERT_EQ_INT(atomic_load(&blocked->coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_flag_to_state(atomic_load(&blocked->flags)), XR_CORO_STATE_BLOCKED);
     ASSERT_TRUE(xr_coro_flags_has(blocked, XR_CORO_FLG_BLOCKED));
     ASSERT_FALSE(xr_coro_flags_has(blocked, XR_CORO_FLG_RUNNING));
 

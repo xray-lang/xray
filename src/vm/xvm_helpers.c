@@ -283,6 +283,10 @@ void xr_vm_vm_init(XrayIsolate *isolate) {
             isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
                 xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
         }
+        if (isolate->native_type_classes[XR_TRESULTGROUP]) {
+            isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
+                xr_value_from_class(isolate->native_type_classes[XR_TRESULTGROUP]);
+        }
 
         // process/__file__/__dir__ indices 5/6/7, user global variables start from
         // XR_USER_GLOBALS_START

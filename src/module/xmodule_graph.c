@@ -109,7 +109,16 @@ static int graph_add_spec(XrModuleGraph *g, const char *canonical, const char *s
     s->topo_index = -1;
     s->scc_id = -1;
 
-    xr_hashmap_set(g->id_index, s->canonical, (void *) (intptr_t) (idx + 1));
+    /* An unindexed spec would let the same canonical id be added twice,
+     * so roll the slot back instead of leaving a half-registered entry. */
+    if (!s->canonical ||
+        !xr_hashmap_set(g->id_index, s->canonical, (void *) (intptr_t) (idx + 1))) {
+        xr_free(s->canonical);
+        xr_free(s->source_path);
+        memset(s, 0, sizeof(*s));
+        g->spec_count--;
+        return -1;
+    }
     return idx;
 }
 

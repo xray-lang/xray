@@ -73,55 +73,65 @@ typedef enum {
     XM_HELPER_rc_drop_reuse = 36,
     XM_HELPER_rc_alloc_at = 37,
     XM_HELPER_throw = 38,
-    XM_HELPER_is_type = 39,
-    XM_HELPER_checktype = 40,
-    XM_HELPER_typename = 41,
-    XM_HELPER_typeof = 42,
-    XM_HELPER_deep_copy = 43,
-    XM_HELPER_chr = 44,
-    XM_HELPER_substring = 45,
-    XM_HELPER_str_repeat = 46,
-    XM_HELPER_tostring = 47,
-    XM_HELPER_strbuf_new = 48,
-    XM_HELPER_strbuf_append = 49,
-    XM_HELPER_strbuf_finish = 50,
-    XM_HELPER_new_struct = 51,
-    XM_HELPER_struct_get = 52,
-    XM_HELPER_struct_set = 53,
-    XM_HELPER_struct_copy = 54,
-    XM_HELPER_rt_array_new = 55,
-    XM_HELPER_rt_array_push = 56,
-    XM_HELPER_rt_array_len = 57,
-    XM_HELPER_rt_map_new = 58,
-    XM_HELPER_newrange = 59,
-    XM_HELPER_range_unpack = 60,
-    XM_HELPER_newset = 61,
-    XM_HELPER_tuple_new = 62,
-    XM_HELPER_tuple_get = 63,
-    XM_HELPER_slice = 64,
-    XM_HELPER_bytes_new = 65,
-    XM_HELPER_enum_access = 66,
-    XM_HELPER_enum_name = 67,
-    XM_HELPER_enum_convert = 68,
-    XM_HELPER_print = 69,
-    XM_HELPER_dump = 70,
-    XM_HELPER_assert = 71,
-    XM_HELPER_assert_eq = 72,
-    XM_HELPER_assert_ne = 73,
-    XM_HELPER_chan_new = 74,
-    XM_HELPER_chan_close = 75,
-    XM_HELPER_chan_is_closed = 76,
-    XM_HELPER_chan_try_send = 77,
-    XM_HELPER_chan_try_recv = 78,
-    XM_HELPER_chan_send = 79,
-    XM_HELPER_chan_send_block = 80,
-    XM_HELPER_chan_recv = 81,
-    XM_HELPER_chan_recv_block = 82,
-    XM_HELPER_scope_enter = 83,
-    XM_HELPER_scope_exit = 84,
-    XM_HELPER_go = 85,
-    XM_HELPER_await = 86,
-    XM_HELPER_await_block = 87,
+    XM_HELPER_pending_error_tag = 39,
+    XM_HELPER_is_type = 40,
+    XM_HELPER_checktype = 41,
+    XM_HELPER_typename = 42,
+    XM_HELPER_typeof = 43,
+    XM_HELPER_deep_copy = 44,
+    XM_HELPER_chr = 45,
+    XM_HELPER_substring = 46,
+    XM_HELPER_str_repeat = 47,
+    XM_HELPER_tostring = 48,
+    XM_HELPER_strbuf_new = 49,
+    XM_HELPER_strbuf_append = 50,
+    XM_HELPER_strbuf_finish = 51,
+    XM_HELPER_new_struct = 52,
+    XM_HELPER_struct_get = 53,
+    XM_HELPER_struct_set = 54,
+    XM_HELPER_struct_copy = 55,
+    XM_HELPER_rt_array_new = 56,
+    XM_HELPER_rt_array_push = 57,
+    XM_HELPER_rt_array_len = 58,
+    XM_HELPER_rt_map_new = 59,
+    XM_HELPER_newrange = 60,
+    XM_HELPER_range_unpack = 61,
+    XM_HELPER_newset = 62,
+    XM_HELPER_tuple_new = 63,
+    XM_HELPER_tuple_get = 64,
+    XM_HELPER_slice = 65,
+    XM_HELPER_bytes_new = 66,
+    XM_HELPER_enum_access = 67,
+    XM_HELPER_enum_name = 68,
+    XM_HELPER_enum_convert = 69,
+    XM_HELPER_print = 70,
+    XM_HELPER_dump = 71,
+    XM_HELPER_assert = 72,
+    XM_HELPER_assert_eq = 73,
+    XM_HELPER_assert_ne = 74,
+    XM_HELPER_chan_new = 75,
+    XM_HELPER_chan_close = 76,
+    XM_HELPER_chan_is_closed = 77,
+    XM_HELPER_chan_try_send = 78,
+    XM_HELPER_chan_try_recv = 79,
+    XM_HELPER_chan_method_try_send = 80,
+    XM_HELPER_chan_method_try_recv = 81,
+    XM_HELPER_chan_method_close = 82,
+    XM_HELPER_chan_method_is_closed = 83,
+    XM_HELPER_chan_method_send = 84,
+    XM_HELPER_chan_method_send_block = 85,
+    XM_HELPER_chan_method_recv = 86,
+    XM_HELPER_chan_method_recv_block = 87,
+    XM_HELPER_chan_method_recv_wrap = 88,
+    XM_HELPER_chan_send = 89,
+    XM_HELPER_chan_send_block = 90,
+    XM_HELPER_chan_recv = 91,
+    XM_HELPER_chan_recv_block = 92,
+    XM_HELPER_scope_enter = 93,
+    XM_HELPER_scope_exit = 94,
+    XM_HELPER_go = 95,
+    XM_HELPER_await = 96,
+    XM_HELPER_await_block = 97,
     XM_HELPER__COUNT
 } XmHelperId;
 
@@ -347,6 +357,11 @@ typedef struct {
 #define XM_HELPER_FLAGS_throw (XM_HF_THROW | XM_HF_STACKMAP)
 #define XM_HELPER_POINTER_TRUST_throw XM_HPT_NONE
 #define XM_HELPER_POST_CALL_throw (XM_HPC_THROW)
+#define XM_HELPER_RET_REP_pending_error_tag XR_REP_I64
+#define XM_HELPER_NARGS_pending_error_tag 0
+#define XM_HELPER_FLAGS_pending_error_tag 0
+#define XM_HELPER_POINTER_TRUST_pending_error_tag XM_HPT_NONE
+#define XM_HELPER_POST_CALL_pending_error_tag 0
 #define XM_HELPER_RET_REP_is_type XR_REP_I64
 #define XM_HELPER_NARGS_is_type 1
 #define XM_HELPER_FLAGS_is_type 0
@@ -547,6 +562,53 @@ typedef struct {
 #define XM_HELPER_FLAGS_chan_try_recv 0
 #define XM_HELPER_POINTER_TRUST_chan_try_recv XM_HPT_GC
 #define XM_HELPER_POST_CALL_chan_try_recv 0
+#define XM_HELPER_RET_REP_chan_method_try_send XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_try_send 0
+#define XM_HELPER_FLAGS_chan_method_try_send (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_try_send XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_try_send 0
+#define XM_HELPER_RET_REP_chan_method_try_recv XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_try_recv 0
+#define XM_HELPER_FLAGS_chan_method_try_recv (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_try_recv XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_try_recv 0
+#define XM_HELPER_RET_REP_chan_method_close XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_close 0
+#define XM_HELPER_FLAGS_chan_method_close 0
+#define XM_HELPER_POINTER_TRUST_chan_method_close XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_close 0
+#define XM_HELPER_RET_REP_chan_method_is_closed XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_is_closed 0
+#define XM_HELPER_FLAGS_chan_method_is_closed 0
+#define XM_HELPER_POINTER_TRUST_chan_method_is_closed XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_method_is_closed 0
+#define XM_HELPER_RET_REP_chan_method_send XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_send 0
+#define XM_HELPER_FLAGS_chan_method_send                                                           \
+    (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_send XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_send (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_method_send_block XR_REP_VOID
+#define XM_HELPER_NARGS_chan_method_send_block 0
+#define XM_HELPER_FLAGS_chan_method_send_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_send_block XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_method_send_block (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_method_recv XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_recv 0
+#define XM_HELPER_FLAGS_chan_method_recv                                                           \
+    (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_recv XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_recv (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_method_recv_block XR_REP_VOID
+#define XM_HELPER_NARGS_chan_method_recv_block 0
+#define XM_HELPER_FLAGS_chan_method_recv_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_recv_block XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_method_recv_block (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_method_recv_wrap XR_REP_TAGGED
+#define XM_HELPER_NARGS_chan_method_recv_wrap 1
+#define XM_HELPER_FLAGS_chan_method_recv_wrap (XM_HF_GC | XM_HF_STACKMAP)
+#define XM_HELPER_POINTER_TRUST_chan_method_recv_wrap XM_HPT_GC
+#define XM_HELPER_POST_CALL_chan_method_recv_wrap 0
 #define XM_HELPER_RET_REP_chan_send XR_REP_TAGGED
 #define XM_HELPER_NARGS_chan_send 0
 #define XM_HELPER_FLAGS_chan_send (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
@@ -659,6 +721,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     [XM_HELPER_rc_drop_reuse] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_rc_alloc_at] = {XR_REP_PTR, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_throw] = {XR_REP_VOID, 1, XM_HF_THROW | XM_HF_STACKMAP, XM_HPT_NONE, XM_HPC_THROW},
+    [XM_HELPER_pending_error_tag] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_is_type] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_checktype] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_typename] = {XR_REP_PTR, 1, 0, XM_HPT_GC, 0},
@@ -701,6 +764,23 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     [XM_HELPER_chan_is_closed] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_chan_try_send] = {XR_REP_I64, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_chan_try_recv] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_chan_method_try_send] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_chan_method_try_recv] = {XR_REP_TAGGED, 0, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_chan_method_close] = {XR_REP_TAGGED, 0, 0, XM_HPT_GC, 0},
+    [XM_HELPER_chan_method_is_closed] = {XR_REP_TAGGED, 0, 0, XM_HPT_NONE, 0},
+    [XM_HELPER_chan_method_send] = {XR_REP_TAGGED, 0,
+                                    XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                    XM_HPT_GC, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_method_send_block] = {XR_REP_VOID, 0,
+                                          XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                          XM_HPT_NONE, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_method_recv] = {XR_REP_TAGGED, 0,
+                                    XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                    XM_HPT_GC, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_method_recv_block] = {XR_REP_VOID, 0,
+                                          XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
+                                          XM_HPT_NONE, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_method_recv_wrap] = {XR_REP_TAGGED, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     [XM_HELPER_chan_send] = {XR_REP_TAGGED, 0,
                              XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP, XM_HPT_GC,
                              XM_HPC_SUSPEND},
@@ -765,6 +845,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(rc_drop_reuse)                                                                               \
     _(rc_alloc_at)                                                                                 \
     _(throw)                                                                                       \
+    _(pending_error_tag)                                                                           \
     _(is_type)                                                                                     \
     _(checktype)                                                                                   \
     _(typename)                                                                                    \
@@ -805,6 +886,15 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(chan_is_closed)                                                                              \
     _(chan_try_send)                                                                               \
     _(chan_try_recv)                                                                               \
+    _(chan_method_try_send)                                                                        \
+    _(chan_method_try_recv)                                                                        \
+    _(chan_method_close)                                                                           \
+    _(chan_method_is_closed)                                                                       \
+    _(chan_method_send)                                                                            \
+    _(chan_method_send_block)                                                                      \
+    _(chan_method_recv)                                                                            \
+    _(chan_method_recv_block)                                                                      \
+    _(chan_method_recv_wrap)                                                                       \
     _(chan_send)                                                                                   \
     _(chan_send_block)                                                                             \
     _(chan_recv)                                                                                   \

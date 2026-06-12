@@ -1,9 +1,19 @@
 // 协程系统综合测试
 // 作者：xingleixu@gmail.com
-// 展示：go, await, task.cancel(), task.done, task.cancelled, task.result, defer, Channel, select
+// 展示：go, await, task.cancel(), task.done, task.status, TaskResult, Channel, select
+
+fn recv_int(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
 
 fn blocked(ch: Channel<int>) -> int {
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 @test
@@ -16,18 +26,22 @@ fn test_main() {
     // === 2. 状态检查（await 后确定性） ===
     print("=== status ===")
     let task2 = go { return 100 }
-    await task2
+    let task2_result = await task2
     print("done:", task2.done)
-    print("result:", task2.result)
+    print("status:", task2.status)
+    print("result:", task2_result)
 
     // === 3. 取消协程（channel-blocked 保证未完成） ===
     print("=== cancel ===")
     const cancel_ch = new Channel<int>(0)
     let task3 = go blocked(cancel_ch)
     task3.cancel()
-    let result3 = await task3
-    print("cancelled:", task3.cancelled)
-    print("cancelled result:", result3)
+    let result3 = task3.awaitResult()
+    print("cancelled:", match (result3) {
+        TaskResult.Cancelled -> true
+        _ -> false
+    })
+    print("cancelled status:", task3.status)
     cancel_ch.close()
 
     // === 4. Channel 通信 ===
@@ -36,7 +50,7 @@ fn test_main() {
     ch.trySend(1)
     ch.trySend(2)
     ch.trySend(3)
-    print("recv:", ch.tryRecv(), ch.tryRecv(), ch.tryRecv())
+    print("recv:", recv_int(ch.tryRecv()), recv_int(ch.tryRecv()), recv_int(ch.tryRecv()))
 
     // === 5. defer 清理 ===
     print("=== defer ===")

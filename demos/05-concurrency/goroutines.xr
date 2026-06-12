@@ -42,4 +42,5 @@ print("first finished: ${first}")
 let task = go compute("check", 10)
 let val = await task
 print("task.done: ${task.done}")
-print("task.result: ${task.result}")
+print("task.status: ${task.status}")
+print("task.awaitResult: ${task.awaitResult()}")

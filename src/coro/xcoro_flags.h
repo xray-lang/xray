@@ -8,40 +8,31 @@
  * xcoro_flags.h - Coroutine state and flags management
  *
  * KEY CONCEPT:
- *   State is split into two fields for lock-free transitions:
- *   - coro_state (uint8_t atomic): mutually exclusive READY/RUNNING/BLOCKED/DONE
- *     State transitions use atomic_store (O(1), no CAS loop).
- *   - flags (uint32_t atomic): wait_reason + mark flags
- *     Marks use atomic OR/AND (no CAS contention with state transitions).
- *
- *   The flags field also shadows state bits for snapshot-style reads.
+ *   The whole scheduling state machine lives in ONE atomic uint32 (flags):
+ *   a one-hot state field (READY/RUNNING/BLOCKED/DONE), the wait reason,
+ *   and the mark flags. Every state transition is a single CAS; pure mark
+ *   updates are a single fetch_or/fetch_and.
  *
  * WHY THIS DESIGN:
- *   - A single 32-bit state word makes all transitions use a CAS loop.
- *     CAS fails when unrelated fields (e.g. sysmon sets CANCEL_REQUESTED)
- *     modify the same word concurrently — unnecessary retries on hot path.
- *   - Split state transitions are single-byte atomic stores (zero retry).
- *     Mark modifications (OR/AND) don't contend with state transitions.
+ *   - One word means one source of truth: a successful CAS both decides a
+ *     race (wake claim, block publish) and makes the result visible. No
+ *     shadow synchronization, no dual-field ordering rules.
+ *   - Per transition this is exactly 1 atomic RMW. Concurrent mark writers
+ *     (sysmon CANCEL_REQUESTED, GC marks) can force a CAS retry, but those
+ *     writes are rare; retries are bounded and cheaper than the 2-3 extra
+ *     RMWs the previous split-field protocol paid on every transition.
  *
- * CORO_STATE FIELD (uint8_t atomic — authoritative):
- *   +-------+
- *   |  7-0  |
- *   +-------+
- *   | state |  NONE=0, READY=1, RUNNING=2, BLOCKED=3, DONE=4
- *   +-------+
- *   Mutually exclusive. Transitions: atomic_store (O(1), no CAS).
- *
- * FLAGS FIELD BIT LAYOUT (uint32_t atomic — marks + shadow):
+ * FLAGS FIELD BIT LAYOUT (uint32_t atomic — single authority):
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
  *   | 31-23 |  22   | 21-20 | 19-16 | 15-12 | 11-8  |  7-4  |  3-0  |
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
- *   | resv  | SLAB  | marks | marks | marks |shadow | wait  | resv  |
+ *   | resv  | SLAB  | marks | marks | marks | state | wait  | resv  |
  *   +-------+-------+-------+-------+-------+-------+-------+-------+
  *
  *   bits 0-3:   Reserved
  *   bits 4-7:   Wait reason (NONE, CHANNEL_SEND, CHANNEL_RECV, AWAIT, ...)
- *   bits 8-11:  State shadow (READY/RUNNING/BLOCKED/DONE)
- *               NOTE: shadow only, authoritative source is coro_state
+ *   bits 8-11:  State field, one-hot (READY/RUNNING/BLOCKED/DONE);
+ *               all bits clear = NONE (not yet scheduled / recycled)
  *   bit  12:    CANCELLED
  *   bit  13:    IN_RUNQ
  *   bit  14:    GC
@@ -54,6 +45,10 @@
  *   bit  21:    CANCEL_REQUESTED (sysmon → worker)
  *   bit  22:    SLAB_STACK (arena slab allocation)
  *   bits 23-31: Reserved
+ *
+ * INVARIANT (one-hot state): at most one of READY/RUNNING/BLOCKED/DONE is
+ * set at any time. Every primitive that sets a state bit clears the whole
+ * state field in the same CAS, so the invariant holds by construction.
  */
 
 #ifndef XCORO_FLAGS_H
@@ -63,7 +58,12 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ========== Authoritative State (coro_state field) ========== */
+/* ========== State Enum (snapshot/diagnostics representation) ==========
+ *
+ * The authoritative encoding is the one-hot state field inside flags.
+ * The enum form is kept for compact snapshots (XrCoroBlockSnapshot) and
+ * debugger/DAP display. Convert with xr_state_to_flag / xr_flag_to_state.
+ */
 
 #define XR_CORO_STATE_NONE 0
 #define XR_CORO_STATE_READY 1
@@ -87,6 +87,7 @@
 #define XR_CORO_WAIT_SCOPE (8 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_AWAIT_ANY (9 << XR_CORO_WAIT_SHIFT)
 #define XR_CORO_WAIT_WORKQUEUE (10 << XR_CORO_WAIT_SHIFT)
+#define XR_CORO_WAIT_RESULTGROUP (11 << XR_CORO_WAIT_SHIFT)
 
 /* ========== State Flags (shadow bits 8-11, mark bits 12+) ========== */
 
@@ -138,124 +139,80 @@ static inline uint8_t xr_flag_to_state(uint32_t flag_bit) {
     return XR_CORO_STATE_NONE;
 }
 
-/* ========== State Operations (route through coro_state) ========== */
+/* ========== State Operations (single-word authority) ========== */
 
 /*
- * Load flags with state bits reconstructed from authoritative coro_state.
- * Returns a 32-bit value compatible with all existing flag-checking code.
- * Plain expression macro (no statement-expression / temp variable) so
- * MSVC compiles it; the two atomic loads are evaluated at distinct
- * points in the expanded expression, no shared temp is required.
+ * Load the full state word. One acquire load; the returned value carries
+ * the one-hot state field, the wait reason, and all marks.
  */
-#define xr_coro_flags_load(coro)                                                                   \
-    ((uint32_t) ((atomic_load_explicit(&(coro)->flags, memory_order_acquire) &                     \
-                  ~(uint32_t) XR_CORO_STATE_FLAG_MASK) |                                           \
-                 xr_state_to_flag(                                                                 \
-                     atomic_load_explicit(&(coro)->coro_state, memory_order_acquire))))
+#define xr_coro_flags_load(coro) atomic_load_explicit(&(coro)->flags, memory_order_acquire)
 
 /*
- * Set flag bits. If any state bit (READY/RUNNING/BLOCKED/DONE) is included,
- * update coro_state with atomic store (no CAS needed for exclusive states).
- * All bits are also OR'd into flags for shadow sync.
+ * Set flag bits. If `f` contains a state bit (READY/RUNNING/BLOCKED/DONE),
+ * the whole state field is replaced in the same CAS so the one-hot
+ * invariant holds. Pure mark sets are a single fetch_or.
+ * The state-bit test folds away when `f` is a compile-time constant.
  */
-#define xr_coro_flags_set(coro, f)                                                                 \
-    do {                                                                                           \
-        uint32_t _ff = (uint32_t) (f);                                                             \
-        if (_ff & XR_CORO_STATE_FLAG_MASK) {                                                       \
-            uint8_t _ns = xr_flag_to_state(_ff);                                                   \
-            if (_ns)                                                                               \
-                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
-        }                                                                                          \
-        atomic_fetch_or_explicit(&(coro)->flags, _ff, memory_order_release);                       \
-    } while (0)
+static inline void xr_coro_flags_set_impl(_Atomic uint32_t *flags_ptr, uint32_t f) {
+    if (f & XR_CORO_STATE_FLAG_MASK) {
+        uint32_t old = atomic_load_explicit(flags_ptr, memory_order_relaxed);
+        uint32_t neu;
+        do {
+            neu = (old & ~(uint32_t) XR_CORO_STATE_FLAG_MASK) | f;
+        } while (!atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_release,
+                                                        memory_order_relaxed));
+    } else {
+        atomic_fetch_or_explicit(flags_ptr, f, memory_order_release);
+    }
+}
+
+#define xr_coro_flags_set(coro, f) xr_coro_flags_set_impl(&(coro)->flags, (uint32_t) (f))
 
 /*
- * Clear flag bits. For state bits this only clears the shadow (authoritative
- * state is set by flags_set/flags_swap). For mark bits this is the real clear.
+ * Clear flag bits (marks or state). Clearing every state bit leaves the
+ * state field at NONE — only init/recycle paths do that.
  */
 #define xr_coro_flags_clear(coro, f)                                                               \
     atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t) (f), memory_order_release)
 
 /*
- * Swap: clear some bits and set others atomically.
- * For state transitions (the hot path): single atomic store on coro_state.
- * Shadow sync on flags: AND then OR (non-CAS, lock-free).
+ * Swap: clear some bits and set others in ONE atomic CAS.
+ * When `set_mask` contains a state bit the whole state field is replaced
+ * (regardless of `clear_mask`), preserving the one-hot invariant.
+ * Concurrent mark updates (sysmon, GC) at worst force a retry.
  */
-#define xr_coro_flags_swap(coro, clear_mask, set_mask)                                             \
-    do {                                                                                           \
-        uint32_t _set = (uint32_t) (set_mask);                                                     \
-        if (_set & XR_CORO_STATE_FLAG_MASK) {                                                      \
-            uint8_t _ns = xr_flag_to_state(_set);                                                  \
-            if (_ns)                                                                               \
-                atomic_store_explicit(&(coro)->coro_state, _ns, memory_order_release);             \
-        }                                                                                          \
-        atomic_fetch_and_explicit(&(coro)->flags, ~(uint32_t) (clear_mask), memory_order_relaxed); \
-        atomic_fetch_or_explicit(&(coro)->flags, _set, memory_order_release);                      \
-    } while (0)
-
-/*
- * Check if flag is set. State bits check coro_state (authoritative).
- * Mark bits check flags field.
- * For pure state checks (f is a single state flag, 99% of cases):
- *   reads coro_state only → single byte load.
- * For pure mark checks: reads flags only.
- */
-#define xr_coro_flags_has(coro, f)                                                                 \
-    (((f) & XR_CORO_STATE_FLAG_MASK)                                                               \
-         ? (xr_state_to_flag(atomic_load_explicit(&(coro)->coro_state, memory_order_acquire)) &    \
-            (f)) != 0                                                                              \
-         : (atomic_load_explicit(&(coro)->flags, memory_order_acquire) & (f)) != 0)
-
-// Non-atomic fast variants (single-owner context only)
-#define xr_coro_flags_set_fast(coro, f)                                                            \
-    do {                                                                                           \
-        uint32_t _ff = (uint32_t) (f);                                                             \
-        if (_ff & XR_CORO_STATE_FLAG_MASK) {                                                       \
-            uint8_t _ns = xr_flag_to_state(_ff);                                                   \
-            if (_ns)                                                                               \
-                (coro)->coro_state = _ns;                                                          \
-        }                                                                                          \
-        (coro)->flags |= _ff;                                                                      \
-    } while (0)
-
-#define xr_coro_flags_clear_fast(coro, f) ((coro)->flags &= ~(uint32_t) (f))
-
-#define xr_coro_flags_has_fast(coro, f) (((coro)->flags & (f)) != 0)
-
-// CAS on flags (used by xr_coro_ready). Also updates coro_state on success.
-// Static inline helper avoids the GCC statement-expression macro form,
-// which MSVC does not accept. Both fields' types are stable across the
-// codebase, so the helper takes _Atomic pointers directly.
-static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr, _Atomic uint8_t *state_ptr,
-                                          uint32_t *expected, uint32_t desired) {
-    bool ok = atomic_compare_exchange_strong_explicit(flags_ptr, expected, desired,
-                                                      memory_order_acq_rel, memory_order_acquire);
-    if (ok && (desired & XR_CORO_STATE_FLAG_MASK)) {
-        uint8_t ns = xr_flag_to_state(desired);
-        if (ns)
-            atomic_store_explicit(state_ptr, ns, memory_order_release);
-    }
-    return ok;
+static inline void xr_coro_flags_swap_impl(_Atomic uint32_t *flags_ptr, uint32_t clear_mask,
+                                           uint32_t set_mask) {
+    if (set_mask & XR_CORO_STATE_FLAG_MASK)
+        clear_mask |= XR_CORO_STATE_FLAG_MASK;
+    uint32_t old = atomic_load_explicit(flags_ptr, memory_order_relaxed);
+    uint32_t neu;
+    do {
+        neu = (old & ~clear_mask) | set_mask;
+    } while (!atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_release,
+                                                    memory_order_relaxed));
 }
 
-#define xr_coro_flags_cas(coro, expected, desired)                                                 \
-    xr_coro_flags_cas_impl(&(coro)->flags, &(coro)->coro_state, (expected), (desired))
+#define xr_coro_flags_swap(coro, clear_mask, set_mask)                                             \
+    xr_coro_flags_swap_impl(&(coro)->flags, (uint32_t) (clear_mask), (uint32_t) (set_mask))
+
+/*
+ * Check if any of the given bits is set. Single acquire load for state and
+ * mark bits alike.
+ */
+#define xr_coro_flags_has(coro, f)                                                                 \
+    ((atomic_load_explicit(&(coro)->flags, memory_order_acquire) & (uint32_t) (f)) != 0)
 
 /* ========== State Transition Helpers ==========
  *
  * These thin wrappers make the intent of each state-machine edge explicit
- * at call sites that previously used raw xr_coro_flags_swap(...) with a
- * hand-rolled (clear_mask, set_mask) pair.  They preserve the exact memory
- * ordering of xr_coro_flags_swap (release on state, relaxed clear, release
- * set), so they are drop-in replacements.
+ * at call sites. Each expands to exactly one CAS (xr_coro_flags_swap):
  *
- * Transitions are named after the Go-scheduler style "<from>_to_<to>":
- *   - scheduled_to_running : dequeue + begin execution
- *                           (clears both READY and BLOCKED since the coro
- *                           may be woken from either path).
- *   - running_to_ready     : voluntary yield / preemption
- *   - running_to_blocked   : channel send/recv/await wait point
- *   - blocked_to_ready     : I/O wake, channel wake, timer fire
+ *   - transition_to_running : dequeue + begin execution
+ *   - transition_to_ready   : voluntary yield / preemption
+ *   - transition_to_blocked : channel send/recv/await wait point
+ *     (unconditional publish; use xr_coro_try_transition_to_blocked when a
+ *      concurrent waker may have claimed the coroutine already)
  *
  * CALLERS SHOULD PREFER THESE over direct xr_coro_flags_swap.
  */
@@ -268,30 +225,28 @@ static inline bool xr_coro_flags_cas_impl(_Atomic uint32_t *flags_ptr, _Atomic u
 #define xr_coro_transition_to_blocked(coro)                                                        \
     xr_coro_flags_swap((coro), XR_CORO_FLG_RUNNING | XR_CORO_FLG_READY, XR_CORO_FLG_BLOCKED)
 
-#define xr_coro_transition_wake(coro)                                                              \
-    xr_coro_flags_swap((coro), XR_CORO_FLG_BLOCKED, XR_CORO_FLG_READY)
-
-static inline bool xr_coro_try_transition_to_blocked_impl(_Atomic uint32_t *flags_ptr,
-                                                          _Atomic uint8_t *state_ptr) {
-    uint8_t expected = XR_CORO_STATE_RUNNING;
-    if (atomic_compare_exchange_strong_explicit(state_ptr, &expected, XR_CORO_STATE_BLOCKED,
-                                                memory_order_release, memory_order_relaxed)) {
-        atomic_fetch_and_explicit(flags_ptr, ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING),
-                                  memory_order_relaxed);
-        atomic_fetch_or_explicit(flags_ptr, (uint32_t) XR_CORO_FLG_BLOCKED, memory_order_release);
-        return true;
+/*
+ * RUNNING -> BLOCKED, but only if nobody woke the coroutine first.
+ * Returns true when the coroutine is now (or already was) BLOCKED.
+ * Returns false when the state moved on (READY: a waker claimed it;
+ * DONE/NONE: terminal) — the caller must not treat it as parked.
+ */
+static inline bool xr_coro_try_transition_to_blocked_impl(_Atomic uint32_t *flags_ptr) {
+    uint32_t old = atomic_load_explicit(flags_ptr, memory_order_acquire);
+    for (;;) {
+        if (old & XR_CORO_FLG_BLOCKED)
+            return true;
+        if (!(old & XR_CORO_FLG_RUNNING))
+            return false;
+        uint32_t neu = (old & ~(uint32_t) XR_CORO_STATE_FLAG_MASK) | XR_CORO_FLG_BLOCKED;
+        if (atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_release,
+                                                  memory_order_acquire))
+            return true;
     }
-    if (expected == XR_CORO_STATE_BLOCKED) {
-        atomic_fetch_and_explicit(flags_ptr, ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_RUNNING),
-                                  memory_order_relaxed);
-        atomic_fetch_or_explicit(flags_ptr, (uint32_t) XR_CORO_FLG_BLOCKED, memory_order_release);
-        return true;
-    }
-    return false;
 }
 
 #define xr_coro_try_transition_to_blocked(coro)                                                    \
-    xr_coro_try_transition_to_blocked_impl(&(coro)->flags, &(coro)->coro_state)
+    xr_coro_try_transition_to_blocked_impl(&(coro)->flags)
 
 /* ========== Unified Wake Claim ==========
  *
@@ -306,22 +261,20 @@ static inline bool xr_coro_try_transition_to_blocked_impl(_Atomic uint32_t *flag
  * Returns false when the coro is no longer BLOCKED (already woken / running /
  * done), in which case the caller must not touch the coroutine at all.
  */
-static inline bool xr_coro_claim_wake_impl(_Atomic uint32_t *flags_ptr,
-                                           _Atomic uint8_t *state_ptr) {
-    uint32_t old = (atomic_load_explicit(flags_ptr, memory_order_acquire) &
-                    ~(uint32_t) XR_CORO_STATE_FLAG_MASK) |
-                   xr_state_to_flag(atomic_load_explicit(state_ptr, memory_order_acquire));
+static inline bool xr_coro_claim_wake_impl(_Atomic uint32_t *flags_ptr) {
+    uint32_t old = atomic_load_explicit(flags_ptr, memory_order_acquire);
     for (;;) {
         if (!(old & XR_CORO_FLG_BLOCKED))
             return false;
         uint32_t neu =
             (old & ~(uint32_t) (XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK)) | XR_CORO_FLG_READY;
-        if (xr_coro_flags_cas_impl(flags_ptr, state_ptr, &old, neu))
+        if (atomic_compare_exchange_weak_explicit(flags_ptr, &old, neu, memory_order_acq_rel,
+                                                  memory_order_acquire))
             return true;
     }
 }
 
-#define xr_coro_claim_wake(coro) xr_coro_claim_wake_impl(&(coro)->flags, &(coro)->coro_state)
+#define xr_coro_claim_wake(coro) xr_coro_claim_wake_impl(&(coro)->flags)
 
 /* ========== Masked Field Update (race-free) ==========
  *
@@ -384,7 +337,7 @@ static inline uint32_t xr_coro_init_flags(bool is_main) {
 
 /* ========== resume_status Accessors ==========
  * Use relaxed atomic: memory ordering is already provided by the surrounding
- * coro_state store(release) / load(acquire) pair.
+ * flags store(release) / load(acquire) pair.
  * These macros only ensure data-race-free access. */
 #define xr_coro_resume_load(coro) atomic_load_explicit(&(coro)->resume_status, memory_order_relaxed)
 

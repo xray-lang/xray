@@ -27,6 +27,8 @@ static XrType stub_null = {.kind = XR_KIND_NULL, .id = 4, .frozen = true};
 static XrType stub_str = {.kind = XR_KIND_STRING, .id = 5, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 static XrType stub_func = {.kind = XR_KIND_FUNCTION, .id = 7, .frozen = true};
+static XrType stub_task = {
+    .kind = XR_KIND_INSTANCE, .id = 10, .frozen = true, .instance = {.class_name = "Task"}};
 static XrType stub_u8 = {
     .kind = XR_KIND_INT, .id = 8, .frozen = true, .native_width = XR_NATIVE_U8};
 static XrType stub_u8_array = {
@@ -421,6 +423,94 @@ TEST(copy_prop_chain) {
     xi_opt_copy_prop(f);
 
     assert(add->args[0] == a && "chained copies should resolve to original");
+    xi_func_free(f);
+}
+
+/* ========== One-shot Await Marking Tests ========== */
+
+TEST(mark_one_shot_await_unique_go) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = go;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "unique go->await should be marked");
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_through_copy) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *copy = xi_value_new(f, blk, XI_COPY, &stub_task, 1);
+    copy->args[0] = go;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = copy;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(chg.values_changed && "unique copied go->await should be marked");
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) != 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) != 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_keeps_visible_task) {
+    XiFunc *f = make_func("test", &stub_bool);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = go;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+    XiValue *done = xi_value_new(f, blk, XI_LOAD_FIELD, &stub_bool, 1);
+    done->args[0] = go;
+    done->aux = (void *) "done";
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(!chg.values_changed && "observable Task use must not be one-shot");
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
+    xi_func_free(f);
+}
+
+TEST(mark_one_shot_await_skips_linked_go) {
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *blk = f->entry;
+
+    XiValue *callee = xi_param(f, blk, 0, &stub_func);
+    XiValue *go = xi_value_new(f, blk, XI_GO, &stub_task, 1);
+    go->args[0] = callee;
+    go->aux_int = 1;
+    go->flags |= XI_FLAG_SIDE_EFFECT;
+    XiValue *await = xi_value_new(f, blk, XI_AWAIT, &stub_int, 1);
+    await->args[0] = go;
+    await->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
+
+    XiPassChange chg = xi_opt_mark_one_shot_await(f);
+
+    assert(!chg.values_changed && "linked go has observable propagation state");
+    assert((await->aux_int & XI_AWAIT_AUX_ONE_SHOT_GO) == 0);
+    assert((go->aux_int & XI_GO_AUX_ONE_SHOT_AWAIT) == 0);
     xi_func_free(f);
 }
 
@@ -1334,6 +1424,12 @@ int main(void) {
     /* Copy propagation */
     run_copy_prop_basic();
     run_copy_prop_chain();
+
+    /* One-shot await marking */
+    run_mark_one_shot_await_unique_go();
+    run_mark_one_shot_await_through_copy();
+    run_mark_one_shot_await_keeps_visible_task();
+    run_mark_one_shot_await_skips_linked_go();
 
     /* Dead code elimination */
     run_dce_removes_unused();

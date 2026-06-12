@@ -72,14 +72,14 @@ static inline int xrt_has_pending_error(void) {
  * and longjmps to the nearest frame. Otherwise, prints and aborts.
  * ========================================================================= */
 
-static _Noreturn void xrt_throw_exc(XrValue exc) {
+static XRT_COLD _Noreturn void xrt_throw_exc(XrValue exc) {
     if (xrt_exc_top) {
         xrt_exc_top->exception = exc;
         longjmp(xrt_exc_top->buf, 1);
     }
     /* Uncaught exception */
     if (exc.tag == XR_TAG_STR || exc.tag == XR_TAG_STR_ARC) {
-        fprintf(stderr, "Uncaught exception: %s\n", (const char *) exc.ptr);
+        fprintf(stderr, "Uncaught exception: %s\n", xr_str_data(exc));
     } else {
         fprintf(stderr, "Uncaught exception (tag=%d)\n", exc.tag);
     }

@@ -1,0 +1,16 @@
+args=--target x86_64-linux-musl
+contains=xaot-plan v0
+contains=  "target": {
+contains=    "name": "x86_64-linux-musl"
+contains=    "arch": "x86_64"
+contains=    "os": "linux"
+contains=    "abi": "musl"
+contains=    "object_format": "elf"
+contains=    "triple": "x86_64-linux-musl"
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="system_libs": ["m"]
+contains="cc_flags": ["-ffunction-sections", "-fdata-sections"]
+contains="ld_flags": ["-Wl,--gc-sections"]
+not_contains="runtime_objects": ["xray_core"]
+not_contains=-Wl,-dead_strip

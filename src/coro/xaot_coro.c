@@ -21,6 +21,7 @@
 #include "../base/xglobal_indices.h"
 #include "../base/xmalloc.h"
 #include "../runtime/class/xclass_system.h"
+#include "../runtime/class/xenum.h"
 #include "../runtime/class/xinstance.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
@@ -105,12 +106,8 @@ static void aot_backend_trace_roots(XrCoroutine *coro, void *visitor) {
 }
 
 static void aot_mark_running(XrCoroutine *coro) {
-    uint32_t flags = atomic_load_explicit(&coro->flags, memory_order_relaxed);
-    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_RUNNING, memory_order_release);
-    atomic_store_explicit(&coro->flags,
-                          (flags & ~(uint32_t) (XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED)) |
-                              XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED,
-                          memory_order_release);
+    xr_coro_flags_swap(coro, XR_CORO_FLG_READY | XR_CORO_FLG_BLOCKED,
+                       XR_CORO_FLG_RUNNING | XR_CORO_FLG_STARTED);
 }
 
 static XrCoroRunResult aot_map_result(XrCoroutine *coro, XrAotResult result) {
@@ -148,7 +145,14 @@ static XrCoroRunResult aot_backend_resume(XrCoroutine *coro, const XrCoroEvent *
     ctx.isolate = run_ctx && run_ctx->isolate ? run_ctx->isolate : coro->isolate;
     ctx.worker = run_ctx ? (void *) run_ctx->worker : NULL;
 
+    XrayIsolate *previous_isolate = xray_isolate_current();
+    if (ctx.isolate)
+        xray_isolate_enter(ctx.isolate);
     XrAotResult result = state->desc->resume(state->frame, &ctx);
+    if (previous_isolate)
+        xray_isolate_enter(previous_isolate);
+    else
+        xray_isolate_exit();
     return aot_map_result(coro, result);
 }
 
@@ -210,10 +214,30 @@ XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {
 XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const char *field) {
     if (!field)
         return XR_NULL_VAL;
+
+    XrValue builtin = xr_aot_get_builtin(ctx, index);
+    if (XR_IS_PTR(builtin) && XR_HEAP_TYPE(builtin) == XR_TINSTANCE && builtin.ptr) {
+        XrGCHeader *gc = (XrGCHeader *) builtin.ptr;
+        if (XR_GC_GET_TYPE(gc) == XR_TINSTANCE) {
+            XrInstance *inst = xr_value_to_instance(builtin);
+            if (inst && inst->klass && inst->klass->builtin_kind == XR_BK_ENUM_TYPE) {
+                XrEnumType *enum_type = (XrEnumType *) inst;
+                for (uint32_t i = 0; i < enum_type->member_count; i++) {
+                    if (enum_type->members[i].name &&
+                        strcmp(enum_type->members[i].name, field) == 0 &&
+                        enum_type->members[i].instance) {
+                        return XR_FROM_PTR(enum_type->members[i].instance);
+                    }
+                }
+                return XR_NULL_VAL;
+            }
+        }
+    }
+
     if (index != XR_GLOBAL_VAR_PROCESS)
         return XR_NULL_VAL;
 
-    XrValue process = xr_aot_get_builtin(ctx, index);
+    XrValue process = builtin;
     if (!XR_IS_INSTANCE(process))
         return XR_NULL_VAL;
 
@@ -228,6 +252,71 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
     if (field_index < 0)
         return XR_NULL_VAL;
     return xr_instance_get_field_by_index((XrInstance *) process.ptr, field_index);
+}
+
+static bool aot_value_is_runtime_instance(XrValue value) {
+    if (!XR_IS_PTR(value) || XR_HEAP_TYPE(value) != XR_TINSTANCE || !value.ptr)
+        return false;
+    XrGCHeader *gc = (XrGCHeader *) value.ptr;
+    return XR_GC_GET_TYPE(gc) == XR_TINSTANCE;
+}
+
+bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name, const char **member_name,
+                                    uint32_t *member_index, bool *is_adt, int *payload_count) {
+    if (!aot_value_is_runtime_instance(value))
+        return false;
+    XrInstance *inst = xr_value_to_instance(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ENUM_VALUE)
+        return false;
+
+    XrEnumValue *enum_value = (XrEnumValue *) inst;
+    XrEnumType *parent = enum_value->parent_type;
+    if (enum_name)
+        *enum_name = enum_value->enum_name ? enum_value->enum_name : "";
+    if (member_name)
+        *member_name = enum_value->member_name ? enum_value->member_name : "";
+    if (member_index)
+        *member_index = enum_value->member_index;
+    if (is_adt)
+        *is_adt = parent && parent->is_adt;
+    if (payload_count) {
+        int count = 0;
+        if (parent && parent->is_adt && parent->payload_counts &&
+            enum_value->member_index < parent->member_count) {
+            count = parent->payload_counts[enum_value->member_index];
+        }
+        *payload_count = count;
+    }
+    return true;
+}
+
+bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name, const char **member_name,
+                                   uint32_t *member_index, int *payload_count) {
+    if (!aot_value_is_runtime_instance(value))
+        return false;
+    XrInstance *inst = xr_value_to_instance(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+        return false;
+
+    bool is_adt = false;
+    return xr_aot_runtime_enum_value_info(inst->fields[0], enum_name, member_name, member_index,
+                                          &is_adt, payload_count) &&
+           is_adt;
+}
+
+XrValue xr_aot_runtime_adt_payload(XrValue value, int index) {
+    if (index < 0 || !aot_value_is_runtime_instance(value))
+        return XR_NULL_VAL;
+    XrInstance *inst = xr_value_to_instance(value);
+    if (!inst || !inst->klass || inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+        return XR_NULL_VAL;
+
+    int payload_count = 0;
+    if (!xr_aot_runtime_adt_value_info(value, NULL, NULL, NULL, &payload_count) ||
+        index >= payload_count) {
+        return XR_NULL_VAL;
+    }
+    return inst->fields[1 + index];
 }
 
 XrValue xr_aot_time_now(void) {
@@ -276,27 +365,217 @@ XrCoroutine *xr_coro_create_aot(XrayIsolate *X, const XrAotCoroDesc *desc, void 
     return coro;
 }
 
-static void aot_recycle_completed_executor(XrTask *task) {
-    if (!task || !task->coro)
+static void aot_detach_completed_executor(XrTask *task) {
+    if (!task || !xr_task_executor_peek(task))
         return;
-    XrCoroutine *exec = task->coro;
-    if (!xr_coro_flags_has(exec, XR_CORO_FLG_DONE))
+    /* Exchange-claim mirrors the VM await path: only the winner detaches. */
+    XrCoroutine *exec = xr_task_claim_executor(task);
+    if (!exec)
         return;
-
-    task->coro = NULL;
-    exec->task = NULL;
-    XrWorker *worker = xr_current_worker();
-    if (worker) {
-        xr_coro_recycle_local(worker, exec);
-    } else {
-        xr_coro_destroy(exec);
+    if (!xr_coro_flags_has(exec, XR_CORO_FLG_DONE)) {
+        /* Executor not done: this claim was premature, restore it. Callers
+         * only reach here for terminal tasks, so this is defensive. */
+        atomic_store_explicit(&task->coro, exec, memory_order_release);
+        return;
     }
+    exec->task = NULL;
 }
 
 static XrAotResult aot_store_slot_result(XrSlotRef out_slot, XrValue value) {
     if (!xr_slot_store_value(out_slot, value))
         return xr_aot_error(XR_NULL_VAL, false);
     return xr_aot_done(value);
+}
+
+static XrayIsolate *aot_context_isolate(const XrAotContext *ctx, const XrTask *task) {
+    if (ctx && ctx->isolate)
+        return ctx->isolate;
+    XrayIsolate *isolate = xray_isolate_get_current();
+    if (isolate)
+        return isolate;
+    if (task) {
+        XrCoroutine *exec = xr_task_executor_peek(task);
+        if (exec)
+            return exec->isolate;
+    }
+    return NULL;
+}
+
+static XrCoroutine *aot_context_coro(const XrAotContext *ctx, XrayIsolate *isolate,
+                                     const XrTask *task) {
+    if (ctx && ctx->coro)
+        return ctx->coro;
+    XrCoroutine *coro = isolate ? xr_current_coro(isolate) : NULL;
+    if (coro)
+        return coro;
+    return task ? xr_task_executor_peek(task) : NULL;
+}
+
+static XrEnumType *aot_builtin_enum_type(const XrAotContext *ctx, int builtin_index) {
+    XrayIsolate *isolate = aot_context_isolate(ctx, NULL);
+    if (!isolate || builtin_index < 0 || builtin_index >= XR_GLOBALS_MAX)
+        return NULL;
+    XrValue value = isolate->vm.builtins[builtin_index];
+    if (!XR_IS_PTR(value))
+        return NULL;
+    return (XrEnumType *) XR_TO_PTR(value);
+}
+
+static XrValue aot_builtin_enum_member(const XrAotContext *ctx, int builtin_index,
+                                       uint32_t member_index) {
+    XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
+    if (!type || member_index >= type->member_count || !type->members[member_index].instance)
+        return xr_null();
+    return XR_FROM_PTR(type->members[member_index].instance);
+}
+
+static XrValue aot_builtin_adt_value(const XrAotContext *ctx, int builtin_index,
+                                     uint32_t member_index, XrValue *args, int nargs) {
+    XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
+    if (!type || !type->is_adt)
+        return xr_null();
+    XrInstance *inst =
+        xr_enum_adt_construct(aot_context_isolate(ctx, NULL), type, member_index, args, nargs);
+    return inst ? XR_FROM_PTR(inst) : xr_null();
+}
+
+static XrValue aot_recv_value(const XrAotContext *ctx, XrValue value) {
+    XrValue args[1] = {value};
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_RECV, 0, args, 1);
+}
+
+static XrValue aot_recv_empty(const XrAotContext *ctx) {
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 1);
+}
+
+static XrValue aot_recv_timeout(const XrAotContext *ctx) {
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 2);
+}
+
+static XrValue aot_recv_closed(const XrAotContext *ctx) {
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_RECV, 3);
+}
+
+static XrValue aot_recv_result_from_block(const XrAotContext *ctx, XrCoroBlockResult block) {
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_recv_value(ctx, block.value);
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
+        return aot_recv_timeout(ctx);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
+        return aot_recv_closed(ctx);
+    return xr_null();
+}
+
+static XrValue aot_send_result(const XrAotContext *ctx, uint32_t member_index) {
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_SEND_RESULT, member_index);
+}
+
+static XrValue aot_send_result_from_block(const XrAotContext *ctx, XrCoroBlockResult block) {
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_send_result(ctx, 0);
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
+        return aot_send_result(ctx, 2);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
+        return aot_send_result(ctx, 3);
+    return aot_send_result(ctx, 1);
+}
+
+static XrValue aot_task_status_from_state(const XrAotContext *ctx, uint8_t state) {
+    uint32_t member_index = 0;
+    switch (state) {
+        case XR_TASK_ACTIVE:
+        case XR_TASK_COMPLETING:
+            member_index = 1;  // Running
+            break;
+        case XR_TASK_COMPLETED:
+            member_index = 2;  // Success
+            break;
+        case XR_TASK_FAILED:
+            member_index = 3;  // Failed
+            break;
+        case XR_TASK_CANCELLING:
+        case XR_TASK_CANCELLED:
+        default:
+            member_index = 4;  // Cancelled
+            break;
+    }
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_TASK_STATUS, member_index);
+}
+
+static XrValue aot_task_result_success(const XrAotContext *ctx, XrValue value) {
+    XrValue args[1] = {value};
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
+}
+
+static XrValue aot_task_failure_exception(const XrAotContext *ctx, XrTask *task) {
+    XrayIsolate *isolate = aot_context_isolate(ctx, task);
+    XrCoroutine *coro = aot_context_coro(ctx, isolate, task);
+    XrValue error = task ? task->error : xr_null();
+    if (XR_IS_NULL(error))
+        return xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+    if (coro && isolate && xr_value_needs_copy(error))
+        error = xr_deep_copy_to_coro(isolate, error, coro);
+    if (isolate && !xr_value_is_exception(isolate, error))
+        error = xr_exception_from_value(isolate, error);
+    return error;
+}
+
+static XrValue aot_task_result_failed(const XrAotContext *ctx, XrTask *task) {
+    XrValue error = aot_task_failure_exception(ctx, task);
+    XrValue args[1] = {error};
+    return aot_builtin_adt_value(ctx, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
+}
+
+static XrValue aot_task_result_member(const XrAotContext *ctx, uint32_t member_index) {
+    return aot_builtin_enum_member(ctx, XR_GLOBAL_VAR_TASK_RESULT, member_index);
+}
+
+static XrValue aot_task_result_from_terminal(const XrAotContext *ctx, XrTask *task) {
+    uint8_t state =
+        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    if (state == XR_TASK_COMPLETED) {
+        XrayIsolate *isolate = aot_context_isolate(ctx, task);
+        XrCoroutine *coro = aot_context_coro(ctx, isolate, task);
+        XrValue value = xr_coro_await_result_value(isolate, coro, task, false);
+        return aot_task_result_success(ctx, value);
+    }
+    if (state == XR_TASK_FAILED)
+        return aot_task_result_failed(ctx, task);
+    if (state == XR_TASK_CANCELLED || state == XR_TASK_CANCELLING)
+        return aot_task_result_member(ctx, 2);
+    return aot_task_result_member(ctx, 4);
+}
+
+static XrValue aot_task_result_from_block(const XrAotContext *ctx, XrTask *task,
+                                          XrCoroBlockResult block, XrValue raw_value,
+                                          bool timeout_enabled) {
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return aot_task_result_success(ctx, raw_value);
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
+        return timeout_enabled ? aot_task_result_member(ctx, 3)
+                               : aot_task_result_from_terminal(ctx, task);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
+        return aot_task_result_from_terminal(ctx, task);
+    return aot_task_result_member(ctx, 4);
+}
+
+static XrAotResult aot_task_terminal_error(const XrAotContext *ctx, XrTask *task) {
+    uint8_t state =
+        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    XrValue error;
+    if (state == XR_TASK_FAILED) {
+        error = aot_task_failure_exception(ctx, task);
+    } else {
+        error = xr_exception_new(aot_context_isolate(ctx, task), XR_ERR_CORO_CANCELLED,
+                                 "Task cancelled");
+    }
+    return xr_aot_error(error, false);
+}
+
+static XrAotResult aot_channel_closed_error(const XrAotContext *ctx) {
+    XrValue error =
+        xr_exception_new(aot_context_isolate(ctx, NULL), XR_ERR_CORO_DEAD, "Channel is closed");
+    return xr_aot_error(error, false);
 }
 
 static XrArray *aot_tasks_array_from_value(const XrAotContext *ctx, XrValue tasks_value) {
@@ -429,7 +708,13 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     if (!child)
         return result;
 
-    XrTask *task = xr_task_create(ctx->coro, child);
+    XrRuntime *runtime = (XrRuntime *) ctx->isolate->vm.runtime;
+    if (!runtime) {
+        xr_coro_destroy(child);
+        return result;
+    }
+
+    XrTask *task = xr_task_create(runtime, ctx->coro, child);
     if (!task) {
         xr_coro_destroy(child);
         return result;
@@ -439,14 +724,14 @@ XrAotSpawnResult xr_aot_spawn(const XrAotContext *ctx, const XrAotCoroDesc *desc
     if (fire_and_forget)
         child->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
-    XrRuntime *runtime = (XrRuntime *) ctx->isolate->vm.runtime;
     XrCoroutine *parent = ctx->coro;
     if (parent && !xr_coro_set_pending_spawn(parent, child)) {
         xr_coro_destroy(child);
         return result;
     }
 
-    XrScopeContext *scope = parent ? parent->current_scope : NULL;
+    XrScopeContext *scope =
+        parent ? atomic_load_explicit(&parent->current_scope, memory_order_relaxed) : NULL;
     if (!scope && runtime)
         scope = runtime->current_scope;
     if (scope && parent) {
@@ -562,11 +847,13 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrSlo
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
-        aot_recycle_completed_executor(task);
+        aot_detach_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }
-    if (block.kind == XR_CORO_BLOCK_CLOSED)
-        return xr_aot_result(XR_AOT_RUN_DONE);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO) {
+        aot_detach_completed_executor(task);
+        return aot_task_terminal_error(ctx, task);
+    }
     if (block.kind == XR_CORO_BLOCK_TIMEOUT)
         return aot_store_slot_result(out_slot, XR_NULL_VAL);
     return xr_aot_error(XR_NULL_VAL, false);
@@ -588,10 +875,14 @@ XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY) {
-        aot_recycle_completed_executor(task);
+        aot_detach_completed_executor(task);
         return xr_aot_result(XR_AOT_RUN_DONE);
     }
-    if (block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_CLOSED)
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO) {
+        aot_detach_completed_executor(task);
+        return aot_task_terminal_error(ctx, task);
+    }
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
         return xr_aot_result(XR_AOT_RUN_DONE);
     return xr_aot_error(XR_NULL_VAL, false);
 }
@@ -600,7 +891,7 @@ XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value) {
     if (!xr_value_is_task(task_value))
         return xr_null();
     XrTask *task = xr_value_to_task(task_value);
-    XrCoroutine *coro = task->coro;
+    XrCoroutine *coro = xr_task_executor_peek(task);
     if (coro && !xr_task_is_done(task)) {
         xr_coro_cancel(coro);
         xr_task_cancel(task);
@@ -620,41 +911,72 @@ XrValue xr_aot_task_done(const XrAotContext *ctx, XrValue task_value) {
     return xr_bool(xr_task_is_done(xr_value_to_task(task_value)));
 }
 
-XrValue xr_aot_task_cancelled(const XrAotContext *ctx, XrValue task_value) {
-    (void) ctx;
+XrValue xr_aot_task_status(const XrAotContext *ctx, XrValue task_value) {
     if (!xr_value_is_task(task_value))
-        return xr_bool(false);
-    return xr_bool(xr_task_is_cancelled(xr_value_to_task(task_value)));
+        return aot_task_status_from_state(ctx, XR_TASK_CANCELLED);
+    XrTask *task = xr_value_to_task(task_value);
+    uint8_t state = atomic_load_explicit(&task->state, memory_order_acquire);
+    return aot_task_status_from_state(ctx, state);
 }
 
-XrValue xr_aot_task_result(const XrAotContext *ctx, XrValue task_value) {
+XrValue xr_aot_task_poll(const XrAotContext *ctx, XrValue task_value) {
     if (!xr_value_is_task(task_value))
-        return xr_null();
+        return aot_task_result_member(ctx, 4);
     XrTask *task = xr_value_to_task(task_value);
-    if (!xr_task_is_done(task) || !XR_IS_NULL(task->error))
-        return xr_null();
-    return xr_coro_await_result_value(ctx ? ctx->isolate : NULL, ctx ? ctx->coro : NULL, task,
-                                      false);
+    return xr_task_is_done(task) ? aot_task_result_from_terminal(ctx, task)
+                                 : aot_task_result_member(ctx, 4);
 }
 
-XrValue xr_aot_task_error(const XrAotContext *ctx, XrValue task_value) {
-    if (!xr_value_is_task(task_value))
-        return xr_null();
-    XrTask *task = xr_value_to_task(task_value);
-    if (atomic_load_explicit(&task->state, memory_order_acquire) != XR_TASK_FAILED ||
-        XR_IS_NULL(task->error))
-        return xr_null();
+XrAotResult xr_aot_task_await_result(const XrAotContext *ctx, XrValue task_value,
+                                     XrSlotRef result_slot, int64_t timeout_ms,
+                                     bool timeout_enabled) {
+    if (!ctx || !ctx->coro || !xr_value_is_task(task_value))
+        return xr_aot_error(XR_NULL_VAL, false);
 
-    XrayIsolate *isolate = ctx ? ctx->isolate : NULL;
-    XrValue err = task->error;
-    if (isolate && xr_value_is_exception(isolate, err)) {
-        const char *message = xr_exception_get_message(isolate, err);
-        if (!message)
-            return xr_null();
-        XrString *s = xr_string_intern(isolate, message, strlen(message), 0);
-        return s ? xr_string_value(s) : xr_null();
-    }
-    return err;
+    if (!timeout_enabled)
+        timeout_ms = -1;
+    else if (timeout_ms < 0)
+        timeout_ms = 0;
+
+    XrTask *task = xr_value_to_task(task_value);
+    XrCoroBlockResult block =
+        xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, result_slot, timeout_ms, false);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_ERROR)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    if (block.kind == XR_CORO_BLOCK_READY)
+        aot_detach_completed_executor(task);
+
+    XrValue result = aot_task_result_from_block(ctx, task, block, block.value, timeout_enabled);
+    return aot_store_slot_result(result_slot, result);
+}
+
+XrAotResult xr_aot_task_await_result_resume(const XrAotContext *ctx, XrSlotRef result_slot,
+                                            bool timeout_enabled) {
+    if (!ctx || !ctx->coro)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroWaitState *wait = xr_coro_wait_state(ctx->coro);
+    XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
+    if (!task)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    XrCoroBlockResult block =
+        xr_coro_await_task_resume_slot(ctx->isolate, ctx->coro, task, result_slot, false);
+    if (block.kind == XR_CORO_BLOCK_NOT_RESUMED)
+        block = xr_coro_await_task_slot(ctx->isolate, ctx->coro, task, result_slot, -1, false);
+    if (block.kind == XR_CORO_BLOCK_BLOCKED)
+        return xr_aot_blocked();
+    if (block.kind == XR_CORO_BLOCK_ERROR)
+        return xr_aot_error(XR_NULL_VAL, false);
+
+    if (block.kind == XR_CORO_BLOCK_READY)
+        aot_detach_completed_executor(task);
+
+    XrValue result = aot_task_result_from_block(ctx, task, block, block.value, timeout_enabled);
+    return aot_store_slot_result(result_slot, result);
 }
 
 XrAotResult xr_aot_await_all_tasks(const XrAotContext *ctx, XrValue tasks_value,
@@ -739,47 +1061,59 @@ XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size) {
 
 XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value) {
     if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
+        return aot_send_result(ctx, 3);
+    XrChannel *ch = xr_value_to_channel(channel_value);
+    if (xr_channel_is_closed(ch))
+        return aot_send_result(ctx, 3);
+    return aot_send_result(ctx, xr_chan_try_send(ctx->isolate, ch, send_value) ? 0 : 1);
+}
+
+XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
+                                   XrValue send_value) {
+    if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
         return xr_bool(false);
     XrChannel *ch = xr_value_to_channel(channel_value);
+    if (xr_channel_is_closed(ch))
+        return xr_bool(false);
     return xr_bool(xr_chan_try_send(ctx->isolate, ch, send_value));
-}
-
-XrValue xr_aot_chan_try_recv_value(const XrAotContext *ctx, XrValue channel_value) {
-    if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
-        return XR_NULL_VAL;
-
-    XrChannel *ch = xr_value_to_channel(channel_value);
-    XrValue recv_value = XR_NULL_VAL;
-    bool ok = xr_chan_try_recv(ctx->isolate, ch, &recv_value, ctx->coro);
-    return ok ? recv_value : XR_NULL_VAL;
-}
-
-bool xr_aot_chan_try_recv_slot(const XrAotContext *ctx, XrValue channel_value, XrSlotRef out_slot) {
-    if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value)) {
-        (void) xr_slot_store_value(out_slot, XR_NULL_VAL);
-        return false;
-    }
-
-    XrChannel *ch = xr_value_to_channel(channel_value);
-    XrValue recv_value = XR_NULL_VAL;
-    bool ok = xr_chan_try_recv(ctx->isolate, ch, &recv_value, ctx->coro);
-    (void) xr_slot_store_value(out_slot, ok ? recv_value : XR_NULL_VAL);
-    return ok;
 }
 
 XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value) {
     if (!ctx || !ctx->isolate || !xr_value_is_channel(channel_value))
-        return XR_NULL_VAL;
+        return aot_recv_closed(ctx);
 
     XrChannel *ch = xr_value_to_channel(channel_value);
     XrValue recv_value = XR_NULL_VAL;
     bool ok = xr_chan_try_recv(ctx->isolate, ch, &recv_value, ctx->coro);
-    XrTuple *tuple = xr_tuple_new(ctx->coro, 2);
-    if (!tuple)
-        return XR_NULL_VAL;
-    xr_tuple_set(tuple, 0, recv_value);
-    xr_tuple_set(tuple, 1, xr_bool(ok));
-    return xr_value_from_tuple(tuple);
+    if (ok)
+        return aot_recv_value(ctx, recv_value);
+    return xr_channel_is_closed(ch) ? aot_recv_closed(ctx) : aot_recv_empty(ctx);
+}
+
+bool xr_aot_recv_is_value(XrValue recv_value) {
+    if (!XR_IS_INSTANCE(recv_value))
+        return false;
+    XrInstance *inst = xr_value_to_instance(recv_value);
+    if (!inst || !inst->klass)
+        return false;
+    if (inst->klass->builtin_kind == XR_BK_ENUM_VALUE) {
+        XrEnumValue *variant = (XrEnumValue *) inst;
+        return variant->parent_type && variant->parent_type->name &&
+               strcmp(variant->parent_type->name, "Recv") == 0 && variant->member_index == 0;
+    }
+    if (inst->klass->builtin_kind != XR_BK_ADT_ENUM)
+        return false;
+    XrValue tag = inst->fields[0];
+    if (!XR_IS_INSTANCE(tag))
+        return false;
+    XrEnumValue *variant = (XrEnumValue *) XR_TO_INSTANCE(tag);
+    return variant->parent_type && variant->parent_type->name &&
+           strcmp(variant->parent_type->name, "Recv") == 0 && variant->member_index == 0;
+}
+
+XrValue xr_aot_recv_payload(XrValue recv_value) {
+    return xr_aot_recv_is_value(recv_value) ? xr_aot_runtime_adt_payload(recv_value, 0)
+                                            : XR_NULL_VAL;
 }
 
 XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value) {
@@ -788,6 +1122,20 @@ XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value) {
     XrChannel *ch = xr_value_to_channel(channel_value);
     xr_channel_close(ch);
     return XR_NULL_VAL;
+}
+
+XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value) {
+    (void) ctx;
+    if (!xr_value_is_channel(channel_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buf_count);
+}
+
+XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value) {
+    (void) ctx;
+    if (!xr_value_is_channel(channel_value))
+        return XR_FROM_INT(0);
+    return XR_FROM_INT((int64_t) xr_value_to_channel(channel_value)->buf_size);
 }
 
 XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value) {
@@ -803,30 +1151,6 @@ XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t 
     return xr_tuple_get(xr_value_to_tuple(tuple_value), index);
 }
 
-static XrAotResult aot_load_slot_done(XrSlotRef slot) {
-    XrValue value = XR_NULL_VAL;
-    if (!xr_slot_load_value(slot, &value))
-        return xr_aot_error(XR_NULL_VAL, false);
-    return xr_aot_done(value);
-}
-
-static XrAotResult aot_store_recv_timeout_tuple(const XrAotContext *ctx, XrSlotRef out_slot,
-                                                XrValue value, bool ok) {
-    if (out_slot.kind == XR_SLOT_NONE)
-        return xr_aot_done(XR_NULL_VAL);
-
-    XrTuple *tuple = xr_tuple_new(ctx ? ctx->coro : NULL, 2);
-    if (!tuple)
-        return xr_aot_error(XR_NULL_VAL, false);
-    xr_tuple_set(tuple, 0, ok ? value : XR_NULL_VAL);
-    xr_tuple_set(tuple, 1, xr_bool(ok));
-
-    XrValue tuple_value = xr_value_from_tuple(tuple);
-    if (!xr_slot_store_value(out_slot, tuple_value))
-        return xr_aot_error(XR_NULL_VAL, false);
-    return xr_aot_done(tuple_value);
-}
-
 XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrValue send_value,
                              XrSlotRef result_slot, int64_t timeout_ms) {
     if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_channel(channel_value))
@@ -839,85 +1163,72 @@ XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value, XrV
         return xr_aot_blocked();
     if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_TIMEOUT ||
         block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO) {
-        if (timeout_ms >= 0)
-            return aot_load_slot_done(result_slot);
+        if (timeout_ms >= 0) {
+            XrValue result = aot_send_result_from_block(ctx, block);
+            return aot_store_slot_result(result_slot, result);
+        }
         if (block.kind == XR_CORO_BLOCK_READY)
             return xr_aot_done(XR_NULL_VAL);
+        if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
+            return aot_channel_closed_error(ctx);
     }
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
 XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx, XrSlotRef result_slot,
-                                    bool status_result) {
+                                    bool result_value) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
     XrCoroBlockResult block = xr_coro_chan_send_resume(ctx->coro, result_slot);
     if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_TIMEOUT ||
         block.kind == XR_CORO_BLOCK_CLOSED) {
-        if (!status_result && block.kind == XR_CORO_BLOCK_READY)
+        if (!result_value && block.kind == XR_CORO_BLOCK_READY)
             return xr_aot_done(XR_NULL_VAL);
-        if (status_result)
-            return aot_load_slot_done(result_slot);
+        if (result_value) {
+            XrValue result = aot_send_result_from_block(ctx, block);
+            return aot_store_slot_result(result_slot, result);
+        }
+        if (block.kind == XR_CORO_BLOCK_CLOSED)
+            return aot_channel_closed_error(ctx);
     }
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
 XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue channel_value,
-                                  XrSlotRef out_slot, int64_t timeout_ms, bool tuple_result) {
+                                  XrSlotRef out_slot, int64_t timeout_ms) {
     if (!ctx || !ctx->isolate || !ctx->coro || !xr_value_is_channel(channel_value))
         return xr_aot_error(XR_NULL_VAL, false);
 
     XrChannel *ch = xr_value_to_channel(channel_value);
     XrCoroBlockResult block =
-        xr_coro_chan_recv(ctx->isolate, ctx->coro, ch, out_slot, xr_slot_none(), timeout_ms);
+        xr_coro_chan_recv(ctx->isolate, ctx->coro, ch, out_slot, xr_slot_none(), timeout_ms, false);
     if (block.kind == XR_CORO_BLOCK_BLOCKED)
         return xr_aot_blocked();
-    if (tuple_result) {
-        if (block.kind == XR_CORO_BLOCK_READY)
-            return aot_store_recv_timeout_tuple(ctx, out_slot, block.value, true);
-        if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_TIMEOUT ||
-            block.kind == XR_CORO_BLOCK_NO_CORO)
-            return aot_store_recv_timeout_tuple(ctx, out_slot, XR_NULL_VAL, false);
-        return xr_aot_error(XR_NULL_VAL, false);
+    if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_CLOSED ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_NO_CORO) {
+        XrValue result = aot_recv_result_from_block(ctx, block);
+        return aot_store_slot_result(out_slot, result);
     }
-    if (block.kind == XR_CORO_BLOCK_READY) {
-        XrValue value = XR_NULL_VAL;
-        (void) xr_slot_load_value(out_slot, &value);
-        return xr_aot_done(value);
-    }
-    if (block.kind == XR_CORO_BLOCK_CLOSED) {
-        (void) xr_slot_store_value(out_slot, XR_NULL_VAL);
-        return xr_aot_done(XR_NULL_VAL);
-    }
-    if (block.kind == XR_CORO_BLOCK_BLOCKED)
-        return xr_aot_blocked();
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
 XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
-                                         bool tuple_result) {
+                                         bool result_value) {
     if (!ctx || !ctx->isolate || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
 
-    if (!tuple_result && out_slot.kind == XR_SLOT_NONE)
-        out_slot = ctx->coro->ext ? ctx->coro->ext->recv_slot_ref : xr_slot_none();
+    XrSlotRef value_slot = out_slot;
+    if (value_slot.kind == XR_SLOT_NONE)
+        value_slot = ctx->coro->ext ? ctx->coro->ext->recv_slot_ref : xr_slot_none();
     XrCoroBlockResult block =
-        xr_coro_chan_recv_resume(ctx->isolate, ctx->coro, out_slot, xr_slot_none());
-    if (tuple_result) {
-        if (block.kind == XR_CORO_BLOCK_READY)
-            return aot_store_recv_timeout_tuple(ctx, out_slot, block.value, true);
-        if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_TIMEOUT)
-            return aot_store_recv_timeout_tuple(ctx, out_slot, XR_NULL_VAL, false);
-        return xr_aot_error(XR_NULL_VAL, false);
-    }
-    if (block.kind == XR_CORO_BLOCK_READY) {
-        XrValue value = XR_NULL_VAL;
-        (void) xr_slot_load_value(out_slot, &value);
-        return xr_aot_done(value);
-    }
-    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_TIMEOUT) {
-        (void) xr_slot_store_value(out_slot, XR_NULL_VAL);
-        return xr_aot_done(XR_NULL_VAL);
+        xr_coro_chan_recv_resume(ctx->isolate, ctx->coro, value_slot, xr_slot_none());
+    if (block.kind == XR_CORO_BLOCK_READY || block.kind == XR_CORO_BLOCK_CLOSED ||
+        block.kind == XR_CORO_BLOCK_TIMEOUT || block.kind == XR_CORO_BLOCK_NO_CORO) {
+        if (!result_value)
+            return xr_aot_done(block.value);
+        XrSlotRef result_slot = out_slot.kind == XR_SLOT_NONE ? value_slot : out_slot;
+        XrValue result = aot_recv_result_from_block(ctx, block);
+        return aot_store_slot_result(result_slot, result);
     }
     return xr_aot_error(XR_NULL_VAL, false);
 }

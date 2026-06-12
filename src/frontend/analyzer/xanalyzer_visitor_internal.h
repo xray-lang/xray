@@ -32,9 +32,11 @@ XR_FUNC XrType *xa_infer_type_param_from_arg(XrType *param_type, XrType *arg_typ
                                              const char *tp_name, int depth);
 XR_FUNC XrType *xa_substitute_generic_call(XaInferContext *ctx, XaSymbolLinks *links,
                                            XrType *callee_type, XrType *return_type,
-                                           CallExprNode *call, int arg_count);
+                                           CallExprNode *call, int arg_count,
+                                           XrType **effective_arg_types);
 XR_FUNC XrType *xa_infer_function_return_type(XaInferContext *ctx, AstNode *body);
 XR_FUNC bool xa_body_has_return_expr(AstNode *node);
+XR_FUNC bool xa_type_is_default_initializable(XaInferContext *ctx, XrType *type);
 
 // Cross-TU helpers between xanalyzer_visitor.c (the dispatch / hoisting
 // / infer entry points) and xanalyzer_visitor_decl.c (the bulk of

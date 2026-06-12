@@ -19,17 +19,26 @@ shared const task_ch = Channel(100)
 // 任务队列
 shared const result_ch = Channel(100)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 结果队列
 // 工作协程：从任务队列取任务，处理后发送结果
 fn worker(id: int) {
     while (true) {
-        let task = task_ch.recv()
-        if (task == null) {
-            break
+        match (task_ch.recv()) {
+            Recv.Value(task) -> {
+                // 模拟计算
+                let result = task * 2
+                result_ch.send(result)
+            }
+            Recv.Closed -> { break }
+            _ -> { break }
         }
-        // 模拟计算
-        let result = task * 2
-        result_ch.send(result)
     }
 }
 
@@ -37,7 +46,7 @@ fn worker(id: int) {
 fn collector(expected_count: int) -> int {
     let sum = 0
     for (let i = 0; i < expected_count; i++) {
-        sum = sum + result_ch.recv()
+        sum = sum + recv_int(result_ch, 0)
     }
     return sum
 }

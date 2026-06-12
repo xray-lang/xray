@@ -1,5 +1,19 @@
 // 测试生产者-消费者模型
 
+fn recv_value(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn recv_ok(r: Recv<int>) -> bool {
+    return match (r) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
 @test
 fn test_main() {
     shared const ch = new Channel(10)
@@ -16,13 +30,19 @@ fn test_main() {
         i = i + 1
     }
     
-    // 消费者接收数据（使用多值返回）
-    let (v1, ok1) = ch.tryRecv()
-    let (v2, ok2) = ch.tryRecv()
-    let (v3, ok3) = ch.tryRecv()
-    let (v4, ok4) = ch.tryRecv()
-    let (v5, ok5) = ch.tryRecv()
-    let (v6, ok6) = ch.tryRecv()
+    // 消费者接收数据（使用 Recv<T>）
+    let r1 = ch.tryRecv()
+    let r2 = ch.tryRecv()
+    let r3 = ch.tryRecv()
+    let r4 = ch.tryRecv()
+    let r5 = ch.tryRecv()
+    let r6 = ch.tryRecv()
+    let v1 = recv_value(r1)
+    let v2 = recv_value(r2)
+    let v3 = recv_value(r3)
+    let v4 = recv_value(r4)
+    let v5 = recv_value(r5)
+    let v6 = recv_value(r6)
     
     print(v1)  // 100
     print(v2)  // 101
@@ -30,9 +50,8 @@ fn test_main() {
     print(v4)  // 200
     print(v5)  // 201
     print(v6)  // 202
-    print(ok1 && ok2 && ok3 && ok4 && ok5 && ok6)  // true
+    print(recv_ok(r1) && recv_ok(r2) && recv_ok(r3) && recv_ok(r4) && recv_ok(r5) && recv_ok(r6))  // true
     
     print("done")
 }
-
 

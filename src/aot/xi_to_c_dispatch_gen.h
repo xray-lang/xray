@@ -84,10 +84,12 @@
     X(AS, "xi.as", xicgen_as) \
     X(SLICE, "xi.slice", xicgen_slice) \
     X(RANGE, "xi.range", xicgen_range) \
+    X(CHAN_RECV_STATUS, "xi.chan.recv.status", xicgen_chan_recv_status) \
     X(JSON_NEW, "xi.json.new", xicgen_json_new) \
     X(JSON_INIT_F, "xi.json.init.f", xicgen_json_init_f) \
     X(JSON_GET_F, "xi.json.get.f", xicgen_json_get_f) \
     X(JSON_SET_F, "xi.json.set.f", xicgen_json_set_f) \
+    X(JSON_DECODE, "xi.json.decode", xicgen_reject_unsupported) \
     X(STRUCT_NEW, "xi.struct.new", xicgen_struct_new) \
     X(STRUCT_GET, "xi.struct.get", xicgen_struct_get) \
     X(STRUCT_SET, "xi.struct.set", xicgen_struct_set) \

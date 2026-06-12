@@ -19,6 +19,7 @@
 #include "xworker_internal.h"
 #include "../base/xchecks.h"
 #include "xblock.h"
+#include "xdeep_copy.h"
 #include "xsched_trace.h"
 #include "xtask.h"
 
@@ -44,7 +45,7 @@ static inline bool worker_blocked_post_check(XrRuntime *runtime, XrCoroutine *co
             return true;
         }
     } else if (wr == (XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT)) {
-        XrScopeContext *scope = coro->current_scope;
+        XrScopeContext *scope = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
         if (!scope || atomic_load(&scope->count) == 0) {
             XrCoroWaitState *wait = xr_coro_wait_state(coro);
             if (wait)
@@ -118,7 +119,7 @@ static XrCoroEvent worker_event_from_coro(XrCoroutine *coro) {
 static bool worker_global_spawn_backlog_visible(XrRuntime *runtime) {
     if (!runtime)
         return false;
-    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+    if (xr_runtime_any_inbox_nonempty(runtime))
         return true;
 
     if (!atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
@@ -155,32 +156,57 @@ static bool worker_spawn_share_backlog_full(XrWorker *worker, XrRuntime *runtime
     return xr_proc_local_runq_len(&worker->p) >= worker_spawn_share_backlog_limit(runtime);
 }
 
-static bool worker_should_share_spawn_child(XrWorker *worker, XrRuntime *runtime) {
+static uint16_t worker_record_spawn_burst(XrCoroutine *parent) {
+    if (!parent)
+        return 0;
+    if (parent->spawn_burst_count < UINT16_MAX)
+        parent->spawn_burst_count++;
+    return parent->spawn_burst_count;
+}
+
+static void worker_reset_spawn_burst(XrCoroutine *coro) {
+    if (coro)
+        coro->spawn_burst_count = 0;
+}
+
+static bool worker_should_share_spawn_child(XrWorker *worker, XrRuntime *runtime,
+                                            uint16_t burst_count) {
     if (!worker || !runtime || runtime->worker_count <= 1)
         return false;
     if (worker_global_spawn_backlog_visible(runtime))
         return false;
     if (worker_spawn_share_backlog_full(worker, runtime))
         return false;
-    worker->p.spawn_share_counter++;
-    if (XR_SPAWN_SHARE_INTERVAL <= 1)
+    if (burst_count < XR_SPAWN_SHARE_BURST_THRESHOLD)
+        return false;
+    if (XR_SPAWN_SHARE_BURST_INTERVAL <= 1)
         return true;
-    return (worker->p.spawn_share_counter % XR_SPAWN_SHARE_INTERVAL) == 0;
+    return ((burst_count - XR_SPAWN_SHARE_BURST_THRESHOLD) % XR_SPAWN_SHARE_BURST_INTERVAL) == 0;
 }
 
 static bool worker_should_inline_spawn_child(XrWorker *worker, XrCoroutine *parent,
-                                             XrCoroutine *child) {
-    (void) parent;
-    (void) child;
+                                             XrCoroutine *child, bool *out_burst_share,
+                                             bool *out_backlog_share) {
+    if (out_burst_share)
+        *out_burst_share = false;
+    if (out_backlog_share)
+        *out_backlog_share = false;
 
     XrRuntime *runtime = worker ? worker->p.runtime : NULL;
     if (!runtime)
         return true;
 
-    if (worker_spawn_backlog_visible(worker, runtime))
+    uint16_t burst_count = worker_record_spawn_burst(parent);
+    if (worker_spawn_backlog_visible(worker, runtime)) {
+        if (out_backlog_share)
+            *out_backlog_share = true;
         return false;
-    if (worker_should_share_spawn_child(worker, runtime))
+    }
+    if (child && worker_should_share_spawn_child(worker, runtime, burst_count)) {
+        if (out_burst_share)
+            *out_burst_share = true;
         return false;
+    }
 
     return true;
 }
@@ -229,23 +255,49 @@ bool worker_process_blocked(XrWorker *worker, XrCoroutine *coro) {
     return false;
 }
 
-// Handle backend execution result for a coroutine. Returns true if runtime should stop.
-static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoroRunResult result) {
+// Handle backend execution result for a coroutine. Returns true if runtime
+// should stop. *out_executor_reclaimed reports whether this worker kept
+// ownership of the executor shell (eager reclaim) — only then may the caller
+// touch the coroutine afterwards (deferred recycle); otherwise a concurrently
+// woken awaiter may already have claimed and recycled it.
+static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoroRunResult result,
+                                     bool *out_executor_reclaimed) {
     XrRuntime *runtime = worker->p.runtime;
+    *out_executor_reclaimed = false;
 
     switch (result.kind) {
         case XR_CORO_RUN_DONE: {
             worker->p.yield_streak = 0;
+            XrTask *done_task = coro->task;
             // Result already saved in the backend resume path (coro->result).
             // flags_set uses release ordering, ensuring coro->result is visible
             // to other threads before FLG_DONE is observed.
             xr_coro_flags_set(coro, XR_CORO_FLG_DONE);
+            bool was_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
 
-            /* Task/Executor separation: cache result in Task before wake.
-             * Await helpers copy the result to the awaiting coroutine's
-             * heap before the executor detaches and becomes recyclable. */
-            if (coro->task) {
-                xr_task_complete(coro->task, coro->result);
+            /* Eager executor reclaim is decided BEFORE the task state is
+             * published: immediate results need no copy out of the executor
+             * heap, so the shell can detach now and this worker keeps sole
+             * ownership of it. Coro-side writes must also happen before
+             * publication — afterwards a woken awaiter may already be
+             * consuming the task on another worker. */
+            bool reclaim_executor = false;
+            if (done_task && !was_main && (done_task->flags & XR_TASK_FLG_RUNTIME_OWNED) &&
+                !xr_value_needs_copy(coro->result)) {
+                reclaim_executor = true;
+                coro->task = NULL;
+                coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
+                if (done_task->flags & XR_TASK_FLG_ONE_SHOT_AWAIT)
+                    coro->gc_flags |= XR_CORO_GC_TRIM_BACKEND_STORAGE;
+                /* Detach before publication so no awaiter can ever claim the
+                 * shell this worker is about to recycle. Relaxed is enough:
+                 * the publication CAS below carries the release. */
+                atomic_store_explicit(&done_task->coro, NULL, memory_order_relaxed);
+            } else if (!done_task && !was_main) {
+                /* Task-less fire-and-forget go: no handle exists, so no
+                 * awaiter can ever claim the shell — this worker keeps it.
+                 * The deferred-recycle push is still gated on RECYCLABLE. */
+                reclaim_executor = true;
             }
 
             // Inline fast path: skip extern calls for anonymous coros without monitors
@@ -257,8 +309,30 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
                 xr_coro_on_exit(runtime->isolate, coro);
             }
             worker->p.stats.completed_count++;
-            xr_coro_wake_waiter(runtime->isolate, coro);
-            if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
+
+            /* Scope bookkeeping dereferences the coroutine, so it must run
+             * before publication (after COMPLETED is visible an awaiter may
+             * claim and recycle the shell). It does not depend on task
+             * state, so the early wake is benign. */
+            xr_coro_wake_scope_waiter(runtime->isolate, coro);
+
+            if (done_task) {
+                /* Publication point: cache result in Task, CAS the state to
+                 * COMPLETED, fire completion listeners. */
+                xr_task_complete(done_task, coro->result);
+                /* Task-side await wake. Reads task fields — safe while
+                 * completer_done is still 0, one-shot destroy waits for it.
+                 * Uses done_task directly: coro->task is already detached
+                 * in the reclaim case, and the shell itself must not be
+                 * dereferenced post-publication in the non-reclaim case. */
+                xr_task_wake_waiter(runtime->isolate, done_task);
+                atomic_store_explicit(&done_task->completer_done, 1, memory_order_release);
+                /* No access to done_task (or, unless reclaimed, coro)
+                 * beyond this point. */
+            }
+
+            *out_executor_reclaimed = reclaim_executor;
+            if (was_main) {
                 atomic_store(&runtime->running, false);
                 return true;
             }
@@ -267,9 +341,15 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
         case XR_CORO_RUN_YIELD:
             xr_coro_resume_store(coro, XR_RESUME_OK);
             xr_coro_transition_to_ready(coro);
-            xr_worker_push(worker, coro);
             worker->p.stats.yielded_count++;
             worker->p.yield_streak++;
+            if (runtime && runtime->worker_count > 1 &&
+                worker->p.yield_streak >= runtime->worker_count / 2) {
+                xr_injectq_push(runtime, coro);
+                worker->p.yield_streak = 0;
+                break;
+            }
+            xr_worker_push(worker, coro);
             break;
 
         case XR_CORO_RUN_BLOCKED:
@@ -306,9 +386,14 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             worker->p.stats.completed_count++;
             xr_coro_wake_waiter(runtime->isolate, coro);
             if (coro->task) {
-                coro->task->coro = NULL;
-                coro->task = NULL;
-                coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
+                XrTask *t = coro->task;
+                /* Exchange-claim: the task.cancel() API path may detach the
+                 * executor concurrently; only the claim winner recycles. */
+                if (xr_task_claim_executor(t) == coro) {
+                    coro->task = NULL;
+                    coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
+                }
+                atomic_store_explicit(&t->completer_done, 1, memory_order_release);
             }
             if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
                 atomic_store(&runtime->running, false);
@@ -342,9 +427,12 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
             worker->p.stats.completed_count++;
             xr_coro_wake_waiter(runtime->isolate, coro);
             if (coro->task) {
-                coro->task->coro = NULL;
-                coro->task = NULL;
-                coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
+                XrTask *t = coro->task;
+                if (xr_task_claim_executor(t) == coro) {
+                    coro->task = NULL;
+                    coro->gc_flags |= XR_CORO_GC_RECYCLABLE;
+                }
+                atomic_store_explicit(&t->completer_done, 1, memory_order_release);
             }
             if (xr_coro_flags_has(coro, XR_CORO_FLG_MAIN)) {
                 atomic_store(&runtime->running, false);
@@ -360,7 +448,6 @@ static XrCoroutine *worker_pop_parent_continuation(XrWorker *worker) {
     if (!parent)
         return NULL;
 
-    xr_worker_refresh_runq_masks(worker);
     return parent;
 }
 
@@ -382,11 +469,25 @@ cont_exec:
     SCHED_TRACE_CORO(worker, coro, "exec");
     atomic_store_explicit(&m->current_coro, coro, memory_order_relaxed);
     p->local_active_coros++;
+    // In-dispatch direct switch chain budget: refilled per scheduler visit.
+    // Complements the fast re-dispatch budget below; the LIFO backlog gate
+    // bounds starvation on every pop in both forms.
+    p->direct_switch_budget = XR_FAST_DISPATCH_BUDGET;
     // Update affinity so IO wakeups return to this worker
     atomic_store_explicit(&coro->affinity_p, p->id, memory_order_relaxed);
 
 exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
     result = xr_coro_run_on_worker(worker, coro);
+    // In-dispatch direct switches settle execution on whichever coroutine ran
+    // last inside run(); rebind before any result handling below. The
+    // switched-away coroutines were fully suspended by the switch helper and
+    // must not be touched here (they may already run on another worker).
+    {
+        XrCoroutine *settled = p->vm_settled_coro;
+        p->vm_settled_coro = NULL;
+        if (settled && settled != coro)
+            coro = settled;
+    }
     // Single-writer store: only owner thread writes, sysmon reads via relaxed load
     atomic_store_explicit(&m->heartbeat,
                           atomic_load_explicit(&m->heartbeat, memory_order_relaxed) + 1,
@@ -406,13 +507,26 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             result = xr_coro_run_error(XR_NULL_VAL, false);
             goto normal_result_path;
         }
-        bool inline_child = worker_should_inline_spawn_child(worker, coro, child);
+        bool burst_share = false;
+        bool backlog_share = false;
+        bool inline_child =
+            worker_should_inline_spawn_child(worker, coro, child, &burst_share, &backlog_share);
         // Queued and inline children both need worker threads visible before
         // the current worker continues the parent.
         xr_runtime_ensure_workers(p->runtime);
         p->stats.spawned_count++;
         if (!inline_child && worker_spawn_share_backlog_full(worker, p->runtime)) {
             inline_child = true;
+            p->stats.spawn_backlog_full_inline_count++;
+        }
+        if (inline_child) {
+            p->stats.spawn_inline_child_count++;
+        } else {
+            p->stats.spawn_shared_child_count++;
+            if (burst_share)
+                p->stats.spawn_burst_shared_count++;
+            if (backlog_share)
+                p->stats.spawn_backlog_shared_count++;
         }
         if (!inline_child) {
             xr_coro_resume_store(coro, XR_RESUME_CONTINUATION);
@@ -430,7 +544,6 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         if (!xr_steal_queue_push(&p->cont_deque, coro)) {
             xr_worker_push(worker, coro);
         } else {
-            xr_worker_refresh_runq_masks(worker);
             // Wake an idle worker so it can steal the continuation.
             // Without this, JIT-compiled children that never yield
             // monopolize the current worker, and parked workers
@@ -461,7 +574,9 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         fast_dispatch_budget--;
         SCHED_TRACE_CORO(worker, coro, "fast_dispatch_blocked");
         p->yield_streak = 0;
-        worker_process_blocked(worker, coro);
+        if (!worker_process_blocked(worker, coro)) {
+            worker_reset_spawn_burst(coro);
+        }
 
         // Periodic lightweight housekeeping during fast dispatch
         if ((fast_dispatch_budget & 7) == 0) {
@@ -471,11 +586,11 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
         if ((fast_dispatch_budget & 15) == 0) {
             int64_t _now = xr_monotonic_ticks();
             if (p->timer_wheel &&
-                (xr_timer_cancel_pending(p->timer_wheel) || _now > p->last_timer_tick)) {
+                (xr_timer_cancel_pending(p->timer_wheel) || _now > xr_proc_last_timer_tick(p))) {
                 xr_bump_timers(p->timer_wheel, _now);
                 p->stats.timer_bump_count++;
-                if (_now > p->last_timer_tick) {
-                    p->last_timer_tick = _now;
+                if (_now > xr_proc_last_timer_tick(p)) {
+                    xr_proc_set_last_timer_tick(p, _now);
                 }
             }
         }
@@ -510,19 +625,32 @@ normal_result_path:
         goto pop_continuation;
     }
 
-    // Reductions tracking (safe: coro is still owned by this worker)
-    int reds_used = XR_CORO_REDUCTIONS - coro->reductions;
-    if (reds_used < 0)
-        reds_used = XR_CORO_REDUCTIONS;
-    xr_worker_reductions_executed(worker, reds_used);
+    /* Spawn-burst and reductions are read from the coroutine, so they are
+     * only safe while this worker still owns it. A BLOCKED result means the
+     * coro was already published to a wait queue inside the backend — the
+     * race guard above catches the detected subset, but a wake can land
+     * between that check and here, so blocked coros must not be touched at
+     * all. Both values are scheduling heuristics; skipping them for blocked
+     * coros (which blocked early in their quantum) is acceptable. */
+    if (result.kind != XR_CORO_RUN_BLOCKED) {
+        worker_reset_spawn_burst(coro);
+        int reds_used = XR_CORO_REDUCTIONS - xr_coro_reds(coro);
+        if (reds_used < 0)
+            reds_used = XR_CORO_REDUCTIONS;
+        xr_worker_reductions_executed(worker, reds_used);
+    }
 
     // Handle backend result
-    worker_handle_run_result(worker, coro, result);
+    bool executor_reclaimed = false;
+    worker_handle_run_result(worker, coro, result, &executor_reclaimed);
 
-    // Deferred recycle: fire-and-forget coro completed, defer to next pool_get.
-    // gc_flags bit 2 = recyclable for fire-and-forget go.
-    // Push to pending linked list (via coro->next) — flushed in pool_get.
-    if (result.kind == XR_CORO_RUN_DONE && worker_can_recycle_completed_coro(coro)) {
+    // Deferred recycle: completed coro this worker still owns, defer to next
+    // pool_get. Push to pending linked list (via coro->next).
+    // executor_reclaimed gating is mandatory: without it the shell may have
+    // been claimed and recycled by a woken awaiter on another worker, and
+    // even reading coro fields here would race its next lifetime.
+    if (result.kind == XR_CORO_RUN_DONE && executor_reclaimed &&
+        worker_can_recycle_completed_coro(coro)) {
         coro->next = p->pending_recycle_coro;
         p->pending_recycle_coro = coro;
     }

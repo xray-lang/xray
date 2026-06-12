@@ -12,18 +12,25 @@ print("消息次数:", N)
 shared const ch1 = Channel(1)
 shared const ch2 = Channel(1)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // Ping 协程（通过参数传递 N，避免闭包捕获）
 fn ping(n: int, c1: Channel<int>, c2: Channel<int>) {
     for (let i = 0; i < n; i++) {
         c1.send(i)
-        c2.recv()
+        recv_int(c2, 0)
     }
 }
 
 // Pong 协程（通过参数传递 N，避免闭包捕获）
 fn pong(n: int, c1: Channel<int>, c2: Channel<int>) {
     for (let i = 0; i < n; i++) {
-        let msg = c1.recv()
+        let msg = recv_int(c1, 0)
         c2.send(msg)
     }
 }

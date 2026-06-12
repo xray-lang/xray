@@ -40,9 +40,11 @@ print("取消时间:", cancel_time, "ms")
 let await_start = time.monotonic()
 let cancelled = 0
 for (t in tasks) {
-    let result = await t
-    if (result == null) {
-        cancelled++
+    match (t.awaitResult()) {
+        TaskResult.Cancelled -> {
+            cancelled++
+        }
+        _ -> {}
     }
 }
 let await_time = time.monotonic() - await_start
@@ -51,6 +53,11 @@ let elapsed = time.monotonic() - start
 print("等待时间:", await_time, "ms")
 print("总时间:", elapsed, "ms")
 print("成功取消:", cancelled, "/", N)
+print("completed_ops:", cancelled)
+print("expected_ops:", N)
+print("checksum:", cancelled)
+print("correctness:", cancelled == N)
+print("reported_time_ms:", elapsed)
 if (elapsed > 0) {
     print("速度:", int(N * 1000 / elapsed), "cancels/sec")
 } else {

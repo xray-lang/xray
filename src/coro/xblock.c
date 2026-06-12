@@ -30,6 +30,39 @@ static inline XrCoroBlockResult block_result(XrCoroBlockKind kind, XrValue value
     return result;
 }
 
+static XrRuntime *coro_stats_runtime(XrCoroutine *coro) {
+    if (!coro || !coro->isolate || !coro->isolate->vm.runtime)
+        return NULL;
+    XrRuntime *runtime = (XrRuntime *) coro->isolate->vm.runtime;
+    return xr_sched_stats_enabled(runtime) ? runtime : NULL;
+}
+
+static XrRuntime *isolate_stats_runtime(XrayIsolate *isolate) {
+    if (!isolate || !isolate->vm.runtime)
+        return NULL;
+    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    return xr_sched_stats_enabled(runtime) ? runtime : NULL;
+}
+
+static inline bool channel_value_needs_deep_copy(XrValue value) {
+    return XR_IS_PTR(value) && xr_value_needs_copy(value);
+}
+
+static void record_channel_ownership_metric(XrayIsolate *isolate, XrValue value, bool recv) {
+    XrRuntime *runtime = isolate_stats_runtime(isolate);
+    if (!runtime)
+        return;
+    bool deep_copy = channel_value_needs_deep_copy(value);
+    XrSchedGlobalStats *stats = &runtime->sched_stats;
+    if (recv) {
+        xr_sched_metric_inc(runtime, deep_copy ? &stats->chan_recv_deep_copy_count
+                                               : &stats->chan_recv_no_copy_count);
+    } else {
+        xr_sched_metric_inc(runtime, deep_copy ? &stats->chan_send_deep_copy_count
+                                               : &stats->chan_send_no_copy_count);
+    }
+}
+
 static bool coro_rollback_wait_block_if_unwoken(XrCoroutine *coro, XrCoroBlockSnapshot snapshot) {
     if (!coro || !snapshot.active)
         return false;
@@ -44,7 +77,6 @@ static bool coro_rollback_wait_block_if_unwoken(XrCoroutine *coro, XrCoroBlockSn
             (old & ~(uint32_t) (XR_CORO_STATE_FLAG_MASK | XR_CORO_WAIT_MASK)) | restore_flag;
         if (atomic_compare_exchange_weak_explicit(&coro->flags, &old, neu, memory_order_acq_rel,
                                                   memory_order_acquire)) {
-            atomic_store_explicit(&coro->coro_state, snapshot.previous_state, memory_order_release);
             return true;
         }
     }
@@ -61,15 +93,39 @@ XrValue *xr_slot_value_address(XrSlotRef slot) {
                 return NULL;
             return (XrValue *) slot.base;
         case XR_SLOT_AOT_FRAME_OFFSET:
-        case XR_SLOT_JIT_SUSPEND:
             if (slot.type_id != XR_REP_TAGGED)
                 return NULL;
             if (!slot.base)
                 return NULL;
             return (XrValue *) ((uint8_t *) slot.base + slot.offset);
+        case XR_SLOT_JIT_SUSPEND:
+            return NULL;
         default:
             return NULL;
     }
+}
+
+static bool slot_store_jit_suspend(XrSlotRef slot, XrValue value) {
+    if (!slot.base)
+        return false;
+
+    int64_t *payload = (int64_t *) ((uint8_t *) slot.base + slot.offset);
+    int64_t *tag = (int64_t *) ((uint8_t *) slot.base + slot.offset + sizeof(int64_t));
+
+    if (slot.type_id == XR_REP_I64) {
+        *payload = XR_TO_INT(value);
+        *tag = XR_TAG_I64;
+        return true;
+    }
+    if (slot.type_id == XR_REP_F64) {
+        *payload = value.i;
+        *tag = XR_TAG_F64;
+        return true;
+    }
+
+    *payload = value.i;
+    *tag = value.tag;
+    return true;
 }
 
 bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
@@ -95,8 +151,7 @@ bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
             *(XrValue *) slot.base = value;
             return true;
         }
-        case XR_SLOT_AOT_FRAME_OFFSET:
-        case XR_SLOT_JIT_SUSPEND: {
+        case XR_SLOT_AOT_FRAME_OFFSET: {
             if (!slot.base)
                 return false;
             void *addr = (uint8_t *) slot.base + slot.offset;
@@ -111,9 +166,37 @@ bool xr_slot_store_value(XrSlotRef slot, XrValue value) {
             *(XrValue *) addr = value;
             return true;
         }
+        case XR_SLOT_JIT_SUSPEND:
+            return slot_store_jit_suspend(slot, value);
         default:
             return false;
     }
+}
+
+static bool slot_load_jit_suspend(XrSlotRef slot, XrValue *out_value) {
+    if (!slot.base)
+        return false;
+
+    int64_t payload = *(int64_t *) ((uint8_t *) slot.base + slot.offset);
+    int64_t tag_raw = *(int64_t *) ((uint8_t *) slot.base + slot.offset + sizeof(int64_t));
+
+    if (slot.type_id == XR_REP_I64) {
+        *out_value = xr_int(payload);
+        return true;
+    }
+    if (slot.type_id == XR_REP_F64) {
+        XrValue value = {0};
+        value.tag = XR_TAG_F64;
+        value.i = payload;
+        *out_value = value;
+        return true;
+    }
+
+    XrValue value = {0};
+    value.tag = (uint8_t) tag_raw;
+    value.i = payload;
+    *out_value = value;
+    return true;
 }
 
 bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
@@ -141,8 +224,7 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
             }
             *out_value = *(XrValue *) slot.base;
             return true;
-        case XR_SLOT_AOT_FRAME_OFFSET:
-        case XR_SLOT_JIT_SUSPEND: {
+        case XR_SLOT_AOT_FRAME_OFFSET: {
             if (!slot.base)
                 return false;
             void *addr = (uint8_t *) slot.base + slot.offset;
@@ -157,6 +239,8 @@ bool xr_slot_load_value(XrSlotRef slot, XrValue *out_value) {
             *out_value = *(XrValue *) addr;
             return true;
         }
+        case XR_SLOT_JIT_SUSPEND:
+            return slot_load_jit_suspend(slot, out_value);
         default:
             return false;
     }
@@ -184,6 +268,10 @@ static void coro_finish_resume(XrCoroutine *coro) {
         xr_channel_wait_token_finish(&coro->ext->chan_wait_token);
         xr_timer_wait_token_finish(&coro->ext->wait.timer_token);
         atomic_store_explicit(&coro->ext->wait_channel, NULL, memory_order_relaxed);
+        // Drop the delivery capability: a stale slot ref must never leak
+        // into a later wait (the ref points into this resume's VM frame).
+        coro->ext->chan_ok_slot_ref = xr_slot_none();
+        coro->ext->chan_resume_delivered = false;
     }
 }
 
@@ -235,9 +323,13 @@ XrCoroBlockResult xr_coro_chan_recv_resume(XrayIsolate *isolate, XrCoroutine *co
     if (resume_status == XR_RESUME_CHANNEL) {
         XrValue value = xr_null();
         (void) xr_slot_load_value(value_slot, &value);
-        value = xr_chan_copy_recv(isolate, value, coro);
+        record_channel_ownership_metric(isolate, value, true);
+        bool needs_copy = channel_value_needs_deep_copy(value);
+        if (needs_copy)
+            value = xr_chan_copy_recv(isolate, value, coro);
         coro_finish_resume(coro);
-        xr_slot_store_value(value_slot, value);
+        if (needs_copy)
+            xr_slot_store_value(value_slot, value);
         xr_slot_store_value(ok_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, value, true);
     }
@@ -260,10 +352,18 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
                                     XrValue value, XrSlotRef result_slot, int64_t timeout_ms) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_send: NULL channel");
 
+    bool had_ext = coro && coro->ext != NULL;
+    record_channel_ownership_metric(isolate, value, false);
     value = xr_chan_prepare_send(isolate, value);
 
     if (timeout_ms == 0) {
         if (xr_channel_try_send(ch, value)) {
+            if (coro && !had_ext) {
+                XrRuntime *runtime = coro_stats_runtime(coro);
+                if (runtime)
+                    xr_sched_metric_inc(runtime,
+                                        &runtime->sched_stats.vm_chan_send_fast_no_ext_count);
+            }
             xr_slot_store_value(result_slot, xr_bool(true));
             return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
         }
@@ -275,11 +375,13 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         return block_result(XR_CORO_BLOCK_TIMEOUT, xr_null(), false);
     }
 
-    if (coro && !xr_coro_ensure_ext(coro))
-        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
-
     XrChanResult chan_result = xr_channel_send(ch, value, coro, timeout_ms);
     if (chan_result == XR_CHAN_OK) {
+        if (coro && !had_ext) {
+            XrRuntime *runtime = coro_stats_runtime(coro);
+            if (runtime)
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_chan_send_fast_no_ext_count);
+        }
         xr_slot_store_value(result_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
@@ -300,21 +402,21 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
 }
 
 XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrChannel *ch,
-                                    XrSlotRef value_slot, XrSlotRef ok_slot, int64_t timeout_ms) {
+                                    XrSlotRef value_slot, XrSlotRef ok_slot, int64_t timeout_ms,
+                                    bool deliver) {
     XR_DCHECK(ch != NULL, "xr_coro_chan_recv: NULL channel");
 
-    XrValue *recv_addr = xr_slot_value_address(value_slot);
-    if (coro) {
-        XrCoroExt *ext = xr_coro_ensure_ext(coro);
-        if (!ext)
-            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
-        ext->recv_slot = recv_addr;
-        ext->recv_slot_ref = value_slot;
-    }
+    bool had_ext = coro && coro->ext != NULL;
 
     if (timeout_ms == 0) {
         XrValue recv_val;
         if (xr_chan_try_recv(isolate, ch, &recv_val, coro)) {
+            if (coro && !had_ext) {
+                XrRuntime *runtime = coro_stats_runtime(coro);
+                if (runtime)
+                    xr_sched_metric_inc(runtime,
+                                        &runtime->sched_stats.vm_chan_recv_fast_no_ext_count);
+            }
             xr_slot_store_value(value_slot, recv_val);
             xr_slot_store_value(ok_slot, xr_bool(true));
             return block_result(XR_CORO_BLOCK_READY, recv_val, true);
@@ -330,8 +432,15 @@ XrCoroBlockResult xr_coro_chan_recv(XrayIsolate *isolate, XrCoroutine *coro, XrC
     }
 
     XrValue recv_val;
-    XrChanResult chan_result = xr_channel_recv(ch, &recv_val, coro, timeout_ms);
+    XrChanResult chan_result =
+        xr_channel_recv_slot(ch, &recv_val, coro, timeout_ms, value_slot, ok_slot, deliver);
     if (chan_result == XR_CHAN_OK) {
+        if (coro && !had_ext) {
+            XrRuntime *runtime = coro_stats_runtime(coro);
+            if (runtime)
+                xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_chan_recv_fast_no_ext_count);
+        }
+        record_channel_ownership_metric(isolate, recv_val, true);
         recv_val = xr_chan_copy_recv(isolate, recv_val, coro);
         xr_slot_store_value(value_slot, recv_val);
         xr_slot_store_value(ok_slot, xr_bool(true));
@@ -391,6 +500,7 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
         atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_RESOLVED) {
         coro_cancel_owned_timer(coro);
         XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        xr_task_unregister_await_waiters(coro);
         if (wait) {
             atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
             xr_await_wait_token_finish(&wait->await_token);
@@ -405,6 +515,7 @@ XrCoroBlockResult xr_coro_await_task_resume(XrCoroutine *coro, XrTask *task) {
     if (task && xr_task_is_done(task)) {
         coro_cancel_owned_timer(coro);
         XrCoroWaitState *wait = xr_coro_wait_state(coro);
+        xr_task_unregister_await_waiters(coro);
         if (wait) {
             atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
             xr_await_wait_token_finish(&wait->await_token);
@@ -424,10 +535,15 @@ XrValue xr_coro_await_result_value(XrayIsolate *isolate, XrCoroutine *dst_coro, 
     if (discard_result || !task)
         return xr_null();
 
+    /* Unlocked read is fine for immediates (the completer published them
+     * before the COMPLETED state). Pointer results take the locked path: a
+     * concurrent awaiter may be caching its deep copy back into the task,
+     * and a torn read must not be consumed or dereferenced. The gate is a
+     * pure tag check — any torn old/new mix still has a pointer-kind tag,
+     * and the locked path re-reads a clean value. */
     XrValue result = task->result;
-    if (dst_coro && isolate && xr_value_needs_copy(result)) {
-        result = xr_deep_copy_to_coro(isolate, result, dst_coro);
-        task->result = result;
+    if (dst_coro && isolate && XR_IS_PTR(result)) {
+        result = xr_task_consume_result_copy(isolate, task, dst_coro);
     }
     return result;
 }
@@ -507,9 +623,6 @@ XrCoroBlockResult xr_coro_await_task_resume_slot(XrayIsolate *isolate, XrCorouti
         if (!await_store_result(isolate, coro, task, result_slot, discard_result, &value))
             return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
         result.value = value;
-    } else if (result.kind == XR_CORO_BLOCK_TIMEOUT || result.kind == XR_CORO_BLOCK_CLOSED) {
-        if (!xr_slot_store_value(result_slot, xr_null()))
-            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     }
     return result;
 }
@@ -519,6 +632,9 @@ XrCoroBlockResult xr_coro_await_task(XrCoroutine *coro, XrTask *task, int64_t ti
 
     uint8_t task_state = atomic_load_explicit(&task->state, memory_order_acquire);
     if (task_state == XR_TASK_COMPLETED) {
+        XrRuntime *runtime = coro_stats_runtime(coro);
+        if (runtime)
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_await_done_fast_count);
         return block_result(XR_CORO_BLOCK_READY, task->result, true);
     }
     if (task_state == XR_TASK_FAILED || task_state == XR_TASK_CANCELLED) {
@@ -543,10 +659,6 @@ XrCoroBlockResult xr_coro_await_task_slot(XrayIsolate *isolate, XrCoroutine *cor
         if (!xr_slot_store_value(result_slot, value))
             return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
         result.value = value;
-    } else if (result.kind == XR_CORO_BLOCK_TIMEOUT || result.kind == XR_CORO_BLOCK_CLOSED ||
-               result.kind == XR_CORO_BLOCK_NO_CORO) {
-        if (!xr_slot_store_value(result_slot, xr_null()))
-            return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     }
     return result;
 }
@@ -703,7 +815,8 @@ XrCoroBlockSnapshot xr_coro_begin_reversible_block(XrCoroutine *coro) {
     XrCoroBlockSnapshot snapshot = {XR_CORO_STATE_NONE, false};
     if (!coro)
         return snapshot;
-    snapshot.previous_state = atomic_load_explicit(&coro->coro_state, memory_order_acquire);
+    snapshot.previous_state =
+        xr_flag_to_state(atomic_load_explicit(&coro->flags, memory_order_acquire));
     snapshot.active = true;
     xr_coro_transition_to_blocked(coro);
     return snapshot;
@@ -719,7 +832,6 @@ void xr_coro_rollback_reversible_block(XrCoroutine *coro, XrCoroBlockSnapshot sn
         return;
     }
 
-    atomic_store_explicit(&coro->coro_state, snapshot.previous_state, memory_order_release);
     xr_coro_flags_clear(coro, XR_CORO_STATE_FLAG_MASK);
 }
 
@@ -841,6 +953,19 @@ static int coro_select_recv_case_status(XrChannel *ch) {
     return XR_RESUME_OK;
 }
 
+static int coro_select_probe_ready(const XrValue *channel_values, int ch_count, int case_count) {
+    int limit = ch_count < case_count ? ch_count : case_count;
+    for (int ci = 0; ci < limit; ci++) {
+        XrValue ch_val = channel_values ? channel_values[ci] : xr_null();
+        if (!xr_value_is_channel(ch_val))
+            continue;
+        int status = coro_select_recv_case_status(xr_value_to_channel(ch_val));
+        if (status != XR_RESUME_OK)
+            return status;
+    }
+    return XR_RESUME_OK;
+}
+
 static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro, XrSelectWait *sw) {
     if (!worker || !coro || !sw)
         return false;
@@ -863,6 +988,10 @@ static bool coro_select_recheck_after_block(XrWorker *worker, XrCoroutine *coro,
         xr_coro_resume_store(coro, XR_RESUME_OK);
         xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);
         xr_coro_transition_to_running(coro);
+        if (worker->p.runtime) {
+            xr_sched_metric_inc(worker->p.runtime,
+                                &worker->p.runtime->sched_stats.vm_select_probe_hit_count);
+        }
         return true;
     }
 
@@ -885,14 +1014,21 @@ XrCoroBlockResult xr_coro_select_block(XrayIsolate *isolate, XrCoroutine *coro,
         xr_sched_metric_inc(runtime, &runtime->sched_stats.select_block_count);
     }
 
-    XrCoroExt *ext = xr_coro_ensure_ext(coro);
-    if (!ext) {
-        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
-    }
-
     int case_slots = case_count > ch_count ? case_count : ch_count;
     if (case_slots <= 0) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+
+    if (coro_select_probe_ready(channel_values, ch_count, case_count) != XR_RESUME_OK) {
+        if (runtime) {
+            xr_sched_metric_inc(runtime, &runtime->sched_stats.vm_select_probe_hit_count);
+        }
+        return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
+    }
+
+    XrCoroExt *ext = xr_coro_ensure_ext(coro);
+    if (!ext) {
+        return block_result(XR_CORO_BLOCK_ERROR, xr_null(), false);
     }
 
     XrSelectStorage *storage = &ext->select_storage;
@@ -973,8 +1109,8 @@ XrCoroBlockResult xr_coro_scope_enter(XrayIsolate *isolate, XrCoroutine *coro, u
     scope->first_child = NULL;
     scope->owner = coro;
     if (coro) {
-        scope->parent = coro->current_scope;
-        coro->current_scope = scope;
+        scope->parent = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
+        atomic_store_explicit(&coro->current_scope, scope, memory_order_release);
     } else {
         scope->parent = sched->current_scope;
         sched->current_scope = scope;
@@ -987,7 +1123,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
     }
 
-    XrScopeContext *scope = coro->current_scope;
+    XrScopeContext *scope = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
     if (!scope) {
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
@@ -1011,7 +1147,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
     if (scope_mode == XR_SCOPE_LINKED && !XR_IS_NULL(scope->first_error)) {
         XrValue err = scope->first_error;
         bool err_is_value = scope->first_error_is_value;
-        coro->current_scope = scope->parent;
+        atomic_store_explicit(&coro->current_scope, scope->parent, memory_order_release);
         xr_free(scope);
         return block_result(XR_CORO_BLOCK_ERROR, err, err_is_value);
     }
@@ -1026,7 +1162,7 @@ XrCoroBlockResult xr_coro_scope_exit(XrCoroutine *coro, uint8_t scope_mode) {
         }
     }
 
-    coro->current_scope = scope->parent;
+    atomic_store_explicit(&coro->current_scope, scope->parent, memory_order_release);
     xr_free(scope);
     return block_result(XR_CORO_BLOCK_READY, supervisor_result, true);
 }

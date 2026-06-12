@@ -369,7 +369,11 @@ int xra_live_ptr(CodegenCtx *ctx, A64Reg *out) {
 // which spill slots hold PTR vregs (spill_bitmap) at cur_ra_pos.
 uint32_t record_safepoint(CodegenCtx *ctx) {
     if (ctx->nsmap >= XM_MAX_STACK_MAP_ENTRIES) {
-        fprintf(stderr, "[SMAP] WARNING: stack map table full (%u entries)\n", ctx->nsmap);
+        /* Fail-closed: a reused/wrong safepoint id makes GC scan the wrong
+         * bitmaps (missed roots → use-after-free). Mark the compile as
+         * failed so the function stays on the interpreter instead. */
+        xr_log_warning("a64-cg", "stack map table full (%u entries): bail", ctx->nsmap);
+        ctx->had_error = true;
         return ctx->nsmap > 0 ? ctx->nsmap - 1 : 0;
     }
 
@@ -1463,6 +1467,10 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
 
     CodegenCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
+    for (uint32_t i = 0; i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        ctx.suspend_result_bc_slots[i] = -1;
+        ctx.suspend_result_tag_offs[i] = -1;
+    }
     ctx.func = func;
     ctx.alloc = alloc;
     ctx.npatch = 0;
@@ -1604,18 +1612,22 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
         ctx.buf.code[ctx.frame_patch_add[i]] = a64_add_imm(A64_SP, A64_SP, frame_size);
     }
 
-    // NOP-out callee-saved STP/LDP for unused register pairs
-    // GP pairs 0-2: x21/x22..x25/x26 → csaved bits 0-5
-    // FP pairs 4-7: d8/d9..d14/d15   → csaved bits 16-23
+    // NOP-out callee-saved STP/LDP for unused register pairs.
+    // GP pair 0 is x19/x20 and must always be preserved: x19 is CORO_REG
+    // and x20 is SAFEPT_PAGE_REG, both outside LSRA's alloc_regs table.
+    // GP pairs 1-2: x21/x22 and x23/x24 → csaved bits 0-3.
+    // x25/x26 and x27/x28 are currently always saved/restored.
+    // FP pairs 4-7: d8/d9..d14/d15 → csaved bits 16-23.
     for (uint32_t i = 0; i < ctx.ncs_patches; i++) {
         uint8_t pair = ctx.cs_patches[i].pair;
         bool used;
-        if (pair < 3) {
-            // GP pair: bits (pair*2) and (pair*2+1) in csaved
-            uint32_t mask = (0x3u << (pair * 2));
+        if (pair == 0) {
+            used = true;
+        } else if (pair < 3) {
+            uint32_t gp_pair = pair - 1;
+            uint32_t mask = (0x3u << (gp_pair * 2));
             used = (ctx.xra->callee_saved & mask) != 0;
         } else {
-            // FP pair: d(8+2*(pair-4)) and d(9+2*(pair-4)) → bits 16+2*(pair-4)..
             uint32_t fp_pair = pair - 4;
             uint32_t mask = (0x3u << (16 + fp_pair * 2));
             used = (ctx.xra->callee_saved & mask) != 0;

@@ -1,0 +1,5 @@
+let x: int = 1
+
+if (x == null) {
+    print("bad")
+}

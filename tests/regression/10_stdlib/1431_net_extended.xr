@@ -5,33 +5,33 @@ import net
 // @test module exports exist
 @test
 fn test_net_core_apis() {
-    assert(net.dial != null)
-    assert(net.listen != null)
-    assert(net.accept != null)
-    assert(net.read != null)
-    assert(net.readInto != null)
-    assert(net.write != null)
-    assert(net.writeBytes != null)
-    assert(net.copy != null)
-    assert(net.copyBidirectional != null)
-    assert(net.shutdownRead != null)
-    assert(net.shutdownWrite != null)
-    assert(net.shutdown != null)
-    assert(net.close != null)
-    assert(net.lookup != null)
-    assert(net.fd != null)
-    assert(net.setReadDeadline != null)
-    assert(net.setWriteDeadline != null)
-    assert(net.setDeadline != null)
-    assert(net.setAcceptDeadline != null)
-    assert(net.lastError != null)
-    assert(net.lastErrno != null)
+    assert(typeof(net.dial) == "function")
+    assert(typeof(net.listen) == "function")
+    assert(typeof(net.accept) == "function")
+    assert(typeof(net.read) == "function")
+    assert(typeof(net.readInto) == "function")
+    assert(typeof(net.write) == "function")
+    assert(typeof(net.writeBytes) == "function")
+    assert(typeof(net.copy) == "function")
+    assert(typeof(net.copyBidirectional) == "function")
+    assert(typeof(net.shutdownRead) == "function")
+    assert(typeof(net.shutdownWrite) == "function")
+    assert(typeof(net.shutdown) == "function")
+    assert(typeof(net.close) == "function")
+    assert(typeof(net.lookup) == "function")
+    assert(typeof(net.fd) == "function")
+    assert(typeof(net.setReadDeadline) == "function")
+    assert(typeof(net.setWriteDeadline) == "function")
+    assert(typeof(net.setDeadline) == "function")
+    assert(typeof(net.setAcceptDeadline) == "function")
+    assert(typeof(net.lastError) == "function")
+    assert(typeof(net.lastErrno) == "function")
 }
 
 // @test TLS APIs exist
 @test
 fn test_net_tls_apis() {
-    assert(net.hasTLS != null)
+    assert(typeof(net.hasTLS) == "function")
     let tls = net.hasTLS()
     assert(typeof(tls) == "bool")
 }
@@ -39,9 +39,9 @@ fn test_net_tls_apis() {
 // @test UDP APIs exist
 @test
 fn test_net_udp_apis() {
-    assert(net.udpBind != null)
-    assert(net.sendTo != null)
-    assert(net.recvFrom != null)
+    assert(typeof(net.udpBind) == "function")
+    assert(typeof(net.sendTo) == "function")
+    assert(typeof(net.recvFrom) == "function")
 }
 
 // @test DNS lookup - multiple calls consistent

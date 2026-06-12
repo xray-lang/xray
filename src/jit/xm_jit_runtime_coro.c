@@ -16,6 +16,7 @@
 #include "xm_jit_internal.h"
 #include "xm_jit_debug.h"
 #include "xm.h"
+#include "../base/xglobal_indices.h"
 #include "../base/xlog.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -55,10 +56,101 @@
 #include "../vm/xvm_internal.h"
 #include "xm_codegen.h"
 #include "xm_jit_debug.h"
+#include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 /* ========== Coroutine Runtime Helpers ========== */
+
+static XmJitState *jit_state_for_coro(XrCoroutine *coro) {
+    return (coro && coro->isolate) ? coro->isolate->vm.jit : NULL;
+}
+
+#define JIT_CORO_STAT_INC(coro, field)                                                             \
+    do {                                                                                           \
+        XmJitState *_jit_stats = jit_state_for_coro((coro));                                       \
+        if (_jit_stats)                                                                            \
+            atomic_fetch_add_explicit(&_jit_stats->field, 1, memory_order_relaxed);                \
+    } while (0)
+
+#define JIT_CORO_HELPER(coro) JIT_CORO_STAT_INC((coro), stats_coro_helper_count)
+
+#define XR_JIT_CHAN_RECV_FAST_DONE_SLOT 2
+#define XR_JIT_CHAN_SEND_VALUE_TAG_SLOT 2
+#define XR_JIT_CHAN_SEND_FAST_DONE_SLOT 3
+#define XR_JIT_CHAN_METHOD_SEND_VALUE_TAG_SLOT 2
+#define XR_JIT_CHAN_METHOD_SEND_FAST_DONE_SLOT 3
+#define XR_JIT_CHAN_METHOD_SEND_DEOPT_ID_SLOT 4
+#define XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT 2
+#define XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT 4
+#define XR_JIT_CHAN_METHOD_RECV_VALUE 1
+#define XR_JIT_CHAN_METHOD_RECV_CLOSED 2
+#define XR_JIT_CHAN_NEW_DYNAMIC_CAP_FLAG (1ULL << 40)
+
+static XrEnumType *jit_builtin_enum_type(XrayIsolate *isolate, int builtin_index) {
+    if (!isolate || builtin_index < 0 || builtin_index >= XR_USER_GLOBALS_START)
+        return NULL;
+    XrValue value = isolate->vm.builtins[builtin_index];
+    if (!XR_IS_PTR(value))
+        return NULL;
+    return (XrEnumType *) XR_TO_PTR(value);
+}
+
+static XrValue jit_builtin_enum_member(XrayIsolate *isolate, int builtin_index,
+                                       uint32_t member_index) {
+    XrEnumType *type = jit_builtin_enum_type(isolate, builtin_index);
+    if (!type || member_index >= type->member_count || !type->members[member_index].instance)
+        return xr_null();
+    return XR_FROM_PTR(type->members[member_index].instance);
+}
+
+static XrValue jit_builtin_adt_value(XrayIsolate *isolate, int builtin_index, uint32_t member_index,
+                                     XrValue *args, int nargs) {
+    XrEnumType *type = jit_builtin_enum_type(isolate, builtin_index);
+    if (!type || !type->is_adt)
+        return xr_null();
+    XrInstance *inst = xr_enum_adt_construct(isolate, type, member_index, args, nargs);
+    return inst ? XR_FROM_PTR(inst) : xr_null();
+}
+
+static XrValue jit_recv_value(XrayIsolate *isolate, XrValue value) {
+    XrValue args[1] = {value};
+    return jit_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 0, args, 1);
+}
+
+static XrValue jit_recv_empty(XrayIsolate *isolate) {
+    return jit_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 1);
+}
+
+static XrValue jit_recv_closed(XrayIsolate *isolate) {
+    return jit_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 3);
+}
+
+static XrValue jit_send_result(XrayIsolate *isolate, uint32_t member_index) {
+    return jit_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
+}
+
+static void jit_store_suspend_result(XrCoroutine *coro, XrValue value) {
+    XrJitCoroState *jit_state = xr_coro_jit_state(coro);
+    if (!jit_state || !jit_state->suspend)
+        return;
+    jit_state->suspend->result = value.i;
+    jit_state->suspend->result_tag = value.tag;
+}
+
+static XrJitResult jit_channel_method_deopt(XrCoroutine *coro, uint32_t deopt_id, XrErrorCode code,
+                                            const char *message) {
+    XrJitCoroState *jit_state = xr_coro_jit_state(coro);
+    if (jit_state && jit_state->scratch) {
+        jit_state->scratch->invoke_deopt_id = deopt_id;
+        jit_state->scratch->deopt_id = UINT32_MAX;
+        if (coro && coro->isolate) {
+            XrValue exc = xr_exception_newf(coro->isolate, code, "%s", message);
+            jit_state->scratch->exception = (void *) exc.ptr;
+        }
+    }
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
+}
 
 XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
     const XrInstruction *code = (const XrInstruction *) proto->code.data;
@@ -68,23 +160,59 @@ XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
             case OP_CATCH:
             case OP_END_TRY:
             case OP_THROW:
+            case OP_AWAIT_TIMEOUT:
+            case OP_AWAIT_ALL:
+            case OP_AWAIT_ANY:
+            case OP_YIELD:
+            case OP_CANCELLED:
+            case OP_LOCK_THREAD:
+            case OP_UNLOCK_THREAD:
+            case OP_SET_LOCAL:
+            case OP_GET_LOCAL:
+            case OP_CORO_CTRL:
+            case OP_CHAN_NEW_NAMED:
+            case OP_CHAN_SEND_TIMEOUT:
+            case OP_CHAN_RECV_TIMEOUT:
+            case OP_CHAN_CLOSE:
+            case OP_SCOPE_ENTER:
+            case OP_SCOPE_EXIT:
+            case OP_SLEEP:
+            case OP_SELECT_BLOCK:
                 return true;
+            default:
+                continue;
         }
     }
     return false;
 }
 
-// Called from JIT via CALL_C for OP_CHAN_NEW.
-// extra_arg = buffer_size
+// Called from JIT via CALL_C for OP_CHAN_NEW / OP_CHAN_NEW_CAP.
+// extra_arg low32 = static buffer size, bits32..39 = elem_tid, bit40 = dynamic cap in call_args[0].
 // Returns raw channel pointer (tagged XrValue).
 XrJitResult xr_jit_chan_new(XrCoroutine *coro, int64_t extra_arg) {
-    uint32_t buffer_size = (uint32_t) (extra_arg & 0xFFFFFFFF);
+    JIT_CORO_HELPER(coro);
+    uint64_t extra = (uint64_t) extra_arg;
+    uint32_t buffer_size = (uint32_t) (extra & 0xFFFFFFFFu);
+    uint8_t elem_tid = (uint8_t) ((extra >> 32) & 0xFF);
+    if (extra & XR_JIT_CHAN_NEW_DYNAMIC_CAP_FLAG) {
+        XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+        XrValue cap_val = jit_value_from_tag(scratch->call_args[0], scratch->call_arg_tags[0]);
+        buffer_size = 0;
+        if (XR_IS_INT(cap_val)) {
+            int64_t cap = XR_TO_INT(cap_val);
+            if (cap > 0 && cap <= MAXARG_Bx)
+                buffer_size = (uint32_t) cap;
+        }
+    } else if (buffer_size > MAXARG_Bx) {
+        buffer_size = 0;
+    }
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)
         return XR_JIT_NULL();
     XrChannel *ch = xr_channel_new(isolate, buffer_size);
     if (!ch)
         return XR_JIT_NULL();
+    ch->elem_tid = elem_tid;
     XrValue v = xr_value_from_channel(ch);
     return XR_JIT_VAL(v);
 }
@@ -93,6 +221,7 @@ XrJitResult xr_jit_chan_new(XrCoroutine *coro, int64_t extra_arg) {
 // jit_call_args[0] = channel raw pointer
 // Returns 0.
 XrJitResult xr_jit_chan_close(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
@@ -106,10 +235,11 @@ XrJitResult xr_jit_chan_close(XrCoroutine *coro, int64_t extra_arg) {
 // jit_call_args[0] = channel raw pointer
 // Returns 1 if closed, 0 otherwise.
 XrJitResult xr_jit_chan_is_closed(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
-        return XR_JIT_BOOL(1);
+        return XR_JIT_BOOL(0);
     XrChannel *ch = xr_value_to_channel(ch_val);
     return XR_JIT_BOOL(xr_channel_is_closed(ch) ? 1 : 0);
 }
@@ -120,6 +250,7 @@ XrJitResult xr_jit_chan_is_closed(XrCoroutine *coro, int64_t extra_arg) {
 // Returns 1 on success, 0 on failure.
 // Canonical logic in xr_chan_try_send (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val))
@@ -130,6 +261,11 @@ XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
                                         xr_coro_jit_state(coro)->scratch->call_arg_tags[1]);
 
     bool success = xr_chan_try_send(coro->isolate, ch, send_v);
+    if (success) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+    } else {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
+    }
     return XR_JIT_BOOL(success ? 1 : 0);
 }
 
@@ -138,6 +274,7 @@ XrJitResult xr_jit_chan_try_send(XrCoroutine *coro, int64_t extra_arg) {
 // Returns received value raw (or 0 for null). Stores ok flag in jit_call_args[1].
 // Canonical logic in xr_chan_try_recv (xchannel_ops.h).
 XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
     XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
@@ -148,11 +285,268 @@ XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
 
     XrValue recv_val;
     if (xr_chan_try_recv(coro->isolate, ch, &recv_val, coro)) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
         xr_coro_jit_state(coro)->scratch->call_args[1] = 1;  // ok = true
         return XR_JIT_VAL(recv_val);
     }
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
     xr_coro_jit_state(coro)->scratch->call_args[1] = 0;  // ok = false
     return XR_JIT_NULL();
+}
+
+/* ========== Language-level Channel<T> Method Helpers ========== */
+
+// ch.trySend(value) -> SendResult
+XrJitResult xr_jit_chan_method_try_send(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_NULL();
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val))
+        return XR_JIT_VAL(jit_send_result(coro->isolate, 3));
+    XrChannel *ch = xr_value_to_channel(ch_val);
+    if (xr_channel_is_closed(ch))
+        return XR_JIT_VAL(jit_send_result(coro->isolate, 3));
+
+    XrValue send_v = jit_value_from_tag(scratch->call_args[1], scratch->call_arg_tags[1]);
+    bool ok = xr_chan_try_send(coro->isolate, ch, send_v);
+    if (ok)
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+    else
+        JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
+    return XR_JIT_VAL(jit_send_result(coro->isolate, ok ? 0 : 1));
+}
+
+// ch.tryRecv() -> Recv<T>
+XrJitResult xr_jit_chan_method_try_recv(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_NULL();
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val))
+        return XR_JIT_VAL(jit_recv_closed(coro->isolate));
+    XrChannel *ch = xr_value_to_channel(ch_val);
+
+    XrValue recv_val;
+    bool ok = xr_chan_try_recv(coro->isolate, ch, &recv_val, coro);
+    if (ok) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        return XR_JIT_VAL(jit_recv_value(coro->isolate, recv_val));
+    }
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
+    return XR_JIT_VAL(xr_channel_is_closed(ch) ? jit_recv_closed(coro->isolate)
+                                               : jit_recv_empty(coro->isolate));
+}
+
+// ch.close() -> ()
+XrJitResult xr_jit_chan_method_close(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_NULL();
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (xr_value_is_channel(ch_val))
+        xr_channel_close(xr_value_to_channel(ch_val));
+    return XR_JIT_NULL();
+}
+
+// ch.isClosed() -> bool
+XrJitResult xr_jit_chan_method_is_closed(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_BOOL(1);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val))
+        return XR_JIT_BOOL(1);
+    return XR_JIT_BOOL(xr_channel_is_closed(xr_value_to_channel(ch_val)) ? 1 : 0);
+}
+
+// ch.send(value) -> ()
+XrJitResult xr_jit_chan_method_send(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    uint32_t deopt_id = (uint32_t) (extra_arg & 0xFFFFu);
+    if (!coro || !coro->isolate)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    scratch->call_args[XR_JIT_CHAN_METHOD_SEND_FAST_DONE_SLOT] = 0;
+    scratch->call_args[XR_JIT_CHAN_METHOD_SEND_DEOPT_ID_SLOT] = (int64_t) deopt_id;
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val))
+        return jit_channel_method_deopt(coro, deopt_id, XR_ERR_INVALID_ARG_TYPE,
+                                        "Channel.send receiver is not a channel");
+
+    XrChannel *ch = xr_value_to_channel(ch_val);
+    if (xr_channel_is_closed(ch))
+        return jit_channel_method_deopt(coro, deopt_id, XR_ERR_CORO_DEAD, "Channel is closed");
+
+    XrValue send_v = jit_value_from_tag(scratch->call_args[1], scratch->call_arg_tags[1]);
+    send_v = xr_chan_prepare_send(coro->isolate, send_v);
+    scratch->call_args[1] = send_v.i;
+    scratch->call_args[XR_JIT_CHAN_METHOD_SEND_VALUE_TAG_SLOT] = (int64_t) send_v.tag;
+
+    if (xr_channel_try_send(ch, send_v)) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        xr_runtime_wake_channel(coro->isolate, ch, false);
+        scratch->call_args[XR_JIT_CHAN_METHOD_SEND_FAST_DONE_SLOT] = 1;
+        jit_store_suspend_result(coro, xr_null());
+        return XR_JIT_NULL();
+    }
+
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
+}
+
+// Block helper for ch.send(value).
+XrJitResult xr_jit_chan_method_send_block(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return (XrJitResult) {1, 0};
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (scratch->call_args[XR_JIT_CHAN_METHOD_SEND_FAST_DONE_SLOT] != 0) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_SEND_FAST_DONE_SLOT] = 0;
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {1, 0};
+    }
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val)) {
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {1, 0};
+    }
+
+    XrChannel *ch = xr_value_to_channel(ch_val);
+    uint8_t val_tag = (uint8_t) (scratch->call_args[XR_JIT_CHAN_METHOD_SEND_VALUE_TAG_SLOT] & 0xFF);
+    XrValue send_v = jit_value_from_tag(scratch->call_args[1], val_tag);
+
+    XrChanResult cr = xr_channel_send(ch, send_v, coro, -1);
+    if (cr == XR_CHAN_OK) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {1, 0};
+    }
+    if (cr == XR_CHAN_BLOCK) {
+        JIT_CORO_STAT_INC(coro, stats_chan_block_count);
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {0, 0};
+    }
+
+    uint32_t deopt_id =
+        (uint32_t) (scratch->call_args[XR_JIT_CHAN_METHOD_SEND_DEOPT_ID_SLOT] & 0xFFFFFFFFu);
+    return jit_channel_method_deopt(coro, deopt_id, XR_ERR_CORO_DEAD, "Channel is closed");
+}
+
+// ch.recv() -> raw payload; lowered code wraps it into Recv<T> after XM_SUSPEND.
+XrJitResult xr_jit_chan_method_recv(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_NULL();
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] = 0;
+    scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_VALUE;
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val)) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_CLOSED;
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] = 1;
+        jit_store_suspend_result(coro, xr_null());
+        return XR_JIT_NULL();
+    }
+
+    XrChannel *ch = xr_value_to_channel(ch_val);
+    XrValue recv_val;
+    if (xr_chan_try_recv(coro->isolate, ch, &recv_val, coro)) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] = 1;
+        jit_store_suspend_result(coro, recv_val);
+        return XR_JIT_VAL(recv_val);
+    }
+
+    if (xr_channel_is_closed(ch)) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_CLOSED;
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] = 1;
+        jit_store_suspend_result(coro, xr_null());
+        return XR_JIT_NULL();
+    }
+
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
+    return (XrJitResult) {XM_DEOPT_MARKER, 0};
+}
+
+// Block helper for ch.recv().
+XrJitResult xr_jit_chan_method_recv_block(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return (XrJitResult) {1, 0};
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] != 0) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_FAST_DONE_SLOT] = 0;
+        return (XrJitResult) {1, 0};
+    }
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
+    if (!xr_value_is_channel(ch_val)) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_CLOSED;
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {1, 0};
+    }
+
+    XrChannel *ch = xr_value_to_channel(ch_val);
+    XrJitSuspendState *suspend = xr_coro_jit_state(coro)->suspend;
+    XrSlotRef result_slot =
+        xr_slot_jit_suspend(suspend, (uint32_t) offsetof(XrJitSuspendState, result), XR_REP_TAGGED);
+    XrCoroBlockResult cr =
+        xr_coro_chan_recv(coro->isolate, coro, ch, result_slot, xr_slot_none(), -1, false);
+    if (cr.kind == XR_CORO_BLOCK_READY) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_VALUE;
+        return (XrJitResult) {1, 0};
+    }
+    if (cr.kind == XR_CORO_BLOCK_CLOSED || cr.kind == XR_CORO_BLOCK_NO_CORO ||
+        cr.kind == XR_CORO_BLOCK_TIMEOUT) {
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_CLOSED;
+        jit_store_suspend_result(coro, xr_null());
+        return (XrJitResult) {1, 0};
+    }
+    if (cr.kind == XR_CORO_BLOCK_BLOCKED) {
+        JIT_CORO_STAT_INC(coro, stats_chan_block_count);
+        scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_VALUE;
+        return (XrJitResult) {0, 0};
+    }
+
+    scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = XR_JIT_CHAN_METHOD_RECV_CLOSED;
+    jit_store_suspend_result(coro, xr_null());
+    return (XrJitResult) {1, 0};
+}
+
+// Wrap a raw ch.recv() payload into the source-level Recv<T> enum.
+XrJitResult xr_jit_chan_method_recv_wrap(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_NULL();
+
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    int64_t status = scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT];
+    if (status == XR_JIT_CHAN_METHOD_RECV_CLOSED)
+        return XR_JIT_VAL(jit_recv_closed(coro->isolate));
+
+    XrValue value = jit_value_from_tag(scratch->call_args[0], scratch->call_arg_tags[0]);
+    return XR_JIT_VAL(jit_recv_value(coro->isolate, value));
 }
 
 /* ========== Blocking Channel Send/Recv (JIT CPS) ========== */
@@ -162,8 +556,11 @@ XrJitResult xr_jit_chan_try_recv(XrCoroutine *coro, int64_t extra_arg) {
 // extra_arg = slot_type of value
 // Returns XR_JIT_NULL on success, DEOPT_MARKER if needs blocking.
 XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    scratch->call_args[XR_JIT_CHAN_SEND_FAST_DONE_SLOT] = 0;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
@@ -172,8 +569,7 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     }
 
-    XrValue send_v = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[1],
-                                        xr_coro_jit_state(coro)->scratch->call_arg_tags[1]);
+    XrValue send_v = jit_value_from_tag(scratch->call_args[1], scratch->call_arg_tags[1]);
 
     // Deep copy mutable values for buffer safety
     if (XR_IS_PTR(send_v) && xr_value_needs_copy(send_v)) {
@@ -182,15 +578,22 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // Store prepared value for block helper
-    xr_coro_jit_state(coro)->scratch->call_args[1] = send_v.i;
-    xr_coro_jit_state(coro)->scratch->call_args[2] = (int64_t) send_v.tag;
+    scratch->call_args[1] = send_v.i;
+    scratch->call_args[XR_JIT_CHAN_SEND_VALUE_TAG_SLOT] = (int64_t) send_v.tag;
 
     bool ok = xr_channel_try_send(ch, send_v);
     if (ok) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
         xr_runtime_wake_channel(coro->isolate, ch, false);
+        scratch->call_args[XR_JIT_CHAN_SEND_FAST_DONE_SLOT] = 1;
+        if (xr_coro_jit_state(coro)->suspend) {
+            xr_coro_jit_state(coro)->suspend->result = xr_null().i;
+            xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
+        }
         return XR_JIT_NULL();
     }
     // Need blocking → XM_SUSPEND will save regs then call block helper
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
     return (XrJitResult) {XM_DEOPT_MARKER, 0};
 }
 
@@ -198,24 +601,35 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
 // Runtime helper owns waiter registration; JIT only publishes suspend result.
 // Returns 0 if blocked, 1 if send succeeded during retry.
 XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (scratch->call_args[XR_JIT_CHAN_SEND_FAST_DONE_SLOT] != 0) {
+        scratch->call_args[XR_JIT_CHAN_SEND_FAST_DONE_SLOT] = 0;
+        xr_coro_jit_state(coro)->suspend->result = xr_null().i;
+        xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
+        return (XrJitResult) {1, 0};
+    }
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
         xr_coro_jit_state(coro)->suspend->result = xr_null().i;
         xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};  // not blocked, handle error inline
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
-    uint8_t val_tag = (uint8_t) (xr_coro_jit_state(coro)->scratch->call_args[2] & 0xFF);
-    XrValue send_v = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[1], val_tag);
+    uint8_t val_tag = (uint8_t) (scratch->call_args[XR_JIT_CHAN_SEND_VALUE_TAG_SLOT] & 0xFF);
+    XrValue send_v = jit_value_from_tag(scratch->call_args[1], val_tag);
 
     XrCoroBlockResult cr = xr_coro_chan_send(coro->isolate, coro, ch, send_v, xr_slot_none(), -1);
     if (cr.kind == XR_CORO_BLOCK_READY) {
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
         xr_coro_jit_state(coro)->suspend->result = xr_null().i;
         xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr.kind == XR_CORO_BLOCK_BLOCKED) {
+        JIT_CORO_STAT_INC(coro, stats_chan_block_count);
         // BLOCKED is already set under the channel lock.
         // Do NOT touch flags after this point — coro may already be woken
         // by another worker. VM bytecode path also doesn't set wait_reason.
@@ -232,26 +646,46 @@ XrJitResult xr_jit_chan_send_block(XrCoroutine *coro, int64_t extra_arg) {
 // Returns XrJitResult with value on success, DEOPT_MARKER if needs blocking.
 // Stores ok flag in jit_call_args[1].
 XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] = 0;
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
-        xr_coro_jit_state(coro)->scratch->call_args[1] = 0;
+        scratch->call_args[1] = 0;
+        scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] = 1;
+        if (xr_coro_jit_state(coro)->suspend) {
+            xr_coro_jit_state(coro)->suspend->result = xr_null().i;
+            xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
+        }
         return XR_JIT_NULL();
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
     XrValue value;
     if (xr_chan_try_recv(coro->isolate, ch, &value, coro)) {
-        xr_coro_jit_state(coro)->scratch->call_args[1] = 1;
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
+        scratch->call_args[1] = 1;
+        scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] = 1;
+        if (xr_coro_jit_state(coro)->suspend) {
+            xr_coro_jit_state(coro)->suspend->result = value.i;
+            xr_coro_jit_state(coro)->suspend->result_tag = value.tag;
+        }
         return XR_JIT_RESULT(value);
     }
 
     if (xr_channel_is_closed(ch)) {
-        xr_coro_jit_state(coro)->scratch->call_args[1] = 0;
+        scratch->call_args[1] = 0;
+        scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] = 1;
+        if (xr_coro_jit_state(coro)->suspend) {
+            xr_coro_jit_state(coro)->suspend->result = xr_null().i;
+            xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
+        }
         return XR_JIT_NULL();
     }
 
     // Need blocking → XM_SUSPEND will save regs then call block helper
+    JIT_CORO_STAT_INC(coro, stats_chan_try_miss_count);
     return (XrJitResult) {XM_DEOPT_MARKER, 0};
 }
 
@@ -259,8 +693,15 @@ XrJitResult xr_jit_chan_recv(XrCoroutine *coro, int64_t extra_arg) {
 // Runtime helper owns waiter registration; JIT only publishes suspend result.
 // Returns 0 if blocked, 1 if recv succeeded during retry.
 XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     (void) extra_arg;
-    XrValue ch_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] != 0) {
+        scratch->call_args[XR_JIT_CHAN_RECV_FAST_DONE_SLOT] = 0;
+        return (XrJitResult) {1, 0};
+    }
+
+    XrValue ch_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_channel(ch_val)) {
         xr_coro_jit_state(coro)->suspend->result = xr_null().i;
         xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
@@ -268,24 +709,22 @@ XrJitResult xr_jit_chan_recv_block(XrCoroutine *coro, int64_t extra_arg) {
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
-    XrValue *slot = &xr_coro_vm_ctx(coro)->stack[0];
+    XrJitSuspendState *suspend = xr_coro_jit_state(coro)->suspend;
+    XrSlotRef result_slot =
+        xr_slot_jit_suspend(suspend, (uint32_t) offsetof(XrJitSuspendState, result), XR_REP_TAGGED);
     XrCoroBlockResult cr =
-        xr_coro_chan_recv(coro->isolate, coro, ch, xr_slot_xvalue_ptr(slot), xr_slot_none(), -1);
+        xr_coro_chan_recv(coro->isolate, coro, ch, result_slot, xr_slot_none(), -1, false);
     if (cr.kind == XR_CORO_BLOCK_READY) {
-        XrValue out = *slot;
-        xr_coro_jit_state(coro)->suspend->result = out.i;
-        xr_coro_jit_state(coro)->suspend->result_tag = out.tag;
+        JIT_CORO_STAT_INC(coro, stats_chan_try_hit_count);
         return (XrJitResult) {1, 0};  // succeeded during retry
     }
     if (cr.kind == XR_CORO_BLOCK_CLOSED) {
-        xr_coro_jit_state(coro)->suspend->result = xr_null().i;
-        xr_coro_jit_state(coro)->suspend->result_tag = XR_TAG_NULL;
         return (XrJitResult) {1, 0};
     }
     if (cr.kind == XR_CORO_BLOCK_BLOCKED) {
-        // recv slot points to stack[0], a persistent bridge slot.
-        // Worker resume path copies stack[0] → jit_suspend.result before
-        // calling xm_jit_resume.
+        JIT_CORO_STAT_INC(coro, stats_chan_block_count);
+        // recv slot points directly to jit_suspend.result/result_tag.
+        // The waker writes the value that xm_jit_resume will load.
         // Do NOT touch flags — coro may already be woken by another worker.
         return (XrJitResult) {0, 0};  // blocked
     }
@@ -758,6 +1197,7 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
     XrJitResult osr_jr = ((XmJitFn) osr_entry)((intptr_t) coro, values);
     int64_t osr_payload = osr_jr.payload;
 #endif
+    (void) saved_id;
 
     if (osr_payload == XM_DEOPT_MARKER) {
         // JIT ran but deoptimized mid-function. It may have produced
@@ -1092,7 +1532,7 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
     if (!coro)
         return XR_JIT_OK();
 
-    XrScopeContext *scope = coro->current_scope;
+    XrScopeContext *scope = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
     if (!scope)
         return XR_JIT_OK();
 
@@ -1150,7 +1590,12 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     // Create Task handle (mirrors vm_spawn)
-    XrTask *task = xr_task_create(coro, child);
+    XrRuntime *runtime = (XrRuntime *) isolate->vm.runtime;
+    if (!runtime) {
+        xr_coro_destroy(child);
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    }
+    XrTask *task = xr_task_create(runtime, coro, child);
     if (!task) {
         xr_coro_destroy(child);
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
@@ -1160,9 +1605,13 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
         child->gc_flags |= XR_CORO_GC_RECYCLABLE;
 
     // Setup scope tracking
-    XrScopeContext *scope = coro->current_scope;
+    XrScopeContext *scope = atomic_load_explicit(&coro->current_scope, memory_order_relaxed);
     if (scope) {
         if (!xr_coro_set_parent_scope(child, scope)) {
+            /* Task not yet visible to any other thread: plain detach. */
+            atomic_store_explicit(&task->coro, NULL, memory_order_relaxed);
+            child->task = NULL;
+            xr_task_cancel(task);
             xr_coro_destroy(child);
             return (XrJitResult) {XM_DEOPT_MARKER, 0};
         }
@@ -1170,9 +1619,6 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     }
 
     // Schedule the coroutine (no continuation stealing in JIT path)
-    XrRuntime *runtime = (XrRuntime *) xr_isolate_get_vm_state(isolate)->runtime;
-    if (!runtime)
-        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     xr_runtime_spawn(runtime, child);
 
     XrValue result = xr_value_from_task(task);
@@ -1186,6 +1632,7 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
 // Slow path: return XM_DEOPT_MARKER to trigger deopt to interpreter.
 // All await coordination lives on XrTask; raw coro await no longer supported.
 XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     int discard_result = (int) (extra_arg & 0x01);
 
     int64_t raw0 = xr_coro_jit_state(coro)->scratch->call_args[0];
@@ -1196,6 +1643,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
         XrTask *task = xr_value_to_task(val);
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (tstate == XR_TASK_COMPLETED) {
+            JIT_CORO_STAT_INC(coro, stats_await_done_fast_count);
             XrValue res =
                 xr_coro_await_result_value(coro->isolate, coro, task, discard_result != 0);
             return XR_JIT_RESULT(res);
@@ -1226,6 +1674,7 @@ XrJitResult xr_jit_await(XrCoroutine *coro, int64_t extra_arg) {
  *       (JIT reloads regs and continues inline)
  */
 XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
     int discard_result = (int) (extra_arg & 0x01);
 
     /* Retrieve Task pointer from the preceding xr_jit_await call.
@@ -1251,6 +1700,7 @@ XrJitResult xr_jit_await_block(XrCoroutine *coro, int64_t extra_arg) {
 
     XrCoroBlockResult await_result = xr_coro_await_task(coro, task, -1);
     if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
+        JIT_CORO_STAT_INC(coro, stats_await_block_count);
         return (XrJitResult) {0, 0};  // blocked
     }
     if (await_result.kind == XR_CORO_BLOCK_READY) {

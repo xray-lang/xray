@@ -30,8 +30,10 @@
 #include "xcoroutine.h"
 #include "xworker.h"
 #include "xchannel.h"
+#include "xdeep_copy.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/xisolate_internal.h"
 #include "../runtime/object/xarray.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -60,32 +62,32 @@ static inline void await_lock_release(_Atomic bool *lock) {
 
 /* ========== Task Creation ========== */
 
-XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
-    XR_DCHECK(executor != NULL, "xr_task_create: executor must not be NULL");
+XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine *executor) {
     (void) parent_coro;
+    XR_DCHECK(runtime != NULL, "xr_task_create: runtime must not be NULL");
+    XR_DCHECK(executor != NULL, "xr_task_create: executor must not be NULL");
+    if (!runtime || !executor)
+        return NULL;
 
-    /* Allocate on executor's heap: executor keeps task alive via coro->task
-     * (GC-marked in mark_coro_roots). The OP_AWAIT paths must NOT recycle
-     * the executor while parent still references the task — parent's GC
-     * would scan freed Immix memory (use-after-free). */
-    XrTask *task = (XrTask *) xr_alloc(executor, sizeof(XrTask), XR_TTASK);
+    XrTask *task = (XrTask *) xr_calloc(1, sizeof(XrTask));
     if (!task)
         return NULL;
 
-    /* Runtime-managed: the executor keeps the task alive via coro->task;
-     * the compiler's per-coroutine RC must not free it. dup/drop become
-     * no-ops so a compiler-inserted drop can never free a task the executor
-     * still holds. */
+    xr_gc_header_init_type(&task->gc, XR_TTASK);
+    task->gc.objsize = (uint32_t) sizeof(XrTask);
+
+    /* Runtime-managed: Task handles can be observed by scheduler, awaiters,
+     * and completion listeners across coroutine boundaries. dup/drop remain
+     * no-ops; the runtime registry releases handles at teardown. */
     XR_OBJ_SET_FLAG(&task->gc, XR_OBJ_MANAGED);
 
     task->result = xr_null();
     task->error = xr_null();
-    task->coro = executor;
     atomic_store_explicit(&task->state, XR_TASK_ACTIVE, memory_order_relaxed);
-    task->flags = 0;
+    task->flags = XR_TASK_FLG_RUNTIME_OWNED;
     task->child_count = 0;
     task->link_mode = 0;
-    task->_pad1 = 0;
+    atomic_store_explicit(&task->completer_done, 0, memory_order_relaxed);
     task->_pad2 = 0;
     atomic_init(&task->child_lock, false);
     task->parent = NULL;
@@ -98,9 +100,154 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
     task->waiter = NULL;
     atomic_init(&task->await_lock, false);
     task->await_waiters = NULL;
+    task->runtime_next = NULL;
 
+    atomic_store_explicit(&task->coro, executor, memory_order_relaxed);
     executor->task = task;
+
+    xr_mutex_lock(&runtime->task_lock);
+    task->runtime_next = runtime->task_list;
+    runtime->task_list = task;
+    runtime->task_count++;
+    xr_mutex_unlock(&runtime->task_lock);
+
     return task;
+}
+
+XrTask *xr_task_runtime_detach_all(XrRuntime *runtime, size_t *out_count) {
+    if (out_count)
+        *out_count = 0;
+    if (!runtime)
+        return NULL;
+
+    xr_mutex_lock(&runtime->task_lock);
+    XrTask *task = runtime->task_list;
+    size_t count = runtime->task_count;
+    runtime->task_list = NULL;
+    runtime->task_count = 0;
+    xr_mutex_unlock(&runtime->task_lock);
+
+    if (out_count)
+        *out_count = count;
+    return task;
+}
+
+bool xr_task_runtime_try_destroy_detached(XrRuntime *runtime, XrTask *task) {
+    if (!runtime || !task || !(task->flags & XR_TASK_FLG_RUNTIME_OWNED))
+        return false;
+
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_attempt_count);
+
+    uint8_t state = atomic_load_explicit(&task->state, memory_order_acquire);
+    if (state != XR_TASK_COMPLETED) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_fail_state_count);
+        return false;
+    }
+    /* The completing worker still touches the task after publishing
+     * COMPLETED (await-waiter wake walk). completer_done (acquire, paired
+     * with the completer's release store) is the proof that it finished;
+     * freeing before that would pull the task out from under it. */
+    if (!atomic_load_explicit(&task->completer_done, memory_order_acquire)) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_fail_coro_count);
+        return false;
+    }
+    if (atomic_load_explicit(&task->coro, memory_order_acquire)) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_fail_coro_count);
+        return false;
+    }
+    if (task->parent || task->first_child || task->links) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_fail_graph_count);
+        return false;
+    }
+    if (atomic_load_explicit(&task->on_completion, memory_order_acquire)) {
+        xr_sched_metric_inc(runtime,
+                            &runtime->sched_stats.task_one_shot_destroy_fail_listener_count);
+        return false;
+    }
+
+    await_lock_acquire(&task->await_lock);
+    bool has_waiter =
+        task->await_waiters != NULL ||
+        atomic_load_explicit((_Atomic(XrCoroutine *) *) &task->waiter, memory_order_acquire) !=
+            NULL ||
+        atomic_load_explicit(&task->await_state, memory_order_acquire) == XR_AWAIT_WAITING;
+    await_lock_release(&task->await_lock);
+    if (has_waiter) {
+        xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_fail_waiter_count);
+        return false;
+    }
+
+    bool found = false;
+    xr_mutex_lock(&runtime->task_lock);
+    XrTask **cursor = &runtime->task_list;
+    while (*cursor) {
+        if (*cursor == task) {
+            *cursor = task->runtime_next;
+            task->runtime_next = NULL;
+            if (runtime->task_count > 0)
+                runtime->task_count--;
+            found = true;
+            break;
+        }
+        cursor = &(*cursor)->runtime_next;
+    }
+    xr_mutex_unlock(&runtime->task_lock);
+    if (!found) {
+        xr_sched_metric_inc(runtime,
+                            &runtime->sched_stats.task_one_shot_destroy_fail_unlinked_count);
+        return false;
+    }
+
+    xr_gc_destroy_task(&task->gc, NULL);
+    xr_free(task);
+    xr_sched_metric_inc(runtime, &runtime->sched_stats.task_one_shot_destroy_success_count);
+    return true;
+}
+
+void xr_task_destroy_list(XrTask *task) {
+    while (task) {
+        XrTask *next = task->runtime_next;
+        task->runtime_next = NULL;
+        xr_gc_destroy_task(&task->gc, NULL);
+        xr_free(task);
+        task = next;
+    }
+}
+
+void xr_task_runtime_destroy_all(XrRuntime *runtime) {
+    xr_task_destroy_list(xr_task_runtime_detach_all(runtime, NULL));
+}
+
+void xr_task_isolate_adopt_deferred(XrayIsolate *isolate, XrTask *tasks, size_t count) {
+    if (!tasks)
+        return;
+    if (!isolate) {
+        xr_task_destroy_list(tasks);
+        return;
+    }
+
+    size_t actual_count = 0;
+    XrTask *tail = tasks;
+    while (tail->runtime_next) {
+        actual_count++;
+        tail = tail->runtime_next;
+    }
+    actual_count++;
+    if (count == 0)
+        count = actual_count;
+
+    tail->runtime_next = isolate->deferred_tasks;
+    isolate->deferred_tasks = tasks;
+    isolate->deferred_task_count += count;
+}
+
+void xr_task_isolate_destroy_deferred(XrayIsolate *isolate) {
+    if (!isolate || !isolate->deferred_tasks)
+        return;
+    XrTask *tasks = isolate->deferred_tasks;
+    isolate->deferred_tasks = NULL;
+    isolate->deferred_task_count = 0;
+    xr_task_destroy_list(tasks);
 }
 
 /* ========== Simple State Setters ========== */
@@ -116,11 +263,12 @@ XrTask *xr_task_create(XrCoroutine *parent_coro, XrCoroutine *executor) {
  * Why CAS: complete/fail and cancel run on different workers (e.g. a slow
  * executor finishes its body just as a linked peer fails on another worker
  * and calls xr_task_cancel_tree on us). Without CAS, the worker that wrote
- * its terminal value last would silently overwrite the other one — which
+ * its terminal value last would silently overwrite the other one -- which
  * is exactly the 1136_task_link race where a slow_work that races a failing
  * linked peer ends up reported as COMPLETED with result=10000 instead of
  * CANCELLED. The rule "cancel wins" matches the user-visible semantics of
- * await on a cancelled task (returns null).
+ * await on a cancelled task (raises cancellation) and awaitResult()
+ * (TaskResult.Cancelled).
  */
 
 static bool task_state_is_final(uint8_t s) {
@@ -270,8 +418,9 @@ void xr_task_finalize(XrTask *task, uint8_t final_state) {
      * executor coroutine; fall back to current worker if the executor was
      * already detached (we are running on a worker thread either way). */
     XrayIsolate *X = NULL;
-    if (task->coro)
-        X = task->coro->isolate;
+    XrCoroutine *executor = xr_task_executor_peek(task);
+    if (executor)
+        X = executor->isolate;
     if (!X) {
         XrWorker *w = xr_current_worker();
         if (w && w->p.runtime)
@@ -330,8 +479,9 @@ void xr_task_cancel_tree(XrTask *task) {
     }
 
     // Cancel executor if still running
-    if (task->coro) {
-        xr_coro_cancel(task->coro);
+    XrCoroutine *executor = xr_task_executor_peek(task);
+    if (executor) {
+        xr_coro_cancel(executor);
     }
 
     // Recursively cancel all children (hold lock while iterating)
@@ -554,7 +704,11 @@ static void task_unregister_single_await_waiter(XrTask *task, XrCoroutine *waite
                                                 XrAwaitWaitToken *token) {
     if (!task || !waiter || !token)
         return;
-    if (token->node.waiter == waiter || token->node.linked)
+    /* Unlocked pre-check (relaxed): the wake walk may be resetting the node
+     * under the task's await_lock concurrently; the locked unregister
+     * re-validates before unlinking. */
+    if (xr_task_await_node_waiter(&token->node) == waiter ||
+        xr_task_await_node_linked(&token->node))
         task_unregister_await_node(task, &token->node);
 }
 
@@ -564,7 +718,7 @@ static void task_unregister_multi_await_waiters(XrCoroutine *waiter, XrCoroWaitS
     XrTaskAwaitNode *nodes = token->nodes;
     int node_count = token->node_count;
     for (int i = 0; nodes && i < node_count; i++) {
-        if (nodes[i].waiter == waiter || nodes[i].linked)
+        if (xr_task_await_node_waiter(&nodes[i]) == waiter || xr_task_await_node_linked(&nodes[i]))
             task_unregister_await_node(nodes[i].task, &nodes[i]);
     }
 }
@@ -779,6 +933,24 @@ void xr_task_wake_waiter(XrayIsolate *X, XrTask *task) {
             break;
         }
     }
+}
+
+XrValue xr_task_consume_result_copy(struct XrayIsolate *X, XrTask *task,
+                                    struct XrCoroutine *dst_coro) {
+    /* Serialize concurrent awaiters of the same task: the first one deep
+     * copies the result out of the executor heap and caches the copy back
+     * into the task (so later awaiters never chase the recycled executor
+     * heap). XrValue is 16 bytes — without the lock a reader could observe
+     * a torn cache write. */
+    await_lock_acquire(&task->await_lock);
+    XrValue result = task->result;
+    if (xr_value_needs_copy(result)) {
+        XrValue copy = xr_deep_copy_to_coro(X, result, dst_coro);
+        task->result = copy;
+        result = copy;
+    }
+    await_lock_release(&task->await_lock);
+    return result;
 }
 
 void xr_task_fire_completion(XrTask *task) {

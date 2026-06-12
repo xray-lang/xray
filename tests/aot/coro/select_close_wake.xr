@@ -13,15 +13,24 @@ let ready = new Channel<int>(0)
 let done = new Channel<int>(1)
 
 go wait_select_close(ch, ready, done)
-print(ready.recv())
+print(match (ready.recv()) {
+    Recv.Value(value) -> value
+    _ -> -1
+})
 
 for (let i = 0; i < 16; i++) {
     yield
 }
 
 ch.close()
-let (value, ok) = done.recvTimeout(2000)
-print(value)
-print(ok)
+let result = done.recvTimeout(2000)
+print(match (result) {
+    Recv.Value(value) -> value
+    _ -> -1
+})
+print(match (result) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 ready.close()
 done.close()

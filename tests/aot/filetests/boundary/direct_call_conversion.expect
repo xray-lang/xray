@@ -1,0 +1,7 @@
+contains=xaot-plan v0
+contains=function 1 name=add_with_capture module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+contains=function 2 name=add module=0 depth=2 abi=tagged boundary=closure-object params=1 ret=XrValue/tagged/tagged
+regex=boundary [0-9]+ kind=direct-call-arg func=add_with_capture value=v[0-9]+ input=v[0-9]+ reason=direct-call target=add arg=0 from=scalar/i64 to=tagged/tagged
+regex=boundary [0-9]+ kind=direct-call-ret func=add_with_capture value=v[0-9]+ input=- reason=direct-call target=add arg=- from=tagged/tagged to=scalar/i64
+c_regex=int64_t v[0-9]+ = XR_TO_INT\(direct_call_conversion_add_[0-9]+\(\(xrt_closure_t\*\)v[0-9]+\.ptr, XR_FROM_INT\(v[0-9]+\)\)\);
+contains=stats functions=3 native=1 tagged=2 coro=0

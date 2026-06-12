@@ -683,6 +683,7 @@ static void build_fixed_intervals(LsCtx *ctx) {
      * Each accumulates intervals from all CALL points. NULL = no CALL uses this class. */
     int ngp = xm_current_target->ngpr_caller_save;
     int nfp = xm_current_target->nfpr_caller_save;
+    int nfp_all = xm_current_target->nfpr;
     if (ngp > xm_current_target->ngpr)
         ngp = xm_current_target->ngpr;
     if (nfp > xm_current_target->nfpr)
@@ -691,6 +692,8 @@ static void build_fixed_intervals(LsCtx *ctx) {
         ngp = MAX_CALLER_SAVED_GP;
     if (nfp > MAX_CALLER_SAVED_FP)
         nfp = MAX_CALLER_SAVED_FP;
+    if (nfp_all > MAX_CALLER_SAVED_FP)
+        nfp_all = MAX_CALLER_SAVED_FP;
     LsRange *gp_fixed[MAX_CALLER_SAVED_GP] = {0}, *fp_fixed[MAX_CALLER_SAVED_FP] = {0};
 
     for (uint32_t bi = 0; bi < f->nblk; bi++) {
@@ -699,29 +702,48 @@ static void build_fixed_intervals(LsCtx *ctx) {
 
         for (uint32_t ii = 0; ii < blk->nins; ii++) {
             XmIns *ins = &blk->ins[ii];
-            if (!is_call_op(ins->op))
+            bool is_call = is_call_op(ins->op);
+            bool is_suspend = (ins->op == XM_SUSPEND);
+            if (!is_call && !is_suspend)
                 continue;
 
             int32_t call_pos = bs + 2 + 2 * (int32_t) ii;
 
-            for (int ci = 0; ci < ngp; ci++) {
-                if (!gp_fixed[ci]) {
-                    LsRange *fr = pool_alloc(&ctx->pool, sizeof(LsRange));
-                    memset(fr, 0, sizeof(LsRange));
-                    fr->vreg = UINT32_MAX;
-                    fr->is_fp = false;
-                    fr->is_fixed = true;
-                    fr->assigned = (int8_t) ci;
-                    fr->spill = XRA_SPILL_NONE;
-                    fr->hint = -1;
-                    fr->bundle_id = UINT32_MAX;
-                    gp_fixed[ci] = fr;
-                    ctx_track(ctx, fr);
+            /* GP caller-saved: clobbered by plain calls. XM_SUSPEND needs no
+             * GP fixed intervals — codegen explicitly bridges all allocatable
+             * GP regs through XrJitSuspendState on both the inline-resume and
+             * cross-worker resume paths. */
+            if (is_call) {
+                for (int ci = 0; ci < ngp; ci++) {
+                    if (!gp_fixed[ci]) {
+                        LsRange *fr = pool_alloc(&ctx->pool, sizeof(LsRange));
+                        memset(fr, 0, sizeof(LsRange));
+                        fr->vreg = UINT32_MAX;
+                        fr->is_fp = false;
+                        fr->is_fixed = true;
+                        fr->assigned = (int8_t) ci;
+                        fr->spill = XRA_SPILL_NONE;
+                        fr->hint = -1;
+                        fr->bundle_id = UINT32_MAX;
+                        gp_fixed[ci] = fr;
+                        ctx_track(ctx, fr);
+                    }
+                    range_add_iv(ctx, gp_fixed[ci], call_pos, call_pos + 2);
                 }
-                range_add_iv(ctx, gp_fixed[ci], call_pos, call_pos + 2);
             }
 
-            for (int ci = 0; ci < nfp; ci++) {
+            /* FP clobber width:
+             *  - plain calls clobber the ABI caller-saved FP set;
+             *  - XM_SUSPEND clobbers ALL FP regs. The suspend bridge
+             *    (XrJitSuspendState) carries only GP regs + spill slots, the
+             *    inline-resume path reloads only GP after the block helper
+             *    (which may clobber caller-saved FP per the C ABI), and on a
+             *    real suspension the frame is torn down so even callee-saved
+             *    FP regs are lost before the cross-worker resume. FP values
+             *    live across a suspend must therefore sit in spill slots,
+             *    which ARE bridged through the suspend state. */
+            int fp_count = is_suspend ? nfp_all : nfp;
+            for (int ci = 0; ci < fp_count; ci++) {
                 if (!fp_fixed[ci]) {
                     LsRange *fr = pool_alloc(&ctx->pool, sizeof(LsRange));
                     memset(fr, 0, sizeof(LsRange));

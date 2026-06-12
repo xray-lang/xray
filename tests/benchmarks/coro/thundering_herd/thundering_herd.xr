@@ -19,8 +19,10 @@ print("轮数:", ROUNDS)
 
 // 等待者：从 channel 接收一个信号后立即返回
 fn waiter(ch: Channel<int>) -> int {
-    let val = ch.recv()
-    return val ?? 0
+    return match (ch.recv()) {
+        Recv.Value(val) -> val
+        _ -> 0
+    }
 }
 
 let start = time.monotonic()

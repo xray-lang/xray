@@ -5,7 +5,8 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_set_direct.inc.c - Direct typed Set helpers for AOT class-native fields.
+ * xrt_set_direct.inc.c - Swiss-table probing for Set plus the direct typed
+ * helpers emitted by codegen for AOT class-native fields.
  */
 
 #ifndef XRT_SET_DIRECT_INC
@@ -23,170 +24,300 @@ static inline void xrt_set_direct_unsupported(uint8_t elem_type, const char *who
     abort();
 }
 
-#define XRT_SET_I64_HAS_CASE(elem, ctype, expr)                                                    \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *items = (ctype *) s->items;                                                         \
-        for (int64_t i = 0; i < s->len; i++) {                                                     \
-            if (items[i] == needle)                                                                \
-                return 1;                                                                          \
-        }                                                                                          \
-        return 0;                                                                                  \
+/* ---- canonical bit patterns (shared with the map key logic) ------------- */
+
+static inline uint64_t xrt_set_item_bits_i64(int64_t value, uint8_t elem_type) {
+    switch (elem_type) {
+        case XR_ELEM_I8:
+            return (uint64_t) (int8_t) value;
+        case XR_ELEM_U8:
+            return (uint64_t) (uint8_t) value;
+        case XR_ELEM_I16:
+            return (uint64_t) (int16_t) value;
+        case XR_ELEM_U16:
+            return (uint64_t) (uint16_t) value;
+        case XR_ELEM_I32:
+            return (uint64_t) (int32_t) value;
+        case XR_ELEM_U32:
+            return (uint64_t) (uint32_t) value;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return (uint64_t) value;
+        case XR_ELEM_BOOL:
+            return value != 0 ? 1u : 0u;
+        default:
+            xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_i64");
     }
+    return 0;
+}
 
-#define XRT_SET_I64_ADD_CASE(elem, ctype, expr)                                                    \
-    case elem:                                                                                     \
-        ((ctype *) s->items)[s->len++] = (ctype) (expr);                                           \
-        return 1
-
-#define XRT_SET_I64_DELETE_CASE(elem, ctype, expr)                                                 \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *items = (ctype *) s->items;                                                         \
-        for (int64_t i = 0; i < s->len; i++) {                                                     \
-            if (items[i] == needle) {                                                              \
-                items[i] = items[--s->len];                                                        \
-                return 1;                                                                          \
-            }                                                                                      \
-        }                                                                                          \
-        return 0;                                                                                  \
+static inline uint64_t xrt_set_item_bits_f64(double value, uint8_t elem_type) {
+    if (elem_type == XR_ELEM_F32) {
+        float f = (float) value;
+        uint32_t b32;
+        if (f == 0.0f)
+            f = 0.0f;
+        memcpy(&b32, &f, sizeof(b32));
+        return b32;
     }
-
-#define XRT_SET_F64_HAS_CASE(elem, ctype, expr)                                                    \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *items = (ctype *) s->items;                                                         \
-        for (int64_t i = 0; i < s->len; i++) {                                                     \
-            if (items[i] == needle)                                                                \
-                return 1;                                                                          \
-        }                                                                                          \
-        return 0;                                                                                  \
+    if (elem_type == XR_ELEM_F64) {
+        uint64_t b64;
+        if (value == 0.0)
+            value = 0.0;
+        memcpy(&b64, &value, sizeof(b64));
+        return b64;
     }
+    xrt_set_direct_unsupported(elem_type, "xrt_set_item_bits_f64");
+    return 0;
+}
 
-#define XRT_SET_F64_ADD_CASE(elem, ctype, expr)                                                    \
-    case elem:                                                                                     \
-        ((ctype *) s->items)[s->len++] = (ctype) (expr);                                           \
-        return 1
-
-#define XRT_SET_F64_DELETE_CASE(elem, ctype, expr)                                                 \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *items = (ctype *) s->items;                                                         \
-        for (int64_t i = 0; i < s->len; i++) {                                                     \
-            if (items[i] == needle) {                                                              \
-                items[i] = items[--s->len];                                                        \
-                return 1;                                                                          \
-            }                                                                                      \
-        }                                                                                          \
-        return 0;                                                                                  \
+static inline int64_t xrt_set_slot_raw_i64(const xrt_set_t *s, int64_t slot) {
+    switch (s->elem_type) {
+        case XR_ELEM_I8:
+            return ((const int8_t *) s->items)[slot];
+        case XR_ELEM_U8:
+        case XR_ELEM_BOOL:
+            return ((const uint8_t *) s->items)[slot];
+        case XR_ELEM_I16:
+            return ((const int16_t *) s->items)[slot];
+        case XR_ELEM_U16:
+            return ((const uint16_t *) s->items)[slot];
+        case XR_ELEM_I32:
+            return ((const int32_t *) s->items)[slot];
+        case XR_ELEM_U32:
+            return ((const uint32_t *) s->items)[slot];
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return ((const int64_t *) s->items)[slot];
+        default:
+            xrt_set_direct_unsupported(s->elem_type, "xrt_set_slot_raw_i64");
     }
+    return 0;
+}
+
+static inline void xrt_set_slot_store_i64(xrt_set_t *s, int64_t slot, int64_t value) {
+    switch (s->elem_type) {
+        case XR_ELEM_I8:
+            ((int8_t *) s->items)[slot] = (int8_t) value;
+            return;
+        case XR_ELEM_U8:
+            ((uint8_t *) s->items)[slot] = (uint8_t) value;
+            return;
+        case XR_ELEM_BOOL:
+            ((uint8_t *) s->items)[slot] = value != 0 ? 1 : 0;
+            return;
+        case XR_ELEM_I16:
+            ((int16_t *) s->items)[slot] = (int16_t) value;
+            return;
+        case XR_ELEM_U16:
+            ((uint16_t *) s->items)[slot] = (uint16_t) value;
+            return;
+        case XR_ELEM_I32:
+            ((int32_t *) s->items)[slot] = (int32_t) value;
+            return;
+        case XR_ELEM_U32:
+            ((uint32_t *) s->items)[slot] = (uint32_t) value;
+            return;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            ((int64_t *) s->items)[slot] = value;
+            return;
+        default:
+            xrt_set_direct_unsupported(s->elem_type, "xrt_set_slot_store_i64");
+    }
+}
+
+static inline void xrt_set_slot_store_f64(xrt_set_t *s, int64_t slot, double value) {
+    if (s->elem_type == XR_ELEM_F32) {
+        ((float *) s->items)[slot] = (float) value;
+        return;
+    }
+    if (s->elem_type == XR_ELEM_F64) {
+        ((double *) s->items)[slot] = value;
+        return;
+    }
+    xrt_set_direct_unsupported(s->elem_type, "xrt_set_slot_store_f64");
+}
+
+/* ---- probe context ------------------------------------------------------ */
+
+typedef struct {
+    xrt_set_t *set;
+    uint64_t bits;
+} xrt_set_probe_i64_ctx;
+
+static inline int xrt_set_probe_i64_eq(void *ctxp, int64_t slot) {
+    xrt_set_probe_i64_ctx *ctx = (xrt_set_probe_i64_ctx *) ctxp;
+    return xrt_set_item_bits_i64(xrt_set_slot_raw_i64(ctx->set, slot), ctx->set->elem_type) ==
+           ctx->bits;
+}
+
+typedef struct {
+    xrt_set_t *set;
+    double value;
+} xrt_set_probe_f64_ctx;
+
+static inline int xrt_set_probe_f64_eq(void *ctxp, int64_t slot) {
+    xrt_set_probe_f64_ctx *ctx = (xrt_set_probe_f64_ctx *) ctxp;
+    if (ctx->set->elem_type == XR_ELEM_F32)
+        return ((const float *) ctx->set->items)[slot] == (float) ctx->value;
+    return ((const double *) ctx->set->items)[slot] == ctx->value;
+}
+
+typedef struct {
+    xrt_set_t *set;
+    XrValue value;
+} xrt_set_probe_tag_ctx;
+
+static inline int xrt_set_probe_tag_eq(void *ctxp, int64_t slot) {
+    xrt_set_probe_tag_ctx *ctx = (xrt_set_probe_tag_ctx *) ctxp;
+    return xrt_eq(((const XrValue *) ctx->set->items)[slot], ctx->value) != 0;
+}
+
+/* ---- hash / find / insert / erase --------------------------------------- */
+
+static inline uint64_t xrt_set_hash_value(xrt_set_t *s, XrValue value) {
+    if (s->elem_type == XR_ELEM_ANY)
+        return xrt_hash_value(value);
+    if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
+        double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
+        return xrt_hash_mix_u64(xrt_set_item_bits_f64(d, s->elem_type));
+    }
+    int64_t i = value.tag == XR_TAG_F64 ? (int64_t) value.f : value.i;
+    return xrt_hash_mix_u64(xrt_set_item_bits_i64(i, s->elem_type));
+}
+
+static inline int64_t xrt_set_find_i64_typed_slot(xrt_set_t *s, int64_t value, uint8_t elem_type) {
+    uint64_t bits = xrt_set_item_bits_i64(value, elem_type);
+    xrt_set_probe_i64_ctx ctx;
+    ctx.set = s;
+    ctx.bits = bits;
+    return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_mix_u64(bits), xrt_set_probe_i64_eq, &ctx);
+}
+
+static inline int64_t xrt_set_find_f64_typed_slot(xrt_set_t *s, double value, uint8_t elem_type) {
+    xrt_set_probe_f64_ctx ctx;
+    ctx.set = s;
+    ctx.value = value;
+    return xrt_swiss_find(s->ctrl, s->cap,
+                          xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type)),
+                          xrt_set_probe_f64_eq, &ctx);
+}
+
+static inline int64_t xrt_set_find_value(xrt_set_t *s, XrValue value) {
+    if (s->elem_type == XR_ELEM_ANY) {
+        xrt_set_probe_tag_ctx ctx;
+        ctx.set = s;
+        ctx.value = value;
+        return xrt_swiss_find(s->ctrl, s->cap, xrt_hash_value(value), xrt_set_probe_tag_eq, &ctx);
+    }
+    if (s->elem_type == XR_ELEM_F32 || s->elem_type == XR_ELEM_F64) {
+        double d = value.tag == XR_TAG_F64 ? value.f : (double) value.i;
+        return xrt_set_find_f64_typed_slot(s, d, s->elem_type);
+    }
+    int64_t i = value.tag == XR_TAG_F64 ? (int64_t) value.f : value.i;
+    return xrt_set_find_i64_typed_slot(s, i, s->elem_type);
+}
+
+static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
+    int64_t old_slots = s->cap;
+    uint8_t *old_ctrl = s->ctrl;
+    void *old_items = s->items;
+
+    xrt_set_alloc_slots(s, new_slots);
+    for (int64_t slot = 0; slot < old_slots; slot++) {
+        if (old_ctrl[slot] & 0x80u)
+            continue;
+        uint64_t hash = s->elem_type == XR_ELEM_ANY
+                            ? xrt_hash_value(((const XrValue *) old_items)[slot])
+                            : xrt_map_stored_key_hash(old_items, slot, s->elem_type);
+        int64_t dst = xrt_swiss_find_free(s->ctrl, s->cap, hash);
+        xrt_swiss_ctrl_set(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
+        memcpy((uint8_t *) s->items + (size_t) dst * s->elem_size,
+               (const uint8_t *) old_items + (size_t) slot * s->elem_size, s->elem_size);
+        s->growth_left--;
+    }
+    XRT_FREE(old_ctrl);
+    XRT_FREE(old_items);
+}
+
+static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
+    if (s->growth_left <= 0)
+        xrt_set_rehash(s, s->len >= (s->cap - s->cap / 8) / 2 ? s->cap * 2 : s->cap);
+    int64_t slot = xrt_swiss_find_free(s->ctrl, s->cap, hash);
+    if (s->ctrl[slot] == XRT_CTRL_EMPTY)
+        s->growth_left--;
+    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
+    s->len++;
+    return slot;
+}
+
+static inline void xrt_set_erase_slot(xrt_set_t *s, int64_t slot) {
+    xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) XRT_CTRL_DELETED);
+    s->len--;
+}
+
+/* ---- direct typed helpers (codegen-emitted, signatures are an ABI) ------ */
 
 static inline int xrt_set_has_i64_typed(xrt_set_t *s, int64_t value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_has_i64_typed");
-    switch (elem_type) {
-        XRT_SET_I64_HAS_CASE(XR_ELEM_I8, int8_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_U8, uint8_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_I16, int16_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_U16, uint16_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_I32, int32_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_U32, uint32_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_I64, int64_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_U64, uint64_t, value);
-        XRT_SET_I64_HAS_CASE(XR_ELEM_BOOL, uint8_t, value != 0 ? 1 : 0);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_has_i64_typed");
-    }
-    return 0;
+    return xrt_set_find_i64_typed_slot(s, value, elem_type) >= 0;
 }
 
 static inline int xrt_set_add_i64_typed(xrt_set_t *s, int64_t value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_add_i64_typed");
-    if (xrt_set_has_i64_typed(s, value, elem_type))
+    uint64_t bits = xrt_set_item_bits_i64(value, elem_type);
+    xrt_set_probe_i64_ctx ctx;
+    ctx.set = s;
+    ctx.bits = bits;
+    uint64_t hash = xrt_hash_mix_u64(bits);
+    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_i64_eq, &ctx) >= 0)
         return 0;
-    if (s->len >= s->cap)
-        xrt_set_grow(s, "xrt_set_add_i64_typed");
-    switch (elem_type) {
-        XRT_SET_I64_ADD_CASE(XR_ELEM_I8, int8_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_U8, uint8_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_I16, int16_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_U16, uint16_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_I32, int32_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_U32, uint32_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_I64, int64_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_U64, uint64_t, value);
-        XRT_SET_I64_ADD_CASE(XR_ELEM_BOOL, uint8_t, value != 0 ? 1 : 0);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_add_i64_typed");
-    }
-    return 0;
+    int64_t slot = xrt_set_insert_slot(s, hash);
+    xrt_set_slot_store_i64(s, slot, value);
+    return 1;
 }
 
 static inline int xrt_set_delete_i64_typed(xrt_set_t *s, int64_t value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_delete_i64_typed");
-    switch (elem_type) {
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_I8, int8_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_U8, uint8_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_I16, int16_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_U16, uint16_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_I32, int32_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_U32, uint32_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_I64, int64_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_U64, uint64_t, value);
-        XRT_SET_I64_DELETE_CASE(XR_ELEM_BOOL, uint8_t, value != 0 ? 1 : 0);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_delete_i64_typed");
-    }
-    return 0;
+    int64_t slot = xrt_set_find_i64_typed_slot(s, value, elem_type);
+    if (slot < 0)
+        return 0;
+    xrt_set_erase_slot(s, slot);
+    return 1;
 }
 
 static inline int xrt_set_has_f64_typed(xrt_set_t *s, double value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_has_f64_typed");
-    switch (elem_type) {
-        XRT_SET_F64_HAS_CASE(XR_ELEM_F32, float, value);
-        XRT_SET_F64_HAS_CASE(XR_ELEM_F64, double, value);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_has_f64_typed");
-    }
-    return 0;
+    return xrt_set_find_f64_typed_slot(s, value, elem_type) >= 0;
 }
 
 static inline int xrt_set_add_f64_typed(xrt_set_t *s, double value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_add_f64_typed");
-    if (xrt_set_has_f64_typed(s, value, elem_type))
+    uint64_t hash = xrt_hash_mix_u64(xrt_set_item_bits_f64(value, elem_type));
+    xrt_set_probe_f64_ctx ctx;
+    ctx.set = s;
+    ctx.value = value;
+    if (xrt_swiss_find(s->ctrl, s->cap, hash, xrt_set_probe_f64_eq, &ctx) >= 0)
         return 0;
-    if (s->len >= s->cap)
-        xrt_set_grow(s, "xrt_set_add_f64_typed");
-    switch (elem_type) {
-        XRT_SET_F64_ADD_CASE(XR_ELEM_F32, float, value);
-        XRT_SET_F64_ADD_CASE(XR_ELEM_F64, double, value);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_add_f64_typed");
-    }
-    return 0;
+    int64_t slot = xrt_set_insert_slot(s, hash);
+    xrt_set_slot_store_f64(s, slot, value);
+    return 1;
 }
 
 static inline int xrt_set_delete_f64_typed(xrt_set_t *s, double value, uint8_t elem_type) {
     if (s->elem_type != elem_type)
         xrt_set_direct_type_mismatch(elem_type, s->elem_type, "xrt_set_delete_f64_typed");
-    switch (elem_type) {
-        XRT_SET_F64_DELETE_CASE(XR_ELEM_F32, float, value);
-        XRT_SET_F64_DELETE_CASE(XR_ELEM_F64, double, value);
-        default:
-            xrt_set_direct_unsupported(elem_type, "xrt_set_delete_f64_typed");
-    }
-    return 0;
+    int64_t slot = xrt_set_find_f64_typed_slot(s, value, elem_type);
+    if (slot < 0)
+        return 0;
+    xrt_set_erase_slot(s, slot);
+    return 1;
 }
-
-#undef XRT_SET_I64_HAS_CASE
-#undef XRT_SET_I64_ADD_CASE
-#undef XRT_SET_I64_DELETE_CASE
-#undef XRT_SET_F64_HAS_CASE
-#undef XRT_SET_F64_ADD_CASE
-#undef XRT_SET_F64_DELETE_CASE
 
 #endif /* XRT_SET_DIRECT_INC */
