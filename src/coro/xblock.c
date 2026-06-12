@@ -367,6 +367,7 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
             xr_slot_store_value(result_slot, xr_bool(true));
             return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
         }
+        xr_chan_abandon_send(value);
         if (xr_channel_is_closed(ch)) {
             xr_slot_store_value(result_slot, xr_bool(false));
             return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
@@ -385,6 +386,13 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
         xr_slot_store_value(result_slot, xr_bool(true));
         return block_result(XR_CORO_BLOCK_READY, xr_null(), true);
     }
+    if (chan_result == XR_CHAN_BLOCK) {
+        /* Value parked in coro->ext->send_value: the receiver consumes it,
+         * or the timeout/close/teardown paths release it. */
+        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
+    }
+    /* CLOSED / NO_CORO / error: the value never entered the channel. */
+    xr_chan_abandon_send(value);
     if (chan_result == XR_CHAN_CLOSED) {
         xr_slot_store_value(result_slot, xr_bool(false));
         return block_result(XR_CORO_BLOCK_CLOSED, xr_null(), false);
@@ -392,9 +400,6 @@ XrCoroBlockResult xr_coro_chan_send(XrayIsolate *isolate, XrCoroutine *coro, XrC
     if (chan_result == XR_CHAN_NO_CORO) {
         xr_slot_store_value(result_slot, xr_bool(false));
         return block_result(XR_CORO_BLOCK_NO_CORO, xr_null(), false);
-    }
-    if (chan_result == XR_CHAN_BLOCK) {
-        return block_result(XR_CORO_BLOCK_BLOCKED, xr_null(), false);
     }
 
     xr_slot_store_value(result_slot, xr_bool(false));

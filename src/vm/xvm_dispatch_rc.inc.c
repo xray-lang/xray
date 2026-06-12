@@ -21,30 +21,27 @@
  */
 
 vmcase(OP_DUP) {
-    /* dup(R[A]): acquire a new owning reference. No-op for scalars and
-     * region-allocated objects (handled inside xr_obj_dup). */
+    /* dup(R[A]): acquire a new owning reference via the unified RC retain
+     * primitive (no-op for scalars / region / managed / dead objects). */
     int a = GETARG_A(i);
     XrValue v = R(a);
-    if (XR_IS_PTR(v)) {
-        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-        xr_obj_dup(o);
-    }
+    if (XR_IS_PTR(v))
+        xr_rc_retain((XrObjHeader *) XR_VALUE_GCPTR(v));
     vmbreak;
 }
 
 vmcase(OP_DROP) {
-    /* drop(R[A]): release an owning reference. On the last reference the
-     * object's destructor runs and its memory returns to the RC freelist
-     * (shared objects route to xr_shared_destroy). Region objects are a
-     * no-op (handled in xr_obj_drop_is_last). */
+    /* drop(R[A]): release an owning reference via the unified RC release
+     * primitive. On the last reference the object is destroyed (and unlinked
+     * from cycle_roots); when RC stays > 0 a cycle-candidate is registered as
+     * a potential cycle root. Region/managed objects are a no-op. This is the
+     * SAME primitive the container runtime uses, so cycle bookkeeping no
+     * longer diverges between the compiler-inserted drop and the C runtime. */
     int a = GETARG_A(i);
     XrValue v = R(a);
     if (XR_IS_PTR(v)) {
-        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-        if (xr_obj_drop_is_last(o)) {
-            XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
-            xr_coro_gc_rc_destroy(_co ? _co->coro_gc : NULL, o);
-        }
+        XrCoroutine *_co = (XrCoroutine *) VM_CURRENT_CORO;
+        xr_rc_release(_co ? _co->coro_gc : NULL, (XrObjHeader *) XR_VALUE_GCPTR(v));
     }
     vmbreak;
 }

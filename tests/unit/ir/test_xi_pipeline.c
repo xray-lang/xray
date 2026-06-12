@@ -304,13 +304,21 @@ TEST(e2e_recursive_func) {
 }
 
 TEST(e2e_nested_call) {
-    /* Tests the register clobber fix: nested calls to same function */
-    XrProto *p = compile_source("fn add(a: int, b: int) -> int { return a + b }\n"
+    /* Tests the register clobber fix: nested calls to same function.
+     * The callee branches so the inliner (which folds straight-line
+     * shared-slot helpers into the caller) keeps both calls alive. */
+    XrProto *p = compile_source("fn add(a: int, b: int) -> int {\n"
+                                "  if (a < 0) { return b }\n"
+                                "  return a + b\n"
+                                "}\n"
                                 "print(add(1, add(2, 3)))",
                                 NULL);
     assert(p != NULL);
-    /* Main proto should have 2 CALL instructions (not CALLSELF) */
-    assert(count_opcode(p, OP_CALL) >= 2 && "nested calls need >= 2 CALLs");
+    /* Main proto should have 2 call instructions (not CALLSELF).  Calls to
+     * a statically known closure emit OP_CALL_STATIC; dynamic ones OP_CALL. */
+    int ncalls = count_opcode(p, OP_CALL) + count_opcode(p, OP_CALL_STATIC);
+    assert(ncalls >= 2 && "nested calls need >= 2 calls");
+    assert(!has_opcode(p, OP_CALLSELF) && "main proto must not self-call");
     xr_vm_proto_free(p);
 }
 

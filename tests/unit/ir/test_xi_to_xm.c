@@ -846,9 +846,45 @@ TEST(lower_assert_deopts_to_vm) {
 
 TEST(lower_builtin_metadata_ops_deopt_to_vm) {
     assert_op_deopts_to_vm(XI_TYPEOF, "typeof_deopt", 1, 0);
-    assert_op_deopts_to_vm(XI_GET_BUILTIN, "get_builtin_deopt", 0, XR_GLOBAL_VAR_PROCESS);
     assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
     assert_op_deopts_to_vm(XI_CALL_BUILTIN, "print", 1, 0);
+}
+
+TEST(lower_get_builtin_via_helper) {
+    /* XI_GET_BUILTIN lowers to a native helper call (no deopt): builtins
+     * such as `process` are read on coroutine hot paths. */
+    XiFunc *f = make_func("get_builtin_helper", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *v = xi_value_new(f, entry, XI_GET_BUILTIN, &stub_int, 0);
+    v->aux_int = XR_GLOBAL_VAR_PROCESS;
+    xi_block_set_return(entry, NULL);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL && "get_builtin lowering should succeed");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found_helper = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        assert(blk0->ins[i].op != XM_DEOPT && "get_builtin must not deopt");
+        if (blk0->ins[i].op == XM_CALL_C && blk0->ins[i].args[0] != XM_NONE) {
+            assert(xm_ref_is_const(blk0->ins[i].args[0]));
+            assert(xm_ref_is_const(blk0->ins[i].args[1]));
+            uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+            uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
+            assert(fn_ci < xm->nconst);
+            assert(extra_ci < xm->nconst);
+            assert(xm->consts[fn_ci].val.ptr == (void *) xr_jit_getbuiltin);
+            assert(xm->consts[extra_ci].val.i64 == XR_GLOBAL_VAR_PROCESS);
+            assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_getbuiltin));
+            found_helper = true;
+        }
+    }
+    assert(found_helper && "should contain CALL_C to xr_jit_getbuiltin");
+    assert(xm->ndeopt == 0 && "get_builtin should not record deopt points");
+
+    xm_func_destroy(xm);
+    xi_func_free(f);
 }
 
 TEST(lower_is_deopts_to_vm) {
@@ -1359,6 +1395,7 @@ int main(void) {
     run_lower_throw();
     run_lower_assert_deopts_to_vm();
     run_lower_builtin_metadata_ops_deopt_to_vm();
+    run_lower_get_builtin_via_helper();
     run_lower_is_deopts_to_vm();
     run_lower_shared_var();
     run_lower_load_field();

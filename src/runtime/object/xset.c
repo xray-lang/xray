@@ -32,7 +32,7 @@
 
 static void xr_set_release_entry(XrSetEntry *entry, XrCoroGC *gc) {
     XR_DCHECK(entry != NULL, "set_release_entry: NULL entry");
-    xr_gc_release_value(gc, entry->value);
+    xr_rc_release_value(gc, entry->value);
     entry->value = xr_null();
 }
 
@@ -299,7 +299,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     }
 
     if (entry != NULL) {
-        xr_gc_release_value(xr_current_coro_gc(), value);
+        xr_rc_release_value(xr_current_coro_gc(), value);
         return false;
     }
 
@@ -388,7 +388,7 @@ XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr) {
     // Add all elements from array (auto dedup)
     for (int i = 0; i < arr->length; i++) {
         XrValue value = xr_array_get_element(arr, i);
-        xr_gc_retain_value(value);
+        xr_rc_retain_value(value);
         xr_set_add(set, value);
     }
 
@@ -407,7 +407,7 @@ XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set) {
         for (uint32_t i = 0; i < set->capacity; i++) {
             XrSetEntry *entry = &set->entries[i];
             if (entry_is_valid(entry)) {
-                xr_gc_retain_value(entry->value);
+                xr_rc_retain_value(entry->value);
                 xr_array_push(arr, entry->value);
             }
         }
@@ -429,7 +429,7 @@ XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
         for (uint32_t i = 0; i < set1->capacity; i++) {
             XrSetEntry *entry = &set1->entries[i];
             if (entry_is_valid(entry)) {
-                xr_gc_retain_value(entry->value);
+                xr_rc_retain_value(entry->value);
                 xr_set_add(result, entry->value);
             }
         }
@@ -440,7 +440,7 @@ XrSet *xr_set_union(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
         for (uint32_t i = 0; i < set2->capacity; i++) {
             XrSetEntry *entry = &set2->entries[i];
             if (entry_is_valid(entry)) {
-                xr_gc_retain_value(entry->value);
+                xr_rc_retain_value(entry->value);
                 xr_set_add(result, entry->value);
             }
         }
@@ -466,7 +466,7 @@ XrSet *xr_set_intersection(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
             if (entry_is_valid(entry)) {
                 // Check if in larger set
                 if (xr_set_has(larger, entry->value)) {
-                    xr_gc_retain_value(entry->value);
+                    xr_rc_retain_value(entry->value);
                     xr_set_add(result, entry->value);
                 }
             }
@@ -488,7 +488,7 @@ XrSet *xr_set_difference(struct XrCoroutine *coro, XrSet *set1, XrSet *set2) {
             XrSetEntry *entry = &set1->entries[i];
             if (entry_is_valid(entry)) {
                 if (!xr_set_has(set2, entry->value)) {
-                    xr_gc_retain_value(entry->value);
+                    xr_rc_retain_value(entry->value);
                     xr_set_add(result, entry->value);
                 }
             }
@@ -510,7 +510,7 @@ XrSet *xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet 
             XrSetEntry *entry = &set1->entries[i];
             if (entry_is_valid(entry)) {
                 if (!xr_set_has(set2, entry->value)) {
-                    xr_gc_retain_value(entry->value);
+                    xr_rc_retain_value(entry->value);
                     xr_set_add(result, entry->value);
                 }
             }
@@ -523,7 +523,7 @@ XrSet *xr_set_symmetric_difference(struct XrCoroutine *coro, XrSet *set1, XrSet 
             XrSetEntry *entry = &set2->entries[i];
             if (entry_is_valid(entry)) {
                 if (!xr_set_has(set1, entry->value)) {
-                    xr_gc_retain_value(entry->value);
+                    xr_rc_retain_value(entry->value);
                     xr_set_add(result, entry->value);
                 }
             }

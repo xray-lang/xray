@@ -760,6 +760,10 @@ TEST(no_dedup_without_idom_set) {
     succ->control = idx;
 
     xi_range_analyze(f);
+    /* Range analysis computes dominators as a loop-forest prerequisite and
+     * fills succ->idom; clear it again so the dedup dominator walk really
+     * runs without idom information. */
+    succ->idom = NULL;
     xi_opt_bce(f);
 
     ASSERT(bc1->op == XI_BOUNDS_CHECK);

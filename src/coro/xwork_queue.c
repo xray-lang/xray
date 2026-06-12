@@ -493,6 +493,9 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
     if (ok) {
         WORK_QUEUE_METRIC_INC(q, work_queue_push_count);
         work_queue_wake_one(q, shard_idx);
+    } else {
+        // Closed or push failure: the prepared value never entered the queue.
+        xr_chan_abandon_send(value);
     }
     return ok;
 }

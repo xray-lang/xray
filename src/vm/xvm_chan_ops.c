@@ -317,6 +317,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
         return XR_DISP_NEXT;
     }
     if (xr_channel_is_closed(ch) || timeout_ms <= 0) {
+        xr_chan_abandon_send(value);
         base[a] = xr_bool(false);
         return XR_DISP_NEXT;
     }
@@ -325,6 +326,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
     while (1) {
         int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
         if (elapsed_ms >= timeout_ms) {
+            xr_chan_abandon_send(value);
             base[a] = xr_bool(false);
             break;
         }
@@ -334,6 +336,7 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
             break;
         }
         if (xr_channel_is_closed(ch)) {
+            xr_chan_abandon_send(value);
             base[a] = xr_bool(false);
             break;
         }

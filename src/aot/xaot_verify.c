@@ -525,7 +525,8 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
         arg_plan = xaot_bundle_find_value_plan(bundle, arg);
         if (!arg_plan)
             return set_error(errbuf, errbuf_len, "AOT direct call arg has no value plan");
-        if (storage_reps_equal(arg_plan->rep, target_plan->abi.params[a - first_arg].rep))
+        if (storage_reps_equal(arg_plan->rep,
+                               xaot_abi_slot_value_rep(&target_plan->abi.params[a - first_arg])))
             continue;
         step = xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, func,
                                                  call, arg, target, (uint16_t) (a - first_arg));
@@ -537,7 +538,7 @@ static bool verify_direct_call_boundaries(const XaotBundle *bundle, const XiFunc
     call_plan = xaot_bundle_find_value_plan(bundle, call);
     if (!call_plan)
         return set_error(errbuf, errbuf_len, "AOT direct call result has no value plan");
-    if (storage_reps_equal(target_plan->abi.ret.rep, call_plan->rep))
+    if (storage_reps_equal(xaot_abi_slot_value_rep(&target_plan->abi.ret), call_plan->rep))
         return true;
     if (!xaot_bundle_find_boundary_step_ex(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, func, call,
                                            NULL, target, UINT16_MAX))

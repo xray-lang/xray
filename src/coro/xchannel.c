@@ -18,6 +18,7 @@
  */
 
 #include "xchannel.h"
+#include "xchannel_ops.h"
 #include "xblock.h"
 #include "xcoroutine.h"
 #include "xcoro_tuning.h"
@@ -634,15 +635,25 @@ bool xr_channel_remove_waiter(XrChannel *ch, XrCoroutine *coro) {
 
     // Try to remove from send queue
     bool removed;
+    bool removed_from_sendq = false;
     XrWaitQueue *q = coro->ext->chan_wait_queue;
     if (q == &ch->sendq) {
         removed = xr_waitq_remove(&ch->sendq, coro);
+        removed_from_sendq = removed;
     } else if (q == &ch->recvq) {
         removed = xr_waitq_remove(&ch->recvq, coro);
     } else {
         // Stale timeout callbacks can arrive after a channel operation already
         // dequeued the coroutine.
-        removed = xr_waitq_remove(&ch->sendq, coro) || xr_waitq_remove(&ch->recvq, coro);
+        removed_from_sendq = xr_waitq_remove(&ch->sendq, coro);
+        removed = removed_from_sendq || xr_waitq_remove(&ch->recvq, coro);
+    }
+
+    // An unlinked sender's parked value never reaches a receiver:
+    // release the channel-side reference before the timeout/cancel resume.
+    if (removed_from_sendq) {
+        xr_chan_abandon_send(coro->ext->send_value);
+        coro->ext->send_value = xr_null();
     }
 
     xr_amutex_unlock(&ch->lock);
@@ -660,8 +671,17 @@ static inline bool channel_buffer_is_inline(XrChannel *ch) {
 void xr_gc_destroy_channel(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     (void) owning_gc;
     XrChannel *ch = (XrChannel *) obj;
-    if (ch->buffer && !channel_buffer_is_inline(ch)) {
-        xr_free(ch->buffer);
+    if (ch->buffer) {
+        // Release transit graphs of values never consumed by a receiver.
+        for (uint32_t i = 0; i < ch->buf_count; i++) {
+            uint32_t idx = ch->recv_idx + i;
+            if (ch->buf_size > 0 && idx >= ch->buf_size)
+                idx -= ch->buf_size;
+            xr_chan_transit_release(ch->buffer[idx]);
+        }
+        if (!channel_buffer_is_inline(ch)) {
+            xr_free(ch->buffer);
+        }
         ch->buffer = NULL;
     }
 }
@@ -1308,8 +1328,11 @@ void xr_channel_close(XrChannel *ch) {
         recv_waiters++;
     }
 
-    // Collect all waiting senders
+    // Collect all waiting senders. Their parked values never reach a
+    // receiver: release the channel-side reference (transit graph or
+    // shared +1) before resuming them with the closed status.
     while ((coro = xr_waitq_dequeue(&ch->sendq)) != NULL) {
+        xr_chan_abandon_send(coro->ext->send_value);
         coro->ext->send_value = xr_null();
         coro->ext->chan_wait_next = send_list;
         send_list = coro;

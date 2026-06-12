@@ -954,8 +954,19 @@ void xa_visit_collect(XaInferContext *ctx, AstNode *node) {
             break;
         }
         case AST_WHILE_STMT:
-            if (node->as.while_stmt.body)
+            /* The body is its own block scope in Pass 2 (via
+             * xa_visit_block_stmt). Pass 1 must mirror that so symbols
+             * declared in one loop body don't collide with same-named
+             * symbols in sibling loops. */
+            if (node->as.while_stmt.body) {
+                bool is_block = node->as.while_stmt.body->type == AST_BLOCK;
+                if (is_block)
+                    xa_analyzer_enter_scope(ctx->analyzer, XA_SCOPE_BLOCK,
+                                            node->as.while_stmt.body);
                 xa_visit_collect(ctx, node->as.while_stmt.body);
+                if (is_block)
+                    xa_analyzer_exit_scope(ctx->analyzer);
+            }
             break;
         case AST_IF_STMT:
             /* Each branch is its own block scope in Pass 2 (via

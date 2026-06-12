@@ -168,6 +168,14 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_CYCLE_COLOR_MASK 0x0300
 #define XR_OBJ_CYCLE_COLOR_SHIFT 8
 
+#define XR_OBJ_TRANSIT                                                                             \
+    0x0400 /* extra bit 10: channel-transit copy. The object graph is a                            \
+            * coroutine-independent deep copy made by the send side; the                           \
+            * channel buffer owns one atomic reference. The receive side                           \
+            * deep-copies it into the receiver's heap (TRANSIT is never                            \
+            * pointer-shared like other SHARED objects) and then drops                             \
+            * the buffer reference, freeing the whole graph. */
+
 #define XR_OBJ_GET_FLAG(o, f) (((o)->extra & (f)) != 0)
 #define XR_OBJ_SET_FLAG(o, f) ((o)->extra |= (uint16_t) (f))
 #define XR_OBJ_CLEAR_FLAG(o, f) ((o)->extra &= (uint16_t) ~(f))

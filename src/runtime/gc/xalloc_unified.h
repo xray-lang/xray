@@ -50,6 +50,19 @@ static inline void *xr_coro_alloc_blob(XrCoroGC *gc, size_t data_size) {
     return obj ? (obj + 1) : NULL;
 }
 
+// Release a blob allocated by xr_coro_alloc_blob back to the owning
+// coroutine's RC freelist. RC owns reclamation (tracing is retired, there
+// is no sweep), so containers MUST release their backing blob explicitly
+// when they are destroyed or when they reallocate their storage —
+// otherwise the blob stays live until coroutine teardown.
+static inline void xr_coro_free_blob(XrCoroGC *gc, void *data) {
+    if (!gc || !data)
+        return;
+    XrGCHeader *obj = ((XrGCHeader *) data) - 1;
+    XR_DCHECK(XR_GC_GET_TYPE(obj) == XR_TBLOB, "free_blob: not a blob");
+    xr_coro_gc_rc_destroy(gc, obj);
+}
+
 // Write barrier for container modifications
 XR_FUNC void xr_coro_write_barrier(struct XrCoroutine *coro, XrGCHeader *parent, XrGCHeader *child);
 

@@ -167,15 +167,20 @@ static const XiFunc *resolve_import_ref(const XaotBundle *bundle, const XiImport
 
 static const XiFunc *resolve_shared_function(const XaotBundle *bundle, const XiFunc *current,
                                              int slot) {
-    const XiModule *mod;
+    const XiModule *mod = NULL;
+    const XiFunc *f;
     const XiImportRef *ref;
 
     if (!current || slot < 0)
         return NULL;
-    if (current->shared_slot_funcs && slot < current->shared_slot_func_count &&
-        current->shared_slot_funcs[slot])
-        return current->shared_slot_funcs[slot];
-    mod = current->module;
+    /* Slot metadata lives on the module init function; walk the lexical
+     * parent chain so calls made inside nested functions resolve too. */
+    for (f = current; f; f = f->parent_func) {
+        if (f->shared_slot_funcs && slot < f->shared_slot_func_count && f->shared_slot_funcs[slot])
+            return f->shared_slot_funcs[slot];
+        if (!mod && f->module)
+            mod = f->module;
+    }
     if (mod && slot < mod->nslots && mod->slot_funcs && mod->slot_funcs[slot])
         return mod->slot_funcs[slot];
 

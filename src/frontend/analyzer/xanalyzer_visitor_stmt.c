@@ -380,17 +380,10 @@ void xa_visit_while_stmt(XaInferContext *ctx, AstNode *node) {
         xa_flow_create_condition(ctx->flow, while_stmt->condition, true);
     }
 
-    // Analyze body - inline block to match Pass 1 scope structure
-    if (while_stmt->body) {
-        if (while_stmt->body->type == AST_BLOCK) {
-            BlockNode *blk = &while_stmt->body->as.block;
-            for (int si = 0; si < blk->count; si++) {
-                xa_visit_infer_stmt(ctx, blk->statements[si]);
-            }
-        } else {
-            xa_visit_infer_stmt(ctx, while_stmt->body);
-        }
-    }
+    /* Analyze body. A block body goes through xa_visit_block_stmt so it
+     * gets its own scope keyed on the body node, matching Pass 1. */
+    if (while_stmt->body)
+        xa_visit_infer_stmt(ctx, while_stmt->body);
 
     // Back edge to loop start
     if (ctx->flow && loop_start) {
