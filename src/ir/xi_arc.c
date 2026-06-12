@@ -509,9 +509,14 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
     return split_any;
 }
 
-/* Place releases for an owned value with no consuming use. Returns true if
- * an edge was split (CFG analyses must be invalidated by the caller). */
-static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
+/* Compute backward liveness of `target` (plus its RC-typed borrowed-projection
+ * closure) over the CFG. On success allocates *out_live (one ArcLive per block
+ * position) and *out_pos_by_id (block-id -> position+1, 0 = absent); the caller
+ * frees both. The def block's live_in is forced false (the definition kills
+ * everything above it), bounding the live region inside the def's dominance
+ * region. Returns false on OOM. */
+static bool arc_compute_liveness(XiFunc *f, XiValue *target, ArcLive **out_live,
+                                 uint32_t **out_pos_by_id) {
     XiBlock *def_blk = target->block ? target->block : f->entry;
     if (!def_blk)
         return false;
@@ -574,11 +579,50 @@ static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
         }
     }
 
-    bool split_any = arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
+    *out_live = live;
+    *out_pos_by_id = pos_by_id;
+    return true;
+}
 
+/* Place releases for an owned value with no consuming use. Returns true if
+ * an edge was split (CFG analyses must be invalidated by the caller). */
+static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
+    XiBlock *def_blk = target->block ? target->block : f->entry;
+    if (!def_blk)
+        return false;
+    ArcLive *live = NULL;
+    uint32_t *pos_by_id = NULL;
+    if (!arc_compute_liveness(f, target, &live, &pos_by_id))
+        return false;
+    bool split_any = arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
     xr_free(pos_by_id);
     xr_free(live);
     return split_any;
+}
+
+/* Is `target` still live immediately after the consume at `site`? A consuming
+ * use is a MOVE (no dup) only when the value is dead right after it on every
+ * path; otherwise the owner still needs a reference afterwards (a later use in
+ * the same block, or a use in a successor) so the consume must dup first.
+ *
+ * Deciding by liveness rather than static program order is what makes mutually
+ * exclusive branch arms each MOVE: a consume in one arm is not "live after"
+ * just because the other arm also consumes — the arms are not on a common path.
+ * `live`/`pos_by_id` come from arc_compute_liveness (uses = consume + borrow
+ * closure), so "live after" correctly accounts for borrows-after-consume too. */
+static bool consume_is_live_after(const ConsumeSite *site, const ArcLive *live,
+                                  const uint32_t *pos_by_id) {
+    if (!site->blk || !pos_by_id[site->blk->id])
+        return true; /* unknown: conservatively dup (never a wrong move) */
+    const ArcLive *li = &live[pos_by_id[site->blk->id] - 1];
+    uint32_t idx = site->order & 0xFFFF;
+    /* Phi-edge (0xFFFE) and return (0xFFFF) consumes sit at block end: the
+     * value is only still live afterwards if a successor uses it. */
+    if (idx >= 0xFFFE)
+        return li->live_out;
+    /* Regular consume at index idx: live after iff a later use exists in this
+     * block, or the value escapes into a successor. */
+    return (li->has_use && li->last_use > idx) || li->live_out;
 }
 
 /* Process one tracked value: insert dup before every consuming use except
@@ -644,13 +688,47 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         return false;
     }
 
-    /* OWNED and CALL_RESULT share the same dup placement: the last consuming
-     * use moves the value out (no dup), every earlier consuming use dups
-     * first so the owner keeps a reference to pass on. They differ only in
-     * the n==0 case above (CALL_RESULT never inserts an unconsumed drop). */
-    for (int i = 0; i < n - 1; i++) {
+    if (mode == OWN_CALL_RESULT) {
+        /* Alias-uncertain call result: dup before every consuming use except
+         * the last (program order), never drop. We cannot prove the result is
+         * a fresh +1 vs an alias of an argument, so the conservative
+         * count-raising placement stays — turning a non-live-after consume into
+         * a move could transfer the only reference of an aliased argument. */
+        for (int i = 0; i < n - 1; i++) {
+            if (sites[i].user == NULL)
+                continue; /* return terminator can only be the single last site */
+            if (sites[i].user->op == XI_PHI) {
+                XiValue *last = sites[i].blk->nvalues > 0
+                                    ? sites[i].blk->values[sites[i].blk->nvalues - 1]
+                                    : NULL;
+                insert_dup_after(f, sites[i].blk, last, target);
+                continue;
+            }
+            insert_dup_before(f, sites[i].blk, sites[i].user, target);
+        }
+        return false;
+    }
+
+    /* OWNED: a consuming use moves the owned reference out only when the value
+     * is dead immediately after it (last use on every path through it);
+     * otherwise the owner still needs a reference afterwards, so dup first.
+     * The decision is by liveness, not static program order, so two mutually
+     * exclusive branch arms that each consume the value both MOVE — the old
+     * "dup all but the last in program order" wrongly dup'd the earlier arm,
+     * leaking that reference whenever that arm ran (it was consumed without the
+     * value ever being live afterwards). */
+    ArcLive *live = NULL;
+    uint32_t *pos_by_id = NULL;
+    bool have_live = arc_compute_liveness(f, target, &live, &pos_by_id);
+    for (int i = 0; i < n; i++) {
+        /* Without liveness (OOM) fall back to the safe count-raising rule: dup
+         * every consuming use except the last in program order — never a wrong
+         * move. With liveness, dup only when the value is live after the use. */
+        bool need_dup = have_live ? consume_is_live_after(&sites[i], live, pos_by_id) : (i < n - 1);
+        if (!need_dup)
+            continue; /* MOVE: the consume transfers the owned reference */
         if (sites[i].user == NULL)
-            continue; /* return terminator can only be the single last site */
+            continue; /* return terminator: last use, never live after */
         if (sites[i].user->op == XI_PHI) {
             /* Edge consume: dup at the end of the predecessor block so the
              * +1 executes only on this incoming path. */
@@ -660,6 +738,10 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
             continue;
         }
         insert_dup_before(f, sites[i].blk, sites[i].user, target);
+    }
+    if (have_live) {
+        xr_free(pos_by_id);
+        xr_free(live);
     }
     return false;
 }
