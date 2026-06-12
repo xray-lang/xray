@@ -442,11 +442,19 @@ static inline void gc_update_alloc_stats(XrCoroGC *gc, uint32_t total) {
 XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
     if (!gc || !obj)
         return;
+
+    /* A dead object (rc==0) no longer counts toward live bytes — mirror the
+     * gc_update_alloc_stats add done at allocation. Small blocks return to the
+     * size-class freelist (a later same-class alloc re-adds via
+     * gc_update_alloc_stats); large/mmap blocks are returned to the OS. Without
+     * this, totalbytes (gc.count/countb/info) accumulated every small-object
+     * allocation instead of tracking the live set. */
+    gc->totalbytes -= (int64_t) obj->objsize;
+
     /* Large objects are individually malloc'd/mmap'd: free directly. */
     if (obj->objsize > XR_LARGE_OBJECT_THRESHOLD) {
         gc_unregister_large_object(gc, obj);
         gc->large_bytes -= (int64_t) obj->objsize;
-        gc->totalbytes -= (int64_t) obj->objsize;
         if (XR_GC_IS_MMAP(obj))
             xr_mem_unmap(obj, obj->objsize);
         else
