@@ -300,11 +300,13 @@ static void insert_drop_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue 
  *     paths that never ran the definition. */
 
 typedef struct {
-    uint8_t has_use;    /* target is used by a value in this block */
-    uint8_t live_in;    /* target live at block entry */
-    uint8_t live_out;   /* target live at block exit */
-    uint8_t use_at_end; /* last use is the block terminator (control) */
-    uint32_t last_use;  /* index in blk->values of the last use */
+    uint8_t has_use;          /* target is used by a value in this block */
+    uint8_t live_in;          /* target live at block entry */
+    uint8_t live_out;         /* target live at block exit */
+    uint8_t use_at_end;       /* last use is the block terminator (control) */
+    uint8_t released_by_move; /* a consuming MOVE releases the owner here, so
+                               * its block-local death needs no drop */
+    uint32_t last_use;        /* index in blk->values of the last use */
 } ArcLive;
 
 /* Insert a XI_RELEASE(target) as the first instruction of `blk`. Needed for
@@ -471,6 +473,10 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
             continue;
 
         if (!li->live_out) {
+            /* A consuming MOVE in this block already released the owner (a move
+             * is the last use on its path), so a death-drop would double-free. */
+            if (li->released_by_move)
+                continue;
             /* Death in block: release after the last use (after the def
              * itself when the block never uses the value). */
             XiValue *anchor;
@@ -715,17 +721,49 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
      * The decision is by liveness, not static program order, so two mutually
      * exclusive branch arms that each consume the value both MOVE — the old
      * "dup all but the last in program order" wrongly dup'd the earlier arm,
-     * leaking that reference whenever that arm ran (it was consumed without the
-     * value ever being live afterwards). */
+     * leaking that reference whenever that arm ran. Paths that reach the
+     * value's death WITHOUT consuming it (a branch arm that only borrows it)
+     * get a death-drop, so the owner is released exactly once on every path. */
     ArcLive *live = NULL;
     uint32_t *pos_by_id = NULL;
-    bool have_live = arc_compute_liveness(f, target, &live, &pos_by_id);
+    if (!arc_compute_liveness(f, target, &live, &pos_by_id)) {
+        /* OOM: safe count-raising fallback — dup all but the last consume in
+         * program order, no death-drops. Never a wrong move or double free. */
+        for (int i = 0; i < n - 1; i++) {
+            if (sites[i].user == NULL)
+                continue;
+            if (sites[i].user->op == XI_PHI) {
+                XiValue *last = sites[i].blk->nvalues > 0
+                                    ? sites[i].blk->values[sites[i].blk->nvalues - 1]
+                                    : NULL;
+                insert_dup_after(f, sites[i].blk, last, target);
+                continue;
+            }
+            insert_dup_before(f, sites[i].blk, sites[i].user, target);
+        }
+        return false;
+    }
+
+    /* Decide move vs dup per site and mark blocks where a MOVE releases the
+     * owner (the death-drop pass skips those). Record decisions before any
+     * insertion: the drop pass indexes blocks by their pre-dup positions, and
+     * dups are pointer-anchored so they are inserted afterwards. */
+    bool moves[MAX_SITES];
     for (int i = 0; i < n; i++) {
-        /* Without liveness (OOM) fall back to the safe count-raising rule: dup
-         * every consuming use except the last in program order — never a wrong
-         * move. With liveness, dup only when the value is live after the use. */
-        bool need_dup = have_live ? consume_is_live_after(&sites[i], live, pos_by_id) : (i < n - 1);
-        if (!need_dup)
+        moves[i] = !consume_is_live_after(&sites[i], live, pos_by_id);
+        if (moves[i] && sites[i].blk && pos_by_id[sites[i].blk->id])
+            live[pos_by_id[sites[i].blk->id] - 1].released_by_move = 1;
+    }
+
+    /* Place death-drops where the owner dies without a move (a borrow-only
+     * branch arm, or a path that never touches it). */
+    XiBlock *def_blk = target->block ? target->block : f->entry;
+    bool split_any = def_blk && arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
+
+    /* Insert the dups last (pointer-anchored, so the drop insertions above that
+     * shifted block indices do not matter). */
+    for (int i = 0; i < n; i++) {
+        if (moves[i])
             continue; /* MOVE: the consume transfers the owned reference */
         if (sites[i].user == NULL)
             continue; /* return terminator: last use, never live after */
@@ -739,11 +777,10 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         }
         insert_dup_before(f, sites[i].blk, sites[i].user, target);
     }
-    if (have_live) {
-        xr_free(pos_by_id);
-        xr_free(live);
-    }
-    return false;
+
+    xr_free(pos_by_id);
+    xr_free(live);
+    return split_any;
 }
 
 /* Does the borrow signature prove parameter `pv` is only borrowed (never
