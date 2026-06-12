@@ -16,8 +16,11 @@
  *     takes ownership. The LAST consuming use moves the value out for
  *     free; every EARLIER consuming use needs a `dup` before it so the
  *     owner still has a reference to give away later.
- *   - A value that is never consumed (only borrowed, or dead) must be
- *     dropped after its last use (or right after its definition if dead).
+ *   - A value that is never consumed (only borrowed, or dead) is dropped
+ *     at its death point, found by backward liveness: after the last use
+ *     in the block where it dies, or on the CFG edge where it goes dead
+ *     (see insert_drops_at_death). Loop-body temporaries therefore die
+ *     once per iteration, not at function exit.
  *
  * This pass MUST run BEFORE backend lowering, while ops are still
  * semantic (STORE_FIELD/ARRAY_NEW/...), because the owned/borrow split
@@ -32,6 +35,7 @@
 #include "xi_escape.h"
 #include "xi_effect.h"
 #include "xi_analysis.h"
+#include "xi_cfg_edit.h"
 #include "xi_core_api.h"
 #include "../runtime/value/xtype.h"
 #include "../base/xchecks.h"
@@ -168,29 +172,13 @@ static bool tracks_rc(const XiValue *v) {
 
 /* Collect consuming uses of `target` across the function, in program
  * order. Returns count; fills sites[] up to cap. */
-/* Grow *arr to hold at least `need` ConsumeSite entries. Compile-time OOM is
- * fatal — strictly safer than the old fixed-cap silent truncation, which
- * dropped dup/drop sites past the limit and could cause a use-after-free
- * from a missing dup, or a leak from a missing drop, on large functions. */
-static void site_reserve(ConsumeSite **arr, int *cap, int need) {
-    if (need <= *cap)
-        return;
-    int nc = *cap ? *cap : 16;
-    while (nc < need)
-        nc *= 2;
-    ConsumeSite *grown = (ConsumeSite *) xr_realloc(*arr, (size_t) nc * sizeof(ConsumeSite));
-    XR_CHECK(grown != NULL, "xi_arc: OOM growing consume-site array");
-    *arr = grown;
-    *cap = nc;
-}
-
-static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite **sites, int *cap) {
+static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites, int cap) {
     int n = 0;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
+    for (uint32_t b = 0; b < f->nblocks && n < cap; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
+        for (uint32_t i = 0; i < blk->nvalues && n < cap; i++) {
             XiValue *user = blk->values[i];
             if (!user)
                 continue;
@@ -199,10 +187,9 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite **sites
                     continue;
                 if (!xi_own_use_is_consuming(user->op, a))
                     continue;
-                site_reserve(sites, cap, n + 1);
-                (*sites)[n].blk = blk;
-                (*sites)[n].user = user;
-                (*sites)[n].order = (blk->rpo << 16) | (i & 0xFFFF);
+                sites[n].blk = blk;
+                sites[n].user = user;
+                sites[n].order = (blk->rpo << 16) | (i & 0xFFFF);
                 n++;
                 break; /* one consume record per user is enough */
             }
@@ -211,28 +198,26 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite **sites
          * blk->phis (not in blk->values[]), so scan them explicitly. The
          * same value may flow in on several edges; each edge is an
          * independent consume site (no dedup). */
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+        for (XiPhi *phi = blk->phis; phi && n < cap; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs && n < cap; a++) {
                 if (phi->value.args[a] != target)
                     continue;
                 XiBlock *pred = (a < blk->npreds) ? blk->preds[a] : NULL;
                 if (!pred)
                     continue;
-                site_reserve(sites, cap, n + 1);
-                (*sites)[n].blk = pred;
-                (*sites)[n].user = &phi->value;
+                sites[n].blk = pred;
+                sites[n].user = &phi->value;
                 /* 0xFFFE = end of the predecessor block: after every value
                  * index, before a return terminator's 0xFFFF. */
-                (*sites)[n].order = (pred->rpo << 16) | 0xFFFE;
+                sites[n].order = (pred->rpo << 16) | 0xFFFE;
                 n++;
             }
         }
         /* Block control (return value) consumes the value. */
-        if (blk->control == target && blk->kind == XI_BLOCK_RETURN) {
-            site_reserve(sites, cap, n + 1);
-            (*sites)[n].blk = blk;
-            (*sites)[n].user = NULL; /* NULL = return terminator */
-            (*sites)[n].order = (blk->rpo << 16) | 0xFFFF;
+        if (blk->control == target && blk->kind == XI_BLOCK_RETURN && n < cap) {
+            sites[n].blk = blk;
+            sites[n].user = NULL; /* NULL = return terminator */
+            sites[n].order = (blk->rpo << 16) | 0xFFFF;
             n++;
         }
     }
@@ -284,101 +269,316 @@ static void insert_drop_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue 
     drop->escape = target->escape;
 }
 
-/* Insert drops before the terminators of all RETURN blocks where the drop is
- * statically sound — used for a value that is owned but never consumed.
+/* ========== Death-point drop placement (unconsumed owned values) ==========
  *
- * The drop is emitted at a RETURN block only when the value's defining block
- * DOMINATES that return block. Otherwise the value's register is not
- * guaranteed live (the def is on a path that may not have executed), and the
- * drop would release a stale/borrowed value — the 1130_linked_scope crash,
- * where a dead ERR_CATCH value defined only in the catch block was dropped at
- * the common return, freeing the borrowed closure on the no-catch path. */
-static void insert_drop_at_returns(XiFunc *f, XiValue *target) {
-    XiBlock *def_blk = target->block;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        XiBlock *blk = f->blocks[b];
-        if (!blk || blk->kind != XI_BLOCK_RETURN)
-            continue;
-        if (blk->control == target)
-            continue; /* returned: caller takes ownership */
-        /* Soundness: only drop where the definition dominates the return. */
-        if (def_blk && !xi_dominates(def_blk, blk))
-            continue;
-        XiValue *last = blk->nvalues > 0 ? blk->values[blk->nvalues - 1] : NULL;
-        insert_drop_after(f, blk, last, target);
-    }
+ * A value that is owned but never consumed must be released exactly once on
+ * every path that executes its definition. Releasing at function returns is
+ * wrong twice over: a definition inside a loop body or branch arm does not
+ * dominate the returns (a dominance-gated return drop then silently skips
+ * it, leaking one object per loop iteration), and even where it would be
+ * sound it pins the object far past its last use.
+ *
+ * Placement is classic backward liveness over the CFG:
+ *
+ *   live_out(B) = OR over successors S of live_in(S)
+ *   live_in(B)  = has_use(B) || live_out(B)        for B != def block
+ *   live_in(def block) = false                      (the def kills upward)
+ *
+ * SSA guarantees every use is dominated by the def, and the def-block kill
+ * stops backward propagation there, so the live region stays inside the
+ * def's dominance region: a drop can never execute before the definition.
+ *
+ * The live→dead frontier is crossed exactly once per execution (liveness is
+ * monotone along any path), and a release is placed on each frontier point:
+ *
+ *   - death in block: live at entry (or the def block) but dead at exit →
+ *     release right after the last use in that block (right after the def
+ *     itself when the value is never used).
+ *   - death on edge: B is live-out only because of another successor →
+ *     release at the head of the dead successor when this edge is its only
+ *     entry; otherwise the edge is split so the release cannot execute on
+ *     paths that never ran the definition. */
+
+typedef struct {
+    uint8_t has_use;    /* target is used by a value in this block */
+    uint8_t live_in;    /* target live at block entry */
+    uint8_t live_out;   /* target live at block exit */
+    uint8_t use_at_end; /* last use is the block terminator (control) */
+    uint32_t last_use;  /* index in blk->values of the last use */
+} ArcLive;
+
+/* Insert a XI_RELEASE(target) as the first instruction of `blk`. Needed for
+ * edge deaths, where the release must run before anything else in the dead
+ * successor. */
+static void insert_drop_at_head(XiFunc *f, XiBlock *blk, XiValue *target) {
+    XiValue *drop = xi_value_insert_after(f, blk, NULL, XI_RELEASE, target->type, 1);
+    XR_DCHECK(drop != NULL, "xi_arc: failed to create RELEASE");
+    drop->args[0] = target;
+    drop->flags = XI_FLAG_SIDE_EFFECT;
+    drop->escape = target->escape;
+    /* xi_value_insert_after(anchor=NULL) appends; rotate it to the front. */
+    for (uint32_t i = blk->nvalues - 1; i > 0; i--)
+        blk->values[i] = blk->values[i - 1];
+    blk->values[0] = drop;
 }
 
-/* Does `target` share its heap object with another SSA value, so that a
- * precise early drop could free it while an alias is still live? Conservative:
- * true when target is an aliasing op itself (XI_COPY narrows/aliases its
- * source, XI_SELECT forwards one input), or when it feeds a XI_COPY / XI_SELECT
- * / borrowed projection (GETFIELD &co read through it). Such values fall back
- * to the safe at-returns drop placement. */
-static bool value_has_alias(const XiFunc *f, const XiValue *target) {
-    if (target->op == XI_COPY || target->op == XI_SELECT)
-        return true;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
-        const XiBlock *blk = f->blocks[b];
-        if (!blk)
-            continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
-            const XiValue *u = blk->values[i];
-            if (!u)
+/* Split the CFG edge pred→succ with a fresh PLAIN block. Phi args in succ
+ * keep their positions (the pred slot is replaced in place). Returns the new
+ * block, or NULL on failure. */
+static XiBlock *arc_split_edge(XiFunc *f, XiBlock *pred, XiBlock *succ) {
+    XiBlock *mid = xi_block_new(f);
+    if (!mid)
+        return NULL;
+    mid->kind = XI_BLOCK_PLAIN;
+    mid->succs[0] = succ;
+    bool ok = xi_cfg_replace_successor(pred, succ, mid);
+    ok = ok && xi_cfg_replace_pred(succ, pred, mid);
+    ok = ok && xi_cfg_append_pred(mid, pred, NULL, 0);
+    XR_DCHECK(ok, "xi_arc: edge split failed");
+    return ok ? mid : NULL;
+}
+
+/* Collect `target` plus the transitive closure of its RC-typed borrowed
+ * projections (GETFIELD and friends). A borrow reads through the owner
+ * without holding a reference, so the owner must outlive the projection's
+ * last use — otherwise the release would free storage a live borrow still
+ * points into. Returns a heap array (caller frees) with the count in
+ * *out_count, or NULL on OOM. */
+static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t *out_count) {
+    enum {
+        ARC_TRACK_INIT = 16
+    };
+    XiValue **tracked = (XiValue **) xr_malloc(ARC_TRACK_INIT * sizeof(XiValue *));
+    if (!tracked)
+        return NULL;
+    uint32_t ntracked = 0, track_cap = ARC_TRACK_INIT;
+    tracked[ntracked++] = target;
+    for (uint32_t scan = 0; scan < ntracked; scan++) {
+        XiValue *member = tracked[scan];
+        for (uint32_t b = 0; b < f->nblocks; b++) {
+            XiBlock *blk = f->blocks[b];
+            if (!blk)
                 continue;
-            if (u->op != XI_COPY && u->op != XI_SELECT && !op_produces_borrow(u->op))
-                continue;
-            for (uint16_t a = 0; a < u->nargs; a++) {
-                if (u->args[a] == target)
-                    return true;
+            for (uint32_t i = 0; i < blk->nvalues; i++) {
+                XiValue *u = blk->values[i];
+                if (!u || !op_produces_borrow(u->op) || !xi_own_type_is_rc(u->type))
+                    continue;
+                bool uses_member = false;
+                for (uint16_t a = 0; a < u->nargs; a++) {
+                    if (u->args[a] == member) {
+                        uses_member = true;
+                        break;
+                    }
+                }
+                if (!uses_member)
+                    continue;
+                bool seen = false;
+                for (uint32_t t = 0; t < ntracked; t++) {
+                    if (tracked[t] == u) {
+                        seen = true;
+                        break;
+                    }
+                }
+                if (seen)
+                    continue;
+                if (ntracked == track_cap) {
+                    uint32_t new_cap = track_cap * 2;
+                    XiValue **grown = (XiValue **) xr_realloc(tracked, new_cap * sizeof(XiValue *));
+                    if (!grown) {
+                        xr_free(tracked);
+                        return NULL;
+                    }
+                    tracked = grown;
+                    track_cap = new_cap;
+                }
+                tracked[ntracked++] = u;
             }
         }
     }
-    return false;
+    *out_count = ntracked;
+    return tracked;
 }
 
-/* Precise placement for an owned, never-consumed value whose whole lifetime is
- * inside its defining block and which has no aliases: release it right after
- * its last use there (right after the def when unused) instead of pinning it to
- * function exit. This reclaims per-iteration loop temporaries and dead branch
- * temporaries that insert_drop_at_returns leaks (the def does not dominate any
- * return, so no at-returns drop is emitted). Returns false — fall back to the
- * safe at-returns placement — for any value that escapes its block (used in
- * another block, by a phi, or as a block control) or that has an alias. */
-static bool try_drop_at_block_local_death(XiFunc *f, XiValue *target) {
-    XiBlock *def = target->block;
-    if (!def || value_has_alias(f, target))
-        return false;
-
-    XiValue *last_use = NULL;
+/* Seed per-block use flags for the tracked set (owner + borrowed
+ * projections). A projection consumed by a phi extends the owner's live
+ * range to the predecessor's end; a block terminator use is a use at
+ * end-of-block. */
+static void arc_seed_uses(XiFunc *f, XiValue **tracked, uint32_t ntracked, ArcLive *live,
+                          const uint32_t *pos_by_id) {
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t a = 0; a < phi->value.nargs; a++) {
-                if (phi->value.args[a] == target)
-                    return false; /* flows across a CFG edge */
-            }
-        }
-        if (blk->control == target)
-            return false; /* used by a terminator (return/if condition) */
+        ArcLive *li = &live[b];
         for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *u = blk->values[i];
             if (!u || u->op == XI_RETAIN || u->op == XI_RELEASE)
                 continue;
-            for (uint16_t a = 0; a < u->nargs; a++) {
-                if (u->args[a] != target)
+            bool uses_tracked = false;
+            for (uint16_t a = 0; a < u->nargs && !uses_tracked; a++) {
+                for (uint32_t t = 0; t < ntracked; t++) {
+                    if (u->args[a] == tracked[t]) {
+                        uses_tracked = true;
+                        break;
+                    }
+                }
+            }
+            if (uses_tracked) {
+                li->has_use = 1;
+                li->last_use = i; /* ascending i: ends at the latest use */
+            }
+        }
+        /* Phi consumes of a projection happen on the incoming edge: treat
+         * as a use at the end of the predecessor block. */
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                XiBlock *pred = (a < blk->npreds) ? blk->preds[a] : NULL;
+                if (!pred || !pos_by_id[pred->id])
                     continue;
-                if (blk != def)
-                    return false; /* used outside the defining block */
-                last_use = u;
+                for (uint32_t t = 0; t < ntracked; t++) {
+                    if (phi->value.args[a] == tracked[t]) {
+                        ArcLive *pl = &live[pos_by_id[pred->id] - 1];
+                        pl->has_use = 1;
+                        pl->use_at_end = 1;
+                        break;
+                    }
+                }
+            }
+        }
+        for (uint32_t t = 0; t < ntracked; t++) {
+            if (blk->control == tracked[t]) {
+                li->has_use = 1;
+                li->use_at_end = 1;
+                break;
+            }
+        }
+    }
+}
+
+/* Place releases on the live→dead frontier for `target`. Returns true if a
+ * CFG edge was split (caller must invalidate analyses). */
+static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *live,
+                                     const uint32_t *pos_by_id, const XiBlock *def_blk) {
+    bool split_any = false;
+    uint32_t def_pos = pos_by_id[def_blk->id] ? pos_by_id[def_blk->id] - 1 : 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        const ArcLive *li = &live[b];
+        bool holds_value = li->live_in || b == def_pos;
+        if (!holds_value)
+            continue;
+
+        if (!li->live_out) {
+            /* Death in block: release after the last use (after the def
+             * itself when the block never uses the value). */
+            XiValue *anchor;
+            if (li->has_use)
+                anchor = li->use_at_end ? (blk->nvalues > 0 ? blk->values[blk->nvalues - 1] : NULL)
+                                        : blk->values[li->last_use];
+            else if (b == def_pos && target->op != XI_PARAM)
+                anchor = target;
+            else {
+                /* Unused owned parameter: dead on entry. */
+                insert_drop_at_head(f, blk, target);
+                continue;
+            }
+            insert_drop_after(f, blk, anchor, target);
+            continue;
+        }
+
+        /* Death on edge: live out of this block, but a successor is dead. */
+        for (int s = 0; s < 2; s++) {
+            XiBlock *sb = blk->succs[s];
+            if (!sb || !pos_by_id[sb->id])
+                continue;
+            if (live[pos_by_id[sb->id] - 1].live_in)
+                continue;
+            if (sb->npreds == 1) {
+                insert_drop_at_head(f, sb, target);
+            } else {
+                XiBlock *mid = arc_split_edge(f, blk, sb);
+                if (mid) {
+                    insert_drop_after(f, mid, NULL, target);
+                    split_any = true;
+                }
+            }
+        }
+    }
+    return split_any;
+}
+
+/* Place releases for an owned value with no consuming use. Returns true if
+ * an edge was split (CFG analyses must be invalidated by the caller). */
+static bool insert_drops_at_death(XiFunc *f, XiValue *target) {
+    XiBlock *def_blk = target->block ? target->block : f->entry;
+    if (!def_blk)
+        return false;
+
+    /* Dense block-id → position map (ids survive block compaction, so the
+     * id space can be larger than nblocks). */
+    uint32_t max_id = 0;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        if (f->blocks[b] && f->blocks[b]->id > max_id)
+            max_id = f->blocks[b]->id;
+    }
+    uint32_t *pos_by_id = (uint32_t *) xr_calloc(max_id + 1, sizeof(uint32_t));
+    ArcLive *live = (ArcLive *) xr_calloc(f->nblocks, sizeof(ArcLive));
+    if (!pos_by_id || !live) {
+        if (pos_by_id)
+            xr_free(pos_by_id);
+        if (live)
+            xr_free(live);
+        return false;
+    }
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        if (f->blocks[b])
+            pos_by_id[f->blocks[b]->id] = b + 1; /* 0 = absent */
+    }
+
+    uint32_t ntracked = 0;
+    XiValue **tracked = arc_collect_borrow_closure(f, target, &ntracked);
+    if (!tracked) {
+        /* OOM: skip placement for this value (leak, never a wrong drop). */
+        xr_free(pos_by_id);
+        xr_free(live);
+        return false;
+    }
+    arc_seed_uses(f, tracked, ntracked, live, pos_by_id);
+    xr_free(tracked);
+
+    /* Backward liveness to fixpoint. The def block's live_in is forced
+     * false: the definition kills everything above it, which both bounds
+     * the live region and makes per-iteration loop deaths land inside the
+     * loop body instead of leaking across the back edge. */
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        for (uint32_t b = f->nblocks; b-- > 0;) {
+            XiBlock *blk = f->blocks[b];
+            if (!blk)
+                continue;
+            bool out = false;
+            for (int s = 0; s < 2 && !out; s++) {
+                XiBlock *sb = blk->succs[s];
+                if (sb && pos_by_id[sb->id])
+                    out = live[pos_by_id[sb->id] - 1].live_in;
+            }
+            bool in = (blk == def_blk) ? false : (live[b].has_use || out);
+            if (out != (bool) live[b].live_out || in != (bool) live[b].live_in) {
+                live[b].live_out = out;
+                live[b].live_in = in;
+                changed = true;
             }
         }
     }
 
-    insert_drop_after(f, def, last_use ? last_use : target, target);
-    return true;
+    bool split_any = arc_place_frontier_drops(f, target, live, pos_by_id, def_blk);
+
+    xr_free(pos_by_id);
+    xr_free(live);
+    return split_any;
 }
 
 /* Process one tracked value: insert dup before every consuming use except
@@ -408,21 +608,20 @@ typedef enum {
     OWN_CALL_RESULT,
 } XiArcOwnMode;
 
-static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode, ConsumeSite **site_buf,
-                             int *site_cap) {
-    int n = collect_consume_sites(f, target, site_buf, site_cap);
-    ConsumeSite *sites = *site_buf;
+static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
+    enum {
+        MAX_SITES = 256
+    };
+    ConsumeSite sites[MAX_SITES];
+    int n = collect_consume_sites(f, target, sites, MAX_SITES);
 
     if (n == 0) {
-        /* Never consumed. Only an OWNED value is dropped. A borrowed value is
-         * owned by the caller; a call result may be an alias — in both cases we
-         * must not drop it here. Prefer a precise block-local death drop (frees
-         * per-iteration loop / dead-branch temporaries); fall back to the safe
-         * at-returns placement when the value escapes its block or has an
-         * alias. */
-        if (mode == OWN_OWNED && !try_drop_at_block_local_death(f, target))
-            insert_drop_at_returns(f, target);
-        return;
+        /* Never consumed. Only an OWNED value is dropped (at its death
+         * point). A borrowed value is owned by the caller; a call result
+         * may be an alias — in both cases we must not drop it here. */
+        if (mode == OWN_OWNED)
+            return insert_drops_at_death(f, target);
+        return false;
     }
 
     qsort(sites, (size_t) n, sizeof(ConsumeSite), cmp_site);
@@ -442,7 +641,7 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode, Cons
             }
             insert_dup_before(f, sites[i].blk, sites[i].user, target);
         }
-        return;
+        return false;
     }
 
     /* OWNED and CALL_RESULT share the same dup placement: the last consuming
@@ -462,6 +661,7 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode, Cons
         }
         insert_dup_before(f, sites[i].blk, sites[i].user, target);
     }
+    return false;
 }
 
 /* Does the borrow signature prove parameter `pv` is only borrowed (never
@@ -505,39 +705,25 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     bool have_own = xi_own_analyze(f, &own);
 
     /* Snapshot the set of tracked values first: we mutate blocks while
-     * inserting, so collect targets up front. Grown dynamically (no fixed
-     * cap): the old MAX_TARGETS=4096 limit silently stopped tracking values
-     * past it, leaving them with no dup/drop (leak / use-after-free) on large
-     * generated or literal-heavy functions. */
-    XiValue **targets = NULL;
-    int nt = 0, targets_cap = 0;
+     * inserting, so collect targets up front. */
+    enum {
+        MAX_TARGETS = 4096
+    };
+    XiValue *targets[MAX_TARGETS];
+    int nt = 0;
 
-    for (uint16_t p = 0; p < f->nparams; p++) {
-        if (f->params[p] && tracks_rc(f->params[p])) {
-            if (nt == targets_cap) {
-                targets_cap = targets_cap ? targets_cap * 2 : 64;
-                targets =
-                    (XiValue **) xr_realloc(targets, (size_t) targets_cap * sizeof(XiValue *));
-                XR_CHECK(targets != NULL, "xi_arc: OOM growing targets array");
-            }
+    for (uint16_t p = 0; p < f->nparams && nt < MAX_TARGETS; p++) {
+        if (f->params[p] && tracks_rc(f->params[p]))
             targets[nt++] = f->params[p];
-        }
     }
-    for (uint32_t b = 0; b < f->nblocks; b++) {
+    for (uint32_t b = 0; b < f->nblocks && nt < MAX_TARGETS; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        for (uint32_t i = 0; i < blk->nvalues; i++) {
+        for (uint32_t i = 0; i < blk->nvalues && nt < MAX_TARGETS; i++) {
             XiValue *v = blk->values[i];
-            if (v && tracks_rc(v)) {
-                if (nt == targets_cap) {
-                    targets_cap = targets_cap ? targets_cap * 2 : 64;
-                    targets =
-                        (XiValue **) xr_realloc(targets, (size_t) targets_cap * sizeof(XiValue *));
-                    XR_CHECK(targets != NULL, "xi_arc: OOM growing targets array");
-                }
+            if (v && tracks_rc(v))
                 targets[nt++] = v;
-            }
         }
     }
 
@@ -548,11 +734,7 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * leaves operands live in the caller's registers). */
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
 
-    /* Reusable consume-site scratch, grown on demand and shared across all
-     * tracked values (avoids a per-value malloc/free). */
-    ConsumeSite *site_buf = NULL;
-    int site_cap = 0;
-
+    bool cfg_changed = false;
     for (int i = 0; i < nt; i++) {
         XiArcOwnMode mode = OWN_OWNED;
         if (targets[i] == borrowed_recv) {
@@ -571,11 +753,11 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
              * everything else stays in the alias-safe CALL_RESULT mode. */
             mode = call_returns_fresh(targets[i]) ? OWN_OWNED : OWN_CALL_RESULT;
         }
-        process_value_ex(f, targets[i], mode, &site_buf, &site_cap);
+        cfg_changed |= process_value_ex(f, targets[i], mode);
     }
 
-    xr_free(site_buf);
-    xr_free(targets);
+    if (cfg_changed)
+        xi_cfg_invalidate(f);
 
     if (have_own)
         xi_own_free(&own);
@@ -626,29 +808,6 @@ static int count_real_uses(const XiFunc *f, const XiValue *v) {
     return count;
 }
 
-/* Is `v` a BORROWED parameter — the borrowed method receiver, an operator
- * operand, or a parameter the borrow signature proved borrowed? The function
- * holds no owning reference to such a value, so the dup inserted before each
- * consuming use is mandatory: it is the +1 the consuming use hands away while
- * the caller keeps its reference. The single-consumer retain elimination below
- * must never remove that dup, or the callee frees a value the caller still
- * owns (e.g. `fn register(this) { registry.push(this) }`).
- *
- * Borrowed loads / unknown call results are deliberately NOT treated as
- * borrowed here: their redundant retains are still eliminable (the AOT
- * fixed-array hot path relies on this), and the precise consuming-vs-reading
- * distinction for them is handled by the dup/drop insertion itself. */
-static bool elim_value_is_borrowed_param(const XiFunc *f, const XiValue *v,
-                                         const XiOwnResult *own) {
-    if (!v || v->op != XI_PARAM)
-        return false;
-    if (f->receiver_borrowed && f->nparams > 0 && f->params[0] == v)
-        return true;
-    if (f->operator_borrowed)
-        return true;
-    return param_is_borrowed(f, v, own);
-}
-
 /* Single-block dup/drop pair elimination.
  *
  * Pattern 1 — "Redundant bracket":
@@ -658,16 +817,16 @@ static bool elim_value_is_borrowed_param(const XiFunc *f, const XiValue *v,
  *   → The pair is dead: the retain increments RC only for the release to
  *     decrement it back. Remove both.
  *
- * Pattern 2 — "Single-consumer forward" (OWNED values only):
- *   XI_RETAIN(v) where v is OWNED and has <= 1 real (non-RC) use
- *   → The retain is redundant: a single consumer already receives ownership
- *     via the last-use move rule. Remove it. Guarded by
- *     elim_value_is_borrowed_param because a borrowed parameter's dup is
- *     mandatory (deleting it was a use-after-free: the callee freed a
- *     reference the caller still owned).
+ * Pattern 2 — "Single-consumer forward":
+ *   XI_RETAIN(v) at position i
+ *   A single consuming use of v at position k (i < k)
+ *   XI_RELEASE(v) does NOT exist elsewhere (no double-drop)
+ *   The value v has exactly 1 real (non-RC) use in the function
+ *   → The retain is redundant because there is only one consumer: it already
+ *     receives ownership via the last-use move rule. Remove the retain.
  *
- * Pattern 1 is applied iteratively (removing a pair may expose new pairs). */
-static int elim_block(XiBlock *blk, const XiFunc *f, const XiOwnResult *own) {
+ * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
+static int elim_block(XiBlock *blk, const XiFunc *f) {
     int eliminated = 0;
     bool changed = true;
 
@@ -716,7 +875,10 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiOwnResult *own) {
         }
     }
 
-    /* Pattern 2: single-consumer retain elimination (OWNED values only). */
+    /* Pattern 2: single-consumer retain elimination.
+     * After removing redundant bracket pairs, check remaining RETAINs:
+     * if the target value has exactly 1 real use (excluding RC ops) in the
+     * function, the retain is unnecessary — ownership flows directly. */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *dup = blk->values[i];
         if (!dup || dup->op != XI_RETAIN)
@@ -724,12 +886,12 @@ static int elim_block(XiBlock *blk, const XiFunc *f, const XiOwnResult *own) {
         XiValue *target = dup->args[0];
         if (!target)
             continue;
-        if (elim_value_is_borrowed_param(f, target, own))
-            continue; /* borrowed param: the dup is mandatory, never remove it */
 
-        if (count_real_uses(f, target) <= 1) {
-            /* OWNED value flowing to at most one real consumer: ownership
-             * transfers via the last-use move rule, so the retain is dead. */
+        int real_uses = count_real_uses(f, target);
+        if (real_uses <= 1) {
+            /* The value flows to at most one real consumer; the retain is
+             * dead weight because xi_arc already handles single-consumer
+             * ownership transfer via the last-use move rule. */
             arc_remove_value(blk, i);
             eliminated++;
             i--; /* re-examine the slot */
@@ -751,21 +913,13 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
             total += xi_arc_elim(f->children[i]);
     }
 
-    /* Borrow signature, so Pattern 2 can tell OWNED from BORROWED values and
-     * never delete a mandatory borrowed dup. */
-    XiOwnResult own;
-    bool have_own = xi_own_analyze(f, &own);
-
     /* Eliminate within each block. */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->nvalues == 0)
             continue;
-        total += elim_block(blk, f, have_own ? &own : NULL);
+        total += elim_block(blk, f);
     }
-
-    if (have_own)
-        xi_own_free(&own);
 
     return total;
 }
