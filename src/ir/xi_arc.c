@@ -168,13 +168,29 @@ static bool tracks_rc(const XiValue *v) {
 
 /* Collect consuming uses of `target` across the function, in program
  * order. Returns count; fills sites[] up to cap. */
-static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites, int cap) {
+/* Grow *arr to hold at least `need` ConsumeSite entries. Compile-time OOM is
+ * fatal — strictly safer than the old fixed-cap silent truncation, which
+ * dropped dup/drop sites past the limit and could cause a use-after-free
+ * from a missing dup, or a leak from a missing drop, on large functions. */
+static void site_reserve(ConsumeSite **arr, int *cap, int need) {
+    if (need <= *cap)
+        return;
+    int nc = *cap ? *cap : 16;
+    while (nc < need)
+        nc *= 2;
+    ConsumeSite *grown = (ConsumeSite *) xr_realloc(*arr, (size_t) nc * sizeof(ConsumeSite));
+    XR_CHECK(grown != NULL, "xi_arc: OOM growing consume-site array");
+    *arr = grown;
+    *cap = nc;
+}
+
+static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite **sites, int *cap) {
     int n = 0;
-    for (uint32_t b = 0; b < f->nblocks && n < cap; b++) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        for (uint32_t i = 0; i < blk->nvalues && n < cap; i++) {
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *user = blk->values[i];
             if (!user)
                 continue;
@@ -183,9 +199,10 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites,
                     continue;
                 if (!xi_own_use_is_consuming(user->op, a))
                     continue;
-                sites[n].blk = blk;
-                sites[n].user = user;
-                sites[n].order = (blk->rpo << 16) | (i & 0xFFFF);
+                site_reserve(sites, cap, n + 1);
+                (*sites)[n].blk = blk;
+                (*sites)[n].user = user;
+                (*sites)[n].order = (blk->rpo << 16) | (i & 0xFFFF);
                 n++;
                 break; /* one consume record per user is enough */
             }
@@ -194,26 +211,28 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites,
          * blk->phis (not in blk->values[]), so scan them explicitly. The
          * same value may flow in on several edges; each edge is an
          * independent consume site (no dedup). */
-        for (XiPhi *phi = blk->phis; phi && n < cap; phi = phi->next) {
-            for (uint16_t a = 0; a < phi->value.nargs && n < cap; a++) {
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
                 if (phi->value.args[a] != target)
                     continue;
                 XiBlock *pred = (a < blk->npreds) ? blk->preds[a] : NULL;
                 if (!pred)
                     continue;
-                sites[n].blk = pred;
-                sites[n].user = &phi->value;
+                site_reserve(sites, cap, n + 1);
+                (*sites)[n].blk = pred;
+                (*sites)[n].user = &phi->value;
                 /* 0xFFFE = end of the predecessor block: after every value
                  * index, before a return terminator's 0xFFFF. */
-                sites[n].order = (pred->rpo << 16) | 0xFFFE;
+                (*sites)[n].order = (pred->rpo << 16) | 0xFFFE;
                 n++;
             }
         }
         /* Block control (return value) consumes the value. */
-        if (blk->control == target && blk->kind == XI_BLOCK_RETURN && n < cap) {
-            sites[n].blk = blk;
-            sites[n].user = NULL; /* NULL = return terminator */
-            sites[n].order = (blk->rpo << 16) | 0xFFFF;
+        if (blk->control == target && blk->kind == XI_BLOCK_RETURN) {
+            site_reserve(sites, cap, n + 1);
+            (*sites)[n].blk = blk;
+            (*sites)[n].user = NULL; /* NULL = return terminator */
+            (*sites)[n].order = (blk->rpo << 16) | 0xFFFF;
             n++;
         }
     }
@@ -317,12 +336,10 @@ typedef enum {
     OWN_CALL_RESULT,
 } XiArcOwnMode;
 
-static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
-    enum {
-        MAX_SITES = 256
-    };
-    ConsumeSite sites[MAX_SITES];
-    int n = collect_consume_sites(f, target, sites, MAX_SITES);
+static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode, ConsumeSite **site_buf,
+                             int *site_cap) {
+    int n = collect_consume_sites(f, target, site_buf, site_cap);
+    ConsumeSite *sites = *site_buf;
 
     if (n == 0) {
         /* Never consumed. Only an OWNED value is dropped at exit. A borrowed
@@ -413,25 +430,39 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
     bool have_own = xi_own_analyze(f, &own);
 
     /* Snapshot the set of tracked values first: we mutate blocks while
-     * inserting, so collect targets up front. */
-    enum {
-        MAX_TARGETS = 4096
-    };
-    XiValue *targets[MAX_TARGETS];
-    int nt = 0;
+     * inserting, so collect targets up front. Grown dynamically (no fixed
+     * cap): the old MAX_TARGETS=4096 limit silently stopped tracking values
+     * past it, leaving them with no dup/drop (leak / use-after-free) on large
+     * generated or literal-heavy functions. */
+    XiValue **targets = NULL;
+    int nt = 0, targets_cap = 0;
 
-    for (uint16_t p = 0; p < f->nparams && nt < MAX_TARGETS; p++) {
-        if (f->params[p] && tracks_rc(f->params[p]))
+    for (uint16_t p = 0; p < f->nparams; p++) {
+        if (f->params[p] && tracks_rc(f->params[p])) {
+            if (nt == targets_cap) {
+                targets_cap = targets_cap ? targets_cap * 2 : 64;
+                targets =
+                    (XiValue **) xr_realloc(targets, (size_t) targets_cap * sizeof(XiValue *));
+                XR_CHECK(targets != NULL, "xi_arc: OOM growing targets array");
+            }
             targets[nt++] = f->params[p];
+        }
     }
-    for (uint32_t b = 0; b < f->nblocks && nt < MAX_TARGETS; b++) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
-        for (uint32_t i = 0; i < blk->nvalues && nt < MAX_TARGETS; i++) {
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
             XiValue *v = blk->values[i];
-            if (v && tracks_rc(v))
+            if (v && tracks_rc(v)) {
+                if (nt == targets_cap) {
+                    targets_cap = targets_cap ? targets_cap * 2 : 64;
+                    targets =
+                        (XiValue **) xr_realloc(targets, (size_t) targets_cap * sizeof(XiValue *));
+                    XR_CHECK(targets != NULL, "xi_arc: OOM growing targets array");
+                }
                 targets[nt++] = v;
+            }
         }
     }
 
@@ -441,6 +472,11 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
      * methods receive ALL their params borrowed (the VM operator dispatch
      * leaves operands live in the caller's registers). */
     XiValue *borrowed_recv = (f->receiver_borrowed && f->nparams > 0) ? f->params[0] : NULL;
+
+    /* Reusable consume-site scratch, grown on demand and shared across all
+     * tracked values (avoids a per-value malloc/free). */
+    ConsumeSite *site_buf = NULL;
+    int site_cap = 0;
 
     for (int i = 0; i < nt; i++) {
         XiArcOwnMode mode = OWN_OWNED;
@@ -460,8 +496,11 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
              * everything else stays in the alias-safe CALL_RESULT mode. */
             mode = call_returns_fresh(targets[i]) ? OWN_OWNED : OWN_CALL_RESULT;
         }
-        process_value_ex(f, targets[i], mode);
+        process_value_ex(f, targets[i], mode, &site_buf, &site_cap);
     }
+
+    xr_free(site_buf);
+    xr_free(targets);
 
     if (have_own)
         xi_own_free(&own);
@@ -512,6 +551,29 @@ static int count_real_uses(const XiFunc *f, const XiValue *v) {
     return count;
 }
 
+/* Is `v` a BORROWED parameter — the borrowed method receiver, an operator
+ * operand, or a parameter the borrow signature proved borrowed? The function
+ * holds no owning reference to such a value, so the dup inserted before each
+ * consuming use is mandatory: it is the +1 the consuming use hands away while
+ * the caller keeps its reference. The single-consumer retain elimination below
+ * must never remove that dup, or the callee frees a value the caller still
+ * owns (e.g. `fn register(this) { registry.push(this) }`).
+ *
+ * Borrowed loads / unknown call results are deliberately NOT treated as
+ * borrowed here: their redundant retains are still eliminable (the AOT
+ * fixed-array hot path relies on this), and the precise consuming-vs-reading
+ * distinction for them is handled by the dup/drop insertion itself. */
+static bool elim_value_is_borrowed_param(const XiFunc *f, const XiValue *v,
+                                         const XiOwnResult *own) {
+    if (!v || v->op != XI_PARAM)
+        return false;
+    if (f->receiver_borrowed && f->nparams > 0 && f->params[0] == v)
+        return true;
+    if (f->operator_borrowed)
+        return true;
+    return param_is_borrowed(f, v, own);
+}
+
 /* Single-block dup/drop pair elimination.
  *
  * Pattern 1 — "Redundant bracket":
@@ -521,16 +583,16 @@ static int count_real_uses(const XiFunc *f, const XiValue *v) {
  *   → The pair is dead: the retain increments RC only for the release to
  *     decrement it back. Remove both.
  *
- * Pattern 2 — "Single-consumer forward":
- *   XI_RETAIN(v) at position i
- *   A single consuming use of v at position k (i < k)
- *   XI_RELEASE(v) does NOT exist elsewhere (no double-drop)
- *   The value v has exactly 1 real (non-RC) use in the function
- *   → The retain is redundant because there is only one consumer: it already
- *     receives ownership via the last-use move rule. Remove the retain.
+ * Pattern 2 — "Single-consumer forward" (OWNED values only):
+ *   XI_RETAIN(v) where v is OWNED and has <= 1 real (non-RC) use
+ *   → The retain is redundant: a single consumer already receives ownership
+ *     via the last-use move rule. Remove it. Guarded by
+ *     elim_value_is_borrowed_param because a borrowed parameter's dup is
+ *     mandatory (deleting it was a use-after-free: the callee freed a
+ *     reference the caller still owned).
  *
- * We apply Pattern 1 iteratively (removing a pair may expose new pairs). */
-static int elim_block(XiBlock *blk, const XiFunc *f) {
+ * Pattern 1 is applied iteratively (removing a pair may expose new pairs). */
+static int elim_block(XiBlock *blk, const XiFunc *f, const XiOwnResult *own) {
     int eliminated = 0;
     bool changed = true;
 
@@ -579,10 +641,7 @@ static int elim_block(XiBlock *blk, const XiFunc *f) {
         }
     }
 
-    /* Pattern 2: single-consumer retain elimination.
-     * After removing redundant bracket pairs, check remaining RETAINs:
-     * if the target value has exactly 1 real use (excluding RC ops) in the
-     * function, the retain is unnecessary — ownership flows directly. */
+    /* Pattern 2: single-consumer retain elimination (OWNED values only). */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         XiValue *dup = blk->values[i];
         if (!dup || dup->op != XI_RETAIN)
@@ -590,12 +649,12 @@ static int elim_block(XiBlock *blk, const XiFunc *f) {
         XiValue *target = dup->args[0];
         if (!target)
             continue;
+        if (elim_value_is_borrowed_param(f, target, own))
+            continue; /* borrowed param: the dup is mandatory, never remove it */
 
-        int real_uses = count_real_uses(f, target);
-        if (real_uses <= 1) {
-            /* The value flows to at most one real consumer; the retain is
-             * dead weight because xi_arc already handles single-consumer
-             * ownership transfer via the last-use move rule. */
+        if (count_real_uses(f, target) <= 1) {
+            /* OWNED value flowing to at most one real consumer: ownership
+             * transfers via the last-use move rule, so the retain is dead. */
             arc_remove_value(blk, i);
             eliminated++;
             i--; /* re-examine the slot */
@@ -617,13 +676,21 @@ XR_FUNC int xi_arc_elim(XiFunc *f) {
             total += xi_arc_elim(f->children[i]);
     }
 
+    /* Borrow signature, so Pattern 2 can tell OWNED from BORROWED values and
+     * never delete a mandatory borrowed dup. */
+    XiOwnResult own;
+    bool have_own = xi_own_analyze(f, &own);
+
     /* Eliminate within each block. */
     for (uint32_t b = 0; b < f->nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk || blk->nvalues == 0)
             continue;
-        total += elim_block(blk, f);
+        total += elim_block(blk, f, have_own ? &own : NULL);
     }
+
+    if (have_own)
+        xi_own_free(&own);
 
     return total;
 }
