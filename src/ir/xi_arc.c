@@ -309,6 +309,78 @@ static void insert_drop_at_returns(XiFunc *f, XiValue *target) {
     }
 }
 
+/* Does `target` share its heap object with another SSA value, so that a
+ * precise early drop could free it while an alias is still live? Conservative:
+ * true when target is an aliasing op itself (XI_COPY narrows/aliases its
+ * source, XI_SELECT forwards one input), or when it feeds a XI_COPY / XI_SELECT
+ * / borrowed projection (GETFIELD &co read through it). Such values fall back
+ * to the safe at-returns drop placement. */
+static bool value_has_alias(const XiFunc *f, const XiValue *target) {
+    if (target->op == XI_COPY || target->op == XI_SELECT)
+        return true;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *u = blk->values[i];
+            if (!u)
+                continue;
+            if (u->op != XI_COPY && u->op != XI_SELECT && !op_produces_borrow(u->op))
+                continue;
+            for (uint16_t a = 0; a < u->nargs; a++) {
+                if (u->args[a] == target)
+                    return true;
+            }
+        }
+    }
+    return false;
+}
+
+/* Precise placement for an owned, never-consumed value whose whole lifetime is
+ * inside its defining block and which has no aliases: release it right after
+ * its last use there (right after the def when unused) instead of pinning it to
+ * function exit. This reclaims per-iteration loop temporaries and dead branch
+ * temporaries that insert_drop_at_returns leaks (the def does not dominate any
+ * return, so no at-returns drop is emitted). Returns false — fall back to the
+ * safe at-returns placement — for any value that escapes its block (used in
+ * another block, by a phi, or as a block control) or that has an alias. */
+static bool try_drop_at_block_local_death(XiFunc *f, XiValue *target) {
+    XiBlock *def = target->block;
+    if (!def || value_has_alias(f, target))
+        return false;
+
+    XiValue *last_use = NULL;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return false; /* flows across a CFG edge */
+            }
+        }
+        if (blk->control == target)
+            return false; /* used by a terminator (return/if condition) */
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *u = blk->values[i];
+            if (!u || u->op == XI_RETAIN || u->op == XI_RELEASE)
+                continue;
+            for (uint16_t a = 0; a < u->nargs; a++) {
+                if (u->args[a] != target)
+                    continue;
+                if (blk != def)
+                    return false; /* used outside the defining block */
+                last_use = u;
+            }
+        }
+    }
+
+    insert_drop_after(f, def, last_use ? last_use : target, target);
+    return true;
+}
+
 /* Process one tracked value: insert dup before every consuming use except
  * the last, and a drop if it is never consumed.
  *
@@ -342,10 +414,13 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode, Cons
     ConsumeSite *sites = *site_buf;
 
     if (n == 0) {
-        /* Never consumed. Only an OWNED value is dropped at exit. A borrowed
-         * value is owned by the caller; a call result may be an alias — in
-         * both cases we must not drop it here. */
-        if (mode == OWN_OWNED)
+        /* Never consumed. Only an OWNED value is dropped. A borrowed value is
+         * owned by the caller; a call result may be an alias — in both cases we
+         * must not drop it here. Prefer a precise block-local death drop (frees
+         * per-iteration loop / dead-branch temporaries); fall back to the safe
+         * at-returns placement when the value escapes its block or has an
+         * alias. */
+        if (mode == OWN_OWNED && !try_drop_at_block_local_death(f, target))
             insert_drop_at_returns(f, target);
         return;
     }
