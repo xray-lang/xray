@@ -1210,6 +1210,12 @@
 (define-xi-op xi.copy
   :class pure
   :arity 1
+  ;; Identity/narrowing: the result aliases the source object (no new
+  ;; reference), so it is a BORROW of the source. It must not get a death-drop
+  ;; of its own (that frees the shared object out from under the source, e.g.
+  ;; a `go(move x)` arg whose narrowing copy was dropped before the GO); the
+  ;; source's borrow-closure extends the owner's lifetime past the copy's uses.
+  :result-ownership borrowed
   :own-use borrow
   :speculation safe
   :effects ()

@@ -756,6 +756,12 @@ typedef struct XiFunc {
      * a callee that never releases it). Arena-allocated; NULL until computed. */
     struct XiBorrowSig *arc_borrow_sig;
 
+    /* ARC return-ownership: 1 if this function provably returns a FRESH (+1)
+     * owned reference on every return (a new allocation or a known fresh call),
+     * so a caller that discards the result must release it. Computed alongside
+     * arc_borrow_sig; meaningful only once arc_borrow_sig is non-NULL. */
+    uint8_t arc_returns_fresh;
+
     /* Re-export table populated during lowering and emitted by emit_reexports. */
     XiReexportEntry *reexports; /* arena-allocated array */
     uint16_t reexport_count;

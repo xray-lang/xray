@@ -926,7 +926,12 @@ static void arc_insert_rec(XiFunc *f) {
             continue;
         for (uint32_t i = 0; i < blk->nvalues && nt < MAX_TARGETS; i++) {
             XiValue *v = blk->values[i];
-            if (v && tracks_rc(v))
+            /* Params can appear in the entry block's value list; they are
+             * already collected (with the correct param mode) by the params
+             * loop above. Collecting them again here would process each twice
+             * and insert a duplicate death-drop on every non-consuming branch
+             * path (a double-free). */
+            if (v && v->op != XI_PARAM && tracks_rc(v))
                 targets[nt++] = v;
         }
     }

@@ -182,6 +182,11 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
      * VM can get dup/drop without stack_alloc_rewrite. */
     if (cfg->run_escape && cfg->run_arc) {
         xi_arc_insert(ir);
+        if (getenv("XRAY_XI_ARC_DUMP")) {
+            fprintf(stderr, "=== Xi IR after xi_arc_insert ===\n");
+            xi_func_dump(ir, stderr);
+            fprintf(stderr, "=================================\n");
+        }
         /* Dup/drop elimination: remove redundant RETAIN+RELEASE pairs where
          * the value is merely forwarded (copy→move optimization). Runs on
          * all backends including VM (fewer RC ops = faster interpretation). */
