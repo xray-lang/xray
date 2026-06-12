@@ -5,7 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xrt_map_typed.inc.c - Typed Map backing and direct AOT helpers.
+ * xrt_map_typed.inc.c - Swiss-table probing for tagged and typed maps,
+ * plus the direct AOT helpers emitted by codegen for class-native fields.
+ *
+ * Every lookup family funnels into xrt_map_probe_* which walk the shared
+ * control bytes declared in xrt_coll.h.  Typed maps store packed scalar
+ * keys/values addressed by slot; tagged maps store XrValue pairs.
  */
 
 #ifndef XRT_MAP_TYPED_INC
@@ -26,67 +31,310 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
     if (key_type == XR_ELEM_ANY || value_type == XR_ELEM_ANY || key_type >= XR_ELEM_COUNT ||
         value_type >= XR_ELEM_COUNT)
         xrt_map_typed_abort("xrt_map_new_typed", "unsupported typed map layout");
-    if (cap < 8)
-        cap = 8;
     xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
     if (!m)
         xrt_map_typed_abort("xrt_map_new_typed", "out of memory");
     m->len = 0;
-    m->cap = cap;
-    m->entries = NULL;
     m->key_type = key_type;
     m->value_type = value_type;
     m->key_size = XR_ELEM_SIZES[key_type];
     m->value_size = XR_ELEM_SIZES[value_type];
-    m->last_lookup_index = -1;
-    m->last_i64_key = 0;
-    m->last_f32_key = 0.0f;
-    m->last_f64_key = 0.0;
-    m->keys = XRT_CALLOC((size_t) cap, (size_t) m->key_size);
-    m->values = XRT_CALLOC((size_t) cap, (size_t) m->value_size);
-    if (!m->keys || !m->values)
-        xrt_map_typed_abort("xrt_map_new_typed", "out of memory");
+    xrt_map_alloc_slots(m, xrt_swiss_slots_for(cap));
     return xr_mkptr(m, XR_TAG_MAP);
 }
 
-static inline XrValue xrt_map_key_get(xrt_map_t *m, int64_t index) {
-    return xrt_map_is_typed(m) ? xr_typed_get(m->keys, (int32_t) index, m->key_type)
-                               : m->entries[index].key;
+/* Slot accessors — valid only for slots whose ctrl byte is FULL. */
+static inline XrValue xrt_map_slot_key(xrt_map_t *m, int64_t slot) {
+    return xrt_map_is_typed(m) ? xr_typed_get(m->keys, (int32_t) slot, m->key_type)
+                               : ((XrValue *) m->keys)[slot];
 }
 
-static inline XrValue xrt_map_value_get(xrt_map_t *m, int64_t index) {
-    return xrt_map_is_typed(m) ? xr_typed_get(m->values, (int32_t) index, m->value_type)
-                               : m->entries[index].val;
+static inline XrValue xrt_map_slot_value(xrt_map_t *m, int64_t slot) {
+    return xrt_map_is_typed(m) ? xr_typed_get(m->values, (int32_t) slot, m->value_type)
+                               : ((XrValue *) m->values)[slot];
 }
+
+/* ---- typed scalar key normalization ------------------------------------ */
+
+/* Pack a scalar key into the canonical 64-bit pattern used for hashing and
+ * raw comparison.  Sub-width integers zero/sign-extend through their stored
+ * representation; floats canonicalize -0.0 so hash agrees with IEEE ==. */
+static inline uint64_t xrt_map_key_bits_i64(int64_t key, uint8_t key_type) {
+    switch (key_type) {
+        case XR_ELEM_I8:
+            return (uint64_t) (int8_t) key;
+        case XR_ELEM_U8:
+            return (uint64_t) (uint8_t) key;
+        case XR_ELEM_I16:
+            return (uint64_t) (int16_t) key;
+        case XR_ELEM_U16:
+            return (uint64_t) (uint16_t) key;
+        case XR_ELEM_I32:
+            return (uint64_t) (int32_t) key;
+        case XR_ELEM_U32:
+            return (uint64_t) (uint32_t) key;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return (uint64_t) key;
+        case XR_ELEM_BOOL:
+            return key != 0 ? 1u : 0u;
+        default:
+            xrt_map_typed_abort("xrt_map_key_bits_i64", "unsupported integer key type");
+    }
+    return 0;
+}
+
+static inline uint64_t xrt_map_key_bits_f64(double key, uint8_t key_type) {
+    if (key_type == XR_ELEM_F32) {
+        float f = (float) key;
+        uint32_t b32;
+        if (f == 0.0f)
+            f = 0.0f;
+        memcpy(&b32, &f, sizeof(b32));
+        return b32;
+    }
+    if (key_type == XR_ELEM_F64) {
+        uint64_t b64;
+        if (key == 0.0)
+            key = 0.0;
+        memcpy(&b64, &key, sizeof(b64));
+        return b64;
+    }
+    xrt_map_typed_abort("xrt_map_key_bits_f64", "unsupported float key type");
+    return 0;
+}
+
+static inline int64_t xrt_map_slot_key_raw(const xrt_map_t *m, int64_t slot) {
+    switch (m->key_type) {
+        case XR_ELEM_I8:
+            return ((const int8_t *) m->keys)[slot];
+        case XR_ELEM_U8:
+        case XR_ELEM_BOOL:
+            return ((const uint8_t *) m->keys)[slot];
+        case XR_ELEM_I16:
+            return ((const int16_t *) m->keys)[slot];
+        case XR_ELEM_U16:
+            return ((const uint16_t *) m->keys)[slot];
+        case XR_ELEM_I32:
+            return ((const int32_t *) m->keys)[slot];
+        case XR_ELEM_U32:
+            return ((const uint32_t *) m->keys)[slot];
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return ((const int64_t *) m->keys)[slot];
+        default:
+            xrt_map_typed_abort("xrt_map_slot_key_raw", "unsupported integer key type");
+    }
+    return 0;
+}
+
+static inline void xrt_map_slot_key_store_i64(xrt_map_t *m, int64_t slot, int64_t key) {
+    switch (m->key_type) {
+        case XR_ELEM_I8:
+            ((int8_t *) m->keys)[slot] = (int8_t) key;
+            return;
+        case XR_ELEM_U8:
+            ((uint8_t *) m->keys)[slot] = (uint8_t) key;
+            return;
+        case XR_ELEM_BOOL:
+            ((uint8_t *) m->keys)[slot] = key != 0 ? 1 : 0;
+            return;
+        case XR_ELEM_I16:
+            ((int16_t *) m->keys)[slot] = (int16_t) key;
+            return;
+        case XR_ELEM_U16:
+            ((uint16_t *) m->keys)[slot] = (uint16_t) key;
+            return;
+        case XR_ELEM_I32:
+            ((int32_t *) m->keys)[slot] = (int32_t) key;
+            return;
+        case XR_ELEM_U32:
+            ((uint32_t *) m->keys)[slot] = (uint32_t) key;
+            return;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            ((int64_t *) m->keys)[slot] = key;
+            return;
+        default:
+            xrt_map_typed_abort("xrt_map_slot_key_store_i64", "unsupported integer key type");
+    }
+}
+
+static inline void xrt_map_slot_key_store_f64(xrt_map_t *m, int64_t slot, double key) {
+    if (m->key_type == XR_ELEM_F32) {
+        ((float *) m->keys)[slot] = (float) key;
+        return;
+    }
+    if (m->key_type == XR_ELEM_F64) {
+        ((double *) m->keys)[slot] = key;
+        return;
+    }
+    xrt_map_typed_abort("xrt_map_slot_key_store_f64", "unsupported float key type");
+}
+
+/* ---- probe helpers ------------------------------------------------------ */
+
+typedef struct {
+    xrt_map_t *map;
+    uint64_t bits; /* canonical integer key pattern */
+} xrt_map_probe_i64_ctx;
+
+static inline int xrt_map_probe_i64_eq(void *ctxp, int64_t slot) {
+    xrt_map_probe_i64_ctx *ctx = (xrt_map_probe_i64_ctx *) ctxp;
+    return xrt_map_key_bits_i64(xrt_map_slot_key_raw(ctx->map, slot), ctx->map->key_type) ==
+           ctx->bits;
+}
+
+typedef struct {
+    xrt_map_t *map;
+    double key;
+} xrt_map_probe_f64_ctx;
+
+static inline int xrt_map_probe_f64_eq(void *ctxp, int64_t slot) {
+    xrt_map_probe_f64_ctx *ctx = (xrt_map_probe_f64_ctx *) ctxp;
+    if (ctx->map->key_type == XR_ELEM_F32)
+        return ((const float *) ctx->map->keys)[slot] == (float) ctx->key;
+    return ((const double *) ctx->map->keys)[slot] == ctx->key;
+}
+
+typedef struct {
+    xrt_map_t *map;
+    XrValue key;
+} xrt_map_probe_tag_ctx;
+
+static inline int xrt_map_probe_tag_eq(void *ctxp, int64_t slot) {
+    xrt_map_probe_tag_ctx *ctx = (xrt_map_probe_tag_ctx *) ctxp;
+    return xrt_eq(((const XrValue *) ctx->map->keys)[slot], ctx->key) != 0;
+}
+
+static inline int64_t xrt_map_find_i64_hashed(xrt_map_t *m, uint64_t bits, uint64_t hash) {
+    xrt_map_probe_i64_ctx ctx;
+    ctx.map = m;
+    ctx.bits = bits;
+    return xrt_swiss_find(m->ctrl, m->cap, hash, xrt_map_probe_i64_eq, &ctx);
+}
+
+static inline int64_t xrt_map_find_f64_hashed(xrt_map_t *m, double key, uint64_t hash) {
+    xrt_map_probe_f64_ctx ctx;
+    ctx.map = m;
+    ctx.key = key;
+    return xrt_swiss_find(m->ctrl, m->cap, hash, xrt_map_probe_f64_eq, &ctx);
+}
+
+static inline int64_t xrt_map_find_tagged(xrt_map_t *m, XrValue key) {
+    xrt_map_probe_tag_ctx ctx;
+    ctx.map = m;
+    ctx.key = key;
+    return xrt_swiss_find(m->ctrl, m->cap, xrt_hash_value(key), xrt_map_probe_tag_eq, &ctx);
+}
+
+/* ---- rehash ------------------------------------------------------------- */
+
+/* Hash the key stored at `slot` of a raw key array laid out for key_type. */
+static inline uint64_t xrt_map_stored_key_hash(const void *keys, int64_t slot, uint8_t key_type) {
+    switch (key_type) {
+        case XR_ELEM_ANY:
+            return xrt_hash_value(((const XrValue *) keys)[slot]);
+        case XR_ELEM_F32:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_f64((double) ((const float *) keys)[slot], XR_ELEM_F32));
+        case XR_ELEM_F64:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_f64(((const double *) keys)[slot], XR_ELEM_F64));
+        case XR_ELEM_I8:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_i64(((const int8_t *) keys)[slot], XR_ELEM_I8));
+        case XR_ELEM_U8:
+        case XR_ELEM_BOOL:
+            return xrt_hash_mix_u64(xrt_map_key_bits_i64(((const uint8_t *) keys)[slot], key_type));
+        case XR_ELEM_I16:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_i64(((const int16_t *) keys)[slot], XR_ELEM_I16));
+        case XR_ELEM_U16:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_i64(((const uint16_t *) keys)[slot], XR_ELEM_U16));
+        case XR_ELEM_I32:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_i64(((const int32_t *) keys)[slot], XR_ELEM_I32));
+        case XR_ELEM_U32:
+            return xrt_hash_mix_u64(
+                xrt_map_key_bits_i64(((const uint32_t *) keys)[slot], XR_ELEM_U32));
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return xrt_hash_mix_u64(xrt_map_key_bits_i64(((const int64_t *) keys)[slot], key_type));
+        default:
+            xrt_map_typed_abort("xrt_map_stored_key_hash", "unsupported key type");
+    }
+    return 0;
+}
+
+static inline void xrt_map_rehash(xrt_map_t *m, int64_t new_slots) {
+    int64_t old_slots = m->cap;
+    uint8_t *old_ctrl = m->ctrl;
+    void *old_keys = m->keys;
+    void *old_values = m->values;
+
+    xrt_map_alloc_slots(m, new_slots);
+    for (int64_t slot = 0; slot < old_slots; slot++) {
+        if (old_ctrl[slot] & 0x80u)
+            continue;
+        uint64_t hash = xrt_map_stored_key_hash(old_keys, slot, m->key_type);
+        int64_t dst = xrt_swiss_find_free(m->ctrl, m->cap, hash);
+        xrt_swiss_ctrl_set(m->ctrl, m->cap, dst, (uint8_t) (hash & 0x7F));
+        memcpy((uint8_t *) m->keys + (size_t) dst * m->key_size,
+               (const uint8_t *) old_keys + (size_t) slot * m->key_size, m->key_size);
+        memcpy((uint8_t *) m->values + (size_t) dst * m->value_size,
+               (const uint8_t *) old_values + (size_t) slot * m->value_size, m->value_size);
+        m->growth_left--;
+    }
+    XRT_FREE(old_ctrl);
+    XRT_FREE(old_keys);
+    XRT_FREE(old_values);
+}
+
+static inline void xrt_map_rehash_tagged(xrt_map_t *m, int64_t new_slots) {
+    xrt_map_rehash(m, new_slots);
+}
+
+/* Grow when the free budget is gone: double when genuinely loaded, otherwise
+ * rebuild at the same size to flush tombstones. */
+static inline void xrt_map_reserve_one(xrt_map_t *m) {
+    if (m->growth_left > 0)
+        return;
+    xrt_map_rehash(m, m->len >= xrt_map_growth_budget(m->cap) / 2 ? m->cap * 2 : m->cap);
+}
+
+static inline int64_t xrt_map_insert_slot(xrt_map_t *m, uint64_t hash) {
+    xrt_map_reserve_one(m);
+    int64_t slot = xrt_swiss_find_free(m->ctrl, m->cap, hash);
+    if (m->ctrl[slot] == XRT_CTRL_EMPTY)
+        m->growth_left--;
+    xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) (hash & 0x7F));
+    m->len++;
+    return slot;
+}
+
+static inline void xrt_map_erase_slot(xrt_map_t *m, int64_t slot) {
+    xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) XRT_CTRL_DELETED);
+    m->len--;
+}
+
+/* ---- tagged entry points via XrValue keys (typed maps unbox first) ------ */
 
 static inline int64_t xrt_map_find_typed(xrt_map_t *m, XrValue key) {
-    for (int64_t i = 0; i < m->len; i++) {
-        if (xrt_key_eq(xrt_map_key_get(m, i), key))
-            return i;
+    if (m->key_type == XR_ELEM_F32 || m->key_type == XR_ELEM_F64) {
+        double k = key.tag == XR_TAG_F64 ? key.f : (double) key.i;
+        return xrt_map_find_f64_hashed(m, k,
+                                       xrt_hash_mix_u64(xrt_map_key_bits_f64(k, m->key_type)));
     }
-    return -1;
-}
-
-static inline void xrt_map_grow_typed(xrt_map_t *m, const char *who) {
-    m->cap *= 2;
-    void *new_keys = XRT_REALLOC(m->keys, (size_t) m->cap * (size_t) m->key_size);
-    void *new_values = XRT_REALLOC(m->values, (size_t) m->cap * (size_t) m->value_size);
-    if (!new_keys || !new_values)
-        xrt_map_typed_abort(who, "out of memory");
-    m->keys = new_keys;
-    m->values = new_values;
-}
-
-static inline void xrt_map_copy_typed_entry(xrt_map_t *m, int64_t dst, int64_t src) {
-    memcpy((uint8_t *) m->keys + (size_t) dst * (size_t) m->key_size,
-           (uint8_t *) m->keys + (size_t) src * (size_t) m->key_size, (size_t) m->key_size);
-    memcpy((uint8_t *) m->values + (size_t) dst * (size_t) m->value_size,
-           (uint8_t *) m->values + (size_t) src * (size_t) m->value_size, (size_t) m->value_size);
+    int64_t k = key.tag == XR_TAG_F64 ? (int64_t) key.f : key.i;
+    uint64_t bits = xrt_map_key_bits_i64(k, m->key_type);
+    return xrt_map_find_i64_hashed(m, bits, xrt_hash_mix_u64(bits));
 }
 
 static inline XrValue xrt_map_get_typed(xrt_map_t *m, XrValue key) {
-    int64_t index = xrt_map_find_typed(m, key);
-    return index >= 0 ? xrt_map_value_get(m, index) : XR_NULL_VAL;
+    int64_t slot = xrt_map_find_typed(m, key);
+    return slot >= 0 ? xrt_map_slot_value(m, slot) : XR_NULL_VAL;
 }
 
 static inline int xrt_map_has_typed(xrt_map_t *m, XrValue key) {
@@ -94,27 +342,31 @@ static inline int xrt_map_has_typed(xrt_map_t *m, XrValue key) {
 }
 
 static inline int xrt_map_delete_typed(xrt_map_t *m, XrValue key) {
-    int64_t index = xrt_map_find_typed(m, key);
-    if (index < 0)
+    int64_t slot = xrt_map_find_typed(m, key);
+    if (slot < 0)
         return 0;
-    m->len--;
-    if (index != m->len)
-        xrt_map_copy_typed_entry(m, index, m->len);
+    xrt_map_erase_slot(m, slot);
     return 1;
 }
 
 static inline void xrt_map_set_typed(xrt_map_t *m, XrValue key, XrValue val) {
-    int64_t index = xrt_map_find_typed(m, key);
-    if (index >= 0) {
-        (void) xr_typed_set(m->values, (int32_t) index, val, m->value_type);
-        return;
+    int64_t slot = xrt_map_find_typed(m, key);
+    if (slot < 0) {
+        uint64_t hash;
+        if (m->key_type == XR_ELEM_F32 || m->key_type == XR_ELEM_F64) {
+            double k = key.tag == XR_TAG_F64 ? key.f : (double) key.i;
+            hash = xrt_hash_mix_u64(xrt_map_key_bits_f64(k, m->key_type));
+        } else {
+            int64_t k = key.tag == XR_TAG_F64 ? (int64_t) key.f : key.i;
+            hash = xrt_hash_mix_u64(xrt_map_key_bits_i64(k, m->key_type));
+        }
+        slot = xrt_map_insert_slot(m, hash);
+        (void) xr_typed_set(m->keys, (int32_t) slot, key, m->key_type);
     }
-    if (m->len >= m->cap)
-        xrt_map_grow_typed(m, "xrt_map_set_typed");
-    (void) xr_typed_set(m->keys, (int32_t) m->len, key, m->key_type);
-    (void) xr_typed_set(m->values, (int32_t) m->len, val, m->value_type);
-    m->len++;
+    (void) xr_typed_set(m->values, (int32_t) slot, val, m->value_type);
 }
+
+/* ---- direct AOT helpers (codegen-emitted, signatures are an ABI) -------- */
 
 static inline void xrt_map_direct_type_mismatch(uint8_t expected_key, uint8_t actual_key,
                                                 uint8_t expected_value, uint8_t actual_value,
@@ -141,200 +393,120 @@ static inline void xrt_map_direct_require(xrt_map_t *m, uint8_t key_type, uint8_
     }
 }
 
-#define XRT_MAP_I64_FIND_CASE(elem, ctype, expr)                                                   \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *keys = (ctype *) m->keys;                                                           \
-        uint64_t cache_key = (uint64_t) needle;                                                    \
-        int64_t cached = m->last_lookup_index;                                                     \
-        if (cached >= 0 && cached < m->len && m->last_i64_key == cache_key &&                      \
-            keys[cached] == needle)                                                                \
-            return cached;                                                                         \
-        for (int64_t i = 0; i < m->len; i++) {                                                     \
-            if (keys[i] == needle) {                                                               \
-                m->last_lookup_index = i;                                                          \
-                m->last_i64_key = cache_key;                                                       \
-                return i;                                                                          \
-            }                                                                                      \
-        }                                                                                          \
-        m->last_lookup_index = -1;                                                                 \
-        m->last_i64_key = cache_key;                                                               \
-        return -1;                                                                                 \
-    }
-
-#define XRT_MAP_F64_FIND_CASE(elem, ctype, expr)                                                   \
-    case elem: {                                                                                   \
-        ctype needle = (ctype) (expr);                                                             \
-        ctype *keys = (ctype *) m->keys;                                                           \
-        double cache_key = (double) needle;                                                        \
-        int64_t cached = m->last_lookup_index;                                                     \
-        if (cached >= 0 && cached < m->len && m->last_f64_key == cache_key &&                      \
-            keys[cached] == needle)                                                                \
-            return cached;                                                                         \
-        for (int64_t i = 0; i < m->len; i++) {                                                     \
-            if (keys[i] == needle) {                                                               \
-                m->last_lookup_index = i;                                                          \
-                m->last_f64_key = cache_key;                                                       \
-                return i;                                                                          \
-            }                                                                                      \
-        }                                                                                          \
-        m->last_lookup_index = -1;                                                                 \
-        m->last_f64_key = cache_key;                                                               \
-        return -1;                                                                                 \
-    }
-
-#define XRT_MAP_I64_STORE_CASE(elem, ctype, expr, field)                                           \
-    case elem:                                                                                     \
-        ((ctype *) field)[index] = (ctype) (expr);                                                 \
-        return
-
-#define XRT_MAP_F64_STORE_CASE(elem, ctype, expr, field)                                           \
-    case elem:                                                                                     \
-        ((ctype *) field)[index] = (ctype) (expr);                                                 \
-        return
-
-#define XRT_MAP_I64_GET_CASE(elem, ctype)                                                          \
-    case elem:                                                                                     \
-        return (int64_t) ((ctype *) m->values)[index]
-
-#define XRT_MAP_F64_GET_CASE(elem, ctype)                                                          \
-    case elem:                                                                                     \
-        return (double) ((ctype *) m->values)[index]
-
 static inline int64_t xrt_map_find_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) value_type;
-    switch (key_type) {
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_I8, int8_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_U8, uint8_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_I16, int16_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_U16, uint16_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_I32, int32_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_U32, uint32_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_I64, int64_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_U64, uint64_t, key);
-        XRT_MAP_I64_FIND_CASE(XR_ELEM_BOOL, uint8_t, key != 0 ? 1 : 0);
-        default:
-            xrt_map_direct_unsupported(key_type, "key", "xrt_map_find_i64_typed");
-    }
-    return -1;
+    uint64_t bits = xrt_map_key_bits_i64(key, key_type);
+    return xrt_map_find_i64_hashed(m, bits, xrt_hash_mix_u64(bits));
 }
 
 static inline int64_t xrt_map_find_f64_typed(xrt_map_t *m, double key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) value_type;
-    switch (key_type) {
-        XRT_MAP_F64_FIND_CASE(XR_ELEM_F32, float, key);
-        XRT_MAP_F64_FIND_CASE(XR_ELEM_F64, double, key);
-        default:
-            xrt_map_direct_unsupported(key_type, "key", "xrt_map_find_f64_typed");
-    }
-    return -1;
+    return xrt_map_find_f64_hashed(m, key, xrt_hash_mix_u64(xrt_map_key_bits_f64(key, key_type)));
 }
 
-static inline void xrt_map_store_i64_key_typed(xrt_map_t *m, int64_t index, int64_t key,
-                                               uint8_t key_type) {
-    switch (key_type) {
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I8, int8_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U8, uint8_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I16, int16_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U16, uint16_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I32, int32_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U32, uint32_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I64, int64_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U64, uint64_t, key, m->keys);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_BOOL, uint8_t, key != 0 ? 1 : 0, m->keys);
-        default:
-            xrt_map_direct_unsupported(key_type, "key", "xrt_map_store_i64_key_typed");
-    }
-}
-
-static inline void xrt_map_store_f64_key_typed(xrt_map_t *m, int64_t index, double key,
-                                               uint8_t key_type) {
-    switch (key_type) {
-        XRT_MAP_F64_STORE_CASE(XR_ELEM_F32, float, key, m->keys);
-        XRT_MAP_F64_STORE_CASE(XR_ELEM_F64, double, key, m->keys);
-        default:
-            xrt_map_direct_unsupported(key_type, "key", "xrt_map_store_f64_key_typed");
-    }
-}
-
-static inline int64_t xrt_map_get_i64_value_typed(xrt_map_t *m, int64_t index, uint8_t value_type) {
+static inline int64_t xrt_map_get_i64_value_typed(xrt_map_t *m, int64_t slot, uint8_t value_type) {
     switch (value_type) {
-        XRT_MAP_I64_GET_CASE(XR_ELEM_I8, int8_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_U8, uint8_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_I16, int16_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_U16, uint16_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_I32, int32_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_U32, uint32_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_I64, int64_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_U64, uint64_t);
-        XRT_MAP_I64_GET_CASE(XR_ELEM_BOOL, uint8_t);
+        case XR_ELEM_I8:
+            return ((const int8_t *) m->values)[slot];
+        case XR_ELEM_U8:
+        case XR_ELEM_BOOL:
+            return ((const uint8_t *) m->values)[slot];
+        case XR_ELEM_I16:
+            return ((const int16_t *) m->values)[slot];
+        case XR_ELEM_U16:
+            return ((const uint16_t *) m->values)[slot];
+        case XR_ELEM_I32:
+            return ((const int32_t *) m->values)[slot];
+        case XR_ELEM_U32:
+            return ((const uint32_t *) m->values)[slot];
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            return ((const int64_t *) m->values)[slot];
         default:
             xrt_map_direct_unsupported(value_type, "value", "xrt_map_get_i64_value_typed");
     }
     return 0;
 }
 
-static inline double xrt_map_get_f64_value_typed(xrt_map_t *m, int64_t index, uint8_t value_type) {
-    switch (value_type) {
-        XRT_MAP_F64_GET_CASE(XR_ELEM_F32, float);
-        XRT_MAP_F64_GET_CASE(XR_ELEM_F64, double);
-        default:
-            xrt_map_direct_unsupported(value_type, "value", "xrt_map_get_f64_value_typed");
-    }
+static inline double xrt_map_get_f64_value_typed(xrt_map_t *m, int64_t slot, uint8_t value_type) {
+    if (value_type == XR_ELEM_F32)
+        return (double) ((const float *) m->values)[slot];
+    if (value_type == XR_ELEM_F64)
+        return ((const double *) m->values)[slot];
+    xrt_map_direct_unsupported(value_type, "value", "xrt_map_get_f64_value_typed");
     return 0.0;
 }
 
-static inline void xrt_map_store_i64_value_typed(xrt_map_t *m, int64_t index, int64_t value,
+static inline void xrt_map_store_i64_value_typed(xrt_map_t *m, int64_t slot, int64_t value,
                                                  uint8_t value_type) {
     switch (value_type) {
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I8, int8_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U8, uint8_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I16, int16_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U16, uint16_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I32, int32_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U32, uint32_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_I64, int64_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_U64, uint64_t, value, m->values);
-        XRT_MAP_I64_STORE_CASE(XR_ELEM_BOOL, uint8_t, value != 0 ? 1 : 0, m->values);
+        case XR_ELEM_I8:
+            ((int8_t *) m->values)[slot] = (int8_t) value;
+            return;
+        case XR_ELEM_U8:
+            ((uint8_t *) m->values)[slot] = (uint8_t) value;
+            return;
+        case XR_ELEM_BOOL:
+            ((uint8_t *) m->values)[slot] = value != 0 ? 1 : 0;
+            return;
+        case XR_ELEM_I16:
+            ((int16_t *) m->values)[slot] = (int16_t) value;
+            return;
+        case XR_ELEM_U16:
+            ((uint16_t *) m->values)[slot] = (uint16_t) value;
+            return;
+        case XR_ELEM_I32:
+            ((int32_t *) m->values)[slot] = (int32_t) value;
+            return;
+        case XR_ELEM_U32:
+            ((uint32_t *) m->values)[slot] = (uint32_t) value;
+            return;
+        case XR_ELEM_I64:
+        case XR_ELEM_U64:
+            ((int64_t *) m->values)[slot] = value;
+            return;
         default:
             xrt_map_direct_unsupported(value_type, "value", "xrt_map_store_i64_value_typed");
     }
 }
 
-static inline void xrt_map_store_f64_value_typed(xrt_map_t *m, int64_t index, double value,
+static inline void xrt_map_store_f64_value_typed(xrt_map_t *m, int64_t slot, double value,
                                                  uint8_t value_type) {
-    switch (value_type) {
-        XRT_MAP_F64_STORE_CASE(XR_ELEM_F32, float, value, m->values);
-        XRT_MAP_F64_STORE_CASE(XR_ELEM_F64, double, value, m->values);
-        default:
-            xrt_map_direct_unsupported(value_type, "value", "xrt_map_store_f64_value_typed");
+    if (value_type == XR_ELEM_F32) {
+        ((float *) m->values)[slot] = (float) value;
+        return;
     }
+    if (value_type == XR_ELEM_F64) {
+        ((double *) m->values)[slot] = value;
+        return;
+    }
+    xrt_map_direct_unsupported(value_type, "value", "xrt_map_store_f64_value_typed");
 }
 
 static inline int64_t xrt_map_get_i64_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
-    int64_t index = xrt_map_find_i64_typed(m, key, key_type, value_type);
-    return index >= 0 ? xrt_map_get_i64_value_typed(m, index, value_type) : 0;
+    int64_t slot = xrt_map_find_i64_typed(m, key, key_type, value_type);
+    return slot >= 0 ? xrt_map_get_i64_value_typed(m, slot, value_type) : 0;
 }
 
 static inline double xrt_map_get_i64_f64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                uint8_t value_type) {
-    int64_t index = xrt_map_find_i64_typed(m, key, key_type, value_type);
-    return index >= 0 ? xrt_map_get_f64_value_typed(m, index, value_type) : 0.0;
+    int64_t slot = xrt_map_find_i64_typed(m, key, key_type, value_type);
+    return slot >= 0 ? xrt_map_get_f64_value_typed(m, slot, value_type) : 0.0;
 }
 
 static inline int64_t xrt_map_get_f64_i64_typed(xrt_map_t *m, double key, uint8_t key_type,
                                                 uint8_t value_type) {
-    int64_t index = xrt_map_find_f64_typed(m, key, key_type, value_type);
-    return index >= 0 ? xrt_map_get_i64_value_typed(m, index, value_type) : 0;
+    int64_t slot = xrt_map_find_f64_typed(m, key, key_type, value_type);
+    return slot >= 0 ? xrt_map_get_i64_value_typed(m, slot, value_type) : 0;
 }
 
 static inline double xrt_map_get_f64_f64_typed(xrt_map_t *m, double key, uint8_t key_type,
                                                uint8_t value_type) {
-    int64_t index = xrt_map_find_f64_typed(m, key, key_type, value_type);
-    return index >= 0 ? xrt_map_get_f64_value_typed(m, index, value_type) : 0.0;
+    int64_t slot = xrt_map_find_f64_typed(m, key, key_type, value_type);
+    return slot >= 0 ? xrt_map_get_f64_value_typed(m, slot, value_type) : 0.0;
 }
 
 static inline int xrt_map_has_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
@@ -349,227 +521,141 @@ static inline int xrt_map_has_f64_typed(xrt_map_t *m, double key, uint8_t key_ty
 
 static inline int xrt_map_delete_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                            uint8_t value_type) {
-    int64_t index = xrt_map_find_i64_typed(m, key, key_type, value_type);
-    if (index < 0)
+    int64_t slot = xrt_map_find_i64_typed(m, key, key_type, value_type);
+    if (slot < 0)
         return 0;
-    m->len--;
-    if (index != m->len)
-        xrt_map_copy_typed_entry(m, index, m->len);
+    xrt_map_erase_slot(m, slot);
     return 1;
 }
 
 static inline int xrt_map_delete_f64_typed(xrt_map_t *m, double key, uint8_t key_type,
                                            uint8_t value_type) {
-    int64_t index = xrt_map_find_f64_typed(m, key, key_type, value_type);
-    if (index < 0)
+    int64_t slot = xrt_map_find_f64_typed(m, key, key_type, value_type);
+    if (slot < 0)
         return 0;
-    m->len--;
-    if (index != m->len)
-        xrt_map_copy_typed_entry(m, index, m->len);
+    xrt_map_erase_slot(m, slot);
     return 1;
-}
-
-static inline void xrt_map_prepare_new_typed_entry(xrt_map_t *m, int64_t *index, const char *who) {
-    if (m->len >= m->cap)
-        xrt_map_grow_typed(m, who);
-    *index = m->len;
-    m->len++;
 }
 
 static inline void xrt_map_set_i64_i64_typed(xrt_map_t *m, int64_t key, int64_t value,
                                              uint8_t key_type, uint8_t value_type) {
-    int64_t index = xrt_map_find_i64_typed(m, key, key_type, value_type);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_i64_i64_typed");
-        xrt_map_store_i64_key_typed(m, index, key, key_type);
+    uint64_t bits = xrt_map_key_bits_i64(key, key_type);
+    uint64_t hash = xrt_hash_mix_u64(bits);
+    int64_t slot = xrt_map_find_i64_hashed(m, bits, hash);
+    if (slot < 0) {
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_i64(m, slot, key);
     }
-    xrt_map_store_i64_value_typed(m, index, value, value_type);
+    xrt_map_store_i64_value_typed(m, slot, value, value_type);
 }
 
 static inline void xrt_map_set_i64_f64_typed(xrt_map_t *m, int64_t key, double value,
                                              uint8_t key_type, uint8_t value_type) {
-    int64_t index = xrt_map_find_i64_typed(m, key, key_type, value_type);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_i64_f64_typed");
-        xrt_map_store_i64_key_typed(m, index, key, key_type);
+    uint64_t bits = xrt_map_key_bits_i64(key, key_type);
+    uint64_t hash = xrt_hash_mix_u64(bits);
+    int64_t slot = xrt_map_find_i64_hashed(m, bits, hash);
+    if (slot < 0) {
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_i64(m, slot, key);
     }
-    xrt_map_store_f64_value_typed(m, index, value, value_type);
+    xrt_map_store_f64_value_typed(m, slot, value, value_type);
 }
 
 static inline void xrt_map_set_f64_i64_typed(xrt_map_t *m, double key, int64_t value,
                                              uint8_t key_type, uint8_t value_type) {
-    int64_t index = xrt_map_find_f64_typed(m, key, key_type, value_type);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_f64_i64_typed");
-        xrt_map_store_f64_key_typed(m, index, key, key_type);
+    uint64_t hash = xrt_hash_mix_u64(xrt_map_key_bits_f64(key, key_type));
+    int64_t slot = xrt_map_find_f64_hashed(m, key, hash);
+    if (slot < 0) {
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_f64(m, slot, key);
     }
-    xrt_map_store_i64_value_typed(m, index, value, value_type);
+    xrt_map_store_i64_value_typed(m, slot, value, value_type);
 }
 
 static inline void xrt_map_set_f64_f64_typed(xrt_map_t *m, double key, double value,
                                              uint8_t key_type, uint8_t value_type) {
-    int64_t index = xrt_map_find_f64_typed(m, key, key_type, value_type);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_f64_f64_typed");
-        xrt_map_store_f64_key_typed(m, index, key, key_type);
+    uint64_t hash = xrt_hash_mix_u64(xrt_map_key_bits_f64(key, key_type));
+    int64_t slot = xrt_map_find_f64_hashed(m, key, hash);
+    if (slot < 0) {
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_f64(m, slot, key);
     }
-    xrt_map_store_f64_value_typed(m, index, value, value_type);
+    xrt_map_store_f64_value_typed(m, slot, value, value_type);
 }
 
-static inline int64_t xrt_map_find_bool_key_typed(xrt_map_t *m, int64_t key) {
-    uint8_t needle = key != 0 ? 1 : 0;
-    uint8_t *keys = (uint8_t *) m->keys;
-    if (m->len > 0 && keys[0] == needle)
-        return 0;
-    if (m->len > 1 && keys[1] == needle)
-        return 1;
-    return -1;
-}
+/* bool-key / f32-key direct families reuse the generic probes; the dedicated
+ * names stay because codegen emits them with these exact signatures. */
 
 static inline int64_t xrt_map_get_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                  uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    return index >= 0 ? ((int64_t *) m->values)[index] : 0;
+    return xrt_map_get_i64_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline int xrt_map_has_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    return xrt_map_find_bool_key_typed(m, key) >= 0;
+    return xrt_map_has_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline int xrt_map_delete_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    if (index < 0)
-        return 0;
-    m->len--;
-    if (index != m->len) {
-        ((uint8_t *) m->keys)[index] = ((uint8_t *) m->keys)[m->len];
-        ((int64_t *) m->values)[index] = ((int64_t *) m->values)[m->len];
-    }
-    return 1;
+    return xrt_map_delete_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline void xrt_map_set_bool_i64_typed(xrt_map_t *m, int64_t key, int64_t value,
                                               uint8_t key_type, uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_bool_i64_typed");
-        ((uint8_t *) m->keys)[index] = key != 0 ? 1 : 0;
-    }
-    ((int64_t *) m->values)[index] = value;
+    xrt_map_set_i64_i64_typed(m, key != 0 ? 1 : 0, value, XR_ELEM_BOOL, value_type);
 }
 
 static inline double xrt_map_get_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    return index >= 0 ? (double) ((float *) m->values)[index] : 0.0;
+    return xrt_map_get_i64_f64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline int xrt_map_has_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    return xrt_map_find_bool_key_typed(m, key) >= 0;
+    return xrt_map_has_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline int xrt_map_delete_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    if (index < 0)
-        return 0;
-    m->len--;
-    if (index != m->len) {
-        ((uint8_t *) m->keys)[index] = ((uint8_t *) m->keys)[m->len];
-        ((float *) m->values)[index] = ((float *) m->values)[m->len];
-    }
-    return 1;
+    return xrt_map_delete_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
 }
 
 static inline void xrt_map_set_bool_f32_typed(xrt_map_t *m, int64_t key, double value,
                                               uint8_t key_type, uint8_t value_type) {
     (void) key_type;
-    (void) value_type;
-    int64_t index = xrt_map_find_bool_key_typed(m, key);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_bool_f32_typed");
-        ((uint8_t *) m->keys)[index] = key != 0 ? 1 : 0;
-    }
-    ((float *) m->values)[index] = (float) value;
-}
-
-static inline int64_t xrt_map_find_f32_f32_typed(xrt_map_t *m, double key, uint8_t key_type,
-                                                 uint8_t value_type) {
-    (void) key_type;
-    (void) value_type;
-    float needle = (float) key;
-    float *keys = (float *) m->keys;
-    int64_t cached = m->last_lookup_index;
-    if (cached >= 0 && cached < m->len && m->last_f32_key == needle && keys[cached] == needle)
-        return cached;
-    for (int64_t i = 0; i < m->len; i++) {
-        if (keys[i] == needle) {
-            m->last_lookup_index = i;
-            m->last_f32_key = needle;
-            return i;
-        }
-    }
-    m->last_lookup_index = -1;
-    m->last_f32_key = needle;
-    return -1;
+    xrt_map_set_i64_f64_typed(m, key != 0 ? 1 : 0, value, XR_ELEM_BOOL, value_type);
 }
 
 static inline double xrt_map_get_f32_f32_typed(xrt_map_t *m, double key, uint8_t key_type,
                                                uint8_t value_type) {
-    int64_t index = xrt_map_find_f32_f32_typed(m, key, key_type, value_type);
-    return index >= 0 ? (double) ((float *) m->values)[index] : 0.0;
+    (void) key_type;
+    return xrt_map_get_f64_f64_typed(m, key, XR_ELEM_F32, value_type);
 }
 
 static inline int xrt_map_has_f32_f32_typed(xrt_map_t *m, double key, uint8_t key_type,
                                             uint8_t value_type) {
-    return xrt_map_find_f32_f32_typed(m, key, key_type, value_type) >= 0;
+    (void) key_type;
+    return xrt_map_has_f64_typed(m, key, XR_ELEM_F32, value_type);
 }
 
 static inline int xrt_map_delete_f32_f32_typed(xrt_map_t *m, double key, uint8_t key_type,
                                                uint8_t value_type) {
-    int64_t index = xrt_map_find_f32_f32_typed(m, key, key_type, value_type);
-    if (index < 0)
-        return 0;
-    m->len--;
-    if (index != m->len) {
-        ((float *) m->keys)[index] = ((float *) m->keys)[m->len];
-        ((float *) m->values)[index] = ((float *) m->values)[m->len];
-    }
-    return 1;
+    (void) key_type;
+    return xrt_map_delete_f64_typed(m, key, XR_ELEM_F32, value_type);
 }
 
 static inline void xrt_map_set_f32_f32_typed(xrt_map_t *m, double key, double value,
                                              uint8_t key_type, uint8_t value_type) {
-    int64_t index = xrt_map_find_f32_f32_typed(m, key, key_type, value_type);
-    if (index < 0) {
-        xrt_map_prepare_new_typed_entry(m, &index, "xrt_map_set_f32_f32_typed");
-        ((float *) m->keys)[index] = (float) key;
-    }
-    ((float *) m->values)[index] = (float) value;
+    (void) key_type;
+    xrt_map_set_f64_f64_typed(m, key, value, XR_ELEM_F32, value_type);
 }
-
-#undef XRT_MAP_I64_FIND_CASE
-#undef XRT_MAP_F64_FIND_CASE
-#undef XRT_MAP_I64_STORE_CASE
-#undef XRT_MAP_F64_STORE_CASE
-#undef XRT_MAP_I64_GET_CASE
-#undef XRT_MAP_F64_GET_CASE
 
 #endif /* XRT_MAP_TYPED_INC */

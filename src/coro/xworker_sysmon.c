@@ -100,8 +100,9 @@ static void sysmon_check(XrRuntime *runtime) {
             // future calls release P before execution (dirty worker path).
             // All accesses are atomic; upgrade uses
             // one-way CAS to prevent ABA with concurrent VM reads.
-            if (elapsed_us >= 10000 && wm->current_cfunc) {
-                XrCFunction *cfn = (XrCFunction *) wm->current_cfunc;
+            void *cur_cfunc = atomic_load_explicit(&wm->current_cfunc, memory_order_relaxed);
+            if (elapsed_us >= 10000 && cur_cfunc) {
+                XrCFunction *cfn = (XrCFunction *) cur_cfunc;
                 uint8_t cls = atomic_load_explicit(&cfn->cfunc_class, memory_order_relaxed);
                 if (cls == XR_CFUNC_FAST) {
                     uint8_t cnt =
@@ -157,7 +158,7 @@ static void sysmon_check(XrRuntime *runtime) {
                                    coro_name ? coro_name : "unknown",
                                    snap.backend_name ? snap.backend_name : "unknown",
                                    snap.function_name ? snap.function_name : "?", snap.in_c_frame,
-                                   snap.frame_count, coro->reductions, xr_coro_flags_load(coro));
+                                   snap.frame_count, xr_coro_reds(coro), xr_coro_flags_load(coro));
                 }
             }
         } else {
@@ -198,8 +199,8 @@ static void sysmon_assist(XrRuntime *runtime) {
         // owner's two non-atomic stores to next_timeout_pos and
         // next_timeout_time.  A stale value here is benign: worst case the
         // owner gets unparked one sysmon tick later.
-        if (w->p.timer_wheel && now > w->p.last_timer_tick) {
-            int64_t next = w->p.timer_wheel->next_timeout_pos;
+        if (w->p.timer_wheel && now > xr_proc_last_timer_tick(&w->p)) {
+            int64_t next = xr_timer_wheel_next_pos_peek(w->p.timer_wheel);
             if (next <= now) {
                 worker_unpark(w);
             }
@@ -287,7 +288,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     // Initialize main thread Worker's Timer Wheel (owner is worker 0)
     if (!worker->p.timer_wheel) {
         worker->p.timer_wheel = xr_timer_wheel_create(runtime, 0);  // Worker 0 owns this
-        worker->p.last_timer_tick = xr_monotonic_ticks();
+        xr_proc_set_last_timer_tick(&worker->p, xr_monotonic_ticks());
     }
 
     // Put the main coroutine into Worker 0's local queue.
@@ -321,7 +322,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         while (idle) {
             atomic_store_explicit(&idle->park_state, XR_PARK_WOKEN, memory_order_release);
             xr_park_futex_wake(&idle->park_state);
-            idle = idle->idle_link;
+            idle = atomic_load_explicit(&idle->idle_link, memory_order_relaxed);
         }
     }
 
@@ -461,6 +462,25 @@ void xr_worker_block_select(XrWorker *worker, XrCoroutine *coro, void **channels
     (void) xr_coro_publish_wait_block(coro);
 }
 
+// worker_detach_select_waiter_with_status - Claim and detach one select waiter.
+//
+// THREADING INVARIANT (load-bearing, do not weaken):
+// Every path that touches a select wait — registration (xr_worker_block_select),
+// channel wakes (this function, via xr_worker_wake_select*), timer wakes
+// (worker_sleep_timeout_callback via the owner-private timer wheel), and the
+// post-block recheck (coro_select_recheck_after_block) — executes on the
+// OWNING worker thread. Remote workers route wakes through chan_wake_queue;
+// sysmon never fires timers itself, it only unparks the owner. This
+// serialization is what makes the sw->triggered protocol below correct.
+//
+// triggered protocol: the first waker to CAS triggered false->true owns the
+// right to deliver a result (selected_index/status). If the subsequent
+// xr_coro_claim_wake fails, the coroutine is no longer BLOCKED — some other
+// wake path (e.g. cancellation via xr_coro_ready) already won and the select
+// is about to resume and tear down its wait state. Deliberately do NOT roll
+// back triggered in that case: the latch is harmless once the coro is awake,
+// while a late write into sw could race with the resumed coroutine reusing
+// select_storage for its next select.
 static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, void *channel,
                                                             int resume_status) {
     if (!worker || !channel)
@@ -490,6 +510,8 @@ static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, vo
                           "wake_select: case index out of range");
                 int case_index = (int) (sc - sw->cases);
                 if (!xr_coro_claim_wake(coro)) {
+                    // Coro already woken elsewhere; leave triggered latched
+                    // (see protocol note in the function doc comment).
                     sc = next;
                     continue;
                 }
@@ -527,9 +549,11 @@ static XrCoroutine *worker_detach_select_waiter_with_status(XrWorker *worker, vo
 XrCoroutine *xr_worker_wake_select_with_status(XrWorker *worker, void *channel, int resume_status) {
     if (!worker || !channel)
         return NULL;
-    // MUST only be called from the owning worker thread.
-    XR_DCHECK(xr_current_worker() == worker,
-              "wake_select: cross-worker call detected (use chan_wake_queue)");
+    // MUST only be called from the owning worker thread. The select wake
+    // protocol (sw->triggered latch) is only correct under this
+    // serialization, so enforce it in release builds too.
+    XR_CHECK(xr_current_worker() == worker,
+             "wake_select: cross-worker call detected (use chan_wake_queue)");
     if (resume_status != XR_RESUME_CHANNEL && resume_status != XR_RESUME_CHANNEL_CLOSED) {
         resume_status = XR_RESUME_CHANNEL;
     }
@@ -548,8 +572,8 @@ XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel) {
 int xr_worker_wake_select_all_with_status(XrWorker *worker, void *channel, int resume_status) {
     if (!worker || !channel)
         return 0;
-    XR_DCHECK(xr_current_worker() == worker,
-              "wake_select_all: cross-worker call detected (use chan_wake_queue)");
+    XR_CHECK(xr_current_worker() == worker,
+             "wake_select_all: cross-worker call detected (use chan_wake_queue)");
     if (resume_status != XR_RESUME_CHANNEL && resume_status != XR_RESUME_CHANNEL_CLOSED) {
         resume_status = XR_RESUME_CHANNEL;
     }

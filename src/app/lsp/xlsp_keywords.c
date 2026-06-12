@@ -30,8 +30,9 @@ const char *xr_keywords[] = {
     // Literals
     "true", "false", "null",
     // Types
-    "void", "int", "float", "string", "bool", "Array", "Map", "Set", "Json", "Channel", "Bytes",
-    "BigInt", "StringBuilder", "Exception", "Regex", NULL};
+    "void", "int", "float", "string", "bool", "Array", "Map", "Set", "Json", "Channel", "Recv",
+    "SendResult", "Task", "TaskResult", "TaskStatus", "Bytes", "BigInt", "StringBuilder",
+    "Exception", "Regex", NULL};
 
 // Builtin functions
 const char *xr_builtins[] = {"print",        "dump",      "typeof",    "assert", "assert_true",

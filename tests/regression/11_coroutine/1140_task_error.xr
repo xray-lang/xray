@@ -1,4 +1,4 @@
-// Test task.error property
+// Test TaskResult failure/success status
 // Author: xingleixu@gmail.com
 
 fn bad() -> int {
@@ -14,17 +14,20 @@ fn good() -> int {
 fn test_main() {
     // Error task
     let t1 = go bad()
-    await t1
+    let r1 = t1.awaitResult()
     print("t1.done:", t1.done)
-    print("t1.error:", t1.error)
-    print("t1.result:", t1.result)
+    print("t1.failed:", match (r1) {
+        TaskResult.Failed(_) -> true
+        _ -> false
+    })
 
     // Good task
     let t2 = go good()
-    let r = await t2
+    let r = t2.awaitResult()
     print("t2.done:", t2.done)
-    print("t2.error:", t2.error)
-    print("t2.result:", t2.result)
+    print("t2.result:", match (r) {
+        TaskResult.Success(v) -> v
+        _ -> -1
+    })
 }
-
 

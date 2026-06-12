@@ -52,11 +52,11 @@ detect_platform() {
 check_dependencies() {
     info "检查依赖..."
 
-    # 检查 C 编译器（用于 xray build）
+    # 检查 C 编译器（用于 native/host xray build）
     if command -v cc &> /dev/null || command -v gcc &> /dev/null || command -v clang &> /dev/null; then
         success "C 编译器已安装"
     else
-        warn "未检测到 C 编译器（xray build 需要）"
+        warn "未检测到 C 编译器（native/host xray build 需要）"
         case "$(uname -s)" in
             Darwin)
                 echo "  安装命令: xcode-select --install"
@@ -148,6 +148,12 @@ verify_install() {
         echo ""
         "${XRAY_INSTALL_DIR}/bin/xray" --version
         echo ""
+        if "${XRAY_INSTALL_DIR}/bin/xray" toolchain doctor >/dev/null 2>&1; then
+            success "AOT cross-target toolchain 可用"
+        else
+            warn "AOT cross-target toolchain 不可用；可安装或随包携带 Zig"
+            echo "  ${XRAY_INSTALL_DIR}/bin/xray toolchain doctor"
+        fi
         success "Xray 安装成功！"
     else
         error "安装验证失败"
@@ -178,6 +184,7 @@ main() {
     echo "  xray --help              # 查看帮助"
     echo "  xray app.xr              # 运行脚本"
     echo "  xray build app.xr        # 编译为可执行文件"
+    echo "  xray toolchain doctor    # 检查 AOT 跨平台工具链"
     echo ""
 }
 

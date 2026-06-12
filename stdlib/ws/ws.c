@@ -1874,6 +1874,21 @@ process_frame:
     }
 
     if (ws->frame_opcode == WS_OPCODE_CONTINUATION && ws->frag_buf) {
+        // Enforce max_message_size on the ACCUMULATED message, not just per
+        // frame: otherwise many small continuation frames bypass the budget
+        // and grow frag_buf without bound (fragmentation bomb).
+        size_t frag_max = ws->config.max_message_size;
+        if (frag_max == 0)
+            frag_max = WS_DEFAULT_MAX_MESSAGE_SIZE;
+        if (payload_len_actual > frag_max - ws->frag_buf_len) {
+            if (ws->state == WS_STATE_OPEN) {
+                char cd[2] = {(WS_CLOSE_TOO_LARGE >> 8) & 0xFF, WS_CLOSE_TOO_LARGE & 0xFF};
+                send_close_frame(ws, cd, 2, !ws->is_server);
+            }
+            ws->close_code = WS_CLOSE_TOO_LARGE;
+            ws->state = WS_STATE_CLOSED;
+            return NULL;
+        }
         if (ws_frag_append(ws, payload, payload_len_actual) < 0) {
             return NULL;
         }

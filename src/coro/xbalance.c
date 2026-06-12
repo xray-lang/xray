@@ -157,8 +157,6 @@ int xr_try_emigrate(struct XrWorker *worker) {
     if (stolen > 0) {
         mp->runq.target_worker = -1;
         xr_proc_local_runq_inc(&target->p, stolen);
-        xr_worker_refresh_runq_masks(worker);
-        xr_worker_refresh_runq_masks(target);
     }
     return stolen;
 }

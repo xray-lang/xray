@@ -141,7 +141,8 @@ vmcase(OP_SET_STORAGE_CTX) {
     ** Set before constructor call, OP_INVOKE reads this context
     */
     int storage_mode = GETARG_A(i);
-    isolate->current_storage_mode = (uint8_t) storage_mode;
+    atomic_store_explicit(&isolate->current_storage_mode, (uint8_t) storage_mode,
+                          memory_order_relaxed);
     vmbreak;
 }
 

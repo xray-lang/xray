@@ -33,11 +33,12 @@ struct XrCoroutine;
 #define XR_CORO_POOL_MAX_SIZE (1024 * 1024)  // Max pool size
 
 // gc_flags bit definitions (coroutine pool markers)
-#define XR_CORO_GC_FROM_POOL 0x0002            // Struct allocated from pool block
-#define XR_CORO_GC_RECYCLABLE 0x0004           // Fire-and-forget, eligible for deferred recycle
-#define XR_CORO_GC_RECYCLED_CLEAN 0x0008       // Recycled with thorough field reset (skip memset)
-#define XR_CORO_GC_BACKEND_STATE_OWNED 0x0010  // Backend state is owned by the coroutine shell
-#define XR_CORO_GC_LIGHTWEIGHT 0x0020          // Struct allocated without pool ownership
+#define XR_CORO_GC_FROM_POOL 0x0002             // Struct allocated from pool block
+#define XR_CORO_GC_RECYCLABLE 0x0004            // Fire-and-forget, eligible for deferred recycle
+#define XR_CORO_GC_RECYCLED_CLEAN 0x0008        // Recycled with thorough field reset (skip memset)
+#define XR_CORO_GC_BACKEND_STATE_OWNED 0x0010   // Backend state is owned by the coroutine shell
+#define XR_CORO_GC_LIGHTWEIGHT 0x0020           // Struct allocated without pool ownership
+#define XR_CORO_GC_TRIM_BACKEND_STORAGE 0x0040  // Drop backend caches when recycling
 
 // ========== Pool Block ==========
 

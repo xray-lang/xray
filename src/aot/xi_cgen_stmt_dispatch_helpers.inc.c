@@ -127,7 +127,7 @@ static bool xicgen_stmt_err_check(XiCgenCtx *ctx, FILE *out, const XiFunc *f, co
         cg_class_native_err_check_after_nothrow_call(ctx, f, v))
         return true;
 
-    fprintf(out, "    if (xrt_has_pending_error()) {\n");
+    fprintf(out, "    if (XR_UNLIKELY(xrt_has_pending_error())) {\n");
     emit_class_field_cache_flush(ctx, out);
     emit_deferred_calls(ctx, out, f, prefix);
     fprintf(out, "        return ");

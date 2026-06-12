@@ -1,0 +1,49 @@
+// AOT regression: string equality must compare by content, not pointer.
+// Runtime-allocated strings (concat results) and literals must be
+// interchangeable in ==, Array.indexOf/includes, Map keys and Set members,
+// matching VM xr_value_eq semantics.
+
+fn glue(a: string, b: string) -> string {
+    return a + b
+}
+
+// --- direct == between literal and runtime-allocated string ---
+let needle = glue("b", "ob")
+print(needle == "bob")                   // true
+print("bob" == needle)                   // true
+print(needle == glue("bo", "b"))         // true
+print(needle == "bo")                    // false
+
+// --- Array<string>.indexOf / includes with runtime-allocated needle ---
+let names: Array<string> = ["alice", "bob", "carol"]
+print(names.indexOf(needle))             // 1
+print(names.includes(needle))            // true
+print(names.indexOf(glue("da", "ve")))   // -1
+print(names.includes(glue("da", "ve")))  // false
+
+// --- runtime-allocated array elements vs literal needle ---
+let built: Array<string> = []
+built.push(glue("al", "ice"))
+built.push(glue("b", "ob"))
+print(built.indexOf("bob"))              // 1
+print(built.includes("alice"))           // true
+print(built.indexOf("carol"))            // -1
+
+// --- Map<string, int>: runtime-allocated key lookup ---
+let scores: Map<string, int> = #{}
+scores.set("alice", 9)
+scores.set(glue("b", "ob"), 7)
+print(scores.get(glue("al", "ice")) ?? -1)  // 9
+print(scores.has(glue("b", "ob")))          // true
+print(scores.get("bob") ?? -1)              // 7
+print(scores.delete(glue("al", "ice")))     // true
+print(scores.has("alice"))                  // false
+
+// --- Set<string>: runtime-allocated membership ---
+let tags: Set<string> = #[]
+tags.add("red")
+tags.add(glue("gr", "een"))
+print(tags.has(glue("r", "ed")))            // true
+print(tags.has("green"))                    // true
+print(tags.delete(glue("re", "d")))         // true
+print(tags.has("red"))                      // false

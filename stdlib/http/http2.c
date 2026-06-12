@@ -763,7 +763,9 @@ int xr_hpack_decode(XrHpackTable *table, const uint8_t *buf, size_t buf_len,
                 return -1;
             pos += len;
 
-            if (index <= HPACK_STATIC_TABLE_SIZE) {
+            if (index == 0) {
+                return -1;
+            } else if (index <= HPACK_STATIC_TABLE_SIZE) {
                 name = (char *) hpack_static_table[index].name;
                 name_len = strlen(name);
                 value = (char *) hpack_static_table[index].value;
@@ -1375,6 +1377,11 @@ int xr_h2_recv(XrH2Conn *conn) {
             break;
 
         case XR_H2_FRAME_PING:
+            if (header.length != 8 || header.stream_id != 0 || !payload) {
+                xr_h2_send_goaway(conn, 0, XR_H2_PROTOCOL_ERROR);
+                result = -1;
+                break;
+            }
             if (!(header.flags & XR_H2_FLAG_ACK)) {
                 xr_h2_send_ping(conn, payload, true);
             }

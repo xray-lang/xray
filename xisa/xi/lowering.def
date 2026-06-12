@@ -294,8 +294,9 @@
 
 (lower xi.err.check
   :match ()
-  :required-targets (vm-bytecode aot-c-stmt)
+  :required-targets (vm-bytecode jit-xm aot-c-stmt)
   :vm-bytecode (driver xi_emit_err_check)
+  :jit-xm (driver xi2xm_err_check)
   :aot-c-stmt (driver xicgen_stmt_err_check))
 
 (lower xi.err.catch
@@ -654,8 +655,15 @@
 (lower xi.chan.recv
   :match ()
   :required-targets (vm-bytecode jit-xm)
-  :vm-bytecode (driver xi_emit_chan_recv)
+  :vm-bytecode (driver xi_emit_chan_recv :fresh-dst yes)
   :jit-xm (reject xi2xm_reject_unsupported))
+
+(lower xi.chan.recv.status
+  :match ()
+  :required-targets (vm-bytecode jit-xm aot-c)
+  :vm-bytecode (driver xi_emit_chan_recv_status)
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (driver xicgen_chan_recv_status))
 
 (lower xi.chan.try.send
   :match ()
@@ -702,7 +710,7 @@
   :match ()
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_chan_new)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (driver xi2xm_chan_new))
 
 (lower xi.defer
   :match ()
@@ -741,9 +749,10 @@
 
 (lower xi.json.decode
   :match ()
-  :required-targets (vm-bytecode jit-xm)
+  :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_json_decode)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (reject xi2xm_reject_unsupported)
+  :aot-c (reject xicgen_reject_unsupported))
 
 (lower xi.struct.new
   :match ()

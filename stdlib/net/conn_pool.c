@@ -388,9 +388,13 @@ XrPooledConn *xr_conn_pool_get(struct XrayIsolate *X, XrConnPool *pool, const ch
                     pool->total_conns--;
                     continue;
                 }
+                *pp = conn->next;
+                conn->next = NULL;
                 conn->state = XR_CONN_IN_USE;
                 conn->last_used_ms = now;
+                hp->conn_count--;
                 hp->idle_count--;
+                pool->total_conns--;
                 result = conn;
                 break;
             }

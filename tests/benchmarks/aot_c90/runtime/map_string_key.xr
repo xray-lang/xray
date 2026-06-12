@@ -1,0 +1,24 @@
+fn run(n: int) -> int {
+    let m: Map<string, int> = #{}
+
+    let i = 0
+    while (i < n) {
+        let key = "user:" + ((i * 7) % n).toString()
+        m.set(key, i)
+        i = i + 1
+    }
+
+    let sum = 0
+    i = 0
+    while (i < n) {
+        let key = "user:" + i.toString()
+        if (m.has(key)) {
+            sum = sum + m.get(key)
+        }
+        i = i + 1
+    }
+
+    return sum + m.size
+}
+
+print(run(60000))

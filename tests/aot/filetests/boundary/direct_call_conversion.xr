@@ -1,0 +1,14 @@
+fn add_with_capture(delta: int) -> int {
+    fn add(x: int) -> int {
+        let acc = x
+        let i = 0
+        while (i < 4) {
+            acc = acc + delta + i
+            i = i + 1
+        }
+        return acc
+    }
+    return add(5)
+}
+
+print(add_with_capture(7))

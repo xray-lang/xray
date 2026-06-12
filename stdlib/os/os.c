@@ -35,6 +35,9 @@
 #include <windows.h>
 #include <tlhelp32.h>
 #else
+#include <errno.h>
+#include <fcntl.h>
+#include <poll.h>
 #include <unistd.h>
 #include <pwd.h>
 #include <sys/wait.h>
@@ -547,28 +550,131 @@ static XrValue os_clock(XrayIsolate *X, XrValue *args, int argc) {
 /* ========== Process Execution (P0) ========== */
 
 #ifndef XR_OS_WINDOWS
-// Read all data from a file descriptor into a heap-allocated string
-static char *read_fd_to_string(int fd) {
-    XR_DCHECK(fd >= 0, "read_fd_to_string: fd must be non-negative");
-    size_t cap = 4096, len = 0;
-    char *buf = (char *) xr_malloc(cap);
-    if (!buf)
-        return NULL;
+typedef struct {
+    int fd;
+    char *buf;
+    size_t len;
+    size_t cap;
+    bool open;
+} XrExecPipe;
 
-    ssize_t n;
-    while ((n = read(fd, buf + len, cap - len - 1)) > 0) {
-        len += (size_t) n;
-        if (len + 1 >= cap) {
-            size_t new_cap = cap * 2;
-            if (!XR_REALLOC(buf, new_cap)) {
-                xr_free(buf);
-                return NULL;
+static bool exec_pipe_init(XrExecPipe *pipe, int fd) {
+    pipe->fd = fd;
+    pipe->len = 0;
+    pipe->cap = 4096;
+    pipe->open = true;
+    pipe->buf = (char *) xr_malloc(pipe->cap);
+    if (!pipe->buf)
+        return false;
+    pipe->buf[0] = '\0';
+
+    int flags = fcntl(fd, F_GETFL, 0);
+    if (flags >= 0) {
+        (void) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+    }
+    return true;
+}
+
+static void exec_pipe_close(XrExecPipe *pipe) {
+    if (pipe->open) {
+        close(pipe->fd);
+        pipe->open = false;
+    }
+}
+
+static void exec_pipe_free(XrExecPipe *pipe) {
+    exec_pipe_close(pipe);
+    xr_free(pipe->buf);
+    pipe->buf = NULL;
+    pipe->len = 0;
+    pipe->cap = 0;
+}
+
+static bool exec_pipe_append(XrExecPipe *pipe, const char *data, size_t n) {
+    if (pipe->len + n + 1 > pipe->cap) {
+        size_t new_cap = pipe->cap;
+        while (pipe->len + n + 1 > new_cap)
+            new_cap *= 2;
+        if (!XR_REALLOC(pipe->buf, new_cap))
+            return false;
+        pipe->cap = new_cap;
+    }
+    memcpy(pipe->buf + pipe->len, data, n);
+    pipe->len += n;
+    pipe->buf[pipe->len] = '\0';
+    return true;
+}
+
+static bool exec_pipe_drain(XrExecPipe *pipe) {
+    char tmp[4096];
+    for (;;) {
+        ssize_t n = read(pipe->fd, tmp, sizeof(tmp));
+        if (n > 0) {
+            if (!exec_pipe_append(pipe, tmp, (size_t) n))
+                return false;
+            continue;
+        }
+        if (n == 0) {
+            exec_pipe_close(pipe);
+            return true;
+        }
+        if (errno == EINTR)
+            continue;
+        if (errno == EAGAIN || errno == EWOULDBLOCK)
+            return true;
+        exec_pipe_close(pipe);
+        return false;
+    }
+}
+
+static bool read_exec_pipes(int stdout_fd, int stderr_fd, char **stdout_buf, char **stderr_buf) {
+    XrExecPipe pipes[2];
+    if (!exec_pipe_init(&pipes[0], stdout_fd))
+        return false;
+    if (!exec_pipe_init(&pipes[1], stderr_fd)) {
+        exec_pipe_free(&pipes[0]);
+        return false;
+    }
+
+    while (pipes[0].open || pipes[1].open) {
+        struct pollfd pfds[2];
+        nfds_t nfds = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            pfds[nfds].fd = pipes[i].fd;
+            pfds[nfds].events = POLLIN | POLLHUP | POLLERR;
+            pfds[nfds].revents = 0;
+            nfds++;
+        }
+
+        int rc;
+        do {
+            rc = poll(pfds, nfds, -1);
+        } while (rc < 0 && errno == EINTR);
+        if (rc < 0)
+            goto fail;
+
+        nfds_t pos = 0;
+        for (int i = 0; i < 2; i++) {
+            if (!pipes[i].open)
+                continue;
+            short revents = pfds[pos++].revents;
+            if (revents & (POLLIN | POLLHUP | POLLERR)) {
+                if (!exec_pipe_drain(&pipes[i]))
+                    goto fail;
             }
-            cap = new_cap;
         }
     }
-    buf[len] = '\0';
-    return buf;
+
+    *stdout_buf = pipes[0].buf;
+    *stderr_buf = pipes[1].buf;
+    return true;
+
+fail:
+    exec_pipe_free(&pipes[0]);
+    exec_pipe_free(&pipes[1]);
+    return false;
 }
 #endif
 
@@ -667,14 +773,24 @@ static XrValue os_exec(XrayIsolate *X, XrValue *args, int argc) {
     close(stdout_pipe[1]);
     close(stderr_pipe[1]);
 
-    char *stdout_buf = read_fd_to_string(stdout_pipe[0]);
-    char *stderr_buf = read_fd_to_string(stderr_pipe[0]);
-    close(stdout_pipe[0]);
-    close(stderr_pipe[0]);
+    char *stdout_buf = NULL;
+    char *stderr_buf = NULL;
+    bool read_ok = read_exec_pipes(stdout_pipe[0], stderr_pipe[0], &stdout_buf, &stderr_buf);
 
-    int status;
-    waitpid(pid, &status, 0);
-    int exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : -1;
+    int status = 0;
+    pid_t waited;
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0) {
+        status = -1;
+    }
+    if (!read_ok) {
+        xr_free(stdout_buf);
+        xr_free(stderr_buf);
+        return xr_null();
+    }
+    int exit_code = (waited >= 0 && WIFEXITED(status)) ? WEXITSTATUS(status) : -1;
 
     XrJson *json = xr_json_new(xr_current_coro(X));
     XR_CHECK(json != NULL, "os_exec: json alloc failed");

@@ -12,7 +12,7 @@ class ScoreBag {
     }
 
     score(name: string) -> int {
-        return this.scores.get(name)
+        return this.scores.get(name) ?? -1
     }
 
     contains(name: string) -> bool {

@@ -1,0 +1,18 @@
+// 037_go_block_capture_shared_let.xr
+// Expected: Compile error - go { block } capturing a mutable 'shared let'
+// Error should mention: cannot capture mutable
+//
+// `shared let` is mutable shared state; its only legal cross-coroutine use
+// is ownership transfer via `move` in an argument position. Capturing it in
+// a go block closure must be rejected, same as the call form.
+
+fn main_logic() {
+    shared let payload = [1, 2, 3]
+    let t = go {
+        payload.push(4)
+        return 0
+    }
+    await t
+}
+
+main_logic()

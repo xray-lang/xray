@@ -421,6 +421,8 @@ option(XR_STDLIB_FROM_FILE "Load stdlib from file instead of embedded bytecode (
 option(XR_BUILD_LSP "Build LSP language server" ON)
 option(XR_BUILD_DAP "Build DAP debug adapter" ON)
 option(XR_BUILD_MCP "Build MCP server for AI assistants" ON)
+option(XRAY_BUNDLE_ZIG "Install a Zig executable with Xray for AOT cross targets" OFF)
+set(XRAY_BUNDLED_ZIG "" CACHE FILEPATH "Zig executable to install when XRAY_BUNDLE_ZIG=ON")
 
 # Stdlib modular options (for security control / binary size)
 option(XR_STDLIB_FULL       "Full stdlib (ignores group options below)" ON)
@@ -716,7 +718,7 @@ file(GLOB IR_SRC "src/ir/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
 file(GLOB API_SRC "src/api/*.c")
-file(GLOB NEW_CLI_SRC "src/app/cli/*.c")
+file(GLOB NEW_CLI_SRC CONFIGURE_DEPENDS "src/app/cli/*.c")
 
 # Standard Library (Native modules) - modular conditional compilation
 # Core modules (required): prelude (built-in type registry), time, math, log,
@@ -1097,6 +1099,41 @@ if(BUILD_TESTS)
 
     # All unit tests are managed by tests/unit/CMakeLists.txt
     add_subdirectory(tests/unit)
+
+    add_test(
+        NAME aot_filetests
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_filetests.sh
+                --xray $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_filetests PROPERTIES
+        LABELS "aot;filetests"
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME aot_cross_smoke
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_cross_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_cross_smoke PROPERTIES
+        LABELS "aot;cross;smoke"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 120
+    )
+
+    add_test(
+        NAME aot_bundled_zig_smoke
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_aot_bundled_zig_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_bundled_zig_smoke PROPERTIES
+        LABELS "aot;cross;toolchain;smoke"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 120
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)
@@ -1133,6 +1170,7 @@ message(STATUS "  Build Type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C Compiler: ${CMAKE_C_COMPILER_ID} ${CMAKE_C_COMPILER_VERSION}")
 message(STATUS "  GC: ${XR_USE_GC}")
 message(STATUS "  Build Tests: ${BUILD_TESTS}")
+message(STATUS "  Bundle Zig: ${XRAY_BUNDLE_ZIG}")
 message(STATUS "  Sanitizers:")
 message(STATUS "    ASan:  ${ENABLE_ASAN}")
 message(STATUS "    UBSan: ${ENABLE_UBSAN}")
@@ -1261,6 +1299,32 @@ install(DIRECTORY ${CMAKE_SOURCE_DIR}/stdlib/
     DESTINATION lib/xray/stdlib
     FILES_MATCHING PATTERN "*.xr"
 )
+
+if(XRAY_BUNDLE_ZIG)
+    set(_XRAY_ZIG_TO_INSTALL "${XRAY_BUNDLED_ZIG}")
+    if(NOT _XRAY_ZIG_TO_INSTALL)
+        find_program(_XRAY_ZIG_TO_INSTALL NAMES zig)
+    endif()
+    if(NOT _XRAY_ZIG_TO_INSTALL OR NOT EXISTS "${_XRAY_ZIG_TO_INSTALL}")
+        message(FATAL_ERROR
+            "XRAY_BUNDLE_ZIG=ON requires XRAY_BUNDLED_ZIG=/path/to/zig or zig in PATH")
+    endif()
+    get_filename_component(_XRAY_ZIG_REALPATH "${_XRAY_ZIG_TO_INSTALL}" REALPATH)
+    get_filename_component(_XRAY_ZIG_ROOT "${_XRAY_ZIG_REALPATH}" DIRECTORY)
+    if(EXISTS "${_XRAY_ZIG_ROOT}/lib")
+        install(DIRECTORY "${_XRAY_ZIG_ROOT}/"
+            DESTINATION libexec/xray/zig
+            USE_SOURCE_PERMISSIONS
+        )
+    else()
+        message(WARNING
+            "Bundled Zig root '${_XRAY_ZIG_ROOT}' has no lib directory; installing executable only")
+        install(PROGRAMS "${_XRAY_ZIG_REALPATH}"
+            DESTINATION libexec/xray/zig
+            RENAME "zig${CMAKE_EXECUTABLE_SUFFIX}"
+        )
+    endif()
+endif()
 
 # ============================================================================
 # Packaging Configuration (CPack)

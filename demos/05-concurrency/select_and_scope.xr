@@ -73,7 +73,9 @@ scope {
 // All fetches complete, read results
 results.close()
 while (true) {
-    let r = results.recv()
-    if (r == null) { break }
-    print("got: ${r}")
+    match (results.recv()) {
+        Recv.Value(r) -> print("got: ${r}")
+        Recv.Closed -> { break }
+        _ -> { break }
+    }
 }

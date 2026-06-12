@@ -28,6 +28,7 @@
 struct XrCoroutine;
 struct XrProto;
 struct XrType;
+struct XrayIsolate;
 
 /* ========== JIT result codes (mirror jit/xm_jit.h constants) ========== */
 
@@ -54,6 +55,12 @@ typedef struct XrJitHooks {
     // Install background-compiled JIT result into proto.
     // Mirrors xm_jit_install_bg_result() signature.
     void (*install_bg_result)(struct XrProto *proto);
+
+    // Try to compile proto for an isolate-owned JIT state.
+    bool (*try_compile)(struct XrayIsolate *isolate, struct XrProto *proto);
+
+    // Return whether proto contains exception control that should bypass direct JIT entry.
+    bool (*proto_has_exception_control)(const struct XrProto *proto);
 
     /* --- Guard page safepoint --- */
 

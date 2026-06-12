@@ -78,7 +78,13 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
 
 /* ========== dup/drop Insertion ========== */
 
-/* A consuming use site, in program order (block RPO, then index). */
+/* A consuming use site, in program order (block RPO, then index).
+ *
+ * For a phi use, the consume happens on the CFG edge preds[i] → join, so the
+ * site is attributed to the PREDECESSOR block (blk = pred, user = the phi):
+ * a dup for a non-last consume must execute only on that incoming path, and
+ * the move for a last consume conceptually happens as control leaves the
+ * predecessor. */
 typedef struct {
     XiBlock *blk;
     XiValue *user;  /* the value whose arg consumes the tracked value */
@@ -155,6 +161,25 @@ static int collect_consume_sites(XiFunc *f, XiValue *target, ConsumeSite *sites,
                 sites[n].order = (blk->rpo << 16) | (i & 0xFFFF);
                 n++;
                 break; /* one consume record per user is enough */
+            }
+        }
+        /* Phi uses consume the incoming value on its edge. Phis live on
+         * blk->phis (not in blk->values[]), so scan them explicitly. The
+         * same value may flow in on several edges; each edge is an
+         * independent consume site (no dedup). */
+        for (XiPhi *phi = blk->phis; phi && n < cap; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs && n < cap; a++) {
+                if (phi->value.args[a] != target)
+                    continue;
+                XiBlock *pred = (a < blk->npreds) ? blk->preds[a] : NULL;
+                if (!pred)
+                    continue;
+                sites[n].blk = pred;
+                sites[n].user = &phi->value;
+                /* 0xFFFE = end of the predecessor block: after every value
+                 * index, before a return terminator's 0xFFFF. */
+                sites[n].order = (pred->rpo << 16) | 0xFFFE;
+                n++;
             }
         }
         /* Block control (return value) consumes the value. */
@@ -287,7 +312,9 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
         /* Borrowed: the function owns no reference, so every consuming use
          * must dup first; nothing is moved out and nothing is dropped. */
         for (int i = 0; i < n; i++) {
-            if (sites[i].user == NULL) {
+            if (sites[i].user == NULL || sites[i].user->op == XI_PHI) {
+                /* Return terminator, or a phi edge consume (site->blk is the
+                 * predecessor): dup at the end of that block. */
                 XiValue *last = sites[i].blk->nvalues > 0
                                     ? sites[i].blk->values[sites[i].blk->nvalues - 1]
                                     : NULL;
@@ -306,6 +333,14 @@ static void process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
     for (int i = 0; i < n - 1; i++) {
         if (sites[i].user == NULL)
             continue; /* return terminator can only be the single last site */
+        if (sites[i].user->op == XI_PHI) {
+            /* Edge consume: dup at the end of the predecessor block so the
+             * +1 executes only on this incoming path. */
+            XiValue *last =
+                sites[i].blk->nvalues > 0 ? sites[i].blk->values[sites[i].blk->nvalues - 1] : NULL;
+            insert_dup_after(f, sites[i].blk, last, target);
+            continue;
+        }
         insert_dup_before(f, sites[i].blk, sites[i].user, target);
     }
 }
@@ -431,6 +466,13 @@ static int count_real_uses(const XiFunc *f, const XiValue *v) {
                 continue;
             for (uint16_t a = 0; a < user->nargs; a++) {
                 if (user->args[a] == v)
+                    count++;
+            }
+        }
+        /* Phi uses (phis live on blk->phis, not in blk->values[]). */
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == v)
                     count++;
             }
         }

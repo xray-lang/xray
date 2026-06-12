@@ -42,6 +42,14 @@
 #include "../coro/xdeep_copy.h"
 #include <string.h>
 
+static inline XrDispatchAction vm_chan_ready_next_or_yield(XrayIsolate *isolate,
+                                                           XrCoroutine *current,
+                                                           XrBcCallFrame *frame,
+                                                           XrInstruction *pc) {
+    return vm_ready_operation_next_or_yield(isolate, current, frame, pc,
+                                            XR_VM_CHAN_READY_REDUCTION_COST);
+}
+
 static XrDispatchAction vm_time_after_impl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                                            XrInstruction instr, XrValue *base, XrBcCallFrame *frame,
                                            XrInstruction *pc) {
@@ -183,14 +191,16 @@ XR_FUNC XrDispatchAction vm_chan_send(XrayIsolate *isolate, XrVMContext *vm_ctx,
     if (result.kind == XR_CORO_BLOCK_READY) {
         vm_suspend_clear_yielded(frame);
         base[a] = xr_null();
-        return XR_DISP_NEXT;
+        return vm_chan_ready_next_or_yield(isolate, current, frame, pc);
     }
     if (result.kind == XR_CORO_BLOCK_CLOSED) {
         vm_suspend_clear_yielded(frame);
         VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Channel is closed");
     }
     if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-        return XR_DISP_BLOCKED;
+        /* Frame state saved above; the dispatch loop may switch to a
+         * just-woken LIFO partner without exiting run(). */
+        return XR_DISP_SWITCH;
     }
 
     vm_suspend_clear_yielded(frame);
@@ -225,15 +235,22 @@ XR_FUNC XrDispatchAction vm_chan_recv(XrayIsolate *isolate, XrVMContext *vm_ctx,
     }
     XrChannel *ch = xr_value_to_channel(ch_val);
 
+    // Replay-capable registration with delivery capability: copy-free wakes
+    // are delivered by the waker and resume at the next instruction; values
+    // needing a receive-side deep copy replay through the resume protocol.
     vm_suspend_replay_yielded(frame, pc);
     XrCoroBlockResult result = xr_coro_chan_recv(isolate, current, ch, xr_slot_xvalue_ptr(&base[a]),
-                                                 xr_slot_xvalue_ptr(&base[a + 1]), -1);
+                                                 xr_slot_xvalue_ptr(&base[a + 1]), -1, true);
     if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
         vm_suspend_clear_yielded(frame);
+        if (result.kind == XR_CORO_BLOCK_READY)
+            return vm_chan_ready_next_or_yield(isolate, current, frame, pc);
         return XR_DISP_NEXT;
     }
     if (result.kind == XR_CORO_BLOCK_BLOCKED) {
-        return XR_DISP_BLOCKED;
+        /* Frame state saved above; the dispatch loop may switch to a
+         * just-woken LIFO partner without exiting run(). */
+        return XR_DISP_SWITCH;
     }
 
     vm_suspend_clear_yielded(frame);
@@ -280,6 +297,8 @@ XR_FUNC XrDispatchAction vm_chan_send_timeout(XrayIsolate *isolate, XrVMContext 
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
+            if (result.kind == XR_CORO_BLOCK_READY)
+                return vm_chan_ready_next_or_yield(isolate, current, frame, pc);
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {
@@ -356,10 +375,12 @@ XR_FUNC XrDispatchAction vm_chan_recv_timeout(XrayIsolate *isolate, XrVMContext 
         }
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, ok_slot, timeout_ms);
+            xr_coro_chan_recv(isolate, current, ch, value_slot, ok_slot, timeout_ms, false);
         if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
             result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
+            if (result.kind == XR_CORO_BLOCK_READY)
+                return vm_chan_ready_next_or_yield(isolate, current, frame, pc);
             return XR_DISP_NEXT;
         }
         if (result.kind == XR_CORO_BLOCK_BLOCKED) {

@@ -6,26 +6,44 @@ fn send_after_yield(ch: Channel<int>, value: int) -> int {
 
 fn recv_after_yield(ch: Channel<int>) -> int {
     yield
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> -1
+    }
 }
 
 let buffered = new Channel<int>(1)
 print(buffered.sendTimeout(11, 0))
-let (v1, ok1) = buffered.recvTimeout(0)
-print(v1)
-print(ok1)
+let r1 = buffered.recvTimeout(0)
+print(match (r1) {
+    Recv.Value(value) -> value
+    _ -> -1
+})
+print(match (r1) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 buffered.close()
 
 let empty = new Channel<int>(0)
-let (v2, ok2) = empty.recvTimeout(5)
-print(ok2)
+let r2 = empty.recvTimeout(5)
+print(match (r2) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 empty.close()
 
 let rendezvous_recv = new Channel<int>(0)
 let sender = go send_after_yield(rendezvous_recv, 33)
-let (v3, ok3) = rendezvous_recv.recvTimeout(2000)
-print(v3)
-print(ok3)
+let r3 = rendezvous_recv.recvTimeout(2000)
+print(match (r3) {
+    Recv.Value(value) -> value
+    _ -> -1
+})
+print(match (r3) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 print(await sender)
 rendezvous_recv.close()
 
@@ -41,5 +59,8 @@ rendezvous_send.close()
 
 let closed = new Channel<int>(0)
 closed.close()
-let (v4, ok4) = closed.recvTimeout(0)
-print(ok4)
+let r4 = closed.recvTimeout(0)
+print(match (r4) {
+    Recv.Value(_) -> true
+    _ -> false
+})

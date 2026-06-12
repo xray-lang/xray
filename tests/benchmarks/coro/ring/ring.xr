@@ -15,6 +15,14 @@ if (process.args.length > 1) {
 print("=== Ring 测试 ===")
 print("协程数量:", N)
 print("消息轮数:", M)
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 创建 N 个 channel（存入数组自动共享）
 shared let channels: Array<Channel<int>> = []
 for (let i = 0; i < N; i++) {
@@ -24,7 +32,7 @@ for (let i = 0; i < N; i++) {
 // 创建 N 个协程，每个协程从自己的 channel 接收，发送到下一个
 fn ring_node(id: int, in_ch: Channel<int>, out_ch: Channel<int>, rounds: int) {
     for (let r = 0; r < rounds; r++) {
-        let msg = in_ch.recv()
+        let msg = recv_int(in_ch, 0)
         out_ch.send(msg + 1)
     }
 }
@@ -44,7 +52,7 @@ for (task in tasks) {
     await task
 }
 // 读取最后的结果
-let result = channels[0].recv()
+let result = recv_int(channels[0], 0)
 let elapsed = time.monotonic() - start
 for (ch in channels) {
     ch.close()

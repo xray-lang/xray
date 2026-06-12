@@ -135,12 +135,6 @@ void xr_vm_proto_free(XrProto *proto) {
         proto->symbols = NULL;
     }
 
-    // Free raw constant pool
-    if (proto->raw_constants != NULL) {
-        xr_free(proto->raw_constants);
-        proto->raw_constants = NULL;
-    }
-
     // Free JIT/AOT metadata
     if (proto->bb_leaders != NULL) {
         xr_free(proto->bb_leaders);
@@ -208,8 +202,10 @@ void xr_vm_proto_free(XrProto *proto) {
 }
 
 // Add a global symbol to the per-function symbol table.
-// Returns local index (0-based). Deduplicates: if the same global symbol
-// was already added, returns the existing local index.
+// Returns local index (0-based), or -1 on allocation failure. Deduplicates:
+// if the same global symbol was already added, returns the existing index.
+// NEVER return 0 on failure — 0 is a valid local index and the bytecode
+// would silently bind the wrong global symbol.
 int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     XR_DCHECK(proto != NULL, "proto_add_symbol: NULL proto");
     XR_DCHECK(global_symbol >= 0, "proto_add_symbol: negative symbol id");
@@ -229,7 +225,7 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
         int32_t *new_buf = (int32_t *) xr_realloc(proto->symbols, new_cap * sizeof(int32_t));
         if (!new_buf) {
             fprintf(stderr, "xr_proto_add_symbol: out of memory\n");
-            return 0;
+            return -1;
         }
         proto->symbols = new_buf;
         proto->symbol_capacity = new_cap;
@@ -260,37 +256,6 @@ void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line) {
 int xr_vm_proto_add_constant(XrProto *proto, XrValue value) {
     XR_DCHECK(proto != NULL, "proto_add_constant: NULL proto");
     return xr_valuearray_add(&proto->constants, value);
-}
-
-// Add raw 64-bit constant to raw constant pool
-// Returns constant index
-int xr_proto_add_raw_constant(XrProto *proto, uint64_t value) {
-    XR_DCHECK(proto != NULL, "proto_add_raw_constant: NULL proto");
-    XR_DCHECK(proto->raw_constant_count >= 0, "proto_add_raw_constant: negative count");
-    XR_DCHECK(proto->raw_constant_capacity >= 0, "proto_add_raw_constant: negative capacity");
-    XR_DCHECK(proto->raw_constant_count <= proto->raw_constant_capacity,
-              "proto_add_raw_constant: count > capacity");
-    // Dedup check
-    for (int i = 0; i < proto->raw_constant_count; i++) {
-        if (proto->raw_constants[i] == value)
-            return i;
-    }
-
-    // Grow if needed
-    if (proto->raw_constant_count >= proto->raw_constant_capacity) {
-        int new_cap = proto->raw_constant_capacity < 8 ? 8 : proto->raw_constant_capacity * 2;
-        uint64_t *new_buf =
-            (uint64_t *) xr_realloc(proto->raw_constants, new_cap * sizeof(uint64_t));
-        if (!new_buf)
-            return 0;
-        proto->raw_constants = new_buf;
-        proto->raw_constant_capacity = new_cap;
-    }
-
-    int idx = proto->raw_constant_count;
-    proto->raw_constants[idx] = value;
-    proto->raw_constant_count++;
-    return idx;
 }
 
 // Add nested function prototype

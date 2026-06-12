@@ -69,7 +69,6 @@ fn test_setenv_overwrite() {
 @test
 fn test_environ() {
     let env = os.environ()
-    assert(env != null)
     // PATH should exist; Windows may store it as "Path"
     let path = env.get("PATH")
     if (path == null) {
@@ -89,21 +88,18 @@ fn test_getpid() {
 @test
 fn test_getcwd() {
     let cwd = os.getcwd()
-    assert(cwd != null)
     assert(cwd.length > 0)
 }
 
 @test
 fn test_hostname() {
     let h = os.hostname()
-    assert(h != null)
     assert(h.length > 0)
 }
 
 @test
 fn test_tmpdir() {
     let tmp = os.tmpdir()
-    assert(tmp != null)
     assert(tmp.length > 0)
 }
 
@@ -117,7 +113,7 @@ fn test_chdir() {
     os.chdir(tmp)
     let newCwd = os.getcwd()
     // Should have changed (may differ due to symlink resolution)
-    assert(newCwd != null)
+    assert(newCwd.length > 0)
 
     // Restore
     os.chdir(original)

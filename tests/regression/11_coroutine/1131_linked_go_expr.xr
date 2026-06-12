@@ -1,4 +1,4 @@
-// Test linked go as expressions and task.monitor() API
+// Test go expressions and explicit TaskResult observation
 
 fn ok() -> int {
     return 42
@@ -8,12 +8,14 @@ fn test_linked_go_basic() {
     let r = await t
     assert(r == 42, "linked go should return result via await")
 }
-fn test_go_with_monitor() {
+fn test_go_with_await_result() {
     let t = go ok()
-    let mon = t.monitor()
-    let completed_task = mon.recv()
-    assert(completed_task.done, "monitored task should be done")
-    assert(completed_task.result == 42, "task.monitor() should deliver task with result")
+    let result = t.awaitResult()
+    assert(t.done, "awaitResult should complete the task")
+    match (result) {
+        TaskResult.Success(value) -> assert(value == 42, "awaitResult should carry the task value")
+        _ -> assert(false, "awaitResult should return Success")
+    }
 }
 fn test_linked_go_in_scope() {
     let result = 0
@@ -29,12 +31,11 @@ fn test_linked_go_expr() {
 
     // Test 1: linked go as expression returns Task
 
-    // Test 2: go + task.monitor() delivers task via Channel on completion
+    // Test 2: go + awaitResult() delivers explicit task status
 
     // Test 3: linked go inside linked scope
 
     test_linked_go_basic()
-    test_go_with_monitor()
+    test_go_with_await_result()
     test_linked_go_in_scope()
 }
-

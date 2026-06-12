@@ -2,6 +2,10 @@
 # Run Xray AOT benchmarks against C references and report progress toward the
 # AOT C90 target.  Default mode is a baseline report; --gate turns ratio and
 # code-shape expectations into failures.
+#
+# With --rust, benchmarks that ship a .rs reference are also compared against
+# safe std-only Rust built at the same optimization tier.  Manifests gate the
+# Rust column via min_rust_ratio; without it the Rust column is report-only.
 
 set -u
 
@@ -9,12 +13,14 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BENCH_ROOT="$REPO_ROOT/tests/benchmarks/aot_c90"
 XRAY_BIN="${XRAY_BIN:-$REPO_ROOT/build/xray}"
 CC_BIN="${CC:-cc}"
-OPT_LEVEL="2"
+RUSTC_BIN="${RUSTC:-rustc}"
+OPT_LEVEL="3"
 SAMPLES=31
 FILTER=""
 JSON_OUTPUT=""
 GATE=false
 KEEP=false
+RUST=false
 
 usage() {
     cat <<EOF
@@ -23,7 +29,9 @@ Usage: $0 [options]
 Options:
   --xray-bin PATH    Xray executable (default: build/xray)
   --cc CC            C compiler (default: cc)
-  --opt LEVEL        xray build optimization level (default: 2)
+  --rust             Also benchmark Rust references (*.rs) when rustc exists
+  --rustc PATH       Rust compiler (default: rustc)
+  --opt LEVEL        xray build optimization level (default: 3)
   --samples N        Samples per runtime (default: 31)
   --quick            One sample, useful for smoke tests
   --bench LIST       Comma-separated benchmark basenames or relative names
@@ -47,6 +55,14 @@ while [ "$#" -gt 0 ]; do
             ;;
         --cc)
             CC_BIN="$2"
+            shift 2
+            ;;
+        --rust)
+            RUST=true
+            shift
+            ;;
+        --rustc)
+            RUSTC_BIN="$2"
             shift 2
             ;;
         --opt)
@@ -97,6 +113,11 @@ fi
 if ! command -v "$CC_BIN" >/dev/null 2>&1; then
     echo "Missing C compiler: $CC_BIN" >&2
     exit 2
+fi
+
+if $RUST && ! command -v "$RUSTC_BIN" >/dev/null 2>&1; then
+    echo "rustc not found ($RUSTC_BIN); Rust reference column disabled" >&2
+    RUST=false
 fi
 
 if ! command -v python3 >/dev/null 2>&1; then
@@ -218,7 +239,11 @@ metric_from_audit() {
 }
 
 printf '=== Xray AOT C90 Benchmarks ===\n'
-printf 'xray=%s\ncc=%s\nsamples=%s\ngate=%s\n\n' "$XRAY_BIN" "$CC_BIN" "$SAMPLES" "$GATE"
+printf 'xray=%s\ncc=%s\nsamples=%s\ngate=%s\n' "$XRAY_BIN" "$CC_BIN" "$SAMPLES" "$GATE"
+if $RUST; then
+    printf 'rustc=%s (%s)\n' "$RUSTC_BIN" "$("$RUSTC_BIN" --version 2>/dev/null || echo unknown)"
+fi
+printf '\n'
 
 PASS=0
 FAIL=0
@@ -231,6 +256,7 @@ while IFS= read -r xr_file; do
     base=$(basename "$xr_file" .xr)
     category=$(dirname "$rel")
     c_file="$BENCH_ROOT/$rel_no_ext.c"
+    rs_file="$BENCH_ROOT/$rel_no_ext.rs"
     expect_file="$BENCH_ROOT/manifests/$base.expect"
 
     if ! matches_filter "$rel_no_ext" "$base"; then
@@ -276,6 +302,19 @@ while IFS= read -r xr_file; do
         continue
     fi
 
+    rust_bin=""
+    if $RUST && [ -f "$rs_file" ]; then
+        rust_bin="$bench_work/$base.rust"
+        rust_build_log="$bench_work/rust_build.log"
+        if ! "$RUSTC_BIN" -C opt-level=3 -C lto=fat -C panic=abort --edition 2021 \
+                "$rs_file" -o "$rust_bin" > "$rust_build_log" 2>&1; then
+            echo "FAIL: Rust reference build failed"
+            sed -n '1,20p' "$rust_build_log" | sed 's/^/  /'
+            FAIL=$((FAIL + 1))
+            continue
+        fi
+    fi
+
     audit_args=()
     if $GATE; then
         audit_args+=(--strict)
@@ -294,6 +333,7 @@ while IFS= read -r xr_file; do
 
     c_times=()
     aot_times=()
+    rust_times=()
     output_ok=1
     c_out_ref="$bench_work/c.ref.out"
     aot_out_ref="$bench_work/aot.ref.out"
@@ -313,6 +353,21 @@ while IFS= read -r xr_file; do
         }
         c_times+=("$c_ms")
         aot_times+=("$aot_ms")
+        if [ -n "$rust_bin" ]; then
+            rust_out="$bench_work/rust.$i.out"
+            rust_ms=$(measure_ms "$rust_out" "$rust_bin") || {
+                echo "FAIL: Rust reference run failed"
+                output_ok=0
+                break
+            }
+            rust_times+=("$rust_ms")
+            if ! diff -u "$c_out" "$rust_out" > "$bench_work/rust_output.diff"; then
+                echo "FAIL: C/Rust output mismatch"
+                sed -n '1,20p' "$bench_work/rust_output.diff" | sed 's/^/  /'
+                output_ok=0
+                break
+            fi
+        fi
         if [ "$i" -eq 1 ]; then
             cp "$c_out" "$c_out_ref"
             cp "$aot_out" "$aot_out_ref"
@@ -336,6 +391,18 @@ while IFS= read -r xr_file; do
     min_ratio=$(manifest_value "$expect_file" min_ratio)
     [ -z "$min_ratio" ] && min_ratio="0.90"
     ratio_pass=$(awk -v r="$ratio" -v m="$min_ratio" 'BEGIN { print (r >= m) ? 1 : 0 }')
+    rust_median=""
+    rust_ratio=""
+    rust_ratio_pass=1
+    min_rust_ratio=$(manifest_value "$expect_file" min_rust_ratio)
+    if [ -n "$rust_bin" ] && [ "${#rust_times[@]}" -gt 0 ]; then
+        rust_median=$(median_of "${rust_times[@]}")
+        rust_ratio=$(ratio_of "$rust_median" "$aot_median")
+        if [ -n "$min_rust_ratio" ]; then
+            rust_ratio_pass=$(awk -v r="$rust_ratio" -v m="$min_rust_ratio" \
+                'BEGIN { print (r >= m) ? 1 : 0 }')
+        fi
+    fi
     audit_pass=$(metric_from_audit "$audit_out" audit_pass)
     [ -z "$audit_pass" ] && audit_pass=1
     aot_size=$(wc -c < "$aot_bin" | tr -d ' ')
@@ -344,6 +411,14 @@ while IFS= read -r xr_file; do
     printf '  C median:   %s ms\n' "$c_median"
     printf '  AOT median: %s ms\n' "$aot_median"
     printf '  ratio:      %s (target >= %s)\n' "$ratio" "$min_ratio"
+    if [ -n "$rust_median" ]; then
+        printf '  Rust median: %s ms\n' "$rust_median"
+        if [ -n "$min_rust_ratio" ]; then
+            printf '  rust ratio: %s (target >= %s)\n' "$rust_ratio" "$min_rust_ratio"
+        else
+            printf '  rust ratio: %s (report only)\n' "$rust_ratio"
+        fi
+    fi
     printf '  audit:      %s\n' "$([ "$audit_pass" -eq 1 ] && echo pass || echo fail)"
     printf '  size:       C=%s AOT=%s bytes\n' "$c_size" "$aot_size"
 
@@ -352,7 +427,7 @@ while IFS= read -r xr_file; do
     fi
 
     status="pass"
-    if [ "$ratio_pass" -ne 1 ] || [ "$audit_pass" -ne 1 ]; then
+    if [ "$ratio_pass" -ne 1 ] || [ "$audit_pass" -ne 1 ] || [ "$rust_ratio_pass" -ne 1 ]; then
         status="report_only_fail"
         REPORT_ONLY_FAIL=$((REPORT_ONLY_FAIL + 1))
     fi
@@ -363,11 +438,12 @@ while IFS= read -r xr_file; do
     fi
 
     checksum=$(tr '\n' '|' < "$c_out_ref")
-    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
+    printf '%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s%s\n' \
         "$rel_no_ext" "$DELIM" "$category" "$DELIM" "$status" "$DELIM" \
         "$c_median" "$DELIM" "$aot_median" "$DELIM" "$ratio" "$DELIM" \
         "$min_ratio" "$DELIM" "$audit_pass" "$DELIM" "$c_size" "$DELIM" \
-        "$aot_size" "$DELIM" "$checksum" >> "$RESULTS_TSV"
+        "$aot_size" "$DELIM" "$rust_median" "$DELIM" "$rust_ratio" "$DELIM" \
+        "$checksum" >> "$RESULTS_TSV"
     echo
 done < <(find "$BENCH_ROOT" -mindepth 2 -name '*.xr' | sort)
 
@@ -381,11 +457,14 @@ if [ -n "$JSON_OUTPUT" ]; then
         printf '{\n'
         printf '  "xray": '; json_string "$XRAY_BIN"; printf ',\n'
         printf '  "cc": '; json_string "$CC_BIN"; printf ',\n'
+        if $RUST; then
+            printf '  "rustc": '; json_string "$("$RUSTC_BIN" --version 2>/dev/null || echo unknown)"; printf ',\n'
+        fi
         printf '  "samples": %s,\n' "$SAMPLES"
         printf '  "gate": %s,\n' "$GATE"
         printf '  "benchmarks": [\n'
         first=true
-        while IFS="$DELIM" read -r name category status c_ms aot_ms ratio min_ratio audit_pass c_size aot_size checksum; do
+        while IFS="$DELIM" read -r name category status c_ms aot_ms ratio min_ratio audit_pass c_size aot_size rust_ms rust_ratio checksum; do
             if ! $first; then
                 printf ',\n'
             fi
@@ -398,6 +477,8 @@ if [ -n "$JSON_OUTPUT" ]; then
             printf '      "aot_median_ms": '; json_number_or_null "$aot_ms"; printf ',\n'
             printf '      "ratio": '; json_number_or_null "$ratio"; printf ',\n'
             printf '      "min_ratio": '; json_number_or_null "$min_ratio"; printf ',\n'
+            printf '      "rust_median_ms": '; json_number_or_null "$rust_ms"; printf ',\n'
+            printf '      "rust_ratio": '; json_number_or_null "$rust_ratio"; printf ',\n'
             printf '      "audit_pass": %s,\n' "$([ "$audit_pass" = "1" ] && echo true || echo false)"
             printf '      "c_size_bytes": '; json_number_or_null "$c_size"; printf ',\n'
             printf '      "aot_size_bytes": '; json_number_or_null "$aot_size"; printf ',\n'

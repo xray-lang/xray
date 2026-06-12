@@ -1,0 +1,126 @@
+let bytes: Array<uint8> = []
+bytes.push(7)
+bytes.push(9)
+
+let values: Map<uint8, int32> = #{}
+values.set(1, 11)
+values.set(2, 22)
+
+let seen: Set<uint16> = #[]
+seen.add(1)
+seen.add(2)
+
+class ArrayBag {
+    values: Array<int>
+
+    constructor(items: Array<int>) {
+        this.values = items
+    }
+
+    scan() -> int {
+        let arr = this.values
+        let total = 0
+        let i = 0
+        while (i < arr.length) {
+            total = total + arr[i]
+            i = i + 1
+        }
+        return total
+    }
+
+    refill(n: int) -> int {
+        let next_values: Array<int> = []
+        this.values = next_values
+
+        let i = 0
+        while (i < n) {
+            this.values.push(i + 1)
+            i = i + 1
+        }
+
+        let arr = this.values
+        let total = 0
+        i = 0
+        while (i < arr.length) {
+            total = total + arr[i]
+            i = i + 1
+        }
+        return total
+    }
+}
+
+fn local_arrays() -> int {
+    let values: Array<int> = []
+    values.push(1)
+    values.push(2)
+    values.push(3)
+
+    let bag = ArrayBag(values)
+
+    let mid = values[0:2]
+    let mapped = values.map(fn(x: int) -> int { return x + 10 })
+    let kept = values.filter(fn(x: int) -> bool { return x > 1 })
+
+    let bytes = new Bytes(3)
+    bytes[0] = 4
+    bytes[1] = 5
+    bytes[2] = 6
+
+    return mid[0] + mapped[0] + kept[0] + bytes[2] + bag.scan() + bag.refill(4)
+}
+
+fn loop_sum(n: int) -> int {
+    let values: Array<int> = []
+    let i = 0
+    while (i < n) {
+        values.push(i)
+        i = i + 1
+    }
+
+    let total = 0
+    i = 0
+    while (i < values.length) {
+        total = total + values[i]
+        i = i + 1
+    }
+    return total
+}
+
+fn bytes_index(n: int) -> int {
+    let bytes = new Bytes(n)
+    let i = 0
+    while (i < bytes.length) {
+        bytes[i] = i * 3 + 1
+        i = i + 1
+    }
+
+    let total = 0
+    i = 0
+    while (i < bytes.length) {
+        total = total + bytes[i]
+        i = i + 1
+    }
+    return total
+}
+
+class Bag {
+    values: Map<uint8, int32>
+    seen: Set<uint16>
+
+    constructor() {
+        this.values = #{}
+        this.seen = #[]
+    }
+
+    fill() -> int {
+        this.values.set(1, 11)
+        this.seen.add(1)
+        if (this.values.has(1)) {
+            return this.seen.length
+        }
+        return 0
+    }
+}
+
+let bag = Bag()
+print(bytes[0] + values.get(1) + seen.length + bag.fill() + local_arrays() + loop_sum(4) + bytes_index(4))

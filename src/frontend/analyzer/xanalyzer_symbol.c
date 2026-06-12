@@ -191,7 +191,10 @@ void xa_scope_add_symbol(XaScope *scope, XaSymbol *symbol) {
     if (!scope || !symbol || !symbol->name)
         return;
     symbol->scope = scope;
-    xr_hashmap_set(scope->symbols, symbol->name, symbol);
+    // The map is the only storage for scope symbols; a dropped insert
+    // would silently corrupt name resolution. Fail-stop on OOM.
+    XR_CHECK(xr_hashmap_set(scope->symbols, symbol->name, symbol),
+             "scope symbol insert failed (out of memory)");
     // Auto-register for O(1) ID lookup
     if (g_symbol_registry && symbol->id != 0) {
         xr_intmap_set(g_symbol_registry, symbol->id, symbol);
@@ -329,7 +332,10 @@ void xa_class_info_add_field(XrClassInfo *info, XaSymbol *field) {
         member_list_append(&info->fields, &info->field_count, field);
     }
     if (info->members_map && field->name) {
-        xr_hashmap_set(info->members_map, field->name, field);
+        // Lookup only falls back to linear scan when the map is absent
+        // entirely; a member missing from a live map would be invisible.
+        XR_CHECK(xr_hashmap_set(info->members_map, field->name, field),
+                 "class member insert failed (out of memory)");
     }
 }
 
@@ -343,7 +349,9 @@ void xa_class_info_add_method(XrClassInfo *info, XaSymbol *method) {
         member_list_append(&info->methods, &info->method_count, method);
     }
     if (info->members_map && method->name) {
-        xr_hashmap_set(info->members_map, method->name, method);
+        // See xa_class_info_add_field: missing entries are invisible.
+        XR_CHECK(xr_hashmap_set(info->members_map, method->name, method),
+                 "class member insert failed (out of memory)");
     }
 }
 

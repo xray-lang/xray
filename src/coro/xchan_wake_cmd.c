@@ -258,8 +258,9 @@ void xr_worker_dispatch_chan_wake(XrRuntime *runtime, int target_id, void *chann
     // Pairs with seq_cst store of M_PARKING in worker_park.
     atomic_thread_fence(memory_order_seq_cst);
 
-    // Wake target worker if parked
-    if (atomic_load(&target->m->state) == M_PARKING) {
+    // Wake target worker if parked and currently bound to an M.
+    XrMachine *target_m = atomic_load_explicit(&target->p.current_m, memory_order_acquire);
+    if (target_m && atomic_load_explicit(&target_m->state, memory_order_acquire) == M_PARKING) {
         worker_unpark(target);
     }
 }

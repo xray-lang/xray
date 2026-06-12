@@ -1,0 +1,11 @@
+// 035_struct_non_default_field_init.xr
+// Expected: Compile error - struct with a non-default field is not default-initializable
+// Error should mention: not default-initializable
+
+struct Item {
+    count: int
+    name: string
+}
+
+let item: Item
+

@@ -1,0 +1,22 @@
+fn run(n: int) -> int {
+    let values: Array<int> = []
+    let seed = 123456789
+    let i = 0
+    while (i < n) {
+        seed = (seed * 1103515245 + 12345) % 2147483648
+        values.push(seed)
+        i = i + 1
+    }
+
+    values.sort()
+
+    let checksum = values[0] + values[n / 2] + values[n - 1]
+    i = 0
+    while (i < n) {
+        checksum = checksum + values[i] % 7
+        i = i + 7919
+    }
+    return checksum
+}
+
+print(run(1000000))

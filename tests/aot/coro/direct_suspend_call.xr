@@ -1,6 +1,8 @@
 fn recv_once(ch: Channel<int>) -> int {
-    let value = ch.recv()
-    return value
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> -1
+    }
 }
 
 fn caller(ch: Channel<int>) -> int {

@@ -962,13 +962,45 @@ const char *xr_http_get_header(XrHttpHeader *headers, size_t count, const char *
 
 /* ========== Parse Decimal Number ========== */
 
+/* Strict Content-Length parse: the entire [p,end) range must be digits.
+ * Returns -1 on empty input, any non-digit byte, or overflow — callers
+ * treat -1 as a framing error. The old lenient version accepted
+ * "123abc" as 123 and silently overflowed, both smuggling vectors. */
 static inline int64_t parse_int(const char *p, const char *end) {
+    if (p >= end)
+        return -1;
     int64_t val = 0;
-    while (p < end && *p >= '0' && *p <= '9') {
+    while (p < end) {
+        if (*p < '0' || *p > '9')
+            return -1;
+        if (val > (INT64_MAX - 9) / 10)
+            return -1;
         val = val * 10 + (*p - '0');
         p++;
     }
     return val;
+}
+
+/* RFC 9112 §6.1/6.3: a message body is chunked-framed only when "chunked"
+ * is the FINAL transfer coding. A sliding substring search would also match
+ * "notchunked" or accept "chunked, gzip" (where the body is NOT chunked at
+ * the outermost layer) — both are request-smuggling vectors. */
+static bool te_final_coding_is_chunked(const char *value, size_t len) {
+    // Trim trailing OWS
+    while (len > 0 && (value[len - 1] == ' ' || value[len - 1] == '\t'))
+        len--;
+    // Find the start of the final comma-separated token
+    size_t start = 0;
+    for (size_t i = len; i > 0; i--) {
+        if (value[i - 1] == ',') {
+            start = i;
+            break;
+        }
+    }
+    // Trim leading OWS of the final token
+    while (start < len && (value[start] == ' ' || value[start] == '\t'))
+        start++;
+    return (len - start) == 7 && strcasecmp_n(value + start, "chunked", 7);
 }
 
 /* ========== Process Special Headers ========== */
@@ -999,21 +1031,24 @@ static void process_special_header_request(XrHttpRequest *req, XrHttpHeader *h) 
             break;
         case 14:  // Content-Length
             if (strcasecmp_n(h->name, "Content-Length", 14)) {
-                req->content_length = parse_int(h->value, h->value + h->value_len);
+                int64_t cl = parse_int(h->value, h->value + h->value_len);
+                // Malformed value, or duplicate headers that disagree,
+                // are framing errors (smuggling vectors), not data.
+                if (cl < 0 || (req->content_length >= 0 && req->content_length != cl)) {
+                    req->framing_invalid = true;
+                } else {
+                    req->content_length = cl;
+                }
             }
             break;
         case 17:  // Transfer-Encoding
             if (strcasecmp_n(h->name, "Transfer-Encoding", 17)) {
-                if (h->value_len >= 7) {
-                    const char *p = h->value;
-                    const char *end = h->value + h->value_len;
-                    while (p + 7 <= end) {
-                        if (strcasecmp_n(p, "chunked", 7)) {
-                            req->chunked = true;
-                            break;
-                        }
-                        p++;
-                    }
+                if (te_final_coding_is_chunked(h->value, h->value_len)) {
+                    req->chunked = true;
+                } else {
+                    // TE present but body is not chunked at the outer
+                    // layer: we cannot frame it — reject.
+                    req->framing_invalid = true;
                 }
             }
             break;
@@ -1041,21 +1076,20 @@ static void process_special_header_response(XrHttpResponse *resp, XrHttpHeader *
             break;
         case 14:  // Content-Length
             if (strcasecmp_n(h->name, "Content-Length", 14)) {
-                resp->content_length = parse_int(h->value, h->value + h->value_len);
+                int64_t cl = parse_int(h->value, h->value + h->value_len);
+                if (cl < 0 || (resp->content_length >= 0 && resp->content_length != cl)) {
+                    resp->framing_invalid = true;
+                } else {
+                    resp->content_length = cl;
+                }
             }
             break;
         case 17:  // Transfer-Encoding
             if (strcasecmp_n(h->name, "Transfer-Encoding", 17)) {
-                if (h->value_len >= 7) {
-                    const char *p = h->value;
-                    const char *end = h->value + h->value_len;
-                    while (p + 7 <= end) {
-                        if (strcasecmp_n(p, "chunked", 7)) {
-                            resp->chunked = true;
-                            break;
-                        }
-                        p++;
-                    }
+                if (te_final_coding_is_chunked(h->value, h->value_len)) {
+                    resp->chunked = true;
+                } else {
+                    resp->framing_invalid = true;
                 }
             }
             break;
@@ -1107,6 +1141,14 @@ XrHttpParseResult xr_http_parse_request(XrHttpParser *parser, XrHttpRequest *req
     // Set body pointer
     req->body = data + r;
     size_t remaining = len - r;
+
+    /* RFC 9112 §6.3: malformed/conflicting Content-Length, unsupported
+     * transfer codings, or CL+TE together make the body framing ambiguous
+     * (request smuggling). Reject instead of guessing. */
+    if (req->framing_invalid || (req->chunked && req->content_length >= 0)) {
+        parser->state = HTTP_STATE_ERROR;
+        return XR_HTTP_PARSE_ERROR;
+    }
 
     if (req->chunked) {
         req->body_len = remaining;
@@ -1162,6 +1204,13 @@ XrHttpParseResult xr_http_parse_response(XrHttpParser *parser, XrHttpResponse *r
     // Set body pointer
     resp->body = data + r;
     size_t remaining = len - r;
+
+    /* Same framing strictness as the request path: ambiguous framing from
+     * a server (CL+TE, bad CL, unsupported codings) is rejected. */
+    if (resp->framing_invalid || (resp->chunked && resp->content_length >= 0)) {
+        parser->state = HTTP_STATE_ERROR;
+        return XR_HTTP_PARSE_ERROR;
+    }
 
     if (resp->chunked) {
         resp->body_len = remaining;

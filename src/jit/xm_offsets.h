@@ -95,15 +95,15 @@
 /* ========== XrProto field offsets ========== */
 
 /*
- * Offsets shifted by -16 bytes after the IC tables (XrICMethodTable*,
- * XrICFieldTable*) were removed from XrProto and the smaller proto_id
- * field was added; static_asserts below validate against the live
- * struct layout.
+ * Hardcoded XrProto byte offsets consumed by JIT codegen; static_asserts
+ * below validate them against the live struct layout. Update these in
+ * lockstep whenever XrProto fields are added/removed (most recently the
+ * raw constant pool fields were removed, shifting everything by -16).
  */
-#define XM_PROTO_JIT_ENTRY_OFFSET 344
-#define XM_PROTO_JIT_FAST_ENTRY_OFFSET 352
-#define XM_PROTO_JIT_RESUME_ENTRY_OFFSET 360
-#define XM_PROTO_STACK_MAP_OFFSET 440
+#define XM_PROTO_JIT_ENTRY_OFFSET 328
+#define XM_PROTO_JIT_FAST_ENTRY_OFFSET 336
+#define XM_PROTO_JIT_RESUME_ENTRY_OFFSET 344
+#define XM_PROTO_STACK_MAP_OFFSET 424
 
 /* ========== Object layout constants ========== */
 

@@ -294,7 +294,11 @@ XR_FUNC void rv64_emit_deopt_id(Rv64CodegenCtx *ctx, XmIns *ins) {
 XR_FUNC uint32_t rv64_record_safepoint(Rv64CodegenCtx *ctx) {
     XR_DCHECK(ctx != NULL, "rv64_record_safepoint: NULL ctx");
     if (ctx->nsmap >= XM_MAX_STACK_MAP_ENTRIES) {
-        xr_log_warning("rv64-cg", "stack map table full (%u entries)", ctx->nsmap);
+        /* Fail-closed: a reused/wrong safepoint id makes GC scan the wrong
+         * bitmaps (missed roots → use-after-free). Mark the compile as
+         * failed so the function stays on the interpreter instead. */
+        xr_log_warning("rv64-cg", "stack map table full (%u entries): bail", ctx->nsmap);
+        ctx->had_error = true;
         return ctx->nsmap > 0 ? ctx->nsmap - 1 : 0;
     }
 

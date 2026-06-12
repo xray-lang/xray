@@ -1,0 +1,28 @@
+// Regression: OP_CHAN_SEND must not clobber the receiver register.
+// A rendezvous send wakes the blocked receiver; the bug being guarded
+// against is the send opcode overwriting the channel/receiver register
+// window so the second recv saw a stale value.
+
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn send_twice(ch: Channel<int>, a: int, b: int) -> int {
+    ch.send(a)
+    ch.send(b)
+    return a + b
+}
+
+@test
+fn test_chan_send_preserves_receiver() {
+    shared const ch = new Channel<int>(0)
+    let task = go send_twice(ch, 21, 34)
+
+    assert_eq(recv_int(ch), 21)
+    assert_eq(recv_int(ch), 34)
+    assert_eq(await task, 55)
+    ch.close()
+}

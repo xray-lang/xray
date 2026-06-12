@@ -26,6 +26,7 @@
  * owner deque is full. Mirrors the proven runqputslow shape: keep the fresh
  * wake local, share older work in one batch. */
 #define XR_RUNQ_SPILL_BATCH (XR_LOCAL_QUEUE_SIZE / 2)
+#define XR_RUNQ_STEAL_BATCH_MAX 32
 
 typedef enum XrLifoGateDecision {
     XR_LIFO_GATE_ALLOW,
@@ -51,8 +52,12 @@ static int64_t worker_schedule_time(XrWorker *worker) {
 }
 
 static void prepare_scheduled_coro_at(XrCoroutine *coro, int64_t submit_time) {
-    coro->submit_time = submit_time;
+    atomic_store_explicit(&coro->submit_time, submit_time, memory_order_relaxed);
     coro->schedule_count = 1;
+    /* A re-enqueue ends any spawn burst. Resetting here (enqueuer owns the
+     * coro) replaces the post-block reset in the executor result path, which
+     * could race a concurrent wake once the coro was on a wait queue. */
+    coro->spawn_burst_count = 0;
 }
 
 static void prepare_scheduled_coro(XrWorker *worker, XrCoroutine *coro) {
@@ -93,7 +98,7 @@ static void runq_batch_append(XrCoroutine **first, XrCoroutine **last, XrCorouti
 }
 
 static void runq_enqueue_at(XrRunQueue *rq, XrCoroutine *coro, int64_t submit_time) {
-    coro->submit_time = submit_time;
+    atomic_store_explicit(&coro->submit_time, submit_time, memory_order_relaxed);
     if (!xr_steal_queue_push(&rq->deque, coro)) {
         // Deque full: overflow to linked list.
         coro->sched_link = NULL;
@@ -116,8 +121,9 @@ static int runq_spill_oldest_batch(XrRunQueue *rq, int max_count, XrCoroutine **
     *out_last = NULL;
     int count = 0;
     while (count < max_count) {
-        XrCoroutine *coro = xr_steal_queue_steal(&rq->deque);
-        if (!coro)
+        XrCoroutine *coro = NULL;
+        XrStealQueueStatus status = xr_steal_queue_steal_status(&rq->deque, &coro);
+        if (status != XR_STEAL_QUEUE_SUCCESS)
             break;
         runq_batch_append(out_first, out_last, coro);
         count++;
@@ -125,23 +131,14 @@ static int runq_spill_oldest_batch(XrRunQueue *rq, int max_count, XrCoroutine **
     return count;
 }
 
-void xr_worker_refresh_runq_masks(XrWorker *worker) {
-    if (!worker || !worker->p.runtime)
-        return;
-    XrRuntime *runtime = worker->p.runtime;
-    XrCoroutine *lifo = atomic_load_explicit(&worker->p.lifo_slot, memory_order_relaxed);
-    int deque_len = xr_steal_queue_size(&worker->p.runq.deque);
-    bool has_cont = xr_steal_queue_size(&worker->p.cont_deque) > 0;
-    bool nonempty = deque_len > 0 || worker->p.runq.overflow_len > 0 || lifo || has_cont;
-    bool stealable = deque_len > 0 || has_cont;
-    xr_runtime_set_runq_nonempty(runtime, worker->p.id, nonempty);
-    xr_runtime_set_runq_stealable(runtime, worker->p.id, stealable);
-}
-
-static bool runtime_backlog_should_gate_lifo(XrRuntime *runtime) {
+static bool worker_backlog_should_gate_lifo(XrWorker *worker, XrRuntime *runtime) {
     if (!runtime)
         return false;
-    if (atomic_load_explicit(&runtime->total_inbox_len, memory_order_relaxed) > 0)
+    // Own-inbox check only: cross-worker deliveries pending on THIS worker
+    // must not starve behind a LIFO chain. Other workers drain their own
+    // inboxes; a global signal here would just be a shared-cacheline read
+    // of state this worker cannot act on.
+    if (!xr_mpsc_empty(&worker->p.inbox))
         return true;
     if (!atomic_load_explicit(&runtime->injectq_nonempty, memory_order_acquire))
         return false;
@@ -154,7 +151,7 @@ static XrLifoGateDecision worker_lifo_gate_decision(XrWorker *worker, bool consu
         return XR_LIFO_GATE_BUDGET;
 
     XrRuntime *runtime = worker->p.runtime;
-    if (runtime_backlog_should_gate_lifo(runtime))
+    if (worker_backlog_should_gate_lifo(worker, runtime))
         return XR_LIFO_GATE_BACKLOG;
 
     return XR_LIFO_GATE_ALLOW;
@@ -188,10 +185,12 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         atomic_store_explicit(&worker->p.lifo_slot, NULL, memory_order_relaxed);
         if (consume_poll_budget)
             worker->p.lifo_polls++;
-        xr_proc_stats_record_runnable_wait(&worker->p.stats, lifo, xr_monotonic_ticks());
+        XrRuntime *runtime = worker->p.runtime;
+        if (XR_UNLIKELY(runtime && runtime->sched_stats_enabled)) {
+            xr_proc_stats_record_runnable_wait(&worker->p.stats, lifo, xr_monotonic_ticks());
+        }
         xr_proc_local_runq_dec(&worker->p, 1);
         worker->p.stats.lifo_hit_count++;
-        xr_worker_refresh_runq_masks(worker);
         return lifo;
     }
 
@@ -201,19 +200,19 @@ XrCoroutine *xr_worker_try_pop_lifo(XrWorker *worker, bool consume_poll_budget) 
         xr_proc_local_runq_dec(&worker->p, 1);
     }
     worker->p.stats.lifo_flush_count++;
-    xr_worker_refresh_runq_masks(worker);
     return NULL;
 }
 
 static XrCoroutine *worker_pop_local(XrWorker *worker) {
-    int64_t now = xr_monotonic_ticks();
     XrCoroutine *coro = runq_pop_local(&worker->p.runq);
     if (!coro)
         return NULL;
     worker->p.stats.local_runq_pop_count++;
-    xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, now);
+    XrRuntime *runtime = worker->p.runtime;
+    if (XR_UNLIKELY(runtime && runtime->sched_stats_enabled)) {
+        xr_proc_stats_record_runnable_wait(&worker->p.stats, coro, xr_monotonic_ticks());
+    }
     xr_proc_local_runq_dec(&worker->p, 1);
-    xr_worker_refresh_runq_masks(worker);
     return coro;
 }
 
@@ -223,14 +222,12 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, b
     prepare_scheduled_coro(worker, coro);
 
     if (xr_steal_queue_push(&worker->p.runq.deque, coro)) {
-        xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, true);
         return true;
     }
 
     XrRuntime *runtime = worker->p.runtime;
     if (!runtime) {
         xr_runq_enqueue(&worker->p.runq, coro);
-        xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, true);
         return true;
     }
 
@@ -246,7 +243,6 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, b
                                     (uint64_t) spill_count);
             }
             injectq_push_batch_internal(runtime, spill_first, spill_last, spill_count, false);
-            xr_runtime_set_runq_nonempty(worker->p.runtime, worker->p.id, true);
             return true;
         }
 
@@ -256,7 +252,6 @@ static bool worker_enqueue_runq_or_inject(XrWorker *worker, XrCoroutine *coro, b
                                 (uint64_t) (spill_count + 1));
         }
         injectq_push_batch_internal(runtime, spill_first, spill_last, spill_count + 1, false);
-        xr_worker_refresh_runq_masks(worker);
         return false;
     }
 
@@ -395,12 +390,12 @@ int xr_injectq_pop_batch(XrRuntime *runtime, XrWorker *worker, int max_count) {
     while (cur) {
         XrCoroutine *next = cur->sched_link;
         cur->sched_link = NULL;
-        int64_t submit_time = cur->submit_time > 0 ? cur->submit_time : fallback_submit_time;
+        int64_t prior = atomic_load_explicit(&cur->submit_time, memory_order_relaxed);
+        int64_t submit_time = prior > 0 ? prior : fallback_submit_time;
         runq_enqueue_at(&worker->p.runq, cur, submit_time);
         cur = next;
     }
     xr_proc_local_runq_inc(&worker->p, count);
-    xr_worker_refresh_runq_masks(worker);
     xr_sched_metric_inc(runtime, &runtime->sched_stats.inject_pop_batch_count);
     xr_sched_metric_add(runtime, &runtime->sched_stats.inject_pop_count, (uint64_t) count);
     return count;
@@ -437,8 +432,8 @@ static void runq_push_stolen(XrRunQueue *dst, XrCoroutine *coro) {
 int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
     int src_len = xr_steal_queue_size(&src->deque);
     int actual_max = src_len / 2;
-    if (actual_max > 32)
-        actual_max = 32;
+    if (actual_max > XR_RUNQ_STEAL_BATCH_MAX)
+        actual_max = XR_RUNQ_STEAL_BATCH_MAX;
     if (actual_max > max_steal)
         actual_max = max_steal;
     if (actual_max <= 0)
@@ -446,8 +441,9 @@ int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
 
     int stolen = 0;
     for (int i = 0; i < actual_max; i++) {
-        XrCoroutine *c = xr_steal_queue_steal(&src->deque);
-        if (!c)
+        XrCoroutine *c = NULL;
+        XrStealQueueStatus status = xr_steal_queue_steal_status(&src->deque, &c);
+        if (status != XR_STEAL_QUEUE_SUCCESS)
             break;
         XR_DCHECK(c->sched_link == NULL, "runq_steal: stolen coro sched_link must be NULL");
         runq_push_stolen(dst, c);
@@ -456,15 +452,17 @@ int xr_runq_steal(XrRunQueue *src, XrRunQueue *dst, int max_steal) {
     return stolen;
 }
 
-int xr_runq_steal_direct(XrRunQueue *src, XrRunQueue *dst, int max_steal,
-                         XrCoroutine **out_direct) {
+XrRunqStealStatus xr_runq_steal_direct_status(XrRunQueue *src, XrRunQueue *dst, int max_steal,
+                                              int *out_stolen, XrCoroutine **out_direct) {
     if (out_direct)
         *out_direct = NULL;
+    if (out_stolen)
+        *out_stolen = 0;
 
     int src_len = xr_steal_queue_size(&src->deque);
     int actual_max = src_len / 2;
-    if (actual_max > 32)
-        actual_max = 32;
+    if (actual_max > XR_RUNQ_STEAL_BATCH_MAX)
+        actual_max = XR_RUNQ_STEAL_BATCH_MAX;
     if (actual_max > max_steal)
         actual_max = max_steal;
     if (actual_max <= 0)
@@ -472,10 +470,15 @@ int xr_runq_steal_direct(XrRunQueue *src, XrRunQueue *dst, int max_steal,
 
     XrCoroutine *direct = NULL;
     int stolen = 0;
+    XrRunqStealStatus final_status = XR_RUNQ_STEAL_EMPTY;
     for (int i = 0; i < actual_max; i++) {
-        XrCoroutine *c = xr_steal_queue_steal(&src->deque);
-        if (!c)
+        XrCoroutine *c = NULL;
+        XrStealQueueStatus status = xr_steal_queue_steal_status(&src->deque, &c);
+        if (status != XR_STEAL_QUEUE_SUCCESS) {
+            if (status == XR_STEAL_QUEUE_RETRY && stolen == 0)
+                final_status = XR_RUNQ_STEAL_RETRY;
             break;
+        }
         XR_DCHECK(c->sched_link == NULL, "runq_steal_direct: stolen coro sched_link must be NULL");
         if (direct)
             runq_push_stolen(dst, direct);
@@ -483,11 +486,17 @@ int xr_runq_steal_direct(XrRunQueue *src, XrRunQueue *dst, int max_steal,
         stolen++;
     }
 
+    if (direct) {
+        XR_DCHECK(direct->sched_link == NULL,
+                  "runq_steal_direct: direct coro sched_link must be NULL");
+    }
     if (out_direct)
         *out_direct = direct;
     else if (direct)
         runq_push_stolen(dst, direct);
-    return stolen;
+    if (out_stolen)
+        *out_stolen = stolen;
+    return stolen > 0 ? XR_RUNQ_STEAL_SUCCESS : final_status;
 }
 
 // ========== Worker Pop / Push ==========
@@ -519,7 +528,6 @@ void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro) {
                 xr_proc_local_runq_dec(&worker->p, 1);
             }
         }
-        xr_worker_refresh_runq_masks(worker);
         return;
     }
     // Cross-worker: fall back to normal push.
@@ -580,7 +588,6 @@ int xr_worker_push_lifo_batch(XrWorker *worker, XrCoroutine *first) {
     } else if (local_delta < 0) {
         xr_proc_local_runq_dec(&worker->p, -local_delta);
     }
-    xr_worker_refresh_runq_masks(worker);
     return total_count;
 }
 
@@ -596,7 +603,6 @@ void xr_worker_push(XrWorker *worker, XrCoroutine *coro) {
     bool queued_locally = worker_enqueue_runq_or_inject(worker, coro, true);
     if (queued_locally) {
         xr_proc_local_runq_inc(&worker->p, 1);
-        xr_worker_refresh_runq_masks(worker);
     }
     XrRuntime *rt = worker->p.runtime;
 
@@ -628,7 +634,6 @@ int xr_worker_push_batch(XrWorker *worker, XrCoroutine *first) {
 
     if (local_count > 0) {
         xr_proc_local_runq_inc(&worker->p, local_count);
-        xr_worker_refresh_runq_masks(worker);
         XrRuntime *rt = worker->p.runtime;
         if (rt && atomic_load_explicit(&rt->spinning_count, memory_order_relaxed) == 0) {
             wake_idle_worker(rt);

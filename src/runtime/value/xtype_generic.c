@@ -38,6 +38,12 @@ XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_name
     if (!type || count == 0)
         return type;
 
+    if (type->is_nullable) {
+        XrType *non_null = xr_type_non_nullable(X, type);
+        XrType *subst = xr_type_substitute(X, non_null, param_names, actual_types, count);
+        return subst != non_null ? xr_type_make_nullable(X, subst) : type;
+    }
+
     // If it's a type parameter, look it up
     if (type->kind == XR_KIND_TYPE_PARAM) {
         const char *param_name = type->type_param.name;
@@ -160,16 +166,6 @@ XrType *xr_type_substitute(XrayIsolate *X, XrType *type, const char **param_name
         }
         if (changed)
             return xr_type_new_union(X, new_members, mc);
-        return type;
-    }
-
-    // Substitute in nullable types
-    if (type->is_nullable) {
-        XrType *non_null = xr_type_non_nullable(X, type);
-        XrType *subst = xr_type_substitute(X, non_null, param_names, actual_types, count);
-        if (subst != non_null) {
-            return xr_type_make_nullable(X, subst);
-        }
         return type;
     }
 

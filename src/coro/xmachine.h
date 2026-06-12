@@ -124,7 +124,9 @@ typedef struct XrMachine {
     _Atomic uint64_t heartbeat;
 
     /* === Current C function (for sysmon auto-upgrade) === */
-    void *current_cfunc;  // XrCFunction* when executing C code, NULL otherwise
+    /* Relaxed atomic: owner publishes around C calls; sysmon peeks it on
+     * stall detection to auto-upgrade FAST cfuncs. */
+    _Atomic(void *) current_cfunc;  // XrCFunction* when executing C code, NULL otherwise
 
     /* === Next P to acquire (set before unpark) === */
     struct XrProc *next_p;
@@ -133,9 +135,11 @@ typedef struct XrMachine {
     struct XrWorker *blocked_worker;
 
     /* === M Linked Lists === */
-    struct XrMachine *all_link;   // Global all-M list
-    struct XrMachine *idle_link;  // Idle list link (shared by idle_worker_list
-                                  // OR idle_m_head at any moment — see xworker.h)
+    struct XrMachine *all_link;  // Global all-M list
+    /* Relaxed atomic: Treiber-stack link. A losing pop contender may read it
+     * while the winner clears it; ownership rides the list-head CAS. */
+    _Atomic(struct XrMachine *) idle_link;  // Idle list link (shared by idle_worker_list
+                                            // OR idle_m_head at any moment — see xworker.h)
 
     /* === Idle-stack guard ===
      * Prevents the same M from being pushed twice onto idle_worker_list.

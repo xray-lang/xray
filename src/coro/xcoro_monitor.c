@@ -111,7 +111,7 @@ static void print_top_coros(XrayIsolate *X, int limit) {
             XrCoroutine *coro = snap_buf[i];
             printf("║   %-5d │ " ANSI_YELLOW "READY" ANSI_RESET
                    "   │ %-10lld                                         ║\n",
-                   coro->id, (long long) coro->reductions);
+                   coro->id, (long long) xr_coro_reds(coro));
             shown++;
         }
         // Blocked coroutines
@@ -119,7 +119,7 @@ static void print_top_coros(XrayIsolate *X, int limit) {
         while (bc && shown < limit) {
             printf("║   %-5d │ " ANSI_RED "BLOCKED" ANSI_RESET
                    " │ %-10lld                                         ║\n",
-                   bc->id, (long long) bc->reductions);
+                   bc->id, (long long) xr_coro_reds(bc));
             shown++;
             bc = bc->next;
         }

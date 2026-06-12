@@ -1,0 +1,14 @@
+class Labeler {
+    constructor() {
+    }
+
+    mark(x: int) -> string {
+        if (x > 0) {
+            return "pos"
+        }
+        return "zero"
+    }
+}
+
+let l = Labeler()
+print(l.mark(1))

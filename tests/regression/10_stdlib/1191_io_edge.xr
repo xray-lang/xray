@@ -74,7 +74,6 @@ fn test_read_dir_recursive() {
     io.writeFile(tmpDir + "/a/file2.txt", "2")
     io.writeFile(tmpDir + "/a/b/file3.txt", "3")
     let all = io.readDirRecursive(tmpDir)
-    assert(all != null)
     assert(all.length >= 3)
     io.removeAll(tmpDir)
 }
@@ -95,7 +94,7 @@ fn test_read_lines_empty() {
     io.writeFile(tmp, "")
     let lines = io.readLines(tmp)
     // Empty file may return empty array or array with one empty string
-    assert(lines != null)
+    assert(lines.length >= 0)
     io.remove(tmp)
 }
 

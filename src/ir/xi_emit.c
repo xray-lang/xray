@@ -263,6 +263,13 @@ XR_FUNC int add_symbol(EmitCtx *ctx, const char *name) {
     XR_DCHECK(st != NULL, "isolate must have a symbol table");
     SymbolId global = xr_symbol_register_in_table(st, name);
     int local = xr_proto_add_symbol(ctx->proto, (int32_t) global);
+    if (local < 0) {
+        /* OOM growing the symbol table. Without this check the -1 would
+         * be truncated to 255 by callers' (uint8_t) casts and silently
+         * bind the wrong symbol. */
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return -1;
+    }
     if (local > MAXARG_B) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return -1;

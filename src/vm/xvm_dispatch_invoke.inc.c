@@ -56,67 +56,12 @@ invoke_dispatch:;
     XrValue receiver = R(a + 1);
     int method_symbol = PROTO_SYMBOL(cl->proto, b);
 
-    /* ── Channel hot path: send/recv MUST be inlined (blocking IO) ── */
+    /* ── Channel methods ──
+     * Keep language-level channel semantics in vm_invoke_channel().  Older
+     * inline recv/send paths returned raw payload/null values and bypassed the
+     * Recv<T>/SendResult protocol state model. */
     if (xr_value_is_channel(receiver)) {
         XrChannel *ch = xr_value_to_channel(receiver);
-
-        if (nargs == 1 && method_symbol == SYMBOL_SEND) {
-            XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
-            XrCoroBlockResult _resumed = xr_coro_chan_send_resume(_cur, xr_slot_none());
-            if (_resumed.kind == XR_CORO_BLOCK_READY) {
-                R(a) = xr_null();
-                vmbreak;
-            }
-            if (_resumed.kind == XR_CORO_BLOCK_CLOSED) {
-                R(a) = xr_null();
-                VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
-            }
-            savepc();
-            vm_suspend_replay_yielded(frame, pc);
-            XrCoroBlockResult _cr =
-                xr_coro_chan_send(isolate, _cur, ch, R(a + 2), xr_slot_none(), -1);
-            if (_cr.kind == XR_CORO_BLOCK_READY) {
-                vm_suspend_clear_yielded(frame);
-                R(a) = xr_null();
-                vmbreak;
-            } else if (_cr.kind == XR_CORO_BLOCK_CLOSED) {
-                vm_suspend_clear_yielded(frame);
-                VM_RUNTIME_ERROR(XR_ERR_CORO_DEAD, "Channel is closed");
-            } else if (_cr.kind == XR_CORO_BLOCK_BLOCKED) {
-                return XR_VM_BLOCKED;
-            } else {
-                vm_suspend_clear_yielded(frame);
-            }
-        }
-
-        if (nargs == 0 && method_symbol == SYMBOL_RECV) {
-            XrCoroutine *_cur = (XrCoroutine *) VM_CURRENT_CORO;
-            if (_cur) {
-                XrCoroBlockResult _resumed = xr_coro_chan_recv_resume(
-                    isolate, _cur, xr_slot_xvalue_ptr(&R(a)), xr_slot_none());
-                if (_resumed.kind == XR_CORO_BLOCK_READY) {
-                    vmbreak;
-                }
-                if (_resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
-                    R(a) = xr_null();
-                    vmbreak;
-                }
-            }
-            savepc();
-            vm_suspend_replay_yielded(frame, pc);
-            XrCoroBlockResult _cr =
-                xr_coro_chan_recv(isolate, _cur, ch, xr_slot_xvalue_ptr(&R(a)), xr_slot_none(), -1);
-            if (_cr.kind == XR_CORO_BLOCK_READY || _cr.kind == XR_CORO_BLOCK_CLOSED) {
-                vm_suspend_clear_yielded(frame);
-                vmbreak;
-            } else if (_cr.kind == XR_CORO_BLOCK_BLOCKED) {
-                return XR_VM_BLOCKED;
-            } else {
-                vm_suspend_clear_yielded(frame);
-            }
-        }
-
-        /* Dispatch: other channel methods (tryRecv, close, etc.) */
         XrDispatchAction _cr =
             vm_invoke_channel(isolate, vm_ctx, ch, method_symbol, nargs, base, a, frame, pc);
         if (_cr == XR_DISP_NEXT) {
@@ -133,11 +78,13 @@ invoke_dispatch:;
     /* ── Task handle methods (can block/yield) ── */
     if (xr_value_is_task(receiver)) {
         XrDispatchAction _cr =
-            vm_invoke_task_handle(isolate, receiver, method_symbol, nargs, base, a, ci, pc);
+            vm_invoke_task_handle(isolate, vm_ctx, receiver, method_symbol, nargs, base, a, ci, pc);
         if (_cr == XR_DISP_NEXT) {
             VM_REBIND_AFTER_NATIVE_CALL();
             vmbreak;
         }
+        if (_cr == XR_DISP_BLOCKED)
+            return XR_VM_BLOCKED;
         if (!xr_vm_is_catch_reachable(isolate))
             return XR_VM_RUNTIME_ERROR;
         goto startfunc;
@@ -327,6 +274,11 @@ invoke_dispatch:;
                 vm_suspend_clear_yielded(ci);
                 R(a) = result;
                 VM_BUILTIN_INVOKE_CHECK_EXC();
+                XrDispatchAction ready_action =
+                    vm_ready_operation_next_or_yield(isolate, (XrCoroutine *) VM_CURRENT_CORO, ci,
+                                                     pc, XR_VM_YIELDABLE_READY_REDUCTION_COST);
+                if (ready_action == XR_DISP_YIELD)
+                    return XR_VM_YIELD;
                 vmbreak;
             }
             if (status == XR_CFUNC_BLOCKED) {
@@ -497,6 +449,11 @@ vmcase(OP_INVOKE_DIRECT) {
             vm_suspend_clear_yielded(ci);
             R(a) = result;
             VM_BUILTIN_INVOKE_CHECK_EXC();
+            XrDispatchAction ready_action =
+                vm_ready_operation_next_or_yield(isolate, (XrCoroutine *) VM_CURRENT_CORO, ci, pc,
+                                                 XR_VM_YIELDABLE_READY_REDUCTION_COST);
+            if (ready_action == XR_DISP_YIELD)
+                return XR_VM_YIELD;
             vmbreak;
         }
         if (status == XR_CFUNC_BLOCKED) {

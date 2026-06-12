@@ -2,8 +2,10 @@
 // 作者：xingleixu@gmail.com
 
 fn blocked_task(ch: Channel<int>) -> int {
-    let v = ch.recv()
-    return v
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 fn quick_task(x: int) -> int {
@@ -16,16 +18,22 @@ fn test_cancel() {
     const ch = new Channel<int>(0)
     let t1 = go blocked_task(ch)
     t1.cancel()
-    let r1 = await t1
-    print("t1 cancelled:", t1.cancelled)
-    print("t1 result is null:", r1 == null)
+    let r1 = t1.awaitResult()
+    print("t1 cancelled:", match (r1) {
+        TaskResult.Cancelled -> true
+        _ -> false
+    })
+    print("t1 status:", t1.status)
     ch.close()
 
     // Test 2: cancel an already-completed task is no-op
     let t2 = go quick_task(21)
     let r2 = await t2
     t2.cancel()
-    print("t2 cancelled:", t2.cancelled)
+    print("t2 success:", match (t2.poll()) {
+        TaskResult.Success(_) -> true
+        _ -> false
+    })
     print("t2 result:", r2)
 
     print("done")
@@ -33,7 +41,7 @@ fn test_cancel() {
 
 // 期望输出：
 // t1 cancelled: true
-// t1 result is null: true
-// t2 cancelled: false
+// t1 status: Cancelled
+// t2 success: true
 // t2 result: 42
 // done

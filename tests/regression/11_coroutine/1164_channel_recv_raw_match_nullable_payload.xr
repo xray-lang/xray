@@ -1,0 +1,46 @@
+// EXPECTED: ok
+// Raw VM recv lowering must keep payload status separate from payload bits.
+// In particular, 0 and null are legal Channel<T> values and are not closed.
+
+@test
+fn test_recv_match_keeps_payload_status() {
+    shared const ch: Channel<int?> = new Channel(2)
+    ch.send(0)
+    ch.send(null)
+
+    let zero = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+    assert_eq(zero, 0)
+
+    let nil = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> 7
+    }
+    assert_eq(nil, null)
+
+    ch.close()
+    let closed = match (ch.recv()) {
+        Recv.Value(_) -> false
+        _ -> true
+    }
+    assert_eq(closed, true)
+}
+
+@test
+fn test_select_keeps_null_payload_ready() {
+    shared const ch: Channel<int?> = new Channel(1)
+    ch.send(null)
+
+    let saw_null = false
+    select {
+        msg from ch -> { saw_null = (msg == null) }
+    }
+    assert_eq(saw_null, true)
+    ch.close()
+}
+
+test_recv_match_keeps_payload_status()
+test_select_keeps_null_payload_ready()
+print("ok")

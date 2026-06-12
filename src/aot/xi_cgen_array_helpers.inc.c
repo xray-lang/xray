@@ -14,45 +14,36 @@ typedef struct CgArrayElemInfo {
     XrRep rep;
 } CgArrayElemInfo;
 
-static const XrType *cg_array_elem_type_from_type(const XrType *type) {
-    if (!type)
-        return NULL;
-    if (type->kind == XR_KIND_ARRAY)
-        return type->container.element_type;
-    if (type->kind == XR_KIND_FIXED_ARRAY)
-        return type->fixed_array.element_type;
-    return NULL;
+static bool cg_array_elem_info_from_container_plan(const XaotContainerElemPlan *plan,
+                                                   CgArrayElemInfo *out) {
+    if (!plan || !plan->elem_name || !plan->c_type || !out)
+        return false;
+    *out = (CgArrayElemInfo) {plan->elem_name, plan->c_type, plan->storage_rep};
+    return true;
 }
 
 static bool cg_array_elem_info_from_type(const XrType *type, CgArrayElemInfo *out) {
-    const XrType *elem = cg_array_elem_type_from_type(type);
-    if (!elem || elem->is_nullable || !out)
-        return false;
+    XaotContainerPlan plan;
+    return xaot_container_plan_for_type(type, &plan) && plan.kind == XAOT_CONTAINER_ARRAY &&
+           cg_array_elem_info_from_container_plan(&plan.elem, out);
+}
 
-    memset(out, 0, sizeof(*out));
-    if (elem->native_width != 0) {
-        const char *elem_name = xaot_elem_name_for_native_type(elem->native_width);
-        const char *ctype = xaot_c_type_for_native_type(elem->native_width);
-        if (elem_name && ctype) {
-            *out = (CgArrayElemInfo) {elem_name, ctype,
-                                      xaot_storage_rep_for_native_type(elem->native_width)};
-            return true;
-        }
-    }
+static bool cg_array_elem_info_from_type_ctx(XiCgenCtx *ctx, const XrType *type,
+                                             CgArrayElemInfo *out) {
+    const XaotContainerTypePlan *plan =
+        xaot_bundle_find_container_plan(cg_ctx_aot_bundle(ctx), type);
+    return plan && plan->plan.kind == XAOT_CONTAINER_ARRAY &&
+           cg_array_elem_info_from_container_plan(&plan->plan.elem, out);
+}
 
-    if (elem->kind == XR_KIND_INT) {
-        *out = (CgArrayElemInfo) {"XR_ELEM_I64", "int64_t", XR_REP_I64};
-        return true;
-    }
-    if (elem->kind == XR_KIND_FLOAT) {
-        *out = (CgArrayElemInfo) {"XR_ELEM_F64", "double", XR_REP_F64};
-        return true;
-    }
-    if (elem->kind == XR_KIND_BOOL) {
-        *out = (CgArrayElemInfo) {"XR_ELEM_BOOL", "uint8_t", XR_REP_I64};
-        return true;
-    }
-    return false;
+static bool cg_array_elem_info_from_storage_plan(const XaotArrayStoragePlan *plan,
+                                                 CgArrayElemInfo *out) {
+    return plan && cg_array_elem_info_from_container_plan(&plan->elem, out);
+}
+
+static bool cg_array_elem_info_from_cache_plan(const XaotArrayCachePlan *plan,
+                                               CgArrayElemInfo *out) {
+    return plan && cg_array_elem_info_from_container_plan(&plan->elem, out);
 }
 
 typedef enum CgArrayStorageUse {
@@ -60,72 +51,23 @@ typedef enum CgArrayStorageUse {
     CG_ARRAY_STORAGE_READ
 } CgArrayStorageUse;
 
-static bool cg_array_value_storage_info_depth(XiCgenCtx *ctx, const XiFunc *f,
-                                              const XiValue *array_value, CgArrayElemInfo *out,
-                                              CgArrayStorageUse use, uint8_t depth) {
-    const XiValue *v = cg_unwrap_identity_value(array_value);
-    if (!v || depth > 8 || !cg_array_elem_info_from_type(v->type, out))
-        return false;
-    if (v->op == XI_ARRAY_NEW)
-        return true;
-    if (cg_class_native_receiver_ref_field(ctx, f, v, XR_NATIVE_ARRAY_REF, NULL, NULL))
-        return true;
-    if (use == CG_ARRAY_STORAGE_READ && v->op == XI_SLICE && v->nargs >= 1)
-        return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, CG_ARRAY_STORAGE_READ,
-                                                 depth + 1);
-    if (v->op == XI_CALL_BUILTIN) {
-        const char *name = (const char *) v->aux;
-        if (name &&
-            (strcmp(name, "array_new") == 0 || strcmp(name, "Bytes") == 0 ||
-             strcmp(name, "array_with_capacity") == 0 || strcmp(name, "array_filled_new") == 0))
-            return true;
-        if (name && (strcmp(name, "array_reserve") == 0 || strcmp(name, "array_resize") == 0) &&
-            v->nargs >= 1)
-            return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, use, depth + 1);
-        if (use == CG_ARRAY_STORAGE_READ && name && strcmp(name, "slice") == 0 && v->nargs >= 1)
-            return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, CG_ARRAY_STORAGE_READ,
-                                                     depth + 1);
-    }
-    if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
-        const char *method = (const char *) v->aux;
-        if (use == CG_ARRAY_STORAGE_READ && method && strcmp(method, "slice") == 0)
-            return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, CG_ARRAY_STORAGE_READ,
-                                                     depth + 1);
-        if (method && strcmp(method, "filter") == 0)
-            return cg_array_value_storage_info_depth(ctx, f, v->args[0], out, CG_ARRAY_STORAGE_READ,
-                                                     depth + 1);
-        if (method && strcmp(method, "map") == 0)
-            return cg_array_elem_info_from_type(v->type, out);
-    }
-    if (v->op == XI_PHI) {
-        bool has_base = false;
-        if (v->nargs == 0)
-            return false;
-        for (uint16_t i = 0; i < v->nargs; i++) {
-            CgArrayElemInfo arg_info;
-            const XiValue *arg = cg_unwrap_identity_value(v->args[i]);
-            if (arg == v)
-                continue;
-            if (!cg_array_value_storage_info_depth(ctx, f, arg, &arg_info, use, depth + 1))
-                return false;
-            if (strcmp(arg_info.elem_name, out->elem_name) != 0)
-                return false;
-            has_base = true;
-        }
-        return has_base;
-    }
-    return false;
-}
-
 static bool cg_array_value_storage_info(XiCgenCtx *ctx, const XiFunc *f, const XiValue *array_value,
                                         CgArrayElemInfo *out, CgArrayStorageUse use) {
-    return cg_array_value_storage_info_depth(ctx, f, array_value, out, use, 0);
+    const XaotArrayStoragePlan *plan;
+    const XiValue *v = cg_unwrap_identity_value(array_value);
+    uint32_t required_flag =
+        use == CG_ARRAY_STORAGE_READ ? XAOT_ARRAY_STORAGE_READ : XAOT_ARRAY_STORAGE_MUTABLE;
+    (void) f;
+    plan = xaot_bundle_find_array_storage_plan(cg_ctx_aot_bundle(ctx), v);
+    return plan && (plan->flags & required_flag) != 0 &&
+           cg_array_elem_info_from_storage_plan(plan, out);
 }
 
-static bool cg_array_index_get_reads_f32_storage(const XiValue *v) {
+static bool cg_array_index_get_reads_f32_storage(XiCgenCtx *ctx, const XiFunc *f,
+                                                 const XiValue *v) {
     CgArrayElemInfo info;
     return v && v->op == XI_INDEX_GET && v->nargs >= 1 &&
-           cg_array_value_storage_info(NULL, NULL, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
+           cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ) &&
            strcmp(info.elem_name, "XR_ELEM_F32") == 0;
 }
 
@@ -184,84 +126,8 @@ static const XiValue *cg_array_single_origin(const XiValue *array_value, uint8_t
     return origin;
 }
 
-static bool cg_array_value_precedes_in_block(const XiValue *before, const XiValue *after) {
-    if (!before || !after || before->block != after->block)
-        return false;
-    for (uint32_t i = 0; i < after->block->nvalues; i++) {
-        const XiValue *cur = after->block->values[i];
-        if (cur == before)
-            return true;
-        if (cur == after)
-            return false;
-    }
-    return false;
-}
-
-static bool cg_array_native_receiver_array_store_info(XiCgenCtx *ctx, const XiFunc *f,
-                                                      const XiValue *v, uint16_t expected_idx,
-                                                      CgClassNativeFunc *out_info,
-                                                      uint16_t *out_idx) {
-    CgClassNativeFunc info = cg_class_native_func(ctx, f);
-    if (out_info)
-        memset(out_info, 0, sizeof(*out_info));
-    if (out_idx)
-        *out_idx = 0;
-    if (!info.layout || !v || v->op != XI_STORE_FIELD || v->nargs < 2 ||
-        !cg_class_native_receiver_value(ctx, f, v->args[0]))
-        return false;
-    int idx = cg_class_native_field_index(info.layout, (const char *) v->aux);
-    if (idx < 0 || (expected_idx != UINT16_MAX && (uint16_t) idx != expected_idx))
-        return false;
-    const XrStructFieldLayout *field = cg_struct_field(info.layout, idx);
-    if (!field || field->native_type != XR_NATIVE_ARRAY_REF)
-        return false;
-    if (out_info)
-        *out_info = info;
-    if (out_idx)
-        *out_idx = (uint16_t) idx;
-    return true;
-}
-
-static bool cg_array_native_receiver_array_store(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v,
-                                                 uint16_t expected_idx) {
-    return cg_array_native_receiver_array_store_info(ctx, f, v, expected_idx, NULL, NULL);
-}
-
-static const XiValue *cg_array_class_field_fresh_store_origin(XiCgenCtx *ctx, const XiFunc *f,
-                                                              const XiValue *field_value,
-                                                              const XiValue *site) {
-    CgClassNativeFunc info;
-    uint16_t field_idx = 0;
-    const XiValue *v = cg_unwrap_identity_value(field_value);
-    if (!ctx || !f || !v || !site ||
-        !cg_class_native_receiver_ref_field(ctx, f, v, XR_NATIVE_ARRAY_REF, &info, &field_idx))
-        return NULL;
-
-    xi_ensure_dominators((XiFunc *) f);
-
-    const XiValue *store = NULL;
-    const XiValue *origin = NULL;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cg_array_native_receiver_array_store(ctx, f, cur, field_idx))
-                continue;
-            const XiValue *cur_origin = cg_array_single_origin(cur->args[1], 0);
-            if (!cur_origin || store)
-                return NULL;
-            store = cur;
-            origin = cur_origin;
-        }
-    }
-    if (!store || !origin || !xi_dominates(store->block, site->block))
-        return NULL;
-    if (store->block == site->block && !cg_array_value_precedes_in_block(store, site))
-        return NULL;
-    return origin;
-}
+static const XiValue *cg_array_class_field_cached_origin(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *value);
 
 static const XiValue *cg_array_fill_receiver_origin(XiCgenCtx *ctx, const XiFunc *f,
                                                     const XiValue *push,
@@ -278,7 +144,7 @@ static const XiValue *cg_array_fill_receiver_origin(XiCgenCtx *ctx, const XiFunc
         return origin;
     }
 
-    origin = cg_array_class_field_fresh_store_origin(ctx, f, push->args[0], push);
+    origin = cg_array_class_field_cached_origin(ctx, f, push->args[0]);
     if (origin && out_storage)
         *out_storage = cg_unwrap_identity_value(push->args[0]);
     return origin;
@@ -355,8 +221,8 @@ static bool cg_array_add_base_const_step(const XiValue *value, const XiValue *ba
     return false;
 }
 
-static bool emit_bool_accumulate_diamond_stmt(FILE *out, const XiBlock *blk) {
-    if (!out || !blk || blk->kind != XI_BLOCK_IF || !blk->control ||
+static bool emit_bool_accumulate_diamond_stmt(XiCgenCtx *ctx, FILE *out, const XiBlock *blk) {
+    if (!ctx || !out || !blk || blk->kind != XI_BLOCK_IF || !blk->control ||
         !cg_value_type_is_bool(blk->control))
         return false;
     const XiBlock *then_blk = blk->succs[0];
@@ -369,22 +235,23 @@ static bool emit_bool_accumulate_diamond_stmt(FILE *out, const XiBlock *blk) {
     uint16_t pred_idx = cg_array_pred_index(merge_blk, blk);
     uint16_t then_idx = cg_array_pred_index(merge_blk, then_blk);
     if (pred_idx == UINT16_MAX || then_idx == UINT16_MAX || pred_idx >= phi->value.nargs ||
-        then_idx >= phi->value.nargs || cg_rep(&phi->value) != XR_REP_I64)
+        then_idx >= phi->value.nargs || cg_value_plan_storage_rep(ctx, &phi->value) != XR_REP_I64)
         return false;
     const XiValue *base = phi->value.args[pred_idx];
     const XiValue *add = phi->value.args[then_idx];
     const XiValue *step = NULL;
     if (!base || !add ||
         cg_unwrap_identity_value(then_blk->values[0]) != cg_unwrap_identity_value(add) ||
-        cg_rep(base) != XR_REP_I64 || !cg_array_add_base_const_step(add, base, &step))
+        cg_value_plan_storage_rep(ctx, base) != XR_REP_I64 ||
+        !cg_array_add_base_const_step(add, base, &step))
         return false;
 
     fprintf(out, "    phi%u = ", phi->value.id);
-    emit_value_as_rep(out, base, XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, base, XR_REP_I64);
     fprintf(out, " + ((");
-    emit_vref(out, blk->control);
-    fprintf(out, " != 0) ? ");
-    emit_value_as_rep(out, step, XR_REP_I64);
+    emit_condition_expr_ctx(ctx, out, blk->control);
+    fprintf(out, ") ? ");
+    emit_value_as_rep_ctx(ctx, out, step, XR_REP_I64);
     fprintf(out, " : 0);\n");
     fprintf(out, "    goto L%u;\n", merge_blk->id);
     return true;
@@ -771,112 +638,29 @@ typedef struct CgArrayClassFieldAlloc {
     CgClassNativeFunc class_info;
     uint16_t field_idx;
     CgArrayElemInfo elem;
-    CgArrayFillLoop fill;
 } CgArrayClassFieldAlloc;
-
-static bool cg_array_block_has_no_side_effect_between(const XiValue *start, const XiValue *end) {
-    if (!start || !end || start->block != end->block)
-        return false;
-    bool after_start = false;
-    for (uint32_t i = 0; i < start->block->nvalues; i++) {
-        const XiValue *cur = start->block->values[i];
-        if (!cur)
-            continue;
-        if (cur == start) {
-            after_start = true;
-            continue;
-        }
-        if (cur == end)
-            return after_start;
-        if (after_start && (cur->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM)))
-            return false;
-    }
-    return false;
-}
-
-static bool cg_array_origin_is_directly_used_only_by_store(const XiFunc *f, const XiValue *origin,
-                                                           const XiValue *store) {
-    if (!f || !origin || !store)
-        return false;
-    bool saw_store_use = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        if (blk->control == origin)
-            return false;
-        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
-                if (phi->value.args[ai] == origin)
-                    return false;
-            }
-        }
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *v = blk->values[vi];
-            if (!v || v == origin)
-                continue;
-            for (uint16_t ai = 0; ai < v->nargs; ai++) {
-                if (v->args[ai] != origin)
-                    continue;
-                if (v == store && ai == 1) {
-                    saw_store_use = true;
-                    continue;
-                }
-                return false;
-            }
-        }
-    }
-    return saw_store_use;
-}
 
 static bool cg_array_class_field_alloc_info(XiCgenCtx *ctx, const XiFunc *f, const XiValue *origin,
                                             CgArrayClassFieldAlloc *out) {
+    const XaotArrayClassFieldAllocPlan *plan;
     CgArrayElemInfo elem;
-    if (!ctx || ctx->pre_decl_all || !f || !origin ||
-        !cg_array_elem_info_from_type(origin->type, &elem))
+    if (!ctx || ctx->pre_decl_all || !f || !origin)
         return false;
-    CgArrayFillLoop fill;
-    if (!cg_array_unique_fill_loop_for_origin(ctx, f, origin, &fill) || !fill.storage_value)
-        return false;
-
-    const XiValue *store = NULL;
-    CgClassNativeFunc class_info;
-    uint16_t field_idx = 0;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur->op != XI_STORE_FIELD || cur->nargs < 2)
-                continue;
-            const XiValue *cur_origin = cg_array_single_origin(cur->args[1], 0);
-            if (cur_origin != origin)
-                continue;
-            uint16_t cur_idx = 0;
-            CgClassNativeFunc cur_info;
-            if (!cg_array_native_receiver_array_store_info(ctx, f, cur, UINT16_MAX, &cur_info,
-                                                           &cur_idx))
-                return false;
-            if (store)
-                return false;
-            store = cur;
-            class_info = cur_info;
-            field_idx = cur_idx;
-        }
-    }
-    if (!store || store->block != origin->block ||
-        !cg_array_block_has_no_side_effect_between(origin, store) ||
-        !cg_array_origin_is_directly_used_only_by_store(f, origin, store))
+    plan = xaot_bundle_find_array_class_field_alloc_plan(cg_ctx_aot_bundle(ctx),
+                                                         cg_unwrap_identity_value(origin));
+    if (!plan || plan->func != f || !cg_array_elem_info_from_container_plan(&plan->elem, &elem))
         return false;
 
     if (out) {
-        out->origin = origin;
-        out->store = store;
-        out->class_info = class_info;
-        out->field_idx = field_idx;
+        memset(out, 0, sizeof(*out));
+        out->origin = plan->origin;
+        out->store = plan->store;
+        out->class_info.class_data = plan->class_data;
+        out->class_info.func = f;
+        out->class_info.layout = plan->class_data ? plan->class_data->instance_layout : NULL;
+        out->class_info.class_name = plan->class_data ? plan->class_data->class_name : NULL;
+        out->field_idx = plan->field_idx;
         out->elem = elem;
-        out->fill = fill;
     }
     return true;
 }
@@ -897,7 +681,10 @@ static bool emit_typed_array_class_field_alloc_store_stmt(XiCgenCtx *ctx, FILE *
         return false;
     const XiValue *origin = cg_array_single_origin(store->args[1], 0);
     CgArrayClassFieldAlloc info;
-    if (!cg_array_class_field_alloc_info(ctx, f, origin, &info) || info.store != store)
+    const XaotArrayClassFieldAllocPlan *plan =
+        xaot_bundle_find_array_class_field_alloc_plan_for_store(cg_ctx_aot_bundle(ctx), store);
+    if (!plan || !cg_array_class_field_alloc_info(ctx, f, plan->origin, &info) ||
+        info.store != store || (origin && origin != plan->origin))
         return false;
 
     fprintf(out, "    ");
@@ -909,9 +696,10 @@ static bool emit_typed_array_class_field_alloc_store_stmt(XiCgenCtx *ctx, FILE *
 
     fprintf(out, "    %s *", info.elem.ctype);
     emit_typed_array_data_cache_ref(out, origin);
-    fprintf(out, " = (%s*)", info.elem.ctype);
+    /* Fresh allocation stored into the field above: XRT_DATA_ALIGN contract. */
+    fprintf(out, " = (%s*)XR_ASSUME_ALIGNED(", info.elem.ctype);
     emit_class_native_field_ref(ctx, out, info.class_info.class_data, "p0", info.field_idx);
-    fprintf(out, "->data;\n");
+    fprintf(out, "->data, XRT_DATA_ALIGN);\n");
     return true;
 }
 
@@ -929,96 +717,6 @@ static void emit_aot_hot_region_end(FILE *out, const char *kind) {
 
 static void emit_typed_array_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                       const XiValue *value, const char *prefix);
-
-static bool cg_array_can_cache_data_for_origin(XiCgenCtx *ctx, const XiValue *origin,
-                                               CgArrayElemInfo *info_out, CgArrayFillLoop *out) {
-    if (!ctx || ctx->pre_decl_all || !origin)
-        return false;
-    if (info_out && !cg_array_elem_info_from_type(origin->type, info_out))
-        return false;
-    if (!info_out) {
-        CgArrayElemInfo info;
-        if (!cg_array_elem_info_from_type(origin->type, &info))
-            return false;
-    }
-    const XiFunc *f = origin && origin->block ? origin->block->func : NULL;
-    return cg_array_unique_fill_loop_for_origin(ctx, f, origin, out);
-}
-
-static bool cg_array_is_slice_result(const XiValue *value) {
-    const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v)
-        return false;
-    if (v->op == XI_CALL_BUILTIN) {
-        const char *name = (const char *) v->aux;
-        return name && strcmp(name, "slice") == 0 && v->nargs >= 1;
-    }
-    if (v->op == XI_SLICE)
-        return v->nargs >= 1;
-    if (v->op == XI_CALL_METHOD) {
-        const char *method = (const char *) v->aux;
-        return method && strcmp(method, "slice") == 0 && v->nargs >= 1;
-    }
-    return false;
-}
-
-static bool cg_array_is_hof_result(const XiValue *value) {
-    const XiValue *v = cg_unwrap_identity_value(value);
-    if (!v || v->op != XI_CALL_METHOD)
-        return false;
-    const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "map") == 0 || strcmp(method, "filter") == 0) && v->nargs >= 2;
-}
-
-static bool cg_array_value_arg_matches(const XiValue *v, const XiValue *target,
-                                       uint16_t first_arg) {
-    if (!v || !target)
-        return false;
-    for (uint16_t i = first_arg; i < v->nargs; i++) {
-        if (cg_array_same_value(v->args[i], target))
-            return true;
-    }
-    return false;
-}
-
-static bool cg_array_value_has_uncacheable_use(const XiValue *value) {
-    const XiValue *target = cg_unwrap_identity_value(value);
-    const XiFunc *f = (target && target->block) ? target->block->func : NULL;
-    if (!f)
-        return true;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur == target)
-                continue;
-            switch ((XiOp) cur->op) {
-                case XI_INDEX_GET:
-                case XI_LOAD_FIELD:
-                    break;
-                case XI_INDEX_SET:
-                case XI_STORE_FIELD:
-                case XI_CALL:
-                case XI_CALL_BUILTIN:
-                case XI_CALL_METHOD:
-                case XI_CALL_METHOD_DIRECT:
-                case XI_GO:
-                case XI_SET_SHARED:
-                    if (cg_array_value_arg_matches(cur, target, 0))
-                        return true;
-                    break;
-                default:
-                    if ((cur->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM)) &&
-                        cg_array_value_arg_matches(cur, target, 0))
-                        return true;
-                    break;
-            }
-        }
-    }
-    return false;
-}
 
 static bool cg_array_is_native_local_alloc(const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
@@ -1103,157 +801,73 @@ static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
     return true;
 }
 
-static bool cg_array_value_has_index_get_use(const XiFunc *f, const XiValue *target) {
-    target = cg_unwrap_identity_value(target);
-    if (!f || !target)
-        return false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur->op != XI_INDEX_GET || cur->nargs < 1)
-                continue;
-            if (cg_unwrap_identity_value(cur->args[0]) == target)
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool cg_array_class_field_read_cacheable(XiCgenCtx *ctx, const XiFunc *f,
-                                                const XiValue *value, CgArrayElemInfo *info_out) {
-    CgArrayElemInfo info;
-    const XiValue *v = cg_unwrap_identity_value(value);
-    if (!ctx || ctx->pre_decl_all || !f || !v || !cg_array_elem_info_from_type(v->type, &info) ||
-        !cg_class_native_receiver_ref_field(ctx, f, v, XR_NATIVE_ARRAY_REF, NULL, NULL) ||
-        !cg_array_value_has_index_get_use(f, v))
-        return false;
-
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur == v)
-                continue;
-            if (cur->flags & (XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM))
-                return false;
-        }
-    }
-
-    if (info_out)
-        *info_out = info;
-    return true;
-}
-
-static bool cg_array_native_local_data_cacheable(XiCgenCtx *ctx, const XiValue *value,
-                                                 CgArrayElemInfo *info_out) {
-    const XiValue *target = cg_unwrap_identity_value(value);
-    const XiFunc *f = target && target->block ? target->block->func : NULL;
-    CgArrayElemInfo info;
-    if (!target || !f || !cg_array_value_uses_native_local(ctx, f, target) ||
-        !cg_array_elem_info_from_type(target->type, &info))
-        return false;
-
-    bool has_index_use = false;
-    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        const XiBlock *blk = f->blocks[bi];
-        if (!blk)
-            continue;
-        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
-            const XiValue *cur = blk->values[vi];
-            if (!cur || cur == target)
-                continue;
-            for (uint16_t a = 0; a < cur->nargs; a++) {
-                if (!cg_array_same_value(cur->args[a], target))
-                    continue;
-                switch ((XiOp) cur->op) {
-                    case XI_INDEX_GET:
-                        if (a != 0)
-                            return false;
-                        has_index_use = true;
-                        break;
-                    case XI_INDEX_SET:
-                        if (a != 0 || !(cg_array_index_access_bounds_proven(ctx, f, cur) ||
-                                        cg_array_index_set_counted_loop_bounds_proven(ctx, f, cur)))
-                            return false;
-                        has_index_use = true;
-                        break;
-                    case XI_LOAD_FIELD: {
-                        const char *field = (const char *) cur->aux;
-                        if (a != 0 || !field ||
-                            (strcmp(field, "length") != 0 && strcmp(field, "size") != 0))
-                            return false;
-                        break;
-                    }
-                    case XI_RETAIN:
-                    case XI_RELEASE:
-                        if (a != 0)
-                            return false;
-                        break;
-                    default:
-                        return false;
-                }
-            }
-        }
-    }
-
-    if (!has_index_use)
-        return false;
-    if (info_out)
-        *info_out = info;
-    return true;
-}
-
 static bool cg_array_can_cache_data_for_value(XiCgenCtx *ctx, const XiValue *value,
                                               CgArrayElemInfo *info_out) {
-    CgArrayElemInfo info;
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!ctx || ctx->pre_decl_all || !v)
         return false;
-    if (cg_array_native_local_data_cacheable(ctx, v, info_out))
-        return true;
-    if (cg_array_can_cache_data_for_origin(ctx, v, info_out, NULL))
-        return true;
-    const XiFunc *f = v && v->block ? v->block->func : NULL;
-    if (cg_array_class_field_read_cacheable(ctx, f, v, info_out))
-        return true;
-    bool cacheable_producer = cg_array_is_slice_result(v);
-    if (!cacheable_producer && cg_array_is_hof_result(v))
-        cacheable_producer = !cg_array_value_has_uncacheable_use(v);
-    if (!cacheable_producer)
-        return false;
-    if (!cg_array_value_storage_info(ctx, f, v, &info, CG_ARRAY_STORAGE_READ))
-        return false;
-    if (info_out)
-        *info_out = info;
-    return true;
+    const XaotArrayCachePlan *plan = xaot_bundle_find_array_cache_plan(cg_ctx_aot_bundle(ctx), v);
+    if (plan)
+        return cg_array_elem_info_from_cache_plan(plan, info_out);
+    return false;
 }
 
 static const XiValue *cg_array_class_field_cached_origin(XiCgenCtx *ctx, const XiFunc *f,
                                                          const XiValue *value) {
     const XiValue *v = cg_unwrap_identity_value(value);
+    XaotClassNativeFunc info;
+    uint16_t field_idx = 0;
     if (!ctx || !f || !v ||
-        !cg_class_native_receiver_ref_field(ctx, f, v, XR_NATIVE_ARRAY_REF, NULL, NULL))
+        !xaot_class_native_receiver_ref_field(cg_ctx_aot_bundle(ctx), f, v, XR_NATIVE_ARRAY_REF,
+                                              &info, &field_idx))
         return NULL;
-    const XiValue *origin = cg_array_class_field_fresh_store_origin(ctx, f, v, v);
-    CgArrayClassFieldAlloc info;
-    return cg_array_class_field_alloc_info(ctx, f, origin, &info) ? origin : NULL;
+    const XaotArrayClassFieldAllocPlan *plan =
+        xaot_bundle_find_array_class_field_alloc_plan_for_field(cg_ctx_aot_bundle(ctx), f,
+                                                                info.class_data, field_idx);
+    return plan ? plan->origin : NULL;
+}
+
+/* `restrict` qualifier for a data cache local, emitted only when prepare
+ * proved the pointer unique over its backing (XaotAliasPlan). */
+static const char *cg_array_cache_restrict_str(XiCgenCtx *ctx, const XiValue *origin) {
+    const XaotAliasPlan *alias = xaot_bundle_find_alias_plan(cg_ctx_aot_bundle(ctx), origin);
+    return alias && alias->kind == XAOT_ALIAS_UNIQUE_DATA ? "XRT_RESTRICT " : "";
 }
 
 static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const XiValue *value) {
     CgArrayElemInfo info;
-    if (!cg_array_can_cache_data_for_value(ctx, value, &info))
+    const XiValue *v = cg_unwrap_identity_value(value);
+    const XaotArrayCachePlan *plan = xaot_bundle_find_array_cache_plan(cg_ctx_aot_bundle(ctx), v);
+    if (plan) {
+        if (!cg_array_elem_info_from_cache_plan(plan, &info))
+            return false;
+        /* Slice views alias foreign storage at an arbitrary element offset,
+         * so the alignment promise only holds for non-view caches. */
+        bool aligned = (plan->flags & XAOT_ARRAY_CACHE_VIEW) == 0;
+        fprintf(out, "    %s *%s", info.ctype, cg_array_cache_restrict_str(ctx, plan->value));
+        emit_typed_array_data_cache_ref(out, plan->value);
+        fprintf(out, " = (%s*)", info.ctype);
+        if (aligned)
+            fprintf(out, "XR_ASSUME_ALIGNED(");
+        const XiFunc *f = plan->storage_value && plan->storage_value->block
+                              ? plan->storage_value->block->func
+                              : NULL;
+        emit_typed_array_ptr_expr(ctx, out, f, plan->storage_value, NULL);
+        fprintf(out, "->data");
+        if (aligned)
+            fprintf(out, ", XRT_DATA_ALIGN)");
+        fprintf(out, ";\n");
+        return true;
+    }
+    if (!cg_array_can_cache_data_for_value(ctx, v, &info))
         return false;
-    const XiFunc *f = value && value->block ? value->block->func : NULL;
-    fprintf(out, "    %s *", info.ctype);
-    emit_typed_array_data_cache_ref(out, value);
-    fprintf(out, " = (%s*)", info.ctype);
-    emit_typed_array_ptr_expr(ctx, out, f, value, NULL);
-    fprintf(out, "->data;\n");
+    const XiFunc *f = v && v->block ? v->block->func : NULL;
+    fprintf(out, "    %s *%s", info.ctype, cg_array_cache_restrict_str(ctx, v));
+    emit_typed_array_data_cache_ref(out, v);
+    /* Fresh local allocation: XRT_DATA_ALIGN contract (see xrt_coll.h). */
+    fprintf(out, " = (%s*)XR_ASSUME_ALIGNED(", info.ctype);
+    emit_typed_array_ptr_expr(ctx, out, f, v, NULL);
+    fprintf(out, "->data, XRT_DATA_ALIGN);\n");
     return true;
 }
 
@@ -1285,6 +899,22 @@ static const XiValue *cg_array_single_cacheable_value(XiCgenCtx *ctx, const XiVa
 static bool cg_array_data_cache_for_value(XiCgenCtx *ctx, const XiValue *array_value,
                                           const XiValue **out_origin) {
     const XiValue *v = cg_unwrap_identity_value(array_value);
+    const XaotBundle *bundle = cg_ctx_aot_bundle(ctx);
+    const XaotArrayCachePlan *plan = xaot_bundle_find_array_cache_plan(bundle, v);
+    if (plan) {
+        if (out_origin)
+            *out_origin = plan->value;
+        return true;
+    }
+    const XaotArrayStoragePlan *storage = xaot_bundle_find_array_storage_plan(bundle, v);
+    if (storage && storage->origin) {
+        plan = xaot_bundle_find_array_cache_plan(bundle, storage->origin);
+        if (plan) {
+            if (out_origin)
+                *out_origin = plan->value;
+            return true;
+        }
+    }
     if (cg_array_can_cache_data_for_value(ctx, v, NULL)) {
         if (out_origin)
             *out_origin = v;
@@ -1303,12 +933,7 @@ static bool cg_array_data_cache_for_value(XiCgenCtx *ctx, const XiValue *array_v
             *out_origin = cached;
         return true;
     }
-    const XiValue *origin = cg_array_single_origin(array_value, 0);
-    if (!cg_array_can_cache_data_for_origin(ctx, origin, NULL, NULL))
-        return false;
-    if (out_origin)
-        *out_origin = origin;
-    return true;
+    return false;
 }
 
 static bool cg_array_can_use_final_len_store(XiCgenCtx *ctx, const CgArrayFillLoop *fill) {
@@ -1412,47 +1037,6 @@ static bool cg_array_value_known_nonnegative(const XiValue *v, const XiValue *ro
     }
 }
 
-static bool cg_array_values_share_storage(XiCgenCtx *ctx, const XiFunc *f, const XiValue *lhs,
-                                          const XiValue *rhs) {
-    if (cg_array_same_value(lhs, rhs))
-        return true;
-
-    uint16_t lhs_idx = 0;
-    uint16_t rhs_idx = 0;
-    return cg_class_native_receiver_ref_field(ctx, f, cg_unwrap_identity_value(lhs),
-                                              XR_NATIVE_ARRAY_REF, NULL, &lhs_idx) &&
-           cg_class_native_receiver_ref_field(ctx, f, cg_unwrap_identity_value(rhs),
-                                              XR_NATIVE_ARRAY_REF, NULL, &rhs_idx) &&
-           lhs_idx == rhs_idx;
-}
-
-static bool cg_array_length_value_matches(XiCgenCtx *ctx, const XiFunc *f,
-                                          const XiValue *length_value, const XiValue *array_value) {
-    const XiValue *v = cg_unwrap_identity_value(length_value);
-    if (!v || v->op != XI_LOAD_FIELD || v->nargs < 1)
-        return false;
-    const char *field = (const char *) v->aux;
-    if (!field || (strcmp(field, "length") != 0 && strcmp(field, "size") != 0))
-        return false;
-    return cg_array_values_share_storage(ctx, f, v->args[0], array_value);
-}
-
-static bool cg_array_control_proves_index_lt_len(XiCgenCtx *ctx, const XiFunc *f,
-                                                 const XiValue *control, const XiValue *array_value,
-                                                 const XiValue *index_value,
-                                                 const XiValue **out_len) {
-    const XiValue *v = cg_unwrap_identity_value(control);
-    if (!v || v->op != XI_LT || v->nargs < 2)
-        return false;
-    if (!cg_array_same_value(v->args[0], index_value))
-        return false;
-    if (!cg_array_length_value_matches(ctx, f, v->args[1], array_value))
-        return false;
-    if (out_len)
-        *out_len = cg_unwrap_identity_value(v->args[1]);
-    return true;
-}
-
 static bool cg_array_block_has_no_side_effect_after(const XiBlock *blk, const XiValue *start) {
     bool seen = start == NULL;
     bool found = false;
@@ -1496,58 +1080,13 @@ static bool cg_array_block_has_no_side_effect_before(const XiBlock *blk, const X
     return false;
 }
 
+/* In-bounds decisions live in the XaotBoundsPlan computed by prepare and
+ * re-derived by the verifier; emission only consults the plan. Unproven
+ * accesses are recorded too (as audit rows), so evidence must be checked. */
 static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    if (!v || (v->op != XI_INDEX_GET && v->op != XI_INDEX_SET) || v->nargs < 2 || !v->block)
-        return false;
-    if (!f)
-        f = v->block->func;
-    const XiValue *array_value = v->args[0];
-    const XiValue *index_value = v->args[1];
-    if (!cg_array_value_known_nonnegative(index_value, NULL, 0))
-        return false;
-    if (!cg_array_block_has_no_side_effect_before(v->block, v))
-        return false;
-    if (v->block->npreds == 0)
-        return false;
-    for (uint16_t i = 0; i < v->block->npreds; i++) {
-        const XiBlock *pred = v->block->preds[i];
-        const XiValue *len_value = NULL;
-        if (!pred || pred->kind != XI_BLOCK_IF || pred->succs[0] != v->block)
-            return false;
-        if (!cg_array_control_proves_index_lt_len(ctx, f, pred->control, array_value, index_value,
-                                                  &len_value))
-            return false;
-        if (!cg_array_block_has_no_side_effect_after(pred, len_value))
-            return false;
-    }
-    return true;
-}
-
-static bool cg_array_index_get_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
-    return cg_array_index_access_bounds_proven(ctx, f, v);
-}
-
-static bool cg_array_index_set_counted_loop_bounds_proven(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *v) {
-    if (!v || v->op != XI_INDEX_SET || v->nargs < 2 || !v->block)
-        return false;
-    const XiBlock *loop = v->block;
-    if (loop->kind != XI_BLOCK_IF || loop->succs[0] != loop)
-        return false;
-    if (!cg_array_block_has_no_side_effect_before(loop, v))
-        return false;
-    const XiValue *cond = cg_unwrap_identity_value(loop->control);
-    if (!cond || cond->op != XI_LT || cond->nargs < 2)
-        return false;
-    const XiValue *index = cg_array_phi_from_add_one(cond->args[0]);
-    if (!index || !cg_array_same_value(index, v->args[1]))
-        return false;
-    const XiValue *bound = cg_array_loop_bound_base(cond->args[1], loop, loop);
-    if (!bound || !cg_array_length_value_matches(ctx, f, bound, v->args[0]))
-        return false;
-    if (!cg_array_loop_index_is_counted(index, loop, loop))
-        return false;
-    return cg_array_single_block_entry_checked(loop, bound);
+    const XaotBoundsPlan *plan = xaot_bundle_find_bounds_plan(cg_ctx_aot_bundle(ctx), v);
+    (void) f;
+    return plan != NULL && plan->evidence != 0;
 }
 
 static void emit_typed_array_store_value(FILE *out, const CgArrayElemInfo *info,
@@ -1559,7 +1098,7 @@ static void emit_typed_array_store_value(FILE *out, const CgArrayElemInfo *info,
 static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                       int64_t cap) {
     CgArrayElemInfo info;
-    if (!cg_array_elem_info_from_type(v->type, &info))
+    if (!cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
         return false;
     CgArrayFillLoop fill;
     if (cg_array_unique_fill_loop_for_origin(ctx, f, v, &fill)) {
@@ -1575,7 +1114,7 @@ static bool emit_typed_array_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
 static bool emit_typed_array_new_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                           const XiValue *v, int64_t cap) {
     CgArrayElemInfo info;
-    if (!cg_array_elem_info_from_type(v->type, &info))
+    if (!cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
         return false;
     CgArrayFillLoop fill;
     if (cg_array_unique_fill_loop_for_origin(ctx, f, v, &fill)) {
@@ -1629,7 +1168,7 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         !cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ))
         return false;
 
-    bool unchecked = cg_array_index_get_bounds_proven(ctx, f, v);
+    bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
     const XiValue *cached_origin = NULL;
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
     bool wrapped = emit_conversion_prefix(out, v->type, info.rep, cg_rep(v));
@@ -1659,7 +1198,7 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
         fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
-        fprintf(out, "(_idx >= 0 && _idx < _a->len) ? (double)");
+        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->len) ? (double)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
@@ -1673,7 +1212,7 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
         fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
-        fprintf(out, "(_idx >= 0 && _idx < _a->len) ? (int64_t)");
+        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->len) ? (int64_t)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
@@ -1693,8 +1232,7 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
         !cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_MUTABLE))
         return false;
 
-    if (cg_array_index_access_bounds_proven(ctx, f, v) ||
-        cg_array_index_set_counted_loop_bounds_proven(ctx, f, v)) {
+    if (cg_array_index_access_bounds_proven(ctx, f, v)) {
         const XiValue *cached_origin = NULL;
         bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
         fprintf(out, "({ ");
@@ -1722,15 +1260,14 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
     fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
     fprintf(out,
-            "if (_idx >= 0) { if (_idx >= _a->cap) { if (_a->cap == 0) { "
+            "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->cap)) { if (_a->is_slice) { "
             "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
-            "while (_idx >= _a->cap) _a->cap *= 2; void *_tmp = XRT_REALLOC(_a->data, "
-            "(size_t)_a->cap * sizeof(%s)); if (!_tmp) { fprintf(stderr, "
-            "\"xrt_array_set: out of memory\\n\"); abort(); } _a->data = _tmp; } "
+            "int64_t _ncap = _a->cap == 0 ? 4 : _a->cap; while (_idx >= _ncap) _ncap *= 2; "
+            "xrt_array_data_grow(_a, _ncap); } "
             "if (_idx > _a->len) { memset((uint8_t*)_a->data + (size_t)_a->len * "
             "sizeof(%s), 0, (size_t)(_idx - _a->len) * sizeof(%s)); "
             "_a->len = _idx; } ((%s*)_a->data)[_idx] = ",
-            info.ctype, info.ctype, info.ctype, info.ctype);
+            info.ctype, info.ctype, info.ctype);
     emit_typed_array_store_value(out, &info, v->args[2]);
     fprintf(out, "; if (_idx == _a->len) _a->len++; } XR_NULL_VAL; })");
     return true;
@@ -1793,11 +1330,12 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
         fprintf(out,
-                "; if (_a->len >= _a->cap) { _a->cap *= 2; "
-                "void *_tmp = XRT_REALLOC(_a->data, (size_t)_a->cap * sizeof(%s)); "
-                "if (!_tmp) { fprintf(stderr, \"xrt_array_push: out of memory\\n\"); abort(); } "
-                "_a->data = _tmp; } ((%s*)_a->data)[_a->len++] = ",
-                info.ctype, info.ctype);
+                "; if (_a->is_slice) { fprintf(stderr, "
+                "\"xrt_array_push: cannot push to array slice\\n\"); abort(); } "
+                "if (XR_UNLIKELY(_a->len >= _a->cap)) { "
+                "xrt_array_data_grow(_a, _a->cap == 0 ? 4 : _a->cap * 2); } "
+                "((%s*)_a->data)[_a->len++] = ",
+                info.ctype);
     }
     emit_typed_array_store_value(out, &info, arg);
     fprintf(out, "; XR_NULL_VAL; })");
@@ -1991,7 +1529,7 @@ static bool cg_array_inline_map_info(XiCgenCtx *ctx, const XiFunc *current, cons
                                      const XiValue *v, CgArrayInlineMap *out) {
     CgArrayInlineMap info;
     if (!ctx || !cg_array_call_method_is(v, "map") || v->nargs != 2 || !out ||
-        !cg_array_elem_info_from_type(v->type, &info.dst_info) ||
+        !cg_array_elem_info_from_type_ctx(ctx, v->type, &info.dst_info) ||
         !cg_array_value_storage_info(ctx, current, v->args[0], &info.src_info,
                                      CG_ARRAY_STORAGE_READ))
         return false;
@@ -2071,7 +1609,7 @@ static bool cg_array_inline_filter_info(XiCgenCtx *ctx, const XiFunc *current, c
                                         const XiValue *v, CgArrayInlineMap *out) {
     CgArrayInlineMap info;
     if (!ctx || !cg_array_call_method_is(v, "filter") || v->nargs != 2 || !out ||
-        !cg_array_elem_info_from_type(v->type, &info.dst_info) ||
+        !cg_array_elem_info_from_type_ctx(ctx, v->type, &info.dst_info) ||
         !cg_array_value_storage_info(ctx, current, v->args[0], &info.src_info,
                                      CG_ARRAY_STORAGE_READ))
         return false;
@@ -2325,7 +1863,7 @@ static bool cg_array_closure_value_only_used_by_inline_map(XiCgenCtx *ctx, const
 static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
                                       const char *prefix, const XiValue *v) {
     CgArrayElemInfo info;
-    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type(v->type, &info))
+    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
         return false;
     if (emit_typed_array_map_inline_expr(ctx, out, current, prefix, v))
         return true;
@@ -2341,7 +1879,7 @@ static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *c
 static bool emit_typed_array_filter_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
                                          const char *prefix, const XiValue *v) {
     CgArrayElemInfo info;
-    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type(v->type, &info))
+    if (!v || v->nargs != 2 || !cg_array_elem_info_from_type_ctx(ctx, v->type, &info))
         return false;
     if (emit_typed_array_filter_inline_expr(ctx, out, current, prefix, v))
         return true;

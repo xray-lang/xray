@@ -194,6 +194,10 @@ static void parser_error(XrParser *p, XrRegexError code, const char *msg) {
 
 // Add named capture group
 static void parser_add_capture_name(XrParser *p, int index, const char *name) {
+    if (index < 0 || index >= XR_RE_MAX_CAPTURES - 1) {
+        parser_error(p, XR_RE_ERR_TOO_MANY_CAPTURES, "too many capture groups");
+        return;
+    }
     if (p->names_count >= p->names_cap) {
         int new_cap = p->names_cap ? p->names_cap * 2 : 8;
         XR_REALLOC_OR_ABORT(p->capture_names, (size_t) new_cap * sizeof(char *),
@@ -670,6 +674,11 @@ static XrAstNode *parse_group(XrParser *p) {
     p->flags = saved_flags;
 
     if (capturing) {
+        if (p->capture_index >= XR_RE_MAX_CAPTURES - 1) {
+            parser_error(p, XR_RE_ERR_TOO_MANY_CAPTURES, "too many capture groups");
+            xr_re_free(name);
+            return NULL;
+        }
         int index = p->capture_index++;
         const char *cap_name = NULL;
         if (name) {

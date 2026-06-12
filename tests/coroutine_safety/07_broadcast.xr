@@ -4,6 +4,13 @@
 // 验证：const 数据广播到多个协程，零拷贝高效共享
 print("========== 测试7：广播模式 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 fn test_simple_broadcast() {
     // 广播同一消息给多个 worker
     let ch1 = new Channel(1)
@@ -14,7 +21,7 @@ fn test_simple_broadcast() {
     // const 消息（零拷贝）
     const message = { "type" => "broadcast", "data" => [1, 2, 3, 4, 5] }
     fn worker(ch) {
-        let msg = ch.recv()
+        let msg = recvValue(ch)
         return msg.get("data").length
     }
     // 启动 workers
@@ -63,7 +70,7 @@ fn test_config_broadcast() {
     await t4
     // 验证所有 worker 使用相同配置
     for (let i = 0; i < 4; i++) {
-        let port = results.recv()
+        let port = recvValue(results)
         assert_eq(port, 8080)
     }
     print("✓ 配置广播测试通过")
@@ -97,7 +104,7 @@ fn test_large_data_broadcast() {
     let expected_sum = 4950
     let correct = 0
     for (let i = 0; i < 4; i++) {
-        let sum = results.recv()
+        let sum = recvValue(results)
         if (sum == expected_sum) {
             correct = correct + 1
         }

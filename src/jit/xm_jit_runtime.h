@@ -140,6 +140,7 @@ XR_FUNC XrJitResult xr_jit_rc_alloc_at(struct XrCoroutine *coro, int64_t extra_a
 /* ========== Exception ========== */
 
 XR_FUNC XrJitResult xr_jit_throw(struct XrCoroutine *coro, int64_t exception_raw);
+XR_FUNC int64_t xr_jit_pending_error_tag(struct XrCoroutine *coro, int64_t unused);
 
 /* ========== Type Operations ========== */
 
@@ -201,6 +202,15 @@ XR_FUNC XrJitResult xr_jit_chan_close(struct XrCoroutine *coro, int64_t extra_ar
 XR_FUNC XrJitResult xr_jit_chan_is_closed(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_chan_try_send(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_chan_try_recv(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_try_send(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_try_recv(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_close(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_is_closed(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_send(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_send_block(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_recv(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_recv_block(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_method_recv_wrap(struct XrCoroutine *coro, int64_t extra_arg);
 
 // Blocking channel send/recv (JIT CPS via XM_SUSPEND)
 XR_FUNC XrJitResult xr_jit_chan_send(struct XrCoroutine *coro, int64_t extra_arg);

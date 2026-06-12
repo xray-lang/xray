@@ -36,6 +36,10 @@
 #include "../ir/xi_import_resolve.h"
 #include "xi_cgen.h"
 #include "xi_lto.h"
+#include "xaot_bundle.h"
+#include "xaot_link.h"
+#include "xaot_prepare.h"
+#include "xaot_verify.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
 #include <string.h>
@@ -203,6 +207,117 @@ static void infer_features(XiFunc **ir_funcs, int nmodules, XaotFeatureSet *fs) 
         infer_features_recursive(ir_funcs[m], fs);
 }
 
+static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSet stdlib) {
+    struct {
+        XaotStdlibSet flag;
+        const char *name;
+    } table[] = {
+        {XAOT_STDLIB_JSON, "json"},     {XAOT_STDLIB_REGEX, "regex"},
+        {XAOT_STDLIB_MATH, "math"},     {XAOT_STDLIB_TIME, "time"},
+        {XAOT_STDLIB_PATH, "path"},     {XAOT_STDLIB_IO, "io"},
+        {XAOT_STDLIB_OS, "os"},         {XAOT_STDLIB_NET, "net"},
+        {XAOT_STDLIB_HTTP, "http"},     {XAOT_STDLIB_CRYPTO, "crypto"},
+        {XAOT_STDLIB_BASE64, "base64"}, {XAOT_STDLIB_CSV, "csv"},
+        {XAOT_STDLIB_TOML, "toml"},     {XAOT_STDLIB_YAML, "yaml"},
+        {XAOT_STDLIB_XML, "xml"},       {XAOT_STDLIB_COMPRESS, "compress"},
+    };
+
+    for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
+        if ((stdlib & table[i].flag) &&
+            !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, table[i].name))
+            return false;
+    }
+    return true;
+}
+
+static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
+    XaotTarget target;
+    bool ok = false;
+
+    if (!features || !manifest)
+        return false;
+    if (!xaot_target_init(&target, "native-c90"))
+        return false;
+    if (!xaot_link_manifest_init(manifest, &target)) {
+        xaot_target_free(&target);
+        return false;
+    }
+    xaot_target_free(&target);
+
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_GENERATED_C_FILE, "<aot-generated-c>"))
+        goto done;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_DEFINE, "XRT_IMPL"))
+        goto done;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "m"))
+        goto done;
+#ifdef XR_OS_MACOS
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,-dead_strip"))
+        goto done;
+#else
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-ffunction-sections"))
+        goto done;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fdata-sections"))
+        goto done;
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-Wl,--gc-sections"))
+        goto done;
+#endif
+
+    if (features->need_coro || features->need_channel || features->need_scope ||
+        features->need_timer || features->need_netpoll || features->need_deep_copy ||
+        features->need_exception || features->need_reflection || features->need_stacktrace ||
+        features->need_instanceof || features->stdlib) {
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_core"))
+            goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))
+            goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "z"))
+            goto done;
+#ifdef XR_OS_MACOS
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG,
+                                           "-L/opt/homebrew/opt/openssl@3/lib"))
+            goto done;
+#endif
+#ifdef XR_ENABLE_TLS
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ssl"))
+            goto done;
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "crypto"))
+            goto done;
+#endif
+    }
+
+    if (!add_stdlib_manifest_entries(manifest, features->stdlib))
+        goto done;
+    ok = true;
+
+done:
+    if (!ok)
+        xaot_link_manifest_free(manifest);
+    return ok;
+}
+
+static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallback_file) {
+    int diag_count = 0;
+    int error_count = 0;
+    XaDiagnostic *diags = xa_analyzer_get_diagnostics(analyzer, &diag_count);
+    (void) diag_count;
+    for (XaDiagnostic *d = diags; d; d = d->next) {
+        if (d->severity == XR_DIAG_SEV_ERROR)
+            error_count++;
+        const char *sev = "error";
+        if (d->severity == XR_DIAG_SEV_WARNING)
+            sev = "warning";
+        else if (d->severity == XR_DIAG_SEV_INFO)
+            sev = "info";
+        else if (d->severity == XR_DIAG_SEV_HINT)
+            sev = "hint";
+        const char *file =
+            d->location.file ? d->location.file : (fallback_file ? fallback_file : "?");
+        fprintf(stderr, "%s:%u:%u: %s: %s\n", file, (unsigned) d->location.line,
+                (unsigned) d->location.column, sev, d->message ? d->message : "");
+    }
+    return error_count;
+}
+
 XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
@@ -296,7 +411,13 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         if (!spec->ast || !spec->source_path)
             continue;
         xa_analyzer_analyze(shared_analyzer, spec->source_path, (XrAstNode *) spec->ast);
+        int file_errors = report_analyzer_diagnostics(shared_analyzer, spec->source_path);
+        if (file_errors > 0) {
+            fprintf(stderr, "Error: semantic analysis failed for '%s'\n", spec->source_path);
+            goto fail_free_analyzer;
+        }
         spec->exports = xa_analyzer_collect_exports(shared_analyzer, (XrAstNode *) spec->ast);
+        xa_analyzer_clear_diagnostics(shared_analyzer);
     }
 
     /* --- Compile all modules through Xi IR pipeline --- */
@@ -304,6 +425,15 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     XiPipelineResult *pres_arr = (XiPipelineResult *) xr_calloc(nmodules, sizeof(XiPipelineResult));
     XiFunc **ir_funcs = (XiFunc **) xr_calloc(nmodules, sizeof(XiFunc *));
     XiModule **modules = (XiModule **) xr_calloc(nmodules, sizeof(XiModule *));
+    XaotBundle aot_bundle;
+    bool aot_bundle_initialized = false;
+    XaotPrepareStats prepare_stats;
+    char *plan_dump = NULL;
+    XaotLinkManifest link_manifest;
+    bool link_manifest_initialized = false;
+    memset(&aot_bundle, 0, sizeof(aot_bundle));
+    memset(&prepare_stats, 0, sizeof(prepare_stats));
+    memset(&link_manifest, 0, sizeof(link_manifest));
     if (!pres_arr || !ir_funcs || !modules) {
         xr_free(pres_arr);
         xr_free(ir_funcs);
@@ -359,6 +489,31 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         xi_lto_context_free(&lto);
     }
 
+    /* --- AOT target prepare: build sidecar rep/ABI plan before C emission --- */
+    if (!xaot_bundle_init(&aot_bundle, modules, (uint32_t) nmodules, (uint32_t) entry_index)) {
+        fprintf(stderr, "Error: failed to initialize AOT bundle plan\n");
+        goto fail_free_ir;
+    }
+    aot_bundle_initialized = true;
+    if (!xaot_prepare_bundle(&aot_bundle, &prepare_stats)) {
+        fprintf(stderr, "Error: AOT prepare failed: %s\n",
+                aot_bundle.error_msg ? aot_bundle.error_msg : "?");
+        goto fail_free_ir;
+    }
+    {
+        char verify_err[512];
+        if (!xaot_verify_bundle(&aot_bundle, XAOT_VERIFY_AOT_READY, verify_err,
+                                sizeof(verify_err))) {
+            fprintf(stderr, "Error: AOT verifier failed: %s\n", verify_err);
+            goto fail_free_ir;
+        }
+    }
+    plan_dump = xaot_bundle_dump_plan(&aot_bundle);
+    if (!plan_dump) {
+        fprintf(stderr, "Error: failed to dump AOT prepare plan\n");
+        goto fail_free_ir;
+    }
+
     /* Graph ASTs must not be freed before compilation is done.
      * Now that pipeline is complete, free the graph (frees ASTs too). */
     xr_module_graph_free(graph);
@@ -372,6 +527,7 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         fprintf(stderr, "Error: failed to create codegen context\n");
         goto fail_free_ir;
     }
+    xi_cgen_ctx_set_aot_bundle(cg_ctx, &aot_bundle);
 
     /* --- Resolve cross-module imports for C codegen --- */
     xi_cgen_resolve_module_imports(cg_ctx, modules, nmodules);
@@ -390,11 +546,33 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         /* Single-module fast path */
         xi_cgen_program(cg_ctx, mem, modules[0]);
     } else {
-        /* Multi-module: header + per-module sections + combined main */
+        /* Multi-module: header + literal defs + per-module sections +
+         * combined main.  Module bodies are buffered so interned string
+         * literal definitions can be emitted ahead of every use. */
         xi_cgen_header(mem);
+        char *modbuf = NULL;
+        size_t modsz = 0;
+        FILE *modmem = xr_open_memstream(&modbuf, &modsz);
+        if (!modmem) {
+            fprintf(stderr, "Error: xr_open_memstream failed\n");
+            xr_close_memstream(mem, &buf, &bufsz);
+            xr_free(buf);
+            xi_cgen_ctx_free(cg_ctx);
+            goto fail_free_ir;
+        }
         for (int m = 0; m < nmodules; m++)
-            xi_cgen_module(cg_ctx, mem, modules[m]);
-        xi_cgen_main(cg_ctx, mem, modules, nmodules, entry_index);
+            xi_cgen_module(cg_ctx, modmem, modules[m]);
+        xi_cgen_main(cg_ctx, modmem, modules, nmodules, entry_index);
+        if (xr_close_memstream(modmem, &modbuf, &modsz) != 0) {
+            fprintf(stderr, "Error: xr_close_memstream failed\n");
+            xr_close_memstream(mem, &buf, &bufsz);
+            xr_free(buf);
+            xi_cgen_ctx_free(cg_ctx);
+            goto fail_free_ir;
+        }
+        xi_cgen_emit_str_literal_defs(cg_ctx, mem);
+        fwrite(modbuf, 1, modsz, mem);
+        xr_free(modbuf);
     }
     if (xr_close_memstream(mem, &buf, &bufsz) != 0) {
         fprintf(stderr, "Error: xr_close_memstream failed\n");
@@ -407,12 +585,21 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
         xr_free(buf);
         goto fail_free_ir;
     }
+    XiCgenStats cgen_stats = xi_cgen_stats(cg_ctx);
     XiCgenCoroFrameStats coro_frame_stats = xi_cgen_coro_frame_stats(cg_ctx);
     xi_cgen_ctx_free(cg_ctx);
 
     /* Infer runtime features before freeing IR */
     XaotFeatureSet features;
     infer_features(ir_funcs, nmodules, &features);
+    if (!build_link_manifest(&features, &link_manifest)) {
+        fprintf(stderr, "Error: failed to build AOT link manifest\n");
+        goto fail_free_ir;
+    }
+    link_manifest_initialized = true;
+
+    xaot_bundle_free(&aot_bundle);
+    aot_bundle_initialized = false;
 
     /* Free IR and module metadata (no longer needed after C generation) */
     for (int m = 0; m < nmodules; m++) {
@@ -429,10 +616,17 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     /* buf is xr_malloc-owned (xr_close_memstream guarantees this on every
      * platform). Hand it off to the caller as-is. */
     result->c_source = buf;
+    result->plan_dump = plan_dump;
+    plan_dump = NULL;
+    result->link_manifest = link_manifest;
+    memset(&link_manifest, 0, sizeof(link_manifest));
+    link_manifest_initialized = false;
     result->total_compiled = total_funcs;
     result->total_aot = total_funcs;
     result->nmodules = nmodules;
     result->features = features;
+    result->prepare_stats = prepare_stats;
+    result->cgen_stats = cgen_stats;
     result->coro_frame_stats = coro_frame_stats;
 
     /* Cleanup module name arrays */
@@ -445,6 +639,11 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
     return 0;
 
 fail_free_ir:
+    xr_free(plan_dump);
+    if (link_manifest_initialized)
+        xaot_link_manifest_free(&link_manifest);
+    if (aot_bundle_initialized)
+        xaot_bundle_free(&aot_bundle);
     for (int m = 0; m < nmodules; m++) {
         if (modules)
             xi_module_free(modules[m]);
@@ -456,6 +655,13 @@ fail_free_ir:
     if (shared_analyzer) {
         xa_analyzer_set_graph(shared_analyzer, NULL);
         xa_analyzer_free(shared_analyzer);
+        shared_analyzer = NULL;
+    }
+fail_free_analyzer:
+    if (shared_analyzer) {
+        xa_analyzer_set_graph(shared_analyzer, NULL);
+        xa_analyzer_free(shared_analyzer);
+        shared_analyzer = NULL;
     }
 fail_free_graph:
     if (graph)
@@ -469,4 +675,13 @@ fail_free_graph:
     xr_free(paths);
     xr_free(mod_names);
     return 1;
+}
+
+XR_FUNC void xaot_build_result_free(XaotBuildResult *result) {
+    if (!result)
+        return;
+    xr_free(result->c_source);
+    xr_free(result->plan_dump);
+    xaot_link_manifest_free(&result->link_manifest);
+    memset(result, 0, sizeof(*result));
 }

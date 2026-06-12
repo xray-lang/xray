@@ -1,0 +1,11 @@
+fn wrap_byte(seed: int) -> uint8 {
+    fn inner(x: uint8) -> uint8 {
+        if (seed > 0) {
+            return x + 1
+        }
+        return x
+    }
+    return inner(41)
+}
+
+print(wrap_byte(1))

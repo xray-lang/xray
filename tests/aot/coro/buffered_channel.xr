@@ -1,5 +1,8 @@
-const ch = Channel(1)
+const ch = new Channel<int>(1)
 ch.send(41)
 let v = ch.recv()
-print(v + 1)
+print(match (v) {
+    Recv.Value(value) -> value + 1
+    _ -> -1
+})
 ch.close()

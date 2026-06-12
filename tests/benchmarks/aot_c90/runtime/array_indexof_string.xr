@@ -1,0 +1,23 @@
+fn run(n: int, queries: int) -> int {
+    let haystack: Array<string> = []
+    let i = 0
+    while (i < n) {
+        haystack.push("entry-" + i.toString())
+        i = i + 1
+    }
+
+    let found = 0
+    i = 0
+    while (i < queries) {
+        let needle = "entry-" + ((i * 13) % (n * 2)).toString()
+        let idx = haystack.indexOf(needle)
+        if (idx >= 0) {
+            found = found + idx
+        }
+        i = i + 1
+    }
+
+    return found
+}
+
+print(run(2000, 3000))

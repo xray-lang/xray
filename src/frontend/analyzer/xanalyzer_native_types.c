@@ -268,11 +268,12 @@ static const NativeTypeMapping type_mappings[] = {
     {"EnumType", XR_TID_ENUM_TYPE, TYPE_NAME_ENUM_TYPE},
     {"Regex", XR_TID_REGEX, TYPE_NAME_REGEX},
     {"Exception", XR_TID_EXCEPTION, TYPE_NAME_EXCEPTION},
-    {"Task", XR_TID_COROUTINE, TYPE_NAME_COROUTINE},
+    {"Task", XR_TID_COROUTINE, TYPE_NAME_TASK},
     {"WeakMap", XR_TID_WEAKMAP, TYPE_NAME_WEAKMAP},
     {"WeakSet", XR_TID_WEAKSET, TYPE_NAME_WEAKSET},
     {"DateTime", XR_TID_DATETIME, "DateTime"},
     {"WorkQueue", XR_TID_WORKQUEUE, TYPE_NAME_WORKQUEUE},
+    {"ResultGroup", XR_TID_RESULTGROUP, TYPE_NAME_RESULTGROUP},
 };
 
 #define NUM_TYPE_MAPPINGS (int) (sizeof(type_mappings) / sizeof(type_mappings[0]))
@@ -414,6 +415,7 @@ static const TidObjMapping tid_obj_map[] = {
     {XR_TID_STRINGBUILDER, XR_TINSTANCE},
     {XR_TID_CHANNEL, XR_TCHANNEL},
     {XR_TID_WORKQUEUE, XR_TWORKQUEUE},
+    {XR_TID_RESULTGROUP, XR_TRESULTGROUP},
     {XR_TID_REGEX, XR_TINSTANCE},
     {XR_TID_EXCEPTION, XR_TINSTANCE},
     {XR_TID_COROUTINE, XR_TTASK},

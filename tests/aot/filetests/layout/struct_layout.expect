@@ -1,0 +1,6 @@
+contains=xaot-plan v0
+contains=module 0 name=struct_layout
+contains=function 1 name=score module=0 depth=1 abi=native boundary=none params=0 ret=int64_t/scalar/i64
+contains=  ret class=scalar kind=scalar rep=i64 c_type=int64_t
+c_contains=struct { int64_t f0; uint8_t f1; uint8_t f2; }
+contains=stats functions=2 native=1 tagged=1 coro=0

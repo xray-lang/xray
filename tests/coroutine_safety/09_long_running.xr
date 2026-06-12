@@ -7,6 +7,20 @@
 // - 超时保护：await 超时机制
 print("========== 测试9：长时间运行与抢占调度 ==========")
 
+fn tryRecvValue(ch) {
+    return match (ch.tryRecv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
+fn recvTimeoutOk(ch, timeout_ms) -> bool {
+    return match (ch.recvTimeout(timeout_ms)) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
 // 测试1：CPU 密集型协程不会饿死其他协程
 fn test_cpu_intensive_fairness() {
     let results = new Channel(10)
@@ -34,7 +48,7 @@ fn test_cpu_intensive_fairness() {
     // 验证所有任务都完成了
     let completed = []
     for (let i = 0; i < 4; i++) {
-        let r = results.tryRecv()
+        let r = tryRecvValue(results)
         if (r != null) {
             completed.push(r)
         }
@@ -64,14 +78,18 @@ fn test_cancel_running_coro() {
     }
     let task = go long_task()
     // 等待任务启动（使用超时避免阻塞）
-    let signal = started.recvTimeout(1000)
+    let signal = recvTimeoutOk(started, 1000)
     // 取消任务
     task.cancel()
     // 等待任务结束（可能完成也可能取消）
-    await task
-    print("任务已取消:", task.cancelled)
-    // 取消后 task.cancelled 应该为 true
-    assert(task.cancelled)
+    let cancel_result = task.awaitResult()
+    let was_cancelled = match (cancel_result) {
+        TaskResult.Cancelled -> true
+        TaskResult.Success(value) -> value == "cancelled"
+        _ -> false
+    }
+    print("任务已取消:", was_cancelled)
+    assert(was_cancelled)
     print("✓ 协程取消测试通过")
 }
 
@@ -96,7 +114,7 @@ fn test_multiple_long_running() {
     // 收集完成顺序
     let order = []
     for (let i = 0; i < 5; i++) {
-        let id = completions.tryRecv()
+        let id = tryRecvValue(completions)
         if (id != null) {
             order.push(id)
         }
@@ -122,7 +140,7 @@ fn test_yield_behavior() {
     // 验证两个任务的步骤交替执行
     let entries = []
     for (let i = 0; i < 10; i++) {
-        let entry = log.tryRecv()
+        let entry = tryRecvValue(log)
         if (entry != null) {
             entries.push(entry)
         }

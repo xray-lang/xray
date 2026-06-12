@@ -41,6 +41,12 @@ typedef struct XrStealQueue {
     int capacity;
 } XrStealQueue;
 
+typedef enum XrStealQueueStatus {
+    XR_STEAL_QUEUE_EMPTY = 0,
+    XR_STEAL_QUEUE_RETRY = 1,
+    XR_STEAL_QUEUE_SUCCESS = 2,
+} XrStealQueueStatus;
+
 // ========== Lifecycle API ==========
 
 XR_FUNC bool xr_steal_queue_init(XrStealQueue *q, int capacity);
@@ -57,8 +63,9 @@ XR_FUNC struct XrCoroutine *xr_steal_queue_pop(XrStealQueue *q);
 
 // ========== Steal Operations (CAS) ==========
 
-// Steal coroutine (other threads, CAS, FIFO)
-XR_FUNC struct XrCoroutine *xr_steal_queue_steal(XrStealQueue *q);
+// Steal with status so callers can distinguish empty from CAS contention.
+XR_FUNC XrStealQueueStatus xr_steal_queue_steal_status(XrStealQueue *q,
+                                                       struct XrCoroutine **out_coro);
 
 // ========== Status Query ==========
 

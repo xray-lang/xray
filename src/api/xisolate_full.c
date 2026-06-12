@@ -151,6 +151,9 @@ static int isolate_init_full(XrayIsolate *isolate) {
         if (isolate->native_type_classes[XR_TWORKQUEUE])
             isolate->vm.builtins[XR_GLOBAL_VAR_WORKQUEUE] =
                 xr_value_from_class(isolate->native_type_classes[XR_TWORKQUEUE]);
+        if (isolate->native_type_classes[XR_TRESULTGROUP])
+            isolate->vm.builtins[XR_GLOBAL_VAR_RESULTGROUP] =
+                xr_value_from_class(isolate->native_type_classes[XR_TRESULTGROUP]);
         if (isolate->vm.builtin_count < XR_USER_GLOBALS_START)
             isolate->vm.builtin_count = XR_USER_GLOBALS_START;
     }

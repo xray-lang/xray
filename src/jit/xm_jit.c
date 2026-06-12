@@ -163,6 +163,12 @@ static void xm_jit_worker_set_heartbeat(void *worker_state, _Atomic uint64_t *he
         scratch->heartbeat_ptr = heartbeat;
 }
 
+static bool xm_jit_try_compile_for_isolate(XrayIsolate *isolate, XrProto *proto) {
+    if (!isolate || !isolate->vm.jit)
+        return false;
+    return xm_jit_try_compile(isolate->vm.jit, proto);
+}
+
 XmJitState *xm_jit_init(XrayIsolate *isolate, int threshold) {
     XR_DCHECK(threshold >= 0, "xm_jit_init: negative threshold");
     XmJitState *jit = (XmJitState *) xr_calloc(1, sizeof(XmJitState));
@@ -192,6 +198,8 @@ XmJitState *xm_jit_init(XrayIsolate *isolate, int threshold) {
         .call = xm_jit_call,
         .resume = xm_jit_resume,
         .install_bg_result = xm_jit_install_bg_result,
+        .try_compile = xm_jit_try_compile_for_isolate,
+        .proto_has_exception_control = xm_proto_has_exception_control,
         .guard_page_alloc = jit_guard_page_alloc,
         .guard_page_free = jit_guard_page_free,
         .guard_page_arm = jit_guard_page_arm,
@@ -216,19 +224,41 @@ void xm_jit_destroy(XmJitState *jit) {
         uint32_t total = jit->stats_tier1 + jit->stats_tier2 + jit->stats_conservative;
         uint64_t total_ms = jit->stats_compile_ns / 1000000ULL;
         double avg_ms = total > 0 ? (double) total_ms / total : 0.0;
+        uint64_t coro_helpers =
+            atomic_load_explicit(&jit->stats_coro_helper_count, memory_order_relaxed);
+        uint64_t suspends = atomic_load_explicit(&jit->stats_suspend_count, memory_order_relaxed);
+        uint64_t resumes = atomic_load_explicit(&jit->stats_resume_count, memory_order_relaxed);
+        uint64_t chan_try_hit =
+            atomic_load_explicit(&jit->stats_chan_try_hit_count, memory_order_relaxed);
+        uint64_t chan_try_miss =
+            atomic_load_explicit(&jit->stats_chan_try_miss_count, memory_order_relaxed);
+        uint64_t chan_block =
+            atomic_load_explicit(&jit->stats_chan_block_count, memory_order_relaxed);
+        uint64_t await_done_fast =
+            atomic_load_explicit(&jit->stats_await_done_fast_count, memory_order_relaxed);
+        uint64_t await_block =
+            atomic_load_explicit(&jit->stats_await_block_count, memory_order_relaxed);
         fprintf(stderr,
                 "\n=== JIT Statistics ===\n"
                 "Functions compiled: %u (Tier1: %u, Tier2: %u, Conservative: %u)\n"
                 "Total compile time: %llums (avg %.1fms/func)\n"
                 "Code cache: %lluKB used / %lluKB allocated (budget %lluMB)\n"
                 "Deopts: %u  Permanently disabled: %u  Evicted: %u\n"
+                "Suspend/resume: suspends=%llu resumes=%llu\n"
+                "JIT coroutine helpers: %llu\n"
+                "Coroutine runtime: chan_try_hit=%llu chan_try_miss=%llu chan_block=%llu "
+                "await_done_fast=%llu await_block=%llu\n"
                 "======================\n",
                 total, jit->stats_tier1, jit->stats_tier2, jit->stats_conservative,
                 (unsigned long long) total_ms, avg_ms,
                 (unsigned long long) (jit->stats_code_bytes / 1024),
                 (unsigned long long) (jit->code_alloc.total_allocated / 1024),
                 (unsigned long long) (jit->code_alloc.budget / (1024 * 1024)),
-                jit->stats_deopt_total, jit->stats_disabled, jit->stats_evicted);
+                jit->stats_deopt_total, jit->stats_disabled, jit->stats_evicted,
+                (unsigned long long) suspends, (unsigned long long) resumes,
+                (unsigned long long) coro_helpers, (unsigned long long) chan_try_hit,
+                (unsigned long long) chan_try_miss, (unsigned long long) chan_block,
+                (unsigned long long) await_done_fast, (unsigned long long) await_block);
     }
 
     // Shutdown background thread before freeing code allocator
@@ -540,6 +570,10 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     if (saved_feedback)
         proto->type_feedback = saved_feedback;
     if (!func) {
+        if (jit->verbose) {
+            fprintf(stderr, "[JIT] skip %s: xi_to_xm lowering failed\n",
+                    proto->name ? XR_STRING_CHARS(proto->name) : "?");
+        }
         xr_log_debug("jit", "xi_to_xm failed for %s",
                      proto->name ? XR_STRING_CHARS(proto->name) : "?");
         xr_free(shared_protos);
@@ -915,6 +949,10 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
 #endif
 
     if (ret == XM_SUSPEND_MARKER) {
+        if (coro->isolate && coro->isolate->vm.jit) {
+            atomic_fetch_add_explicit(&coro->isolate->vm.jit->stats_suspend_count, 1,
+                                      memory_order_relaxed);
+        }
         // JIT suspend: coro blocked on channel/await. resume_entry/proto
         // already set by XM_SUSPEND codegen BEFORE block_helper.
         // Do NOT write to coro/jit_ctx here — another worker may have
@@ -1025,6 +1063,11 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
     if (!proto)
         return XM_JIT_DEOPT;
 
+    if (coro->isolate && coro->isolate->vm.jit) {
+        atomic_fetch_add_explicit(&coro->isolate->vm.jit->stats_resume_count, 1,
+                                  memory_order_relaxed);
+    }
+
     xr_coro_jit_state(coro)->scratch->call_proto = proto;
     xr_coro_jit_state(coro)->scratch->jit_frame_depth = 0;
     xr_coro_jit_state(coro)->scratch->active_stack_map = proto->stack_map;
@@ -1044,6 +1087,10 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
 #endif
 
     if (ret == (int64_t) XM_SUSPEND_MARKER) {
+        if (coro->isolate && coro->isolate->vm.jit) {
+            atomic_fetch_add_explicit(&coro->isolate->vm.jit->stats_suspend_count, 1,
+                                      memory_order_relaxed);
+        }
         // Nested suspend: another channel/await block hit during resume.
         // XM_SUSPEND codegen already re-populated jit_resume_entry/proto.
         // Do NOT write to coro/jit_ctx — gopark race: another worker may

@@ -792,8 +792,14 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
         }
     }
 
+    // The restore path above reuses SCRATCH_REG for jit_state/suspend pointers.
+    // Reload suspend_id immediately before dispatch so the compare chain does
+    // not see a clobbered pointer value and fall through to deopt.
+    a64_emit_load_jit_state(ctx, SCRATCH_REG2);
+    a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XM_JIT_STATE_SUSPEND_ID_OFFSET));
+
     // === Per-suspend-id dispatch: load result + branch to continuation ===
-    // x16 = suspend_id (loaded above), x17 = suspend_regs base
+    // x16 = suspend_id, x17 = suspend_regs base
     // For each suspend point: CMP + B.EQ to trampoline
     // Each trampoline: LDR result_reg, [x17, #result_off]; B continuation
 

@@ -100,11 +100,11 @@ bool xr_steal_queue_push(XrStealQueue *q, struct XrCoroutine *coro) {
     // Write data
     atomic_store_explicit(&q->buffer[b & q->mask], coro, memory_order_relaxed);
 
-    // Memory fence: ensure data write visible to other threads
-    atomic_thread_fence(memory_order_release);
-
-    // Update bottom
-    atomic_store_explicit(&q->bottom, b + 1, memory_order_relaxed);
+    // Release store publishes the buffer write (and every owner-thread write
+    // to the coroutine itself) to stealers that acquire-load bottom. A
+    // standalone release fence would be equivalent per C11, but TSAN does not
+    // model standalone fences, so the store itself must carry the ordering.
+    atomic_store_explicit(&q->bottom, b + 1, memory_order_release);
     return true;
 }
 
@@ -148,9 +148,11 @@ struct XrCoroutine *xr_steal_queue_pop(XrStealQueue *q) {
 
 // ========== Steal Operations ==========
 
-struct XrCoroutine *xr_steal_queue_steal(XrStealQueue *q) {
+XrStealQueueStatus xr_steal_queue_steal_status(XrStealQueue *q, struct XrCoroutine **out_coro) {
+    if (out_coro)
+        *out_coro = NULL;
     if (!q || !q->buffer)
-        return NULL;
+        return XR_STEAL_QUEUE_EMPTY;
 
     int64_t t = atomic_load_explicit(&q->top, memory_order_acquire);
 
@@ -161,7 +163,7 @@ struct XrCoroutine *xr_steal_queue_steal(XrStealQueue *q) {
 
     if (t >= b) {
         // Queue empty
-        return NULL;
+        return XR_STEAL_QUEUE_EMPTY;
     }
 
     // Read data
@@ -171,10 +173,12 @@ struct XrCoroutine *xr_steal_queue_steal(XrStealQueue *q) {
     if (!atomic_compare_exchange_strong_explicit(&q->top, &t, t + 1, memory_order_seq_cst,
                                                  memory_order_relaxed)) {
         // CAS failed: contention, return NULL for caller to retry
-        return NULL;
+        return XR_STEAL_QUEUE_RETRY;
     }
 
-    return coro;
+    if (out_coro)
+        *out_coro = coro;
+    return XR_STEAL_QUEUE_SUCCESS;
 }
 
 // ========== State Query ==========

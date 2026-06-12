@@ -4,12 +4,19 @@
 // 验证：const 类型通过 Channel 传递时零拷贝，多个接收者共享同一数据
 print("========== 测试2：Channel const 零拷贝共享 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 fn test_const_string() {
     let ch = new Channel(1)
     // const 字符串（天生不可变）
     const msg = "Hello, World!"
     ch.send(msg)
-    let received = ch.recv()
+    let received = recvValue(ch)
     print("发送:", msg)
     print("接收:", received)
     assert_eq(received, "Hello, World!")
@@ -21,7 +28,7 @@ fn test_const_array() {
     // const 数组
     const data = [1, 2, 3, 4, 5]
     ch.send(data)
-    let received = ch.recv()
+    let received = recvValue(ch)
     print("发送长度:", data.length)
     print("接收长度:", received.length)
     assert_eq(received.length, 5)
@@ -35,7 +42,7 @@ fn test_const_map() {
     // const Map
     const config = { "host" => "localhost", "port" => 8080 }
     ch.send(config)
-    let received = ch.recv()
+    let received = recvValue(ch)
     print("发送 host:", config.get("host"))
     print("接收 host:", received.get("host"))
     assert_eq(received.get("host"), "localhost")
@@ -54,11 +61,11 @@ fn test_primitive_types() {
     ch.send(flag)
     ch.send(null)
     ch.send("literal string")
-    assert_eq(ch.recv(), 42)
-    assert_eq(ch.recv(), 3.14159)
-    assert_eq(ch.recv(), true)
-    assert_eq(ch.recv(), null)
-    assert_eq(ch.recv(), "literal string")
+    assert_eq(recvValue(ch), 42)
+    assert_eq(recvValue(ch), 3.14159)
+    assert_eq(recvValue(ch), true)
+    assert_eq(recvValue(ch), null)
+    assert_eq(recvValue(ch), "literal string")
     print("✓ 基本类型测试通过")
 }
 

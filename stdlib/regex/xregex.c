@@ -175,6 +175,8 @@ XR_FUNC const char *xr_regex_group_name(const XrRegex *re, int index) {
  * Convert internal capture array to XrMatch structure
  */
 static void captures_to_match(const char **caps, int cap_count, XrMatch *match) {
+    if (cap_count > XR_RE_MAX_CAPTURES - 1)
+        cap_count = XR_RE_MAX_CAPTURES - 1;
     match->group_count = cap_count + 1;  // Full match
 
     // groups[0] is full match
@@ -225,6 +227,8 @@ XR_FUNC bool xr_regex_match_at(const XrRegex *re, const char *text, int len, int
         return false;
 
     int cap_count = re->prog->capture_count;
+    if (cap_count > XR_RE_MAX_CAPTURES - 1)
+        cap_count = XR_RE_MAX_CAPTURES - 1;
     int ncaps = (cap_count + 1) * 2;  // +1 for full match
 
     const char *caps[XR_RE_MAX_CAPTURES * 2];
@@ -246,6 +250,8 @@ XR_FUNC bool xr_regex_full_match(const XrRegex *re, const char *text, int len, X
         len = (int) strlen(text);
 
     int cap_count = re->prog->capture_count;
+    if (cap_count > XR_RE_MAX_CAPTURES - 1)
+        cap_count = XR_RE_MAX_CAPTURES - 1;
     int ncaps = (cap_count + 1) * 2;
 
     const char *caps[XR_RE_MAX_CAPTURES * 2];

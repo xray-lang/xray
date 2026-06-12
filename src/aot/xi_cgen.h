@@ -26,6 +26,7 @@
  * session.  Created once by the AOT driver, shared across module calls,
  * then freed.  No file-scope globals. */
 typedef struct XiCgenCtx XiCgenCtx;
+typedef struct XaotBundle XaotBundle;
 
 typedef struct XiCgenCoroFrameStats {
     uint32_t coroutine_count;
@@ -37,11 +38,24 @@ typedef struct XiCgenCoroFrameStats {
     uint32_t max_releases;
 } XiCgenCoroFrameStats;
 
+typedef struct XiCgenStats {
+    uint32_t functions_total;
+    uint32_t functions_native_abi;
+    uint32_t functions_tagged_abi;
+    uint32_t functions_coro_abi;
+    uint32_t boxed_adapters;
+    uint32_t sync_go_wrappers;
+    uint32_t xi_box_ops;
+    uint32_t xi_unbox_ops;
+} XiCgenStats;
+
 /* Lifecycle */
 XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void);
 XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx);
+XR_FUNC void xi_cgen_ctx_set_aot_bundle(XiCgenCtx *ctx, const XaotBundle *bundle);
 XR_FUNC bool xi_cgen_has_error(const XiCgenCtx *ctx);
 XR_FUNC XiCgenCoroFrameStats xi_cgen_coro_frame_stats(const XiCgenCtx *ctx);
+XR_FUNC XiCgenStats xi_cgen_stats(const XiCgenCtx *ctx);
 
 /* Generate a complete standalone C file (single-module fast path):
  *   #include "xrt.h" + forward decls + bodies + main()
@@ -65,5 +79,11 @@ XR_FUNC void xi_cgen_module(XiCgenCtx *ctx, FILE *out, struct XiModule *module);
 /* Emit main() calling module inits in topo order. */
 XR_FUNC void xi_cgen_main(XiCgenCtx *ctx, FILE *out, struct XiModule **modules, int n,
                           int entry_index);
+
+/* Emit static const xrt_str_t definitions for every string literal
+ * interned while emitting module bodies.  Multi-module flow: buffer
+ * module/main output in a memstream, emit these defs after the header,
+ * then append the buffered bodies (definitions must precede uses). */
+XR_FUNC void xi_cgen_emit_str_literal_defs(XiCgenCtx *ctx, FILE *out);
 
 #endif  // XI_CGEN_H

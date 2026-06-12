@@ -30,6 +30,7 @@
 #include "../runtime/object/xstringbuilder.h"
 
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xexception.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
 #include "../base/xutf8.h"
@@ -37,7 +38,12 @@
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
+#include "../coro/xdeep_copy.h"
+#include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
+#include <stdatomic.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #define VM_AWAIT_FLAG_DISCARD_RESULT 0x01
 #define VM_AWAIT_FLAG_ONE_SHOT_GO 0x02
@@ -52,6 +58,157 @@ static XrValue vm_coro_name_value(XrayIsolate *isolate, const XrCoroutine *coro)
         return xr_null();
     XrString *s = xr_string_intern(isolate, name, strlen(name), 0);
     return s ? xr_string_value(s) : xr_null();
+}
+
+static uint8_t vm_go_jit_slot_type_from_value(XrValue value) {
+    switch (value.tag) {
+        case XR_TAG_I64:
+            return XR_SLOT_I64;
+        case XR_TAG_BOOL:
+            return XR_SLOT_BOOL;
+        case XR_TAG_F64:
+            return XR_SLOT_F64;
+        case XR_TAG_PTR:
+        case XR_TAG_STRUCT_REF:
+            return XR_SLOT_PTR;
+        default:
+            return XR_SLOT_ANY;
+    }
+}
+
+static XrType *vm_go_jit_type_from_value(XrayIsolate *isolate, XrValue value) {
+    if (xr_value_is_channel(value))
+        return xr_type_new_channel(isolate, xr_type_new_unknown(isolate));
+    return xr_slot_type_to_type(isolate, vm_go_jit_slot_type_from_value(value));
+}
+
+static void vm_go_jit_seed_param_types(XrayIsolate *isolate, XrProto *proto, XrValue *args,
+                                       int arg_count) {
+    if (!proto || !args || arg_count <= 0 || proto->numparams != arg_count)
+        return;
+    if (!proto->param_types) {
+        proto->param_types =
+            (struct XrType **) xr_calloc((size_t) proto->numparams, sizeof(struct XrType *));
+        if (!proto->param_types)
+            return;
+        proto->param_types_count = proto->numparams;
+    }
+    for (int i = 0; i < arg_count && i < proto->param_types_count; i++) {
+        if (proto->param_types[i])
+            continue;
+        XrType *type = vm_go_jit_type_from_value(isolate, args[i]);
+        if (type)
+            proto->param_types[i] = type;
+    }
+}
+
+static bool vm_cached_env_flag(_Atomic int *cache, const char *name) {
+    int value = atomic_load_explicit(cache, memory_order_acquire);
+    if (value >= 0)
+        return value != 0;
+
+    int enabled = getenv(name) != NULL ? 1 : 0;
+    int expected = -1;
+    if (atomic_compare_exchange_strong_explicit(cache, &expected, enabled, memory_order_release,
+                                                memory_order_acquire)) {
+        return enabled != 0;
+    }
+    return atomic_load_explicit(cache, memory_order_acquire) != 0;
+}
+
+static bool vm_coro_entry_jit_enabled(void) {
+    /*
+     * Coroutine entry JIT still assumes the pre-096 await/channel result protocol.
+     * Keep ordinary function JIT enabled, but run go-spawned entry frames through
+     * the interpreter by default until the suspend/resume ABI is taught the new
+     * result types. XRAY_JIT_CORO_ENTRY=1 enables the experimental VM/JIT path.
+     */
+    static _Atomic int cached = -1;
+    return vm_cached_env_flag(&cached, "XRAY_JIT_CORO_ENTRY");
+}
+
+static bool vm_coro_entry_jit_debug_enabled(void) {
+    static _Atomic int cached = -1;
+    return vm_cached_env_flag(&cached, "XRAY_JIT_CORO_ENTRY_DEBUG");
+}
+
+static void vm_go_try_compile_entry(XrayIsolate *isolate, XrProto *proto, XrValue *args,
+                                    int arg_count) {
+    if (!vm_coro_entry_jit_enabled()) {
+        if (vm_coro_entry_jit_debug_enabled())
+            fprintf(stderr, "[JIT-CORO-ENTRY] skip disabled for coroutine entry proto=%p\n",
+                    (void *) proto);
+        return;
+    }
+
+    bool debug = vm_coro_entry_jit_debug_enabled();
+    if (!XR_JIT_AVAILABLE() || !xr_jit_hooks->try_compile || !proto || proto->jit_entry ||
+        proto->deopt_count > 3 || proto->numparams != arg_count) {
+        if (debug) {
+            fprintf(stderr,
+                    "[JIT-CORO-ENTRY] skip early available=%d try=%d proto=%p entry=%p "
+                    "deopt=%u params=%d args=%d\n",
+                    XR_JIT_AVAILABLE() ? 1 : 0,
+                    (XR_JIT_AVAILABLE() && xr_jit_hooks->try_compile) ? 1 : 0, (void *) proto,
+                    proto ? proto->jit_entry : NULL, proto ? proto->deopt_count : 0,
+                    proto ? proto->numparams : -1, arg_count);
+        }
+        return;
+    }
+    if (xr_jit_hooks->proto_has_exception_control &&
+        xr_jit_hooks->proto_has_exception_control(proto)) {
+        if (debug)
+            fprintf(stderr, "[JIT-CORO-ENTRY] skip exception-control proto=%p\n", (void *) proto);
+        return;
+    }
+    uint32_t threshold = isolate->vm.jit_threshold > 0 ? (uint32_t) isolate->vm.jit_threshold : 1;
+    uint32_t calls = atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1;
+    if (calls < threshold) {
+        if (debug) {
+            fprintf(stderr, "[JIT-CORO-ENTRY] wait threshold proto=%p calls=%u threshold=%u\n",
+                    (void *) proto, calls, threshold);
+        }
+        return;
+    }
+    vm_go_jit_seed_param_types(isolate, proto, args, arg_count);
+    bool ok = xr_jit_hooks->try_compile(isolate, proto);
+    if (debug) {
+        fprintf(stderr,
+                "[JIT-CORO-ENTRY] compile proto=%p ok=%d entry=%p params=%d count=%d calls=%u\n",
+                (void *) proto, ok ? 1 : 0, proto->jit_entry, proto->numparams,
+                proto->param_types_count, calls);
+    }
+}
+
+static void vm_go_detach_scope_child(XrCoroutine *coro) {
+    XrScopeContext *scope = xr_coro_parent_scope(coro);
+    if (!scope)
+        return;
+
+    while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {
+    }
+    XrCoroutine *prev = NULL;
+    XrCoroutine *cur = scope->first_child;
+    bool removed = false;
+    while (cur) {
+        XrCoroutine *next = xr_coro_scope_sibling(cur);
+        if (cur == coro) {
+            if (prev) {
+                (void) xr_coro_set_scope_sibling(prev, next);
+            } else {
+                scope->first_child = next;
+            }
+            (void) xr_coro_set_scope_sibling(coro, NULL);
+            removed = true;
+            break;
+        }
+        prev = cur;
+        cur = next;
+    }
+    atomic_store_explicit(&scope->child_lock, false, memory_order_release);
+    if (removed)
+        atomic_fetch_sub_explicit(&scope->count, 1, memory_order_relaxed);
+    (void) xr_coro_set_parent_scope(coro, NULL);
 }
 
 static void vm_coro_set_source_field(XrayIsolate *isolate, XrMap *info, const XrCoroutine *coro) {
@@ -213,7 +370,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             xr_map_set(info, VM_INTERN_KEY("state"),
                        xr_string_value(xr_string_intern(isolate, state_str, strlen(state_str), 0)));
 
-            xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
+            xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(xr_coro_reds(coro)));
 
             vm_coro_set_source_field(isolate, info, coro);
 
@@ -380,7 +537,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
             for (int i = 0; i < count; i++) {
                 entries[i].coro = raw[i].coro;
                 entries[i].state = raw[i].state;
-                entries[i].value = (metric == 2) ? raw[i].coro->reductions : raw[i].coro->id;
+                entries[i].value = (metric == 2) ? xr_coro_reds(raw[i].coro) : raw[i].coro->id;
             }
             xr_free(raw);
 
@@ -408,7 +565,7 @@ XR_FUNC XrDispatchAction vm_coro_ctrl(XrayIsolate *isolate, XrVMContext *vm_ctx,
                 xr_map_set(info, VM_INTERN_KEY("state"),
                            xr_string_value(xr_string_intern(isolate, entries[j].state,
                                                             strlen(entries[j].state), 0)));
-                xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(coro->reductions));
+                xr_map_set(info, VM_INTERN_KEY("reductions"), xr_int(xr_coro_reds(coro)));
                 vm_coro_set_source_field(isolate, info, coro);
                 xr_array_push(result, xr_value_from_map(info));
             }
@@ -600,6 +757,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 
     XrInstruction next_inst = *pc;
     int link_mode = 0;
+    bool one_shot_await = false;
 
     if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 1) {
         int name_idx = GETARG_Bx(next_inst);
@@ -614,7 +772,14 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
         pc++;
         next_inst = *pc;
     }
+    if (GET_OPCODE(next_inst) == OP_NOP && GETARG_A(next_inst) == 4) {
+        one_shot_await = GETARG_Bx(next_inst) != 0;
+        pc++;
+        next_inst = *pc;
+    }
     XrValue *args = (c > 0) ? &base[b + 1] : NULL;
+    vm_go_try_compile_entry(isolate, proto, args, c);
+
     // Debug source metadata is populated lazily for named coroutines.
     XrCoroutine *coro = xr_coro_create_vm_closure(isolate, closure, args, c, coro_name, NULL, 0);
     if (!coro) {
@@ -627,15 +792,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
     }
 
     XrCoroutine *parent = vm_get_coro(vm_ctx);
-
-    // Allocate GC-managed Task handle on executor's heap
-    XrTask *task = xr_task_create(parent, coro);
-    if (!task) {
-        VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create task");
-    }
-
-    // Store link_mode on task for runtime association
-    task->link_mode = (uint8_t) link_mode;
+    bool needs_task = !fire_and_forget || link_mode != XR_LINK_NONE;
+    uint8_t task_link_mode = (uint8_t) link_mode;
 
     // Mark fire-and-forget coros as recyclable for deferred recycle
     if (fire_and_forget)
@@ -648,7 +806,8 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
 
     // Scope tracking: link coro to scope
     {
-        XrScopeContext *_scope = parent ? parent->current_scope : NULL;
+        XrScopeContext *_scope =
+            parent ? atomic_load_explicit(&parent->current_scope, memory_order_relaxed) : NULL;
         if (!_scope && runtime->current_scope)
             _scope = runtime->current_scope;
         if (_scope && parent) {
@@ -674,15 +833,32 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
             // Supervisor scope children stay XR_LINK_NONE — errors are collected
             // by the scope itself, no per-child propagation needed.
             if (link_mode == XR_LINK_NONE && _scope->mode == XR_SCOPE_LINKED) {
-                task->link_mode = XR_LINK_LINKED;
+                task_link_mode = XR_LINK_LINKED;
             }
         }
+    }
+
+    // Allocate a runtime-managed Task only when the result/Task state is user-visible.
+    // Statement-form plain `go` is represented by the child coroutine plus optional
+    // scope membership; scope wait/error handling is orthogonal to Task handles.
+    XrTask *task = NULL;
+    if (needs_task) {
+        task = xr_task_create(runtime, parent, coro);
+        if (!task) {
+            (void) xr_coro_set_pending_spawn(parent, NULL);
+            vm_go_detach_scope_child(coro);
+            xr_coro_destroy(coro);
+            VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "go: failed to create task");
+        }
+        task->link_mode = task_link_mode;
+        if (one_shot_await)
+            task->flags |= XR_TASK_FLG_ONE_SHOT_AWAIT;
     }
 
     /* linked go (standalone, NOT in scope): establish parent-child Task hierarchy.
      * Scope children use scope-based error propagation (first_error + SCOPE_EXIT).
      * Only standalone linked go uses Task hierarchy (fail_with_propagation). */
-    if (task->link_mode == XR_LINK_LINKED && parent && parent->task &&
+    if (task && task->link_mode == XR_LINK_LINKED && parent && parent->task &&
         !xr_coro_parent_scope(coro)) {
         xr_task_attach_child(parent->task, task);
     }
@@ -691,7 +867,7 @@ XR_FUNC XrDispatchAction vm_go(XrayIsolate *isolate, XrVMContext *vm_ctx, XrInst
      * for go result, writing base[a+1] would corrupt the stack frame.
      * Users should call task.monitor() to get the notification Channel. */
 
-    base[a] = xr_value_from_task(task);
+    base[a] = task ? xr_value_from_task(task) : xr_null();
     frame->pc = pc;
 
     // xr_coro_init_shell already sets XR_CORO_FLG_READY.
@@ -712,6 +888,26 @@ static inline XrValue vm_task_consume_result(XrayIsolate *isolate, XrTask *task,
     return discard_result ? xr_null() : res;
 }
 
+static XrDispatchAction vm_task_raise_await_terminal(XrayIsolate *isolate, XrTask *task,
+                                                     XrBcCallFrame *frame, XrInstruction *pc) {
+    uint8_t tstate =
+        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    XrValue exc;
+    if (tstate == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
+        exc = task->error;
+        if (!xr_value_is_exception(isolate, exc))
+            exc = xr_exception_from_value(isolate, exc);
+    } else if (tstate == XR_TASK_FAILED) {
+        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+    } else {
+        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+    }
+    if (frame)
+        frame->pc = pc;
+    xr_vm_unwind_with_trace(isolate, exc);
+    return XR_DISP_RAISE;
+}
+
 static inline void vm_task_recycle_completed_executor(XrCoroutine *exec) {
     if (!exec || !xr_coro_flags_has(exec, XR_CORO_FLG_DONE) ||
         xr_coro_flags_has(exec, XR_CORO_FLG_MAIN)) {
@@ -730,13 +926,29 @@ static inline void vm_task_finish_completed_executor(XrTask *task, bool one_shot
     if (!task)
         return;
 
-    XrCoroutine *exec = task->coro;
+    /* Exchange-claim: only the winner owns the executor shell. The
+     * completing worker may have reclaimed it already (immediate results),
+     * or a concurrent awaiter of the same task may have won. */
+    XrCoroutine *exec = xr_task_claim_executor(task);
     if (exec) {
-        task->coro = NULL;
         exec->task = NULL;
         if (one_shot)
+            exec->gc_flags |= XR_CORO_GC_TRIM_BACKEND_STORAGE;
+        /* Tag-only check: task->result may be concurrently rewritten by
+         * another awaiter caching its deep copy (16-byte store), so it must
+         * not be dereferenced here. Pointer results imply the completer did
+         * not reclaim, and any executor-heap data forbids recycling anyway. */
+        XrValue cached = task->result;
+        if (one_shot || ((task->flags & XR_TASK_FLG_RUNTIME_OWNED) && !XR_IS_PTR(cached)))
             vm_task_recycle_completed_executor(exec);
     }
+}
+
+static inline void vm_task_destroy_one_shot_success(XrayIsolate *isolate, XrTask *task,
+                                                    bool one_shot) {
+    if (!one_shot || !isolate || !task)
+        return;
+    xr_task_runtime_try_destroy_detached((XrRuntime *) isolate->vm.runtime, task);
 }
 
 static inline void vm_task_detach_completed_executor(XrTask *task) {
@@ -762,6 +974,11 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
     /* ============ Task path (new: go returns XrTask) ============ */
     if (xr_value_is_task(task_val)) {
         XrTask *task = xr_value_to_task(task_val);
+        if (one_shot_go) {
+            XrRuntime *rt = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+            if (rt)
+                xr_sched_metric_inc(rt, &rt->sched_stats.task_one_shot_await_count);
+        }
 
         // Fast path: task already completed — works for re-await too
         XrCoroutine *current = vm_get_coro(vm_ctx);
@@ -773,10 +990,17 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
                 if (one_shot_go && a != b)
                     base[b] = xr_null();
                 vm_task_finish_completed_executor(task, one_shot_go);
+                vm_task_destroy_one_shot_success(isolate, task, one_shot_go);
                 return XR_DISP_NEXT;
             }
-            if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
-                return XR_DISP_NEXT;
+            if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+                if (one_shot_go && a != b)
+                    base[b] = xr_null();
+                vm_task_finish_completed_executor(task, one_shot_go);
+                return vm_task_raise_await_terminal(isolate, task, frame, pc);
+            }
+            if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unexpected timeout");
             }
             if (resumed.kind == XR_CORO_BLOCK_ERROR) {
                 VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to resume");
@@ -789,14 +1013,14 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             if (one_shot_go && a != b)
                 base[b] = xr_null();
             vm_task_finish_completed_executor(task, one_shot_go);
+            vm_task_destroy_one_shot_success(isolate, task, one_shot_go);
             return XR_DISP_NEXT;
         }
         if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
-            base[a] = xr_null();
             if (one_shot_go && a != b)
                 base[b] = xr_null();
             vm_task_finish_completed_executor(task, one_shot_go);
-            return XR_DISP_NEXT;
+            return vm_task_raise_await_terminal(isolate, task, frame, pc);
         }
 
         // Slow path: task still active, need to suspend
@@ -811,19 +1035,27 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
             XrCoroBlockResult await_result =
                 xr_coro_await_task_slot(isolate, current, task, result_slot, -1, discard_result);
             if (await_result.kind == XR_CORO_BLOCK_BLOCKED) {
-                return XR_DISP_BLOCKED;
+                /* Frame state saved above; the dispatch loop may switch to a
+                 * just-woken LIFO partner without exiting run(). */
+                return XR_DISP_SWITCH;
             }
             vm_suspend_continue_from_next(frame, pc);
             if (await_result.kind == XR_CORO_BLOCK_READY) {
                 if (one_shot_go && a != b)
                     base[b] = xr_null();
                 vm_task_finish_completed_executor(task, one_shot_go);
+                vm_task_destroy_one_shot_success(isolate, task, one_shot_go);
                 return XR_DISP_NEXT;
             }
-            if (await_result.kind == XR_CORO_BLOCK_CLOSED ||
-                await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
+            if (await_result.kind == XR_CORO_BLOCK_CLOSED) {
+                if (one_shot_go && a != b)
+                    base[b] = xr_null();
+                vm_task_finish_completed_executor(task, one_shot_go);
+                return vm_task_raise_await_terminal(isolate, task, frame, pc);
+            }
+            if (await_result.kind == XR_CORO_BLOCK_TIMEOUT ||
                 await_result.kind == XR_CORO_BLOCK_NO_CORO) {
-                return XR_DISP_NEXT;
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unexpected timeout");
             }
             VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "await: unable to block");
         }
@@ -852,10 +1084,18 @@ XR_FUNC XrDispatchAction vm_await(XrayIsolate *isolate, XrVMContext *vm_ctx, XrI
                 xr_thread_yield();
             }
         }
+        tstate = atomic_load_explicit(&task->state, memory_order_acquire);
+        if (tstate == XR_TASK_FAILED || tstate == XR_TASK_CANCELLED) {
+            if (one_shot_go && a != b)
+                base[b] = xr_null();
+            vm_task_finish_completed_executor(task, one_shot_go);
+            return vm_task_raise_await_terminal(isolate, task, frame, pc);
+        }
         base[a] = vm_task_consume_result(isolate, task, NULL, discard_result);
         if (one_shot_go && a != b)
             base[b] = xr_null();
         vm_task_finish_completed_executor(task, one_shot_go);
+        vm_task_destroy_one_shot_success(isolate, task, one_shot_go);
         return XR_DISP_NEXT;
     }
 

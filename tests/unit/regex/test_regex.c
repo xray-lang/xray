@@ -75,6 +75,22 @@ TEST(compile_is_valid) {
     ASSERT_FALSE(xr_regex_is_valid("(", XR_RE_NONE));
 }
 
+TEST(compile_rejects_too_many_capture_groups) {
+    char pattern[XR_RE_MAX_CAPTURES * 3 + 1];
+    char *p = pattern;
+    for (int i = 0; i < XR_RE_MAX_CAPTURES; i++) {
+        *p++ = '(';
+        *p++ = 'a';
+        *p++ = ')';
+    }
+    *p = '\0';
+
+    XrRegexError err = XR_RE_OK;
+    XrRegex *re = xr_regex_compile(pattern, XR_RE_NONE, &err);
+    ASSERT_NULL(re);
+    ASSERT_EQ_INT(err, XR_RE_ERR_TOO_MANY_CAPTURES);
+}
+
 /* ========================================================================
  * 2. Basic Matching Tests (test/find/full_match)
  * ======================================================================== */
@@ -839,6 +855,7 @@ RUN_TEST(compile_invalid_unmatched_bracket);
 RUN_TEST(compile_invalid_bad_repeat);
 RUN_TEST(compile_flags);
 RUN_TEST(compile_is_valid);
+RUN_TEST(compile_rejects_too_many_capture_groups);
 
 RUN_TEST_SUITE("Basic Matching");
 RUN_TEST(test_match_simple);

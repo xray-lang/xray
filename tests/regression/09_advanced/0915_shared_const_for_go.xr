@@ -44,7 +44,10 @@ fn test_shared_const_channel_for_go() {
     }
     let sum = 0
     for (i in 0..3) {
-        sum = sum + ch.recv()
+        sum = sum + match (ch.recv()) {
+            Recv.Value(v) -> v
+            _ -> 0
+        }
     }
     assert_eq(sum, 3)
 }

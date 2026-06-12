@@ -57,8 +57,10 @@ fn test_ne_strings() {
 
 @test
 fn test_ne_mixed() {
-    assert_eq(1 != null, true)
-    assert_eq("" != null, true)
+    let one: int? = 1
+    let text: string? = ""
+    assert_eq(one != null, true)
+    assert_eq(text != null, true)
 }
 
 // ===== 小于 =====
@@ -190,4 +192,3 @@ fn test_float_nan_comparison() {
         assert_eq(rt_numeric_le(math.NAN, 1.0), false)
     }
 }
-

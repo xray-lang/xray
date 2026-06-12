@@ -5,12 +5,18 @@ fn send_int(ch: Channel<int>) {
 let buffered = new Channel<int>(1)
 buffered.send(9)
 let buffered_value = buffered.recv()
-print(buffered_value + 1)
+print(match (buffered_value) {
+    Recv.Value(value) -> value + 1
+    _ -> -1
+})
 buffered.close()
 
 let rendezvous = new Channel<int>(0)
 let task = go send_int(rendezvous)
 let direct_value = rendezvous.recv()
 await task
-print(direct_value + 1)
+print(match (direct_value) {
+    Recv.Value(value) -> value + 1
+    _ -> -1
+})
 rendezvous.close()

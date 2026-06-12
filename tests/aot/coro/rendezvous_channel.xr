@@ -1,11 +1,14 @@
-fn sender(ch: Channel) -> int {
+fn sender(ch: Channel<int>) -> int {
     ch.send(41)
     return 1
 }
 
-const ch = Channel()
+const ch = new Channel<int>(0)
 const task = go sender(ch)
 let v = ch.recv()
 let done = await task
-print(v + done)
+print(match (v) {
+    Recv.Value(value) -> value + done
+    _ -> -1
+})
 ch.close()

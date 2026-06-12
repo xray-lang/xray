@@ -1,6 +1,7 @@
 // Test: Coro.whereis and Coro.monitor for named coroutine lifecycle monitoring
 
 import time
+
 fn worker1() -> int {
     time.sleep(50)
     return 42
@@ -41,12 +42,18 @@ fn test_coro_monitor() {
     let ch = Coro.monitor("test-worker-2")
 
     // Wait for exit notification
-    let reason = ch.recv()
+    let reason = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
     print(reason)  // expect: normal
 
     // ========== Test 3: monitor non-existent coroutine ==========
     let ch2 = Coro.monitor("does-not-exist")
-    let reason2 = ch2.recv()
+    let reason2 = match (ch2.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
     print(reason2)  // expect: noproc
 
     // ========== Test 4: monitor already completed coroutine ==========
@@ -58,9 +65,11 @@ fn test_coro_monitor() {
     // Coroutine already done
     time.sleep(10)
     let ch3 = Coro.monitor("test-worker-3")
-    let reason3 = ch3.recv()
+    let reason3 = match (ch3.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
     print(reason3)  // expect: noproc
 
     print("all tests passed")  // expect: all tests passed
 }
-

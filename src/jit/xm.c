@@ -762,6 +762,8 @@ bool xm_op_has_side_effect(uint16_t op) {
         case XM_RETAIN:
         case XM_RELEASE:
         case XM_ALLOC:
+        // Coroutine suspend/resume points
+        case XM_SUSPEND:
         // Guards (may deopt — observable side effect)
         case XM_DEOPT:
         case XM_GUARD_TAG:

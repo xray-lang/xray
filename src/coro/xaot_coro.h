@@ -123,6 +123,13 @@ XR_FUNC void xr_aot_release_frame_value(struct XrCoroGC *gc, XrValue value);
 XR_FUNC XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index);
 XR_FUNC XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index,
                                           const char *field);
+XR_FUNC bool xr_aot_runtime_enum_value_info(XrValue value, const char **enum_name,
+                                            const char **member_name, uint32_t *member_index,
+                                            bool *is_adt, int *payload_count);
+XR_FUNC bool xr_aot_runtime_adt_value_info(XrValue value, const char **enum_name,
+                                           const char **member_name, uint32_t *member_index,
+                                           int *payload_count);
+XR_FUNC XrValue xr_aot_runtime_adt_payload(XrValue value, int index);
 XR_FUNC XrValue xr_aot_time_now(void);
 XR_FUNC XrValue xr_aot_time_monotonic(void);
 XR_FUNC XrValue xr_aot_time_nanos(void);
@@ -153,6 +160,8 @@ XR_FUNC XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef 
 XR_FUNC XrValue xr_aot_channel_new(const XrAotContext *ctx, int64_t buffer_size);
 XR_FUNC XrValue xr_aot_chan_try_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value);
+XR_FUNC XrValue xr_aot_chan_try_send_ready(const XrAotContext *ctx, XrValue channel_value,
+                                           XrValue send_value);
 
 static inline XrValue xr_aot_chan_try_send_i64(const XrAotContext *ctx, XrValue channel_value,
                                                int64_t send_value) {
@@ -164,11 +173,22 @@ static inline XrValue xr_aot_chan_try_send_f64(const XrAotContext *ctx, XrValue 
     return xr_aot_chan_try_send(ctx, channel_value, XR_FROM_FLOAT(send_value));
 }
 
-XR_FUNC XrValue xr_aot_chan_try_recv_value(const XrAotContext *ctx, XrValue channel_value);
-XR_FUNC bool xr_aot_chan_try_recv_slot(const XrAotContext *ctx, XrValue channel_value,
-                                       XrSlotRef out_slot);
+static inline XrValue xr_aot_chan_try_send_ready_i64(const XrAotContext *ctx, XrValue channel_value,
+                                                     int64_t send_value) {
+    return xr_aot_chan_try_send_ready(ctx, channel_value, XR_FROM_INT(send_value));
+}
+
+static inline XrValue xr_aot_chan_try_send_ready_f64(const XrAotContext *ctx, XrValue channel_value,
+                                                     double send_value) {
+    return xr_aot_chan_try_send_ready(ctx, channel_value, XR_FROM_FLOAT(send_value));
+}
+
 XR_FUNC XrValue xr_aot_chan_try_recv(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC bool xr_aot_recv_is_value(XrValue recv_value);
+XR_FUNC XrValue xr_aot_recv_payload(XrValue recv_value);
 XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
@@ -203,11 +223,10 @@ static inline XrAotResult xr_aot_chan_send_timeout_f64(const XrAotContext *ctx,
 }
 
 XR_FUNC XrAotResult xr_aot_chan_send_resume(const XrAotContext *ctx, XrSlotRef result_slot,
-                                            bool status_result);
+                                            bool result_value);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue channel_value,
-                                          XrSlotRef out_slot, int64_t timeout_ms,
-                                          bool tuple_result);
+                                          XrSlotRef out_slot, int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
-                                                 bool tuple_result);
+                                                 bool result_value);
 
 #endif  // XAOT_CORO_H

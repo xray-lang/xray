@@ -70,6 +70,7 @@
 #include "../runtime/class/xclass_descriptor.h"
 #include "../module/xmodule.h"
 #include "../coro/xchannel.h"
+#include "../coro/xcoro_pool.h"
 #include "../coro/xdeep_copy.h"
 #include "../runtime/object/xbigint.h"
 #include "../runtime/object/xrange.h"
@@ -149,6 +150,17 @@ static inline XrValue vm_bigint_divop(void *ctx, XrValue left, XrValue right, Xr
             goto startfunc;                                                                        \
         if (_da == XR_DISP_BLOCKED)                                                                \
             return XR_VM_BLOCKED;                                                                  \
+        if (_da == XR_DISP_SWITCH) {                                                               \
+            /* Blocked, but a just-woken LIFO partner may be runnable: swap                        \
+             * vm_ctx in place and keep interpreting instead of exiting                            \
+             * run() through the worker loop. Frame state of the blocked                           \
+             * coroutine was already saved by the channel/await helper. */                         \
+            XrVMContext *_next_ctx = xr_vm_try_direct_switch(isolate, vm_ctx);                     \
+            if (!_next_ctx)                                                                        \
+                return XR_VM_BLOCKED;                                                              \
+            vm_ctx = _next_ctx;                                                                    \
+            goto startfunc;                                                                        \
+        }                                                                                          \
         if (_da == XR_DISP_YIELD)                                                                  \
             return XR_VM_YIELD;                                                                    \
         if (_da == XR_DISP_FATAL)                                                                  \

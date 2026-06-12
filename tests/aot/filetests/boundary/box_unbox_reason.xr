@@ -1,0 +1,10 @@
+let arr = [1, 2, 3]
+let total = 0
+let i = 0
+
+while (i < arr.length) {
+    total = total + arr[i]
+    i = i + 1
+}
+
+print(total)

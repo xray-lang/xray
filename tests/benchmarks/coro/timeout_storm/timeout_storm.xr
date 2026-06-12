@@ -11,12 +11,18 @@ if (process.args.length > 1) {
 }
 
 fn recv_timeout_worker(ch: Channel<int>, timeout_ms: int) -> bool {
-    let (value, ok) = ch.recvTimeout(timeout_ms)
-    return !ok
+    return match (ch.recvTimeout(timeout_ms)) {
+        Recv.Timeout -> true
+        Recv.Value(_) -> false
+        _ -> true
+    }
 }
 
 fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
-    return !ch.sendTimeout(value, timeout_ms)
+    return match (ch.sendTimeout(value, timeout_ms)) {
+        SendResult.Sent -> false
+        _ -> true
+    }
 }
 
 fn run_recv_storm(count: int, timeout_ms: int) -> int {
@@ -51,7 +57,10 @@ fn run_send_storm(count: int, timeout_ms: int) -> int {
             timeouts++
         }
     }
-    let _drain = ch.recv()
+    let _drain = match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
     ch.close()
     return timeouts
 }
@@ -59,6 +68,8 @@ fn run_send_storm(count: int, timeout_ms: int) -> int {
 print("=== Timeout Storm Benchmark ===")
 print("coroutines:", COUNT)
 print("timeout:", TIMEOUT_MS, "ms")
+
+let start_total = time.monotonic()
 
 let start_recv = time.monotonic()
 let recv_timeouts = run_recv_storm(COUNT, TIMEOUT_MS)
@@ -68,9 +79,19 @@ let start_send = time.monotonic()
 let send_timeouts = run_send_storm(COUNT, TIMEOUT_MS)
 let send_elapsed = time.monotonic() - start_send
 
+let total_elapsed = time.monotonic() - start_total
+let completed = COUNT * 2
+let expected = COUNT * 2
+let timed_out = recv_timeouts + send_timeouts
+
 print("recv completed:", COUNT)
 print("recv timeouts:", recv_timeouts)
 print("recv wall:", recv_elapsed, "ms")
 print("send completed:", COUNT)
 print("send timeouts:", send_timeouts)
 print("send wall:", send_elapsed, "ms")
+print("completed_ops:", completed)
+print("expected_ops:", expected)
+print("checksum:", timed_out)
+print("correctness:", timed_out == expected)
+print("reported_time_ms:", total_elapsed)

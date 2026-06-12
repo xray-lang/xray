@@ -83,7 +83,8 @@ typedef struct {
     // Special headers (fast access)
     int64_t content_length;    // Content-Length, -1 = not set
     bool keep_alive;           // Connection: keep-alive
-    bool chunked;              // Transfer-Encoding: chunked
+    bool chunked;              // Transfer-Encoding: chunked (final coding)
+    bool framing_invalid;      // malformed/conflicting CL or TE (reject)
     const char *content_type;  // Content-Type
     size_t content_type_len;
     const char *host;  // Host
@@ -115,6 +116,7 @@ typedef struct {
     int64_t content_length;
     bool keep_alive;
     bool chunked;
+    bool framing_invalid;  // malformed/conflicting CL or TE (reject)
     const char *content_type;
     size_t content_type_len;
 
@@ -281,24 +283,59 @@ XR_FUNC const char *xr_http_method_to_string(XrHttpMethod method);
 
 /*
  * Parse Content-Length header
- * Returns: Content-Length value, -1 if not found
+ * Returns: Content-Length value, -1 if not found, -2 if malformed
+ * (non-digit value, overflow, or duplicate headers that disagree).
+ * Callers MUST treat -2 as a request error, never as "no body".
  */
 static inline long long xr_http_parse_content_length(const char *headers, size_t len) {
+    static const char NAME[] = "content-length:";
+    const size_t name_len = sizeof(NAME) - 1; /* 15 */
     const char *p = headers;
     const char *end = headers + len;
+    long long found = -1;
     while (p < end) {
-        if ((end - p >= 15) && (p[0] == 'C' || p[0] == 'c') && (p[7] == '-') &&
-            (p[8] == 'L' || p[8] == 'l')) {
-            const char *value = p + 16;
-            while (value < end && (*value == ' ' || *value == '\t'))
-                value++;
-            return strtoll(value, NULL, 10);
+        /* Match the full header name at line start (case-insensitive).
+         * The old fast-path probe checked only 3 characters and skipped
+         * a hardcoded extra byte after the colon, mis-parsing
+         * "Content-Length:123" (no space) as 23. */
+        if ((size_t) (end - p) > name_len) {
+            size_t i = 0;
+            while (i < name_len) {
+                char c = p[i];
+                if (c >= 'A' && c <= 'Z')
+                    c = (char) (c - 'A' + 'a');
+                if (c != NAME[i])
+                    break;
+                i++;
+            }
+            if (i == name_len) {
+                const char *value = p + name_len;
+                while (value < end && (*value == ' ' || *value == '\t'))
+                    value++;
+                long long v = 0;
+                bool has_digit = false;
+                while (value < end && *value >= '0' && *value <= '9') {
+                    if (v > (9223372036854775807LL - 9) / 10)
+                        return -2;
+                    v = v * 10 + (*value - '0');
+                    has_digit = true;
+                    value++;
+                }
+                /* Value must be digits followed by end-of-line/OWS only. */
+                while (value < end && (*value == ' ' || *value == '\t'))
+                    value++;
+                if (!has_digit || (value < end && *value != '\r' && *value != '\n'))
+                    return -2;
+                if (found >= 0 && found != v)
+                    return -2; /* conflicting duplicates: smuggling vector */
+                found = v;
+            }
         }
         while (p < end && *p != '\n')
             p++;
         p++;
     }
-    return -1;
+    return found;
 }
 
 /*

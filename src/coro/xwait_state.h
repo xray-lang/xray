@@ -49,19 +49,31 @@ typedef enum {
 typedef struct XrTaskAwaitNode {
     struct XrTaskAwaitNode *next;
     XrTask *task;
-    XrCoroutine *waiter;
+    /* waiter/linked are relaxed atomics: list mutation happens under the
+     * task's await_lock, but the waiter side pre-checks them without the
+     * lock before unregistering (a stale value is fine — the locked
+     * unregister re-validates). */
+    _Atomic(XrCoroutine *) waiter;
     int waiter_index;
-    bool linked;
+    _Atomic bool linked;
 } XrTaskAwaitNode;
+
+static inline XrCoroutine *xr_task_await_node_waiter(const XrTaskAwaitNode *node) {
+    return atomic_load_explicit(&((XrTaskAwaitNode *) node)->waiter, memory_order_relaxed);
+}
+
+static inline bool xr_task_await_node_linked(const XrTaskAwaitNode *node) {
+    return atomic_load_explicit(&((XrTaskAwaitNode *) node)->linked, memory_order_relaxed);
+}
 
 static inline void xr_task_await_node_reset(XrTaskAwaitNode *node) {
     if (!node)
         return;
     node->next = NULL;
     node->task = NULL;
-    node->waiter = NULL;
+    atomic_store_explicit(&node->waiter, NULL, memory_order_relaxed);
     node->waiter_index = -1;
-    node->linked = false;
+    atomic_store_explicit(&node->linked, false, memory_order_relaxed);
 }
 
 typedef struct XrAwaitWaitToken {
@@ -522,6 +534,75 @@ static inline void xr_work_queue_wait_token_finish(XrWorkQueueWaitToken *token) 
     xr_work_queue_wait_token_reset(token);
 }
 
+/* ========== Result Group Wait Token ==========
+ *
+ * ResultGroup.recv uses a group-owned waiter list. The coroutine-side token
+ * records the owner so cancellation and shell recycle can unlink the waiter
+ * before the coroutine is reused.
+ */
+typedef enum {
+    XR_RESULT_GROUP_WAIT_IDLE = 0,
+    XR_RESULT_GROUP_WAIT_REGISTERING,
+    XR_RESULT_GROUP_WAIT_REGISTERED,
+    XR_RESULT_GROUP_WAIT_RESOLVED,
+    XR_RESULT_GROUP_WAIT_CANCELLED,
+} XrResultGroupWaitTokenState;
+
+typedef struct XrResultGroupWaitToken {
+    _Atomic int state;
+    _Atomic(void *) group;
+    uint32_t sequence;
+} XrResultGroupWaitToken;
+
+static inline void xr_result_group_wait_token_reset(XrResultGroupWaitToken *token) {
+    if (!token)
+        return;
+    atomic_store_explicit(&token->state, XR_RESULT_GROUP_WAIT_IDLE, memory_order_relaxed);
+    atomic_store_explicit(&token->group, NULL, memory_order_relaxed);
+}
+
+static inline void xr_result_group_wait_token_prepare(XrResultGroupWaitToken *token, void *group) {
+    if (!token)
+        return;
+    token->sequence++;
+    atomic_store_explicit(&token->group, group, memory_order_relaxed);
+    atomic_store_explicit(&token->state, XR_RESULT_GROUP_WAIT_REGISTERING, memory_order_release);
+}
+
+static inline void xr_result_group_wait_token_commit(XrResultGroupWaitToken *token) {
+    if (!token)
+        return;
+    int expected = XR_RESULT_GROUP_WAIT_REGISTERING;
+    (void) atomic_compare_exchange_strong_explicit(&token->state, &expected,
+                                                   XR_RESULT_GROUP_WAIT_REGISTERED,
+                                                   memory_order_acq_rel, memory_order_acquire);
+}
+
+static inline void xr_result_group_wait_token_set_terminal(XrResultGroupWaitToken *token,
+                                                           int terminal) {
+    if (!token)
+        return;
+    int state = atomic_load_explicit(&token->state, memory_order_acquire);
+    while (state == XR_RESULT_GROUP_WAIT_REGISTERING || state == XR_RESULT_GROUP_WAIT_REGISTERED) {
+        if (atomic_compare_exchange_weak_explicit(&token->state, &state, terminal,
+                                                  memory_order_acq_rel, memory_order_acquire)) {
+            return;
+        }
+    }
+}
+
+static inline void xr_result_group_wait_token_resolve(XrResultGroupWaitToken *token) {
+    xr_result_group_wait_token_set_terminal(token, XR_RESULT_GROUP_WAIT_RESOLVED);
+}
+
+static inline void xr_result_group_wait_token_cancel(XrResultGroupWaitToken *token) {
+    xr_result_group_wait_token_set_terminal(token, XR_RESULT_GROUP_WAIT_CANCELLED);
+}
+
+static inline void xr_result_group_wait_token_finish(XrResultGroupWaitToken *token) {
+    xr_result_group_wait_token_reset(token);
+}
+
 /* ========== Channel Wait Token ==========
  *
  * A channel waiter has a short but race-sensitive lifecycle:
@@ -530,11 +611,22 @@ static inline void xr_work_queue_wait_token_finish(XrWorkQueueWaitToken *token) 
  *                                  \----> TIMED_OUT
  *                                  \----> CANCELLED
  *
- * The channel lock serializes REGISTERING/REGISTERED with wait queue
- * insertion.  Wake paths claim the coroutine with xr_coro_claim_wake(); this
- * token records the waiter-side decision so specialized channel queues share
- * the same commit/cancel contract without depending on ad hoc fields.
+ * The token is a DIAGNOSTIC state machine: ownership itself is already
+ * decided by "dequeue from the wait queue under ch->lock" plus the
+ * coroutine state-word CAS. Nothing in the runtime reads the token back
+ * for control flow, so release builds compile the whole lifecycle to
+ * no-ops (XR_CHAN_WAIT_TOKEN_CHECKS=0) and the channel block/wake hot
+ * path drops 2-3 atomics per operation. Debug/sanitizer builds keep the
+ * checks to pin down double-wake / lost-wake regressions.
  */
+#ifndef XR_CHAN_WAIT_TOKEN_CHECKS
+#ifdef NDEBUG
+#define XR_CHAN_WAIT_TOKEN_CHECKS 0
+#else
+#define XR_CHAN_WAIT_TOKEN_CHECKS 1
+#endif
+#endif
+
 typedef enum {
     XR_CHAN_WAIT_IDLE = 0,
     XR_CHAN_WAIT_REGISTERING,
@@ -550,6 +642,8 @@ typedef struct XrChannelWaitToken {
     bool is_send;
     uint32_t sequence;
 } XrChannelWaitToken;
+
+#if XR_CHAN_WAIT_TOKEN_CHECKS
 
 static inline void xr_channel_wait_token_reset(XrChannelWaitToken *token) {
     if (!token)
@@ -606,6 +700,46 @@ static inline void xr_channel_wait_token_cancel(XrChannelWaitToken *token) {
 static inline void xr_channel_wait_token_timeout(XrChannelWaitToken *token) {
     xr_channel_wait_token_set_terminal(token, XR_CHAN_WAIT_TIMED_OUT);
 }
+
+#else /* !XR_CHAN_WAIT_TOKEN_CHECKS */
+
+static inline void xr_channel_wait_token_reset(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+static inline void xr_channel_wait_token_prepare(XrChannelWaitToken *token, void *channel,
+                                                 bool is_send) {
+    (void) token;
+    (void) channel;
+    (void) is_send;
+}
+
+static inline void xr_channel_wait_token_commit(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+static inline void xr_channel_wait_token_finish(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+static inline void xr_channel_wait_token_set_terminal(XrChannelWaitToken *token, int terminal) {
+    (void) token;
+    (void) terminal;
+}
+
+static inline void xr_channel_wait_token_resolve(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+static inline void xr_channel_wait_token_cancel(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+static inline void xr_channel_wait_token_timeout(XrChannelWaitToken *token) {
+    (void) token;
+}
+
+#endif /* XR_CHAN_WAIT_TOKEN_CHECKS */
 
 /* ========== Select Support ========== */
 
@@ -700,6 +834,7 @@ typedef struct XrCoroWaitState {
     XrTimerWaitToken timer_token;
     XrIoWaitToken io_token;
     XrWorkQueueWaitToken work_queue_token;
+    XrResultGroupWaitToken result_group_token;
 } XrCoroWaitState;
 
 struct XrBlockedBucket {

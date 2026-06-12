@@ -35,14 +35,32 @@
 #include "../base/xmalloc.h"
 #include "../runtime/xglobals_table.h"
 #include "../coro/xcoroutine.h"
+#include "../coro/xtask.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_api.h"
 #include "../vm/xvm_profiler.h"
 #include "../vm/xvm_internal.h"
 #include "../../stdlib/stdlib_cache.h"
+#include "../os/os_time.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static bool isolate_teardown_stats_enabled(void) {
+    const char *value = getenv("XRAY_SCHED_STATS");
+    if (!value || value[0] == '\0' || value[0] == '0')
+        return false;
+    if (value[0] == 'f' || value[0] == 'F')
+        return false;
+    if (value[0] == 'n' || value[0] == 'N')
+        return false;
+    return true;
+}
+
+static uint64_t isolate_teardown_elapsed_ms(uint64_t start_ns) {
+    uint64_t now_ns = xr_time_monotonic_ns();
+    return (now_ns >= start_ns) ? (now_ns - start_ns) / 1000000ULL : 0;
+}
 
 /* ========== Isolate Creation ========== */
 
@@ -144,75 +162,152 @@ void xray_isolate_delete(XrayIsolate *isolate) {
     if (!isolate)
         return;
 
+    bool teardown_stats = isolate_teardown_stats_enabled();
+    uint64_t teardown_start_ns = xr_time_monotonic_ns();
+    uint64_t stage_start_ns = teardown_start_ns;
+    uint64_t profiler_ms = 0;
+    uint64_t runtime_ms = 0;
+    uint64_t tls_exit_ms = 0;
+    uint64_t main_coro_ms = 0;
+    uint64_t cleanup_extra_ms = 0;
+    uint64_t vm_cleanup_ms = 0;
+    uint64_t tmp_strbuf_ms = 0;
+    uint64_t globals_ms = 0;
+    uint64_t coro_storage_ms = 0;
+    uint64_t gc_cleanup_ms = 0;
+    uint64_t deferred_tasks_ms = 0;
+    uint64_t sys_heap_ms = 0;
+    uint64_t string_pool_ms = 0;
+    uint64_t stdlib_cache_ms = 0;
+    uint64_t config_ms = 0;
+
     /* Drain the per-isolate profiler before any structure that
      * powers the report (opcode info, isolate pointer) goes away.
      * vm_profiler_report tolerates NULL so this is a no-op when
      * the build never compiled the profiler in. */
+    stage_start_ns = xr_time_monotonic_ns();
     vm_profiler_report((const VMProfiler *) isolate->profiler);
     if (isolate->profiler) {
         xr_free(isolate->profiler);
         isolate->profiler = NULL;
     }
+    profiler_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    /* Runtime-owned Task shells are still referenced by coroutine heaps
+     * (for example Array<Task> locals in main). Destroy the runtime first
+     * so workers and pools are drained, but defer the Task shell free until
+     * after all isolate GC roots have released their XrValue references. */
+    stage_start_ns = xr_time_monotonic_ns();
+    if (isolate->vm.runtime) {
+        xr_multicore_destroy(isolate);
+    }
+    runtime_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    stage_start_ns = xr_time_monotonic_ns();
     if (g_current_isolate == isolate) {
         xray_isolate_exit();
     }
+    tls_exit_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->main_coro) {
         xr_coro_free(isolate->main_coro);
         isolate->main_coro = NULL;
     }
+    main_coro_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     // Cleanup via callback (mirrors init_extra)
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->params.cleanup_extra) {
         isolate->params.cleanup_extra(isolate);
     }
+    cleanup_extra_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     xr_vm_cleanup(isolate);
+    vm_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->tmp_strbuf) {
         xr_strbuf_free(isolate->tmp_strbuf);
         isolate->tmp_strbuf = NULL;
     }
+    tmp_strbuf_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     // The globals table stores XrValue entries that reference fixedgc
     // bodies (enum types and the like). Drop the table BEFORE
     // xr_gc_cleanup so any post-VM hook that scans globals during
     // teardown still sees consistent pointers, and so xr_gc_cleanup is
     // the single authoritative free path for those bodies.
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->globals) {
         xr_globals_destroy((XrGlobalsTable *) isolate->globals);
         isolate->globals = NULL;
     }
+    globals_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->sys_heap) {
         /* Coroutine shells must release their per-coroutine heaps before
          * fixed GC finalization. Class/module metadata remains alive until
          * fixed GC destroy hooks finish reading instance layouts. */
         xr_sysheap_destroy_coro_storage(isolate->sys_heap);
     }
+    coro_storage_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     xr_gc_cleanup(&isolate->gc);
+    gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
+    xr_task_isolate_destroy_deferred(isolate);
+    deferred_tasks_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->sys_heap) {
         xr_sysheap_destroy(isolate->sys_heap);
         xr_free(isolate->sys_heap);
         isolate->sys_heap = NULL;
     }
+    sys_heap_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->global_string_pool) {
         xr_global_pool_free(isolate->global_string_pool);
         xr_free(isolate->global_string_pool);
         isolate->global_string_pool = NULL;
     }
+    string_pool_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     // Release the lazy stdlib per-isolate cache. Calls log_state_cleanup
     // and frees the container. Safe to call even when cache is NULL.
+    stage_start_ns = xr_time_monotonic_ns();
     xr_stdlib_cache_free(isolate);
+    stdlib_cache_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
+    stage_start_ns = xr_time_monotonic_ns();
     if (isolate->config) {
         xr_free(isolate->config);
         isolate->config = NULL;
+    }
+    config_ms = isolate_teardown_elapsed_ms(stage_start_ns);
+
+    if (teardown_stats) {
+        fprintf(stderr,
+                "Isolate teardown: profiler_ms=%llu runtime_ms=%llu tls_exit_ms=%llu "
+                "main_coro_ms=%llu cleanup_extra_ms=%llu vm_cleanup_ms=%llu "
+                "tmp_strbuf_ms=%llu globals_ms=%llu coro_storage_ms=%llu "
+                "gc_cleanup_ms=%llu deferred_tasks_ms=%llu sys_heap_ms=%llu "
+                "string_pool_ms=%llu stdlib_cache_ms=%llu config_ms=%llu total_ms=%llu\n",
+                (unsigned long long) profiler_ms, (unsigned long long) runtime_ms,
+                (unsigned long long) tls_exit_ms, (unsigned long long) main_coro_ms,
+                (unsigned long long) cleanup_extra_ms, (unsigned long long) vm_cleanup_ms,
+                (unsigned long long) tmp_strbuf_ms, (unsigned long long) globals_ms,
+                (unsigned long long) coro_storage_ms, (unsigned long long) gc_cleanup_ms,
+                (unsigned long long) deferred_tasks_ms, (unsigned long long) sys_heap_ms,
+                (unsigned long long) string_pool_ms, (unsigned long long) stdlib_cache_ms,
+                (unsigned long long) config_ms,
+                (unsigned long long) isolate_teardown_elapsed_ms(teardown_start_ns));
     }
 
     xr_free(isolate);

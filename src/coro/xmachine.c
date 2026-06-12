@@ -49,7 +49,7 @@ void xr_machine_init(XrMachine *m, int id, struct XrRuntime *runtime) {
     m->backend_storage = NULL;
     m->backend_storage_destroy = NULL;
     m->all_link = NULL;
-    m->idle_link = NULL;
+    atomic_store_explicit(&m->idle_link, NULL, memory_order_relaxed);
     atomic_store(&m->in_idle_worker_list, false);
     atomic_store(&m->heartbeat, 0);
 
@@ -114,10 +114,10 @@ XrMachine *xr_get_idle_m(struct XrRuntime *runtime) {
         XrMachine *head = atomic_load_explicit(&runtime->idle_m_head, memory_order_acquire);
         if (!head)
             return NULL;
-        XrMachine *next = head->idle_link;
+        XrMachine *next = atomic_load_explicit(&head->idle_link, memory_order_relaxed);
         if (atomic_compare_exchange_weak_explicit(&runtime->idle_m_head, &head, next,
                                                   memory_order_acq_rel, memory_order_acquire)) {
-            head->idle_link = NULL;
+            atomic_store_explicit(&head->idle_link, NULL, memory_order_relaxed);
             atomic_fetch_sub_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);
             return head;
         }
@@ -134,7 +134,7 @@ void xr_put_idle_m(struct XrRuntime *runtime, XrMachine *m) {
     XrMachine *head;
     do {
         head = atomic_load_explicit(&runtime->idle_m_head, memory_order_relaxed);
-        m->idle_link = head;
+        atomic_store_explicit(&m->idle_link, head, memory_order_relaxed);
     } while (!atomic_compare_exchange_weak_explicit(&runtime->idle_m_head, &head, m,
                                                     memory_order_release, memory_order_relaxed));
     atomic_fetch_add_explicit(&runtime->idle_m_count, 1, memory_order_relaxed);

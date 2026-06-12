@@ -1,0 +1,3 @@
+import { triple, add_one } from "./_math_lib"
+
+print(add_one(triple(14)))

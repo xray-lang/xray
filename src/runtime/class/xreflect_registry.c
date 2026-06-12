@@ -164,14 +164,22 @@ bool xr_registry_register_type(XrayIsolate *X, XrTypeMetadata *meta) {
 
     if (registry->type_count >= registry->capacity) {
         registry_grow(registry);
+        if (registry->type_count >= registry->capacity) {
+            // Grow failed (OOM): refuse instead of writing past the array.
+            return false;
+        }
     }
 
     int index = registry->type_count++;
     XR_DCHECK(registry->type_count <= registry->capacity, "registry_register: count > capacity");
     registry->types[index] = meta;
 
-    if (registry->type_map) {
-        xr_hashmap_set(registry->type_map, type_name, meta);
+    if (registry->type_map && !xr_hashmap_set(registry->type_map, type_name, meta)) {
+        // An entry missing from a live map is invisible to find/dup-check,
+        // so roll the slot back and report failure.
+        registry->types[index] = NULL;
+        registry->type_count--;
+        return false;
     }
 
     // Cache on class for O(1) reverse lookup

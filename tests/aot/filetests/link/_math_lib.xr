@@ -1,0 +1,7 @@
+export fn triple(x: int) -> int {
+    return x * 3
+}
+
+export fn add_one(x: int) -> int {
+    return x + 1
+}

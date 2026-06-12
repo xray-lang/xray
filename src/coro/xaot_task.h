@@ -15,8 +15,12 @@
 
 XR_FUNC XrValue xr_aot_task_cancel(const XrAotContext *ctx, XrValue task_value);
 XR_FUNC XrValue xr_aot_task_done(const XrAotContext *ctx, XrValue task_value);
-XR_FUNC XrValue xr_aot_task_cancelled(const XrAotContext *ctx, XrValue task_value);
-XR_FUNC XrValue xr_aot_task_result(const XrAotContext *ctx, XrValue task_value);
-XR_FUNC XrValue xr_aot_task_error(const XrAotContext *ctx, XrValue task_value);
+XR_FUNC XrValue xr_aot_task_status(const XrAotContext *ctx, XrValue task_value);
+XR_FUNC XrValue xr_aot_task_poll(const XrAotContext *ctx, XrValue task_value);
+XR_FUNC XrAotResult xr_aot_task_await_result(const XrAotContext *ctx, XrValue task_value,
+                                             XrSlotRef result_slot, int64_t timeout_ms,
+                                             bool timeout_enabled);
+XR_FUNC XrAotResult xr_aot_task_await_result_resume(const XrAotContext *ctx, XrSlotRef result_slot,
+                                                    bool timeout_enabled);
 
 #endif  // XAOT_TASK_H

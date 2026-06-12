@@ -42,6 +42,7 @@
     X(TRY, "xi.try", xi2xm_try) \
     X(CATCH, "xi.catch", xi2xm_catch) \
     X(END_TRY, "xi.end.try", xi2xm_end_try) \
+    X(ERR_CHECK, "xi.err.check", xi2xm_err_check) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \
     X(DROP_REUSE, "xi.drop.reuse", xi2xm_drop_reuse) \
@@ -93,13 +94,14 @@
     X(AWAIT, "xi.await", xi2xm_reject_unsupported) \
     X(CHAN_SEND, "xi.chan.send", xi2xm_reject_unsupported) \
     X(CHAN_RECV, "xi.chan.recv", xi2xm_reject_unsupported) \
+    X(CHAN_RECV_STATUS, "xi.chan.recv.status", xi2xm_reject_unsupported) \
     X(CHAN_TRY_SEND, "xi.chan.try.send", xi2xm_reject_unsupported) \
     X(CHAN_TRY_RECV, "xi.chan.try.recv", xi2xm_reject_unsupported) \
     X(CHAN_IS_CLOSED, "xi.chan.is.closed", xi2xm_reject_unsupported) \
     X(TIME_AFTER, "xi.time.after", xi2xm_reject_unsupported) \
     X(SELECT_BLOCK, "xi.select.block", xi2xm_reject_unsupported) \
     X(YIELD, "xi.yield", xi2xm_reject_unsupported) \
-    X(CHAN_NEW, "xi.chan.new", xi2xm_reject_unsupported) \
+    X(CHAN_NEW, "xi.chan.new", xi2xm_chan_new) \
     X(DEFER, "xi.defer", xi2xm_reject_unsupported) \
     X(JSON_NEW, "xi.json.new", xi2xm_reject_unsupported) \
     X(JSON_INIT_F, "xi.json.init.f", xi2xm_reject_unsupported) \

@@ -2,9 +2,6 @@ import regex
 
 fn regex_match_ok(pattern: string, text: string) -> bool {
     let re = regex.compile(pattern)
-    if (re == null) {
-        return false
-    }
     return regex.find(re, text) != null
 }
 

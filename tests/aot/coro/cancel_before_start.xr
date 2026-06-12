@@ -7,7 +7,10 @@ fn sleeper() -> int {
 
 let task = go sleeper()
 task.cancel()
-let value = await task
-print(value == null)
+let value = task.awaitResult()
+print(match (value) {
+    TaskResult.Cancelled -> true
+    _ -> false
+})
 print(task.done)
-print(task.cancelled)
+print(task.status)

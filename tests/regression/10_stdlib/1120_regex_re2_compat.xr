@@ -14,17 +14,11 @@ import regex
 
 fn match_ok(pattern: string, text: string) -> bool {
     let re = regex.compile(pattern)
-    if (re == null) {
-        return false
-    }
     return regex.find(re, text) != null
 }
 
 fn match_eq(pattern: string, text: string, expected: string) -> bool {
     let re = regex.compile(pattern)
-    if (re == null) {
-        return false
-    }
     let result = regex.find(re, text)
     if (result == null) {
         return false

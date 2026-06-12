@@ -253,12 +253,15 @@ static bool both_float(SccpCell a, SccpCell b) {
     return a.kind == SCCP_CONST_FLOAT && b.kind == SCCP_CONST_FLOAT;
 }
 
-/* Evaluate a unary op given the operand's lattice cell. */
+/* Evaluate a unary op given the operand's lattice cell.
+ * Integer semantics must mirror fold_int_binary in xi_opt.c exactly
+ * (uint64 wrap, INT64_MIN edge cases, arithmetic right shift) — a fold
+ * that disagrees with the runtime is a miscompile. */
 static SccpCell eval_unary(uint16_t op, SccpCell a) {
     switch (op) {
         case XI_NEG:
             if (a.kind == SCCP_CONST_INT)
-                return sccp_int(-a.ival);
+                return sccp_int((int64_t) (-(uint64_t) a.ival));
             if (a.kind == SCCP_CONST_FLOAT)
                 return sccp_float(-a.fval);
             return sccp_bot();
@@ -302,14 +305,20 @@ static SccpCell eval_arith(uint16_t op, SccpCell a, SccpCell b) {
                 return sccp_float(a.fval * b.fval);
             return sccp_bot();
         case XI_DIV:
-            if (both_int(a, b) && b.ival != 0)
+            if (both_int(a, b) && b.ival != 0) {
+                if (b.ival == -1)  // INT64_MIN / -1 wraps to INT64_MIN
+                    return sccp_int((int64_t) (-(uint64_t) a.ival));
                 return sccp_int(a.ival / b.ival);
+            }
             if (both_float(a, b) && b.fval != 0.0)
                 return sccp_float(a.fval / b.fval);
             return sccp_bot();
         case XI_MOD:
-            if (both_int(a, b) && b.ival != 0)
+            if (both_int(a, b) && b.ival != 0) {
+                if (b.ival == -1)  // INT64_MIN % -1 is defined as 0
+                    return sccp_int(0);
                 return sccp_int(a.ival % b.ival);
+            }
             return sccp_bot();
         default:
             return sccp_bot();
@@ -332,8 +341,11 @@ static SccpCell eval_bitwise(uint16_t op, SccpCell a, SccpCell b) {
                 return sccp_int((int64_t) ((uint64_t) a.ival << b.ival));
             return sccp_bot();
         case XI_SHR:
+            /* Arithmetic shift (sign-extending), matching xi_opt fold and
+             * codegen (SAR/ASR/SRA); a logical shift here would fold
+             * negative operands to the wrong value. */
             if (b.ival >= 0 && b.ival < 64)
-                return sccp_int((int64_t) ((uint64_t) a.ival >> b.ival));
+                return sccp_int(a.ival >> b.ival);
             return sccp_bot();
         default:
             return sccp_bot();

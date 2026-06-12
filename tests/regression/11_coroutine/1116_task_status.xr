@@ -1,8 +1,11 @@
-// 测试 task.done 和 task.cancelled 属性
+// 测试 task.done 和 task.status 属性
 // 作者：xingleixu@gmail.com
 
 fn blocked(ch: Channel<int>) -> int {
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 fn compute(x: int) -> int {
@@ -16,7 +19,7 @@ fn test_main() {
     let task = go blocked(ch)
     print("before send:")
     print("  done:", task.done)
-    print("  cancelled:", task.cancelled)
+    print("  status:", task.status)
 
     ch.send(21)
     let result = await task
@@ -29,11 +32,14 @@ fn test_main() {
     const ch2 = new Channel<int>(0)
     let task2 = go blocked(ch2)
     task2.cancel()
-    let result2 = await task2
+    let result2 = task2.awaitResult()
     print("after cancel:")
     print("  done:", task2.done)
-    print("  cancelled:", task2.cancelled)
-    print("  result:", result2)
+    print("  status:", task2.status)
+    print("  cancelled result:", match (result2) {
+        TaskResult.Cancelled -> true
+        _ -> false
+    })
     ch2.close()
 
     // Test 3: completed task status
@@ -41,22 +47,22 @@ fn test_main() {
     let result3 = await task3
     print("completed:")
     print("  done:", task3.done)
-    print("  cancelled:", task3.cancelled)
+    print("  status:", task3.status)
     print("  result:", result3)
 }
 
 // 期望输出：
 // before send:
 //   done: false
-//   cancelled: false
+//   status: Running
 // after await:
 //   done: true
 //   result: 21
 // after cancel:
 //   done: true
-//   cancelled: true
-//   result: null
+//   status: Cancelled
+//   cancelled result: true
 // completed:
 //   done: true
-//   cancelled: false
+//   status: Success
 //   result: 42

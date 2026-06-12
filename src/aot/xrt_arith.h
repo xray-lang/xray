@@ -15,14 +15,32 @@
 #include "xrt_arc.h"        // xrt_str_concat used by xrt_add
 #include "xrt_exception.h"  // xrt_throw_exc for div/mod by zero
 #include "xrt_range.h"
+#include "xrt_coll.h"
 
 /* =========================================================================
  * Tagged arithmetic — all inline, no extern dependency
  * ========================================================================= */
 
+/* int64 add/sub/mul with two's-complement wrap on overflow.
+ * Signed overflow is UB in C, so compute on uint64_t and cast back. This is
+ * the single source of truth for AOT integer arithmetic wrap and MUST match
+ * the VM (uint64 wrap in xvm_dispatch_arith) and xi_opt constant folding so
+ * INT64_MAX + 1, INT64_MIN - 1, etc. produce identical results across tiers. */
+static inline int64_t xrt_i64_add(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a + (uint64_t) b);
+}
+static inline int64_t xrt_i64_sub(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a - (uint64_t) b);
+}
+static inline int64_t xrt_i64_mul(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a * (uint64_t) b);
+}
+
 static inline XrValue xrt_add(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return XR_FROM_INT(a.i + b.i);
+        return XR_FROM_INT(xrt_i64_add(a.i, b.i));
+    if (XR_IS_STR(a) && XR_IS_STR(b))
+        return xrt_str_concat_value(a, b); /* header lengths, no strlen */
     if (XR_IS_STR(a) || XR_IS_STR(b)) {
         char ba[64], bb[64];
         return xrt_str_concat(xr_to_cstr(a, ba, sizeof(ba)), xr_to_cstr(b, bb, sizeof(bb)));
@@ -32,24 +50,9 @@ static inline XrValue xrt_add(XrValue a, XrValue b) {
     return XR_FROM_FLOAT(fa + fb);
 }
 
-static inline int64_t xrt_eq(XrValue a, XrValue b) {
-    // Normalize STR_ARC to STR for comparison
-    uint32_t ta = (a.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : a.tag;
-    uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
-    if (ta != tb)
-        return 0;
-    if (ta == XR_TAG_I64)
-        return a.i == b.i;
-    if (ta == XR_TAG_F64)
-        return a.f == b.f;
-    if (ta == XR_TAG_STR)
-        return strcmp((const char *) a.ptr, (const char *) b.ptr) == 0;
-    return a.ptr == b.ptr;
-}
-
 static inline XrValue xrt_sub(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return XR_FROM_INT(a.i - b.i);
+        return XR_FROM_INT(xrt_i64_sub(a.i, b.i));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa - fb);
@@ -57,7 +60,7 @@ static inline XrValue xrt_sub(XrValue a, XrValue b) {
 
 static inline XrValue xrt_mul(XrValue a, XrValue b) {
     if (a.tag == XR_TAG_I64 && b.tag == XR_TAG_I64)
-        return XR_FROM_INT(a.i * b.i);
+        return XR_FROM_INT(xrt_i64_mul(a.i, b.i));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
     return XR_FROM_FLOAT(fa * fb);
@@ -70,18 +73,30 @@ static inline XrValue xrt_mul(XrValue a, XrValue b) {
  *   INT64_MIN / -1  → INT64_MIN (unsigned negate; matches xi_opt fold)
  *   INT64_MIN % -1  → 0 */
 static inline int64_t xrt_int_div(int64_t a, int64_t b) {
-    if (b == 0)
+    if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0301: division by zero"));
-    if (b == -1)
+    if (XR_UNLIKELY(b == -1))
         return (int64_t) (-(uint64_t) a);
     return a / b;
 }
 static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
-    if (b == 0)
+    if (XR_UNLIKELY(b == 0))
         xrt_throw_exc(xr_box_str("E0302: modulo by zero"));
-    if (b == -1)
+    if (XR_UNLIKELY(b == -1))
         return 0;
     return a % b;
+}
+
+/* Shifts: the language defines the count as taken mod 64 (spec: "shift count
+ * is taken modulo 64 — unlike C, xray shifts are always defined"). Matches
+ * xi_opt constant folding and JIT hardware behavior (x64 SHL/SAR with CL,
+ * ARM64 LSL/ASR, RISC-V SLL/SRA all mask to 6 bits). Left shift goes through
+ * uint64_t because shifting into/past the sign bit is UB on signed in C. */
+static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {
+    return (int64_t) ((uint64_t) a << ((uint64_t) b & 63));
+}
+static inline int64_t xrt_i64_shr(int64_t a, int64_t b) {
+    return a >> ((uint64_t) b & 63);
 }
 
 static inline XrValue xrt_div(XrValue a, XrValue b) {
@@ -89,7 +104,7 @@ static inline XrValue xrt_div(XrValue a, XrValue b) {
         return XR_FROM_INT(xrt_int_div(a.i, b.i));
     double fa = (a.tag == XR_TAG_I64) ? (double) a.i : a.f;
     double fb = (b.tag == XR_TAG_I64) ? (double) b.i : b.f;
-    if (fb == 0.0)
+    if (XR_UNLIKELY(fb == 0.0))
         xrt_throw_exc(xr_box_str("E0301: division by zero"));
     return XR_FROM_FLOAT(fa / fb);
 }
@@ -136,7 +151,7 @@ static inline void xrt_print(XrValue v) {
     switch (v.tag) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            printf("%s", (const char *) v.ptr);
+            fwrite(xr_str_data(v), 1, (size_t) xr_str_len(v), stdout);
             break;
         case XR_TAG_I64:
             printf("%lld", (long long) v.i);
@@ -157,6 +172,24 @@ static inline void xrt_print(XrValue v) {
             char buf[96];
             xrt_range_format_buf((const xrt_range_t *) v.ptr, buf, sizeof(buf));
             fputs(buf, stdout);
+            break;
+        }
+        case XR_TAG_ARRAY: {
+            xrt_array_t *a = (xrt_array_t *) v.ptr;
+            if (a && a->adt_enum_name && a->adt_member_name) {
+                printf("%s.%s", a->adt_enum_name, a->adt_member_name);
+                if (a->len > 1) {
+                    printf("(");
+                    for (int64_t i = 1; i < a->len; i++) {
+                        if (i > 1)
+                            printf(", ");
+                        xrt_print(xr_typed_get(a->data, (int32_t) i, a->elem_type));
+                    }
+                    printf(")");
+                }
+                break;
+            }
+            printf("<object@%p>", v.ptr);
             break;
         }
         default:
@@ -204,36 +237,49 @@ static inline int64_t xrt_typeof_id(XrValue v) {
     }
 }
 
-/* typename(x) — return type name as a boxed string value */
+/* typename(x) — return type name as a static literal string value */
 static inline XrValue xrt_typeof_str(XrValue v) {
+    XRT_STR_LIT_DEF(xs_int, "int");
+    XRT_STR_LIT_DEF(xs_float, "float");
+    XRT_STR_LIT_DEF(xs_bool, "bool");
+    XRT_STR_LIT_DEF(xs_null, "null");
+    XRT_STR_LIT_DEF(xs_string, "string");
+    XRT_STR_LIT_DEF(xs_array, "Array");
+    XRT_STR_LIT_DEF(xs_set, "Set");
+    XRT_STR_LIT_DEF(xs_map, "Map");
+    XRT_STR_LIT_DEF(xs_function, "function");
+    XRT_STR_LIT_DEF(xs_strbuf, "StringBuilder");
+    XRT_STR_LIT_DEF(xs_tuple, "tuple");
+    XRT_STR_LIT_DEF(xs_range, "Range");
+    XRT_STR_LIT_DEF(xs_object, "object");
     switch (v.tag) {
         case XR_TAG_I64:
-            return xr_box_str("int");
+            return xr_str_lit(&xs_int);
         case XR_TAG_F64:
-            return xr_box_str("float");
+            return xr_str_lit(&xs_float);
         case XR_TAG_BOOL:
-            return xr_box_str("bool");
+            return xr_str_lit(&xs_bool);
         case XR_TAG_NULL:
-            return xr_box_str("null");
+            return xr_str_lit(&xs_null);
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
-            return xr_box_str("string");
+            return xr_str_lit(&xs_string);
         case XR_TAG_ARRAY:
-            return xr_box_str("Array");
+            return xr_str_lit(&xs_array);
         case XR_TAG_SET:
-            return xr_box_str("Set");
+            return xr_str_lit(&xs_set);
         case XR_TAG_MAP:
-            return xr_box_str("Map");
+            return xr_str_lit(&xs_map);
         case XR_TAG_CLOSURE:
-            return xr_box_str("function");
+            return xr_str_lit(&xs_function);
         case XR_TAG_STRBUF:
-            return xr_box_str("StringBuilder");
+            return xr_str_lit(&xs_strbuf);
         case XR_TAG_TUPLE:
-            return xr_box_str("tuple");
+            return xr_str_lit(&xs_tuple);
         case XR_TAG_RANGE:
-            return xr_box_str("Range");
+            return xr_str_lit(&xs_range);
         default:
-            return xr_box_str("object");
+            return xr_str_lit(&xs_object);
     }
 }
 

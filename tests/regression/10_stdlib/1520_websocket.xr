@@ -4,12 +4,12 @@ import ws
 
 @test
 fn test_ws_apis_exist() {
-    assert(ws.connect != null)
-    assert(ws.send != null)
-    assert(ws.recv != null)
-    assert(ws.close != null)
-    assert(ws.ping != null)
-    assert(ws.state != null)
+    assert(typeof(ws.connect) == "function")
+    assert(typeof(ws.send) == "function")
+    assert(typeof(ws.recv) == "function")
+    assert(typeof(ws.close) == "function")
+    assert(typeof(ws.ping) == "function")
+    assert(typeof(ws.state) == "function")
 }
 
 @test

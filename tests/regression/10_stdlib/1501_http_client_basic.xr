@@ -4,19 +4,19 @@ import http
 
 @test
 fn test_http_client_apis_exist() {
-    assert(http.get != null)
-    assert(http.post != null)
-    assert(http.put != null)
-    assert(http.delete != null)
-    assert(http.request != null)
+    assert(typeof(http.get) == "function")
+    assert(typeof(http.post) == "function")
+    assert(typeof(http.put) == "function")
+    assert(typeof(http.delete) == "function")
+    assert(typeof(http.request) == "function")
 }
 
 @test
 fn test_http_server_apis_exist() {
-    assert(http.route != null)
-    assert(http.listen != null)
-    assert(http.urlEncode != null)
-    assert(http.urlDecode != null)
+    assert(typeof(http.route) == "function")
+    assert(typeof(http.listen) == "function")
+    assert(typeof(http.urlEncode) == "function")
+    assert(typeof(http.urlDecode) == "function")
 }
 
 print("All http client basic tests passed")

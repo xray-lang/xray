@@ -4,6 +4,13 @@
 // 验证：闭包捕获的 upvalue 在协程间正确隔离
 print("========== 测试4：闭包 upvalue 隔离 ==========")
 
+fn recvValue(ch) {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> null
+    }
+}
+
 fn test_closure_capture() {
     let counter = 0
     fn increment() {
@@ -35,7 +42,7 @@ fn test_closure_in_go() {
     }
     let task = go worker()
     await task
-    let result = result_ch.recv()
+    let result = recvValue(result_ch)
     print("闭包协程结果:", result)
     assert_eq(result, 15)
     print("✓ 协程中闭包测试通过")
@@ -64,9 +71,9 @@ fn test_multiple_closures() {
     let t2 = go worker2()
     let t3 = go worker3()
     await [t1, t2, t3]
-    let r1 = results.recv()
-    let r2 = results.recv()
-    let r3 = results.recv()
+    let r1 = recvValue(results)
+    let r2 = recvValue(results)
+    let r3 = recvValue(results)
     print("结果:", r1, r2, r3)
     // 结果顺序可能不同，检查总和
     let sum = r1 + r2 + r3
@@ -93,7 +100,7 @@ fn test_nested_closure() {
     }
     let task = go worker()
     await task
-    let result = ch.recv()
+    let result = recvValue(ch)
     print("嵌套闭包结果:", result)
     assert_eq(result, 6)
     print("✓ 嵌套闭包测试通过")

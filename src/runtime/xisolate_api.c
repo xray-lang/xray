@@ -148,12 +148,12 @@ XrVMContext *xr_isolate_get_vm_ctx(XrayIsolate *X) {
 /* ========== Storage Mode ========== */
 
 uint8_t xr_isolate_get_storage_mode(XrayIsolate *X) {
-    return X ? X->current_storage_mode : 0;
+    return X ? atomic_load_explicit(&X->current_storage_mode, memory_order_relaxed) : 0;
 }
 
 void xr_isolate_set_storage_mode(XrayIsolate *X, uint8_t mode) {
     if (X) {
-        X->current_storage_mode = mode;
+        atomic_store_explicit(&X->current_storage_mode, mode, memory_order_relaxed);
     }
 }
 

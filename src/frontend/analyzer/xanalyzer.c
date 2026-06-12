@@ -174,8 +174,11 @@ static void xa_register_codegen_builtins(XaAnalyzer *analyzer) {
 // with a single canonical identity — mirroring how the runtime binds the
 // matching XrEnumType into a builtin global slot.  member_names are stable
 // string literals; payload_counts is copied (NULL for simple enums).
-static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const char **member_names,
-                                  int member_count, const int *payload_counts, bool is_adt) {
+static void register_prelude_enum_full(XaAnalyzer *analyzer, const char *name,
+                                       const char **type_param_names, int type_param_count,
+                                       const char **member_names, int member_count,
+                                       const int *payload_counts, XrType ***payload_types,
+                                       bool is_adt) {
     XR_DCHECK(analyzer != NULL, "register_prelude_enum: NULL analyzer");
     XaSymbol *sym = xa_symbol_new(name, XA_SYM_ENUM);
     sym->location.line = 0;
@@ -190,6 +193,9 @@ static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const 
     links->is_definitely_assigned = true;
     links->is_adt_enum = is_adt;
     links->enum_value_type = xr_type_new_int(NULL);
+    if (type_param_count > 0 && type_param_names) {
+        xa_symbol_links_set_type_params(links, type_param_names, NULL, NULL, type_param_count);
+    }
 
     if (member_count > 0) {
         links->enum_member_names =
@@ -202,19 +208,62 @@ static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const 
             links->enum_payload_counts = (int *) xr_calloc((size_t) member_count, sizeof(int));
             links->enum_payload_types =
                 (XrType ***) xr_calloc((size_t) member_count, sizeof(XrType **));
-            for (int i = 0; i < member_count; i++)
+            for (int i = 0; i < member_count; i++) {
                 links->enum_payload_counts[i] = payload_counts ? payload_counts[i] : 0;
+                int pc = links->enum_payload_counts[i];
+                if (pc > 0 && payload_types && payload_types[i]) {
+                    links->enum_payload_types[i] =
+                        (XrType **) xr_calloc((size_t) pc, sizeof(XrType *));
+                    if (links->enum_payload_types[i]) {
+                        for (int p = 0; p < pc; p++)
+                            links->enum_payload_types[i][p] = payload_types[i][p];
+                    }
+                }
+            }
         }
     }
 }
 
-// Register prelude enums (Ordering) so they are available without a
+static void register_prelude_enum(XaAnalyzer *analyzer, const char *name, const char **member_names,
+                                  int member_count, const int *payload_counts, bool is_adt) {
+    register_prelude_enum_full(analyzer, name, NULL, 0, member_names, member_count, payload_counts,
+                               NULL, is_adt);
+}
+
+// Register prelude enums so they are available without a
 // per-module declaration.  The runtime binds the matching canonical
-// XrEnumType into XR_GLOBAL_VAR_ORDERING.
+// XrEnumType into builtin VM slots.
 static void xa_register_prelude_enums(XaAnalyzer *analyzer) {
     static const char *ordering_members[] = {"Relaxed", "Acquire", "Release", "AcquireRelease",
                                              "SeqCst"};
     register_prelude_enum(analyzer, "Ordering", ordering_members, 5, NULL, false);
+
+    static const char *recv_type_params[] = {"T"};
+    static const char *recv_members[] = {"Value", "Empty", "Timeout", "Closed"};
+    static const int recv_payload_counts[] = {1, 0, 0, 0};
+    XrType *recv_value_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
+    XrType **recv_payload_types[] = {recv_value_payload, NULL, NULL, NULL};
+    register_prelude_enum_full(analyzer, "Recv", recv_type_params, 1, recv_members, 4,
+                               recv_payload_counts, recv_payload_types, true);
+
+    static const char *send_result_members[] = {"Sent", "Full", "Timeout", "Closed"};
+    register_prelude_enum(analyzer, "SendResult", send_result_members, 4, NULL, false);
+
+    static const char *task_result_type_params[] = {"T"};
+    static const char *task_result_members[] = {"Success", "Failed", "Cancelled", "Timeout",
+                                                "Pending"};
+    static const int task_result_payload_counts[] = {1, 1, 0, 0, 0};
+    XrType *task_success_payload[] = {xr_type_new_type_param(analyzer->isolate, "T", 0)};
+    XrType *task_failed_payload[] = {xr_type_new_named_instance(analyzer->isolate, "Exception")};
+    XrType **task_result_payload_types[] = {task_success_payload, task_failed_payload, NULL, NULL,
+                                            NULL};
+    register_prelude_enum_full(analyzer, "TaskResult", task_result_type_params, 1,
+                               task_result_members, 5, task_result_payload_counts,
+                               task_result_payload_types, true);
+
+    static const char *task_status_members[] = {"Pending", "Running", "Success", "Failed",
+                                                "Cancelled"};
+    register_prelude_enum(analyzer, "TaskStatus", task_status_members, 5, NULL, false);
 }
 
 // Create analyzer
@@ -399,7 +448,11 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
                 if (sym && sym->links.type) {
                     if (!exports)
                         exports = xr_hashmap_new();
-                    xr_hashmap_set(exports, name, sym->links.type);
+                    /* OOM: skip the entry. A missing entry means "no type
+                     * info for this export", which consumers already
+                     * tolerate (same as sym->links.type == NULL). */
+                    if (exports)
+                        (void) xr_hashmap_set(exports, name, sym->links.type);
                 }
             }
         }
@@ -413,7 +466,8 @@ XrHashMap *xa_analyzer_collect_exports(XaAnalyzer *analyzer, XrAstNode *ast) {
             if (sym && sym->links.type) {
                 if (!exports)
                     exports = xr_hashmap_new();
-                xr_hashmap_set(exports, name, sym->links.type);
+                if (exports)
+                    (void) xr_hashmap_set(exports, name, sym->links.type);
             }
         }
     }
@@ -797,15 +851,23 @@ static XaFileEntry *find_or_create_file(XaAnalyzer *analyzer, const char *file) 
         return NULL;
 
     entry->path = xr_strdup(file);
+    if (!entry->path) {
+        xr_free(entry);
+        return NULL;
+    }
+
+    // Register in hash map first: an entry on the list but absent from the
+    // map would make the next lookup miss and create a duplicate entry.
+    if (fmap && !xr_hashmap_set(fmap, entry->path, entry)) {
+        xr_free(entry->path);
+        xr_free(entry);
+        return NULL;
+    }
+
     entry->dirty = true;
     entry->next = analyzer->files;
     analyzer->files = entry;
     analyzer->file_count++;
-
-    // Register in hash map
-    if (fmap) {
-        xr_hashmap_set(fmap, entry->path, entry);
-    }
 
     return entry;
 }
@@ -1195,8 +1257,10 @@ struct XrType *xa_analyzer_resolve_adt_payload_type(XaAnalyzer *analyzer,
         return NULL;
 
     int param_count = xa_symbol_links_get_type_param_count(links);
-    if (param_count <= 0 || !subject_type ||
-        (subject_type->kind != XR_KIND_INSTANCE && subject_type->kind != XR_KIND_CLASS) ||
+    bool subject_can_carry_type_args =
+        subject_type && (subject_type->kind == XR_KIND_INSTANCE ||
+                         subject_type->kind == XR_KIND_CLASS || subject_type->kind == XR_KIND_ENUM);
+    if (param_count <= 0 || !subject_can_carry_type_args ||
         subject_type->instance.type_arg_count != param_count || !subject_type->instance.type_args)
         return payload_type;
 

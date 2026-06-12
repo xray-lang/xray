@@ -171,7 +171,10 @@ go {
     }
 }
 
-let result = err_ch.recv()
+let result = match (err_ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> "error"
+}
 if (result != "ok") { log("worker failed") }
 ```
 
@@ -559,7 +562,10 @@ go {
     }
 }
 
-let result = err_ch.recv()
+let result = match (err_ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> "error"
+}
 if (result != "ok") { log("worker failed") }
 ```
 

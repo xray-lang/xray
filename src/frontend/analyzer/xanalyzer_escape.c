@@ -285,6 +285,33 @@ static bool ea_is_channel_send(AstNode *callee) {
     return strcmp(callee->as.member_access.name, "send") == 0;
 }
 
+/*
+ * Walk a function body that executes on a NEW coroutine, with go-closure
+ * capture tracking enabled. Covers both spawn forms:
+ *   go fn() { body }()   (inline closure callee)
+ *   go { body }          (bare block, parsed as GO_EXPR -> FUNCTION_EXPR)
+ * Both must enforce the explicit-sharing model: capturing locals across the
+ * coroutine boundary is a compile error unless shared const / Channel.
+ */
+static void ea_walk_go_closure(EaContext *ctx, FunctionDeclNode *fn) {
+    ea_push_scope(ctx);
+    int old_boundary = ctx->func_boundary;
+    bool old_in_go = ctx->in_go_closure;
+    int old_go_boundary = ctx->go_scope_boundary;
+
+    ctx->func_boundary = ctx->depth;
+    ctx->in_go_closure = true;
+    ctx->go_scope_boundary = ctx->depth;
+    ea_register_params(ctx, fn);
+    if (fn->body)
+        ea_walk(ctx, fn->body);
+
+    ctx->func_boundary = old_boundary;
+    ctx->in_go_closure = old_in_go;
+    ctx->go_scope_boundary = old_go_boundary;
+    ea_pop_scope(ctx);
+}
+
 static void ea_walk(EaContext *ctx, AstNode *node) {
     if (!node)
         return;
@@ -335,28 +362,18 @@ static void ea_walk(EaContext *ctx, AstNode *node) {
 
                 AstNode *callee = call->callee;
                 if (callee && callee->type == AST_FUNCTION_EXPR) {
-                    /* Inline go closure: go fn() { body }()
-                     * Walk body with go-closure tracking to detect captures */
-                    FunctionDeclNode *fn = &callee->as.function_decl;
-                    ea_push_scope(ctx);
-                    int old_boundary = ctx->func_boundary;
-                    bool old_in_go = ctx->in_go_closure;
-                    int old_go_boundary = ctx->go_scope_boundary;
-
-                    ctx->func_boundary = ctx->depth;
-                    ctx->in_go_closure = true;
-                    ctx->go_scope_boundary = ctx->depth;
-                    ea_register_params(ctx, fn);
-                    if (fn->body)
-                        ea_walk(ctx, fn->body);
-
-                    ctx->func_boundary = old_boundary;
-                    ctx->in_go_closure = old_in_go;
-                    ctx->go_scope_boundary = old_go_boundary;
-                    ea_pop_scope(ctx);
+                    /* Inline go closure: go fn() { body }() */
+                    ea_walk_go_closure(ctx, &callee->as.function_decl);
                 } else {
                     ea_walk(ctx, callee);
                 }
+            } else if (expr && expr->type == AST_FUNCTION_EXPR) {
+                /* go { block }: the parser wraps the block in a bare
+                 * FUNCTION_EXPR (no call). It runs on a new coroutine, so it
+                 * needs the same capture enforcement as the call form —
+                 * walking it as a plain function would silently allow
+                 * capturing locals across the coroutine boundary. */
+                ea_walk_go_closure(ctx, &expr->as.function_decl);
             } else if (expr) {
                 ea_walk(ctx, expr);
             }

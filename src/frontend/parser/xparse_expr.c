@@ -65,9 +65,8 @@ AstNode *xr_parse_literal(Parser *parser) {
         case TK_LITERAL_INT: {
             xr_Integer value =
                 parse_integer_literal(parser->previous.start, parser->previous.length);
-            // Full int64 range allowed at parse time.
-            // The compiler decides per-context: int64 targets use LOADK_RAW,
-            // tagged fallback targets with >64-bit values get a compile error.
+            // Full int64 range allowed at parse time; range checks against
+            // the target type happen later in the analyzer/compiler.
             AstNode *node = xr_ast_literal_int(parser->X, value, parser->previous.line);
             node->column = column;
             return node;

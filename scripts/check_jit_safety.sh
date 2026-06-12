@@ -34,7 +34,7 @@
 #   [D3] Multi-return value correctness
 #   [D4] ASan build check (memory safety)
 #   [D5] Nested loop OSR correctness
-#   [D6] Channel trySend/tryRecv value + bool return
+#   [D6] Channel trySend/tryRecv result enums
 #   [D7] Logical operators always return bool
 #   [D8] Map for-in with compound assignment
 #   [D9] Custom iterator class for-in
@@ -550,24 +550,27 @@ XREOF
 
     run_jit_diff_test "nested-loop-osr" "/tmp/_jit_check_nested_osr.xr"
 
-    # [D6] Channel trySend/tryRecv value + bool return
-    echo -e "\n${CYAN}[D6] Channel trySend/tryRecv bool return${NC}"
+    # [D6] Channel trySend/tryRecv result enums
+    echo -e "\n${CYAN}[D6] Channel trySend/tryRecv result enums${NC}"
 
     cat > /tmp/_jit_check_chan_bool.xr << 'XREOF'
-fn producer(ch: Channel<int>): void {
+fn producer(ch: Channel<int>) -> () {
     ch.send(42)
 }
 let ch = Channel<int>(1)
-let ok1 = ch.trySend(10)
-print(ok1)
-print(typeof(ok1))
-let val, ok2 = ch.tryRecv()
-print(val)
-print(ok2)
-print(typeof(ok2))
+let send1 = ch.trySend(10)
+print(send1)
+print(typeof(send1))
+let recv1 = ch.tryRecv()
+print(recv1)
+print(match (recv1) {
+    Recv.Value(v) -> v
+    _ -> -1
+})
+print(typeof(recv1))
 XREOF
 
-    run_jit_diff_test "chan-trysend-bool" "/tmp/_jit_check_chan_bool.xr"
+    run_jit_diff_test "chan-result-enums" "/tmp/_jit_check_chan_bool.xr"
 
     # [D7] Logical operators always return bool
     # KNOWN ISSUE: && / || short-circuit creates PHI with =??? rep,
@@ -575,7 +578,7 @@ XREOF
     echo -e "\n${CYAN}[D7] Logical operators always return bool (KNOWN ISSUE)${NC}"
 
     cat > /tmp/_jit_check_logic_bool.xr << 'XREOF'
-fn test_logic(a: int, b: int): void {
+fn test_logic(a: int, b: int) -> () {
     let r1 = a > 0 && b > 0
     let r2 = a > 0 || b > 0
     let r3 = !(a > 0)
@@ -614,7 +617,7 @@ class Counter {
     let max: int
     let current: int = 0
 
-    fn init(max: int): void {
+    fn init(max: int) -> () {
         this.max = max
     }
 
@@ -644,7 +647,7 @@ XREOF
     echo -e "\n${CYAN}[D10] Array<any> element type dispatch (KNOWN ISSUE)${NC}"
 
     cat > /tmp/_jit_check_any_array.xr << 'XREOF'
-fn test_any_array(): void {
+fn test_any_array() -> () {
     let arr: Array<any> = [1, true, "hello", 3.14]
     for (let i = 0; i < arr.length; i++) {
         print(arr[i])

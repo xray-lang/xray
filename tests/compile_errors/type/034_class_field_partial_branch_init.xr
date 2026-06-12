@@ -1,0 +1,13 @@
+// 034_class_field_partial_branch_init.xr
+// Expected: Compile error - constructor assigns the field on only one branch
+// Error should mention: must have an initializer or be assigned
+
+class User {
+    name: string
+
+    constructor(flag: bool) {
+        if (flag) {
+            this.name = "ready"
+        }
+    }
+}

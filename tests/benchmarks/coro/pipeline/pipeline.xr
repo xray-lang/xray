@@ -17,11 +17,18 @@ print("=== Pipeline 测试 ===")
 print("管道级数:", STAGES)
 print("数据项数:", ITEMS)
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 管道阶段：从 in 读取，处理后写入 out
 fn stage(in_ch: Channel<int>, out_ch: Channel<int>, stage_id: int) {
     while (true) {
-        let val = in_ch.recv()
-        if (val == null) { break }
+        let val = recv_int(in_ch, -1)
+        if (val < 0) { break }
         // 每级加 1
         out_ch.send(val + 1)
     }
@@ -55,9 +62,9 @@ let producer = go produce(first_ch, ITEMS)
 let sum = 0
 let count = 0
 while (true) {
-    let val = last_ch.recv()
-    if (val == null) { break }
-    sum = sum + (int(val) ?? 0)
+    let val = recv_int(last_ch, -1)
+    if (val < 0) { break }
+    sum = sum + val
     count++
 }
 

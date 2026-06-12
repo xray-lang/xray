@@ -59,6 +59,17 @@ static void xr_array_release_elements(XrArray *arr, XrCoroGC *gc) {
     }
 }
 
+static bool xr_array_same_gc_object(XrValue a, XrValue b) {
+    return XR_IS_PTR(a) && XR_IS_PTR(b) && XR_TO_PTR(a) == XR_TO_PTR(b);
+}
+
+static void xr_array_retain_extra_fill_refs(XrValue value, int32_t changed_slots) {
+    if (!XR_VALUE_NEEDS_GC(value))
+        return;
+    for (int32_t i = 0; i < changed_slots; i++)
+        xr_gc_retain_value(value);
+}
+
 XrArray *xr_array_new(struct XrCoroutine *coro) {
     return xr_array_with_capacity(coro, 0);
 }
@@ -498,11 +509,25 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
     int count = end - start;
 
     if (arr->elem_type == XR_ELEM_ANY) {
-        // ANY array: direct XrValue fill
         XrValue *data = (XrValue *) arr->data;
-        for (int i = start; i < end; i++)
+        int32_t changed_slots = 0;
+        if (XR_VALUE_NEEDS_GC(value)) {
+            for (int i = start; i < end; i++) {
+                if (!xr_array_same_gc_object(data[i], value))
+                    changed_slots++;
+            }
+            xr_array_retain_extra_fill_refs(value, changed_slots);
+        }
+        XrCoroGC *gc = xr_current_coro_gc();
+        for (int i = start; i < end; i++) {
+            XrValue old = data[i];
+            if (xr_array_same_gc_object(old, value))
+                continue;
             data[i] = value;
+            xr_gc_release_value(gc, old);
+        }
         XR_ARRAY_MARK_GC_PTRS(arr, value);
+        XR_GC_BARRIER_BACK_SAFE(gc, arr);
         return;
     }
 
@@ -611,6 +636,9 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
     if (arr->capacity < length || !arr->data)
         return false;
 
+    int32_t added = length - old_length;
+    if (arr->elem_type == XR_ELEM_ANY)
+        xr_array_retain_extra_fill_refs(fill, added);
     for (int32_t i = old_length; i < length; i++)
         xr_array_set_element(arr, i, fill);
     arr->length = length;

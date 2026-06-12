@@ -58,16 +58,21 @@ XrFrameStatus xr_frame_parse(const char *buf, size_t buf_len, size_t *header_end
     while (val < sep && isspace((unsigned char) *val))
         val++;
 
-    /* Parse the integer value */
-    int n = 0;
+    /* Parse the integer value. Accumulate in 64-bit and reject anything
+     * above XR_FRAME_MAX_BODY: callers allocate the body up front, and the
+     * old int accumulation overflowed into UB on hostile inputs. */
+    int64_t acc = 0;
     bool has_digit = false;
     while (val < sep && *val >= '0' && *val <= '9') {
-        n = n * 10 + (*val - '0');
+        acc = acc * 10 + (*val - '0');
         has_digit = true;
+        if (acc > (int64_t) XR_FRAME_MAX_BODY)
+            return XR_FRAME_ERROR;
         val++;
     }
-    if (!has_digit || n < 0)
+    if (!has_digit)
         return XR_FRAME_ERROR;
+    int n = (int) acc;
 
     /* Check if the full body has arrived */
     if (buf_len < hend + (size_t) n) {

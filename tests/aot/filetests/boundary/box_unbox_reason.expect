@@ -1,0 +1,8 @@
+contains=xaot-plan v0
+contains=function 0 name=<main> module=0 depth=0 abi=tagged boundary=module-init
+contains=op=BOX
+contains=op=UNBOX
+contains=boundary 0 kind=func-abi func=<main> value=- input=- reason=module-init
+regex=boundary [0-9]+ kind=value-rep func=<main> value=v[0-9]+ input=v[0-9]+ reason=box
+regex=boundary [0-9]+ kind=value-rep func=<main> value=v[0-9]+ input=v[0-9]+ reason=unbox
+regex=stats functions=1 native=0 tagged=1 coro=0 values=[0-9]+ boundaries=[1-9][0-9]*

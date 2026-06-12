@@ -53,9 +53,10 @@ op_call_entry:;
     int nargs = GETARG_B(i);
 
     XrValue func_val = R(a);
+    bool static_closure = GET_OPCODE(i) == OP_CALL_STATIC;
 
     // Fast dispatch: skip slow paths for most common call types
-    if (XR_LIKELY(XR_IS_FUNCTION(func_val)))
+    if (XR_LIKELY(static_closure || XR_IS_FUNCTION(func_val)))
         goto op_call_closure;
     if (XR_IS_CFUNCTION(func_val))
         goto op_call_cfunc;
@@ -127,8 +128,8 @@ op_call_entry:;
 
             // Create instance (allocation based on storage mode context)
             XrInstance *instance;
-            uint8_t storage_mode = isolate->current_storage_mode;
-            isolate->current_storage_mode = 0;  // Reset context
+            uint8_t storage_mode =
+                atomic_exchange_explicit(&isolate->current_storage_mode, 0, memory_order_relaxed);
 
             if (storage_mode != 0 && isolate->sys_heap) {
                 // shared: allocate on system heap
@@ -215,7 +216,7 @@ op_call_cfunc:
         {
             XrWorker *_w = xr_current_worker();
             if (_w && _w->m)
-                _w->m->current_cfunc = cfunc;
+                atomic_store_explicit(&_w->m->current_cfunc, cfunc, memory_order_relaxed);
         }
 
         /* SLOW C functions release P before execution.
@@ -284,7 +285,7 @@ op_call_cfunc:
 
 // Xray closure call (most common)
 op_call_closure:
-    if (XR_IS_FUNCTION(func_val)) {
+    if (static_closure || XR_IS_FUNCTION(func_val)) {
         XrClosure *closure = xr_value_to_closure(func_val);
         XrProto *proto = closure->proto;
 
@@ -662,9 +663,9 @@ vmcase(OP_CALL_KEEP) {
 
 vmcase(OP_CALL_STATIC) {
     /* OP_CALL_STATIC A B: call R[A] with B args, result to R[A]
-    ** Emitted when codegen knows R[A] is a plain closure (no class call,
-    ** no C function, no enum). Falls through to OP_CALL which handles
-    ** the fast-path XR_IS_FUNCTION branch first.
+    ** Emitted when codegen knows R[A] is a plain closure. It reuses
+    ** OP_CALL's closure frame/JIT path while skipping dynamic callable
+    ** classification (cfunc / enum / class / ADT constructor).
     */
     goto op_call_entry;
 }
@@ -702,11 +703,11 @@ vmcase(OP_LOOP_BACK) {
             return XR_VM_RUNTIME_ERROR;
         }
 
-        if (--coro->reductions <= 0) {
+        if (xr_coro_consume_reds(coro, 1) <= 0) {
             if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                 return XR_VM_CANCELLED;
             }
-            coro->reductions = XR_CORO_REDUCTIONS;
+            xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
             /* See xvm_dispatch_jump.inc.c (OP_JMP backward): without a
              * scheduler we must not yield, otherwise the no-runtime
              * fallback in xr_vm_interpret_proto_isolate would abandon

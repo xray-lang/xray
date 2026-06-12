@@ -79,7 +79,6 @@ static void init_running_scope_coro(XrCoroutine *coro, XrCoroExt *ext, int id,
     coro->isolate = isolate;
     coro->ext = ext;
     atomic_store(&coro->flags, XR_CORO_FLG_RUNNING);
-    atomic_store(&coro->coro_state, XR_CORO_STATE_RUNNING);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
 }
@@ -108,7 +107,7 @@ TEST(scope_wait_token_tracks_block_wake_and_exit) {
     ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_REGISTERED);
     ASSERT_EQ_PTR(atomic_load(&owner_ext.wait.scope_token.scope), scope);
     ASSERT_TRUE(xr_coro_flags_has(&owner, XR_CORO_FLG_BLOCKED));
-    ASSERT_EQ_INT(atomic_load(&owner.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_flag_to_state(atomic_load(&owner.flags)), XR_CORO_STATE_BLOCKED);
     ASSERT_EQ_INT(xr_coro_get_wait_reason(xr_coro_flags_load(&owner)),
                   XR_CORO_WAIT_SCOPE >> XR_CORO_WAIT_SHIFT);
     xr_coro_wake_waiter(&f.isolate_storage, &child);
@@ -151,7 +150,7 @@ TEST(scope_wait_token_resolves_after_published_block) {
     ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
     ASSERT_EQ_INT(atomic_load(&owner_ext.wait.scope_token.state), XR_SCOPE_WAIT_REGISTERED);
     ASSERT_TRUE(xr_coro_flags_has(&owner, XR_CORO_FLG_BLOCKED));
-    ASSERT_EQ_INT(atomic_load(&owner.coro_state), XR_CORO_STATE_BLOCKED);
+    ASSERT_EQ_INT(xr_flag_to_state(atomic_load(&owner.flags)), XR_CORO_STATE_BLOCKED);
 
     xr_coro_wake_waiter(&f.isolate_storage, &child);
     ASSERT_EQ_INT(atomic_load(&scope->count), 0);

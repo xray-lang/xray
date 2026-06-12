@@ -19,6 +19,7 @@
 
 #include "xi_range.h"
 #include "xi_analysis.h"
+#include "xi_loop.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
@@ -226,8 +227,11 @@ static bool is_int_value(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_INT;
 }
 
+static XiRange eval_counted_iv_bound(const XiValue *phi, const RangeTable *rt,
+                                     const XiLoopInfo *li);
+
 /* Evaluate the range of a value from its operands' ranges. */
-static XiRange eval_range(const XiValue *v, const RangeTable *rt) {
+static XiRange eval_range(const XiValue *v, const RangeTable *rt, const XiLoopInfo *li) {
     XR_DCHECK(v != NULL, "eval_range: NULL value");
 
     if (v->op == XI_CONST && is_int_value(v))
@@ -258,15 +262,18 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt) {
         case XI_COPY:
             return r0;
         case XI_PHI: {
-            /* Union of all phi inputs. */
+            /* Union of all phi inputs, tightened by the counted-loop IV
+             * bound when the phi is a canonical induction variable. */
             XiRange result = xi_range_bot();
             for (uint16_t i = 0; i < v->nargs; i++) {
                 if (v->args[i] && v->args[i]->id < rt->cap)
                     result = xi_range_union(result, rt->ranges[v->args[i]->id]);
-                else
-                    return xi_range_top();
+                else {
+                    result = xi_range_top();
+                    break;
+                }
             }
-            return result;
+            return xi_range_intersect(result, eval_counted_iv_bound(v, rt, li));
         }
         case XI_NARROW_I8:
             return xi_range_intersect(r0, xi_range_make(-128, 127));
@@ -283,6 +290,112 @@ static XiRange eval_range(const XiValue *v, const RangeTable *rt) {
         default:
             return xi_range_top();
     }
+}
+
+/* ========== Counted-Loop Induction Variable Bound ==========
+ *
+ * A loop-carried phi normally degrades to TOP (its latch input grows every
+ * iteration and the plain union never converges below TOP).  For the
+ * canonical counted form
+ *
+ *     header(IF): if (phi < limit) -> body ... latch: next = phi + step
+ *     phi = [init from preheader, next from latch],  step const > 0
+ *
+ * the phi value is bounded: any path that reaches the latch leaves the
+ * header through the true edge, so the value being incremented satisfied
+ * `phi < limit`, and the first value that fails the test is at most
+ * limit + step - 1.  When the loop runs zero times the phi only ever
+ * holds init, giving
+ *
+ *     [init.lo,  max(init.hi, limit.hi + step - 1)]
+ *
+ * computed only when both init and limit have finite ranges.  Soundness
+ * needs the loop shape verified structurally: the phi block must be a
+ * natural-loop header, the increment must flow in over a back edge from
+ * inside the loop, and the false edge must leave the loop (otherwise a
+ * `while (true) { if (i < n) ... ; i += 1 }` body would re-enter the
+ * latch without passing the test).  The bound is intersected with the
+ * plain phi union inside eval_range, which keeps the fixed-point
+ * iteration monotone and convergent. */
+static const XiValue *unwrap_copy(const XiValue *v) {
+    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+        v = v->args[0];
+    return v;
+}
+
+static XiRange eval_counted_iv_bound(const XiValue *phi, const RangeTable *rt,
+                                     const XiLoopInfo *li) {
+    const XiBlock *header = phi->block;
+    if (!li || !header || header->kind != XI_BLOCK_IF || phi->nargs != 2 || header->npreds != 2)
+        return xi_range_top();
+    if (header->id >= li->nblocks)
+        return xi_range_top();
+    const XiLoop *loop = li->block_to_loop[header->id];
+    if (!loop || loop->header != header)
+        return xi_range_top();
+    /* The false edge must exit the loop: otherwise the increment can be
+     * reached without passing the `phi < limit` test. */
+    if (header->succs[1] && xi_loop_contains_block(loop, header->succs[1]))
+        return xi_range_top();
+
+    /* Header condition must be `phi < limit` on the phi itself. */
+    const XiValue *cond = unwrap_copy(header->control);
+    if (!cond || cond->op != XI_LT || cond->nargs < 2)
+        return xi_range_top();
+    if (unwrap_copy(cond->args[0]) != phi)
+        return xi_range_top();
+    const XiValue *limit = cond->args[1];
+
+    /* One incoming value must be `phi + const step` (step > 0) flowing in
+     * from inside the loop; the other is the init value. */
+    const XiValue *init = NULL;
+    int64_t step = 0;
+    for (uint16_t i = 0; i < 2; i++) {
+        const XiValue *arg = unwrap_copy(phi->args[i]);
+        if (!arg)
+            return xi_range_top();
+        if (arg->op == XI_ADD && arg->nargs >= 2) {
+            const XiValue *a0 = unwrap_copy(arg->args[0]);
+            const XiValue *a1 = unwrap_copy(arg->args[1]);
+            const XiValue *step_v = NULL;
+            if (a0 == phi)
+                step_v = a1;
+            else if (a1 == phi)
+                step_v = a0;
+            if (step_v && step_v->op == XI_CONST && is_int_value(step_v) && step_v->aux_int > 0 &&
+                header->preds[i] && xi_loop_contains_block(loop, header->preds[i])) {
+                if (step != 0)
+                    return xi_range_top(); /* both inputs are increments */
+                step = step_v->aux_int;
+                continue;
+            }
+        }
+        if (init)
+            return xi_range_top();
+        init = arg;
+    }
+    if (!init || step <= 0)
+        return xi_range_top();
+
+    XiRange init_r = (init->op == XI_CONST && is_int_value(init)) ? xi_range_const(init->aux_int)
+                     : (init->id < rt->cap)                       ? rt->ranges[init->id]
+                                                                  : xi_range_top();
+    limit = unwrap_copy(limit);
+    XiRange limit_r = (limit && limit->op == XI_CONST && is_int_value(limit))
+                          ? xi_range_const(limit->aux_int)
+                      : (limit && limit->id < rt->cap) ? rt->ranges[limit->id]
+                                                       : xi_range_top();
+    if (init_r.is_top || init_r.is_bot || limit_r.is_top || limit_r.is_bot)
+        return xi_range_top();
+    if (add_overflows(limit_r.hi, step - 1))
+        return xi_range_top();
+
+    int64_t hi = limit_r.hi + step - 1;
+    if (init_r.hi > hi)
+        hi = init_r.hi;
+    if (init_r.lo > hi)
+        return xi_range_top();
+    return xi_range_make(init_r.lo, hi);
 }
 
 /* Compare two ranges for equality (used for fixed-point). */
@@ -328,6 +441,11 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
     for (uint32_t i = 0; i < max_id; i++)
         rt->ranges[i] = xi_range_top();
 
+    /* Loop forest for counted-IV phi bounds (NULL when no loops). */
+    xi_ensure_rpo(f);
+    xi_ensure_dominators(f);
+    const XiLoopInfo *li = xi_ensure_loops(f);
+
     /* Seed constants with exact ranges. */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         XiBlock *blk = f->blocks[bi];
@@ -358,7 +476,7 @@ XR_FUNC XiPassChange xi_range_analyze(XiFunc *f) {
                 if (!is_int_value(v))
                     continue;
 
-                XiRange new_r = eval_range(v, rt);
+                XiRange new_r = eval_range(v, rt, li);
                 if (!range_eq(new_r, rt->ranges[v->id])) {
                     rt->ranges[v->id] = new_r;
                     changed = true;

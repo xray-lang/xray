@@ -126,7 +126,10 @@ typedef struct XrTimerWheel {
 
     /* === Next Timeout Cache === */
     int true_next_timeout_time;
-    int64_t next_timeout_pos;
+    /* Relaxed atomic: owner-exclusive read-modify-write; sysmon peeks it to
+     * unpark owners with overdue timers (stale reads are benign — worst case
+     * the owner is unparked one sysmon tick later). */
+    _Atomic int64_t next_timeout_pos;
     int64_t next_timeout_time;
 
     /* === Ownership === */
@@ -139,6 +142,20 @@ typedef struct XrTimerWheel {
 
 static inline bool xr_timer_cancel_pending(XrTimerWheel *tw) {
     return tw && atomic_load_explicit(&tw->canceled_queue.head, memory_order_acquire) != NULL;
+}
+
+/* Owner-side accessors (relaxed: owner is the only writer). */
+static inline int64_t xr_tw_next_pos(const XrTimerWheel *tw) {
+    return atomic_load_explicit(&((XrTimerWheel *) tw)->next_timeout_pos, memory_order_relaxed);
+}
+
+static inline void xr_tw_set_next_pos(XrTimerWheel *tw, int64_t v) {
+    atomic_store_explicit(&tw->next_timeout_pos, v, memory_order_relaxed);
+}
+
+/* Cross-thread monitoring peek (sysmon). */
+static inline int64_t xr_timer_wheel_next_pos_peek(const XrTimerWheel *tw) {
+    return xr_tw_next_pos(tw);
 }
 
 /* ========== API ========== */

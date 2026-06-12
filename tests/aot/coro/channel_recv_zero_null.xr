@@ -1,0 +1,31 @@
+fn read_zero(ch: Channel<int>) -> int {
+    match (ch.recv()) {
+        Recv.Value(value) -> {
+            return value
+        }
+        _ -> {
+            return -1
+        }
+    }
+}
+
+fn read_closed(ch: Channel<int>) -> int {
+    match (ch.recv()) {
+        Recv.Closed -> {
+            return 1
+        }
+        _ -> {
+            return 0
+        }
+    }
+}
+
+let zero_ch = new Channel<int>(1)
+zero_ch.send(0)
+let zero_task = go read_zero(zero_ch)
+print(await zero_task)
+
+let closed_ch = new Channel<int>(0)
+closed_ch.close()
+let closed_task = go read_closed(closed_ch)
+print(await closed_task)

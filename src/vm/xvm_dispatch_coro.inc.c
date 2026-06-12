@@ -41,20 +41,40 @@ vmcase(OP_AWAIT) {
         XrValue _aw_tv = base[_aw_b];
         if (xr_value_is_task(_aw_tv)) {
             XrTask *_aw_task = xr_value_to_task(_aw_tv);
+            XrRuntime *_aw_runtime = isolate ? (XrRuntime *) isolate->vm.runtime : NULL;
+            if (_aw_one_shot && _aw_runtime) {
+                xr_sched_metric_inc(_aw_runtime,
+                                    &_aw_runtime->sched_stats.task_one_shot_await_count);
+            }
             uint8_t _aw_st = atomic_load_explicit(&_aw_task->state, memory_order_acquire);
             if (_aw_st == XR_TASK_COMPLETED) {
                 XrValue _aw_res = _aw_task->result;
                 if (!XR_IS_PTR(_aw_res)) {
+                    /* A replayed await reaches this fast path after a blocked
+                     * registration: drop the waiter-side bookkeeping (wait
+                     * state's await_task back-pointer) before the task can be
+                     * one-shot destroyed, or it would dangle. */
+                    xr_task_finish_await_waiters((XrCoroutine *) VM_CURRENT_CORO);
                     // Immediate value: no deep copy
                     base[_aw_a] = _aw_discard ? xr_null() : _aw_res;
+                    XrWorker *_aw_stats_worker = xr_current_worker();
+                    if (_aw_stats_worker && _aw_stats_worker->p.runtime) {
+                        xr_sched_metric_inc(
+                            _aw_stats_worker->p.runtime,
+                            &_aw_stats_worker->p.runtime->sched_stats.vm_await_done_fast_count);
+                    }
                     if (_aw_one_shot && _aw_a != _aw_b)
                         base[_aw_b] = xr_null();
-                    XrCoroutine *_aw_exec = _aw_task->coro;
+                    /* Exchange-claim: the completing worker reclaims
+                     * immediate-result executors before publishing
+                     * COMPLETED, so this is NULL on the hot path; a
+                     * non-NULL claim transfers shell ownership to us. */
+                    XrCoroutine *_aw_exec = xr_task_claim_executor(_aw_task);
                     if (_aw_exec) {
-                        _aw_task->coro = NULL;
                         _aw_exec->task = NULL;
                         if (_aw_one_shot && xr_coro_flags_has(_aw_exec, XR_CORO_FLG_DONE) &&
                             !xr_coro_flags_has(_aw_exec, XR_CORO_FLG_MAIN)) {
+                            _aw_exec->gc_flags |= XR_CORO_GC_TRIM_BACKEND_STORAGE;
                             XrWorker *_aw_worker = xr_current_worker();
                             if (_aw_worker) {
                                 xr_coro_recycle_local(_aw_worker, _aw_exec);
@@ -63,6 +83,8 @@ vmcase(OP_AWAIT) {
                             }
                         }
                     }
+                    if (_aw_one_shot && _aw_runtime)
+                        (void) xr_task_runtime_try_destroy_detached(_aw_runtime, _aw_task);
                     vmbreak;
                 }
             }
@@ -104,9 +126,8 @@ vmcase(OP_YIELD) {
             return XR_VM_YIELD;
         }
         // Hint yield: accelerate next scheduling point
-        current->reductions -= hint;
-        if (current->reductions <= 0) {
-            current->reductions = XR_CORO_REDUCTIONS;
+        if (xr_coro_consume_reds(current, hint) <= 0) {
+            xr_coro_set_reds(current, XR_CORO_REDUCTIONS);
             frame->pc = pc;
             return XR_VM_YIELD;
         }

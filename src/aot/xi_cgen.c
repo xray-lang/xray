@@ -17,6 +17,8 @@
  *     populated by xi_opt_select_rep in the pipeline.
  */
 #include "xi_cgen.h"
+#include "xaot_bundle.h"
+#include "xaot_class_native.h"
 #include "xaot_rep_gen.h"
 #include "xaot_abi_gen.h"
 #include "xaot_layout_gen.h"
@@ -37,6 +39,8 @@
 #include "../base/xmalloc.h"
 #include "../runtime/value/xtype.h"
 #include "xrt_method_symbols.h"
+#include "xrt_hash.h"
+#include "../base/xmemstream.h"
 #include "../frontend/parser/xast_nodes.h"
 #include <string.h>
 #include <inttypes.h>
@@ -173,6 +177,8 @@ static bool cg_is_unsupported_coroutine_op(uint16_t op) {
 static bool cg_is_aot_suspend_op(uint16_t op) {
     return xi_generated_op_class(op) == XI_GEN_CLASS_COROUTINE;
 }
+
+static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx);
 
 #include "xi_cgen_type_helpers.inc.c"
 
@@ -317,6 +323,18 @@ typedef struct {
     const XiClassData *class_data;
 } CgSharedNativeExport;
 
+/* Interned string literal: emitted once as a static const xrt_str_t with
+ * its content hash precomputed, so literal use sites are zero-cost loads
+ * instead of per-evaluation xr_box_str allocations. */
+typedef struct CgStrLit {
+    char *str; /* owned copy (sources may be transient buffers) */
+    size_t len;
+    int id;
+    struct CgStrLit *next; /* hash bucket chain */
+} CgStrLit;
+
+#define CG_STRLIT_BUCKETS 1024
+
 /* All mutable codegen state for one C-generation session.
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
@@ -340,11 +358,52 @@ struct XiCgenCtx {
     XiModule **all_modules; /* full modules array for resolved-index lookups */
     int all_nmodules;
     bool error; /* set on fatal codegen errors (unknown builtin, etc.) */
+    XiCgenStats stats;
     XiCgenCoroFrameStats coro_frame_stats;
+    const XaotBundle *aot_bundle;
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     CgClassFieldCache class_field_cache;
+    CgStrLit *strlit_buckets[CG_STRLIT_BUCKETS];
+    CgStrLit **strlit_list; /* ordered by id for definition emission */
+    int nstrlit;
+    int strlit_cap;
 };
+
+/* Intern a literal; returns its stable id. */
+static int cg_intern_str_lit(XiCgenCtx *ctx, const char *s) {
+    if (!s)
+        s = "";
+    size_t len = strlen(s);
+    uint32_t bucket = (uint32_t) xrt_hash_bytes(s, len) & (CG_STRLIT_BUCKETS - 1);
+    for (CgStrLit *e = ctx->strlit_buckets[bucket]; e; e = e->next) {
+        if (e->len == len && memcmp(e->str, s, len) == 0)
+            return e->id;
+    }
+    CgStrLit *e = (CgStrLit *) xr_malloc(sizeof(CgStrLit));
+    e->str = xr_strdup(s);
+    e->len = len;
+    e->id = ctx->nstrlit;
+    e->next = ctx->strlit_buckets[bucket];
+    ctx->strlit_buckets[bucket] = e;
+    if (ctx->nstrlit >= ctx->strlit_cap) {
+        int ncap = ctx->strlit_cap ? ctx->strlit_cap * 2 : 64;
+        ctx->strlit_list = (CgStrLit **) xr_realloc(ctx->strlit_list, ncap * sizeof(CgStrLit *));
+        ctx->strlit_cap = ncap;
+    }
+    ctx->strlit_list[ctx->nstrlit++] = e;
+    return e->id;
+}
+
+/* Emit a string literal value expression: a pointer to the module-level
+ * static xrt_str_t emitted by xi_cgen_emit_str_literal_defs. */
+static void cg_emit_str_value(XiCgenCtx *ctx, FILE *out, const char *s) {
+    fprintf(out, "xr_str_lit(&_xstr_%d)", cg_intern_str_lit(ctx, s));
+}
+
+static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
+    return ctx ? ctx->aot_bundle : NULL;
+}
 
 #include "xi_cgen_ctx_impl.inc.c"
 #include "xi_cgen_time_ctx_helpers.inc.c"
@@ -663,6 +722,7 @@ static void emit_vref(FILE *out, const XiValue *v) {
 }
 
 #include "xi_cgen_class_native_meta.inc.c"
+static void emit_codegen_abort_expr(FILE *out);
 #include "xi_cgen_abi_helpers.inc.c"
 #include "xi_cgen_value_helpers.inc.c"
 #include "xi_cgen_method_symbols.inc.c"
@@ -671,8 +731,8 @@ static bool cg_array_value_known_nonnegative(const XiValue *v, const XiValue *ro
 static bool cg_array_block_has_no_side_effect_after(const XiBlock *blk, const XiValue *start);
 static bool cg_array_block_has_no_side_effect_before(const XiBlock *blk, const XiValue *target);
 static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
-static bool cg_array_index_set_counted_loop_bounds_proven(XiCgenCtx *ctx, const XiFunc *f,
-                                                          const XiValue *v);
+static void emit_condition_expr(FILE *out, const XiValue *v);
+static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v);
 #include "xi_cgen_struct_helpers.inc.c"
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
@@ -682,6 +742,9 @@ static bool cg_has_exception_handling(const XiFunc *f);
 static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
         return "xrt_array_t *";
+    const XaotValuePlan *plan = cg_value_plan(ctx, v);
+    if (plan && plan->rep.c_type)
+        return plan->rep.c_type;
     return local_ctype_str(v);
 }
 
@@ -698,25 +761,41 @@ static void emit_binop(FILE *out, const XiValue *v, const char *op) {
     emit_vref(out, v->args[1]);
 }
 
-static void emit_bitwise_binop(FILE *out, const XiValue *v, const char *op) {
-    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+static void emit_bitwise_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "XR_FROM_INT(");
     fprintf(out, "(");
-    emit_value_as_rep(out, v->args[0], XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
     fprintf(out, ") %s (", op);
-    emit_value_as_rep(out, v->args[1], XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, ")");
     if (boxed)
         fprintf(out, ")");
 }
 
-static void emit_bitwise_unop(FILE *out, const XiValue *v, const char *op) {
-    bool boxed = cg_rep(v) == XR_REP_TAGGED;
+static void emit_bitwise_unop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *op) {
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
     if (boxed)
         fprintf(out, "XR_FROM_INT(");
     fprintf(out, "%s(", op);
-    emit_value_as_rep(out, v->args[0], XR_REP_I64);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ")");
+    if (boxed)
+        fprintf(out, ")");
+}
+
+/* Shifts cannot use raw C << / >>: out-of-range counts and shifting into the
+ * sign bit are UB. Route through xrt_i64_shl / xrt_i64_shr, which implement
+ * the language's count-mod-64 semantics (see xrt_arith.h). */
+static void emit_shift_binop_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, const char *fn) {
+    bool boxed = cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED;
+    if (boxed)
+        fprintf(out, "XR_FROM_INT(");
+    fprintf(out, "%s(", fn);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_I64);
+    fprintf(out, ", ");
+    emit_value_as_rep_ctx(ctx, out, v->args[1], XR_REP_I64);
     fprintf(out, ")");
     if (boxed)
         fprintf(out, ")");
@@ -726,6 +805,18 @@ static void emit_bitwise_unop(FILE *out, const XiValue *v, const char *op) {
 
 static void emit_condition_expr(FILE *out, const XiValue *v) {
     if (cg_rep(v) == XR_REP_TAGGED) {
+        fprintf(out, "xr_truthy(");
+        emit_vref(out, v);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "(");
+        emit_vref(out, v);
+        fprintf(out, " != 0)");
+    }
+}
+
+static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (cg_value_plan_storage_rep(ctx, v) == XR_REP_TAGGED) {
         fprintf(out, "xr_truthy(");
         emit_vref(out, v);
         fprintf(out, ")");
@@ -964,7 +1055,8 @@ static void emit_phi_copies(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             fprintf(out, "    ");
             emit_phi_ref(out, phi);
             fprintf(out, " = ");
-            emit_value_as_rep(out, phi->value.args[pred_idx], cg_rep(&phi->value));
+            emit_value_as_rep_ctx(ctx, out, phi->value.args[pred_idx],
+                                  cg_value_plan_storage_rep(ctx, &phi->value));
             fprintf(out, ";\n");
         }
     }
@@ -1035,11 +1127,13 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             XR_DCHECK(blk->control != NULL, "IF block missing control");
             XR_DCHECK(blk->succs[0] != NULL, "IF block missing then");
             XR_DCHECK(blk->succs[1] != NULL, "IF block missing else");
-            if (emit_bool_accumulate_diamond_stmt(out, blk))
+            if (emit_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))
+                break;
+            if (emit_bool_accumulate_diamond_stmt(ctx, out, blk))
                 break;
             /* Emit phi copies for both branches */
             fprintf(out, "    if (");
-            emit_condition_expr(out, blk->control);
+            emit_condition_expr_ctx(ctx, out, blk->control);
             fprintf(out, ") {\n");
             emit_phi_copies(ctx, out, f, blk->succs[0], find_pred_idx(blk->succs[0], blk));
             fprintf(out, "        goto L%u;\n", blk->succs[0]->id);
@@ -1104,7 +1198,7 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 continue;
             if (cg_value_is_elided_heap_struct_alias(ctx, f, &phi->value))
                 continue;
-            XrRep rep = cg_rep(&phi->value);
+            XrRep rep = cg_value_plan_storage_rep(ctx, &phi->value);
             fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, &phi->value));
             emit_phi_ref(out, phi);
             if (rep == XR_REP_TAGGED)
@@ -1148,7 +1242,7 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
                 if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
                     cg_value_is_elided_heap_struct_alias(ctx, f, v))
                     continue;
-                XrRep rep = cg_rep(v);
+                XrRep rep = cg_value_plan_storage_rep(ctx, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));
                 emit_vref(out, v);
                 if (rep == XR_REP_TAGGED)
@@ -1158,6 +1252,53 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
             }
         }
     }
+}
+
+static void cg_record_ir_conversion_stats(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (v->op == XI_BOX)
+                ctx->stats.xi_box_ops++;
+            else if (v->op == XI_UNBOX)
+                ctx->stats.xi_unbox_ops++;
+        }
+    }
+}
+
+static void cg_record_function_stats(XiCgenCtx *ctx, const XiFunc *f, bool typed_abi,
+                                     bool native_receiver, bool coro_abi) {
+    if (!ctx || !f)
+        return;
+    ctx->stats.functions_total++;
+    if (coro_abi) {
+        ctx->stats.functions_coro_abi++;
+    } else if (typed_abi || native_receiver) {
+        ctx->stats.functions_native_abi++;
+    } else {
+        ctx->stats.functions_tagged_abi++;
+    }
+    cg_record_ir_conversion_stats(ctx, f);
+}
+
+/* Emit the purity attribute proven by prepare (no-op without a plan).
+ * Placed between `static` and the return type on definitions and forward
+ * declarations so clang/gcc can CSE / LICM across call sites. */
+static void emit_func_attr_qualifier(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
+    const XaotFuncAttrPlan *plan = xaot_bundle_find_func_attr_plan(cg_ctx_aot_bundle(ctx), f);
+    if (!plan)
+        return;
+    if (plan->flags & XAOT_FN_ATTR_CONST)
+        fprintf(out, "XRT_FN_CONST ");
+    else if (plan->flags & XAOT_FN_ATTR_PURE)
+        fprintf(out, "XRT_FN_PURE ");
 }
 
 static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefix) {
@@ -1180,7 +1321,12 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     cg_class_field_cache_reset(&ctx->class_field_cache);
 
-    if (cg_func_needs_aot_coro_ctx(ctx, f)) {
+    bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
+    bool typed_abi = cg_func_uses_typed_abi(ctx, f);
+    bool native_receiver = cg_class_func_uses_native_receiver(ctx, f);
+    cg_record_function_stats(ctx, f, typed_abi, native_receiver, needs_aot_coro);
+
+    if (needs_aot_coro) {
         xi_cgen_coro_func(ctx, out, f, prefix);
         return;
     }
@@ -1188,10 +1334,10 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     /* Function signature.  Closure children with captures receive a hidden
      * first parameter xrt_closure_t *_cl for per-closure upvalue access. */
     bool has_cl = (f->ncaptures > 0);
-    bool typed_abi = cg_func_uses_typed_abi(ctx, f);
     fprintf(out, "static ");
+    emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
-        fprintf(out, "%s", ctype_str(cg_func_return_abi_rep(ctx, f)));
+        fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
     fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
@@ -1218,15 +1364,18 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     /* Blocks in order */
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
-        if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(f, f->blocks[bi]))
+        if (f->blocks[bi] && !cg_structured_counted_loop_block_is_elided(f, f->blocks[bi]) &&
+            !cg_structured_array_fill_loop_block_is_elided(ctx, f, f->blocks[bi]))
             emit_block(ctx, out, f, f->blocks[bi], prefix);
     }
 
     fprintf(out, "}\n\n");
 
-    if (cg_class_func_uses_native_receiver(ctx, f)) {
+    if (native_receiver) {
+        ctx->stats.boxed_adapters++;
         emit_class_native_boxed_adapter(ctx, out, prefix, f);
     } else if (typed_abi) {
+        ctx->stats.boxed_adapters++;
         fprintf(out, "static XrValue ");
         emit_typed_abi_fname(ctx, out, prefix, f);
         fprintf(out, "(xrt_closure_t *_cl");
@@ -1254,8 +1403,10 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         fprintf(out, "}\n\n");
     }
 
-    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f))
+    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f)) {
+        ctx->stats.sync_go_wrappers++;
         emit_sync_go_wrapper(ctx, out, f, prefix);
+    }
 }
 
 /* ========== Forward Declarations ========== */
@@ -1268,8 +1419,9 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
 
     fprintf(out, "static ");
+    emit_func_attr_qualifier(ctx, out, f);
     if (!emit_class_native_return_type(ctx, out, prefix, f))
-        fprintf(out, "%s", ctype_str(cg_func_return_abi_rep(ctx, f)));
+        fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
     fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");

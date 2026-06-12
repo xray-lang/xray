@@ -22,6 +22,8 @@
 
 /* ========== Helper Functions ========== */
 
+static void free_dependency(XrDependency *dep);
+
 /* Get a strdup'd string from a TOML table by key, or NULL. */
 static char *get_toml_str(XrTomlValue *tbl, const char *key) {
     const char *s = xtoml_get_string(tbl, key);
@@ -79,7 +81,7 @@ XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root) {
 
     // Parse [dependencies] section
     XrTomlValue *deps = xtoml_get_table(root, "dependencies");
-    if (deps) {
+    if (deps && project->dependencies) {
         for (int i = 0; i < deps->as.table.count; i++) {
             XrTomlMember *m = &deps->as.table.members[i];
             XR_DCHECK(m->key != NULL, "TOML member key must not be NULL");
@@ -88,6 +90,10 @@ XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root) {
             if (!dep)
                 continue;
             dep->name = xr_strdup(m->key);
+            if (!dep->name) {
+                xr_free(dep);
+                continue;
+            }
 
             if (m->value->type == XR_TOML_STRING) {
                 // Simple version string: "^1.0.0"
@@ -100,7 +106,12 @@ XrProject *xr_project_load(XrayIsolate *isolate, const char *project_root) {
                 dep->is_local = (dep->path != NULL);
             }
 
-            xr_hashmap_set(project->dependencies, m->key, dep);
+            // Key must be dep->name (owned by dep): the TOML tree and its
+            // m->key strings are freed right after parsing, and lookups
+            // happen long after that.
+            if (!xr_hashmap_set(project->dependencies, dep->name, dep)) {
+                free_dependency(dep);
+            }
         }
     }
 

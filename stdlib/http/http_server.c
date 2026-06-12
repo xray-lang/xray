@@ -309,7 +309,21 @@ int xr_http_read_request(XrayIsolate *X, int fd, XrHttpReq *req, char *buf, size
 
     // Parse Content-Length and read request body
     const char *headers = line_end + 2;
-    long long content_length = xr_http_parse_content_length(headers, total - (headers - buf));
+    size_t headers_len = total - (headers - buf);
+    long long content_length = xr_http_parse_content_length(headers, headers_len);
+
+    // Malformed/conflicting Content-Length: reject, never treat as "no body".
+    if (content_length == -2)
+        return -1;
+
+    // This simple server does not decode Transfer-Encoding. A chunked body
+    // left unread on the socket would desynchronize keep-alive framing
+    // (request smuggling), so reject any request that declares one.
+    for (size_t i = 0; i + 18 <= headers_len; i++) {
+        if (strncasecmp(headers + i, "transfer-encoding:", 18) == 0) {
+            return -1;
+        }
+    }
 
     if (content_length > 0) {
         // Prevent memory exhaustion attack, limit max body size

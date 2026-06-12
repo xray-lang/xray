@@ -132,15 +132,15 @@ order: 015
 | 成员 | 类型/说明 |
 |--|--|
 | `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
-| `recv()` | 阻塞接收；关闭且缓冲为空时返回 `null` |
-| `trySend(v)` | 非阻塞发送，返回 bool |
-| `tryRecv()` | 非阻塞接收，返回 `(T, bool)` |
-| `sendTimeout(v, ms)` | 带超时发送，超时或关闭返回 false |
-| `recvTimeout(ms)` | 带超时接收，返回 `(T, bool)` |
+| `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
+| `trySend(v)` | 非阻塞发送，返回 `SendResult` |
+| `tryRecv()` | 非阻塞接收，返回 `Recv<T>`；空时为 `Recv.Empty` |
+| `sendTimeout(v, ms)` | 带超时发送，返回 `SendResult`；超时为 `SendResult.Timeout` |
+| `recvTimeout(ms)` | 带超时接收，返回 `Recv<T>`；超时为 `Recv.Timeout` |
 | `close()` | 关闭 channel |
 | `isClosed` / `isClosed()` | 关闭状态；运行时属性和方法均支持 |
 
-> `stdlib/types/channel.xr` 仍声明 `closed` 属性，但运行时符号表和 VM 分派使用 `isClosed`；该声明漂移已记录为已知问题。
+`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
 ### 14.11 `Json`
 
@@ -202,7 +202,7 @@ order: 015
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` 属性：`done`、`cancelled`、`result`、`error`；方法：`cancel()`。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`，plain `await task` 成功时返回 `T`，失败或取消时走异常路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 
@@ -357,15 +357,15 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | Member | Type / Description |
 |--|--|
 | `send(v)` | blocking send; throws if the channel is closed |
-| `recv()` | blocking receive; returns `null` when closed and the buffer is empty |
-| `trySend(v)` | non-blocking send, returns bool |
-| `tryRecv()` | non-blocking receive, returns `(T, bool)` |
-| `sendTimeout(v, ms)` | timed send; returns false on timeout/close |
-| `recvTimeout(ms)` | timed receive; returns `(T, bool)` |
+| `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
+| `trySend(v)` | non-blocking send, returns `SendResult` |
+| `tryRecv()` | non-blocking receive, returns `Recv<T>`; empty is `Recv.Empty` |
+| `sendTimeout(v, ms)` | timed send, returns `SendResult`; timeout is `SendResult.Timeout` |
+| `recvTimeout(ms)` | timed receive, returns `Recv<T>`; timeout is `Recv.Timeout` |
 | `close()` | close the channel |
 | `isClosed` / `isClosed()` | closed state; both runtime property and method are supported |
 
-> `stdlib/types/channel.xr` still declares a `closed` property, but the runtime symbol table and VM dispatch use `isClosed`; this declaration drift is recorded as a known issue.
+`Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
 ### 14.11 `Json`
 
@@ -427,7 +427,7 @@ The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` properties: `done`, `cancelled`, `result`, `error`; methods: `cancel()`. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; plain `await task` returns `T` on success and uses the exception path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 

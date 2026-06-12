@@ -12,6 +12,8 @@
 #include "base/xconstants.h"
 #include "coro/xcoro_tuning.h"
 #include "coro/xscheduler_policy.h"
+#include "coro/xcoro_abi.h"
+#include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "runtime/gc/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
@@ -29,6 +31,7 @@ typedef struct SchedulerFixture {
     bool sys_heap_initialized;
     bool worker_initialized;
     bool inject_initialized;
+    bool task_lock_initialized;
 } SchedulerFixture;
 
 static void fixture_init_runtime(XrRuntime *runtime, XrayIsolate *isolate, XrWorker *workers,
@@ -42,12 +45,12 @@ static void fixture_init_runtime(XrRuntime *runtime, XrayIsolate *isolate, XrWor
     atomic_store(&runtime->threads_started, false);
     atomic_store(&runtime->spinning_count, 0);
     atomic_store(&runtime->idle_worker_count, 0);
-    atomic_store(&runtime->total_inbox_len, 0);
-    atomic_store(&runtime->nonempty_p_mask, 0);
-    atomic_store(&runtime->stealable_p_mask, 0);
     atomic_store(&runtime->timer_p_mask, 0);
     atomic_store(&runtime->idle_p_mask, 0);
     atomic_store(&runtime->searching_count, 0);
+    xr_mutex_init(&runtime->task_lock);
+    runtime->task_list = NULL;
+    runtime->task_count = 0;
 }
 
 static bool scheduler_fixture_init(SchedulerFixture *f) {
@@ -64,6 +67,7 @@ static bool scheduler_fixture_init(SchedulerFixture *f) {
     fixture_init_runtime(&f->runtime, &f->isolate_storage, &f->worker, &f->machine, 1);
     xr_injectq_init(&f->runtime);
     f->inject_initialized = true;
+    f->task_lock_initialized = true;
 
     xr_worker_init(&f->worker, 0, &f->runtime);
     f->worker_initialized = true;
@@ -75,6 +79,7 @@ static bool scheduler_fixture_init(SchedulerFixture *f) {
 }
 
 static void scheduler_fixture_cleanup(SchedulerFixture *f) {
+    xr_runtime_stop(&f->runtime);
     if (f->worker_initialized) {
         xr_worker_destroy(&f->worker);
         f->worker_initialized = false;
@@ -82,6 +87,11 @@ static void scheduler_fixture_cleanup(SchedulerFixture *f) {
     if (f->inject_initialized) {
         xr_injectq_destroy(&f->runtime);
         f->inject_initialized = false;
+    }
+    xr_task_runtime_destroy_all(&f->runtime);
+    if (f->task_lock_initialized) {
+        xr_mutex_destroy(&f->runtime.task_lock);
+        f->task_lock_initialized = false;
     }
     tls_current_worker = f->saved_worker;
     tls_current_machine = f->saved_machine;
@@ -102,6 +112,7 @@ typedef struct StealFixture {
     bool sys_heap_initialized;
     bool inject_initialized;
     bool worker_initialized[2];
+    bool task_lock_initialized;
 } StealFixture;
 
 static bool steal_fixture_init(StealFixture *f) {
@@ -118,6 +129,7 @@ static bool steal_fixture_init(StealFixture *f) {
     fixture_init_runtime(&f->runtime, &f->isolate_storage, f->workers, f->machines, 2);
     xr_injectq_init(&f->runtime);
     f->inject_initialized = true;
+    f->task_lock_initialized = true;
 
     for (int i = 0; i < 2; i++) {
         xr_worker_init(&f->workers[i], i, &f->runtime);
@@ -132,6 +144,7 @@ static bool steal_fixture_init(StealFixture *f) {
 }
 
 static void steal_fixture_cleanup(StealFixture *f) {
+    xr_runtime_stop(&f->runtime);
     for (int i = 1; i >= 0; i--) {
         if (f->worker_initialized[i]) {
             xr_worker_destroy(&f->workers[i]);
@@ -141,6 +154,11 @@ static void steal_fixture_cleanup(StealFixture *f) {
     if (f->inject_initialized) {
         xr_injectq_destroy(&f->runtime);
         f->inject_initialized = false;
+    }
+    xr_task_runtime_destroy_all(&f->runtime);
+    if (f->task_lock_initialized) {
+        xr_mutex_destroy(&f->runtime.task_lock);
+        f->task_lock_initialized = false;
     }
     tls_current_worker = f->saved_worker;
     tls_current_machine = f->saved_machine;
@@ -155,9 +173,65 @@ static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
     coro->id = id;
     coro->isolate = isolate;
     atomic_store(&coro->flags, XR_CORO_FLG_READY);
-    atomic_store(&coro->coro_state, XR_CORO_STATE_READY);
     atomic_store(&coro->resume_status, XR_RESUME_OK);
     atomic_store(&coro->affinity_p, 0);
+}
+
+typedef enum SpawnProbeAfterSpawns {
+    SPAWN_PROBE_DONE,
+    SPAWN_PROBE_YIELD_ONCE,
+    SPAWN_PROBE_BLOCK_ONCE,
+} SpawnProbeAfterSpawns;
+
+typedef struct SpawnProbeState {
+    XrCoroutine *children;
+    int child_count;
+    int next_child;
+    SpawnProbeAfterSpawns after_spawns;
+    bool yielded;
+} SpawnProbeState;
+
+static XrCoroRunResult spawn_probe_resume(XrCoroutine *coro, const XrCoroEvent *event,
+                                          const XrCoroRunContext *run_ctx) {
+    (void) event;
+    (void) run_ctx;
+    SpawnProbeState *state = (SpawnProbeState *) coro->backend_state;
+    if (state && state->next_child < state->child_count) {
+        return xr_coro_run_spawn_child(&state->children[state->next_child++]);
+    }
+    if (state && state->after_spawns == SPAWN_PROBE_YIELD_ONCE && !state->yielded) {
+        state->yielded = true;
+        return xr_coro_run_result(XR_CORO_RUN_YIELD);
+    }
+    if (state && state->after_spawns == SPAWN_PROBE_BLOCK_ONCE && !state->yielded) {
+        state->yielded = true;
+        xr_coro_transition_to_blocked(coro);
+        return xr_coro_run_result(XR_CORO_RUN_BLOCKED);
+    }
+    coro->result = XR_NULL_VAL;
+    return xr_coro_run_done(XR_NULL_VAL);
+}
+
+static const XrCoroBackendVTable spawn_probe_backend = {
+    .kind = XR_CORO_BACKEND_NATIVE,
+    .resume = spawn_probe_resume,
+};
+
+static void init_spawn_probe_parent(XrCoroutine *parent, int id, XrayIsolate *isolate,
+                                    SpawnProbeState *state) {
+    init_ready_coro(parent, id, isolate);
+    parent->backend = &spawn_probe_backend;
+    parent->backend_state = state;
+    parent->reductions = XR_CORO_REDUCTIONS;
+}
+
+static void init_spawn_probe_children(XrCoroutine *children, int count, int base_id,
+                                      XrayIsolate *isolate) {
+    for (int i = 0; i < count; i++) {
+        init_ready_coro(&children[i], base_id + i, isolate);
+        children[i].backend = &spawn_probe_backend;
+        children[i].reductions = XR_CORO_REDUCTIONS;
+    }
 }
 
 TEST(local_runq_pops_recent_owner_items_first) {
@@ -225,6 +299,24 @@ TEST(global_inject_spill_preserves_all_work) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(coro_ext_init_sets_timer_and_owner_sentinels) {
+    XrCoroutine coro;
+    init_ready_coro(&coro, 350, NULL);
+
+    XrCoroExt *ext = xr_coro_ensure_ext(&coro);
+    ASSERT_TRUE(ext != NULL);
+    ASSERT_EQ_INT(ext->locked_worker, -1);
+    ASSERT_EQ_INT(ext->wait_bucket_owner, -1);
+    ASSERT_EQ_INT(ext->timer.slot, XR_TW_SLOT_INACTIVE);
+    ASSERT_EQ_INT(ext->timer.owner_worker_id, -1);
+    ASSERT_EQ_INT(ext->timer_wheel_owner, -1);
+    ASSERT_FALSE(atomic_load_explicit(&ext->timer_active, memory_order_relaxed));
+    ASSERT_EQ_INT((int) atomic_load_explicit(&ext->timer.state, memory_order_relaxed),
+                  XR_TIMER_STATE_ACTIVE);
+
+    xr_free(ext);
+}
+
 TEST(work_stealing_moves_batch_and_returns_direct_item) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
@@ -241,7 +333,6 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
     for (int i = 0; i < TOTAL; i++) {
         coros[i].submit_time = old_submit_time;
     }
-    xr_worker_refresh_runq_masks(&f.workers[0]);
 
     int64_t delay = 0;
     bool should_exit = false;
@@ -257,12 +348,150 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
     steal_fixture_cleanup(&f);
 }
 
+TEST(spawn_burst_shares_same_parent_fanout) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+
+    XrCoroutine parent;
+    XrCoroutine children[3];
+    SpawnProbeState state = {
+        .children = children, .child_count = 3, .next_child = 0, .after_spawns = SPAWN_PROBE_DONE};
+    init_spawn_probe_children(children, 3, 600, &f.isolate_storage);
+    init_spawn_probe_parent(&parent, 500, &f.isolate_storage, &state);
+
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(state.next_child, 3);
+    ASSERT_TRUE(xr_coro_flags_has(&parent, XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT(parent.spawn_burst_count, 0);
+    ASSERT_TRUE(xr_coro_flags_has(&children[0], XR_CORO_FLG_DONE));
+    ASSERT_FALSE(xr_coro_flags_has(&children[1], XR_CORO_FLG_DONE));
+    ASSERT_FALSE(xr_coro_flags_has(&children[2], XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_inline_child_count, 1);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_shared_child_count, 2);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_burst_shared_count, 2);
+    ASSERT_EQ_INT(xr_proc_local_runq_len(&f.workers[0].p), 2);
+
+    steal_fixture_cleanup(&f);
+}
+
+TEST(spawn_burst_resets_after_yield) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+
+    XrCoroutine parent;
+    XrCoroutine first_child[1];
+    XrCoroutine second_child[1];
+    SpawnProbeState first_state = {.children = first_child,
+                                   .child_count = 1,
+                                   .next_child = 0,
+                                   .after_spawns = SPAWN_PROBE_YIELD_ONCE};
+    SpawnProbeState second_state = {.children = second_child,
+                                    .child_count = 1,
+                                    .next_child = 0,
+                                    .after_spawns = SPAWN_PROBE_DONE};
+    init_spawn_probe_children(first_child, 1, 700, &f.isolate_storage);
+    init_spawn_probe_children(second_child, 1, 710, &f.isolate_storage);
+    init_spawn_probe_parent(&parent, 650, &f.isolate_storage, &first_state);
+
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(first_state.next_child, 1);
+    ASSERT_TRUE(xr_coro_flags_has(&first_child[0], XR_CORO_FLG_DONE));
+    ASSERT_FALSE(xr_coro_flags_has(&parent, XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT(parent.spawn_burst_count, 0);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_inline_child_count, 1);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_shared_child_count, 0);
+
+    // Yield-storm diffusion may route the yielded parent through the global
+    // inject queue (streak >= worker_count/2); pull it like a real worker.
+    XrCoroutine *resumed = xr_worker_pop(&f.workers[0]);
+    if (!resumed) {
+        worker_pull_inject(&f.workers[0], XR_INJECT_POP_BATCH);
+        resumed = xr_worker_pop(&f.workers[0]);
+    }
+    ASSERT_EQ_PTR(resumed, &parent);
+    parent.backend_state = &second_state;
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(second_state.next_child, 1);
+    ASSERT_TRUE(xr_coro_flags_has(&second_child[0], XR_CORO_FLG_DONE));
+    ASSERT_TRUE(xr_coro_flags_has(&parent, XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT(parent.spawn_burst_count, 0);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_inline_child_count, 2);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_shared_child_count, 0);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_burst_shared_count, 0);
+
+    steal_fixture_cleanup(&f);
+}
+
+TEST(spawn_burst_resets_after_block) {
+    StealFixture f;
+    ASSERT_TRUE(steal_fixture_init(&f));
+    tls_current_worker = &f.workers[0];
+    tls_current_machine = f.workers[0].m;
+
+    XrCoroutine parent;
+    XrCoroutine first_child[1];
+    XrCoroutine second_child[1];
+    SpawnProbeState first_state = {.children = first_child,
+                                   .child_count = 1,
+                                   .next_child = 0,
+                                   .after_spawns = SPAWN_PROBE_BLOCK_ONCE};
+    SpawnProbeState second_state = {.children = second_child,
+                                    .child_count = 1,
+                                    .next_child = 0,
+                                    .after_spawns = SPAWN_PROBE_DONE};
+    init_spawn_probe_children(first_child, 1, 800, &f.isolate_storage);
+    init_spawn_probe_children(second_child, 1, 810, &f.isolate_storage);
+    init_spawn_probe_parent(&parent, 750, &f.isolate_storage, &first_state);
+
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(first_state.next_child, 1);
+    ASSERT_TRUE(xr_coro_flags_has(&first_child[0], XR_CORO_FLG_DONE));
+    ASSERT_TRUE(xr_coro_flags_has(&parent, XR_CORO_FLG_BLOCKED));
+    /* A blocked coro may already be owned by a concurrent waker, so the
+     * executor result path no longer touches it: the burst counter keeps
+     * its value at block time and resets on the next enqueue (the point
+     * where the enqueuing thread owns the coro). */
+    ASSERT_EQ_INT(parent.spawn_burst_count, 1);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_inline_child_count, 1);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_shared_child_count, 0);
+
+    ASSERT_TRUE(xr_coro_claim_wake(&parent));
+    parent.backend_state = &second_state;
+    xr_worker_push(&f.workers[0], &parent);
+    ASSERT_EQ_INT(parent.spawn_burst_count, 0);
+    XrCoroutine *resumed = xr_worker_pop(&f.workers[0]);
+    ASSERT_EQ_PTR(resumed, &parent);
+    worker_exec_with_cont_stealing(&f.workers[0], &parent);
+
+    ASSERT_EQ_INT(second_state.next_child, 1);
+    ASSERT_TRUE(xr_coro_flags_has(&second_child[0], XR_CORO_FLG_DONE));
+    ASSERT_TRUE(xr_coro_flags_has(&parent, XR_CORO_FLG_DONE));
+    ASSERT_EQ_INT(parent.spawn_burst_count, 0);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_inline_child_count, 2);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_shared_child_count, 0);
+    ASSERT_EQ_INT((int) f.workers[0].p.stats.spawn_burst_shared_count, 0);
+
+    steal_fixture_cleanup(&f);
+}
+
 TEST_MAIN_BEGIN()
 
 RUN_TEST_SUITE("Scheduler Run Queue");
 RUN_TEST(local_runq_pops_recent_owner_items_first);
 RUN_TEST(lifo_budget_flushes_run_next_to_local_queue);
 RUN_TEST(global_inject_spill_preserves_all_work);
+RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
+RUN_TEST(spawn_burst_shares_same_parent_fanout);
+RUN_TEST(spawn_burst_resets_after_yield);
+RUN_TEST(spawn_burst_resets_after_block);
 
 TEST_MAIN_END()

@@ -1728,11 +1728,14 @@ Pattern ::= Identifier
 let x = 1                         // 类型推断为 int
 let name: string = "Alice"        // 显式类型
 let count: int                    // 仅声明无初值：使用零值
+let maybeName: string?            // OK：默认 null
+let empty: string = ""            // string 必须显式初始化
 ```
 
 - 可重新赋值。
 - 必须有初值**或**类型标注；否则编译错误 `E0303`。
-- 无初值的情况下，初始值为类型的零值（`int` → `0`、`string` → `""`、`bool` → `false`、`T?` → `null`）。
+- 无初值只允许 **default-initializable** 类型：数值类型默认 `0` / `0.0`，`bool` 默认 `false`，`()` 默认 unit，`T?` 默认 `null`，struct 仅当所有字段都可默认初始化时允许。
+- 非 nullable 的 `string`、class instance、`Array` / `Map` / `Set`、`Channel`、`Task`、function / closure、interface / union 等必须显式初始化。
 
 #### 5.1.2 `const` — 不可变绑定
 
@@ -2812,7 +2815,10 @@ let t3 = go fn(b: Bytes) -> int {
 // 方法 4：Channel 通信（可被捕获）
 shared const ch = new Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
-    return c.recv()
+    return match (c.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
 }(ch)
 ch.send(42)
 ```
@@ -3003,7 +3009,10 @@ go {
     }
 }
 
-let result = err_ch.recv()
+let result = match (err_ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> "error"
+}
 if (result != "ok") { log("worker failed") }
 ```
 
@@ -3501,6 +3510,7 @@ let firstOk = await anySuccess [t1, t2, t3]
 - 当前协程**让出**直到目标完成（不阻塞 OS 线程）。
 - 异常传播：
   - `await t` 重抛 t 抛出的异常。
+  - `await t` 成功时返回 `T`；如果 `T` 是 `T?`，返回的 `null` 是任务真实结果，不代表取消或失败。
   - `await all` 中任一任务抛异常即整体抛异常（其余任务会被取消）。
   - `await any` 仅当**全部失败**时抛异常；只要有一个完成，返回该任务结果。
   - `await anySuccess` 类似 `await any`，但**跳过**抛异常的任务，只等成功完成的。
@@ -3513,21 +3523,27 @@ let firstOk = await anySuccess [t1, t2, t3]
 | 方法 / 属性 | 类型 | 说明 |
 |--|--|--|
 | `t.done` | `bool`（属性） | 任务是否已完成（成功、失败或取消） |
-| `t.cancelled` | `bool`（属性） | 任务是否被取消过 |
-| `t.result` | `Json`（属性） | 任务返回值；未完成或失败时为 `null` |
-| `t.error` | `string?`（属性） | 任务的异常消息；未失败时为 `null` |
+| `t.status` | `TaskStatus`（属性） | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
 | `t.cancel()` | `() -> ()` | 请求取消任务（合作式） |
+| `t.poll()` | `() -> TaskResult<T>` | 非阻塞观察；未完成返回 `TaskResult.Pending` |
+| `t.awaitResult()` | `() -> TaskResult<T>` | 阻塞等待并返回状态结果，不重抛异常 |
+| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | 阻塞到完成或超时，超时返回 `TaskResult.Timeout` |
 
 ```xray
 let t = go fetch(url)
 if (!t.done) { /* 还在跑 */ }
 let r = await t
 
-// 直接读取属性（无需 await）
-print(t.done, t.cancelled, t.result, t.error)
+match t.poll() {
+    TaskResult.Pending -> print("running")
+    TaskResult.Success(value) -> print(value)
+    TaskResult.Failed(err) -> print(err)
+    TaskResult.Cancelled -> print("cancelled")
+    TaskResult.Timeout -> print("timeout")
+}
 ```
 
-**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。`await` 已取消的 task 返回 `null`，`t.cancelled` 变为 `true`。
+**取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
 
 ### 10.5 Channel
 
@@ -3549,22 +3565,30 @@ shared const cha = new Channel(3)          // 元素类型从首次 send 推断
 | 方法 | 签名 | 行为 |
 |--|--|--|
 | `send(v)` | `(T) -> ()` | 阻塞发送；满则等待消费者；channel 已关闭时抛异常 |
-| `recv()` | `() -> T?` | 阻塞接收；空则等待生产者；channel 已关闭且缓冲为空时返回 `null` |
-| `trySend(v)` | `(T) -> bool` | 非阻塞：成功返回 `true`，满或已关闭返回 `false` |
-| `tryRecv()` | `() -> (T, bool)` | 非阻塞，返回**多值**：`(value, ok)`；空或已关闭时 `ok=false` |
-| `sendTimeout(v, ms)` | `(T, int) -> bool` | 带超时发送；超时返回 `false` |
-| `recvTimeout(ms)` | `(int) -> (T, bool)` | 带超时接收；超时返回 `ok=false` |
+| `recv()` | `() -> Recv<T>` | 阻塞接收；关闭且缓冲为空时返回 `Recv.Closed` |
+| `trySend(v)` | `(T) -> SendResult` | 非阻塞发送；返回 `Sent` / `Full` / `Closed` |
+| `tryRecv()` | `() -> Recv<T>` | 非阻塞接收；空时返回 `Recv.Empty` |
+| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | 带超时发送；超时返回 `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(int) -> Recv<T>` | 带超时接收；超时返回 `Recv.Timeout` |
 | `close()` | `() -> ()` | 关闭 channel；幂等 |
 | `isClosed` | `bool`（属性） | channel 是否已关闭 |
 
 ```xray
 shared const ch = new Channel<int>(10)
 ch.send(42)                             // 阻塞发送
-let v = ch.recv()                       // 阻塞接收（关闭并取空后返回 null）
+let v = match ch.recv() {
+    Recv.Value(value) -> value
+    Recv.Closed -> -1
+    _ -> -1
+}
 
-let sent = ch.trySend(99)               // 非阻塞发送：true / false
-let (next, ok) = ch.tryRecv()           // 非阻塞接收：值 + 成功标志
-if (ok) { print(next) }
+let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+match ch.tryRecv() {
+    Recv.Value(next) -> print(next)
+    Recv.Empty -> print("empty")
+    Recv.Closed -> print("closed")
+    Recv.Timeout -> print("timeout")
+}
 
 ch.close()
 ```
@@ -3583,7 +3607,7 @@ fn producer(ch: Channel<int>) {
 - **MPMC**（多生产者多消费者）。
 - 有缓冲 ch：满则发送方挂起，空则接收方挂起。
 - 无缓冲 ch：发送/接收必须同时握手（rendezvous）。
-- 关闭后：`send` 抛异常；`recv` 返回剩余值，剩余取完后返回 `null`；`tryRecv` 返回 `(zero, false)`。
+- 关闭后：`send` 抛异常；`recv` 返回剩余 buffered value 的 `Recv.Value(v)`，取完后返回 `Recv.Closed`；`tryRecv` 在空且未关闭时返回 `Recv.Empty`。
 
 ### 10.6 `select`
 
@@ -3611,7 +3635,7 @@ select {
 ```
 
 **语义**：
-- 接收分支 `name from ch -> body`：等价于 `name = ch.recv()`，但仅在 ch 有数据时被选中。
+- 接收分支 `name from ch -> body`：在 ch 有数据时被选中，并把 `Recv.Value(name)` 的 payload 绑定到 `name`。
 - 发送分支 `value to ch -> body`：等价于 `ch.send(value)`，但仅在 ch 有空间时被选中。
 - 默认分支 `_ -> body`：当前无任何分支就绪时立即执行；**省略默认分支**会让 select 阻塞直到某个分支就绪。
 - 多个分支同时就绪时**随机**选择一个（与 Go 一致）。
@@ -4283,15 +4307,15 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 | 成员 | 类型/说明 |
 |--|--|
 | `send(v)` | 阻塞发送；channel 已关闭时抛异常 |
-| `recv()` | 阻塞接收；关闭且缓冲为空时返回 `null` |
-| `trySend(v)` | 非阻塞发送，返回 bool |
-| `tryRecv()` | 非阻塞接收，返回 `(T, bool)` |
-| `sendTimeout(v, ms)` | 带超时发送，超时或关闭返回 false |
-| `recvTimeout(ms)` | 带超时接收，返回 `(T, bool)` |
+| `recv()` | 阻塞接收，返回 `Recv<T>`；关闭且缓冲为空时为 `Recv.Closed` |
+| `trySend(v)` | 非阻塞发送，返回 `SendResult` |
+| `tryRecv()` | 非阻塞接收，返回 `Recv<T>`；空时为 `Recv.Empty` |
+| `sendTimeout(v, ms)` | 带超时发送，返回 `SendResult`；超时为 `SendResult.Timeout` |
+| `recvTimeout(ms)` | 带超时接收，返回 `Recv<T>`；超时为 `Recv.Timeout` |
 | `close()` | 关闭 channel |
 | `isClosed` / `isClosed()` | 关闭状态；运行时属性和方法均支持 |
 
-> `stdlib/types/channel.xr` 仍声明 `closed` 属性，但运行时符号表和 VM 分派使用 `isClosed`；该声明漂移已记录为已知问题。
+`Recv.Value(v)` 中的 `v` 就是 channel payload，因此 `Channel<int?>` 可以区分真实的 `Recv.Value(null)` 和 `Recv.Closed`。
 
 ### 14.11 `Json`
 
@@ -4353,7 +4377,7 @@ BigInt 使用 `123n` 字面量或 `int.toBigInt()`；Json 使用 `Json.parse` / 
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` 属性：`done`、`cancelled`、`result`、`error`；方法：`cancel()`。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
+`Task<T>` 属性：`done`、`status`；方法：`cancel()`、`poll()`、`awaitResult()`、`awaitTimeout(ms)`。`poll()` 和显式等待方法返回 `TaskResult<T>`，plain `await task` 成功时返回 `T`，失败或取消时走异常路径。`EnumValue` 属性：`name`、`value`、`ordinal`，方法：`toString()`。`EnumType` 属性：`name`、`memberCount`，方法：`getMember(name)`。
 
 ### 14.18 其他 prelude 类型（`Logger` / `NetConn` / `NetListener`）
 

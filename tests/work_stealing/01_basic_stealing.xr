@@ -13,12 +13,11 @@ print("========== 测试1：基础工作窃取 ==========")
 /* 测试参数 */
 const CORO_COUNT = 100
 const WORK_PER_CORO = 1000
-/* 结果收集 */
-let results = []
 let completed = 0
+let all_correct = true
 
 /* 计算密集型工作函数 */
-fn compute_work(id, iterations) {
+fn compute_work(id: int, iterations: int) -> int {
     let sum = 0
     for (let i = 0; i < iterations; i++) {
         sum = sum + i * id
@@ -29,21 +28,20 @@ fn compute_work(id, iterations) {
 /* 启动多个协程 */
 print("启动 " + string(CORO_COUNT) + " 个协程...")
 let start_time = time.monotonic()
-let tasks = []
+let tasks: Array<Task> = []
 for (let i = 0; i < CORO_COUNT; i++) {
-    let coro_id = i
-    let task = go fn() {
-        let result = compute_work(coro_id, WORK_PER_CORO)
-        return { "id": coro_id, "result": result }
-    }
+    let task = go compute_work(i, WORK_PER_CORO)
     tasks.push(task)
 }
 /* 等待所有协程完成 */
 print("等待所有协程完成...")
 for (let i = 0; i < tasks.length; i++) {
-    await tasks[i]
-    let r = tasks[i].result
-    results.push(r)
+    let result: int = await tasks[i]
+    let expected = compute_work(i, WORK_PER_CORO)
+    if (result != expected) {
+        print("✗ 协程 " + string(i) + " 结果错误")
+        all_correct = false
+    }
     completed = completed + 1
 }
 let end_time = time.monotonic()
@@ -57,19 +55,6 @@ if (completed == CORO_COUNT) {
 } else {
     print("✗ 测试失败：有协程未完成")
     throw WsErr.Failed("基础工作窃取测试失败")
-}
-/* 验证结果正确性 */
-let all_correct = true
-for (let i = 0; i < results.length; i++) {
-    let r = results[i]
-    let expected = 0
-    for (let j = 0; j < WORK_PER_CORO; j++) {
-        expected = expected + j * r.id
-    }
-    if (r.result != expected) {
-        print("✗ 协程 " + string(r.id) + " 结果错误")
-        all_correct = false
-    }
 }
 if (all_correct) {
     print("✓ 所有协程计算结果正确")

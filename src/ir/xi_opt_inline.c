@@ -143,15 +143,31 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
 
 /* Trace a call's callee value back to an XI_CLOSURE_NEW to find
  * the callee's XiFunc*.  Returns NULL if not resolvable. */
-static XiFunc *resolve_callee(const XiValue *callee_val) {
+static XiFunc *resolve_shared_slot_callee(const XiFunc *caller, int64_t slot) {
+    if (!caller || slot < 0)
+        return NULL;
+
+    for (const XiFunc *f = caller; f; f = f->parent_func) {
+        if (!f->shared_slot_funcs || slot >= (int64_t) f->shared_slot_func_count)
+            continue;
+        XiFunc *callee = f->shared_slot_funcs[slot];
+        if (callee)
+            return callee;
+    }
+    return NULL;
+}
+
+static XiFunc *resolve_callee(const XiFunc *caller, const XiValue *callee_val) {
     if (!callee_val)
         return NULL;
     /* Direct closure: XI_CLOSURE_NEW stores XiFunc* in aux. */
     if (callee_val->op == XI_CLOSURE_NEW && callee_val->aux)
         return (XiFunc *) callee_val->aux;
+    if (callee_val->op == XI_GET_SHARED)
+        return resolve_shared_slot_callee(caller, callee_val->aux_int);
     /* Through a copy chain */
     if (callee_val->op == XI_COPY && callee_val->nargs >= 1)
-        return resolve_callee(callee_val->args[0]);
+        return resolve_callee(caller, callee_val->args[0]);
     return NULL;
 }
 
@@ -511,7 +527,7 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
             if (v->nargs < 1)
                 continue;
 
-            XiFunc *callee = resolve_callee(v->args[0]);
+            XiFunc *callee = resolve_callee(f, v->args[0]);
             if (!callee)
                 continue;
             if (callee == f)
@@ -521,6 +537,11 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
 
             XiInlineCostModel cm = analyze_callee(callee);
             if (cm.value_count > XI_INLINE_MAX_COST)
+                continue;
+            /* The current CFG cloner is reliable for straight-line helpers.
+             * Multi-block inlining needs a dedicated repair pass for cloned
+             * branch predecessor metadata before it is safe for VM/JIT/AOT. */
+            if (cm.branch_count > 0)
                 continue;
             /* callee == f is filtered above; calls_self stays false here.
              * The benefit function still honours calls_self, so any future

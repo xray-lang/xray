@@ -1,5 +1,12 @@
 // 协程系统综合示例
 
+fn recv_has_value(r: Recv<int>) -> bool {
+    return match (r) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
 // 生产者-消费者模式
 fn producer(ch: Channel<int>, id: int, count: int) -> int {
     let i = 0
@@ -14,8 +21,8 @@ fn consumer(ch: Channel<int>, expected: int) -> int {
     let received = 0
     let i = 0
     while (i < expected) {
-        let (msg, ok) = ch.tryRecv()
-        if (ok) {
+        let msg = ch.tryRecv()
+        if (recv_has_value(msg)) {
             received = received + 1
         }
         i++

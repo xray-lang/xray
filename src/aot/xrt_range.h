@@ -76,7 +76,7 @@ static inline XrValue xrt_range_new_raw(int64_t start, int64_t end, int64_t step
         abort();
     }
     xrt_range_t *r = (xrt_range_t *) XRT_MALLOC(sizeof(xrt_range_t));
-    if (!r) {
+    if (XR_UNLIKELY(!r)) {
         fprintf(stderr, "xrt_range: out of memory\n");
         abort();
     }
@@ -95,18 +95,18 @@ static inline XrValue xrt_range(XrValue start, XrValue end) {
 }
 
 static inline XrValue xrt_range_to_string(XrValue value) {
+    XRT_STR_LIT_DEF(xs_range_fallback, "<Range>");
     if (value.tag != XR_TAG_RANGE || !value.ptr)
-        return xr_box_str("<Range>");
+        return xr_str_lit(&xs_range_fallback);
     char buf[96];
     int n = xrt_range_format_buf((const xrt_range_t *) value.ptr, buf, sizeof(buf));
     if (n < 0)
-        return xr_box_str("<Range>");
+        return xr_str_lit(&xs_range_fallback);
     size_t len = (size_t) n;
     if (len >= sizeof(buf))
         len = sizeof(buf) - 1;
     XrValue out = xrt_str_alloc(len);
-    memcpy(out.ptr, buf, len);
-    ((char *) out.ptr)[len] = 0;
+    memcpy(xr_str_buf(out), buf, len);
     return out;
 }
 

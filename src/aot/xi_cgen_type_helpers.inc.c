@@ -18,6 +18,18 @@ static bool cg_value_type_is_channel(const XiValue *v) {
     return v && cg_type_is_channel(v->type);
 }
 
+static const char *cg_channel_field_helper(const char *field) {
+    if (!field)
+        return NULL;
+    if (strcmp(field, "length") == 0)
+        return "xr_aot_chan_length";
+    if (strcmp(field, "capacity") == 0)
+        return "xr_aot_chan_capacity";
+    if (strcmp(field, "isClosed") == 0)
+        return "xr_aot_chan_is_closed";
+    return NULL;
+}
+
 static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }
@@ -47,17 +59,13 @@ static const char *cg_task_field_helper(const char *field) {
         return NULL;
     if (strcmp(field, "done") == 0)
         return "xr_aot_task_done";
-    if (strcmp(field, "cancelled") == 0)
-        return "xr_aot_task_cancelled";
-    if (strcmp(field, "result") == 0)
-        return "xr_aot_task_result";
-    if (strcmp(field, "error") == 0)
-        return "xr_aot_task_error";
+    if (strcmp(field, "status") == 0)
+        return "xr_aot_task_status";
     return NULL;
 }
 
 static bool cg_task_field_needs_xrt_bridge(const char *field) {
-    return field && (strcmp(field, "result") == 0 || strcmp(field, "error") == 0);
+    return field && strcmp(field, "status") == 0;
 }
 
 static bool cg_channel_method_may_suspend(const XiValue *v) {
@@ -78,75 +86,31 @@ typedef struct CgMapElemInfo {
     CgSetElemInfo value;
 } CgMapElemInfo;
 
-static bool cg_set_elem_info_from_elem_type(const XrType *elem, CgSetElemInfo *out) {
-    if (!elem || elem->is_nullable || !out)
+static bool cg_set_elem_info_from_plan(const XaotContainerElemPlan *plan, CgSetElemInfo *out) {
+    if (!plan || !plan->elem_name || !out)
         return false;
-
-    memset(out, 0, sizeof(*out));
-    if (elem->native_width != 0) {
-        const char *elem_name = xaot_elem_name_for_native_type(elem->native_width);
-        if (elem_name) {
-            *out =
-                (CgSetElemInfo) {elem_name, xaot_storage_rep_for_native_type(elem->native_width)};
-            return true;
-        }
-    }
-
-    if (elem->kind == XR_KIND_INT) {
-        *out = (CgSetElemInfo) {"XR_ELEM_I64", XR_REP_I64};
-        return true;
-    }
-    if (elem->kind == XR_KIND_FLOAT) {
-        *out = (CgSetElemInfo) {"XR_ELEM_F64", XR_REP_F64};
-        return true;
-    }
-    if (elem->kind == XR_KIND_BOOL) {
-        *out = (CgSetElemInfo) {"XR_ELEM_BOOL", XR_REP_I64};
-        return true;
-    }
-    return false;
-}
-
-static bool cg_set_elem_info_from_type(const XrType *type, CgSetElemInfo *out) {
-    if (!type || type->kind != XR_KIND_SET)
-        return false;
-    return cg_set_elem_info_from_elem_type(type->container.element_type, out);
-}
-
-static bool cg_set_type_is_i64_storage(const XrType *type) {
-    CgSetElemInfo info;
-    return cg_set_elem_info_from_type(type, &info) && strcmp(info.elem_name, "XR_ELEM_I64") == 0;
-}
-
-static bool cg_set_type_direct_info(const XrType *type, CgSetElemInfo *out) {
-    CgSetElemInfo info;
-    if (!cg_set_elem_info_from_type(type, &info))
-        return false;
-    if (strcmp(info.elem_name, "XR_ELEM_ANY") == 0)
-        return false;
-    if (out)
-        *out = info;
+    *out = (CgSetElemInfo) {plan->elem_name, plan->storage_rep};
     return true;
 }
 
-static bool cg_map_elem_info_from_type(const XrType *type, CgMapElemInfo *out) {
-    if (!type || type->kind != XR_KIND_MAP || !out)
+static bool cg_set_type_direct_info_ctx(XiCgenCtx *ctx, const XrType *type, CgSetElemInfo *out) {
+    const XaotContainerTypePlan *plan =
+        xaot_bundle_find_container_plan(cg_ctx_aot_bundle(ctx), type);
+    if (!plan || plan->plan.kind != XAOT_CONTAINER_SET ||
+        (plan->plan.flags & XAOT_CONTAINER_DIRECT_HELPERS) == 0)
         return false;
-    memset(out, 0, sizeof(*out));
-    return cg_set_elem_info_from_elem_type(type->map.key_type, &out->key) &&
-           cg_set_elem_info_from_elem_type(type->map.value_type, &out->value);
+    return cg_set_elem_info_from_plan(&plan->plan.elem, out);
 }
 
-static bool cg_map_type_direct_info(const XrType *type, CgMapElemInfo *out) {
-    CgMapElemInfo info;
-    if (!cg_map_elem_info_from_type(type, &info))
+static bool cg_map_type_direct_info_ctx(XiCgenCtx *ctx, const XrType *type, CgMapElemInfo *out) {
+    const XaotContainerTypePlan *plan =
+        xaot_bundle_find_container_plan(cg_ctx_aot_bundle(ctx), type);
+    if (!plan || plan->plan.kind != XAOT_CONTAINER_MAP ||
+        (plan->plan.flags & XAOT_CONTAINER_DIRECT_HELPERS) == 0 || !out)
         return false;
-    if ((info.key.rep != XR_REP_I64 && info.key.rep != XR_REP_F64) ||
-        (info.value.rep != XR_REP_I64 && info.value.rep != XR_REP_F64))
-        return false;
-    if (out)
-        *out = info;
-    return true;
+    memset(out, 0, sizeof(*out));
+    return cg_set_elem_info_from_plan(&plan->plan.key, &out->key) &&
+           cg_set_elem_info_from_plan(&plan->plan.value, &out->value);
 }
 
 static const char *cg_map_direct_get_helper(const CgMapElemInfo *info) {
@@ -233,18 +197,25 @@ static const char *cg_map_direct_set_helper(const CgMapElemInfo *info) {
     return NULL;
 }
 
-static bool emit_typed_map_new_expr(FILE *out, const XiValue *v, int64_t cap) {
+static bool emit_typed_map_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, int64_t cap) {
     CgMapElemInfo info;
-    if (!out || !v || !cg_map_elem_info_from_type(v->type, &info))
+    const XaotContainerTypePlan *plan =
+        v ? xaot_bundle_find_container_plan(cg_ctx_aot_bundle(ctx), v->type) : NULL;
+    if (!out || !v || !plan || plan->plan.kind != XAOT_CONTAINER_MAP ||
+        !cg_set_elem_info_from_plan(&plan->plan.key, &info.key) ||
+        !cg_set_elem_info_from_plan(&plan->plan.value, &info.value))
         return false;
     fprintf(out, "xrt_map_new_typed(%" PRId64 ", %s, %s)", cap, info.key.elem_name,
             info.value.elem_name);
     return true;
 }
 
-static bool emit_typed_set_new_expr(FILE *out, const XiValue *v, int64_t cap) {
+static bool emit_typed_set_new_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v, int64_t cap) {
     CgSetElemInfo info;
-    if (!out || !v || !cg_set_elem_info_from_type(v->type, &info))
+    const XaotContainerTypePlan *plan =
+        v ? xaot_bundle_find_container_plan(cg_ctx_aot_bundle(ctx), v->type) : NULL;
+    if (!out || !v || !plan || plan->plan.kind != XAOT_CONTAINER_SET ||
+        !cg_set_elem_info_from_plan(&plan->plan.elem, &info))
         return false;
     fprintf(out, "xrt_set_new_typed(%" PRId64 ", %s)", cap, info.elem_name);
     return true;

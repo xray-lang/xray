@@ -1,6 +1,8 @@
 fn wait_for_value(ch: Channel<int>) -> int {
-    let value = ch.recv()
-    return value
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> -1
+    }
 }
 
 fn quick_value(n: int) -> int {
@@ -10,10 +12,16 @@ fn quick_value(n: int) -> int {
 
 let ch = new Channel<int>(0)
 let blocked = go wait_for_value(ch)
-let timed_out = await(timeout: 1) blocked
-print(timed_out == null)
+let timed_out = blocked.awaitTimeout(1)
+print(match (timed_out) {
+    TaskResult.Timeout -> true
+    _ -> false
+})
 ch.close()
 
 let quick = go quick_value(21)
-let value = await(timeout: 1000) quick
-print(value)
+let value = quick.awaitTimeout(1000)
+print(match (value) {
+    TaskResult.Success(v) -> v
+    _ -> -1
+})

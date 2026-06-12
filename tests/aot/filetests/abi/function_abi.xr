@@ -1,0 +1,12 @@
+fn add_i64(a: int, b: int) -> int {
+    return a + b
+}
+
+fn choose(flag: bool, value: int) -> int {
+    if (flag) {
+        return value
+    }
+    return 0
+}
+
+print(choose(true, add_i64(21, 21)))

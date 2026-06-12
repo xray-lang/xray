@@ -182,7 +182,6 @@ void xr_coro_pool_put(XrRuntime *runtime, XrCoroutine *coro) {
     coro->result = xr_null();
     coro->error = xr_null();
     atomic_store(&coro->flags, 0);
-    atomic_store_explicit(&coro->coro_state, XR_CORO_STATE_NONE, memory_order_relaxed);
 
     XrWorker *worker = xr_current_worker();
     if (!worker) {

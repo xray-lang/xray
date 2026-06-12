@@ -1,0 +1,7 @@
+// 025_non_nullable_null_comparison.xr
+// Expected: Compile error - non-nullable values cannot be compared with null
+
+let x: int = 0
+if (x == null) {
+    print(1)
+}

@@ -24,10 +24,11 @@ XR_FUNC XiSlotMap *build_slot_map(EmitCtx *ctx) {
     XiFunc *f = ctx->func;
     XR_DCHECK(f != NULL, "build_slot_map: NULL func");
 
-    /* Count mapped values */
+    /* Count mapped values plus PC-only anchors for side-effecting ops
+     * such as ERR_CHECK that can deopt but do not own a bytecode slot. */
     uint32_t count = 0;
     for (uint32_t i = 0; i < ctx->reg_map_size; i++) {
-        if (ctx->reg_map[i] != NO_REG)
+        if (ctx->reg_map[i] != NO_REG || (ctx->value_pc && ctx->value_pc[i] >= 0))
             count++;
     }
     if (count == 0)
@@ -55,7 +56,8 @@ XR_FUNC XiSlotMap *build_slot_map(EmitCtx *ctx) {
             if (!v || v->id >= ctx->reg_map_size)
                 continue;
             uint8_t reg = ctx->reg_map[v->id];
-            if (reg == NO_REG)
+            bool pc_only = ctx->value_pc && ctx->value_pc[v->id] >= 0;
+            if (reg == NO_REG && !pc_only)
                 continue;
 
             map->entries[idx].value_id = v->id;

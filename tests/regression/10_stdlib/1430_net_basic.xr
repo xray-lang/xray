@@ -37,19 +37,19 @@ fn test_lookup_invalid_host() {
 @test
 fn test_net_module_exists() {
     // 验证 net 模块可以正常导入
-    assert_true(net != null)
+    assert_true(typeof(net.lookup) == "function")
 }
 
 @test
 fn test_net_dial_exists() {
     // 验证 dial 函数存在
-    assert_true(net.dial != null)
+    assert_true(typeof(net.dial) == "function")
 }
 
 @test
 fn test_net_lookup_exists() {
     // 验证 lookup 函数存在
-    assert_true(net.lookup != null)
+    assert_true(typeof(net.lookup) == "function")
 }
 
 // ============================================================

@@ -3,12 +3,21 @@ let ch = new Channel<int>(1)
 print(ch.trySend(7))
 print(ch.trySend(8))
 
-let (v1, ok1) = ch.tryRecv()
-print(v1)
-print(ok1)
+let r1 = ch.tryRecv()
+print(match (r1) {
+    Recv.Value(v) -> v
+    _ -> -1
+})
+print(match (r1) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 
-let (v2, ok2) = ch.tryRecv()
-print(ok2)
+let r2 = ch.tryRecv()
+print(match (r2) {
+    Recv.Value(_) -> true
+    _ -> false
+})
 
 ch.close()
-print(ch.isClosed())
+print(ch.isClosed)

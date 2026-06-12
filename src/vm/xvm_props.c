@@ -41,8 +41,39 @@
 #include "../coro/xworker.h"
 #include "../coro/xtask.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xresult_group.h"
 #include "../coro/xwork_queue.h"
 #include "../runtime/object/xexception.h"
+#include "../runtime/class/xenum.h"
+#include "../base/xglobal_indices.h"
+
+static XrValue vm_task_status_property_value(XrayIsolate *isolate, uint8_t tstate) {
+    XrValue value = isolate->vm.builtins[XR_GLOBAL_VAR_TASK_STATUS];
+    if (!XR_IS_PTR(value))
+        return xr_null();
+    XrEnumType *type = (XrEnumType *) XR_TO_PTR(value);
+    uint32_t member_index = 0;
+    switch (tstate) {
+        case XR_TASK_ACTIVE:
+        case XR_TASK_COMPLETING:
+            member_index = 1;  // Running
+            break;
+        case XR_TASK_COMPLETED:
+            member_index = 2;  // Success
+            break;
+        case XR_TASK_FAILED:
+            member_index = 3;  // Failed
+            break;
+        case XR_TASK_CANCELLING:
+        case XR_TASK_CANCELLED:
+        default:
+            member_index = 4;  // Cancelled
+            break;
+    }
+    if (member_index >= type->member_count || !type->members[member_index].instance)
+        return xr_null();
+    return XR_FROM_PTR(type->members[member_index].instance);
+}
 #include <stdatomic.h>
 
 /* ========== Dispatch: OP_SETPROP Type Dispatch ========== */
@@ -311,16 +342,21 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                                                   XrInstruction *pc) {
     XR_DCHECK(isolate != NULL, "vm_getprop_type_dispatch: NULL isolate");
     XR_DCHECK(base != NULL, "vm_getprop_type_dispatch: NULL base");
-    // Task properties: task.done, task.cancelled, task.result, task.error
+    // Task properties: task.done, task.status
     if (xr_value_is_task(obj)) {
         XrTask *task = xr_value_to_task(obj);
         uint8_t tstate = atomic_load_explicit(&task->state, memory_order_acquire);
         if (prop_symbol == SYMBOL_DONE) {
             base[a] = xr_bool(tstate >= XR_TASK_COMPLETED);
+        } else if (prop_symbol == SYMBOL_STATUS) {
+            base[a] = vm_task_status_property_value(isolate, tstate);
         } else if (prop_symbol == SYMBOL_CANCELLED) {
             base[a] = xr_bool(tstate == XR_TASK_CANCELLING || tstate == XR_TASK_CANCELLED);
         } else if (prop_symbol == SYMBOL_RESULT) {
-            base[a] = (tstate == XR_TASK_COMPLETED) ? task->result : xr_null();
+            XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
+            base[a] = (tstate == XR_TASK_COMPLETED)
+                          ? xr_coro_await_result_value(isolate, caller, task, false)
+                          : xr_null();
         } else if (prop_symbol == SYMBOL_ERROR) {
             if (tstate == XR_TASK_FAILED && !XR_IS_NULL(task->error)) {
                 XrValue err = task->error;
@@ -333,6 +369,9 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
                         base[a] = xr_null();
                     }
                 } else {
+                    XrCoroutine *caller = (XrCoroutine *) vm_ctx->current_coro;
+                    if (caller && xr_value_needs_copy(err))
+                        err = xr_deep_copy_to_coro(isolate, err, caller);
                     base[a] = err;
                 }
             } else {
@@ -388,6 +427,24 @@ XR_FUNC XrDispatchAction vm_getprop_type_dispatch(XrayIsolate *isolate, XrVMCont
             base[a] = xr_bool(xr_work_queue_is_closed(q));
         } else if (prop_name && strcmp(prop_name, "shardCount") == 0) {
             base[a] = xr_int((xr_Integer) q->shard_count);
+        } else {
+            base[a] = xr_null();
+        }
+        return XR_DISP_NEXT;
+    }
+
+    if (xr_value_is_result_group(obj)) {
+        XrResultGroup *g = xr_value_to_result_group(obj);
+        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
+        const char *prop_name = xr_symbol_get_name_in_table(sym_table, prop_symbol);
+        if (prop_symbol == SYMBOL_LENGTH) {
+            base[a] = xr_int((xr_Integer) xr_result_group_length(g));
+        } else if (prop_symbol == SYMBOL_IS_CLOSED) {
+            base[a] = xr_bool(xr_result_group_is_closed(g));
+        } else if (prop_name && strcmp(prop_name, "pendingCount") == 0) {
+            base[a] = xr_int((xr_Integer) xr_result_group_pending_count(g));
+        } else if (prop_name && strcmp(prop_name, "batchSize") == 0) {
+            base[a] = xr_int((xr_Integer) g->batch_size);
         } else {
             base[a] = xr_null();
         }
@@ -1020,7 +1077,7 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         {
             XrWorker *worker = xr_current_worker();
             if (worker && worker->m)
-                worker->m->current_cfunc = cfunc;
+                atomic_store_explicit(&worker->m->current_cfunc, cfunc, memory_order_relaxed);
         }
         bool is_slow =
             (atomic_load_explicit(&cfunc->cfunc_class, memory_order_acquire) == XR_CFUNC_SLOW);
@@ -1091,8 +1148,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
 
         // Create instance (allocation based on storage mode context)
         XrInstance *instance;
-        uint8_t storage_mode = isolate->current_storage_mode;
-        isolate->current_storage_mode = 0;
+        uint8_t storage_mode =
+            atomic_exchange_explicit(&isolate->current_storage_mode, 0, memory_order_relaxed);
 
         if (storage_mode != 0 && isolate->sys_heap) {
             size_t size = xr_instance_size(klass);

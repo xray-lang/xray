@@ -13,6 +13,13 @@ fn await_any_report(id: int, task: Task, ready: Channel<int>, out: Channel<int>)
     out.send(id * 100 + value)
 }
 
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
 @test
 fn test_overlapping_await_any_waiters() {
     const ready = new Channel<int>(2)
@@ -22,11 +29,11 @@ fn test_overlapping_await_any_waiters() {
     let a = go await_any_report(1, task, ready, out)
     let b = go await_any_report(2, task, ready, out)
 
-    ready.recv()
-    ready.recv()
+    recv_int(ready)
+    recv_int(ready)
 
-    let first = out.recv()
-    let second = out.recv()
+    let first = recv_int(out)
+    let second = recv_int(out)
     print(first + second)
 
     await a

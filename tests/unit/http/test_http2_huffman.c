@@ -183,6 +183,17 @@ TEST(huffman_invalid_padding_rejected) {
     xr_hpack_free(&table);
 }
 
+TEST(hpack_index_zero_rejected) {
+    static const uint8_t block[] = {0x80};  // Indexed header field, index 0.
+    XrHpackTable table;
+    xr_hpack_init(&table, 4096);
+    CollectedHeaders c = {0};
+    int rc = xr_hpack_decode(&table, block, sizeof(block), collect_header, &c);
+    ASSERT_EQ_INT(rc, -1);
+    ASSERT_EQ_INT(c.count, 0);
+    xr_hpack_free(&table);
+}
+
 /* ========== Main ========== */
 
 TEST_MAIN_BEGIN()
@@ -198,5 +209,6 @@ RUN_TEST(huffman_rfc7541_c_6_3_gzip);
 
 RUN_TEST_SUITE("HPACK Huffman - Padding / Error Cases");
 RUN_TEST(huffman_invalid_padding_rejected);
+RUN_TEST(hpack_index_zero_rejected);
 
 TEST_MAIN_END()

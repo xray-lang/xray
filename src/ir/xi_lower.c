@@ -487,6 +487,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         xi_lower_cleanup(&l);
         return NULL;
     }
+    l.func->parent_func = parent_ctx ? parent_ctx->func : NULL;
     l.func->analyzer = analyzer;
 
     /* Entry block (no predecessors — seal immediately) */
@@ -795,7 +796,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
     }
     l->func->nshared = next_shared;
 
-    /* Populate export_names and slot_owned_names on XiFunc */
+    /* Populate export_names, slot_owned_names, and optimization-time
+     * shared-slot metadata on XiFunc. */
     if (next_shared > 0) {
         const char **names = (const char **) xi_func_arena_alloc(
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
@@ -803,6 +805,10 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             l->func, (uint32_t) (next_shared * sizeof(const char *)));
         uint8_t *consts =
             (uint8_t *) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(uint8_t)));
+        XiFunc **slot_funcs =
+            (XiFunc **) xi_func_arena_alloc(l->func, (uint32_t) (next_shared * sizeof(XiFunc *)));
+        l->func->shared_slot_funcs = slot_funcs;
+        l->func->shared_slot_func_count = next_shared;
         for (uint16_t si = 0; si < next_shared; si++) {
             if (names) {
                 const char *src = (si < 512) ? export_flags[si] : NULL;
@@ -828,6 +834,8 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     owned[si] = NULL;
                 }
             }
+            if (slot_funcs)
+                slot_funcs[si] = NULL;
         }
         if (consts) {
             for (uint16_t si = 0; si < next_shared; si++)

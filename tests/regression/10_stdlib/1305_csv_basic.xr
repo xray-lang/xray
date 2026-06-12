@@ -45,7 +45,6 @@ fn test_parse_escaped_quotes() {
 fn test_stringify() {
     let arr = [["a", "b", "c"], ["1", "2", "3"]]
     let result = csv.stringify(arr)
-    assert(result != null)
     assert(result.length > 0)
 }
 

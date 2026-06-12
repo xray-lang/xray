@@ -209,7 +209,13 @@ static XrDepNode *graph_get_or_create_node(XrDepGraph *graph, const char *name,
     }
 
     graph->nodes[graph->node_count++] = node;
-    xr_hashmap_set(graph->index, node->name, node);
+    if (!xr_hashmap_set(graph->index, node->name, node)) {
+        // Unindexed nodes would be re-created on the next lookup; keep the
+        // graph and index consistent by rolling back.
+        graph->node_count--;
+        node_free(node);
+        return NULL;
+    }
     return node;
 }
 

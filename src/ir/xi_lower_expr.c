@@ -40,8 +40,6 @@
 
 /* ========== Forward Declarations ========== */
 
-#define XI_GO_AUX_LINK_MASK 0xff
-
 static int pack_go_aux(int link_mode) {
     return link_mode & XI_GO_AUX_LINK_MASK;
 }
@@ -342,7 +340,12 @@ static XiValue *lower_variable(XiLower *l, AstNode *node) {
             {"DateTime", XR_GLOBAL_VAR_DATETIME},
             {"Atomic", XR_GLOBAL_VAR_ATOMIC},
             {"Ordering", XR_GLOBAL_VAR_ORDERING},
+            {"Recv", XR_GLOBAL_VAR_RECV},
+            {"SendResult", XR_GLOBAL_VAR_SEND_RESULT},
+            {"TaskResult", XR_GLOBAL_VAR_TASK_RESULT},
+            {"TaskStatus", XR_GLOBAL_VAR_TASK_STATUS},
             {"WorkQueue", XR_GLOBAL_VAR_WORKQUEUE},
+            {"ResultGroup", XR_GLOBAL_VAR_RESULTGROUP},
         };
         for (int i = 0; i < (int) (sizeof(builtin_classes) / sizeof(builtin_classes[0])); i++) {
             if (strcmp(name, builtin_classes[i].name) == 0) {
@@ -1332,6 +1335,18 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         xi_lower_narrow_map_method_args(l, node, ma->name, recv, arg_vals, n);
         xi_lower_narrow_set_method_args(l, node, ma->name, recv, arg_vals, n);
 
+        if (recv->type && recv->type->kind == XR_KIND_CHANNEL && ma->name &&
+            strcmp(ma->name, "send") == 0 && n == 1) {
+            XiValue *v = xi_value_new(l->func, l->cur_block, XI_CHAN_SEND, l->type_unit, 2);
+            if (!v)
+                return NULL;
+            v->args[0] = recv;
+            v->args[1] = arg_vals[0];
+            v->flags |= XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW | XI_FLAG_MAY_SUSPEND;
+            v->line = (uint32_t) node->line;
+            return v;
+        }
+
         uint16_t nargs = (uint16_t) (n + 1); /* receiver + args */
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_METHOD, result_type, nargs);
         if (!v)
@@ -1507,10 +1522,24 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     return v;
 }
 
+static XiValue *xi_lower_narrow_select_arm(XiLower *l, AstNode *node, XiValue *val,
+                                           struct XrType *result_type) {
+    if (!val || !result_type || !val->type || xr_type_assignable(result_type, val->type))
+        return val;
+    XiValue *copy = xi_value_new(l->func, l->cur_block, XI_COPY, result_type, 1);
+    if (!copy)
+        return val;
+    copy->args[0] = val;
+    copy->line = (uint32_t) node->line;
+    return copy;
+}
+
 static XiValue *lower_ternary(XiLower *l, AstNode *node) {
     XiValue *cond = xi_lower_expr(l, node->as.ternary.condition);
     if (!cond)
         return NULL;
+
+    struct XrType *result_type = xi_lower_node_type(l, node);
 
     XiBlock *then_blk = xi_block_new(l->func);
     XiBlock *else_blk = xi_block_new(l->func);
@@ -1522,17 +1551,18 @@ static XiValue *lower_ternary(XiLower *l, AstNode *node) {
 
     l->cur_block = then_blk;
     XiValue *then_val = xi_lower_expr(l, node->as.ternary.true_expr);
+    then_val = xi_lower_narrow_select_arm(l, node, then_val, result_type);
     XiBlock *then_exit = l->cur_block;
     xi_block_set_jump(then_exit, merge);
 
     l->cur_block = else_blk;
     XiValue *else_val = xi_lower_expr(l, node->as.ternary.false_expr);
+    else_val = xi_lower_narrow_select_arm(l, node, else_val, result_type);
     XiBlock *else_exit = l->cur_block;
     xi_block_set_jump(else_exit, merge);
 
     xi_lower_braun_seal(l, merge);
     l->cur_block = merge;
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
     if (phi) {
         for (uint16_t i = 0; i < merge->npreds; i++) {
@@ -1571,6 +1601,8 @@ static XiValue *lower_nullish_coalesce(XiLower *l, AstNode *node) {
     xi_lower_braun_seal(l, eval_rhs);
     xi_lower_braun_seal(l, skip);
 
+    struct XrType *result_type = xi_lower_node_type(l, node);
+
     /* Evaluate RHS in eval_rhs block */
     l->cur_block = eval_rhs;
     XiValue *rhs = xi_lower_expr(l, node->as.binary.right);
@@ -1578,19 +1610,20 @@ static XiValue *lower_nullish_coalesce(XiLower *l, AstNode *node) {
     xi_block_set_jump(rhs_exit, merge);
 
     /* Skip → merge (lhs is non-null) */
+    l->cur_block = skip;
+    XiValue *skip_val = xi_lower_narrow_select_arm(l, node, lhs, result_type);
     xi_block_set_jump(skip, merge);
 
     xi_lower_braun_seal(l, merge);
     l->cur_block = merge;
 
-    struct XrType *result_type = xi_lower_node_type(l, node);
     XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
     if (phi) {
         for (uint16_t i = 0; i < merge->npreds; i++) {
             if (merge->preds[i] == rhs_exit)
                 phi->value.args[i] = rhs ? rhs : lhs;
             else
-                phi->value.args[i] = lhs;
+                phi->value.args[i] = skip_val;
         }
     }
     return phi ? &phi->value : lhs;
@@ -1707,8 +1740,11 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
             b.type = l->vars[var_id].type;
             xi_lower_emit_top_store(l, b, v);
             /* Track function → shared slot for module export metadata */
-            if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
+            if (slot >= 0 && slot < XI_LOWER_MAX_VARS) {
                 l->shared_slot_funcs[slot] = child;
+                if (l->func->shared_slot_funcs && slot < (int) l->func->shared_slot_func_count)
+                    l->func->shared_slot_funcs[slot] = child;
+            }
         }
     }
 

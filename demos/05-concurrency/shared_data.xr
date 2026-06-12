@@ -34,7 +34,10 @@ fn sender(ch: Channel<int>) {
 }
 
 go sender(ch)
-let val = ch.recv()
+let val = match (ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
 print("received via channel: ${val}")
 ch.close()
 

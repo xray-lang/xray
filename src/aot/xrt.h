@@ -9,6 +9,7 @@
  *
  * KEY CONCEPT:
  *   Includes all layered sub-headers in dependency order:
+ *     L0  xrt_hash.h    - content hash primitives (shared with xi_cgen)
  *     L0  xrt_value.h   - tags, boxing/unboxing, source-level aliases, XrtContext
  *     L1  xrt_arc.h     - bump allocator, str_alloc/str_concat
  *     L1  xrt_arith.h   - arithmetic, comparison, print

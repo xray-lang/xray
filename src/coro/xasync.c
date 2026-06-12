@@ -209,6 +209,7 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
     atomic_store_explicit(&pool->max_queue_depth, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->in_flight, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->live_threads, 0, memory_order_relaxed);
+    atomic_store_explicit(&pool->threads_state, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->submit_count, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->complete_count, 0, memory_order_relaxed);
     atomic_store_explicit(&pool->reject_count, 0, memory_order_relaxed);
@@ -228,26 +229,50 @@ void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread
 }
 
 // Create async threads (called lazily on first spawn)
-void xr_async_pool_start_threads(XrAsyncPool *pool) {
+bool xr_async_pool_start_threads(XrAsyncPool *pool) {
     if (!pool)
-        return;
+        return false;
+
+    int state = atomic_load_explicit(&pool->threads_state, memory_order_acquire);
+    if (state == 2)
+        return true;
+
+    int expected = 0;
+    if (!atomic_compare_exchange_strong_explicit(&pool->threads_state, &expected, 1,
+                                                 memory_order_acq_rel, memory_order_acquire)) {
+        while ((state = atomic_load_explicit(&pool->threads_state, memory_order_acquire)) == 1) {
+            xr_thread_sleep_ms(1);
+        }
+        return state == 2;
+    }
 
     if (!pool->threads) {
         pool->threads = (xr_thread_t *) xr_calloc(pool->thread_count, sizeof(xr_thread_t));
         if (!pool->threads) {
             xr_log_warning("async", "failed to allocate thread array");
-            return;
+            atomic_store_explicit(&pool->threads_state, 0, memory_order_release);
+            return false;
         }
     }
 
+    int started = 0;
     for (int i = 0; i < pool->thread_count; i++) {
         if (xr_thread_is_valid(pool->threads[i])) {
+            started++;
             continue;
         }
         if (!xr_thread_create_ex(&pool->threads[i], async_thread_main, pool, XR_ASYNC_STACK_SIZE)) {
             xr_log_warning("async", "failed to create async thread %d", i);
+        } else {
+            started++;
         }
     }
+    if (started <= 0) {
+        atomic_store_explicit(&pool->threads_state, 0, memory_order_release);
+        return false;
+    }
+    atomic_store_explicit(&pool->threads_state, 2, memory_order_release);
+    return true;
 }
 
 // Destroy async thread pool
@@ -303,6 +328,11 @@ void xr_async_pool_destroy(XrAsyncPool *pool) {
 bool xr_async_submit(XrAsyncPool *pool, XrAsyncJob *job) {
     if (!pool || !job)
         return false;
+
+    if (pool->runtime && pool->runtime->async_pool == pool && !xr_async_pool_start_threads(pool)) {
+        atomic_fetch_add_explicit(&pool->reject_count, 1, memory_order_relaxed);
+        return false;
+    }
 
     XrCoroBlockSnapshot block_snapshot = {0};
 

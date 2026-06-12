@@ -23,6 +23,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <stdatomic.h>
 #include "../../os/os_thread.h"
 
 // Forward declaration
@@ -95,19 +96,31 @@ typedef struct XrStringPool {
 #define STR_FLAG_PERMANENT 0x20  // compile-time constant, never evicted
 #define STR_FLAG_ACCESSED 0x40   // touched since last sweep cycle
 
+/* Pooled-string flag accesses use relaxed atomics on the header flags word:
+ * the ACCESSED bit is set by concurrent lookups holding only the pool read
+ * lock (LRU heuristic), so plain |= would be a racy RMW that could drop a
+ * concurrent bit update. Same cast-to-_Atomic idiom as task->waiter. */
+#define XR_STR_FLAGS_RELAXED(s)                                                                    \
+    atomic_load_explicit((_Atomic uint16_t *) &(s)->gc.extra, memory_order_relaxed)
+
 // Check macros
-#define XR_STR_IS_INTERNED(s) ((s)->gc.extra & STR_FLAG_INTERNED)
-#define XR_STR_IS_GLOBAL(s) ((s)->gc.extra & STR_FLAG_GLOBAL)
-#define XR_STR_IS_LOCAL(s) ((s)->gc.extra & STR_FLAG_LOCAL)
-#define XR_STR_IS_PERMANENT(s) ((s)->gc.extra & STR_FLAG_PERMANENT)
-#define XR_STR_IS_ACCESSED(s) ((s)->gc.extra & STR_FLAG_ACCESSED)
+#define XR_STR_IS_INTERNED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_INTERNED)
+#define XR_STR_IS_GLOBAL(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_GLOBAL)
+#define XR_STR_IS_LOCAL(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_LOCAL)
+#define XR_STR_IS_PERMANENT(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_PERMANENT)
+#define XR_STR_IS_ACCESSED(s) (XR_STR_FLAGS_RELAXED(s) & STR_FLAG_ACCESSED)
 
 // Set macros
-#define XR_STR_SET_GLOBAL(s) ((s)->gc.extra |= (STR_FLAG_INTERNED | STR_FLAG_GLOBAL))
-#define XR_STR_SET_LOCAL(s) ((s)->gc.extra |= (STR_FLAG_INTERNED | STR_FLAG_LOCAL))
-#define XR_STR_SET_PERMANENT(s) ((s)->gc.extra |= STR_FLAG_PERMANENT)
-#define XR_STR_SET_ACCESSED(s) ((s)->gc.extra |= STR_FLAG_ACCESSED)
-#define XR_STR_CLR_ACCESSED(s) ((s)->gc.extra &= (uint16_t) ~STR_FLAG_ACCESSED)
+#define XR_STR_SET_FLAGS_RELAXED(s, bits)                                                          \
+    ((void) atomic_fetch_or_explicit((_Atomic uint16_t *) &(s)->gc.extra, (uint16_t) (bits),       \
+                                     memory_order_relaxed))
+#define XR_STR_SET_GLOBAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_GLOBAL)
+#define XR_STR_SET_LOCAL(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_INTERNED | STR_FLAG_LOCAL)
+#define XR_STR_SET_PERMANENT(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_PERMANENT)
+#define XR_STR_SET_ACCESSED(s) XR_STR_SET_FLAGS_RELAXED(s, STR_FLAG_ACCESSED)
+#define XR_STR_CLR_ACCESSED(s)                                                                     \
+    ((void) atomic_fetch_and_explicit((_Atomic uint16_t *) &(s)->gc.extra,                         \
+                                      (uint16_t) ~STR_FLAG_ACCESSED, memory_order_relaxed))
 
 // XrGlobalStringPool - Global string intern pool (thread-safe)
 typedef struct XrGlobalStringPool {

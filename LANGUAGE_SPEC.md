@@ -1729,11 +1729,14 @@ Pattern ::= Identifier
 let x = 1                         // type inferred as int
 let name: string = "Alice"        // explicit type
 let count: int                    // no initializer: zero value used
+let maybeName: string?            // OK: defaults to null
+let empty: string = ""            // string requires an explicit initializer
 ```
 
 - Reassignable.
 - Must have an initializer **or** a type annotation; otherwise compile error `E0303`.
-- Without an initializer, the value defaults to the type's zero value (`int` → `0`, `string` → `""`, `bool` → `false`, `T?` → `null`).
+- Omitted initializers are allowed only for **default-initializable** types: numeric types default to `0` / `0.0`, `bool` defaults to `false`, `()` defaults to unit, `T?` defaults to `null`, and structs are allowed only when every field is default-initializable.
+- Non-nullable `string`, class instances, `Array` / `Map` / `Set`, `Channel`, `Task`, function / closure, interface / union, and similar reference-like values require an explicit initializer.
 
 #### 5.1.2 `const` — immutable binding
 
@@ -2813,7 +2816,10 @@ let t3 = go fn(b: Bytes) -> int {
 // Pattern 4: Channel communication (capturable)
 shared const ch = new Channel<int>(10)
 let t4 = go fn(c: Channel<int>) -> int {
-    return c.recv()
+    return match (c.recv()) {
+        Recv.Value(v) -> v
+        _ -> 0
+    }
 }(ch)
 ch.send(42)
 ```
@@ -3004,7 +3010,10 @@ go {
     }
 }
 
-let result = err_ch.recv()
+let result = match (err_ch.recv()) {
+    Recv.Value(v) -> v
+    _ -> "error"
+}
 if (result != "ok") { log("worker failed") }
 ```
 
@@ -3502,6 +3511,7 @@ let firstOk = await anySuccess [t1, t2, t3]
 - The current coroutine **yields** until the target completes (without blocking the OS thread).
 - Exception propagation:
   - `await t` rethrows the exception thrown by `t`.
+  - On success, `await t` returns `T`; if `T` is nullable, a returned `null` is the task's real result, not a cancellation or failure marker.
   - `await all` throws if any task throws (the others are cancelled).
   - `await any` throws only when **every** task fails; if any one completes, its result is returned.
   - `await anySuccess` is similar to `await any` but **skips** throwing tasks, awaiting only the first successful one.
@@ -3514,21 +3524,27 @@ let firstOk = await anySuccess [t1, t2, t3]
 | Method / property | Type | Description |
 |--|--|--|
 | `t.done` | `bool` (property) | Whether the task has completed (success, failure, or cancellation) |
-| `t.cancelled` | `bool` (property) | Whether the task was cancelled |
-| `t.result` | `Json` (property) | Task return value; `null` if incomplete or failed |
-| `t.error` | `string?` (property) | Task exception message; `null` if it has not failed |
+| `t.status` | `TaskStatus` (property) | `Pending` / `Running` / `Success` / `Failed` / `Cancelled` |
 | `t.cancel()` | `() -> ()` | Request cooperative cancellation |
+| `t.poll()` | `() -> TaskResult<T>` | Non-blocking observation; returns `TaskResult.Pending` while incomplete |
+| `t.awaitResult()` | `() -> TaskResult<T>` | Waits and returns a status result without rethrowing |
+| `t.awaitTimeout(ms)` | `(int) -> TaskResult<T>` | Waits until completion or timeout; timeout returns `TaskResult.Timeout` |
 
 ```xray
 let t = go fetch(url)
 if (!t.done) { /* still running */ }
 let r = await t
 
-// read properties directly (no await required)
-print(t.done, t.cancelled, t.result, t.error)
+match t.poll() {
+    TaskResult.Pending -> print("running")
+    TaskResult.Success(value) -> print(value)
+    TaskResult.Failed(err) -> print(err)
+    TaskResult.Cancelled -> print("cancelled")
+    TaskResult.Timeout -> print("timeout")
+}
 ```
 
-**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). `await` on a cancelled task returns `null`; `t.cancelled` becomes `true`.
+**Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
 
 ### 10.5 Channel
 
@@ -3550,22 +3566,30 @@ shared const cha = new Channel(3)          // element type inferred from the fir
 | Method | Signature | Behaviour |
 |--|--|--|
 | `send(v)` | `(T) -> ()` | Blocking send; waits for a consumer when full; throws if the channel is closed |
-| `recv()` | `() -> T?` | Blocking receive; waits for a producer when empty; returns `null` once the channel is closed and the buffer is drained |
-| `trySend(v)` | `(T) -> bool` | Non-blocking: `true` on success, `false` if full or closed |
-| `tryRecv()` | `() -> (T, bool)` | Non-blocking; returns `(value, ok)`; `ok=false` when empty or closed |
-| `sendTimeout(v, ms)` | `(T, int) -> bool` | Send with timeout; returns `false` on timeout |
-| `recvTimeout(ms)` | `(int) -> (T, bool)` | Receive with timeout; `ok=false` on timeout |
+| `recv()` | `() -> Recv<T>` | Blocking receive; returns `Recv.Closed` when closed and drained |
+| `trySend(v)` | `(T) -> SendResult` | Non-blocking send; returns `Sent` / `Full` / `Closed` |
+| `tryRecv()` | `() -> Recv<T>` | Non-blocking receive; returns `Recv.Empty` when empty |
+| `sendTimeout(v, ms)` | `(T, int) -> SendResult` | Send with timeout; timeout returns `SendResult.Timeout` |
+| `recvTimeout(ms)` | `(int) -> Recv<T>` | Receive with timeout; timeout returns `Recv.Timeout` |
 | `close()` | `() -> ()` | Close the channel; idempotent |
 | `isClosed` | `bool` (property) | Whether the channel is closed |
 
 ```xray
 shared const ch = new Channel<int>(10)
 ch.send(42)                             // blocking send
-let v = ch.recv()                       // blocking receive (null after close + drain)
+let v = match ch.recv() {
+    Recv.Value(value) -> value
+    Recv.Closed -> -1
+    _ -> -1
+}
 
-let sent = ch.trySend(99)               // non-blocking send: true / false
-let (next, ok) = ch.tryRecv()           // non-blocking receive: value + ok flag
-if (ok) { print(next) }
+let sent = ch.trySend(99)               // SendResult.Sent / Full / Closed
+match ch.tryRecv() {
+    Recv.Value(next) -> print(next)
+    Recv.Empty -> print("empty")
+    Recv.Closed -> print("closed")
+    Recv.Timeout -> print("timeout")
+}
 
 ch.close()
 ```
@@ -3584,7 +3608,7 @@ fn producer(ch: Channel<int>) {
 - **MPMC** (multi-producer, multi-consumer).
 - Buffered channel: senders suspend when full; receivers suspend when empty.
 - Unbuffered channel: send and receive must rendezvous (synchronous handshake).
-- After close: `send` throws; `recv` returns remaining values, then `null` once drained; `tryRecv` returns `(zero, false)`.
+- After close: `send` throws; `recv` returns remaining buffered values as `Recv.Value(v)`, then `Recv.Closed`; `tryRecv` returns `Recv.Empty` when empty and not closed.
 
 ### 10.6 `select`
 
@@ -3612,7 +3636,7 @@ select {
 ```
 
 **Semantics**:
-- Receive arm `name from ch -> body`: equivalent to `name = ch.recv()`, but selected only when `ch` has data.
+- Receive arm `name from ch -> body`: selected when ch has data, and binds the `Recv.Value(name)` payload to `name`.
 - Send arm `value to ch -> body`: equivalent to `ch.send(value)`, but selected only when `ch` has capacity.
 - Default arm `_ -> body`: runs immediately when no arm is ready; **omitting the default arm** makes `select` block until an arm becomes ready.
 - When multiple arms are ready at the same time, one is selected **randomly** (matching Go).
@@ -4284,15 +4308,15 @@ This section is a **method index** for each type (grouped by topic). Concrete si
 | Member | Type / Description |
 |--|--|
 | `send(v)` | blocking send; throws if the channel is closed |
-| `recv()` | blocking receive; returns `null` when closed and the buffer is empty |
-| `trySend(v)` | non-blocking send, returns bool |
-| `tryRecv()` | non-blocking receive, returns `(T, bool)` |
-| `sendTimeout(v, ms)` | timed send; returns false on timeout/close |
-| `recvTimeout(ms)` | timed receive; returns `(T, bool)` |
+| `recv()` | blocking receive, returns `Recv<T>`; closed and drained is `Recv.Closed` |
+| `trySend(v)` | non-blocking send, returns `SendResult` |
+| `tryRecv()` | non-blocking receive, returns `Recv<T>`; empty is `Recv.Empty` |
+| `sendTimeout(v, ms)` | timed send, returns `SendResult`; timeout is `SendResult.Timeout` |
+| `recvTimeout(ms)` | timed receive, returns `Recv<T>`; timeout is `Recv.Timeout` |
 | `close()` | close the channel |
 | `isClosed` / `isClosed()` | closed state; both runtime property and method are supported |
 
-> `stdlib/types/channel.xr` still declares a `closed` property, but the runtime symbol table and VM dispatch use `isClosed`; this declaration drift is recorded as a known issue.
+`Recv.Value(v)` carries the channel payload, so `Channel<int?>` can distinguish a real `Recv.Value(null)` from `Recv.Closed`.
 
 ### 14.11 `Json`
 
@@ -4354,7 +4378,7 @@ The built-in `Exception` class has fields `message`, `stack`, `cause`, `code`, `
 
 ### 14.17 `Task<T>` / `EnumValue` / `EnumType`
 
-`Task<T>` properties: `done`, `cancelled`, `result`, `error`; methods: `cancel()`. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
+`Task<T>` properties: `done`, `status`; methods: `cancel()`, `poll()`, `awaitResult()`, `awaitTimeout(ms)`. `poll()` and explicit wait methods return `TaskResult<T>`; plain `await task` returns `T` on success and uses the exception path for failure or cancellation. `EnumValue` properties: `name`, `value`, `ordinal`; methods: `toString()`. `EnumType` properties: `name`, `memberCount`; methods: `getMember(name)`.
 
 ### 14.18 Other Prelude Types (`Logger` / `NetConn` / `NetListener`)
 

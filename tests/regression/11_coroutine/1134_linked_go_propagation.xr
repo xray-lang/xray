@@ -15,8 +15,11 @@ fn slow_work() -> int {
 }
 fn test_linked_go_fail() {
     let t = linked go failing()
-    let r = await t
-    assert(r == null, "await of failed linked go should return null")
+    let r = t.awaitResult()
+    match (r) {
+        TaskResult.Failed(_) -> assert(true, "failed linked go should report TaskResult.Failed")
+        _ -> assert(false, "failed linked go should not return null or success")
+    }
 }
 fn test_linked_go_success() {
     let t = linked go slow_work()
@@ -28,11 +31,10 @@ fn test_linked_go_success() {
 fn test_linked_go_propagation() {
 
 
-    // Test 1: linked go child fails → await returns null
+    // Test 1: linked go child fails → awaitResult reports failure
 
     // Test 2: linked go child succeeds
 
     test_linked_go_fail()
     test_linked_go_success()
 }
-

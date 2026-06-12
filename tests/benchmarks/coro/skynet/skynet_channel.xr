@@ -4,6 +4,13 @@
 // 这是 Go 版本 Skynet 的等价实现方式
 import time
 
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
 // 递归创建协程树，通过 channel 返回结果
 fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
     if (size == 1) {
@@ -20,7 +27,7 @@ fn skynet(result_ch: Channel<int>, num: int, size: int, div: int) {
             go skynet_child(ch, cn, cs, div)
         }
         for (let i = 0; i < div; i++) {
-            sum = sum + ch.recv()
+            sum = sum + recv_int(ch, 0)
         }
     }
     ch.close()
@@ -55,7 +62,7 @@ const start = time.monotonic()
 const final_size = size
 shared const result_ch = Channel(1)
 let root = go skynet_child(result_ch, 0, final_size, 10)
-const result = result_ch.recv()
+const result = recv_int(result_ch, 0)
 await root
 const elapsed = time.monotonic() - start
 result_ch.close()

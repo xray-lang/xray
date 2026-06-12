@@ -1,5 +1,19 @@
 // 测试 select 发送分支
 
+fn recv_value(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn recv_ok(r: Recv<int>) -> bool {
+    return match (r) {
+        Recv.Value(_) -> true
+        _ -> false
+    }
+}
+
 @test
 fn test_select_send() {
     shared const ch = new Channel(2)
@@ -22,12 +36,14 @@ fn test_select_send() {
         _ -> { print("buffer full") }
     }
     
-    // 接收并验证（使用多值返回）
-    let (v1, ok1) = ch.tryRecv()
-    let (v2, ok2) = ch.tryRecv()
+    // 接收并验证（使用 Recv<T>）
+    let r1 = ch.tryRecv()
+    let r2 = ch.tryRecv()
+    let v1 = recv_value(r1)
+    let v2 = recv_value(r2)
     print(v1)  // 100
     print(v2)  // 200
-    print(ok1 && ok2)  // true
+    print(recv_ok(r1) && recv_ok(r2))  // true
     
     print("done")
 }

@@ -25,6 +25,7 @@
 #include "../frontend/parser/xparse.h"
 #include "../base/xhashmap.h"
 #include <stdio.h>
+#include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 #include <limits.h>
@@ -132,7 +133,15 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
                 if (mid.source_path && (ctx->flags & XR_BUNDLE_STATIC_PACKAGES)) {
                     /* Static bundle: compile the package */
                     if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                        xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1);
+                        /* The visited mark is the cycle breaker; never descend
+                         * into a module that could not be marked, or circular
+                         * imports would recurse forever. */
+                        if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
+                            xr_log_warning("bundle", "out of memory tracking visited: %s",
+                                           mid.source_path);
+                            xr_module_id_cleanup(&mid);
+                            return;
+                        }
                         char *source = xr_file_read_all(mid.source_path, "r", NULL);
                         if (source) {
                             AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
@@ -165,7 +174,13 @@ static void visit_node(BundleContext *ctx, AstNode *node, const char *current_di
             case XR_MOD_FILE: {
                 XR_DCHECK(mid.source_path != NULL, "visit_node: FILE module without source_path");
                 if (!xr_hashmap_has(ctx->visited, mid.source_path)) {
-                    xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1);
+                    /* See XR_MOD_PACKAGE above: do not descend unmarked. */
+                    if (!xr_hashmap_set(ctx->visited, mid.source_path, (void *) 1)) {
+                        xr_log_warning("bundle", "out of memory tracking visited: %s",
+                                       mid.source_path);
+                        xr_module_id_cleanup(&mid);
+                        return;
+                    }
                     char *source = xr_file_read_all(mid.source_path, "r", NULL);
                     if (source) {
                         AstNode *ast = xr_parse_with_source(ctx->X, source, mid.source_path);
@@ -377,8 +392,18 @@ XrBundle *xr_bundle_create_ex(XrayIsolate *X, const char *entry_file, XrBundleFl
                          .flags = flags,
                          .resolver = resolver};
 
-    // Mark entry file as visited
-    xr_hashmap_set(ctx.visited, abs_path, (void *) 1);
+    // Mark entry file as visited. Without the mark a circular import back
+    // into the entry would recurse forever, so treat failure as fatal.
+    if (!ctx.visited || !xr_hashmap_set(ctx.visited, abs_path, (void *) 1)) {
+        xr_log_warning("bundle", "out of memory creating visited set");
+        xr_free(source);
+        xr_module_resolver_free(ctx.resolver);
+        xr_hashmap_free(ctx.visited);
+        xr_free(ctx.base_dir);
+        xr_free(abs_path);
+        xr_bundle_free(bundle);
+        return NULL;
+    }
 
     // Parse entry file
     AstNode *ast = xr_parse_with_source(X, source, abs_path);
@@ -442,6 +467,71 @@ void xr_bundle_free(XrBundle *bundle) {
     xr_free(bundle);
 }
 
+static bool bundle_emitf(char **buf, size_t *cap, size_t *len, const char *fmt, ...) {
+    if (!buf || !*buf || !cap || !len || !fmt)
+        return false;
+    for (;;) {
+        size_t avail = (*cap > *len) ? (*cap - *len) : 0;
+        va_list ap;
+        va_start(ap, fmt);
+        int n = vsnprintf(*buf + *len, avail, fmt, ap);
+        va_end(ap);
+        if (n < 0)
+            return false;
+        if ((size_t) n < avail) {
+            *len += (size_t) n;
+            return true;
+        }
+        size_t need = *len + (size_t) n + 1;
+        size_t new_cap = *cap ? *cap : 4096;
+        while (new_cap < need)
+            new_cap *= 2;
+        char *tmp = (char *) xr_realloc(*buf, new_cap);
+        if (!tmp)
+            return false;
+        *buf = tmp;
+        *cap = new_cap;
+    }
+}
+
+static bool bundle_emit_c_string(char **buf, size_t *cap, size_t *len, const char *s) {
+    if (!bundle_emitf(buf, cap, len, "\""))
+        return false;
+    for (const unsigned char *p = (const unsigned char *) (s ? s : ""); *p; p++) {
+        switch (*p) {
+            case '\\':
+                if (!bundle_emitf(buf, cap, len, "\\\\"))
+                    return false;
+                break;
+            case '"':
+                if (!bundle_emitf(buf, cap, len, "\\\""))
+                    return false;
+                break;
+            case '\n':
+                if (!bundle_emitf(buf, cap, len, "\\n"))
+                    return false;
+                break;
+            case '\r':
+                if (!bundle_emitf(buf, cap, len, "\\r"))
+                    return false;
+                break;
+            case '\t':
+                if (!bundle_emitf(buf, cap, len, "\\t"))
+                    return false;
+                break;
+            default:
+                if (*p < 0x20 || *p == 0x7f) {
+                    if (!bundle_emitf(buf, cap, len, "\\%03o", (unsigned) *p))
+                        return false;
+                } else if (!bundle_emitf(buf, cap, len, "%c", *p)) {
+                    return false;
+                }
+                break;
+        }
+    }
+    return bundle_emitf(buf, cap, len, "\"");
+}
+
 char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     if (!bundle || bundle->count == 0)
         return NULL;
@@ -458,14 +548,22 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     char *output = xr_malloc(buf_size);
     if (!output)
         return NULL;
-    char *p = output;
-    char *end = output + buf_size;
+    size_t len = 0;
 
 #define EMIT(...)                                                                                  \
     do {                                                                                           \
-        int _n = snprintf(p, (size_t) (end - p), __VA_ARGS__);                                     \
-        if (_n > 0)                                                                                \
-            p += _n;                                                                               \
+        if (!bundle_emitf(&output, &buf_size, &len, __VA_ARGS__)) {                                \
+            xr_free(output);                                                                       \
+            return NULL;                                                                           \
+        }                                                                                          \
+    } while (0)
+
+#define EMIT_C_STRING(s)                                                                           \
+    do {                                                                                           \
+        if (!bundle_emit_c_string(&output, &buf_size, &len, (s))) {                                \
+            xr_free(output);                                                                       \
+            return NULL;                                                                           \
+        }                                                                                          \
     } while (0)
 
     // Header
@@ -476,7 +574,7 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     // Bytecode for each module
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
-        EMIT("/* Module: %s */\n", e->path);
+        EMIT("/* Module %d */\n", i);
         EMIT("static const uint8_t %s_mod%d_bc[%zu] = {\n", prefix, i, e->bc_size);
 
         for (size_t j = 0; j < e->bc_size; j++) {
@@ -506,7 +604,9 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     EMIT("const XrEmbeddedModule %s_modules[%d] = {\n", prefix, bundle->count);
     for (int i = 0; i < bundle->count; i++) {
         const XrBundleEntry *e = &bundle->entries[i];
-        EMIT("    {\"%s\", %s_mod%d_bc, %zu},\n", e->path, prefix, i, e->bc_size);
+        EMIT("    {");
+        EMIT_C_STRING(e->path);
+        EMIT(", %s_mod%d_bc, %zu},\n", prefix, i, e->bc_size);
     }
     EMIT("};\n\n");
 
@@ -526,6 +626,7 @@ char *xr_bundle_to_c_source(XrBundle *bundle, const char *var_prefix) {
     EMIT("}\n");
 
 #undef EMIT
+#undef EMIT_C_STRING
 
     return output;
 }

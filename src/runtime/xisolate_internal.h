@@ -88,6 +88,8 @@ struct XrayIsolate {
     // - Main coroutine: large heap (4MB), deferred GC (max_gen_gcs=100)
     // - O(1) heap release on program exit
     struct XrCoroutine *main_coro;  // Main coroutine (owns large heap GC)
+    struct XrTask *deferred_tasks;  // Runtime-owned Task shells awaiting isolate teardown
+    size_t deferred_task_count;
 
     // Global state
     XrGlobalsTable *globals;                 // Dynamic global variables table
@@ -115,8 +117,11 @@ struct XrayIsolate {
     XrModuleRegistry *module_registry;  // Module registry
     XrModule *current_module;           // Currently loading module (for export collection)
 
-    // Storage mode context (for class instance shared)
-    uint8_t current_storage_mode;  // 0=normal, 1=shared
+    // Storage mode context (for class instance shared).
+    // Relaxed atomic: each worker sets it immediately before the
+    // instantiation that consumes-and-clears it, but multiple workers touch
+    // the same isolate-level slot, so the accesses must be tear-free.
+    _Atomic uint8_t current_storage_mode;  // 0=normal, 1=shared
 
     // Test mode: suppress [Uncaught Exception] stderr output
     bool suppress_exception_print;

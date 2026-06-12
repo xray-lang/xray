@@ -352,6 +352,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                                                         arg_copy, 1);
                 }
             }
+            if (strcmp(name, "ResultGroup") == 0) {
+                return xr_type_new_named_instance(ctx->analyzer->isolate, "ResultGroup");
+            }
 
             XaSymbol *sym = xa_scope_lookup(ctx->analyzer->global_scope, name);
             if (sym && sym->kind == XA_SYM_CLASS) {
@@ -467,6 +470,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
     int arg_count = eff_count;
+    XrType **effective_arg_types = NULL;
+    if (arg_count > 0)
+        effective_arg_types = (XrType **) xr_calloc((size_t) arg_count, sizeof(XrType *));
 
     // Check argument count (use min_params for functions with default parameters)
     int min_params = callee_type->function.min_params;
@@ -544,11 +550,15 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
             if (!src || !XR_TYPE_IS_TUPLE(src))
                 continue;
-            for (int j = 0; j < src->tuple.element_count && slot < param_count; j++, slot++) {
+            for (int j = 0; j < src->tuple.element_count; j++, slot++) {
+                XrType *arg_type = src->tuple.element_types[j];
+                if (effective_arg_types && slot < arg_count)
+                    effective_arg_types[slot] = arg_type;
+                if (slot >= param_count)
+                    continue;
                 XrType *param_type = param_types ? param_types[slot] : NULL;
                 if (!param_type || XR_TYPE_IS_UNKNOWN(param_type))
                     continue;
-                XrType *arg_type = src->tuple.element_types[j];
                 XrLocation loc = {
                     .file = ctx->file_path, .line = arg_node->line, .column = arg_node->column};
                 bool null_err =
@@ -568,6 +578,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
 
         if (slot >= param_count) {
+            XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
+            if (effective_arg_types && slot < arg_count)
+                effective_arg_types[slot] = arg_type;
             slot++;
             continue;
         }
@@ -579,6 +592,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
         XrType *arg_type = xa_visit_infer_expr(ctx, arg_node);
         ctx->expected_type = saved_expected;
+        if (effective_arg_types && slot < arg_count)
+            effective_arg_types[slot] = arg_type;
 
         if (param_type && !XR_TYPE_IS_UNKNOWN(param_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
@@ -620,8 +635,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             if (declared && !XR_TYPE_IS_UNKNOWN(declared))
                 continue;  // explicitly typed
 
-            // Read argument type from the analyzer side table.
-            XrType *arg_type = xa_analyzer_get_node_type(ctx->analyzer, call->arguments[i]);
+            XrType *arg_type = effective_arg_types ? effective_arg_types[i] : NULL;
             if (!arg_type || XR_TYPE_IS_UNKNOWN(arg_type))
                 continue;
 
@@ -639,11 +653,6 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                 }
             }
         }
-    }
-
-    // Infer remaining arguments (for type checking side effects)
-    for (int i = param_count; i < arg_count; i++) {
-        xa_visit_infer_expr(ctx, call->arguments[i]);
     }
 
     XrType *return_type = callee_type->function.return_type;
@@ -668,7 +677,9 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
             }
         } else if (strcmp(method_name, "reduce") == 0 && arg_count >= 2) {
             // arr.reduce(fn, init) -> type of init value
-            XrType *init_type = xa_visit_infer_expr(ctx, call->arguments[1]);
+            XrType *init_type = effective_arg_types ? effective_arg_types[1] : NULL;
+            if (!init_type && call->arg_count >= 2)
+                init_type = xa_visit_infer_expr(ctx, call->arguments[1]);
             if (init_type && !XR_TYPE_IS_UNKNOWN(init_type)) {
                 return_type = init_type;
             }
@@ -685,8 +696,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
 
     // Apply type substitution for generic function calls
     if (return_type && fn_links) {
-        return_type =
-            xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call, arg_count);
+        return_type = xa_substitute_generic_call(ctx, fn_links, callee_type, return_type, call,
+                                                 arg_count, effective_arg_types);
     }
 
     XrType *builtin_override = xa_csv_parse_return_type(ctx, call);
@@ -712,7 +723,8 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
                         if (method_links) {
                             // Apply method's own type parameters
                             return_type = xa_substitute_generic_call(ctx, method_links, callee_type,
-                                                                     return_type, call, arg_count);
+                                                                     return_type, call, arg_count,
+                                                                     effective_arg_types);
 
                             // Also apply class type parameters substitution
                             int class_type_param_count =
@@ -738,5 +750,7 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         }
     }
 
-    return return_type ? return_type : xr_type_new_unknown(NULL);
+    XrType *final_type = return_type ? return_type : xr_type_new_unknown(NULL);
+    xr_free(effective_arg_types);
+    return final_type;
 }

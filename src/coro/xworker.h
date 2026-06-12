@@ -34,6 +34,7 @@
 // Forward decl: full definition in src/io/xio_runtime.h. Coro is the
 // lower layer and must not include the IO header.
 struct XrIoRuntime;
+struct XrTask;
 
 /* ========== Worker Structure (P + M* pointer) ========== */
 
@@ -62,6 +63,7 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t select_close_wake_count;
     _Atomic uint64_t select_heap_alloc_count;
     _Atomic uint64_t select_inline_alloc_count;
+    _Atomic uint64_t vm_select_probe_hit_count;
     _Atomic uint64_t timeout_yield_retry_count;
     _Atomic uint64_t timeout_event_block_count;
     _Atomic uint64_t timer_fire_count;
@@ -81,6 +83,10 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_sendq_dequeue_count;
     _Atomic uint64_t chan_recvq_dequeue_count;
     _Atomic uint64_t chan_ready_wake_count;
+    _Atomic uint64_t chan_send_no_copy_count;
+    _Atomic uint64_t chan_send_deep_copy_count;
+    _Atomic uint64_t chan_recv_no_copy_count;
+    _Atomic uint64_t chan_recv_deep_copy_count;
     _Atomic uint64_t chan_close_ready_wake_count;
     _Atomic uint64_t chan_close_send_waiter_count;
     _Atomic uint64_t chan_close_recv_waiter_count;
@@ -114,12 +120,72 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t chan_kind_work_queue_op_count;
     _Atomic uint64_t chan_kind_mpmc_op_count;
     _Atomic uint64_t chan_kind_rendezvous_op_count;
+    _Atomic uint64_t chan_kind_generic_send_op_count;
+    _Atomic uint64_t chan_kind_rendezvous_send_op_count;
+    _Atomic uint64_t chan_kind_spsc_send_op_count;
+    _Atomic uint64_t chan_kind_mpsc_send_op_count;
+    _Atomic uint64_t chan_kind_work_queue_send_op_count;
+    _Atomic uint64_t chan_kind_mpmc_send_op_count;
+    _Atomic uint64_t chan_kind_generic_recv_op_count;
+    _Atomic uint64_t chan_kind_rendezvous_recv_op_count;
+    _Atomic uint64_t chan_kind_spsc_recv_op_count;
+    _Atomic uint64_t chan_kind_mpsc_recv_op_count;
+    _Atomic uint64_t chan_kind_work_queue_recv_op_count;
+    _Atomic uint64_t chan_kind_mpmc_recv_op_count;
+    _Atomic uint64_t chan_kind_generic_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_block_send_waiter_count;
+    _Atomic uint64_t chan_kind_generic_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_block_recv_waiter_count;
+    _Atomic uint64_t chan_kind_generic_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_wake_send_waiter_count;
+    _Atomic uint64_t chan_kind_generic_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_wake_recv_waiter_count;
+    _Atomic uint64_t chan_kind_generic_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_retarget_send_waiter_count;
+    _Atomic uint64_t chan_kind_generic_retarget_recv_waiter_count;
+    _Atomic uint64_t chan_kind_rendezvous_retarget_recv_waiter_count;
+    _Atomic uint64_t chan_kind_spsc_retarget_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpsc_retarget_recv_waiter_count;
+    _Atomic uint64_t chan_kind_work_queue_retarget_recv_waiter_count;
+    _Atomic uint64_t chan_kind_mpmc_retarget_recv_waiter_count;
+    _Atomic uint64_t vm_chan_send_fast_no_ext_count;
+    _Atomic uint64_t vm_chan_recv_fast_no_ext_count;
+    _Atomic uint64_t vm_await_done_fast_count;
     _Atomic uint64_t chan_worker_kind_generic_op_count;
     _Atomic uint64_t chan_worker_kind_spsc_op_count;
     _Atomic uint64_t chan_worker_kind_mpsc_op_count;
     _Atomic uint64_t chan_worker_kind_work_queue_op_count;
     _Atomic uint64_t chan_worker_kind_mpmc_op_count;
     _Atomic uint64_t chan_worker_kind_rendezvous_op_count;
+    _Atomic uint64_t task_one_shot_await_count;
+    _Atomic uint64_t task_one_shot_destroy_attempt_count;
+    _Atomic uint64_t task_one_shot_destroy_success_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_state_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_coro_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_graph_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_listener_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_waiter_count;
+    _Atomic uint64_t task_one_shot_destroy_fail_unlinked_count;
     _Atomic uint64_t inject_push_count;
     _Atomic uint64_t inject_pop_count;
     _Atomic uint64_t inject_spill_count;
@@ -133,6 +199,15 @@ typedef struct XrSchedGlobalStats {
     _Atomic uint64_t work_queue_wake_count;
     _Atomic uint64_t work_queue_close_count;
     _Atomic uint64_t work_queue_close_wake_count;
+    _Atomic uint64_t result_group_add_count;
+    _Atomic uint64_t result_group_flush_count;
+    _Atomic uint64_t result_group_flush_item_count;
+    _Atomic uint64_t result_group_recv_count;
+    _Atomic uint64_t result_group_recv_empty_count;
+    _Atomic uint64_t result_group_block_count;
+    _Atomic uint64_t result_group_wake_count;
+    _Atomic uint64_t result_group_close_count;
+    _Atomic uint64_t result_group_close_wake_count;
     _Atomic uint64_t handoff_reuse_count;
     _Atomic uint64_t handoff_create_count;
     _Atomic uint64_t handoff_cap_hit_count;
@@ -198,18 +273,28 @@ typedef struct XrRuntime {
     _Atomic int needspinning;  // Last spinner notify protocol
 
     /* === Statistics === */
-    _Atomic int64_t total_inbox_len;  // Global atomic counter for inbox items
     _Atomic int next_coro_id;
     bool sched_stats_enabled;
     XrSchedGlobalStats sched_stats;
+
+    /* === Runtime-owned Task handles === */
+    xr_mutex_t task_lock;
+    struct XrTask *task_list;
+    size_t task_count;
 
     /* === Global Injection Queue === */
     XrInjectQueue injectq;
     _Atomic bool injectq_nonempty;
 
-    /* === Scheduler Hint Bitsets === */
-    _Atomic uint64_t nonempty_p_mask;
-    _Atomic uint64_t stealable_p_mask;
+    /* === Scheduler Hint Bitsets ===
+     *
+     * Work discovery deliberately has NO per-enqueue global state: pushing or
+     * popping a coroutine touches only per-P memory (Go runqput/runqget
+     * semantics). Idle workers DISCOVER work by scanning per-P queue sizes
+     * and inbox heads — a bounded read-only loop on the cold path — instead
+     * of every hot-path enqueue paying a shared-cacheline RMW.
+     * Only park bookkeeping (idle_p_mask) and timer presence (timer_p_mask)
+     * keep eager bits; both are cold-path writers. */
     _Atomic uint64_t timer_p_mask;
     _Atomic uint64_t idle_p_mask;
     _Atomic int searching_count;
@@ -251,19 +336,6 @@ static inline void xr_runtime_set_mask_bit(_Atomic uint64_t *mask, int worker_id
     } else {
         atomic_fetch_and_explicit(mask, ~bit, memory_order_release);
     }
-}
-
-static inline void xr_runtime_set_runq_nonempty(XrRuntime *runtime, int worker_id, bool nonempty) {
-    if (!runtime)
-        return;
-    xr_runtime_set_mask_bit(&runtime->nonempty_p_mask, worker_id, nonempty);
-}
-
-static inline void xr_runtime_set_runq_stealable(XrRuntime *runtime, int worker_id,
-                                                 bool stealable) {
-    if (!runtime)
-        return;
-    xr_runtime_set_mask_bit(&runtime->stealable_p_mask, worker_id, stealable);
 }
 
 static inline void xr_runtime_set_timer_pending(XrRuntime *runtime, int worker_id, bool pending) {
@@ -326,8 +398,42 @@ XR_FUNC XrCoroutine *xr_worker_pop(XrWorker *worker);
 XR_FUNC void xr_worker_push(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC void xr_worker_push_lifo(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC int xr_worker_push_lifo_batch(XrWorker *worker, XrCoroutine *first);
-XR_FUNC void xr_worker_refresh_runq_masks(XrWorker *worker);
 XR_FUNC XrCoroRunResult xr_coro_run_on_worker(XrWorker *worker, XrCoroutine *coro);
+
+/* ========== Work Discovery (scan-based, cold path only) ==========
+ *
+ * Hot-path enqueue/dequeue never publishes global "has work" state; these
+ * bounded read-only scans are the discovery mechanism for spinners, parkers
+ * and steal candidate selection.
+ */
+
+// Any cross-worker delivery pending in some worker's MPSC inbox?
+static inline bool xr_runtime_any_inbox_nonempty(XrRuntime *runtime) {
+    for (int i = 0; i < runtime->worker_count; i++) {
+        if (!xr_mpsc_empty(&runtime->workers[i].p.inbox))
+            return true;
+    }
+    return false;
+}
+
+// Stealable victim bitmap: workers with a nonempty deque or continuation
+// deque. LIFO slots are deliberately excluded — only the owner may consume
+// its LIFO slot, exactly like Go's runnext.
+static inline uint64_t xr_runtime_scan_stealable(XrRuntime *runtime, uint64_t exclude_bits) {
+    uint64_t candidates = 0;
+    int count = runtime->worker_count < 64 ? runtime->worker_count : 64;
+    for (int i = 0; i < count; i++) {
+        uint64_t bit = (uint64_t) 1ull << i;
+        if (exclude_bits & bit)
+            continue;
+        XrProc *p = &runtime->workers[i].p;
+        if (xr_steal_queue_size(&p->runq.deque) > 0 || p->runq.overflow_len > 0 ||
+            xr_steal_queue_size(&p->cont_deque) > 0) {
+            candidates |= bit;
+        }
+    }
+    return candidates;
+}
 
 /* ========== Run Queue Operations (declared in xproc.h) ========== */
 
@@ -341,7 +447,7 @@ static inline int xr_worker_total_queue_len(XrWorker *worker) {
 XR_FUNC XrWorker *xr_current_worker(void);
 
 // Enqueue coro to target worker's inbox with full synchronization.
-// Handles: MPSC push + total_inbox_len increment + Dekker fence + wake if parked.
+// Handles: MPSC push + Dekker fence + wake if parked.
 // This is the ONLY correct way to push to a remote worker's inbox.
 XR_FUNC void xr_worker_inbox_enqueue(XrRuntime *runtime, int target_id, XrCoroutine *coro);
 XR_FUNC void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutine *first,

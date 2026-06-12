@@ -160,7 +160,8 @@ static XrRuntime *work_queue_stats_runtime(XrWorkQueue *q) {
             xr_sched_metric_inc(_rt, &_rt->sched_stats.field);                                     \
     } while (0)
 
-static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) {
+static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro,
+                                             int64_t worker_hint) {
     XR_DCHECK(q != NULL, "work_queue_waiter_enqueue_locked: NULL queue");
     XR_DCHECK(coro != NULL, "work_queue_waiter_enqueue_locked: NULL coro");
     XrCoroExt *ext = xr_coro_ensure_ext(coro);
@@ -169,6 +170,7 @@ static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) 
 
     ext->wait_link = NULL;
     ext->wait_prev = q->wait_last;
+    ext->work_queue_hint = worker_hint;
     if (q->wait_last) {
         q->wait_last->ext->wait_link = coro;
     } else {
@@ -183,25 +185,58 @@ static bool work_queue_waiter_enqueue_locked(XrWorkQueue *q, XrCoroutine *coro) 
 static bool work_queue_pop_from_shard(XrWorkQueue *q, uint32_t shard_idx, bool own_shard,
                                       XrValue *out);
 
+static void work_queue_waiter_unlink_locked(XrWorkQueue *q, XrCoroutine *coro) {
+    XR_DCHECK(q != NULL, "work_queue_waiter_unlink_locked: NULL queue");
+    XR_DCHECK(coro != NULL, "work_queue_waiter_unlink_locked: NULL coro");
+    XR_DCHECK(coro->ext != NULL, "work_queue_waiter_unlink_locked: NULL ext");
+
+    XrCoroutine *prev = coro->ext->wait_prev;
+    XrCoroutine *next = coro->ext->wait_link;
+    if (prev) {
+        prev->ext->wait_link = next;
+    } else {
+        q->wait_first = next;
+    }
+    if (next) {
+        next->ext->wait_prev = prev;
+    } else {
+        q->wait_last = prev;
+    }
+    coro->ext->wait_link = NULL;
+    coro->ext->wait_prev = NULL;
+    coro->ext->work_queue_hint = -1;
+    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
+}
+
+static bool work_queue_waiter_matches_shard(XrWorkQueue *q, XrCoroutine *coro, uint32_t shard_idx) {
+    if (!q || !coro || !coro->ext || coro->ext->work_queue_hint < 0)
+        return false;
+    uint32_t wanted = (uint32_t) ((uint64_t) coro->ext->work_queue_hint % q->shard_count);
+    return wanted == shard_idx;
+}
+
 static XrCoroutine *work_queue_waiter_pop_locked(XrWorkQueue *q) {
     XR_DCHECK(q != NULL, "work_queue_waiter_pop_locked: NULL queue");
     XrCoroutine *coro = q->wait_first;
     if (!coro)
         return NULL;
 
-    XrCoroutine *next = coro->ext ? coro->ext->wait_link : NULL;
-    q->wait_first = next;
-    if (next) {
-        next->ext->wait_prev = NULL;
-    } else {
-        q->wait_last = NULL;
-    }
-    if (coro->ext) {
-        coro->ext->wait_link = NULL;
-        coro->ext->wait_prev = NULL;
-    }
-    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    work_queue_waiter_unlink_locked(q, coro);
     return coro;
+}
+
+static XrCoroutine *work_queue_waiter_pop_for_shard_locked(XrWorkQueue *q, uint32_t shard_idx) {
+    XR_DCHECK(q != NULL, "work_queue_waiter_pop_for_shard_locked: NULL queue");
+    XrCoroutine *coro = q->wait_first;
+    while (coro) {
+        XrCoroutine *next = coro->ext ? coro->ext->wait_link : NULL;
+        if (work_queue_waiter_matches_shard(q, coro, shard_idx)) {
+            work_queue_waiter_unlink_locked(q, coro);
+            return coro;
+        }
+        coro = next;
+    }
+    return work_queue_waiter_pop_locked(q);
 }
 
 static bool work_queue_waiter_remove_locked(XrWorkQueue *q, XrCoroutine *coro) {
@@ -210,25 +245,10 @@ static bool work_queue_waiter_remove_locked(XrWorkQueue *q, XrCoroutine *coro) {
     if (!coro->ext)
         return false;
 
-    XrCoroutine *prev = coro->ext->wait_prev;
-    XrCoroutine *next = coro->ext->wait_link;
-    if (prev) {
-        prev->ext->wait_link = next;
-    } else if (q->wait_first == coro) {
-        q->wait_first = next;
-    } else {
+    if (!coro->ext->wait_prev && q->wait_first != coro)
         return false;
-    }
 
-    if (next) {
-        next->ext->wait_prev = prev;
-    } else {
-        q->wait_last = prev;
-    }
-
-    coro->ext->wait_link = NULL;
-    coro->ext->wait_prev = NULL;
-    atomic_fetch_sub_explicit(&q->waiter_count, 1, memory_order_relaxed);
+    work_queue_waiter_unlink_locked(q, coro);
     return true;
 }
 
@@ -289,14 +309,14 @@ static bool work_queue_ready_waiter(XrWorkQueue *q, XrCoroutine *coro) {
     return true;
 }
 
-static void work_queue_wake_one(XrWorkQueue *q) {
+static void work_queue_wake_one(XrWorkQueue *q, uint32_t shard_idx) {
     if (!q)
         return;
     if (!work_queue_runtime_can_wake(work_queue_runtime(q)))
         return;
     for (;;) {
         xr_amutex_lock(&q->wait_lock);
-        XrCoroutine *coro = work_queue_waiter_pop_locked(q);
+        XrCoroutine *coro = work_queue_waiter_pop_for_shard_locked(q, shard_idx);
         xr_amutex_unlock(&q->wait_lock);
         if (!coro)
             return;
@@ -334,6 +354,7 @@ static void work_queue_wake_all(XrWorkQueue *q) {
         if (list->ext) {
             list->ext->wait_link = NULL;
             list->ext->wait_prev = NULL;
+            list->ext->work_queue_hint = -1;
         }
         int target_id = 0;
         if (work_queue_claim_waiter(q, list, runtime, &target_id)) {
@@ -471,7 +492,7 @@ bool xr_work_queue_push(XrayIsolate *X, XrWorkQueue *q, XrValue value, int64_t s
     xr_amutex_unlock(&shard->lock);
     if (ok) {
         WORK_QUEUE_METRIC_INC(q, work_queue_push_count);
-        work_queue_wake_one(q);
+        work_queue_wake_one(q, shard_idx);
     }
     return ok;
 }
@@ -631,7 +652,7 @@ static XrCFuncResult ym_pop(XrayIsolate *isolate, XrValue self, XrValue *args, i
     XrWorker *worker_state = xr_current_worker();
     if (worker_state)
         atomic_store_explicit(&coro->affinity_p, worker_state->p.id, memory_order_relaxed);
-    if (!work_queue_waiter_enqueue_locked(q, coro)) {
+    if (!work_queue_waiter_enqueue_locked(q, coro, worker)) {
         xr_amutex_unlock(&q->wait_lock);
         xr_work_queue_wait_token_finish(&wait->work_queue_token);
         xr_coro_flags_clear(coro, XR_CORO_WAIT_MASK);

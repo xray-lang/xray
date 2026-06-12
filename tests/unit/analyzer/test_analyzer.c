@@ -640,6 +640,22 @@ TEST(compile_type_optional) {
     ASSERT(XR_TYPE_IS_INT(opt));
 }
 
+TEST(type_substitute_preserves_nullable_type_param) {
+    XrType *ret = xr_type_new_type_param(g_isolate, "T", 0);
+    ret = xr_type_make_nullable(g_isolate, ret);
+    XrType *fn = xr_type_new_function(g_isolate, NULL, 0, ret, false);
+
+    const char *names[] = {"T"};
+    XrType *actuals[] = {xr_type_new_int(NULL)};
+    XrType *subst = xr_type_substitute(g_isolate, fn, names, actuals, 1);
+
+    ASSERT(subst != NULL);
+    ASSERT(XR_TYPE_IS_FUNCTION(subst));
+    ASSERT(subst->function.return_type != NULL);
+    ASSERT(XR_TYPE_IS_INT(subst->function.return_type));
+    ASSERT(subst->function.return_type->is_nullable);
+}
+
 // ============================================================================
 // Edge case tests
 // ============================================================================
@@ -805,6 +821,7 @@ int main(void) {
     RUN_TEST(compile_type_function);
     RUN_TEST(compile_type_class);
     RUN_TEST(compile_type_optional);
+    RUN_TEST(type_substitute_preserves_nullable_type_param);
 
     printf("\nEdge case tests:\n");
     RUN_TEST(type_null_handling);

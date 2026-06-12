@@ -7,6 +7,13 @@
 
 import time
 
+fn recv_int(ch: Channel<int>) -> int {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
 fn worker(id: int, ch: Channel<int>, iterations: int) {
     for (let i = 0; i < iterations; i++) {
         time.sleep(5)
@@ -31,7 +38,7 @@ fn test_preempt_test() {
     let ids: Array<int> = []
     let received = 0
     for (let i = 0; i < WORKER_COUNT; i++) {
-        let id = resultCh.recv()
+        let id = recv_int(resultCh)
         received++
         ids.push(id)
     }
@@ -42,4 +49,3 @@ fn test_preempt_test() {
     assert(received == WORKER_COUNT, "scheduling test failed: only " + string(received) + " coroutines completed")
     print("调度测试通过：" + string(received) + "/" + string(WORKER_COUNT) + " 协程完成")
 }
-

@@ -411,6 +411,21 @@ static bool proto_has_opcode(const XrProto *proto, OpCode target) {
     return false;
 }
 
+static int proto_opcode_count(const XrProto *proto, OpCode target) {
+    int total = 0;
+    int count = PROTO_CODE_COUNT(proto);
+    for (int i = 0; i < count; i++) {
+        if (GET_OPCODE(PROTO_CODE(proto, i)) == target)
+            total++;
+    }
+    int nchildren = DYNARRAY_COUNT(&proto->protos);
+    for (int i = 0; i < nchildren; i++) {
+        XrProto *child = DYNARRAY_GET(&proto->protos, i, XrProto *);
+        total += proto_opcode_count(child, target);
+    }
+    return total;
+}
+
 /* Compile via Xi and assert a specific fused opcode is present.
  * Also runs execution comparison if check_exec is set. */
 typedef struct {
@@ -1963,6 +1978,33 @@ TEST(cmp_chan_send_recv_buffered) {
     });
 }
 
+TEST(cmp_chan_recv_match_uses_raw_opcode) {
+    const char *src = "const ch: Channel<int?> = new Channel(2)\n"
+                      "ch.send(0)\n"
+                      "ch.send(null)\n"
+                      "let zero = match (ch.recv()) {\n"
+                      "  Recv.Value(v) -> v\n"
+                      "  _ -> -1\n"
+                      "}\n"
+                      "let nil = match (ch.recv()) {\n"
+                      "  Recv.Value(v) -> v\n"
+                      "  _ -> 7\n"
+                      "}\n"
+                      "print(zero)\n"
+                      "print(nil == null)\n";
+
+    XrProto *p_xi = compile_xi(src);
+    assert(p_xi != NULL && "Xi pipeline must compile raw recv match");
+
+    int raw_recv_count = proto_opcode_count(p_xi, OP_CHAN_RECV);
+    int invoke_count = proto_opcode_count(p_xi, OP_INVOKE);
+    fprintf(stderr, "  raw recv opcodes=%d invoke opcodes=%d\n", raw_recv_count, invoke_count);
+    assert(raw_recv_count == 2 && "recv+match should lower to raw OP_CHAN_RECV");
+    assert(invoke_count == 0 && "recv+match must not fall back to method dispatch");
+
+    xr_vm_proto_free(p_xi);
+}
+
 TEST(cmp_go_simple) {
     /* go fn() — basic coroutine spawn + await.
      * Output ordering may differ; only verify compiles and runs. */
@@ -2453,6 +2495,7 @@ int main(void) {
     run_cmp_chan_new_unbuf();
     run_cmp_chan_new_buffered();
     run_cmp_chan_send_recv_buffered();
+    run_cmp_chan_recv_match_uses_raw_opcode();
     run_cmp_go_simple();
     run_cmp_go_with_chan();
     run_cmp_cancelled();

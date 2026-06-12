@@ -146,6 +146,11 @@ static X64Xmm x64_prepare_commutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XmRef ar
  *      so arg1 in rd survives until consumed by OP. */
 typedef void (*X64BinopGpEmit)(X64Buf *buf, X64Reg dst, X64Reg src);
 typedef void (*X64BinopFpEmit)(X64Buf *buf, X64Xmm dst, X64Xmm src);
+typedef void (*X64StoreGpEmit)(X64Buf *buf, X64Reg base, int32_t offset, X64Reg src);
+
+static X64Reg x64_saved_temp_reg(X64Reg avoid) {
+    return avoid == X64_RAX ? X64_RCX : X64_RAX;
+}
 
 static void x64_emit_noncommutative_gp(X64CodegenCtx *ctx, X64Reg rd, XmRef arg0, XmRef arg1,
                                        X64BinopGpEmit emit_op) {
@@ -523,6 +528,18 @@ static void x64_h_select_cond(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 static void x64_h_select(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg true_reg = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+    if (true_reg == X64_SCRATCH_REG && ins->args[0] != ins->args[1] &&
+        x64_arg_needs_scratch_gp(ctx, ins->args[1])) {
+        X64Reg temp = x64_saved_temp_reg(rd);
+        x64_push_r(&ctx->buf, temp);
+        x64_mov_rr(&ctx->buf, temp, X64_SCRATCH_REG);
+        X64Reg false_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
+        if (false_reg != rd)
+            x64_mov_rr(&ctx->buf, rd, false_reg);
+        x64_cmov_rr(&ctx->buf, X64_CC_NE, rd, temp);
+        x64_pop_r(&ctx->buf, temp);
+        return;
+    }
     X64Reg false_reg = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
     if (false_reg != rd)
         x64_mov_rr(&ctx->buf, rd, false_reg);
@@ -530,6 +547,27 @@ static void x64_h_select(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 }
 
 /* ========== Load / Store ========== */
+
+static void x64_emit_gp_store(X64CodegenCtx *ctx, XmRef addr_ref, XmRef value_ref,
+                              X64StoreGpEmit emit_store) {
+    X64Reg addr = x64_get_operand(ctx, addr_ref, X64_SCRATCH_REG);
+    if (addr == X64_SCRATCH_REG && addr_ref != value_ref &&
+        x64_arg_needs_scratch_gp(ctx, value_ref)) {
+        X64Reg temp = X64_RAX;
+        x64_push_r(&ctx->buf, temp);
+        x64_mov_rr(&ctx->buf, temp, X64_SCRATCH_REG);
+        X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
+        emit_store(&ctx->buf, temp, 0, val);
+        x64_pop_r(&ctx->buf, temp);
+        return;
+    }
+    X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
+    if (val == addr) {
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+        val = X64_SCRATCH_REG;
+    }
+    emit_store(&ctx->buf, addr, 0, val);
+}
 
 static void x64_h_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
@@ -543,7 +581,6 @@ static void x64_h_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 static void x64_h_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     (void) rd;
-    X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     bool store_fp = false;
     if (xm_ref_is_vreg(ins->args[1])) {
         uint32_t vi = XM_REF_INDEX(ins->args[1]);
@@ -551,15 +588,11 @@ static void x64_h_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             store_fp = (ctx->func->vregs[vi].rep == XR_REP_F64);
     }
     if (store_fp) {
+        X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
         X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
         x64_movsd_mr(&ctx->buf, rn, 0, fm);
     } else {
-        X64Reg rm = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-        if (rm == rn) {
-            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, rm);
-            rm = X64_SCRATCH_REG;
-        }
-        x64_mov_mr(&ctx->buf, rn, 0, rm);
+        x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr);
     }
 }
 
@@ -578,13 +611,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE8: {
-            X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-            if (val == addr) {
-                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
-                val = X64_SCRATCH_REG;
-            }
-            x64_mov_mr8(&ctx->buf, addr, 0, val);
+            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr8);
             break;
         }
         case XM_LOAD16Z: {
@@ -598,13 +625,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE16: {
-            X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-            if (val == addr) {
-                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
-                val = X64_SCRATCH_REG;
-            }
-            x64_mov_mr16(&ctx->buf, addr, 0, val);
+            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr16);
             break;
         }
         case XM_LOAD32Z: {
@@ -623,13 +644,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE32: {
-            X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-            if (val == addr) {
-                x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
-                val = X64_SCRATCH_REG;
-            }
-            x64_mov_mr32(&ctx->buf, addr, 0, val);
+            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr32);
             break;
         }
         default:

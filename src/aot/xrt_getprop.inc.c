@@ -25,11 +25,10 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
             return XR_FROM_INT(s->len == 0);
     }
     if (XR_IS_STR(obj)) {
-        const char *s = (const char *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT((int64_t) strlen(s));
+            return XR_FROM_INT(xr_str_len(obj)); /* O(1) header length */
         if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(s[0] == '\0');
+            return XR_FROM_INT(xr_str_len(obj) == 0);
     }
     if (obj.tag == XR_TAG_STRBUF) {
         xrt_strbuf_t *sb = (xrt_strbuf_t *) obj.ptr;

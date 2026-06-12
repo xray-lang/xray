@@ -2,17 +2,11 @@ import regex
 
 fn regex_dynamic_match_ok(pattern: string, text: string) -> bool {
     let re = regex.compile(pattern)
-    if (re == null) {
-        return false
-    }
     return regex.find(re, text) != null
 }
 
 fn regex_dynamic_match_text(pattern: string, text: string, expected: string) -> bool {
     let re = regex.compile(pattern)
-    if (re == null) {
-        return false
-    }
     let result = regex.find(re, text)
     if (result == null) {
         return false

@@ -152,6 +152,7 @@ typedef struct {
     int bit_pos;
     uint32_t bit_buf;
     int bits_in_buf;
+    bool error;
 } BitReader;
 
 static void br_init(BitReader *br, const uint8_t *data, size_t len) {
@@ -161,6 +162,7 @@ static void br_init(BitReader *br, const uint8_t *data, size_t len) {
     br->bit_pos = 0;
     br->bit_buf = 0;
     br->bits_in_buf = 0;
+    br->error = false;
 }
 
 static void br_fill(BitReader *br) {
@@ -171,11 +173,25 @@ static void br_fill(BitReader *br) {
 }
 
 static uint32_t br_peek(BitReader *br, int n) {
+    if (n < 0 || n > 24) {
+        br->error = true;
+        return 0;
+    }
+    if (n == 0)
+        return 0;
     br_fill(br);
+    if (br->bits_in_buf < n) {
+        br->error = true;
+        return 0;
+    }
     return br->bit_buf & ((1u << n) - 1);
 }
 
 static void br_skip(BitReader *br, int n) {
+    if (n < 0 || br->bits_in_buf < n) {
+        br->error = true;
+        return;
+    }
     br->bit_buf >>= n;
     br->bits_in_buf -= n;
 }
@@ -191,6 +207,10 @@ static void br_align(BitReader *br) {
     // Note: bits_in_buf may contain unconsumed whole bytes
     // We need to "put back" these bytes to byte_pos
     int full_bytes = br->bits_in_buf / 8;
+    if ((size_t) full_bytes > br->byte_pos) {
+        br->error = true;
+        return;
+    }
     if (full_bytes > 0) {
         br->byte_pos -= full_bytes;  // Put back unconsumed bytes
     }
@@ -217,6 +237,11 @@ static void bw_init(BitWriter *bw, uint8_t *data, size_t cap) {
 }
 
 static bool bw_write(BitWriter *bw, uint32_t val, int n) {
+    if (n < 0 || n > 24)
+        return false;
+    if (n == 0)
+        return true;
+    val &= (1u << n) - 1;
     bw->bit_buf |= val << bw->bits_in_buf;
     bw->bits_in_buf += n;
 
@@ -287,6 +312,8 @@ static int decode_huffman(BitReader *br, HuffmanTable *ht) {
     for (int len = 1; len <= MAX_BITS; len++) {
         code |= br_peek(br, 1);
         br_skip(br, 1);
+        if (br->error)
+            return -1;
 
         int count = ht->counts[len];
         if ((int) (code - first) < count) {
@@ -318,6 +345,8 @@ XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t 
         // Read block header
         final_block = br_read(&br, 1) != 0;
         int type = br_read(&br, 2);
+        if (br.error)
+            return XR_COMPRESS_ERR_DATA;
 
         if (type == 0) {
             // Uncompressed block
@@ -349,18 +378,22 @@ XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t 
 
             if (type == 1) {
                 // Fixed Huffman codes
-                build_huffman_table(&lit_table, FIXED_LIT_LENGTHS, 288);
+                if (build_huffman_table(&lit_table, FIXED_LIT_LENGTHS, 288) != 0)
+                    return XR_COMPRESS_ERR_DATA;
 
                 // Fixed distance codes: all 5 bits
                 uint8_t dist_lengths[32];
                 memset(dist_lengths, 5, 32);
-                build_huffman_table(&dist_table, dist_lengths, 32);
+                if (build_huffman_table(&dist_table, dist_lengths, 32) != 0)
+                    return XR_COMPRESS_ERR_DATA;
 
             } else {
                 // Dynamic Huffman codes
                 int hlit = br_read(&br, 5) + 257;
                 int hdist = br_read(&br, 5) + 1;
                 int hclen = br_read(&br, 4) + 4;
+                if (br.error)
+                    return XR_COMPRESS_ERR_DATA;
 
                 // Read code length code lengths
                 static const uint8_t CLEN_ORDER[19] = {16, 17, 18, 0, 8,  7, 9,  6, 10, 5,
@@ -369,10 +402,13 @@ XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t 
                 uint8_t clen_lengths[19] = {0};
                 for (int i = 0; i < hclen; i++) {
                     clen_lengths[CLEN_ORDER[i]] = br_read(&br, 3);
+                    if (br.error)
+                        return XR_COMPRESS_ERR_DATA;
                 }
 
                 HuffmanTable clen_table;
-                build_huffman_table(&clen_table, clen_lengths, 19);
+                if (build_huffman_table(&clen_table, clen_lengths, 19) != 0)
+                    return XR_COMPRESS_ERR_DATA;
 
                 // Decode literal/length and distance code lengths
                 uint8_t lengths[288 + 32];
@@ -388,22 +424,30 @@ XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t 
                         if (i == 0)
                             return XR_COMPRESS_ERR_DATA;
                         int rep = br_read(&br, 2) + 3;
+                        if (br.error)
+                            return XR_COMPRESS_ERR_DATA;
                         uint8_t prev = lengths[i - 1];
                         while (rep-- > 0 && i < hlit + hdist)
                             lengths[i++] = prev;
                     } else if (sym == 17) {
                         int rep = br_read(&br, 3) + 3;
+                        if (br.error)
+                            return XR_COMPRESS_ERR_DATA;
                         while (rep-- > 0 && i < hlit + hdist)
                             lengths[i++] = 0;
                     } else {
                         int rep = br_read(&br, 7) + 11;
+                        if (br.error)
+                            return XR_COMPRESS_ERR_DATA;
                         while (rep-- > 0 && i < hlit + hdist)
                             lengths[i++] = 0;
                     }
                 }
 
-                build_huffman_table(&lit_table, lengths, hlit);
-                build_huffman_table(&dist_table, lengths + hlit, hdist);
+                if (build_huffman_table(&lit_table, lengths, hlit) != 0 ||
+                    build_huffman_table(&dist_table, lengths + hlit, hdist) != 0) {
+                    return XR_COMPRESS_ERR_DATA;
+                }
             }
 
             // Decode data
@@ -429,12 +473,16 @@ XR_FUNC XrCompressError xr_inflate(const uint8_t *input, size_t in_len, uint8_t 
                         return XR_COMPRESS_ERR_DATA;
 
                     int length = LEN_BASE[len_idx] + br_read(&br, LEN_EXTRA_BITS[len_idx]);
+                    if (br.error)
+                        return XR_COMPRESS_ERR_DATA;
 
                     int dist_sym = decode_huffman(&br, &dist_table);
                     if (dist_sym < 0 || dist_sym >= 30)
                         return XR_COMPRESS_ERR_DATA;
 
                     int distance = DIST_BASE[dist_sym] + br_read(&br, DIST_EXTRA_BITS[dist_sym]);
+                    if (br.error)
+                        return XR_COMPRESS_ERR_DATA;
 
                     if ((size_t) distance > out_pos)
                         return XR_COMPRESS_ERR_DATA;
@@ -524,8 +572,8 @@ static const uint8_t DIST_REV_CODES[32] = {
 };
 
 // Emit fixed Huffman code using precomputed table
-static inline void emit_fixed_literal(BitWriter *bw, int lit) {
-    bw_write(bw, FIXED_HUFF_CODES[lit].code, FIXED_HUFF_CODES[lit].bits);
+static inline bool emit_fixed_literal(BitWriter *bw, int lit) {
+    return bw_write(bw, FIXED_HUFF_CODES[lit].code, FIXED_HUFF_CODES[lit].bits);
 }
 
 // Find length code via binary search: O(5) vs O(29) linear scan
@@ -555,25 +603,30 @@ static inline int find_dist_code(int dist) {
 }
 
 // Emit length+distance pair
-static void emit_match(BitWriter *bw, int len, int dist) {
+static bool emit_match(BitWriter *bw, int len, int dist) {
     // Output length code
     int len_code = find_len_code(len);
-    emit_fixed_literal(bw, len_code);
+    if (!emit_fixed_literal(bw, len_code))
+        return false;
 
     // Output length extra bits
     int len_idx = len_code - 257;
     if (LEN_EXTRA_BITS[len_idx] > 0) {
-        bw_write(bw, len - LEN_BASE[len_idx], LEN_EXTRA_BITS[len_idx]);
+        if (!bw_write(bw, len - LEN_BASE[len_idx], LEN_EXTRA_BITS[len_idx]))
+            return false;
     }
 
     // Output distance code (fixed 5 bits, precomputed reverse)
     int dist_code = find_dist_code(dist);
-    bw_write(bw, DIST_REV_CODES[dist_code], 5);
+    if (!bw_write(bw, DIST_REV_CODES[dist_code], 5))
+        return false;
 
     // Output distance extra bits
     if (DIST_EXTRA_BITS[dist_code] > 0) {
-        bw_write(bw, dist - DIST_BASE[dist_code], DIST_EXTRA_BITS[dist_code]);
+        if (!bw_write(bw, dist - DIST_BASE[dist_code], DIST_EXTRA_BITS[dist_code]))
+            return false;
     }
+    return true;
 }
 
 // LZ77 find longest match
@@ -721,8 +774,11 @@ XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t 
     bw_init(&bw, output, out_cap);
 
     // Block header: BFINAL=1, BTYPE=01 (fixed Huffman)
-    bw_write(&bw, 1, 1);  // final block
-    bw_write(&bw, 1, 2);  // fixed huffman
+    if (!bw_write(&bw, 1, 1) || !bw_write(&bw, 1, 2)) {  // final fixed-Huffman block
+        xr_free(hash_table);
+        xr_free(prev_chain);
+        return XR_COMPRESS_ERR_BUFFER;
+    }
 
     size_t pos = 0;
     while (pos < in_len) {
@@ -735,7 +791,8 @@ XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t 
 
         if (match_len >= LZ77_MIN_MATCH) {
             // Output match
-            emit_match(&bw, match_len, match_dist);
+            if (!emit_match(&bw, match_len, match_dist))
+                goto buffer_error;
 
             // Update hash chain (lazy update)
             for (int i = 0; i < match_len && pos + i + LZ77_MIN_MATCH <= in_len; i++) {
@@ -744,7 +801,8 @@ XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t 
             pos += match_len;
         } else {
             // Output literal
-            emit_fixed_literal(&bw, input[pos]);
+            if (!emit_fixed_literal(&bw, input[pos]))
+                goto buffer_error;
 
             if (pos + LZ77_MIN_MATCH <= in_len) {
                 lz77_update_hash(input, pos, hash_table, prev_chain);
@@ -754,16 +812,23 @@ XR_FUNC XrCompressError xr_deflate(const uint8_t *input, size_t in_len, uint8_t 
     }
 
     // Output end-of-block symbol 256
-    emit_fixed_literal(&bw, 256);
+    if (!emit_fixed_literal(&bw, 256))
+        goto buffer_error;
 
     // Flush bit buffer
-    bw_flush(&bw);
+    if (!bw_flush(&bw))
+        goto buffer_error;
 
     xr_free(hash_table);
     xr_free(prev_chain);
 
     *out_len = bw.byte_pos;
     return XR_COMPRESS_OK;
+
+buffer_error:
+    xr_free(hash_table);
+    xr_free(prev_chain);
+    return XR_COMPRESS_ERR_BUFFER;
 }
 
 /* ========== Gzip Implementation ========== */

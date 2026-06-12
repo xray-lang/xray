@@ -40,6 +40,60 @@ typedef struct XrAotRuntimeArrayView {
 
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
 
+static inline XrValue xr_aot_bridge_enum_string_to_xrt(const char *enum_name,
+                                                       const char *member_name) {
+    if (!enum_name)
+        enum_name = "";
+    if (!member_name)
+        member_name = "";
+    size_t enum_len = strlen(enum_name);
+    size_t member_len = strlen(member_name);
+    XrValue out = xrt_str_alloc(enum_len + 1 + member_len);
+    char *dst = (char *) out.ptr;
+    memcpy(dst, enum_name, enum_len);
+    dst[enum_len] = '.';
+    memcpy(dst + enum_len + 1, member_name, member_len);
+    dst[enum_len + 1 + member_len] = '\0';
+    return out;
+}
+
+static inline XrValue xr_aot_bridge_runtime_enum_to_xrt(XrValue value) {
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    uint32_t member_index = 0;
+    bool is_adt = false;
+    int payload_count = 0;
+    if (!xr_aot_runtime_enum_value_info(value, &enum_name, &member_name, &member_index, &is_adt,
+                                        &payload_count)) {
+        return value;
+    }
+    if (is_adt && payload_count > 0)
+        return XR_FROM_INT((int64_t) member_index);
+    return xr_aot_bridge_enum_string_to_xrt(enum_name, member_name);
+}
+
+static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
+    const char *enum_name = NULL;
+    const char *member_name = NULL;
+    uint32_t member_index = 0;
+    int payload_count = 0;
+    if (!xr_aot_runtime_adt_value_info(value, &enum_name, &member_name, &member_index,
+                                       &payload_count)) {
+        return value;
+    }
+
+    XrValue out = xrt_array_new((int64_t) payload_count + 1);
+    xrt_array_t *arr = (xrt_array_t *) out.ptr;
+    arr->adt_enum_name = enum_name;
+    arr->adt_member_name = member_name;
+    xrt_array_push(out, XR_FROM_INT((int64_t) member_index));
+    for (int i = 0; i < payload_count; i++) {
+        XrValue payload = xr_aot_runtime_adt_payload(value, i);
+        xrt_array_push(out, xr_aot_bridge_value_to_xrt(payload));
+    }
+    return out;
+}
+
 static inline XrValue xr_aot_bridge_string_to_xrt(XrValue value) {
     XrAotRuntimeStringView *src = (XrAotRuntimeStringView *) value.ptr;
     if (!src)
@@ -80,6 +134,12 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
     if (value.tag != XR_TAG_PTR)
         return value;
+    XrValue adt = xr_aot_bridge_runtime_adt_to_xrt(value);
+    if (adt.tag != value.tag || adt.ptr != value.ptr)
+        return adt;
+    XrValue enum_value = xr_aot_bridge_runtime_enum_to_xrt(value);
+    if (enum_value.tag != value.tag || enum_value.ptr != value.ptr)
+        return enum_value;
     if (value.heap_type == XR_TSTRING)
         return xr_aot_bridge_string_to_xrt(value);
     if (value.heap_type == XR_TARRAY)

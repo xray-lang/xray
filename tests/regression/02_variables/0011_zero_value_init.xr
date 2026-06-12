@@ -1,4 +1,4 @@
-// Typed variables without initializer get zero values
+// Typed variables without initializer get zero values (default-initializable types only)
 
 @test
 fn test_int_zero_value() {
@@ -19,13 +19,59 @@ fn test_bool_zero_value() {
 }
 
 @test
-fn test_string_zero_value() {
-    let d: string
-    assert_eq(d, "")
-}
-
-@test
 fn test_nullable_defaults_to_null() {
     let e: int?
     assert_eq(e, null)
+}
+
+@test
+fn test_string_requires_initializer() {
+    // string is not default-initializable; must use explicit initializer
+    let d: string = ""
+    assert_eq(d, "")
+}
+
+struct DefaultPoint {
+    x: int
+    y: int
+}
+
+struct DefaultBox {
+    p: DefaultPoint
+    ok: bool
+}
+
+@test
+fn test_struct_zero_value_init() {
+    let p: DefaultPoint
+    assert_eq(p.x, 0)
+    assert_eq(p.y, 0)
+
+    p.x = 7
+    assert_eq(p.x, 7)
+
+    let box: DefaultBox
+    assert_eq(box.p.x, 0)
+    assert_eq(box.p.y, 0)
+    assert_eq(box.ok, false)
+}
+
+class BranchInitializedName {
+    name: string
+
+    constructor(flag: bool) {
+        if (flag) {
+            this.name = "yes"
+        } else {
+            this.name = "no"
+        }
+    }
+}
+
+@test
+fn test_class_field_initialized_in_both_branches() {
+    let yes = new BranchInitializedName(true)
+    let no = new BranchInitializedName(false)
+    assert_eq(yes.name, "yes")
+    assert_eq(no.name, "no")
 }

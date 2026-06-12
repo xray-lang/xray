@@ -281,9 +281,9 @@
     _(CHAN_NEW_CAP, FMT_AB, KOP_AB_UNARY, "R[A] = Channel(R[B]) — dynamic buffer size")            \
     _(CHAN_NEW_NAMED, FMT_ABC, KOP_ABC_BIN, "R[A] = Channel(R[B], R[C]) - named")                  \
     _(CHAN_SEND, FMT_ABC, KOP_SPECIAL, "R[B].send(R[C])")                                          \
-    _(CHAN_RECV, FMT_AB, KOP_AB_RECV, "R[A], R[A+1] = R[B].recv()")                                \
+    _(CHAN_RECV, FMT_AB, KOP_AB_RECV, "R[A] = R[B].recv()")                                        \
     _(CHAN_TRY_SEND, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].trySend(R[C])")                            \
-    _(CHAN_TRY_RECV, FMT_AB, KOP_AB_RECV, "R[A], R[A+1] = R[B].tryRecv()")                         \
+    _(CHAN_TRY_RECV, FMT_AB, KOP_AB_RECV, "R[A] = R[B].tryRecv()")                                 \
     _(CHAN_SEND_TIMEOUT, FMT_ABC, KOP_SPECIAL, "R[A] = R[B].send(R[C], timeout: R[C+1])")          \
     _(CHAN_RECV_TIMEOUT, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B].recv(timeout: R[C])")                  \
     _(CHAN_CLOSE, FMT_A, KOP_A_USE, "R[A].close()")                                                \

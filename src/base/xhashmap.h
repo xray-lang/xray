@@ -62,7 +62,10 @@ XR_FUNC XrHashMap *xr_hashmap_new_in_arena(struct XrArena *arena);
 // Only for malloc version, not arena version
 XR_FUNC void xr_hashmap_free(XrHashMap *map);
 
-XR_FUNC void xr_hashmap_set(XrHashMap *map, const char *key, void *value);
+// Insert or update. Returns true on success; false only when the key is
+// absent and no slot is available (allocation failure on a full table).
+// The map never silently drops an insert — callers must handle false.
+XR_FUNC bool xr_hashmap_set(XrHashMap *map, const char *key, void *value);
 
 // Returns NULL if key not found
 XR_FUNC void *xr_hashmap_get(XrHashMap *map, const char *key);

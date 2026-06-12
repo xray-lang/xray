@@ -32,7 +32,9 @@
 #include "../runtime/xstrbuf.h"
 #include "../runtime/object/xstringbuilder.h"
 
+#include "../base/xglobal_indices.h"
 #include "../runtime/object/xjson.h"
+#include "../runtime/object/xexception.h"
 #include "../runtime/object/xtuple.h"
 #include "../runtime/class/xclass_descriptor.h"
 #include "../runtime/object/xrange.h"
@@ -42,8 +44,183 @@
 #include "../runtime/value/xtype_feedback.h"
 #include "../coro/xcoro_pool.h"
 #include "../coro/xtask.h"
+#include "../coro/xblock.h"
 #include "../coro/xdeep_copy.h"
+#include "../coro/xworker.h"
 #include "../runtime/class/xenum.h"
+#include "../os/os_time.h"
+
+static XrEnumType *vm_builtin_enum_type(XrayIsolate *isolate, int builtin_index) {
+    if (!isolate || builtin_index < 0 || builtin_index >= XR_USER_GLOBALS_START)
+        return NULL;
+    XrValue value = isolate->vm.builtins[builtin_index];
+    if (!XR_IS_PTR(value))
+        return NULL;
+    return (XrEnumType *) XR_TO_PTR(value);
+}
+
+static XrValue vm_builtin_enum_member(XrayIsolate *isolate, int builtin_index,
+                                      uint32_t member_index) {
+    XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
+    if (!type || member_index >= type->member_count || !type->members[member_index].instance)
+        return xr_null();
+    return XR_FROM_PTR(type->members[member_index].instance);
+}
+
+static XrValue vm_builtin_adt_value(XrayIsolate *isolate, int builtin_index, uint32_t member_index,
+                                    XrValue *args, int nargs) {
+    XrEnumType *type = vm_builtin_enum_type(isolate, builtin_index);
+    if (!type || !type->is_adt)
+        return xr_null();
+    XrInstance *inst = xr_enum_adt_construct(isolate, type, member_index, args, nargs);
+    return inst ? XR_FROM_PTR(inst) : xr_null();
+}
+
+static XrValue vm_recv_value(XrayIsolate *isolate, XrValue value) {
+    XrValue args[1] = {value};
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_RECV, 0, args, 1);
+}
+
+static XrValue vm_recv_empty(XrayIsolate *isolate) {
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 1);
+}
+
+static XrValue vm_recv_timeout(XrayIsolate *isolate) {
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 2);
+}
+
+static XrValue vm_recv_closed(XrayIsolate *isolate) {
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_RECV, 3);
+}
+
+static XrValue vm_send_result(XrayIsolate *isolate, uint32_t member_index) {
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_SEND_RESULT, member_index);
+}
+
+static XrValue vm_task_status_value(XrayIsolate *isolate, const XrTask *task) {
+    uint8_t state = task ? atomic_load_explicit(&((XrTask *) task)->state, memory_order_acquire)
+                         : XR_TASK_CANCELLED;
+    uint32_t member_index = 0;
+    switch (state) {
+        case XR_TASK_ACTIVE:
+        case XR_TASK_COMPLETING:
+            member_index = 1;  // Running
+            break;
+        case XR_TASK_COMPLETED:
+            member_index = 2;  // Success
+            break;
+        case XR_TASK_FAILED:
+            member_index = 3;  // Failed
+            break;
+        case XR_TASK_CANCELLING:
+        case XR_TASK_CANCELLED:
+        default:
+            member_index = 4;  // Cancelled
+            break;
+    }
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_STATUS, member_index);
+}
+
+static XrValue vm_task_result_success(XrayIsolate *isolate, XrValue value) {
+    XrValue args[1] = {value};
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 0, args, 1);
+}
+
+static XrValue vm_task_result_failed(XrayIsolate *isolate, XrTask *task, XrCoroutine *dst_coro) {
+    XrValue error = task ? task->error : xr_null();
+    if (XR_IS_NULL(error))
+        error = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+    if (dst_coro && xr_value_needs_copy(error))
+        error = xr_deep_copy_to_coro(isolate, error, dst_coro);
+    XrValue args[1] = {error};
+    return vm_builtin_adt_value(isolate, XR_GLOBAL_VAR_TASK_RESULT, 1, args, 1);
+}
+
+static XrValue vm_task_result_member(XrayIsolate *isolate, uint32_t member_index) {
+    return vm_builtin_enum_member(isolate, XR_GLOBAL_VAR_TASK_RESULT, member_index);
+}
+
+static void vm_task_recycle_cancelled_executor(XrTask *task, XrCoroutine *coro,
+                                               uint32_t before_cancel_flags) {
+    if (!task || !coro || xr_coro_flags_has(coro, XR_CORO_FLG_MAIN))
+        return;
+    if ((task->flags & XR_TASK_FLG_RUNTIME_OWNED) == 0)
+        return;
+
+    /* Exchange-claim against the executor's own completion path. */
+    if (xr_task_claim_executor(task) != coro)
+        return;
+    coro->task = NULL;
+    coro->gc_flags |= XR_CORO_GC_RECYCLABLE | XR_CORO_GC_TRIM_BACKEND_STORAGE;
+
+    if ((before_cancel_flags & XR_CORO_FLG_BLOCKED) == 0)
+        return;
+
+    if (coro->ext && (coro->ext->wait_bucket || xr_coro_select_wait(coro))) {
+        return;
+    }
+
+    XrWorker *worker = xr_current_worker();
+    XrRuntime *runtime = worker ? worker->p.runtime
+                                : (coro->isolate ? (XrRuntime *) coro->isolate->vm.runtime : NULL);
+    int owner_id = atomic_load_explicit(&coro->affinity_p, memory_order_acquire);
+    if (worker && runtime == worker->p.runtime && worker->p.id == owner_id) {
+        xr_worker_unblock(worker, coro);
+        xr_coro_recycle_local(worker, coro);
+        return;
+    }
+    if (runtime && owner_id >= 0 && owner_id < runtime->worker_count) {
+        xr_worker_inbox_enqueue(runtime, owner_id, coro);
+    }
+}
+
+static XrValue vm_task_result_from_terminal(XrayIsolate *isolate, XrTask *task,
+                                            XrCoroutine *dst_coro) {
+    uint8_t state =
+        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    if (state == XR_TASK_COMPLETED) {
+        XrValue value = xr_coro_await_result_value(isolate, dst_coro, task, false);
+        return vm_task_result_success(isolate, value);
+    }
+    if (state == XR_TASK_FAILED)
+        return vm_task_result_failed(isolate, task, dst_coro);
+    if (state == XR_TASK_CANCELLED || state == XR_TASK_CANCELLING)
+        return vm_task_result_member(isolate, 2);
+    return vm_task_result_member(isolate, 4);
+}
+
+static XrDispatchAction vm_task_raise_terminal(XrayIsolate *isolate, XrTask *task,
+                                               XrBcCallFrame *frame, XrInstruction *pc) {
+    uint8_t state =
+        task ? atomic_load_explicit(&task->state, memory_order_acquire) : XR_TASK_CANCELLED;
+    XrValue exc;
+    if (state == XR_TASK_FAILED && task && !XR_IS_NULL(task->error)) {
+        exc = task->error;
+        if (!xr_value_is_exception(isolate, exc))
+            exc = xr_exception_from_value(isolate, exc);
+    } else if (state == XR_TASK_FAILED) {
+        exc = xr_exception_new(isolate, XR_ERR_RUNTIME, "Task failed");
+    } else {
+        exc = xr_exception_new(isolate, XR_ERR_CORO_CANCELLED, "Task cancelled");
+    }
+    if (frame)
+        frame->pc = pc;
+    xr_vm_unwind_with_trace(isolate, exc);
+    return XR_DISP_RAISE;
+}
+
+static XrValue vm_task_result_from_block(XrayIsolate *isolate, XrTask *task, XrCoroutine *dst_coro,
+                                         XrCoroBlockResult block, XrValue raw_value,
+                                         bool timeout_enabled) {
+    if (block.kind == XR_CORO_BLOCK_READY)
+        return vm_task_result_success(isolate, raw_value);
+    if (block.kind == XR_CORO_BLOCK_TIMEOUT)
+        return timeout_enabled ? vm_task_result_member(isolate, 3)
+                               : vm_task_result_from_terminal(isolate, task, dst_coro);
+    if (block.kind == XR_CORO_BLOCK_CLOSED || block.kind == XR_CORO_BLOCK_NO_CORO)
+        return vm_task_result_from_terminal(isolate, task, dst_coro);
+    return vm_task_result_member(isolate, 4);
+}
 
 static XrDispatchAction
 vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, XrMethod *method,
@@ -64,7 +241,8 @@ vm_call_yieldable_primitive_method(XrayIsolate *isolate, XrVMContext *vm_ctx, Xr
         case XR_CFUNC_DONE:
             vm_suspend_clear_yielded(frame);
             base[a] = result;
-            return XR_DISP_NEXT;
+            return vm_ready_operation_next_or_yield(isolate, vm_get_coro(vm_ctx), frame, pc,
+                                                    XR_VM_YIELDABLE_READY_REDUCTION_COST);
         case XR_CFUNC_BLOCKED:
             return vm_suspend_block_replay_yielded(frame, pc);
         case XR_CFUNC_YIELD:
@@ -87,21 +265,22 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
     XR_DCHECK(base != NULL, "vm_invoke_channel: NULL base");
     // ch.trySend(value) — unified helper
     if (nargs == 1 && method_symbol == SYMBOL_TRYSEND) {
-        base[a] = xr_bool(xr_chan_try_send(isolate, ch, base[a + 2]));
+        if (xr_channel_is_closed(ch)) {
+            base[a] = vm_send_result(isolate, 3);
+            return XR_DISP_NEXT;
+        }
+        base[a] = vm_send_result(isolate, xr_chan_try_send(isolate, ch, base[a + 2]) ? 0 : 1);
         return XR_DISP_NEXT;
     }
 
-    // ch.tryRecv() → (value, ok) tuple — unified helper
+    // ch.tryRecv() → Recv<T> — unified helper
     if (nargs == 0 && method_symbol == SYMBOL_TRYRECV) {
         XrCoroutine *recv_coro = vm_ctx ? (XrCoroutine *) vm_ctx->current_coro : NULL;
         XrValue recv_val;
         bool recv_ok = xr_chan_try_recv(isolate, ch, &recv_val, recv_coro);
-        XrTuple *result = xr_tuple_new(recv_coro, 2);
-        if (result) {
-            xr_tuple_set(result, 0, recv_val);
-            xr_tuple_set(result, 1, xr_bool(recv_ok));
-        }
-        base[a] = xr_value_from_tuple(result);
+        base[a] =
+            recv_ok ? vm_recv_value(isolate, recv_val)
+                    : (xr_channel_is_closed(ch) ? vm_recv_closed(isolate) : vm_recv_empty(isolate));
         return XR_DISP_NEXT;
     }
 
@@ -142,13 +321,23 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         XrCoroBlockResult resumed =
             xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
         if (resumed.kind == XR_CORO_BLOCK_READY) {
+            base[a] = vm_recv_value(isolate, base[a]);
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+            base[a] = vm_recv_closed(isolate);
             return XR_DISP_NEXT;
         }
         vm_suspend_replay_yielded(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), -1);
-        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_CLOSED) {
+            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), -1, false);
+        if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_clear_yielded(frame);
+            base[a] = vm_recv_value(isolate, base[a]);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED) {
+            vm_suspend_clear_yielded(frame);
+            base[a] = vm_recv_closed(isolate);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
@@ -178,75 +367,84 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
         XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
 
         XrCoroBlockResult resumed = xr_coro_chan_send_resume(current, result_slot);
-        if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
-            resumed.kind == XR_CORO_BLOCK_CLOSED) {
+        if (resumed.kind == XR_CORO_BLOCK_READY) {
+            base[a] = vm_send_result(isolate, 0);
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
+            base[a] = vm_send_result(isolate, 2);
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+            base[a] = vm_send_result(isolate, 3);
             return XR_DISP_NEXT;
         }
 
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
             xr_coro_chan_send(isolate, current, ch, base[a + 2], result_slot, timeout_ms);
-        if (result.kind == XR_CORO_BLOCK_READY || result.kind == XR_CORO_BLOCK_TIMEOUT ||
-            result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+        if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
+            base[a] = vm_send_result(isolate, 0);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_TIMEOUT) {
+            vm_suspend_continue_from_next(frame, pc);
+            base[a] = vm_send_result(isolate, 2);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
+            vm_suspend_continue_from_next(frame, pc);
+            base[a] = vm_send_result(isolate, 3);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         }
         vm_suspend_continue_from_next(frame, pc);
-        base[a] = xr_bool(false);
+        base[a] = vm_send_result(isolate, 3);
         return XR_DISP_NEXT;
     }
 
-    // ch.recvTimeout(timeout) → (value, ok) tuple
+    // ch.recvTimeout(timeout) → Recv<T>
     if (nargs == 1 && method_symbol == SYMBOL_RECVTIMEOUT) {
         XrCoroutine *current = (XrCoroutine *) vm_ctx->current_coro;
         int64_t timeout_ms = XR_TO_INT(base[a + 2]);
 
-        /* pack (value, ok) into base[a] as a fresh tuple */
-#define VM_RECV_TUPLE_RESULT(VAL_EXPR, OK_EXPR)                                                    \
-    do {                                                                                           \
-        XrValue _vt_v = (VAL_EXPR);                                                                \
-        bool _vt_ok = (OK_EXPR);                                                                   \
-        XrTuple *_vt_t = xr_tuple_new(current, 2);                                                 \
-        if (_vt_t) {                                                                               \
-            xr_tuple_set(_vt_t, 0, _vt_v);                                                         \
-            xr_tuple_set(_vt_t, 1, xr_bool(_vt_ok));                                               \
-        }                                                                                          \
-        base[a] = xr_value_from_tuple(_vt_t);                                                      \
-    } while (0)
-
         XrSlotRef value_slot = xr_slot_xvalue_ptr(&base[a]);
         XrCoroBlockResult resumed =
             xr_coro_chan_recv_resume(isolate, current, value_slot, xr_slot_none());
-        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT || resumed.kind == XR_CORO_BLOCK_CLOSED) {
-            VM_RECV_TUPLE_RESULT(xr_null(), false);
+        if (resumed.kind == XR_CORO_BLOCK_TIMEOUT) {
+            base[a] = vm_recv_timeout(isolate);
+            return XR_DISP_NEXT;
+        }
+        if (resumed.kind == XR_CORO_BLOCK_CLOSED) {
+            base[a] = vm_recv_closed(isolate);
             return XR_DISP_NEXT;
         }
         if (resumed.kind == XR_CORO_BLOCK_READY) {
-            VM_RECV_TUPLE_RESULT(base[a], true);
+            base[a] = vm_recv_value(isolate, base[a]);
             return XR_DISP_NEXT;
         }
 
         vm_suspend_replay_current(frame, pc);
         XrCoroBlockResult result =
-            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), timeout_ms);
+            xr_coro_chan_recv(isolate, current, ch, value_slot, xr_slot_none(), timeout_ms, false);
         if (result.kind == XR_CORO_BLOCK_READY) {
             vm_suspend_continue_from_next(frame, pc);
-            VM_RECV_TUPLE_RESULT(base[a], true);
+            base[a] = vm_recv_value(isolate, base[a]);
             return XR_DISP_NEXT;
-        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_TIMEOUT ||
-                   result.kind == XR_CORO_BLOCK_NO_CORO) {
+        } else if (result.kind == XR_CORO_BLOCK_CLOSED || result.kind == XR_CORO_BLOCK_NO_CORO) {
             vm_suspend_continue_from_next(frame, pc);
-            VM_RECV_TUPLE_RESULT(xr_null(), false);
+            base[a] = vm_recv_closed(isolate);
+            return XR_DISP_NEXT;
+        } else if (result.kind == XR_CORO_BLOCK_TIMEOUT) {
+            vm_suspend_continue_from_next(frame, pc);
+            base[a] = vm_recv_timeout(isolate);
             return XR_DISP_NEXT;
         } else if (result.kind == XR_CORO_BLOCK_BLOCKED) {
             return XR_DISP_BLOCKED;
         }
         vm_suspend_continue_from_next(frame, pc);
-        VM_RECV_TUPLE_RESULT(xr_null(), false);
+        base[a] = vm_recv_timeout(isolate);
         return XR_DISP_NEXT;
-#undef VM_RECV_TUPLE_RESULT
     }
 
     // toString fallback for Channel
@@ -271,18 +469,108 @@ XR_FUNC XrDispatchAction vm_invoke_channel(XrayIsolate *isolate, XrVMContext *vm
  * cancel(): if executor alive and task pending, cancel it; otherwise no-op.
  * toString(): returns string representation.
  */
-XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrValue receiver,
-                                               int method_symbol, int nargs, XrValue *base, int a,
-                                               XrBcCallFrame *frame, XrInstruction *pc) {
+XR_FUNC XrDispatchAction vm_invoke_task_handle(XrayIsolate *isolate, XrVMContext *vm_ctx,
+                                               XrValue receiver, int method_symbol, int nargs,
+                                               XrValue *base, int a, XrBcCallFrame *frame,
+                                               XrInstruction *pc) {
     XrTask *task = xr_value_to_task(receiver);
     if (nargs == 0 && method_symbol == SYMBOL_CANCEL) {
-        XrCoroutine *coro = task->coro;
+        XrCoroutine *coro = xr_task_executor_peek(task);
         if (coro && !xr_task_is_done(task)) {
+            uint32_t before_cancel_flags = xr_coro_flags_load(coro);
             xr_coro_cancel(coro);
             xr_task_cancel(task);
             xr_coro_wake_waiter(isolate, coro);
+            vm_task_recycle_cancelled_executor(task, coro, before_cancel_flags);
         }
         base[a] = xr_null();
+        return XR_DISP_NEXT;
+    }
+    if (nargs == 0 && method_symbol == SYMBOL_POLL) {
+        base[a] = xr_task_is_done(task)
+                      ? vm_task_result_from_terminal(isolate, task, vm_get_coro(vm_ctx))
+                      : vm_task_result_member(isolate, 4);
+        return XR_DISP_NEXT;
+    }
+    if ((nargs == 0 && method_symbol == SYMBOL_AWAIT_RESULT) ||
+        (nargs == 1 && method_symbol == SYMBOL_AWAIT_TIMEOUT)) {
+        bool timeout_enabled = method_symbol == SYMBOL_AWAIT_TIMEOUT;
+        int64_t timeout_ms = -1;
+        if (timeout_enabled) {
+            XrValue timeout_val = base[a + 2];
+            if (XR_IS_INT(timeout_val))
+                timeout_ms = XR_TO_INT(timeout_val);
+            else if (XR_IS_FLOAT(timeout_val))
+                timeout_ms = (int64_t) XR_TO_FLOAT(timeout_val);
+            if (timeout_ms < 0)
+                timeout_ms = 0;
+        }
+
+        XrCoroutine *current = vm_get_coro(vm_ctx);
+        XrSlotRef result_slot = xr_slot_xvalue_ptr(&base[a]);
+        if (current) {
+            XrCoroBlockResult resumed =
+                xr_coro_await_task_resume_slot(isolate, current, task, result_slot, false);
+            if (resumed.kind == XR_CORO_BLOCK_READY || resumed.kind == XR_CORO_BLOCK_TIMEOUT ||
+                resumed.kind == XR_CORO_BLOCK_CLOSED || resumed.kind == XR_CORO_BLOCK_NO_CORO) {
+                base[a] = vm_task_result_from_block(isolate, task, current, resumed, base[a],
+                                                    timeout_enabled);
+                return XR_DISP_NEXT;
+            }
+            if (resumed.kind == XR_CORO_BLOCK_ERROR) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Task await failed");
+            }
+        }
+
+        if (xr_task_is_done(task)) {
+            base[a] = vm_task_result_from_terminal(isolate, task, current);
+            return XR_DISP_NEXT;
+        }
+        if (timeout_enabled && timeout_ms == 0) {
+            base[a] = vm_task_result_member(isolate, 3);
+            return XR_DISP_NEXT;
+        }
+
+        if (current) {
+            if (frame && frame->closure && frame->closure->proto)
+                vm_ctx->stack_top = base + frame->closure->proto->maxstacksize;
+            vm_suspend_replay_current(frame, pc);
+            XrCoroBlockResult awaited =
+                xr_coro_await_task_slot(isolate, current, task, result_slot, timeout_ms, false);
+            if (awaited.kind == XR_CORO_BLOCK_BLOCKED) {
+                return XR_DISP_BLOCKED;
+            }
+            vm_suspend_continue_from_next(frame, pc);
+            if (awaited.kind == XR_CORO_BLOCK_ERROR) {
+                VM_THROW(frame, pc, XR_ERR_CORO_DEAD, "Task await failed");
+            }
+            base[a] = vm_task_result_from_block(isolate, task, current, awaited, base[a],
+                                                timeout_enabled);
+            return XR_DISP_NEXT;
+        }
+
+        uint64_t start_ns = xr_time_monotonic_ns();
+        int spin_count = 0;
+        while (!xr_task_is_done(task)) {
+            if (timeout_enabled) {
+                int64_t elapsed_ms = (int64_t) ((xr_time_monotonic_ns() - start_ns) / 1000000ULL);
+                if (elapsed_ms >= timeout_ms) {
+                    base[a] = vm_task_result_member(isolate, 3);
+                    return XR_DISP_NEXT;
+                }
+            }
+            XrWorker *w = xr_current_worker();
+            if (w && w->p.timer_wheel) {
+                int64_t tnow = xr_monotonic_ticks();
+                xr_bump_timers(w->p.timer_wheel, tnow);
+            }
+            if (++spin_count > 1000) {
+                spin_count = 0;
+                xr_thread_yield();
+            }
+        }
+
+        base[a] = vm_task_result_from_terminal(isolate, task, NULL);
         return XR_DISP_NEXT;
     }
     if (nargs == 0 && method_symbol == SYMBOL_MONITOR) {

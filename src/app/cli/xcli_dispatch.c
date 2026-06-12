@@ -71,6 +71,7 @@ XR_FUNC int cmd_fmt(const XrCliInvocation *inv);
 XR_FUNC int cmd_compile(const XrCliInvocation *inv);
 XR_FUNC int cmd_build(const XrCliInvocation *inv);
 XR_FUNC int cmd_deps(const XrCliInvocation *inv);
+XR_FUNC int cmd_toolchain(const XrCliInvocation *inv);
 XR_FUNC int cmd_pkg(const XrCliInvocation *inv);
 XR_FUNC int cmd_builtin_dump(const XrCliInvocation *inv);
 /* Defined below in this file */
@@ -98,6 +99,7 @@ void xr_cli_register_all_handlers(void) {
     xr_cli_register_handler("compile", cmd_compile);
     xr_cli_register_handler("build", cmd_build);
     xr_cli_register_handler("deps", cmd_deps);
+    xr_cli_register_handler("toolchain", cmd_toolchain);
     xr_cli_register_handler("pkg", cmd_pkg);
     xr_cli_register_handler("info", cmd_info);
     xr_cli_register_handler("builtin-dump", cmd_builtin_dump);

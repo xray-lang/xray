@@ -50,11 +50,11 @@ vmcase(OP_JMP) {
             return XR_VM_RUNTIME_ERROR;
         }
 
-        if (--coro->reductions <= 0) {
+        if (xr_coro_consume_reds(coro, 1) <= 0) {
             if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                 return XR_VM_CANCELLED;
             }
-            coro->reductions = XR_CORO_REDUCTIONS;
+            xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
             /* Embedders that did not boot the multicore runtime (e.g. the
              * minimal MCP runner, embedded REPLs, unit tests) have no
              * scheduler to resume a yielded main coroutine — returning

@@ -24,10 +24,9 @@ fn test_coro_dump() {
 
 
     let t = go(name: "test-worker") worker(ch)
-    await t
-    print("worker result:", t.result)
+    let result = await t
+    print("worker result:", result)
 
     print("test5: final dump")
     Coro.dump(10)
 }
-

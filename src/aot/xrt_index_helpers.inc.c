@@ -136,8 +136,8 @@ static inline int xrt_utf8_char_size(unsigned char lead) {
 static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
     if (!XR_IS_STR(obj) || target < 0)
         return XR_NULL_VAL;
-    const char *s = (const char *) obj.ptr;
-    size_t slen = strlen(s);
+    const char *s = xr_str_data(obj);
+    size_t slen = (size_t) xr_str_len(obj);
     const unsigned char *p = (const unsigned char *) s;
     const unsigned char *end = p + slen;
     for (int64_t char_index = 0; p < end; char_index++) {
@@ -146,8 +146,7 @@ static inline XrValue xrt_string_index_get(XrValue obj, int64_t target) {
             size = 1;
         if (char_index == target) {
             XrValue sv = xrt_str_alloc((size_t) size);
-            memcpy((char *) sv.ptr, p, (size_t) size);
-            ((char *) sv.ptr)[size] = 0;
+            memcpy(xr_str_buf(sv), p, (size_t) size);
             return sv;
         }
         p += size;
@@ -159,7 +158,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     if (XR_IS_ARRAY_REF(obj) && key.tag == XR_TAG_I64) {
         int64_t idx = key.i;
         uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
-        if (idx >= 0 && idx < count)
+        if (XR_LIKELY(idx >= 0 && idx < count))
             return xrt_fixed_array_get(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx);
         fprintf(stderr, "fixed array index out of range: %lld (length %u)\n", (long long) idx,
                 (unsigned) count);
@@ -170,7 +169,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         int64_t idx = key.i;
         if (idx < 0)
             idx += a->len;
-        if (idx >= 0 && idx < a->len)
+        if (XR_LIKELY(idx >= 0 && idx < a->len))
             return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
@@ -188,7 +187,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
     if (XR_IS_ARRAY_REF(obj) && key.tag == XR_TAG_I64) {
         int64_t idx = key.i;
         uint16_t count = XR_ARRAY_REF_ELEM_COUNT(obj);
-        if (idx >= 0 && idx < count) {
+        if (XR_LIKELY(idx >= 0 && idx < count)) {
             xrt_fixed_array_set(obj.ptr, XR_ARRAY_REF_ELEM_TYPE(obj), idx, val);
             return;
         }
@@ -201,7 +200,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         int64_t idx = key.i;
         if (idx < 0)
             idx += a->len;
-        if (idx >= 0 && idx < a->len) {
+        if (XR_LIKELY(idx >= 0 && idx < a->len)) {
             xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
         } else if (idx >= 0) {
             while (a->len < idx)

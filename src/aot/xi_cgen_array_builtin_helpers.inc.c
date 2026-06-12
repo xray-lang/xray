@@ -15,7 +15,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiVal
     if (strcmp(name, "array_with_capacity") == 0) {
         CgArrayElemInfo info;
         const char *elem_name =
-            cg_array_elem_info_from_type(v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
+            cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
         fprintf(out, "xrt_array_with_capacity_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", %s)", elem_name);
@@ -24,7 +24,7 @@ static bool emit_array_bytes_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiVal
     if (strcmp(name, "array_filled_new") == 0) {
         CgArrayElemInfo info;
         const char *elem_name =
-            cg_array_elem_info_from_type(v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
+            cg_array_elem_info_from_type_ctx(ctx, v->type, &info) ? info.elem_name : "XR_ELEM_ANY";
         fprintf(out, "xrt_array_new_filled_value(");
         emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ", ");

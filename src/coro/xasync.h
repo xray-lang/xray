@@ -76,6 +76,7 @@ typedef struct XrAsyncPool {
     // Thread management
     int thread_count;
     xr_thread_t *threads;
+    _Atomic int threads_state;  // 0=not started, 1=starting, 2=started
     // Shutdown flag. Plain bool; every read and write happens with
     // queue_mutex held, so the mutex's acquire/release fences carry the
     // happens-before edge. Using _Atomic here surfaces as MSan
@@ -111,8 +112,8 @@ typedef struct XrAsyncPool {
 XR_FUNC void xr_async_pool_init(XrAsyncPool *pool, struct XrRuntime *runtime, int thread_count,
                                 int queue_limit);
 
-// Create async threads (called lazily on first spawn)
-XR_FUNC void xr_async_pool_start_threads(XrAsyncPool *pool);
+// Create async threads. Returns true if at least one worker thread is available.
+XR_FUNC bool xr_async_pool_start_threads(XrAsyncPool *pool);
 
 // Destroy async thread pool
 XR_FUNC void xr_async_pool_destroy(XrAsyncPool *pool);

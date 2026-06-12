@@ -178,10 +178,14 @@ static const char *xr_builtin_symbol_names[] = {
     "--",
     // Coroutine/Task properties
     "done",
+    "status",
     "cancelled",
     "cancel",
     "result",
     "error",
+    "poll",
+    "awaitResult",
+    "awaitTimeout",
     "monitor",
     "link",
     "unlink",
@@ -314,8 +318,9 @@ bool xr_symbol_table_init_builtins(XrSymbolTable *table) {
         SymbolId expected_id = i + 1;
 
         // Store directly — no strdup needed for string literals
+        if (!xr_hashmap_set(table->name_to_id, name, (void *) (intptr_t) expected_id))
+            return false;
         table->id_to_name[table->count] = name;
-        xr_hashmap_set(table->name_to_id, name, (void *) (intptr_t) expected_id);
         table->count++;
 
         XR_DCHECK(table->count == (int) expected_id, "symbol table: builtin id ordering mismatch");
@@ -347,8 +352,13 @@ SymbolId xr_symbol_register_in_table(XrSymbolTable *table, const char *name) {
         return SYMBOL_INVALID;
     memcpy(name_copy, name, name_len + 1);
 
+    if (!xr_hashmap_set(table->name_to_id, name_copy, (void *) (intptr_t) new_id)) {
+        // Failing to index the name would let a later register() hand out a
+        // second id for the same string, breaking symbol identity.
+        xr_free(name_copy);
+        return SYMBOL_INVALID;
+    }
     table->id_to_name[table->count] = name_copy;
-    xr_hashmap_set(table->name_to_id, name_copy, (void *) (intptr_t) new_id);
     table->count++;
     XR_DCHECK(table->count <= table->capacity, "symbol_register: count > capacity");
 

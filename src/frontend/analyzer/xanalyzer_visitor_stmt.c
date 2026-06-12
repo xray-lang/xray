@@ -151,6 +151,19 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         }
     } else if (links->declared_type) {
         var_type = links->declared_type;
+        /* Reject non-default-initializable types without explicit initializer.
+         * e.g. `let u: User` is a compile error, but `let x: int` is allowed. */
+        if (!XR_TYPE_IS_UNKNOWN(links->declared_type) &&
+            !xa_type_is_default_initializable(ctx, links->declared_type)) {
+            XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
+            char msg[256];
+            snprintf(msg, sizeof(msg),
+                     "Type '%s' is not default-initializable; "
+                     "variable '%s' requires an explicit initializer",
+                     xr_type_to_string(links->declared_type), var->name);
+            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
+        }
     } else {
         // Fallback for missing type (error already reported above)
         var_type = xr_type_new_unknown(NULL);
@@ -160,7 +173,8 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
 
     /* Shared mutable runtime primitives require an immutable binding. */
     if (var_type && (xr_type_is_named_class(var_type, "Atomic") ||
-                     xr_type_is_named_class(var_type, "WorkQueue"))) {
+                     xr_type_is_named_class(var_type, "WorkQueue") ||
+                     xr_type_is_named_class(var_type, "ResultGroup"))) {
         if (!sym->is_shared || !sym->is_const) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
             xa_analyzer_add_diagnostic(

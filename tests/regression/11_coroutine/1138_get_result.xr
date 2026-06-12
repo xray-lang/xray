@@ -1,8 +1,11 @@
-// 测试 task.result 属性
+// 测试 Task.poll / Task.awaitResult
 // 作者：xingleixu@gmail.com
 
 fn blocked(ch: Channel<int>) -> int {
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 fn compute(x: int) -> int {
@@ -11,34 +14,46 @@ fn compute(x: int) -> int {
 
 @test
 fn test_main() {
-    // Test 1: blocked task — result is null before completion
+    // Test 1: blocked task — poll is Pending before completion
     const ch = new Channel<int>(0)
     let task = go blocked(ch)
-    print("before:", task.result)
+    print("before pending:", match (task.poll()) {
+        TaskResult.Pending -> true
+        _ -> false
+    })
 
     ch.send(21)
     let result = await task
-    print("after:", task.result)
-    print("again:", task.result)
+    print("after:", result)
+    print("again:", match (task.poll()) {
+        TaskResult.Success(v) -> v
+        _ -> -1
+    })
     ch.close()
 
-    // Test 2: cancel blocked task — result is null
+    // Test 2: cancel blocked task — explicit status is Cancelled
     const ch2 = new Channel<int>(0)
     let task2 = go blocked(ch2)
     task2.cancel()
-    await task2
-    print("cancelled:", task2.result)
+    let cancelled = task2.awaitResult()
+    print("cancelled:", match (cancelled) {
+        TaskResult.Cancelled -> true
+        _ -> false
+    })
     ch2.close()
 
-    // Test 3: completed task — result accessible
+    // Test 3: completed task — awaitResult observes success
     let task3 = go compute(21)
-    await task3
-    print("completed:", task3.result)
+    let done = task3.awaitResult()
+    print("completed:", match (done) {
+        TaskResult.Success(v) -> v
+        _ -> -1
+    })
 }
 
 // 期望输出：
-// before: null
+// before pending: true
 // after: 21
 // again: 21
-// cancelled: null
+// cancelled: true
 // completed: 42

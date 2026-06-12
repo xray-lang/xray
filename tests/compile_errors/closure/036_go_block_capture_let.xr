@@ -1,0 +1,19 @@
+// 036_go_block_capture_let.xr
+// Expected: Compile error - go { block } capturing a mutable local
+// Error should mention: cannot capture mutable
+//
+// The bare-block spawn form `go { ... }` parses to GO_EXPR -> FUNCTION_EXPR
+// (no call wrapper). It must enforce the same explicit-sharing capture rules
+// as `go fn() { ... }()`: capturing a plain `let` across the coroutine
+// boundary is rejected.
+
+fn main_logic() {
+    let counter = [0]
+    let t = go {
+        counter.push(1)
+        return 0
+    }
+    await t
+}
+
+main_logic()

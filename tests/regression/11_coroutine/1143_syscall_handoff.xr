@@ -10,6 +10,13 @@ import time
 
 enum HandoffErr { Failed(string) }
 
+fn recv_string(ch: Channel<string>) -> string {
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> ""
+    }
+}
+
 fn slow_worker(ch: Channel<string>) {
     time.sleep(200)
     ch.send("slow done")
@@ -42,7 +49,7 @@ fn test_syscall_handoff() {
     let fast_done = 0
     let slow_done = false
     for (let i = 0; i < FAST_COUNT + 1; i++) {
-        let msg = resultCh.recv()
+        let msg = recv_string(resultCh)
         if (msg == "slow done") {
             slow_done = true
         } else {
@@ -58,4 +65,3 @@ fn test_syscall_handoff() {
         throw HandoffErr.Failed("handoff test failed")
     }
 }
-

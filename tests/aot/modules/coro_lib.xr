@@ -4,7 +4,10 @@ export fn suspend_plus(x: int) -> int {
 }
 
 export fn recv_once(ch: Channel<int>) -> int {
-    return ch.recv()
+    return match (ch.recv()) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
 }
 
 export fn sync_plus(x: int) -> int {

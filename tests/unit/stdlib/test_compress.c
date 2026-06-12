@@ -115,6 +115,15 @@ TEST(compress_deflate_inflate_roundtrip) {
     xr_free(decompressed);
 }
 
+TEST(compress_inflate_rejects_truncated_stored_block_header) {
+    uint8_t truncated[] = {0x01};  // Final stored block tag without LEN/NLEN.
+    uint8_t output[16];
+    size_t out_len = 0;
+    XrCompressError err =
+        xr_inflate(truncated, sizeof(truncated), output, sizeof(output), &out_len);
+    ASSERT_EQ_INT(err, XR_COMPRESS_ERR_DATA);
+}
+
 /* ========== Gzip / Gunzip ========== */
 
 TEST(compress_gzip_gunzip_roundtrip) {
@@ -180,6 +189,7 @@ RUN_TEST(compress_adler32_incremental);
 
 RUN_TEST_SUITE("Compress - Deflate / Inflate");
 RUN_TEST(compress_deflate_inflate_roundtrip);
+RUN_TEST(compress_inflate_rejects_truncated_stored_block_header);
 
 RUN_TEST_SUITE("Compress - Gzip / Gunzip");
 RUN_TEST(compress_gzip_gunzip_roundtrip);

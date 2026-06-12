@@ -124,9 +124,8 @@ XrCFuncResult xr_yield_for_io(XrayIsolate *X, int fd, int events, int64_t timeou
                         if (atomic_compare_exchange_strong(gpp, &old, XR_PD_NIL)) {
                             // IO already ready — call continuation directly.
                             // Charge reductions to bound C-stack recursion.
-                            coro->reductions -= 100;
-                            if (coro->reductions <= 0) {
-                                coro->reductions = XR_CORO_REDUCTIONS;
+                            if (xr_coro_consume_reds(coro, 100) <= 0) {
+                                xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
                                 // Backend try-mode cannot recurse through continuation frames.
                                 if (xr_coro_backend_in_try_mode(coro))
                                     return XR_CFUNC_WOULD_BLOCK;

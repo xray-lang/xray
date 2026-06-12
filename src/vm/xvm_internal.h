@@ -362,6 +362,14 @@ XR_FUNC bool vm_numeric_greater_equal(XrValue left, XrValue right);
 /* ========== VM Execution Loop (in xvm.c) ========== */
 XR_FUNC XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx);
 
+/* In-dispatch direct coroutine switch (in xvm_coro_backend.c).
+ * Called from the dispatch loop when a coroutine blocks on a channel/await
+ * op (XR_DISP_SWITCH). Returns the VM context of an admissible just-woken
+ * LIFO partner — the caller swaps vm_ctx and jumps to startfunc — or NULL,
+ * in which case the caller must return XR_VM_BLOCKED (ordinary slow path).
+ * On success this owns ALL worker bookkeeping for both coroutines. */
+XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *cur_ctx);
+
 /* ========== Coroutine Scheduler ========== */
 XR_FUNC void xr_coro_free(XrCoroutine *coro);
 XR_FUNC void xr_coro_spawn(XrayIsolate *X, XrCoroutine *coro);

@@ -62,6 +62,8 @@ XrTypeId xr_type_to_builtin_id(XrType *type) {
         return XR_TID_ATOMIC;
     if (xr_type_is_named_class(type, "WorkQueue"))
         return XR_TID_WORKQUEUE;
+    if (xr_type_is_named_class(type, "ResultGroup"))
+        return XR_TID_RESULTGROUP;
     if (xr_type_is_named_class(type, "DateTime"))
         return XR_TID_DATETIME;
     return XR_TID_NULL;
@@ -331,16 +333,26 @@ XrType *xa_builtin_get_method_return_type(XrayIsolate *X, XrType *container_type
             case SYMBOL_SEND:
             case SYMBOL_CLOSE:
                 return xr_type_new_unit(NULL);
-            case SYMBOL_RECV:
-                return elem_type ? elem_type : xr_type_new_unknown(NULL);
-            case SYMBOL_TRYSEND:
+            case SYMBOL_RECV: {
+                XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
+                XrType *args[1] = {t};
+                return xr_type_new_generic_instance(X, "Recv", NULL, args, 1);
+            }
             case SYMBOL_IS_CLOSED:
                 return xr_type_new_bool(NULL);
+            case SYMBOL_TRYSEND:
+                return xr_type_new_enum(X, "SendResult");
+            case SYMBOL_SENDTIMEOUT:
+                return xr_type_new_enum(X, "SendResult");
             case SYMBOL_TRYRECV: {
                 XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
-                if (t)
-                    t->is_nullable = true;
-                return t;
+                XrType *args[1] = {t};
+                return xr_type_new_generic_instance(X, "Recv", NULL, args, 1);
+            }
+            case SYMBOL_RECVTIMEOUT: {
+                XrType *t = elem_type ? xr_type_copy(X, elem_type) : xr_type_new_unknown(NULL);
+                XrType *args[1] = {t};
+                return xr_type_new_generic_instance(X, "Recv", NULL, args, 1);
             }
             case SYMBOL_LENGTH:
             case SYMBOL_CAPACITY:
@@ -542,13 +554,15 @@ static const XaBuiltinMember g_rt_coro_functions[] = {
     {"self", "(): string?", "Get current coroutine name", true, true},
     {"kill", "(name: string, reason?: string): bool", "Kill named coroutine", true, true},
 };
-#define RT_CORO_FUNCTION_COUNT 17
+#define RT_CORO_FUNCTION_COUNT                                                                     \
+    ((int) (sizeof(g_rt_coro_functions) / sizeof(g_rt_coro_functions[0])))
 
 static const XaBuiltinMember g_rt_coropool_functions[] = {
     {"submit", "(fn: function): Json", "Submit task to pool", true, false},
     {"close", "(): ()", "Close the pool", true, false},
 };
-#define RT_COROPOOL_FUNCTION_COUNT 2
+#define RT_COROPOOL_FUNCTION_COUNT                                                                 \
+    ((int) (sizeof(g_rt_coropool_functions) / sizeof(g_rt_coropool_functions[0])))
 
 static const XaBuiltinMember g_rt_reflect_functions[] = {
     {"getType", "(obj: Json): Json", "Get type info of object", true, true},
@@ -562,7 +576,8 @@ static const XaBuiltinMember g_rt_reflect_functions[] = {
     {"valueType", "(obj: Json): string", "Get value type of map", true, true},
     {"typeOf", "(obj: Json): string", "Get type name string", true, true},
 };
-#define RT_REFLECT_FUNCTION_COUNT 10
+#define RT_REFLECT_FUNCTION_COUNT                                                                  \
+    ((int) (sizeof(g_rt_reflect_functions) / sizeof(g_rt_reflect_functions[0])))
 
 static const XaBuiltinModule g_rt_builtin_modules[] = {
     {"Coro", g_rt_coro_functions, RT_CORO_FUNCTION_COUNT, NULL, 0},
@@ -844,6 +859,16 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         type = xr_type_new_json(NULL);
     } else if (base_len == 7 && strncmp(s, TYPE_NAME_UNKNOWN, 7) == 0) {
         type = xr_type_new_unknown(NULL);
+    } else if (base_len == 8 && strncmp(s, "Ordering", 8) == 0) {
+        type = xr_type_new_enum(X, "Ordering");
+    } else if (base_len == 4 && strncmp(s, "Recv", 4) == 0) {
+        type = xr_type_new_enum(X, "Recv");
+    } else if (base_len == 10 && strncmp(s, "SendResult", 10) == 0) {
+        type = xr_type_new_enum(X, "SendResult");
+    } else if (base_len == 10 && strncmp(s, "TaskResult", 10) == 0) {
+        type = xr_type_new_enum(X, "TaskResult");
+    } else if (base_len == 10 && strncmp(s, "TaskStatus", 10) == 0) {
+        type = xr_type_new_enum(X, "TaskStatus");
     } else if (base_len == 5 && strncmp(s, "Regex", 5) == 0) {
         type = xr_type_new_instance(X, NULL);
         type->instance.class_name = "Regex";
@@ -913,6 +938,57 @@ static XrType *parse_type_str(XrayIsolate *X, const char *s, size_t len) {
         const char *inner = s + 8;
         size_t inner_len = base_len - 9;
         type = xr_type_new_channel(X, parse_type_str(X, inner, inner_len));
+    } else if (base_len >= 4 && s[base_len - 1] == '>') {
+        const char *lt = NULL;
+        int depth = 0;
+        for (size_t i = 0; i < base_len; i++) {
+            if (s[i] == '<') {
+                if (depth == 0) {
+                    lt = s + i;
+                    break;
+                }
+                depth++;
+            }
+        }
+        if (lt && lt > s) {
+            size_t name_len = (size_t) (lt - s);
+            char name_buf[64];
+            size_t copy_len = name_len < sizeof(name_buf) - 1 ? name_len : sizeof(name_buf) - 1;
+            memcpy(name_buf, s, copy_len);
+            name_buf[copy_len] = '\0';
+
+            const char *inner = lt + 1;
+            size_t inner_len = (size_t) ((s + base_len - 1) - inner);
+            XrType *args[16];
+            int argc = 0;
+            size_t p = 0;
+            while (p < inner_len && argc < 16) {
+                while (p < inner_len && (inner[p] == ' ' || inner[p] == ','))
+                    p++;
+                if (p >= inner_len)
+                    break;
+                size_t e = p;
+                int d = 0;
+                while (e < inner_len) {
+                    char c = inner[e];
+                    if (c == '<' || c == '(' || c == '[')
+                        d++;
+                    else if (c == '>' || c == ')' || c == ']')
+                        d--;
+                    else if (c == ',' && d == 0)
+                        break;
+                    e++;
+                }
+                args[argc++] = parse_type_str(X, inner + p, e - p);
+                p = e;
+            }
+
+            if (strcmp(name_buf, "Task") == 0 && argc >= 1) {
+                type = xr_type_new_task(X, args[0]);
+            } else if (argc > 0) {
+                type = xr_type_new_generic_instance(X, name_buf, NULL, args, argc);
+            }
+        }
     } else if (base_len >= 3 && strncmp(s, "fn", 2) == 0 && (s[2] == '(' || s[2] == ' ')) {
         // fn(p: T, ...): R — legacy function type literal, still emitted by
         // some hand-authored XR_DEFINE_BUILTIN signatures.
