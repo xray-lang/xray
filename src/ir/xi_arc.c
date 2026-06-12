@@ -113,6 +113,33 @@ static bool op_is_call(uint16_t op) {
     return op_result_ownership(op) == XI_GEN_RESULT_OWNERSHIP_CALL_RESULT;
 }
 
+/* ========== Per-callee return-ownership ==========
+ *
+ * A call result can be promoted from CALL_RESULT to OWNED when the callee
+ * is statically known to return a FRESH (+1) reference that aliases none
+ * of its arguments. CALL_RESULT mode never inserts an unconsumed drop
+ * (the result might alias an argument), so every discarded fresh return
+ * leaks; OWNED mode lets the death-point placement reclaim it.
+ *
+ * Channel receive/try methods materialize a fresh wrapper per call
+ * (Recv<T> / SendResult enum instance plus the payload copied into the
+ * receiving coroutine's heap). Receive loops would otherwise leak one
+ * wrapper per message. Extend this table as more native return-ownership
+ * facts are encoded. */
+static bool call_returns_fresh(const XiValue *v) {
+    if (v->op != XI_CALL_METHOD || v->nargs < 1 || !v->args[0])
+        return false;
+    const struct XrType *recv_type = v->args[0]->type;
+    if (!recv_type || recv_type->kind != XR_KIND_CHANNEL)
+        return false;
+    const char *method = (const char *) v->aux;
+    if (!method)
+        return false;
+    return strcmp(method, "recv") == 0 || strcmp(method, "tryRecv") == 0 ||
+           strcmp(method, "recvTimeout") == 0 || strcmp(method, "trySend") == 0 ||
+           strcmp(method, "sendTimeout") == 0;
+}
+
 /* Is this value a candidate for dup/drop? RC type, not a stack/region
  * alloc, not a scalar, produces an owning reference (not a borrow). */
 static bool tracks_rc(const XiValue *v) {
@@ -429,7 +456,9 @@ XR_FUNC void xi_arc_insert(XiFunc *f) {
         } else if (op_produces_borrow(targets[i]->op)) {
             mode = OWN_BORROWED;
         } else if (op_is_call(targets[i]->op)) {
-            mode = OWN_CALL_RESULT;
+            /* Known fresh-returning callees produce an owned reference;
+             * everything else stays in the alias-safe CALL_RESULT mode. */
+            mode = call_returns_fresh(targets[i]) ? OWN_OWNED : OWN_CALL_RESULT;
         }
         process_value_ex(f, targets[i], mode);
     }

@@ -202,7 +202,7 @@ void xr_aot_trace_frame_value(void *visitor, XrValue value) {
 void xr_aot_release_frame_value(XrCoroGC *gc, XrValue value) {
     if (!gc || !XR_IS_PTR(value))
         return;
-    xr_gc_release_value(gc, value);
+    xr_rc_release_value(gc, value);
 }
 
 XrValue xr_aot_get_builtin(const XrAotContext *ctx, int32_t index) {

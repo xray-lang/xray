@@ -235,9 +235,10 @@ static bool derive_array_storage_plan(const XaotBundle *bundle, const XiValue *a
     if (!bundle || !value || depth > 8 || !array_elem_plan_for_value(bundle, value, &self_elem))
         return false;
 
-    if ((required_flag & XAOT_ARRAY_STORAGE_READ) != 0 &&
-        (required_flag & XAOT_ARRAY_STORAGE_MUTABLE) == 0 &&
-        array_value_is_class_field_storage(bundle, value, out_elem, out_origin))
+    /* Typed array class fields serve reads and writes alike: the element
+     * type is static, and the write paths stay runtime-checked unless a
+     * separate proof (fill loop, bounds plan) upgrades them. */
+    if (array_value_is_class_field_storage(bundle, value, out_elem, out_origin))
         return true;
 
     if (value->op == XI_ARRAY_NEW || array_builtin_is_fresh_storage(value)) {
@@ -1923,6 +1924,7 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
                                              const XiValue *arg) {
     const XaotValuePlan *arg_plan;
     const XaotAbiSlot *slot;
+    XaotValueRep slot_rep;
     XaotBoundaryStep *step;
 
     if (!bundle || !caller_plan || !call || !target || !target_plan || !arg)
@@ -1938,7 +1940,8 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
         return false;
     }
     slot = &target_plan->abi.params[arg_index];
-    if (storage_rep_for_value(arg_plan->rep) == storage_rep_for_value(slot->rep))
+    slot_rep = xaot_abi_slot_value_rep(slot);
+    if (storage_rep_for_value(arg_plan->rep) == storage_rep_for_value(slot_rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG,
@@ -1950,7 +1953,7 @@ static bool prepare_direct_call_arg_boundary(XaotBundle *bundle, const XaotFuncP
     step->target_func = target;
     step->arg_index = arg_index;
     step->from_rep = arg_plan->rep;
-    step->to_rep = slot->rep;
+    step->to_rep = slot_rep;
     bundle->stats.boundary_count++;
     return true;
 }
@@ -1959,6 +1962,7 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
                                              const XiValue *call, const XiFunc *target,
                                              const XaotFuncPlan *target_plan) {
     const XaotValuePlan *call_plan;
+    XaotValueRep ret_rep;
     XaotBoundaryStep *step;
 
     if (!bundle || !caller_plan || !call || !target || !target_plan)
@@ -1971,7 +1975,8 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
         bundle->error_msg = "AOT direct call result has no value plan";
         return false;
     }
-    if (storage_rep_for_value(target_plan->abi.ret.rep) == storage_rep_for_value(call_plan->rep))
+    ret_rep = xaot_abi_slot_value_rep(&target_plan->abi.ret);
+    if (storage_rep_for_value(ret_rep) == storage_rep_for_value(call_plan->rep))
         return true;
 
     step = xaot_bundle_add_boundary_step(bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET,
@@ -1981,7 +1986,7 @@ static bool prepare_direct_call_ret_boundary(XaotBundle *bundle, const XaotFuncP
         return false;
     }
     step->target_func = target;
-    step->from_rep = target_plan->abi.ret.rep;
+    step->from_rep = ret_rep;
     step->to_rep = call_plan->rep;
     bundle->stats.boundary_count++;
     return true;

@@ -223,8 +223,7 @@ static void test_large_object(void) {
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_objects != NULL, "should have large object node");
-    ASSERT(gc->large_objects->obj == large, "large object node should own object");
+    ASSERT(gc->large_set.count == 1, "should have large object registered");
 
     xr_coro_gc_destroy(gc);
     PASS();
@@ -262,7 +261,7 @@ static void test_rc_destroy_unregisters_finalizer(void) {
 
     xr_coro_gc_rc_destroy(gc, obj);
     ASSERT(g_destroy_count == 1, "RC destroy should run finalizer once");
-    ASSERT(gc->finalize_objects == NULL, "RC destroy should unregister finalizer");
+    ASSERT(gc->finalize_set.count == 0, "RC destroy should unregister finalizer");
 
     xr_coro_gc_destroy(gc);
     ASSERT(g_destroy_count == 1, "teardown should not rerun finalizer");
@@ -277,10 +276,10 @@ static void test_large_object_rc_free_unregisters_node(void) {
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
     ASSERT(large != NULL, "large alloc failed");
-    ASSERT(gc->large_objects != NULL, "large node missing");
+    ASSERT(gc->large_set.count == 1, "large registration missing");
 
     xr_coro_gc_rc_destroy(gc, large);
-    ASSERT(gc->large_objects == NULL, "large node should be removed");
+    ASSERT(gc->large_set.count == 0, "large registration should be removed");
     ASSERT(gc->large_bytes == 0, "large bytes should be decremented");
 
     xr_coro_gc_destroy(gc);

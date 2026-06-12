@@ -245,8 +245,8 @@ XrValue xr_iterator_next(XrIterator *iter) {
                 XrTuple *pair = xr_tuple_new(iter->coro, 2);
                 if (!pair)
                     return xr_null();
-                xr_gc_retain_value(node->key);
-                xr_gc_retain_value(node->value);
+                xr_rc_retain_value(node->key);
+                xr_rc_retain_value(node->value);
                 xr_tuple_set(pair, 0, node->key);
                 xr_tuple_set(pair, 1, node->value);
                 return xr_value_from_tuple(pair);
@@ -305,8 +305,8 @@ XrValue xr_iterator_next(XrIterator *iter) {
             XrTuple *pair = xr_tuple_new(iter->coro, 2);
             if (!pair)
                 return xr_null();
-            xr_gc_retain_value(key_str);
-            xr_gc_retain_value(value);
+            xr_rc_retain_value(key_str);
+            xr_rc_retain_value(value);
             xr_tuple_set(pair, 0, key_str);
             xr_tuple_set(pair, 1, value);
             return xr_value_from_tuple(pair);
@@ -326,7 +326,7 @@ XrValue xr_iterator_next(XrIterator *iter) {
         XrTuple *pair = xr_tuple_new(iter->coro, 2);
         if (!pair)
             return xr_null();
-        xr_gc_retain_value(elem);
+        xr_rc_retain_value(elem);
         xr_tuple_set(pair, 0, xr_int((int64_t) idx));
         xr_tuple_set(pair, 1, elem);
         return xr_value_from_tuple(pair);

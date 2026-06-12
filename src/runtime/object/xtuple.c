@@ -117,7 +117,7 @@ XrTuple *xr_tuple_from_values(struct XrCoroutine *coro, const XrValue *values, u
     if (count > 0) {
         memcpy(t->elements, values, (size_t) count * sizeof(XrValue));
         for (uint16_t i = 0; i < count; i++)
-            xr_gc_retain_value(t->elements[i]);
+            xr_rc_retain_value(t->elements[i]);
     }
     return t;
 }
@@ -138,7 +138,7 @@ void xr_tuple_set(XrTuple *t, uint16_t index, XrValue value) {
     XR_DCHECK(index < arity, "xr_tuple_set: index out of range");
     if (!t || index >= arity)
         return;
-    xr_gc_release_value(xr_current_coro_gc(), t->elements[index]);
+    xr_rc_release_value(xr_current_coro_gc(), t->elements[index]);
     t->elements[index] = value;
 }
 

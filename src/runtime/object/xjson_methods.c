@@ -15,6 +15,7 @@
 #include "xstring.h"
 #include "../class/xinstance.h"
 #include "../gc/xgc.h"
+#include "../gc/xcoro_gc.h"  // xr_rc_retain_value (unified RC primitive)
 #include "../value/xvalue.h"
 #include "../value/xvalue_format.h"
 #include "../symbol/xsymbol_table.h"
@@ -92,7 +93,7 @@ static XrValue xr_json_method_values(XrayIsolate *iso, XrValue self, XrValue *ar
 
     for (uint16_t i = 0; i < cls->field_count; i++) {
         XrValue value = xr_instance_get_dynamic_field(json, i);
-        xr_gc_retain_value(value);
+        xr_rc_retain_value(value);
         xr_array_push(result, value);
     }
     return xr_value_from_array(result);

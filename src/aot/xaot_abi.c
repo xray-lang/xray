@@ -126,6 +126,23 @@ XR_FUNC void xaot_abi_free(XaotFuncAbi *abi) {
     memset(abi, 0, sizeof(*abi));
 }
 
+XR_FUNC XaotValueRep xaot_abi_slot_value_rep(const XaotAbiSlot *slot) {
+    XaotValueRep rep;
+
+    if (!slot) {
+        memset(&rep, 0, sizeof(rep));
+        rep.kind = XAOT_VALUE_TAGGED;
+        rep.rep = XAOT_REP_TAGGED;
+        return rep;
+    }
+    rep = slot->rep;
+    if (slot->cls == XAOT_ARG_TAGGED) {
+        rep.kind = XAOT_VALUE_TAGGED;
+        rep.rep = XAOT_REP_TAGGED;
+    }
+    return rep;
+}
+
 XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind) {
     switch (kind) {
         case XAOT_ABI_NATIVE:

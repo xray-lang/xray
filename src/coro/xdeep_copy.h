@@ -88,6 +88,7 @@ typedef struct XrCopyContext {
     struct XrayIsolate *X;
     struct XrGC *dst_gc;           // fixed GC fallback
     struct XrCoroGC *dst_coro_gc;  // Immix heap (preferred when non-NULL)
+    bool to_transit;               // channel-transit copy: sysheap + XR_OBJ_TRANSIT
     XrSeenEntry **buckets;
     int bucket_count;
     int objects_copied;
@@ -97,6 +98,18 @@ typedef struct XrCopyContext {
 XR_FUNC void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC *dst_gc);
 XR_FUNC void xr_copy_context_cleanup(XrCopyContext *ctx);
 XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
+
+/* ========== Channel Transit Copies ==========
+ *
+ * A value sent through a channel must outlive the sending coroutine, so
+ * the send side deep-copies it into a coroutine-independent TRANSIT graph
+ * (atomic refcount, one reference owned by the channel buffer / blocked
+ * sender). The receive side deep-copies the graph into the receiving
+ * coroutine's heap and releases the buffer reference, which frees the
+ * whole transit graph through the regular shared-destroy path. */
+
+XR_FUNC XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value);
+XR_FUNC void xr_chan_transit_release(XrValue value);
 
 XR_FUNC bool xr_can_relocate(XrValue value);
 XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);

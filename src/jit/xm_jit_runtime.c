@@ -425,10 +425,8 @@ XrJitResult xr_jit_rc_dup(XrCoroutine *coro, int64_t unused) {
     (void) unused;
     XrValue v = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0],
                                    xr_coro_jit_state(coro)->scratch->call_arg_tags[0]);
-    if (XR_IS_PTR(v)) {
-        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-        xr_obj_dup(o);
-    }
+    if (XR_IS_PTR(v))
+        xr_rc_retain((XrObjHeader *) XR_VALUE_GCPTR(v));
     return XR_JIT_OK();
 }
 
@@ -439,11 +437,8 @@ XrJitResult xr_jit_rc_drop(XrCoroutine *coro, int64_t unused) {
     (void) unused;
     XrValue v = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0],
                                    xr_coro_jit_state(coro)->scratch->call_arg_tags[0]);
-    if (XR_IS_PTR(v)) {
-        XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-        if (xr_obj_drop_is_last(o))
-            xr_coro_gc_rc_destroy(coro ? coro->coro_gc : NULL, o);
-    }
+    if (XR_IS_PTR(v))
+        xr_rc_release(coro ? coro->coro_gc : NULL, (XrObjHeader *) XR_VALUE_GCPTR(v));
     return XR_JIT_OK();
 }
 

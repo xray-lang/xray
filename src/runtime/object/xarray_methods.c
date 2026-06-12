@@ -278,7 +278,7 @@ static XrValue m_slice(XrayIsolate *iso, XrValue self, XrValue *args, int argc) 
             result->has_gc_ptrs = arr->has_gc_ptrs;
             XrValue *data = (XrValue *) result->data;
             for (int i = 0; i < count; i++)
-                xr_gc_retain_value(data[i]);
+                xr_rc_retain_value(data[i]);
         }
     }
     return xr_value_from_array(result ? result : xr_array_new(xr_current_coro(iso)));
@@ -295,7 +295,7 @@ static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
         return xr_value_from_array(xr_array_new(xr_current_coro(iso)));
     for (int32_t j = 0; j < arr->length; j++) {
         XrValue elem = xr_array_get_element(arr, j);
-        xr_gc_retain_value(elem);
+        xr_rc_retain_value(elem);
         xr_array_push(result, elem);
     }
     for (int i = 0; i < argc; i++) {
@@ -303,7 +303,7 @@ static XrValue m_concat(XrayIsolate *iso, XrValue self, XrValue *args, int argc)
             XrArray *other = XR_TO_ARRAY(args[i]);
             for (int32_t j = 0; j < other->length; j++) {
                 XrValue elem = xr_array_get_element(other, j);
-                xr_gc_retain_value(elem);
+                xr_rc_retain_value(elem);
                 xr_array_push(result, elem);
             }
         } else {
@@ -461,7 +461,7 @@ static XrValue m_entries(XrayIsolate *iso, XrValue self, XrValue *args, int argc
             return xr_null();
         xr_tuple_set(pair, 0, xr_int((int64_t) i));
         XrValue elem = xr_array_get_element(arr, i);
-        xr_gc_retain_value(elem);
+        xr_rc_retain_value(elem);
         xr_tuple_set(pair, 1, elem);
         xr_array_set(out, i, xr_value_from_tuple(pair));
     }

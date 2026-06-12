@@ -170,140 +170,174 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     return gc;
 }
 
+/* ========== GC Pointer Set (open addressing, tombstones) ========== */
+
+// Fibonacci hash on the pointer; objects are >= 8-byte aligned so the
+// low bits carry no entropy.
+static inline uint32_t gc_ptrset_hash(const XrGCHeader *obj, uint32_t cap) {
+    uint64_t h = ((uint64_t) (uintptr_t) obj >> 4) * 0x9E3779B97F4A7C15ull;
+    return (uint32_t) (h >> 32) & (cap - 1);
+}
+
+// Rehash into a table of `new_cap` slots (power of two). Drops tombstones.
+static bool gc_ptrset_rehash(XrGCPtrSet *set, uint32_t new_cap) {
+    XrGCHeader **slots = (XrGCHeader **) xr_calloc(new_cap, sizeof(XrGCHeader *));
+    if (!slots)
+        return false;
+    for (uint32_t i = 0; i < set->cap; i++) {
+        XrGCHeader *obj = set->slots[i];
+        if (!xr_gc_ptrset_slot_live(obj))
+            continue;
+        uint32_t idx = gc_ptrset_hash(obj, new_cap);
+        while (slots[idx])
+            idx = (idx + 1) & (new_cap - 1);
+        slots[idx] = obj;
+    }
+    if (set->slots)
+        xr_free(set->slots);
+    set->slots = slots;
+    set->cap = new_cap;
+    set->tombstones = 0;
+    return true;
+}
+
+// Ensure capacity for one more insert. Called BEFORE the object is
+// allocated so registration after a successful alloc cannot fail (OOM
+// surfaces here, mirroring the old prepare-node contract).
+static bool gc_ptrset_reserve(XrGCPtrSet *set, uint32_t extra) {
+    uint32_t needed = set->count + set->tombstones + extra;
+    if (set->cap == 0)
+        return gc_ptrset_rehash(set, 16);
+    if (needed * 4 < set->cap * 3)
+        return true;
+    uint32_t new_cap = set->cap;
+    while ((set->count + extra) * 4 >= new_cap * 3)
+        new_cap <<= 1;
+    return gc_ptrset_rehash(set, new_cap);
+}
+
+// Insert without allocation. Caller must have reserved capacity.
+static void gc_ptrset_insert(XrGCPtrSet *set, XrGCHeader *obj) {
+    XR_DCHECK(set->cap > 0, "ptrset_insert: no capacity reserved");
+    uint32_t idx = gc_ptrset_hash(obj, set->cap);
+    while (xr_gc_ptrset_slot_live(set->slots[idx])) {
+        XR_DCHECK(set->slots[idx] != obj, "ptrset_insert: duplicate");
+        idx = (idx + 1) & (set->cap - 1);
+    }
+    if (set->slots[idx] == XR_GC_PTRSET_TOMBSTONE)
+        set->tombstones--;
+    set->slots[idx] = obj;
+    set->count++;
+}
+
+static bool gc_ptrset_remove(XrGCPtrSet *set, XrGCHeader *obj) {
+    if (set->cap == 0 || set->count == 0)
+        return false;
+    uint32_t idx = gc_ptrset_hash(obj, set->cap);
+    while (set->slots[idx]) {
+        if (set->slots[idx] == obj) {
+            set->slots[idx] = XR_GC_PTRSET_TOMBSTONE;
+            set->count--;
+            set->tombstones++;
+            return true;
+        }
+        idx = (idx + 1) & (set->cap - 1);
+    }
+    return false;
+}
+
+// Take ownership of the set contents, leaving it empty. Used by the
+// teardown walks so cascading unregisters from destructors operate on
+// the (now empty) live set instead of invalidating the iteration.
+static XrGCPtrSet gc_ptrset_take(XrGCPtrSet *set) {
+    XrGCPtrSet taken = *set;
+    memset(set, 0, sizeof(*set));
+    return taken;
+}
+
+static void gc_ptrset_destroy(XrGCPtrSet *set) {
+    if (set->slots)
+        xr_free(set->slots);
+    memset(set, 0, sizeof(*set));
+}
+
 /* ========== Common Helpers for Destroy/Reset ========== */
 
-static XrGCObjectNode *gc_object_node_new(XrGCHeader *obj) {
-    XrGCObjectNode *node = (XrGCObjectNode *) xr_malloc(sizeof(XrGCObjectNode));
-    if (!node)
-        return NULL;
-    node->obj = obj;
-    node->next = NULL;
-    return node;
-}
-
-static void gc_object_node_push(XrGCObjectNode **head, XrGCObjectNode *node, XrGCHeader *obj) {
-    XR_DCHECK(head != NULL, "node_push: NULL head");
-    XR_DCHECK(node != NULL, "node_push: NULL node");
-    node->obj = obj;
-    node->next = *head;
-    *head = node;
-}
-
-static bool gc_object_node_remove(XrGCObjectNode **head, XrGCHeader *obj) {
-    XR_DCHECK(head != NULL, "node_remove: NULL head");
-    bool removed = false;
-    XrGCObjectNode **p = head;
-    while (*p) {
-        XrGCObjectNode *node = *p;
-        if (node->obj == obj) {
-            *p = node->next;
-            xr_free(node);
-            removed = true;
-            continue;
-        }
-        p = &node->next;
-    }
-    return removed;
-}
-
 static void gc_finalize_registered_objects(XrCoroGC *gc) {
-    while (gc->finalize_objects) {
-        XrGCObjectNode *node = gc->finalize_objects;
-        gc->finalize_objects = node->next;
-        XrGCHeader *obj = node->obj;
-        if (obj && !(obj->extra & XR_OBJ_DEAD)) {
-            obj->extra |= XR_OBJ_DEAD;
-            XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
-            if (destroy) {
-                destroy(obj, gc);
-                gc->finalizer_count++;
-            }
+    XrGCPtrSet set = gc_ptrset_take(&gc->finalize_set);
+    for (uint32_t i = 0; i < set.cap; i++) {
+        XrGCHeader *obj = set.slots[i];
+        if (!xr_gc_ptrset_slot_live(obj) || (obj->extra & XR_OBJ_DEAD))
+            continue;
+        obj->extra |= XR_OBJ_DEAD;
+        XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
+        if (destroy) {
+            destroy(obj, gc);
+            gc->finalizer_count++;
         }
-        xr_free(node);
     }
+    gc_ptrset_destroy(&set);
 }
 
 // Finalize and free all large objects
 static void gc_free_large_objects(XrCoroGC *gc) {
-    XrGCObjectNode *node = gc->large_objects;
-    while (node) {
-        XrGCObjectNode *next = node->next;
-        XrGCHeader *lo = node->obj;
-        if (lo) {
-            gc->large_bytes -= lo->objsize;
-            if (XR_GC_IS_MMAP(lo)) {
-                xr_mem_unmap(lo, lo->objsize);
-            } else {
-                xr_free(lo);
-            }
+    XrGCPtrSet set = gc_ptrset_take(&gc->large_set);
+    for (uint32_t i = 0; i < set.cap; i++) {
+        XrGCHeader *lo = set.slots[i];
+        if (!xr_gc_ptrset_slot_live(lo))
+            continue;
+        gc->large_bytes -= lo->objsize;
+        if (XR_GC_IS_MMAP(lo)) {
+            xr_mem_unmap(lo, lo->objsize);
+        } else {
+            xr_free(lo);
         }
-        xr_free(node);
-        node = next;
     }
-    gc->large_objects = NULL;
+    gc_ptrset_destroy(&set);
     gc->large_bytes = 0;
 }
 
-static bool gc_prepare_nodes(XrCoroGC *gc, uint8_t type, size_t total,
-                             XrGCObjectNode **finalize_node, XrGCObjectNode **large_node) {
-    *finalize_node = NULL;
-    *large_node = NULL;
-    if (xr_gc_needs_finalize_ext(gc, type)) {
-        *finalize_node = gc_object_node_new(NULL);
-        if (!*finalize_node)
-            return false;
-    }
-    if (total > XR_LARGE_OBJECT_THRESHOLD) {
-        *large_node = gc_object_node_new(NULL);
-        if (!*large_node) {
-            if (*finalize_node) {
-                xr_free(*finalize_node);
-                *finalize_node = NULL;
-            }
-            return false;
-        }
-    }
+// Reserve registration capacity BEFORE allocating the object, so a
+// successful allocation can always be registered (OOM-safe ordering).
+static bool gc_prepare_registration(XrCoroGC *gc, uint8_t type, size_t total, bool *needs_finalize,
+                                    bool *is_large) {
+    *needs_finalize = xr_gc_needs_finalize_ext(gc, type);
+    *is_large = total > XR_LARGE_OBJECT_THRESHOLD;
+    if (*needs_finalize && !gc_ptrset_reserve(&gc->finalize_set, 1))
+        return false;
+    if (*is_large && !gc_ptrset_reserve(&gc->large_set, 1))
+        return false;
     return true;
 }
 
-static void gc_discard_nodes(XrGCObjectNode *finalize_node, XrGCObjectNode *large_node) {
-    if (finalize_node)
-        xr_free(finalize_node);
-    if (large_node)
-        xr_free(large_node);
-}
-
-static void gc_register_prepared_nodes(XrCoroGC *gc, XrGCHeader *obj, XrGCObjectNode *finalize_node,
-                                       XrGCObjectNode *large_node) {
-    if (large_node) {
-        gc_object_node_push(&gc->large_objects, large_node, obj);
+static void gc_register_object(XrCoroGC *gc, XrGCHeader *obj, bool needs_finalize, bool is_large) {
+    if (is_large) {
+        gc_ptrset_insert(&gc->large_set, obj);
         gc->large_bytes += (int64_t) obj->objsize;
     }
-    if (finalize_node) {
-        gc_object_node_push(&gc->finalize_objects, finalize_node, obj);
+    if (needs_finalize) {
+        gc_ptrset_insert(&gc->finalize_set, obj);
     }
 }
 
 static bool gc_register_finalizer_after_inline_alloc(XrCoroGC *gc, XrGCHeader *obj) {
     if (!xr_gc_needs_finalize_ext(gc, obj->type))
         return true;
-    XrGCObjectNode *node = gc_object_node_new(obj);
-    if (!node) {
+    if (!gc_ptrset_reserve(&gc->finalize_set, 1))
         return false;
-    }
-    gc_object_node_push(&gc->finalize_objects, node, obj);
+    gc_ptrset_insert(&gc->finalize_set, obj);
     XR_OBJ_SET_FLAG(obj, XR_OBJ_HAS_DTOR);
     return true;
 }
 
 static void gc_unregister_finalizer(XrCoroGC *gc, XrGCHeader *obj) {
     if (gc)
-        (void) gc_object_node_remove(&gc->finalize_objects, obj);
+        (void) gc_ptrset_remove(&gc->finalize_set, obj);
 }
 
 static void gc_unregister_large_object(XrCoroGC *gc, XrGCHeader *obj) {
     if (gc)
-        (void) gc_object_node_remove(&gc->large_objects, obj);
+        (void) gc_ptrset_remove(&gc->large_set, obj);
 }
 
 /* ========== Lifecycle ========== */
@@ -462,6 +496,16 @@ static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
     obj->extra |= XR_OBJ_DEAD;
 
+    /* Destroy is the single convergence point for every drop path (VM
+     * OP_DROP, the JIT helper, container/field release, and the cycle
+     * collector), so unlink a cycle-tracked object from cycle_roots here
+     * while its memory is still valid. A stale pointer left in cycle_roots
+     * would be aliased by a later same-size-class freelist reuse, putting
+     * the same live object in the roots array twice (double trial-decrement
+     * → use-after-free). Cleared before the freelist push below. */
+    if (gc && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
+        xr_cycle_remove_root(gc, obj);
+
     /* Run the type destructor (closes files/sockets, frees side buffers,
      * drops child references — which may push more onto deferred_drops). */
     if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
@@ -572,6 +616,10 @@ XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj) {
     /* RC reached zero. Run the type destructor so fields are properly
      * released (destructors drop child references). The memory stays. */
     obj->extra |= XR_OBJ_DEAD;
+    /* Same cycle-root invariant as rc_destroy_one: unlink before the memory
+     * is handed back for reuse so no stale roots[] pointer survives. */
+    if (gc && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
+        xr_cycle_remove_root(gc, obj);
     if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
         XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
         if (destroy) {
@@ -618,6 +666,9 @@ XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type
     obj->type = type;
     obj->refcount = 1;
     obj->objsize = (uint32_t) total;
+    /* memset zeroed _rsv; restore the "not in cycle_roots" sentinel (0 is a
+     * valid roots index, so it must never be the default — see newobj). */
+    obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
 
     if (gc)
         gc->object_count++;
@@ -634,30 +685,26 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
 
     size_t total = XGC_ALIGN(size);
     XrGCHeader *obj;
-    XrGCObjectNode *finalize_node = NULL;
-    XrGCObjectNode *large_node = NULL;
+    bool needs_finalize = false;
+    bool is_large = false;
 
-    if (!gc_prepare_nodes(gc, type, total, &finalize_node, &large_node))
+    if (!gc_prepare_registration(gc, type, total, &needs_finalize, &is_large))
         return NULL;
 
     bool use_mmap = false;
-    if (total > XR_LARGE_OBJECT_THRESHOLD) {
+    if (is_large) {
         if (total >= XR_MMAP_THRESHOLD) {
             // Tier 2: very large — use anonymous mmap (xr_mem_map)
             // to avoid libc heap fragmentation.
             obj = (XrGCHeader *) xr_mem_map(total, XR_MEM_PROT_READ | XR_MEM_PROT_WRITE);
-            if (!obj) {
-                gc_discard_nodes(finalize_node, large_node);
+            if (!obj)
                 return NULL;
-            }
             use_mmap = true;
         } else {
             // Tier 1: medium large — use xr_malloc
             obj = (XrGCHeader *) xr_malloc(total);
-            if (!obj) {
-                gc_discard_nodes(finalize_node, large_node);
+            if (!obj)
                 return NULL;
-            }
         }
     } else {
         /* RC freelist fast path: reuse a same-size-class block freed by a
@@ -671,10 +718,8 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
              * are reset below; XR_OBJ_DEAD is cleared by extra = 0. */
         } else {
             obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
-            if (!obj) {
-                gc_discard_nodes(finalize_node, large_node);
+            if (!obj)
                 return NULL;
-            }
             gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
         }
     }
@@ -682,17 +727,20 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     obj->type = type;
     obj->objsize = (uint32_t) total;
     obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
-    obj->_rsv = 0;
+    /* Not in cycle_roots yet. MUST be the sentinel, never 0: a freelist-reused
+     * block that still read _rsv==0 would be treated as "already at roots index
+     * 0", so add_root would refuse it and remove_root would corrupt roots[0]. */
+    obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     /* RC: a freshly allocated object has exactly one owning reference (its
      * definition site). dup/drop are 1-based, so initialize to 1. Immix
      * memory is reused/uninitialized, so this must be set explicitly. */
     obj->refcount = 1;
     if (use_mmap)
         XR_GC_SET_MMAP(obj);
-    if (finalize_node)
+    if (needs_finalize)
         XR_OBJ_SET_FLAG(obj, XR_OBJ_HAS_DTOR);
 
-    gc_register_prepared_nodes(gc, obj, finalize_node, large_node);
+    gc_register_object(gc, obj, needs_finalize, is_large);
 
     gc_update_alloc_stats(gc, (uint32_t) total);
 
@@ -722,10 +770,7 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
 
     printf("Object count:   %u\n", gc->object_count);
 
-    size_t large_count = 0;
-    for (XrGCObjectNode *node = gc->large_objects; node; node = node->next)
-        large_count++;
-    printf("Large objects:  %zu (%lld bytes)\n", large_count, (long long) gc->large_bytes);
+    printf("Large objects:  %u (%lld bytes)\n", gc->large_set.count, (long long) gc->large_bytes);
 
     printf("Finalizers total: %u\n", gc->finalizer_count);
 

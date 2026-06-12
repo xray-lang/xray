@@ -104,8 +104,10 @@ XR_FUNC void xr_gc_cleanup(XrGC *gc);
 XR_FUNC void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type);
 XR_FUNC XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size);
 XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
-XR_FUNC void xr_gc_retain_value(XrValue value);
-XR_FUNC void xr_gc_release_value(XrCoroGC *gc, XrValue value);
+
+/* Compile-time RC dup/drop primitives are inline in xcoro_gc.h
+ * (xr_rc_retain_value / xr_rc_release_value): one shared implementation
+ * for the VM, JIT, and container runtime. */
 
 /* ========== Compile-Time Type Function Tables ========== */
 

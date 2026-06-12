@@ -71,14 +71,36 @@ void xr_copy_context_init(XrCopyContext *ctx, struct XrayIsolate *X, struct XrGC
     ctx->X = X;
     ctx->dst_gc = dst_gc;
     ctx->dst_coro_gc = NULL;
+    ctx->to_transit = false;
     ctx->buckets = NULL;
     ctx->bucket_count = 0;
     ctx->objects_copied = 0;
     ctx->arena_head = NULL;
 }
 
-// Unified allocation: prefer Immix heap, fallback to fixed GC
+#include "../runtime/gc/xsystem_heap.h"
+
+// Channel-transit allocation: coroutine-independent shared object with
+// one atomic reference owned by the channel buffer. Freed wholesale via
+// xr_shared_destroy when the receive-side copy releases that reference.
+static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t type) {
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(ctx->X);
+    if (!heap)
+        return NULL;
+    XrGCHeader *obj = (XrGCHeader *) xr_sysheap_alloc_shared(heap, size, type);
+    if (!obj)
+        return NULL;
+    obj->objsize = (uint32_t) size;
+    xr_shared_init(obj);
+    XR_OBJ_SET_FLAG(obj, XR_OBJ_TRANSIT);
+    return obj;
+}
+
+// Unified allocation: transit sysheap, Immix heap, or fixed GC fallback
 static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type) {
+    if (ctx->to_transit) {
+        return copy_ctx_alloc_transit(ctx, size, type);
+    }
     if (ctx->dst_coro_gc) {
         return xr_coro_gc_newobj(ctx->dst_coro_gc, type, size);
     }
@@ -106,8 +128,17 @@ static XrValue xr_copy_context_lookup(XrCopyContext *ctx, void *src) {
         return XR_NULL_VAL;
     int idx = seen_hash_n(src, ctx->bucket_count);
     for (XrSeenEntry *e = ctx->buckets[idx]; e; e = e->next) {
-        if (e->src == src)
+        if (e->src == src) {
+            /* Transit graphs are reclaimed by cascading RC drops, so a
+             * second parent referencing the same copy must own its own
+             * reference. */
+            if (ctx->to_transit && XR_IS_PTR(e->dst)) {
+                XrGCHeader *dst_obj = XR_VALUE_GCPTR(e->dst);
+                if (dst_obj)
+                    xr_shared_incref(dst_obj);
+            }
             return e->dst;
+        }
     }
     return XR_NULL_VAL;
 }
@@ -426,8 +457,12 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     if (!obj)
         return value;
     if (XR_GC_IS_SHARED(obj)) {
-        xr_shared_incref(obj);
-        return value;
+        /* TRANSIT graphs are never pointer-shared: the receive side must
+         * materialize a private copy, so fall through to the per-type copy. */
+        if (!XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
+            xr_shared_incref(obj);
+            return value;
+        }
     }
 
     uint8_t type = XR_GC_GET_TYPE(obj);
@@ -456,6 +491,31 @@ XrValue xr_deep_copy(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc) 
     return result;
 }
 
+XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value) {
+    XR_DCHECK(X != NULL, "deep_copy_to_transit: NULL isolate");
+    if (xr_value_copy_kind(value) != XR_COPY_DEEP)
+        return value;
+    XrCopyContext ctx;
+    xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
+    ctx.to_transit = true;
+    XrValue result = xr_deep_copy_with_ctx(&ctx, value);
+    xr_copy_context_cleanup(&ctx);
+    return result;
+}
+
+void xr_chan_transit_release(XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+        return;
+    /* Drop the channel-buffer reference. The graph's interior nodes hold
+     * one reference each from their parent container, so destroying the
+     * root cascades through the regular shared-destroy path. */
+    if (xr_obj_drop_is_last(obj))
+        xr_shared_destroy(obj);
+}
+
 XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
                              int *out_count) {
     XR_DCHECK(X != NULL, "deep_copy_counted: NULL isolate");
@@ -479,9 +539,10 @@ XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoro
     XR_DCHECK(X != NULL, "deep_copy_to_coro: NULL isolate");
     if (!XR_IS_PTR(value))
         return value;
-    // Shared objects (channel, etc): just increment refcount, no copy needed
+    // Shared objects (channel, etc): just increment refcount, no copy needed.
+    // TRANSIT graphs are the exception: they must be materialized privately.
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (obj && XR_GC_IS_SHARED(obj)) {
+    if (obj && XR_GC_IS_SHARED(obj) && !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
         xr_shared_incref(obj);
         return value;
     }

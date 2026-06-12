@@ -23,14 +23,7 @@ static const XaotFuncPlan *cg_func_plan(XiCgenCtx *ctx, const XiFunc *f) {
 }
 
 static XrRep cg_abi_slot_storage_rep(const XaotAbiSlot *slot) {
-    const XaotRepInfo *info;
-
-    if (!slot)
-        return XR_REP_TAGGED;
-    if (slot->cls == XAOT_ARG_TAGGED)
-        return XR_REP_TAGGED;
-    info = xaot_rep_info(slot->rep.rep);
-    return info ? info->storage_rep : XR_REP_TAGGED;
+    return xaot_value_storage_rep(xaot_abi_slot_value_rep(slot));
 }
 
 static const XaotValuePlan *cg_value_plan(XiCgenCtx *ctx, const XiValue *v) {

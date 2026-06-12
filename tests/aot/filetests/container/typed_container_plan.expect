@@ -9,14 +9,14 @@ regex=array-storage [0-9]+ func=local_arrays value=v[0-9]+ origin=v[0-9]+ flags=
 regex=array-storage [0-9]+ func=local_arrays value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_U8/u8/uint8_t
 regex=array-cache [0-9]+ func=local_arrays value=v[0-9]+ storage=v[0-9]+ flags=0x15 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=local_arrays value=v[0-9]+ storage=v[0-9]+ flags=0xf elem=XR_ELEM_I64/i64/int64_t
-regex=array-storage [0-9]+ func=scan value=v[0-9]+ origin=v[0-9]+ flags=0x1 elem=XR_ELEM_I64/i64/int64_t
+regex=array-storage [0-9]+ func=scan value=v[0-9]+ origin=v[0-9]+ flags=0x3 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=scan value=v[0-9]+ storage=v[0-9]+ flags=0x85 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=refill value=v[0-9]+ storage=v[0-9]+ flags=0x27 elem=XR_ELEM_I64/i64/int64_t
 regex=array-class-field-alloc [0-9]+ func=refill origin=v[0-9]+ store=v[0-9]+ class=ArrayBag field=0 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=loop_sum value=v[0-9]+ storage=v[0-9]+ flags=0x27 elem=XR_ELEM_I64/i64/int64_t
 regex=array-cache [0-9]+ func=bytes_index value=v[0-9]+ storage=v[0-9]+ flags=0x47 elem=XR_ELEM_U8/u8/uint8_t
 contains=container-stats array=2 map=1 set=1 direct=2
-contains=array-storage-stats total=12 read=12 mutable=8
+contains=array-storage-stats total=12 read=12 mutable=11
 contains=array-cache-stats total=7 read=7 mutable=5
 c_contains=xrt_array_new_typed(0, XR_ELEM_U8)
 c_contains=xrt_array_new_typed(0, XR_ELEM_I64)

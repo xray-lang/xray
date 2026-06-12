@@ -40,21 +40,21 @@ static void xr_array_retain_elements(XrArray *arr) {
         return;
     XrValue *data = (XrValue *) arr->data;
     for (int32_t i = 0; i < arr->length; i++)
-        xr_gc_retain_value(data[i]);
+        xr_rc_retain_value(data[i]);
 }
 
 static void xr_array_release_elements(XrArray *arr, XrCoroGC *gc) {
     if (!arr)
         return;
     if (xr_array_is_slice(arr)) {
-        xr_gc_release_value(gc, XR_FROM_PTR(arr->source));
+        xr_rc_release_value(gc, XR_FROM_PTR(arr->source));
         return;
     }
     if (arr->elem_type != XR_ELEM_ANY || arr->length <= 0)
         return;
     XrValue *data = (XrValue *) arr->data;
     for (int32_t i = 0; i < arr->length; i++) {
-        xr_gc_release_value(gc, data[i]);
+        xr_rc_release_value(gc, data[i]);
         data[i] = xr_null();
     }
 }
@@ -67,7 +67,7 @@ static void xr_array_retain_extra_fill_refs(XrValue value, int32_t changed_slots
     if (!XR_VALUE_NEEDS_GC(value))
         return;
     for (int32_t i = 0; i < changed_slots; i++)
-        xr_gc_retain_value(value);
+        xr_rc_retain_value(value);
 }
 
 XrArray *xr_array_new(struct XrCoroutine *coro) {
@@ -194,7 +194,7 @@ void xr_array_set_direct(XrArray *arr, int index, XrValue value) {
     // Caller must ensure valid index and pre-allocated capacity
     xr_array_set_element(arr, index, value);
     if (replacing)
-        xr_gc_release_value(xr_current_coro_gc(), old);
+        xr_rc_release_value(xr_current_coro_gc(), old);
     if (XR_ARRAY_IS_GC_TRACED(arr))
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
 }
@@ -238,7 +238,7 @@ void xr_array_set(XrArray *arr, int index, XrValue value) {
         old = xr_array_get_element(arr, index);
     xr_array_set_element(arr, index, value);
     if (replacing)
-        xr_gc_release_value(xr_current_coro_gc(), old);
+        xr_rc_release_value(xr_current_coro_gc(), old);
     if (XR_ARRAY_IS_GC_TRACED(arr))
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), arr);
 }
@@ -406,7 +406,7 @@ XrArray *xr_array_filter(XrayIsolate *iso, XrArray *arr, struct XrClosure *callb
         XrValue test_result = xr_vm_call_closure(iso, callback, args, 1);
 
         if (xr_vm_is_truthy(test_result)) {
-            xr_gc_retain_value(elem);
+            xr_rc_retain_value(elem);
             xr_array_push(result, elem);
         }
     }
@@ -524,7 +524,7 @@ void xr_array_fill(XrArray *arr, XrValue value, int start, int end) {
             if (xr_array_same_gc_object(old, value))
                 continue;
             data[i] = value;
-            xr_gc_release_value(gc, old);
+            xr_rc_release_value(gc, old);
         }
         XR_ARRAY_MARK_GC_PTRS(arr, value);
         XR_GC_BARRIER_BACK_SAFE(gc, arr);
@@ -622,7 +622,7 @@ bool xr_array_resize(XrArray *arr, int32_t length, XrValue fill) {
             XrValue *data = (XrValue *) arr->data;
             XrCoroGC *gc = xr_current_coro_gc();
             for (int32_t i = length; i < old_length; i++) {
-                xr_gc_release_value(gc, data[i]);
+                xr_rc_release_value(gc, data[i]);
                 data[i] = xr_null();
             }
         }
@@ -982,9 +982,13 @@ void xr_array_grow(XrArray *arr) {
         if (arr->data && old_bytes > 0) {
             memcpy(new_data, arr->data, old_bytes);
         }
+        // The old blob is not swept by anything: release it to the
+        // owning coroutine's freelist now that the copy is done.
+        xr_coro_free_blob(xr_current_coro_gc(), arr->data);
         arr->data = new_data;
         arr->data_on_gc_heap = 0;
         arr->capacity = new_capacity;
+        xr_gc_add_external(xr_current_coro_gc(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -1030,9 +1034,12 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         if (arr->data && old_bytes > 0) {
             memcpy(new_data, arr->data, old_bytes);
         }
+        // The old blob is not swept by anything: release it explicitly.
+        xr_coro_free_blob(xr_current_coro_gc(), arr->data);
         arr->data = new_data;
         arr->data_on_gc_heap = 0;
         arr->capacity = new_capacity;
+        xr_gc_add_external(xr_current_coro_gc(), (int64_t) new_bytes);
     } else {
         // System heap path: realloc + external memory accounting
         void *new_data = xr_realloc(arr->data, new_bytes);
@@ -1110,7 +1117,7 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
 
     // Track source for GC (chase to original if source is also a slice)
     slice->source = arr->source ? arr->source : arr;
-    xr_gc_retain_value(XR_FROM_PTR(slice->source));
+    xr_rc_retain_value(XR_FROM_PTR(slice->source));
 
     // Inherit elem_type, elem_tid, and has_gc_ptrs from source
     slice->elem_type = arr->elem_type;
@@ -1157,7 +1164,8 @@ void xr_gc_destroy_array(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     // Only free data if this is not a slice (capacity > 0 means owns data)
     if (arr->data && arr->capacity > 0) {
         if (arr->data_on_gc_heap) {
-            // GC blob: no free needed, Immix sweep reclaims the blob
+            // GC blob: RC owns reclamation (no sweep), release it explicitly
+            xr_coro_free_blob(owning_gc, arr->data);
             arr->data = NULL;
         } else {
             // System heap: free and update external memory accounting

@@ -91,6 +91,33 @@ static inline int xr_rc_size_class(size_t aligned_size) {
     return (int) (aligned_size / XR_RC_FREE_GRANULARITY) - 1;
 }
 
+/* ========== GC Pointer Set (open-addressing hash set) ========== */
+/*
+ * Tracks per-coroutine object registrations that must support O(1)
+ * insert/remove on the RC hot path:
+ *   - finalize set: objects whose type has a destructor (teardown hook)
+ *   - large set: malloc/mmap-backed objects freed individually
+ *
+ * Open addressing with tombstones; capacity is a power of two and grows
+ * when (live + tombstones) exceeds 3/4 of capacity. Insert never fails
+ * after a successful xr_gc_ptrset_reserve (no allocation on insert), which
+ * preserves the allocator's "reserve bookkeeping before object alloc"
+ * OOM contract.
+ */
+
+typedef struct XrGCPtrSet {
+    XrGCHeader **slots;   // NULL slot = empty; XR_GC_PTRSET_TOMBSTONE = deleted
+    uint32_t cap;         // power of two (0 until first reserve)
+    uint32_t count;       // live entries
+    uint32_t tombstones;  // deleted slots awaiting rehash
+} XrGCPtrSet;
+
+#define XR_GC_PTRSET_TOMBSTONE ((XrGCHeader *) (uintptr_t) 1)
+
+static inline bool xr_gc_ptrset_slot_live(XrGCHeader *slot) {
+    return slot != NULL && slot != XR_GC_PTRSET_TOMBSTONE;
+}
+
 /* ========== Coroutine GC Structure (Immix bump + RC reclamation) ========== */
 
 typedef struct XrCoroGC {
@@ -106,8 +133,8 @@ typedef struct XrCoroGC {
     uint8_t _pad1[6];     // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
-    XrGCObjectNode *large_objects;  // All large objects
-    int64_t large_bytes;            // Total bytes in large_objects
+    XrGCPtrSet large_set;  // All large objects (O(1) insert/remove)
+    int64_t large_bytes;   // Total bytes registered in large_set
 
     // GC tuning parameters (gc.setpause / gc.setstepmul — kept for API surface)
     int gc_pause;
@@ -117,7 +144,10 @@ typedef struct XrCoroGC {
     struct XrCoroutine *owner;
 
     // Objects that need teardown finalization if they outlive local RC.
-    XrGCObjectNode *finalize_objects;
+    // O(1) remove here is load-bearing: every drop-to-zero of an object
+    // with a destructor unregisters it, so a linked list would make RC
+    // reclamation O(live objects) and teardown O(n^2).
+    XrGCPtrSet finalize_set;
 
     // Statistics (cold; surfaced by the gc.* builtins)
     uint32_t gc_count;         // Number of explicit gc.collect() calls (no-op cycles)
@@ -267,6 +297,53 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
 
 /* Sentinel value for _rsv meaning "not in cycle_roots". */
 #define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
+
+/* ========== Unified Compile-Time RC Primitives ==========
+ *
+ * The single authoritative dup/drop entry points. EVERY reference-counting
+ * site routes through these: the VM OP_DUP/OP_DROP dispatch, the JIT
+ * dup/drop helpers, and the container/field element retain/release in the
+ * object runtime. Keeping one implementation means the DEAD guard and the
+ * cycle-root bookkeeping cannot drift apart between paths (the historical
+ * bug: OP_DROP/JIT bypassed cycle-root tracking that only the container
+ * path performed, so local-variable cycles leaked and stale freelist
+ * entries could alias back into cycle_roots).
+ *
+ * Cycle-root contract (see xcycle_gc.c):
+ *   - release that reaches RC==0 destroys the object; rc_destroy_one()
+ *     unlinks it from cycle_roots, so no stale pointer survives into the
+ *     freelist.
+ *   - release that leaves RC>0 on a cycle-candidate registers the object
+ *     as a potential cycle root for trial deletion.
+ */
+
+static inline void xr_rc_retain(XrObjHeader *o) {
+    if (!o || (o->extra & XR_OBJ_DEAD))
+        return;
+    xr_obj_dup(o);
+}
+
+static inline void xr_rc_release(XrCoroGC *gc, XrObjHeader *o) {
+    if (!o || (o->extra & XR_OBJ_DEAD))
+        return;
+    if (xr_obj_drop_is_last(o)) {
+        xr_coro_gc_rc_destroy(gc, o);
+    } else if (o->extra & XR_OBJ_CYCLE_CANDIDATE) {
+        xr_cycle_add_root(gc, o);
+    }
+}
+
+static inline void xr_rc_retain_value(XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    xr_rc_retain((XrObjHeader *) XR_VALUE_GCPTR(value));
+}
+
+static inline void xr_rc_release_value(XrCoroGC *gc, XrValue value) {
+    if (!XR_IS_PTR(value))
+        return;
+    xr_rc_release(gc, (XrObjHeader *) XR_VALUE_GCPTR(value));
+}
 
 /* ========== Write Barrier API (retired) ==========
  *

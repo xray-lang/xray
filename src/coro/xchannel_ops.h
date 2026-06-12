@@ -24,36 +24,81 @@
 #include "xdeep_copy.h"
 #include "../runtime/value/xvalue.h"
 #include "../runtime/xisolate_api.h"
+#include "../runtime/xshared.h"
+#include "../runtime/gc/xalloc_unified.h"
 
 struct XrCoroutine;
 struct XrayIsolate;
 
-/* ========== Send-side deep copy ========== */
+/* ========== Send-side ownership ========== */
 
-/* Deep copy a mutable value before it enters a channel buffer.
- * Copies into the isolate's shared GC so the value outlives the
- * sending coroutine. Returns the original value unchanged for
- * scalars and immutables. */
+/* Send CONSUMES the caller's reference (XI_CHAN_SEND classifies its args
+ * as consuming uses; the compiler dups beforehand when the caller still
+ * needs the value afterwards). What enters the channel:
+ *
+ *   - scalars: the value itself, no RC involved.
+ *   - shared refs (channel, atomic, ...): the caller's +1 transfers to
+ *     the buffer and is handed to the receiver on delivery.
+ *   - deep values (array, map, instance, ...): a coroutine-independent
+ *     TRANSIT graph replaces the original; the caller's reference is
+ *     released HERE — the single send-side consumption point.
+ *
+ * Re-entrant: a value that is already a TRANSIT root (a blocked send
+ * being retried after suspension) passes through unchanged. */
 static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue value) {
     if (!XR_IS_PTR(value))
         return value;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (obj && XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+        return value; /* already prepared (blocked-send retry path) */
     if (!xr_value_needs_copy(value))
         return value;
-    return xr_deep_copy(isolate, value, xr_isolate_get_gc(isolate));
+    XrValue copied = xr_deep_copy_to_transit(isolate, value);
+    if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
+        xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
+    return copied;
+}
+
+/* A prepared send value that never entered the channel — try-send
+ * failure, send on a closed channel, timeout/cancel of a blocked send —
+ * still carries the reference that delivery would have handed to the
+ * receiver. Release it exactly once here.
+ *
+ * Coro-heap values that pass through prepare untouched (e.g. strings)
+ * are left alone: their reference balance is owner-thread business. */
+static inline void xr_chan_abandon_send(XrValue prepared) {
+    if (!XR_IS_PTR(prepared))
+        return;
+    XrGCHeader *obj = XR_VALUE_GCPTR(prepared);
+    if (!obj)
+        return;
+    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT)) {
+        xr_chan_transit_release(prepared);
+        return;
+    }
+    if (XR_GC_IS_SHARED(obj)) {
+        /* Atomic refcount: safe from any thread. Managed objects
+         * (channels) make drop_is_last a no-op by design. */
+        if (xr_obj_drop_is_last((XrObjHeader *) obj))
+            xr_shared_destroy(obj);
+    }
 }
 
 /* ========== Recv-side deep copy ========== */
 
 /* Deep copy a mutable value received from a channel into the
- * receiver's coroutine-local GC.  Returns the original value
- * unchanged for scalars and immutables. */
+ * receiver's coroutine-local GC, then release the channel buffer's
+ * transit reference (frees the transit graph).  Returns the original
+ * value unchanged for scalars and immutables. */
 static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue value,
                                         struct XrCoroutine *recv_coro) {
     if (!XR_IS_PTR(value))
         return value;
     if (!xr_value_needs_copy(value))
         return value;
-    return xr_deep_copy_to_coro(isolate, value, recv_coro);
+    XrValue copied = xr_deep_copy_to_coro(isolate, value, recv_coro);
+    xr_chan_transit_release(value);
+    return copied;
 }
 
 /* ========== tryRecv — non-blocking receive ========== */
@@ -86,12 +131,17 @@ static inline bool xr_chan_try_recv(struct XrayIsolate *isolate, XrChannel *ch, 
 /* ========== trySend — non-blocking send ========== */
 
 /* Unified trySend: deep-copy value, try buffer push, wake receivers
- * on success.  Returns true if the value was enqueued. */
+ * on success.  Returns true if the value was enqueued. The argument is
+ * consumed either way (single-shot semantics): on failure the prepared
+ * value is released. */
 static inline bool xr_chan_try_send(struct XrayIsolate *isolate, XrChannel *ch, XrValue value) {
     XR_DCHECK(ch != NULL, "xr_chan_try_send: NULL channel");
 
     value = xr_chan_prepare_send(isolate, value);
-    return xr_channel_try_send(ch, value);
+    if (xr_channel_try_send(ch, value))
+        return true;
+    xr_chan_abandon_send(value);
+    return false;
 }
 
 #endif  // XCHANNEL_OPS_H

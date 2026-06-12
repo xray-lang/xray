@@ -58,4 +58,10 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XiFunc *func, bool is_m
 XR_FUNC void xaot_abi_free(XaotFuncAbi *abi);
 XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind);
 
+/* Effective value rep a call site sees for an ABI slot.  A tagged-class
+ * slot transports XrValue no matter which typed rep was recorded next to
+ * it, so every boundary decision (prepare, verify, emit) must go through
+ * this one resolver or the three drift apart. */
+XR_FUNC XaotValueRep xaot_abi_slot_value_rep(const XaotAbiSlot *slot);
+
 #endif  // XAOT_ABI_H

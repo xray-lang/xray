@@ -162,7 +162,7 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
         obj->extra = XR_OBJ_MANAGED;
         obj->refcount = 0;
         obj->objsize = (uint32_t) size;
-        obj->_rsv = 0;
+        obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
         node->obj = obj;
         node->next = gc->fixedgc;
         gc->fixedgc = node;
@@ -179,31 +179,10 @@ XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
     return (XrGCHeader *) xr_gc_alloc(gc, size, type);
 }
 
-XR_FUNC void xr_gc_retain_value(XrValue value) {
-    if (!XR_IS_PTR(value))
-        return;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || (obj->extra & XR_OBJ_DEAD))
-        return;
-    xr_obj_dup(obj);
-}
-
-XR_FUNC void xr_gc_release_value(XrCoroGC *gc, XrValue value) {
-    if (!XR_IS_PTR(value))
-        return;
-    XrGCHeader *obj = XR_VALUE_GCPTR(value);
-    if (!obj || (obj->extra & XR_OBJ_DEAD))
-        return;
-    if (xr_obj_drop_is_last(obj)) {
-        /* Remove from cycle roots before destroying (if it was tracked). */
-        if (obj->extra & XR_OBJ_CYCLE_CANDIDATE)
-            xr_cycle_remove_root(gc, obj);
-        xr_coro_gc_rc_destroy(gc, obj);
-    } else if (obj->extra & XR_OBJ_CYCLE_CANDIDATE) {
-        /* RC > 0 after decrement: potential cycle root. */
-        xr_cycle_add_root(gc, obj);
-    }
-}
+/* The compile-time RC dup/drop primitives (xr_rc_retain_value /
+ * xr_rc_release_value) are inline in xcoro_gc.h: a single implementation
+ * shared by the VM, JIT, and container runtime so the DEAD guard and
+ * cycle-root bookkeeping cannot drift between paths. */
 
 /* ========== Debug ========== */
 

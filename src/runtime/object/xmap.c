@@ -46,16 +46,16 @@ XrMapNode xr_map_dummynode = {
 
 static void xr_map_release_entry_values(XrMapNode *node, XrCoroGC *gc) {
     XR_DCHECK(node != NULL, "map_release_entry: NULL node");
-    xr_gc_release_value(gc, node->key);
-    xr_gc_release_value(gc, node->value);
+    xr_rc_release_value(gc, node->key);
+    xr_rc_release_value(gc, node->value);
     node->key = xr_null();
     node->value = xr_null();
 }
 
 static void xr_map_retain_entry_values(XrMapNode *node) {
     XR_DCHECK(node != NULL, "map_retain_entry: NULL node");
-    xr_gc_retain_value(node->key);
-    xr_gc_retain_value(node->value);
+    xr_rc_retain_value(node->key);
+    xr_rc_retain_value(node->value);
 }
 
 /* ========== Memory Profiling (optional) ========== */
@@ -389,11 +389,11 @@ static void rehash(XrMap *map) {
     // Allocate new array
     uint32_t saved_count = map->count;
 
-    /* Force malloc for new nodes during rehash.
+    /* Force malloc for new nodes during rehash (the flag stays cleared:
+     * the node vector is malloc-backed from here on).
      * Immix bump allocator may return memory overlapping the old GC blob
      * (line recycling within the same block), and setnodevector's init
      * loop would zero out old entries before we can re-insert them. */
-    uint16_t saved_gc_flag = map->flags & XR_MAP_FLAG_NODES_ON_GC;
     map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
 
     setnodevector(map, newsize);
@@ -419,8 +419,10 @@ static void rehash(XrMap *map) {
             // Balance the add_external from the previous setnodevector
             // call so totalbytes tracks what is actually live.
             xr_gc_sub_external(xr_current_coro_gc(), (int64_t) old_bytes);
+        } else {
+            // GC blob: RC owns reclamation (no sweep), release it explicitly
+            xr_coro_free_blob(xr_current_coro_gc(), oldnodes);
         }
-        // GC blob: old nodes reclaimed automatically by Immix sweep
         XR_MAP_PROFILE_FREE_NODES(old_bytes);
     }
 }
@@ -436,8 +438,8 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
 
     if (n != NULL) {
         // Update existing value
-        xr_gc_release_value(xr_current_coro_gc(), key);
-        xr_gc_release_value(xr_current_coro_gc(), n->value);
+        xr_rc_release_value(xr_current_coro_gc(), key);
+        xr_rc_release_value(xr_current_coro_gc(), n->value);
         n->value = value;
         XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), map);
         return;
@@ -523,8 +525,8 @@ bool xr_map_delete(XrMap *map, XrValue key) {
                 n->key = xr_null();
                 n->value = xr_null();
             }
-            xr_gc_release_value(xr_current_coro_gc(), old_key);
-            xr_gc_release_value(xr_current_coro_gc(), old_value);
+            xr_rc_release_value(xr_current_coro_gc(), old_key);
+            xr_rc_release_value(xr_current_coro_gc(), old_value);
             map->count--;
             XR_DCHECK(map->count <= xr_map_sizenode(map), "map_delete: count > capacity");
             return true;
@@ -576,7 +578,7 @@ XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *n = &map->node[i];
             if (!XR_MAP_NODE_EMPTY(n)) {
-                xr_gc_retain_value(n->key);
+                xr_rc_retain_value(n->key);
                 xr_array_push(arr, n->key);
             }
         }
@@ -594,7 +596,7 @@ XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
         for (uint32_t i = 0; i < size; i++) {
             XrMapNode *n = &map->node[i];
             if (!XR_MAP_NODE_EMPTY(n)) {
-                xr_gc_retain_value(n->value);
+                xr_rc_retain_value(n->value);
                 xr_array_push(arr, n->value);
             }
         }
@@ -702,7 +704,8 @@ void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
         size_t bytes = sizeof(XrMapNode) * xr_map_sizenode(map);
         XR_MAP_PROFILE_FREE_NODES(bytes);
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
-            // GC blob: no free needed, Immix sweep reclaims
+            // GC blob: RC owns reclamation (no sweep), release it explicitly
+            xr_coro_free_blob(owning_gc, map->node);
             map->node = NULL;
         } else {
             xr_free(map->node);

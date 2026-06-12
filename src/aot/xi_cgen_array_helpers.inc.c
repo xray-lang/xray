@@ -803,12 +803,13 @@ static bool cg_array_value_uses_native_local(XiCgenCtx *ctx, const XiFunc *f,
 
 static bool cg_array_can_cache_data_for_value(XiCgenCtx *ctx, const XiValue *value,
                                               CgArrayElemInfo *info_out) {
+    CgArrayElemInfo scratch;
     const XiValue *v = cg_unwrap_identity_value(value);
     if (!ctx || ctx->pre_decl_all || !v)
         return false;
     const XaotArrayCachePlan *plan = xaot_bundle_find_array_cache_plan(cg_ctx_aot_bundle(ctx), v);
     if (plan)
-        return cg_array_elem_info_from_cache_plan(plan, info_out);
+        return cg_array_elem_info_from_cache_plan(plan, info_out ? info_out : &scratch);
     return false;
 }
 

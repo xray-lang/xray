@@ -571,11 +571,8 @@ XrJitResult xr_jit_chan_send(XrCoroutine *coro, int64_t extra_arg) {
 
     XrValue send_v = jit_value_from_tag(scratch->call_args[1], scratch->call_arg_tags[1]);
 
-    // Deep copy mutable values for buffer safety
-    if (XR_IS_PTR(send_v) && xr_value_needs_copy(send_v)) {
-        XrayIsolate *isolate = coro->isolate;
-        send_v = xr_deep_copy(isolate, send_v, xr_isolate_get_gc(isolate));
-    }
+    // Deep copy mutable values for buffer safety (transit graph)
+    send_v = xr_chan_prepare_send(coro->isolate, send_v);
 
     // Store prepared value for block helper
     scratch->call_args[1] = send_v.i;

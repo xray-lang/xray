@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include "xworker.h"
 #include "xchannel.h"
+#include "xchannel_ops.h"
 #include "xtimer_wheel.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/object/xexception.h"
@@ -343,6 +344,10 @@ static void coro_channel_wait_links_reset(XrCoroExt *ext) {
     ext->wait_bucket = NULL;
     ext->wait_bucket_owner = -1;
     ext->wait_send = false;
+    /* Safety net for cancel/kill while blocked on send: a still-parked
+     * value never reached a receiver, so release the channel-side
+     * reference instead of orphaning the transit graph. */
+    xr_chan_abandon_send(ext->send_value);
     ext->send_value = xr_null();
     ext->pending_spawn = NULL;
 }

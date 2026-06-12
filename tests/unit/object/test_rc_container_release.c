@@ -69,7 +69,7 @@ TEST(array_destroy_releases_child_array) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    xr_gc_release_value(gc, xr_value_from_array(parent));
+    xr_rc_release_value(gc, xr_value_from_array(parent));
     ASSERT_TRUE(is_dead(&parent->gc));
     ASSERT_TRUE(is_dead(&child->gc));
     teardown();
@@ -87,7 +87,7 @@ TEST(map_destroy_releases_key_and_value) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    xr_gc_release_value(gc, xr_value_from_map(map));
+    xr_rc_release_value(gc, xr_value_from_map(map));
     ASSERT_TRUE(is_dead(&map->gc));
     ASSERT_TRUE(is_dead(&key->gc));
     ASSERT_TRUE(is_dead(&value->gc));
@@ -104,7 +104,7 @@ TEST(set_destroy_releases_value) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    xr_gc_release_value(gc, xr_value_from_set(set));
+    xr_rc_release_value(gc, xr_value_from_set(set));
     ASSERT_TRUE(is_dead(&set->gc));
     ASSERT_TRUE(is_dead(&child->gc));
     teardown();
@@ -121,7 +121,7 @@ TEST(tuple_instance_destroy_releases_elements) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    xr_gc_release_value(gc, xr_value_from_tuple(tuple));
+    xr_rc_release_value(gc, xr_value_from_tuple(tuple));
     ASSERT_TRUE(is_dead(&tuple->gc));
     ASSERT_TRUE(is_dead(&left->gc));
     ASSERT_TRUE(is_dead(&right->gc));
@@ -145,7 +145,7 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
-    xr_gc_release_value(gc, XR_FROM_PTR(inst));
+    xr_rc_release_value(gc, XR_FROM_PTR(inst));
     ASSERT_TRUE(is_dead(&inst->gc));
     ASSERT_TRUE(is_dead(&a->gc));
     ASSERT_TRUE(is_dead(&b->gc));
