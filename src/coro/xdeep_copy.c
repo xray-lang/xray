@@ -15,6 +15,7 @@
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xgc_internal.h"
 #include "../runtime/gc/xcoro_gc.h"
+#include "../runtime/gc/xalloc_unified.h"
 #include "../runtime/object/xarray.h"
 #include "../runtime/object/xmap.h"
 #include "../runtime/object/xstring.h"
@@ -548,11 +549,17 @@ XrValue xr_deep_copy_to_coro(struct XrayIsolate *X, XrValue value, struct XrCoro
     }
     if (xr_value_copy_kind(value) != XR_COPY_DEEP)
         return value;
-    // Deep copy to destination coroutine's Immix heap when available
-    if (dst_coro && dst_coro->coro_gc) {
+    /* The value must land in the RECEIVER's private coro heap so the
+     * receiver's own dup/drop (which resolve the gc via xr_current_coro_gc =
+     * current_coro->coro_gc) reclaim it. A spawned coroutine that only ever
+     * receives never triggers lazy gc creation, leaving coro_gc NULL; keying
+     * on the field would fall back to the shared isolate heap while the
+     * receiver's drop targets its own (now NULL) gc — leaking the object and
+     * its data buffer. xr_coro_ensure_gc creates the heap on demand. */
+    if (dst_coro) {
         XrCopyContext ctx;
         xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
-        ctx.dst_coro_gc = dst_coro->coro_gc;
+        ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         xr_copy_context_cleanup(&ctx);
         return result;
@@ -567,10 +574,10 @@ XrValue xr_deep_copy_to_coro_counted(struct XrayIsolate *X, XrValue value,
             *out_count = 0;
         return value;
     }
-    if (dst_coro && dst_coro->coro_gc) {
+    if (dst_coro) {
         XrCopyContext ctx;
         xr_copy_context_init(&ctx, X, xr_isolate_get_gc(X));
-        ctx.dst_coro_gc = dst_coro->coro_gc;
+        ctx.dst_coro_gc = xr_coro_ensure_gc(dst_coro);
         XrValue result = xr_deep_copy_with_ctx(&ctx, value);
         if (out_count)
             *out_count = ctx.objects_copied;
