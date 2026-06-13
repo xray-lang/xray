@@ -144,7 +144,7 @@
 /* Inline allocation bumps the Immix cursor, updates block accounting, and
  * adds to totalbytes. */
 
-#define XM_GC_TOTALBYTES_OFFSET 88            // offsetof(XrCoroGC, totalbytes)
+#define XM_GC_TOTALBYTES_OFFSET 96            // offsetof(XrCoroGC, totalbytes)
 #define XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrImmixBlock, alloc_marks)
 #define XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET 28  // offsetof(XrImmixBlock, alloc_count)
 #define XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET 32  // offsetof(XrImmixBlock, alloc_bytes)

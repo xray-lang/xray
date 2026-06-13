@@ -32,8 +32,7 @@
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 #include "../../os/os_mem.h"
-#include "xstackmap.h"     // XrStackMapTable, XrStackMapEntry
-#include "xbc_stackmap.h"  // XrBcStackMap, bytecode precise GC scanning
+#include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
 #include "../../os/os_thread.h"
 
 /* ========== GC Struct Two-Level Pool ========== */
@@ -160,6 +159,8 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
 
     // Initialize Immix heap
     xr_immix_init(&gc->immix);
+    // Wire the per-isolate L2 block cache (NULL during bootstrap → OS alloc).
+    gc->immix.sys_heap = coro->isolate ? coro->isolate->sys_heap : NULL;
 
     gc_init_runtime_state(gc);
 
@@ -404,6 +405,8 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
 
     gc_init_runtime_state(gc);
     gc->owner = new_owner;
+    // Re-wire the per-isolate L2 block cache (immix reset cleared it).
+    gc->immix.sys_heap = new_owner->isolate ? new_owner->isolate->sys_heap : NULL;
 }
 
 /* ========== Allocation Helpers ========== */
