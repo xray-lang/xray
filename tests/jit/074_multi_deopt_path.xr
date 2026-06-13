@@ -3,8 +3,9 @@
 // EXPECTED: ab
 // EXPECTED: null
 // Test: Deopt at different code positions within same function
+// (`process` is a reserved builtin global, so the helper is named `classify`.)
 
-fn process(x: int | float | string | null) -> int | float | string | null {
+fn classify(x: int | float | string | null) -> int | float | string | null {
     if (x == null) {
         return null
     }
@@ -20,11 +21,11 @@ fn process(x: int | float | string | null) -> int | float | string | null {
 // Warm up with int
 let i = 0
 while (i < 200) {
-    process(i)
+    classify(i)
     i = i + 1
 }
 
-print(process(3))
-print(process(1.5))
-print(process("a"))
-print(process(null))
+print(classify(3))
+print(classify(1.5))
+print(classify("a"))
+print(classify(null))
