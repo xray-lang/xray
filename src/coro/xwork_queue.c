@@ -440,8 +440,9 @@ XrWorkQueue *xr_work_queue_new(XrayIsolate *X, uint32_t shard_count, uint32_t sh
     if (!q)
         return NULL;
 
+    /* Atomic shared-RC like `shared const`: the compiler tracks the handle and
+     * the last drop frees. NOT XR_OBJ_MANAGED (that no-ops drop -> leak). */
     xr_shared_set_refc(&q->gc, 1);
-    XR_OBJ_SET_FLAG(&q->gc, XR_OBJ_MANAGED);
     q->shard_count = shard_count;
     q->initial_capacity = shard_capacity;
     atomic_store_explicit(&q->next_shard, 0, memory_order_relaxed);
