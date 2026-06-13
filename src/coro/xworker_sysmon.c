@@ -130,8 +130,11 @@ static void sysmon_check(XrRuntime *runtime) {
                                coro_name ? coro_name : "unknown", (unsigned long long) hb);
             }
 
-            // === Level 3 (5s): mark coroutine for cancellation ===
-            if (elapsed_us >= XR_SYSMON_CANCEL_US) {
+            // === Level 3 (default 5s): mark coroutine for cancellation ===
+            // Threshold is runtime-configurable via XRAY_SYSMON_CANCEL_MS;
+            // <= 0 disables forced cancel and keeps only the Level 2 warning.
+            int64_t cancel_us = runtime->sysmon_cancel_us;
+            if (cancel_us > 0 && elapsed_us >= cancel_us) {
                 XrCoroutine *coro = atomic_load_explicit(&wm->current_coro, memory_order_relaxed);
                 if (coro && !xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
                     const char *coro_name = xr_coro_name(coro);

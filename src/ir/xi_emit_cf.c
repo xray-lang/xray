@@ -13,6 +13,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "xi_own.h"
 #include "../runtime/value/xtype.h"
 #include "../module/xmodule.h"
 #include "../runtime/xisolate_api.h"
@@ -62,6 +63,14 @@ static bool can_fuse_cmp(XiBlock *blk, XiValue *ctrl) {
     XR_DCHECK(ctrl != NULL, "ctrl must not be NULL");
     uint16_t op = ctrl->op;
     if (op < XI_EQ || op > XI_GE || ctrl->nargs < 2)
+        return false;
+    /* Never fuse comparisons over reference-counted operands. Fusion defers
+     * the compare into the branch terminator, but an operand's ARC RELEASE is
+     * emitted earlier in the block body — it would free the operand and recycle
+     * its register ahead of the deferred compare, so the branch would read a
+     * stale/empty register (e.g. `if (s == "lit")` always taking the else arm).
+     * The non-fused path keeps OP_CMP_* before the RELEASE and stays correct. */
+    if (xi_own_type_is_rc(ctrl->args[0]->type) || xi_own_type_is_rc(ctrl->args[1]->type))
         return false;
     /* Ensure no other value in this block uses the comparison result */
     for (uint32_t i = 0; i < blk->nvalues; i++) {

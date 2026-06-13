@@ -24,6 +24,8 @@
 #include "../gc/xalloc_unified.h"
 #include "../class/xclass_system.h"
 #include "../gc/xgc.h"
+#include "../gc/xsystem_heap.h"
+#include "../xshared.h"
 #include "../../base/xmalloc.h"
 #include "../value/xvalue_hash.h"
 #include "../xstrbuf.h"
@@ -148,6 +150,27 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
         if (!arr->data)
             arr->capacity = 0;
     }
+}
+
+/* Allocate an empty ANY-typed array directly on the shared (system) heap.
+ *
+ * Concurrency collection points — e.g. a supervisor scope's errors[] that the
+ * owner creates but many child coroutines push into across workers — must not
+ * be per-coroutine arrays: growth is accounted to the pushing child's gc while
+ * the array is freed by the owner's gc, underflowing the owner's byte counter
+ * (and the data buffer would be reclaimed against the wrong heap). A shared
+ * array carries no per-coro accounting and is reclaimed via xr_shared_destroy. */
+XrArray *xr_array_new_shared(struct XrayIsolate *X, int capacity) {
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    if (!heap)
+        return NULL;
+    XrArray *arr = (XrArray *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
+    if (!arr)
+        return NULL;
+    xr_array_init_inplace(arr, capacity > 0 ? capacity : 4, XR_ELEM_ANY);
+    XR_GC_SET_STORAGE(&arr->gc, XR_GC_STORAGE_SHARED);
+    xr_shared_set_refc(&arr->gc, 1);
+    return arr;
 }
 
 XrArray *xr_array_from_values(struct XrCoroutine *coro, XrValue *elements, int count) {
@@ -996,8 +1019,12 @@ void xr_array_grow(XrArray *arr) {
             return;
         arr->data = new_data;
         arr->capacity = new_capacity;
-        XrCoroGC *gc = xr_current_coro_gc();
-        xr_gc_add_external(gc, (int64_t) (new_bytes - old_bytes));
+        /* Shared arrays carry no per-coroutine accounting: their buffer is freed
+         * via xr_shared_destroy with a NULL gc, so accounting growth to the
+         * pushing coroutine's gc would skew that counter (and underflow the
+         * owner on a cross-coro collection point). */
+        if (!XR_GC_IS_SHARED(&arr->gc))
+            xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }
 
@@ -1047,8 +1074,12 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
             return;
         arr->data = new_data;
         arr->capacity = new_capacity;
-        XrCoroGC *gc = xr_current_coro_gc();
-        xr_gc_add_external(gc, (int64_t) (new_bytes - old_bytes));
+        /* Shared arrays carry no per-coroutine accounting: their buffer is freed
+         * via xr_shared_destroy with a NULL gc, so accounting growth to the
+         * pushing coroutine's gc would skew that counter (and underflow the
+         * owner on a cross-coro collection point). */
+        if (!XR_GC_IS_SHARED(&arr->gc))
+            xr_gc_add_external(xr_current_coro_gc(), (int64_t) (new_bytes - old_bytes));
     }
 }
 

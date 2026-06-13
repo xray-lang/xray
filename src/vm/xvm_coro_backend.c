@@ -248,8 +248,22 @@ static XrVmCoroState *vm_state_for_coro(XrCoroutine *coro) {
 static void vm_entry_reset_no_free(XrVmCoroState *state) {
     if (!state)
         return;
+    /* The coroutine owns one reference to its entry closure (taken in
+     * vm_backend_bind_closure_entry). This is the single point where the entry
+     * transitions back to empty, so release it here — a closure shared by many
+     * `go` spawns must stay live for every coroutine that still references it,
+     * even when the spawning loop has already dropped its own reference. The
+     * field is nulled immediately below, so a repeated reset is a safe no-op
+     * (shared closures route through the atomic shared-destroy path, so the
+     * exact owning gc does not matter). */
+    if (state->entry_type == XR_CORO_ENTRY_CLOSURE && state->entry.closure) {
+        XrCoroGC *owner =
+            state->entry_closure_owner ? state->entry_closure_owner : xr_current_coro_gc();
+        xr_rc_release(owner, (XrObjHeader *) state->entry.closure);
+    }
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
     state->entry.closure = NULL;
+    state->entry_closure_owner = NULL;
     state->args = NULL;
     state->arg_count = 0;
     for (int i = 0; i < 4; i++)
@@ -317,12 +331,7 @@ XrCoroutine *xr_coro_create_bootstrap(XrayIsolate *X) {
     }
 
     if (!coro->coro_gc) {
-        XrCoroGCConfig main_config = {
-            .gc_threshold = XR_MAIN_CORO_GC_THRESHOLD,
-            .gc_pause = XR_MAIN_CORO_GC_PAUSE,
-            .gc_stepmul = XR_MAIN_CORO_GC_STEPMUL,
-        };
-        coro->coro_gc = xr_coro_gc_create(coro, &main_config);
+        coro->coro_gc = xr_coro_gc_create(coro);
         if (!coro->coro_gc) {
             xr_coro_free(coro);
             xr_coro_discard_uninitialized(coro);
@@ -502,6 +511,14 @@ static bool vm_backend_bind_closure_entry(XrCoroutine *coro, XrayIsolate *X, XrC
     vm_backend_clear_entry_state(coro);
     state->entry_type = XR_CORO_ENTRY_CLOSURE;
     state->entry.closure = closure;
+    /* The coroutine takes its own reference to the entry closure so it survives
+     * for the coroutine's whole life regardless of what the spawning frame does
+     * with its copy (XI_GO only borrows the closure). The spawning coroutine's
+     * gc owns the closure block, so record it for the matching release in
+     * vm_entry_reset_no_free (the last coroutine to drop the shared closure must
+     * return it to the owner's heap, not its own). */
+    xr_rc_retain((XrObjHeader *) closure);
+    state->entry_closure_owner = xr_current_coro_gc();
     if (!vm_entry_copy_args(coro, X, state, args, arg_count, copy_args)) {
         vm_backend_clear_entry_state(coro);
         return false;
@@ -1329,13 +1346,28 @@ static XrVMResult run_finalize(XrayIsolate *isolate, XrWorker *worker, XrCorouti
             XrString *s = xr_string_intern(isolate, "coroutine error", 15, 0);
             coro->error = xr_string_value(s);
         }
-        /* Top-level uncaught value-return error: print diagnostic.
-         * Panic faults print during unwind; child-coro errors are
-         * isolated and surfaced by the awaiting parent. */
-        if (coro->error_is_value && xr_coro_flags_has(coro, XR_CORO_FLG_MAIN) &&
-            !(isolate && isolate->suppress_exception_print) && !XR_IS_NULL(coro->error)) {
-            XrString *msg = xr_value_to_string(isolate, coro->error);
-            fprintf(stderr, "\n[Uncaught Error] %s\n", msg ? msg->data : "<error>");
+        /* Uncaught value-return error diagnostic. Panic faults print during
+         * unwind; errors of an awaited or linked coroutine are surfaced by the
+         * awaiting/parent task, so reprinting them here would double-report.
+         * Two cases ARE printed because their error would otherwise vanish
+         * with no observer:
+         *   - the main coroutine (top-level program), and
+         *   - a statement-form fire-and-forget `go f()`. The codegen only
+         *     allocates an XrTask when the result/Task state is user-visible
+         *     (awaited handle, or a linked/scoped child whose error propagates
+         *     to a parent), so coro->task == NULL is exactly the case where no
+         *     observer exists. Silently swallowing such an error once disguised
+         *     a deterministic compiler miscompile as a scheduler "lost wakeup",
+         *     so surfacing it is worth a line on stderr. */
+        if (coro->error_is_value && !(isolate && isolate->suppress_exception_print) &&
+            !XR_IS_NULL(coro->error)) {
+            bool is_main = xr_coro_flags_has(coro, XR_CORO_FLG_MAIN);
+            bool dropped_fire_and_forget = !is_main && coro->task == NULL;
+            if (is_main || dropped_fire_and_forget) {
+                XrString *msg = xr_value_to_string(isolate, coro->error);
+                fprintf(stderr, "\n[Uncaught Error%s] %s\n", is_main ? "" : " in go coroutine",
+                        msg ? msg->data : "<error>");
+            }
         }
         coro_ctx->current_exception = xr_null();
         coro_ctx->pending_error = xr_null();

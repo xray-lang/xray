@@ -503,11 +503,6 @@ static const XlspSymbolInfo gc_symbols[] = {
      "Returns GC state: PAUSE, PROPAGATE, ATOMIC, SWEEP, or FINALIZE", NULL, 0},
     {"info", XLSP_SYM_FUNCTION, "fn(): Map",
      "Returns comprehensive GC info including generational stats", NULL, 0},
-    // Tuning
-    {"setpause", XLSP_SYM_FUNCTION, "fn(n: int): int",
-     "Sets GC pause multiplier (default 100), returns old value", NULL, 0},
-    {"setstepmul", XLSP_SYM_FUNCTION, "fn(n: int): int",
-     "Sets GC step multiplier (default 200), returns old value", NULL, 0},
 };
 
 // ============================================================================

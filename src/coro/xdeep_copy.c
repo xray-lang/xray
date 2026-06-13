@@ -297,9 +297,17 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
 
     uint32_t size = xr_map_sizenode(map);
     new_map->lsizenode = map->lsizenode;
-    new_map->node = (XrMapNode *) xr_malloc(sizeof(XrMapNode) * size);
+    size_t node_bytes = sizeof(XrMapNode) * size;
+    new_map->node = (XrMapNode *) xr_malloc(node_bytes);
     if (!new_map->node)
         return XR_NULL_VAL;
+    /* The node buffer is a system-heap allocation that xr_gc_destroy_map will
+     * sub_external on teardown (NODES_ON_GC stays clear here). Mirror the
+     * setnodevector accounting so the destination per-coro gc's byte counter
+     * balances; without this the awaiting coroutine underflows when it frees
+     * a deep-copied map (e.g. a Json result handed back from `await all`). */
+    if (ctx->dst_coro_gc)
+        xr_gc_add_external(ctx->dst_coro_gc, (int64_t) node_bytes);
 
     for (uint32_t i = 0; i < size; i++) {
         new_map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
@@ -457,6 +465,15 @@ XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value) {
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
         return value;
+    /* Immortal fixed-heap singletons (enum value & type descriptors, classes —
+     * allocated by xr_gc_alloc with MANAGED + sticky RC) are referenced by
+     * every coroutine. Their identity and native C-struct members (e.g.
+     * XrEnumValue.enum_name, which lives OUTSIDE the instance field array) make
+     * a structural field-copy both wrong and corrupting. Share by pointer; the
+     * sticky RC makes any cross-coroutine retain/drop a no-op. */
+    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
+        xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
+        return value;
     if (XR_GC_IS_SHARED(obj)) {
         /* TRANSIT graphs are never pointer-shared: the receive side must
          * materialize a private copy, so fall through to the per-type copy. */
@@ -515,6 +532,119 @@ void xr_chan_transit_release(XrValue value) {
      * root cascades through the regular shared-destroy path. */
     if (xr_obj_drop_is_last(obj))
         xr_shared_destroy(obj);
+}
+
+/* ========== Zero-copy buffer move for self-contained scalar arrays ==========
+ *
+ * A typed (non-ANY) array's data buffer holds only scalars, so it has no
+ * interior pointers into any coroutine heap and can be re-homed across heaps
+ * (sender → transit → receiver) by moving the malloc'd buffer pointer instead
+ * of allocating + memcpy'ing it twice. The small XrArray struct is still
+ * allocated per side; only the (potentially large) data buffer moves. Every
+ * unsafe shape falls back (returns false) to the normal deep-copy path:
+ *   - ANY arrays / has_gc_ptrs : interior pointers, not self-contained.
+ *   - slices (source != NULL / capacity == 0) : share a backing store.
+ *   - data_on_gc_heap : Region-blob data is bound to its owner heap and is
+ *     freed on heap teardown — it must never escape to another heap.
+ *   - aliased transit (refc != 1) : another holder needs the live buffer.
+ */
+static bool array_is_movable_scalar(const XrArray *a) {
+    return a && a->elem_type != XR_ELEM_ANY && !a->has_gc_ptrs && a->source == NULL &&
+           a->capacity > 0 && !a->data_on_gc_heap && a->data != NULL && a->length > 0;
+}
+
+bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out) {
+    if (!X || !out || !XR_IS_PTR(value))
+        return false;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || XR_GC_IS_SHARED(obj))
+        return false; /* not a coroutine-local array source */
+    XrArray *src = (XrArray *) obj;
+    if (!array_is_movable_scalar(src))
+        return false;
+
+    XrSystemHeap *heap = xr_isolate_get_sys_heap(X);
+    if (!heap)
+        return false;
+    XrGCHeader *th = (XrGCHeader *) xr_sysheap_alloc_shared(heap, sizeof(XrArray), XR_TARRAY);
+    if (!th)
+        return false;
+    th->objsize = (uint32_t) sizeof(XrArray);
+    xr_shared_init(th); /* storage = SHARED, atomic refcount = 1 (channel owns) */
+    XR_OBJ_SET_FLAG(th, XR_OBJ_TRANSIT);
+
+    XrArray *t = (XrArray *) th;
+    t->data = src->data; /* steal the buffer — no element copy */
+    t->length = src->length;
+    t->capacity = src->capacity;
+    t->source = NULL;
+    t->elem_type = src->elem_type;
+    t->elem_size = src->elem_size;
+    t->elem_tid = src->elem_tid;
+    t->has_gc_ptrs = 0;
+    t->data_on_gc_heap = 0;
+    memset(t->_pad, 0, sizeof(t->_pad));
+
+    /* Detach the buffer from the source so the caller's subsequent destruction
+     * of the (now empty) source struct does not free the moved buffer, and
+     * remove its bytes from the sender heap's external accounting (the transit
+     * object carries no per-coro accounting). */
+    size_t data_bytes = (size_t) src->elem_size * (size_t) src->capacity;
+    src->data = NULL;
+    src->capacity = 0;
+    src->length = 0;
+    xr_gc_sub_external(xr_current_coro_gc(), (int64_t) data_bytes);
+
+    *out = XR_FROM_PTR(t);
+    return true;
+}
+
+bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
+                                          struct XrCoroutine *recv_coro, XrValue *out) {
+    if (!X || !out || !recv_coro || !XR_IS_PTR(value))
+        return false;
+    XrGCHeader *obj = XR_VALUE_GCPTR(value);
+    if (!obj || XR_GC_GET_TYPE(obj) != XR_TARRAY || !XR_OBJ_GET_FLAG(obj, XR_OBJ_TRANSIT))
+        return false;
+    /* Only the channel may reference this transit graph; an aliased graph must
+     * be deep-copied so the other holders keep a live buffer. */
+    if (xr_shared_get_refc(obj) != 1)
+        return false;
+    XrArray *t = (XrArray *) obj;
+    if (!array_is_movable_scalar(t))
+        return false;
+
+    XrCoroGC *dst_gc = xr_coro_ensure_gc(recv_coro);
+    if (!dst_gc)
+        return false;
+    XrGCHeader *rh = xr_coro_gc_newobj(dst_gc, XR_TARRAY, sizeof(XrArray));
+    if (!rh)
+        return false; /* OOM: caller falls back to the deep-copy path */
+
+    XrArray *r = (XrArray *) rh;
+    r->data = t->data; /* steal the buffer — no element copy */
+    r->length = t->length;
+    r->capacity = t->capacity;
+    r->source = NULL;
+    r->elem_type = t->elem_type;
+    r->elem_size = t->elem_size;
+    r->elem_tid = t->elem_tid;
+    r->has_gc_ptrs = 0;
+    r->data_on_gc_heap = 0; /* malloc-backed buffer, freed by the array dtor */
+    memset(r->_pad, 0, sizeof(r->_pad));
+
+    size_t data_bytes = (size_t) t->elem_size * (size_t) t->capacity;
+    xr_gc_add_external(dst_gc, (int64_t) data_bytes);
+
+    /* Detach the buffer from the transit struct so releasing the last channel
+     * reference frees only the now-empty struct, not the adopted buffer. */
+    t->data = NULL;
+    t->capacity = 0;
+    t->length = 0;
+    xr_chan_transit_release(value);
+
+    *out = XR_FROM_PTR(r);
+    return true;
 }
 
 XrValue xr_deep_copy_counted(struct XrayIsolate *X, XrValue value, struct XrGC *dst_gc,
@@ -789,6 +919,12 @@ XrValue xr_to_shared(struct XrayIsolate *X, XrValue value) {
         return value;
     XrGCHeader *obj = XR_VALUE_GCPTR(value);
     if (!obj)
+        return value;
+    /* Immortal fixed-heap singletons (enum descriptors, classes) are global
+     * and already coroutine-independent; a structural copy would corrupt their
+     * native C-struct members. Share by pointer (see xr_deep_copy_with_ctx). */
+    if (XR_OBJ_GET_FLAG(obj, XR_OBJ_MANAGED) &&
+        xr_rc_is_sticky(atomic_load_explicit(&obj->refcount, memory_order_relaxed)))
         return value;
     // Already shared: no-op (do NOT incref — caller already owns the reference)
     if (XR_GC_IS_SHARED(obj))

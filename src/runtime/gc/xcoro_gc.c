@@ -114,8 +114,7 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
 /*
  * Reset GC runtime state fields to initial values.
  * Shared by xr_coro_gc_create and xr_coro_gc_reset.
- * Does NOT touch: region heap, tuning params (gc_pause, gc_stepmul),
- * or owner pointer.
+ * Does NOT touch: region heap or owner pointer.
  */
 static void gc_init_runtime_state(XrCoroGC *gc) {
     gc->totalbytes = 0;
@@ -133,7 +132,7 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
 
 /* ========== Coroutine GC Lifecycle ========== */
 
-XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config) {
+XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "gc_create: NULL coroutine");
     XrCoroGC *gc = NULL;
 
@@ -163,10 +162,6 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
     gc->region.sys_heap = coro->isolate ? coro->isolate->sys_heap : NULL;
 
     gc_init_runtime_state(gc);
-
-    gc->gc_pause = config && config->gc_pause > 0 ? config->gc_pause : XR_SPAWN_CORO_GC_PAUSE;
-    gc->gc_stepmul =
-        config && config->gc_stepmul > 0 ? config->gc_stepmul : XR_SPAWN_CORO_GC_STEPMUL;
 
     gc->owner = coro;
 
@@ -415,17 +410,12 @@ static inline void gc_post_region_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t t
                                         uint32_t total) {
     (void) gc;
     (void) type;
+    // Per-block accounting drives whole-block reclaim (alloc_count tally vs
+    // freelist dead-slot tally). No line bitmap: under pure RC there is no
+    // intra-block reclamation, so occupancy is not tracked per line.
     XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj);
     block->alloc_count++;
     block->alloc_bytes += (int64_t) total;
-
-    // Mark alloc_marks so allocator knows these lines are occupied.
-    // NOTE: Do NOT advance mark_cursor here. JIT inline allocs bump
-    // cursor without setting alloc_marks; advancing mark_cursor would
-    // skip those unmarked lines, causing hole scanner to treat them as
-    // free. flush_marks (called in slow path) will batch-mark from
-    // mark_cursor to cursor, covering both JIT and interpreter allocs.
-    xr_region_mark_alloc_lines_fast(obj, total);
 }
 
 /*
@@ -516,8 +506,6 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
      * a block's counters when it is reused). */
     for (XrRegionBlock *b = h->full_blocks; b; b = b->next)
         b->reclaim_dead_count = 0;
-    for (XrRegionBlock *b = h->recycle_blocks; b; b = b->next)
-        b->reclaim_dead_count = 0;
     if (h->current_block)
         h->current_block->reclaim_dead_count = 0;
 
@@ -537,10 +525,6 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
      * freelisted (cls < 0) never appear in the tally, so a block holding one
      * simply will not reach alloc_count and is conservatively kept. */
     for (XrRegionBlock *b = h->full_blocks; b; b = b->next) {
-        if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
-            b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
-    }
-    for (XrRegionBlock *b = h->recycle_blocks; b; b = b->next) {
         if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
             b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
     }
@@ -577,20 +561,6 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
         b = next;
     }
     h->full_blocks = new_full;
-
-    XrRegionBlock *new_recycle = NULL;
-    for (XrRegionBlock *b = h->recycle_blocks; b;) {
-        XrRegionBlock *next = b->next;
-        if (b->reclaim_dead_count == XR_BLOCK_RECLAIM_MARK) {
-            b->next = h->free_blocks;
-            h->free_blocks = b;
-        } else {
-            b->next = new_recycle;
-            new_recycle = b;
-        }
-        b = next;
-    }
-    h->recycle_blocks = new_recycle;
 }
 
 /* Maximum recursive destroy depth before switching to deferred mode.
@@ -785,15 +755,12 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
     printf("=== XrCoroGC (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
     printf("GC count:     %u\n", gc->gc_count);
-    printf("GC pause:     %d%%\n", gc->gc_pause);
-    printf("GC stepmul:   %d\n", gc->gc_stepmul);
 
     XrRegionStats istats;
     xr_region_get_stats(&gc->region, &istats);
-    printf("Region blocks:   %zu (full=%zu recycle=%zu free=%zu)\n", istats.total_blocks,
-           istats.full_blocks, istats.recycle_blocks, istats.free_blocks);
+    printf("Region blocks:   %zu (full=%zu free=%zu)\n", istats.total_blocks, istats.full_blocks,
+           istats.free_blocks);
     printf("Region memory:   %zu bytes\n", istats.total_bytes);
-    printf("Region lines:    live=%zu free=%zu\n", istats.live_lines, istats.free_lines);
 
     printf("Object count:   %u\n", gc->object_count);
 
@@ -816,30 +783,12 @@ XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
         return NULL;
     XR_DCHECK(type < XGC_MAX_TYPES, "jit_alloc: invalid GC type");
     XR_DCHECK(size >= sizeof(XrGCHeader), "jit_alloc: size too small");
-    // Flush deferred alloc_marks from JIT inline allocs before calling
-    // xr_coro_gc_newobj, which advances mark_cursor = cursor after its
-    // own allocation. Without this flush, lines occupied by prior JIT
-    // inline allocs would never be marked, causing the hole scanner to
-    // treat them as free and allocate overlapping objects.
-    xr_region_flush_marks(&coro->coro_gc->region);
     return xr_coro_gc_newobj(coro->coro_gc, type, size);
 }
 
-// Lightweight alloc_marks setter for JIT inline alloc fast path.
-// CALL_C convention: (coro, obj_ptr_as_uint64)
-// Only sets line occupancy bits; stats are handled inline by JIT.
-void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
-    (void) coro;
-    void *p = (void *) (uintptr_t) obj_ptr;
-    if (!p)
-        return;
-    XrGCHeader *obj = (XrGCHeader *) p;
-    xr_region_mark_alloc_lines_fast(obj, obj->objsize);
-}
-
-// Fast path post-alloc: GC bookkeeping after inline bump succeeds
+// Fast path post-alloc: GC bookkeeping after inline bump succeeds.
 // GC header already initialized by JIT code. This handles:
-//   1. alloc_marks (line occupancy bitmap)
+//   1. per-block accounting (alloc_count / alloc_bytes)
 //   2. finalizer registration for objects that need teardown hooks
 //   3. stats update (totalbytes, object_count)
 // CALL_C convention: (coro, obj_ptr)

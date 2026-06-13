@@ -1,0 +1,10 @@
+// Regression for cross-module AOT LTO name collision (known_bugs BUG-1):
+// two modules export the same name `tag`. Each aliased import must bind to
+// its OWN module's export, not to a global by-name match. Before the fix,
+// both call sites resolved to the first `tag` in a flattened table, so at
+// least one printed the wrong value and this VM/AOT diff failed.
+import { tag as tag_a } from "./dup_name_a_lib"
+import { tag as tag_b } from "./dup_name_b_lib"
+
+print(tag_a())  // 111
+print(tag_b())  // 222

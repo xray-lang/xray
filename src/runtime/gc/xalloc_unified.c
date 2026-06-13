@@ -23,7 +23,7 @@ XrCoroGC *xr_coro_ensure_gc(struct XrCoroutine *coro) {
     XR_DCHECK(coro != NULL, "coro_ensure_gc: NULL coro");
     if (coro->coro_gc)
         return coro->coro_gc;
-    coro->coro_gc = xr_coro_gc_create(coro, NULL);
+    coro->coro_gc = xr_coro_gc_create(coro);
     return coro->coro_gc;
 }
 

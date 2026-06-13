@@ -62,6 +62,27 @@ XR_FUNC bool xi_own_type_is_rc(const XrType *type) {
     }
 }
 
+/* Whether a projection (field / element read) of this type could yield a heap
+ * reference, so its owner must stay live until the projection's last use. Only
+ * the fixed scalar value types are pure copies that never alias the owner;
+ * null / any / unknown are dynamic — a Json field typed `null` from its
+ * initializer can hold a reference after reassignment — so they conservatively
+ * count as possible references. */
+XR_FUNC bool xi_own_type_may_be_ref(const XrType *type) {
+    if (!type)
+        return true;
+    switch (type->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+        case XR_KIND_UNIT:
+        case XR_KIND_NEVER:
+            return false;
+        default:
+            return true;
+    }
+}
+
 /* ========== Use-Site Classification: borrow vs owned ========== */
 
 /* Does the using op |user_op| CONSUME (take ownership of) the argument at

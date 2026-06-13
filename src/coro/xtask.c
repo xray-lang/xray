@@ -31,6 +31,7 @@
 #include "xworker.h"
 #include "xchannel.h"
 #include "xdeep_copy.h"
+#include "../runtime/xshared.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../runtime/xisolate_internal.h"
@@ -78,8 +79,17 @@ XrTask *xr_task_create(XrRuntime *runtime, XrCoroutine *parent_coro, XrCoroutine
 
     /* Runtime-managed: Task handles can be observed by scheduler, awaiters,
      * and completion listeners across coroutine boundaries. dup/drop remain
-     * no-ops; the runtime registry releases handles at teardown. */
+     * no-ops; the runtime registry releases handles at teardown.
+     *
+     * The MANAGED no-op only takes effect on the cold RC path (rc < 0); a
+     * zero-initialized (calloc) refcount is thread-local "unique", so the
+     * compiler's hot-path drop would route a Task to xr_coro_gc_rc_free —
+     * subtracting bytes the per-coro gc never accounted (the Task lives on the
+     * system heap via xr_calloc), underflowing its byte counter. Seat the
+     * count in the atomic band so every dup/drop is the intended no-op (same
+     * contract as Channel). */
     XR_OBJ_SET_FLAG(&task->gc, XR_OBJ_MANAGED);
+    xr_shared_set_refc(&task->gc, 1);
 
     task->result = xr_null();
     task->error = xr_null();

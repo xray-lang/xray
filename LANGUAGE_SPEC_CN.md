@@ -3425,9 +3425,9 @@ xray 的并发是**协程 (goroutine 风格) + Channel + 强静态约束**。设
 |--|--|
 | 调度模型 | M:N（用户态协程 + 多 OS 线程） |
 | 调度策略 | 协作式（GC-safepoint）+ work-stealing |
-| 栈模型 | Segmented stack（按需扩展） |
-| 创建开销 | ~微秒级，KB 级初始栈 |
-| 上下文切换 | 用户态切栈，无 syscall |
+| 栈模型 | Stackless（每协程独立 VM 值栈 + 帧数组，按需增长，无原生 C 栈） |
+| 创建开销 | ~微秒级（初始 VM 值栈约 64 槽 + 4 帧，非原生栈） |
+| 上下文切换 | VM 上下文切换（保存/恢复 VM 帧），无原生栈切换、无 syscall |
 
 协程默认分布在多个 worker 线程上；运行时根据 CPU 核数自动设置 GOMAXPROCS 风格的并行度。
 
@@ -3544,6 +3544,8 @@ match t.poll() {
 ```
 
 **取消语义**：`cancel()` 设置取消标志；协程在下一个 safepoint（GC 检查点、Channel 操作、`await`、`yield`）检测到标志后抛出取消异常。plain `await` 已取消的 task 会抛 `TaskCancelled`；需要状态值时使用 `awaitResult()` 或 `awaitTimeout(ms)`。
+
+**看门狗强制取消**：运行时监控线程（sysmon）会强制取消**长时间不经过 safepoint**的协程——当某协程在 RUNNING 状态下心跳冻结超过阈值（默认 5 秒）时被标记取消。该阈值可经环境变量 `XRAY_SYSMON_CANCEL_MS` 配置（单位毫秒），设为 `0` 则**禁用**强制取消（仅在 ~100ms 时打印一次告警）。纯 CPU 紧循环若可能长时间运行，应在循环内插入 `yield` 以提供 safepoint，避免被看门狗误取消。
 
 ### 10.5 Channel
 

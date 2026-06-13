@@ -169,9 +169,31 @@ typedef struct XrWebSocket {
     void *tls_conn;
     void *tls_ctx;
 
-    // Partial send tracking (for non-blocking writev resume)
-    size_t send_offset;     // offset into payload for partial send resume
-    bool send_header_sent;  // true if frame header already sent
+    // Yieldable send: a fully-built frame (header + masked payload) is staged
+    // in send_frame_buf and drained non-blockingly across coroutine yields.
+    // A stable buffer is required because (a) a client frame's mask cannot be
+    // re-derived on retry and (b) TLS SSL_write must retry the same bytes.
+    // The buffer is reused across sends (grown on demand, freed on close).
+    char *send_frame_buf;     // staged frame bytes (owned)
+    size_t send_frame_cap;    // allocated capacity
+    size_t send_frame_len;    // staged frame length
+    size_t send_frame_off;    // bytes already drained
+    bool send_frame_pending;  // a staged send is mid-drain (resume continues it)
+    int send_wait_event;      // XR_WAIT_WRITE, or XR_WAIT_READ for a TLS WANT_READ
+    int recv_wait_event;      // XR_WAIT_READ, or XR_WAIT_WRITE for a TLS WANT_WRITE
+
+    // Yieldable client handshake progress. xr_ws_connect_start sets up
+    // DNS+socket+connect; xr_ws_connect_pump advances a CONNECT->TLS->SEND->RECV
+    // phase machine that never blocks the worker: it returns 0 (open), <0
+    // (-XrWsError) or a poll event (XR_WAIT_READ/WRITE) to wait for before the
+    // next pump. The handshake request is built once and drained, then the
+    // response is read, both across coroutine yields, so the connect cfunc holds
+    // no OS thread (no P handoff, no shared timer-wheel contention).
+    int connect_phase;       // WsConnectPhase
+    char *connect_buf;       // handshake request (SEND) then response (RECV); owned
+    size_t connect_buf_cap;  // allocated capacity of connect_buf
+    size_t connect_len;      // request bytes to send / response bytes received
+    size_t connect_off;      // request bytes already sent
 
     // Cork write buffer (batch multiple frames into single send)
     char *wbuf;    // heap-allocated write buffer
@@ -220,6 +242,17 @@ XR_FUNC void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X);
 
 // Connect to server
 XR_FUNC XrWsError xr_ws_connect(XrWebSocket *ws);
+
+// Yieldable client connect, split into a non-blocking phase machine so the
+// connect cfunc can suspend the coroutine instead of blocking a worker thread.
+//   xr_ws_connect_start: DNS + socket + non-blocking connect(). Returns a poll
+//     event to wait for (XR_WAIT_WRITE) on success, or a negative -XrWsError.
+//   xr_ws_connect_pump:  advance the handshake. Returns 0 when the connection is
+//     OPEN, a negative -XrWsError on failure, or a poll event (XR_WAIT_READ /
+//     XR_WAIT_WRITE) to wait for before calling pump again.
+// xr_ws_connect() above is the blocking wrapper around these two.
+XR_FUNC int xr_ws_connect_start(XrWebSocket *ws);
+XR_FUNC int xr_ws_connect_pump(XrWebSocket *ws);
 
 // Close connection
 XR_FUNC XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason);

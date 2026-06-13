@@ -30,14 +30,6 @@ fn test_gc_objects() {
     assert(objs >= 0)
 }
 
-// @test gc.state returns valid state string
-@test
-fn test_gc_state() {
-    let state = gc.state()
-    assert_eq(typeof(state), "string")
-    assert(state.length > 0)
-}
-
 // @test gc.collect does not crash
 @test
 fn test_gc_collect() {
@@ -45,11 +37,11 @@ fn test_gc_collect() {
     assert(true)
 }
 
-// @test gc.step does not crash
+// @test gc.cycles returns non-negative
 @test
-fn test_gc_step() {
-    gc.step()
-    assert(true)
+fn test_gc_cycles() {
+    let c = gc.cycles()
+    assert(c >= 0)
 }
 
 // @test allocation increases memory

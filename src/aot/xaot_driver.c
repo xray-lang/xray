@@ -42,6 +42,7 @@
 #include "xaot_verify.h"
 #include "../frontend/analyzer/xanalyzer.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
 #include <limits.h>
@@ -273,9 +274,16 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "z"))
             goto done;
 #ifdef XR_OS_MACOS
-        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG,
-                                           "-L/opt/homebrew/opt/openssl@3/lib"))
-            goto done;
+        {
+            /* Default to the Apple-Silicon Homebrew prefix, but allow an
+             * override for Intel Homebrew (/usr/local) or custom prefixes. */
+            const char *ssl_libdir = getenv("XRAY_OPENSSL_LIBDIR");
+            char ssl_flag[512];
+            snprintf(ssl_flag, sizeof(ssl_flag), "-L%s",
+                     ssl_libdir && ssl_libdir[0] ? ssl_libdir : "/opt/homebrew/opt/openssl@3/lib");
+            if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, ssl_flag))
+                goto done;
+        }
 #endif
 #ifdef XR_ENABLE_TLS
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "ssl"))
@@ -318,7 +326,7 @@ static int report_analyzer_diagnostics(XaAnalyzer *analyzer, const char *fallbac
     return error_count;
 }
 
-XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
+XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result) {
     XR_DCHECK(input_path != NULL, "xaot_build: NULL input_path");
     XR_DCHECK(result != NULL, "xaot_build: NULL result");
     memset(result, 0, sizeof(*result));
@@ -508,10 +516,14 @@ XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result) {
             goto fail_free_ir;
         }
     }
-    plan_dump = xaot_bundle_dump_plan(&aot_bundle);
-    if (!plan_dump) {
-        fprintf(stderr, "Error: failed to dump AOT prepare plan\n");
-        goto fail_free_ir;
+    /* The plan dump is O(functions x values) diagnostics; only build it when
+     * the caller actually wants it (--dump-xaot-plan). */
+    if (emit_plan_dump) {
+        plan_dump = xaot_bundle_dump_plan(&aot_bundle);
+        if (!plan_dump) {
+            fprintf(stderr, "Error: failed to dump AOT prepare plan\n");
+            goto fail_free_ir;
+        }
     }
 
     /* Graph ASTs must not be freed before compilation is done.

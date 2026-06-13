@@ -1,0 +1,9 @@
+// AOT module: exports `tag` (same name as dup_name_b_lib) to exercise
+// cross-module LTO name-collision resolution. See import_dup_names.xr.
+export fn tag() -> int {
+    return 111
+}
+
+export fn a_value() -> int {
+    return 1
+}

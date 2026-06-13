@@ -129,17 +129,14 @@ typedef struct XrCoroGC {
     // === Allocation accounting ===
     int64_t totalbytes;        // Total allocated bytes (gc.count / gc.info stats)
     uint8_t in_gc;             // Re-entry guard (teardown / reset)
-    uint8_t gc_disabled;       // gc.disable/enable counter (gc.isrunning)
+    uint8_t gc_disabled;       // gc.disable/enable counter: gates the automatic
+                               // cycle collector (xr_cycle_add_root auto-trigger)
     uint8_t cycle_collecting;  // Re-entry guard for the auto-triggered cycle collector
     uint8_t _pad1[5];          // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
     XrGCPtrSet large_set;  // All large objects (O(1) insert/remove)
     int64_t large_bytes;   // Total bytes registered in large_set
-
-    // GC tuning parameters (gc.setpause / gc.setstepmul — kept for API surface)
-    int gc_pause;
-    int gc_stepmul;
 
     // Ownership
     struct XrCoroutine *owner;
@@ -194,27 +191,9 @@ typedef struct XrCoroGC {
 #define XR_REGION_OFFSET_CURSOR offsetof(XrRegionHeap, cursor)
 #define XR_REGION_OFFSET_LIMIT offsetof(XrRegionHeap, limit)
 
-/* ========== Coroutine GC Configuration ========== */
-
-typedef struct XrCoroGCConfig {
-    size_t gc_threshold;  // GC trigger threshold (bytes)
-    int gc_pause;         // Pause multiplier (100 = collect when memory doubles)
-    int gc_stepmul;       // Step multiplier (controls GC speed vs mutator)
-} XrCoroGCConfig;
-
-// Main coroutine defaults (long-lived, lower GC pressure)
-#define XR_MAIN_CORO_GC_THRESHOLD (8 * 1024 * 1024)  // 8MB
-#define XR_MAIN_CORO_GC_PAUSE 200                    // Collect at 200% (more delay)
-#define XR_MAIN_CORO_GC_STEPMUL 100                  // Slower GC steps
-
-// Spawn coroutine defaults (short-lived, faster reclaim)
-#define XR_SPAWN_CORO_GC_THRESHOLD (32 * 1024)  // 32KB
-#define XR_SPAWN_CORO_GC_PAUSE 100              // Collect at 100% (standard)
-#define XR_SPAWN_CORO_GC_STEPMUL 200            // Faster GC steps
-
 /* ========== Coroutine GC Lifecycle API ========== */
 
-XR_FUNC XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *config);
+XR_FUNC XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro);
 XR_FUNC void xr_coro_gc_destroy(XrCoroGC *gc);
 XR_FUNC void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner);
 

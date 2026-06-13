@@ -31,10 +31,22 @@ int64_t get_current_time_us(void) {
 
 // ========== Syscall Enter/Exit (P Handoff) ==========
 
+// Per-OS-thread syscall nesting depth. A SLOW cfunc releases P at dispatch
+// (entersyscall) and its body may invoke another blocking helper that also
+// enters a syscall (e.g. ws.connect -> dns_resolve). Only the outermost
+// entersyscall/exitsyscall on a thread may hand off / reclaim P; a nested
+// entersyscall would hand the SAME P to a second handoff M, so two Ms would
+// drive one P (data races and a NULL worker->m crash in the scheduler loop).
+static XR_THREAD_LOCAL int tls_syscall_depth = 0;
+
 void xr_worker_entersyscall(void) {
     XrWorker *worker = tls_current_worker;
     XrMachine *m = tls_current_machine;
     if (!worker || !m)
+        return;
+
+    // Only the outermost syscall on this thread hands off P.
+    if (tls_syscall_depth++ > 0)
         return;
 
     XrRuntime *runtime = worker->p.runtime;
@@ -69,6 +81,13 @@ void xr_worker_entersyscall(void) {
 void xr_worker_exitsyscall(void) {
     XrMachine *m = tls_current_machine;
     if (!m)
+        return;
+
+    // Mirror entersyscall's nesting guard: nested exits only unwind the depth;
+    // only the outermost exit reclaims P.
+    if (tls_syscall_depth == 0)
+        return;
+    if (--tls_syscall_depth > 0)
         return;
 
     XrWorker *worker = m->blocked_worker;
@@ -197,19 +216,25 @@ handoff_restart:;
         }
     }
 
-    // Release P and unbind.
-    // handoff_sync wake must follow current_m = NULL so the exitsyscall
-    // waiter sees the NULL when it re-checks after futex return.
-    atomic_store(&m->current_p, NULL);
-    atomic_store_explicit(&p->current_m, NULL, memory_order_release);
-    atomic_store_explicit(&p->handoff_sync, 1, memory_order_release);
-    xr_park_futex_wake(&p->handoff_sync);
-    atomic_store(&p->status, P_IDLE);
+    // Unbind this M from the Worker and fully quiesce it BEFORE releasing P.
+    // exitsyscall synchronizes on p->current_m == NULL and then re-binds the
+    // original M (worker->m = m; xr_acquirep sets status = P_RUNNING). If the
+    // handoff M cleared worker->m / set status = P_IDLE AFTER that release it
+    // would race the returning original M and clobber its restore, leaving
+    // worker->m == NULL while worker_loop keeps running (NULL deref / UAF on
+    // worker->m->spinning). Releasing p->current_m is the single publish point,
+    // so every store the original M must observe precedes it; the handoff_sync
+    // wake follows the release so a futex waiter re-reads the NULL.
     worker->m = NULL;
     atomic_store_explicit(&m->current_coro, NULL, memory_order_relaxed);
     atomic_store(&m->state, M_PARKED);
     tls_current_worker = NULL;
     tls_current_machine = NULL;
+    atomic_store(&m->current_p, NULL);
+    atomic_store(&p->status, P_IDLE);
+    atomic_store_explicit(&p->current_m, NULL, memory_order_release);
+    atomic_store_explicit(&p->handoff_sync, 1, memory_order_release);
+    xr_park_futex_wake(&p->handoff_sync);
 
 handoff_park:
     // Park this M into idle pool, keeping thread alive for reuse

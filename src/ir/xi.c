@@ -310,6 +310,28 @@ void xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
 
 /* ========== Value Construction ========== */
 
+/* Initialize the scalar fields every XiValue needs before any pass (notably
+ * the register allocator) reads them. The arena is NOT zero-initialized
+ * (xr_malloc), so this MUST set every field whose correct default is non-zero:
+ * var_id (0xFF "no source variable", NOT 0 which is variable #0), rep
+ * (XR_REP_TAGGED) and uses (-1). Shared by value_alloc() and xi_phi_new() so
+ * the two construction paths can never drift — a missing var_id init in the
+ * phi path silently coalesced temporary phis (&& / || / ternary results) onto
+ * variable #0's register in reg_of(), clobbering that live local. The caller
+ * assigns args[] (sized differently for phis vs. regular values). */
+static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, struct XrType *type,
+                                        uint16_t nargs, XiBlock *blk) {
+    v->id = id;
+    v->op = op;
+    v->flags = xi_op_default_effects(op);
+    v->rep = XR_REP_TAGGED; /* default until select_rep assigns concrete rep */
+    v->var_id = 0xFF;       /* no source variable */
+    v->type = type;
+    v->nargs = nargs;
+    v->uses = -1; /* not yet computed */
+    v->block = blk;
+}
+
 static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType *type,
                             uint16_t nargs) {
     XR_DCHECK(f != NULL, "value_alloc: f is NULL");
@@ -320,15 +342,7 @@ static XiValue *value_alloc(XiFunc *f, XiBlock *blk, uint16_t op, struct XrType 
     if (!v)
         return NULL;
 
-    v->id = f->next_value_id++;
-    v->op = op;
-    v->flags = xi_op_default_effects(op);
-    v->rep = XR_REP_TAGGED; /* default until select_rep assigns concrete rep */
-    v->type = type;
-    v->var_id = 0xFF; /* no source variable */
-    v->nargs = nargs;
-    v->uses = -1; /* not yet computed */
-    v->block = blk;
+    xi_value_init_fields(v, f->next_value_id++, op, type, nargs, blk);
 
     if (nargs > 0) {
         v->args = (XiValue **) arena_alloc(f, nargs * sizeof(XiValue *));
@@ -510,12 +524,9 @@ XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds)
     if (!phi)
         return NULL;
 
-    phi->value.id = f->next_value_id++;
-    phi->value.op = XI_PHI;
-    phi->value.type = type;
-    phi->value.nargs = npreds;
-    phi->value.uses = -1;
-    phi->value.block = blk;
+    /* Shared field init (var_id=0xFF etc.); a real variable phi's var_id is
+     * overwritten by the Braun SSA construction after this call. */
+    xi_value_init_fields(&phi->value, f->next_value_id++, XI_PHI, type, npreds, blk);
 
     if (npreds > 0) {
         phi->value.args = (XiValue **) arena_alloc(f, npreds * sizeof(XiValue *));

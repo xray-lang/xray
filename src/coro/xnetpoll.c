@@ -218,6 +218,17 @@ bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
     // observes each kernel event and routes it through
     // xr_netpoll_unblock → cond_signal.
     XrNetpoll *np = pd->netpoll;
+
+    // P/M handoff: this OS thread is about to block in cond_wait, which would
+    // otherwise pin its P (run queue + timer wheel) for the whole I/O wait and
+    // starve every other coroutine on the same P (head-of-line blocking).
+    // entersyscall detaches P and hands it to an idle/handoff M so sibling
+    // coroutines keep running; exitsyscall re-acquires P before we return.
+    // No-op when there is no worker (bootstrap/CLI) or in single-worker mode
+    // (just marks P_SYSCALL so sysmon does not flag the legitimate stall);
+    // the self-driving poll below still advances the only worker in that case.
+    xr_worker_entersyscall();
+
     xr_mutex_lock(&pd->block_mu);
     while (atomic_load(gpp) == XR_PD_WAIT && !atomic_load(&pd->closing)) {
         // 1ms timeout balances responsiveness against wakeup overhead.
@@ -230,7 +241,10 @@ bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
         }
         // Release the per-pd mutex while polling so xr_netpoll_unblock
         // (which takes block_mu before cond_signal) can run on this
-        // very thread without deadlocking.
+        // very thread without deadlocking. Safe without P: xr_netpoll_poll
+        // operates on the global netpoll and is MT-safe — in multi-worker
+        // mode the handoff M drives the same P's poll concurrently and the
+        // poll only needs to observe the kernel event once.
         xr_mutex_unlock(&pd->block_mu);
         XrReadyList ready = xr_netpoll_poll(np, 0);
         (void) ready;  // Ready coros, if any, will be picked up by the
@@ -239,6 +253,9 @@ bool xr_netpoll_block_sync(XrPollDesc *pd, int mode, XrayIsolate *X) {
         xr_mutex_lock(&pd->block_mu);
     }
     xr_mutex_unlock(&pd->block_mu);
+
+    // Re-acquire P before returning to the interpreter/cfunc caller.
+    xr_worker_exitsyscall();
 
     uintptr_t old = atomic_exchange(gpp, XR_PD_NIL);
     return old == XR_PD_READY;

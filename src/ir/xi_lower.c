@@ -454,6 +454,45 @@ XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
 
 /* ========== Function Lowering Implementation ========== */
 
+#if XR_DEBUG
+/* Defense-in-depth assertion (debug/CI only): on the freshly lowered RAW IR,
+ * before any optimization pass runs, every value's var_id must be either the
+ * 0xFF "no source variable" sentinel or a real index < var_count. Register
+ * coalescing in xi_emit (reg_of) keys on var_id, so a stray one silently pins
+ * an unrelated value onto a live local's register — the exact failure that made
+ * a temporary && / || / ternary phi clobber variable #0. This lives here, NOT
+ * in xi_verify: inlining clones callee values keeping their own var_ids (which
+ * are out of the caller's range), and xi_verify also runs post-inline, so the
+ * bound only holds on the pre-inline IR available at lowering time. */
+static void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
+    if (!f)
+        return;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *v = blk->values[i];
+            if (!v)
+                continue;
+            XR_DCHECK_FMT(v->var_id == 0xFF || v->var_id < l->var_count,
+                          "xi_lower: func '%s' v%u (op=%u) has var_id=%u >= var_count=%d",
+                          f->name ? f->name : "?", v->id, v->op, v->var_id, l->var_count);
+        }
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            XR_DCHECK_FMT(phi->value.var_id == 0xFF || phi->value.var_id < l->var_count,
+                          "xi_lower: func '%s' phi v%u has var_id=%u >= var_count=%d",
+                          f->name ? f->name : "?", phi->value.id, phi->value.var_id, l->var_count);
+        }
+    }
+}
+#else
+static inline void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
+    (void) l;
+    (void) f;
+}
+#endif
+
 /*
  * Internal function lowering with optional parent context.
  * When parent is non-NULL, the child can resolve variable references
@@ -617,6 +656,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
     if (result) {
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
     return result;
@@ -1079,6 +1119,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     if (result) {
         result->stage = XI_STAGE_RAW;
         result->invariant_mask = xi_stage_invariants(XI_STAGE_RAW);
+        xi_lower_assert_var_ids(&l, result);
     }
     xi_lower_cleanup(&l);
     return result;

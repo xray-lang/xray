@@ -53,6 +53,30 @@ static inline XrValue xr_chan_prepare_send(struct XrayIsolate *isolate, XrValue 
         return value; /* already prepared (blocked-send retry path) */
     if (!xr_value_needs_copy(value))
         return value;
+    /* Zero-copy move fast path applies ONLY to coroutine-local (non-shared)
+     * sources we uniquely own. Shared-by-pointer values must keep the original
+     * copy-then-drop order: deep_copy increfs them and hands them out by
+     * pointer, and the drop rebalances — dropping first then rc_destroy would
+     * free a shared const value the receiver still aliases. drop_is_last is
+     * mutating, so it is evaluated exactly once on each path. */
+    bool coro_local = obj && !XR_GC_IS_SHARED(obj);
+    if (coro_local && xr_obj_drop_is_last((XrObjHeader *) obj)) {
+        /* Unique owner (move semantics): steal the buffer for self-contained
+         * scalar arrays, else deep-copy. Either way free the source struct. */
+        XrValue moved;
+        if (xr_chan_try_move_array_to_transit(isolate, value, &moved)) {
+            xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj); /* free emptied source struct */
+            return moved;
+        }
+        XrValue copied = xr_deep_copy_to_transit(isolate, value);
+        xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
+        return copied;
+    }
+    if (coro_local) {
+        /* Not the last reference (already dropped above): copy, no destroy. */
+        return xr_deep_copy_to_transit(isolate, value);
+    }
+    /* Shared / pointer-shared values: original copy-then-drop order. */
     XrValue copied = xr_deep_copy_to_transit(isolate, value);
     if (obj && xr_obj_drop_is_last((XrObjHeader *) obj))
         xr_coro_gc_rc_destroy(xr_current_coro_gc(), obj);
@@ -96,6 +120,12 @@ static inline XrValue xr_chan_copy_recv(struct XrayIsolate *isolate, XrValue val
         return value;
     if (!xr_value_needs_copy(value))
         return value;
+    /* Zero-copy adopt: if the transit value is a uniquely-owned self-contained
+     * scalar array, steal its buffer into the receiver heap instead of copying;
+     * the helper releases the emptied transit struct on success. */
+    XrValue adopted;
+    if (xr_chan_try_adopt_array_from_transit(isolate, value, recv_coro, &adopted))
+        return adopted;
     XrValue copied = xr_deep_copy_to_coro(isolate, value, recv_coro);
     xr_chan_transit_release(value);
     return copied;

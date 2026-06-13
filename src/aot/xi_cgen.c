@@ -440,7 +440,15 @@ static void cg_register_class_methods(XiCgenCtx *ctx, const XiFunc *parent, cons
         if (!m->is_constructor && !m->is_static && m->name) {
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
-                if (idx < parent->nchildren && ctx->nmethod < CG_MAX_METHODS) {
+                if (idx < parent->nchildren) {
+                    if (ctx->nmethod >= CG_MAX_METHODS) {
+                        ctx->error = true;
+                        fprintf(stderr,
+                                "[xi_cgen] ERROR: too many AOT class methods "
+                                "(limit %d); raise CG_MAX_METHODS\n",
+                                CG_MAX_METHODS);
+                        return;
+                    }
                     ctx->methods[ctx->nmethod].class_name = cd->class_name;
                     ctx->methods[ctx->nmethod].name = m->name;
                     ctx->methods[ctx->nmethod].func = parent->children[idx];
@@ -542,6 +550,20 @@ static void cg_init_from_module(XiCgenCtx *ctx, XiModule *mod) {
     XR_DCHECK(mod != NULL, "cg_init_from_module: NULL module");
     XR_DCHECK(mod->init != NULL, "cg_init_from_module: NULL init func");
 
+    /* Fixed-capacity shared-slot tables: refuse an oversized module with a
+     * hard error instead of silently dropping high slots — a dropped slot
+     * would miscompile every reference at or above the cap. */
+    if (mod->init->nshared > CG_MAX_SHARED || mod->nslots > CG_MAX_SHARED) {
+        ctx->error = true;
+        fprintf(stderr,
+                "[xi_cgen] ERROR: module '%s' shared slots (%u) exceed AOT limit %d; "
+                "raise CG_MAX_SHARED\n",
+                mod->name ? mod->name : "?",
+                (unsigned) (mod->init->nshared > mod->nslots ? mod->init->nshared : mod->nslots),
+                CG_MAX_SHARED);
+        return;
+    }
+
     memset(ctx->shared_funcs, 0, sizeof(ctx->shared_funcs));
     memset(ctx->shared_class, 0, sizeof(ctx->shared_class));
     memset(ctx->shared_enum, 0, sizeof(ctx->shared_enum));
@@ -550,8 +572,8 @@ static void cg_init_from_module(XiCgenCtx *ctx, XiModule *mod) {
     ctx->nmethod = 0;
     ctx->module = mod;
 
-    /* Copy slot mappings from module metadata */
-    uint16_t nslots = mod->nslots < CG_MAX_SHARED ? mod->nslots : CG_MAX_SHARED;
+    /* Copy slot mappings from module metadata (bounds enforced above). */
+    uint16_t nslots = mod->nslots;
     if (mod->slot_funcs) {
         for (uint16_t s = 0; s < nslots; s++)
             ctx->shared_funcs[s] = mod->slot_funcs[s];
@@ -1173,6 +1195,49 @@ static bool cg_has_exception_handling(const XiFunc *f) {
     return false;
 }
 
+/* Whether an SSA value is skipped when pre-declaring all values at function
+ * top (the exception-handling path).  A value is skipped here exactly when
+ * emit_value_stmt does NOT introduce a plain `type vN = ...;` local for it —
+ * void-like / exception markers, inlined structs, and the class-native /
+ * array / shared-native special cases whose `*_is_elided` / `*_can_inline`
+ * predicate is mirrored below.
+ *
+ * INVARIANT: keep this set in lockstep with emit_value_stmt.  A value
+ * declared here but elided there is only an unused-variable warning; a value
+ * skipped here but assigned there is a use-before-declaration C error. */
+static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (!v)
+        return true;
+    if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
+        return true;
+    if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
+        return true;
+    if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
+                                                   cg_value_is_elided_heap_struct_alias(ctx, f, v)))
+        return true;
+    if (cg_class_native_value_stmt_is_elided(ctx, f, v) ||
+        cg_class_native_ctor_can_inline(ctx, f, v) ||
+        cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
+        cg_class_shared_native_set_is_elided(ctx, f, v) ||
+        cg_class_shared_native_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_array_class_field_alloc_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_class_native_map_field_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_class_native_set_field_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
+        cg_class_native_set_method_call_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_array_typed_push_value_is_elided(ctx, f, v))
+        return true;
+    if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
+        cg_value_is_elided_heap_struct_alias(ctx, f, v))
+        return true;
+    return false;
+}
+
 /* Collect all values and phis to declare at function top.
  * When the function contains exception handling (setjmp/goto),
  * ALL SSA values are pre-declared to avoid jumping over decls. */
@@ -1211,36 +1276,7 @@ static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
         if (pre_decl_all) {
             for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
                 const XiValue *v = blk->values[vi];
-                if (!v)
-                    continue;
-                /* Skip void-like ops, exception ops, and inlined structs */
-                if (cg_is_void_like(v) || v->op == XI_TRY || v->op == XI_END_TRY)
-                    continue;
-                if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v))
-                    continue;
-                if ((v->op == XI_COPY || v->op == XI_MOVE) &&
-                    (cg_value_traces_to_inlined_struct(f, v) ||
-                     cg_value_is_elided_heap_struct_alias(ctx, f, v)))
-                    continue;
-                if (cg_class_native_value_stmt_is_elided(ctx, f, v) ||
-                    cg_class_native_ctor_can_inline(ctx, f, v) ||
-                    cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
-                    cg_class_shared_native_set_is_elided(ctx, f, v) ||
-                    cg_class_shared_native_value_is_elided(ctx, f, v))
-                    continue;
-                if (cg_array_class_field_alloc_value_is_elided(ctx, f, v))
-                    continue;
-                if (cg_class_native_map_field_value_is_elided(ctx, f, v))
-                    continue;
-                if (cg_class_native_set_field_value_is_elided(ctx, f, v))
-                    continue;
-                if (cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
-                    cg_class_native_set_method_call_value_is_elided(ctx, f, v))
-                    continue;
-                if (cg_array_typed_push_value_is_elided(ctx, f, v))
-                    continue;
-                if ((v->op == XI_GET_SHARED && cg_value_only_used_by_inlined_struct_new(f, v)) ||
-                    cg_value_is_elided_heap_struct_alias(ctx, f, v))
+                if (cg_value_skips_predecl(ctx, f, v))
                     continue;
                 XrRep rep = cg_value_plan_storage_rep(ctx, v);
                 fprintf(out, "    %s ", local_ctype_str_ctx(ctx, f, v));

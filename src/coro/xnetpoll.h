@@ -183,14 +183,21 @@ typedef struct XrNetpollOps {
 // ========== Global Netpoll State ==========
 
 // Two-level segmented fd_map: fd_map[fd >> 8][fd & 0xFF]
-// First level: 256 page pointers (fixed, ~2KB)
+// First level: XR_FDMAP_PAGES page pointers (fixed, 8 bytes each)
 // Second level: 256-entry pages, allocated on demand (~2KB each)
-// Total capacity: 65536 fds, base overhead: ~2KB (vs ~512KB flat array)
+// Capacity = XR_FDMAP_PAGES * 256 fds. Default 1024 pages -> 262144 fds, which
+// covers the common server ulimit -n (often 65536..262144); the first level is
+// ~8KB of pointers (one global netpoll) and second-level pages stay on demand.
+// Overridable at compile time (-DXR_FDMAP_PAGES=N) for hosts with a higher fd
+// ceiling. An fd at/above the cap is rejected by the bounds checks below rather
+// than corrupting memory.
 #define XR_FDMAP_PAGE_BITS 8
-#define XR_FDMAP_PAGE_SIZE (1 << XR_FDMAP_PAGE_BITS)             // 256
-#define XR_FDMAP_PAGE_MASK (XR_FDMAP_PAGE_SIZE - 1)              // 0xFF
-#define XR_FDMAP_PAGES 256                                       // 256 pages
-#define XR_NETPOLL_FD_MAX (XR_FDMAP_PAGES * XR_FDMAP_PAGE_SIZE)  // 65536
+#define XR_FDMAP_PAGE_SIZE (1 << XR_FDMAP_PAGE_BITS)  // 256
+#define XR_FDMAP_PAGE_MASK (XR_FDMAP_PAGE_SIZE - 1)   // 0xFF
+#ifndef XR_FDMAP_PAGES
+#define XR_FDMAP_PAGES 1024  // 1024 pages
+#endif
+#define XR_NETPOLL_FD_MAX (XR_FDMAP_PAGES * XR_FDMAP_PAGE_SIZE)  // 262144 (default)
 
 typedef struct XrFdMapPage {
     _Atomic(XrPollDesc *) entries[XR_FDMAP_PAGE_SIZE];
