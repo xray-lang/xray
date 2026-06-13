@@ -21,3 +21,8 @@
 XM_RUNTIME_STUB(alloc,        xr_jit_alloc,        CALL_C_EXTRA_ARG,   2, PTR,  GC|STACKMAP, GC,   NONE)
 XM_RUNTIME_STUB(barrier_fwd,  xr_jit_barrier_fwd,  BARRIER_FWD_FIXED,  3, VOID, GC|STACKMAP, NONE, NONE)
 XM_RUNTIME_STUB(barrier_back, xr_jit_barrier_back, BARRIER_BACK_FIXED, 2, VOID, GC|STACKMAP, NONE, NONE)
+# RC slow paths for the inlined XM_RETAIN/XM_RELEASE fast path. The gc pointer
+# is passed via the extra-arg ABI; the helpers only run the cold cases
+# (atomic/managed/immortal dup, and unique-destroy/atomic/immortal drop).
+XM_RUNTIME_STUB(rc_dup,       xr_jit_rc_dup_ptr,   CALL_C_EXTRA_ARG,   2, VOID, NONE,        NONE, NONE)
+XM_RUNTIME_STUB(rc_drop,      xr_jit_rc_drop_ptr,  CALL_C_EXTRA_ARG,   2, VOID, NONE,        NONE, NONE)

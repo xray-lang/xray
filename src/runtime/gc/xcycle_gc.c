@@ -13,10 +13,11 @@
  * reference graph contains a cycle).
  *
  * Algorithm (Bacon & Rajan 2001, simplified):
- *   1. Potential roots: objects whose RC decremented but stayed > 0.
+ *   1. Potential roots: objects whose RC decremented but stayed alive.
  *   2. markGray: trial-decrement all children from each root.
- *   3. scan: if root RC > 0 after trial decrement, it is live (scanBlack
- *      restores children). Otherwise mark white (dead cycle member).
+ *   3. scan: if root RC >= 0 after trial decrement, it is live (0-based RC,
+ *      so >= 0 means an external reference survives; scanBlack restores
+ *      children). Otherwise mark white (dead cycle member).
  *   4. collect: gather the white set, RESTORE every white object's
  *      out-edge decrements, then run the normal RC destroy cascade on
  *      each white object. Restoring first means the type destructors
@@ -51,9 +52,6 @@
 
 /* Initial capacity for cycle_roots (lazy; NULL until first add). */
 #define XR_CYCLE_ROOTS_INIT_CAP 64
-
-/* Threshold: only run the collector when root count exceeds this. */
-#define XR_CYCLE_COLLECT_THRESHOLD 128
 
 /* Color encoding for trial deletion (extra bits 8-9, see xgc_header.h).
  * Every reachable object is recolored before its color is read in each
@@ -167,7 +165,12 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
              * XR_TCELL) are not traversed, so cycles closed exclusively
              * through captured closures stay uncollected (a leak, never a
              * corruption — untraversed edges count as external refs and
-             * keep the cycle alive). Strings/blobs hold no RC edges. */
+             * keep the cycle alive). This is correct ONLY while closure
+             * captures are uncounted borrows (the creating scope owns the
+             * cell): traversing/trial-decrementing an uncounted edge would
+             * corrupt refcounts. Enabling closure cycle collection requires
+             * the compiler to first make captures owned (counted) references
+             * with a balanced release on closure/cell destroy. */
             break;
     }
 }
@@ -206,6 +209,14 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
     uint32_t idx = gc->cycle_root_count++;
     gc->cycle_roots[idx] = obj;
     obj->_rsv = idx;
+
+    /* Auto-trigger: once the root set reaches the adaptive threshold, run the
+     * collector. Guarded against re-entry — the destroy cascade inside fullgc
+     * releases child references, which can call back here; cycle_collecting
+     * suppresses a nested collection (and the threshold check) until the
+     * current one finishes. */
+    if (!gc->cycle_collecting && gc->cycle_root_count >= gc->cycle_collect_threshold)
+        xr_coro_gc_fullgc(gc);
 }
 
 XR_FUNC void xr_cycle_remove_root(XrCoroGC *gc, XrGCHeader *obj) {
@@ -277,7 +288,11 @@ static void scan_visitor(XrGCHeader *child, void *ctx);
 static void scan(XrGCHeader *obj) {
     if (get_color(obj) != COLOR_GRAY)
         return;
-    if (obj->refcount > 0) {
+    /* 0-based RC: references = refcount + 1. After trial-decrementing every
+     * internal cycle edge, refcount == external_refs - 1, so refcount >= 0
+     * means an external reference survives (live); refcount == -1 means all
+     * references were internal (dead cycle member). */
+    if (obj->refcount >= 0) {
         /* Still reachable from outside the cycle — restore. */
         scan_black(obj);
     } else {
@@ -376,9 +391,18 @@ static void abort_restore_visitor(XrGCHeader *child, void *ctx) {
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
     if (!gc)
         return;
-    if (!gc->cycle_roots || gc->cycle_root_count == 0)
+    /* Re-entry guard: a destroy cascade started below can call add_root,
+     * whose auto-trigger would otherwise recurse into the collector. */
+    if (gc->cycle_collecting)
         return;
+    if (!gc->cycle_roots || gc->cycle_root_count == 0) {
+        /* No potential cycle roots, but a gc.collect() should still return
+         * fully-dead blocks: pure-RC programs free without forming cycles. */
+        xr_coro_gc_reclaim_blocks(gc);
+        return;
+    }
 
+    gc->cycle_collecting = 1;
     gc->gc_count++;
 
     uint32_t n = gc->cycle_root_count;
@@ -431,6 +455,8 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
                 xr_coro_gc_rc_destroy(gc, obj);
         }
     }
+    /* Productivity of this collection: objects reclaimed vs roots scanned. */
+    uint32_t freed = buf.oom ? 0u : buf.count;
     xr_free(buf.items);
 
     /* Reset the roots list. Surviving (non-dead) entries get their _rsv
@@ -444,4 +470,21 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
             obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     }
     gc->cycle_root_count = 0;
+
+    /* Adaptive threshold (Nim ORC feedback): a productive collect (reclaimed
+     * at least half the scanned roots) lowers the threshold so we collect more
+     * eagerly; an unproductive one raises it to avoid churn. Bounded below. */
+    if (freed * 2u >= n) {
+        uint32_t lowered = gc->cycle_collect_threshold * 2u / 3u;
+        gc->cycle_collect_threshold =
+            lowered < XR_CYCLE_COLLECT_THRESHOLD_MIN ? XR_CYCLE_COLLECT_THRESHOLD_MIN : lowered;
+    } else {
+        gc->cycle_collect_threshold += gc->cycle_collect_threshold / 2u;
+    }
+
+    gc->cycle_collecting = 0;
+
+    /* Cycle collection just freed dead cycles; reclaim any blocks that became
+     * fully dead so their memory can be reused by any size class. */
+    xr_coro_gc_reclaim_blocks(gc);
 }

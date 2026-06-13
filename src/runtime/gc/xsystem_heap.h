@@ -12,7 +12,7 @@
  *   These objects are NOT subject to per-coroutine GC.
  *
  * VS xcoro_gc (Per-Coroutine GC):
- *   - xcoro_gc: Per-coroutine Arena + Mark-Sweep, freed when coro ends
+ *   - xcoro_gc: Per-coroutine Immix bump + reference counting, freed when coro ends
  *   - xsystem_heap: Global, Arena-allocated (never freed) or ref-counted
  *
  * OBJECT TYPES:

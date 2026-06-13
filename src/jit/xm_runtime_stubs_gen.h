@@ -20,7 +20,9 @@ typedef enum {
     XM_RUNTIME_STUB_alloc = 0,
     XM_RUNTIME_STUB_barrier_fwd = 1,
     XM_RUNTIME_STUB_barrier_back = 2,
-    XM_RUNTIME_STUB__COUNT = 3
+    XM_RUNTIME_STUB_rc_dup = 3,
+    XM_RUNTIME_STUB_rc_drop = 4,
+    XM_RUNTIME_STUB__COUNT = 5
 } XmRuntimeStubId;
 
 typedef enum {
@@ -42,19 +44,23 @@ typedef struct {
     uint8_t post_call;
 } XmRuntimeStubInfo;
 
-#define XM_RUNTIME_STUB_COUNT 3
+#define XM_RUNTIME_STUB_COUNT 5
 
 #if defined(XM_RUNTIME_STUBS_DEFINE)
 XR_DATADEF const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT] = {
     {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd", XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
     {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back", XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_rc_dup, "rc_dup", "xr_jit_rc_dup_ptr", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_rc_drop, "rc_drop", "xr_jit_rc_drop_ptr", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0},
 };
 #elif defined(XM_RUNTIME_STUBS_IMPL)
 static const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT] = {
     {XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_PTR, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
     {XM_RUNTIME_STUB_barrier_fwd, "barrier_fwd", "xr_jit_barrier_fwd", XM_RUNTIME_STUB_ABI_BARRIER_FWD_FIXED, 3, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
     {XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back", XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_rc_dup, "rc_dup", "xr_jit_rc_dup_ptr", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0},
+    {XM_RUNTIME_STUB_rc_drop, "rc_drop", "xr_jit_rc_drop_ptr", XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0},
 };
 #else
 XR_DATA const XmRuntimeStubInfo xm_runtime_stub_info[XM_RUNTIME_STUB_COUNT];
@@ -77,6 +83,8 @@ XR_DATADEF const uintptr_t xm_runtime_stub_entries[XM_RUNTIME_STUB_COUNT] = {
     [XM_RUNTIME_STUB_alloc] = (uintptr_t) xr_jit_alloc,
     [XM_RUNTIME_STUB_barrier_fwd] = (uintptr_t) xr_jit_barrier_fwd,
     [XM_RUNTIME_STUB_barrier_back] = (uintptr_t) xr_jit_barrier_back,
+    [XM_RUNTIME_STUB_rc_dup] = (uintptr_t) xr_jit_rc_dup_ptr,
+    [XM_RUNTIME_STUB_rc_drop] = (uintptr_t) xr_jit_rc_drop_ptr,
 };
 #else
 XR_DATA const uintptr_t xm_runtime_stub_entries[XM_RUNTIME_STUB_COUNT];

@@ -1271,28 +1271,34 @@ static XmRef xi2xm_end_try(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xm_const_i64(ctx->xm_func, 0);
 }
 
+/* The native XM_RETAIN/RELEASE inline treats the operand register as a raw
+ * GC pointer. That is only valid when the value is a pointer-or-null at
+ * runtime (the inline null-checks the payload). xr_type_rep == XR_REP_PTR
+ * captures exactly that set (heap kinds, nullable heap, and all-pointer
+ * unions); everything else (scalars, mixed unions, unknown) keeps the tagged
+ * C-helper path, which does the runtime XR_IS_PTR check. */
+static bool rc_operand_is_heap_ptr(const XiValue *v) {
+    return v && v->nargs >= 1 && v->args[0] && xr_type_rep(v->args[0]->type) == XR_REP_PTR;
+}
+
 static XmRef xi2xm_retain(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (rc_operand_is_heap_ptr(v)) {
+        XmRef val = get_ref(ctx, v->args[0]);
+        xm_emit_unary(ctx->xm_func, blk, XM_RETAIN, XR_REP_VOID, val);
+        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
     return lower_ownership_helper(ctx, blk, v, XM_HELPER_rc_dup, "retain");
 }
 
 static XmRef xi2xm_release(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (rc_operand_is_heap_ptr(v)) {
+        XmRef val = get_ref(ctx, v->args[0]);
+        xm_emit_unary(ctx->xm_func, blk, XM_RELEASE, XR_REP_VOID, val);
+        blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
     return lower_ownership_helper(ctx, blk, v, XM_HELPER_rc_drop, "release");
-}
-
-static XmRef xi2xm_drop_reuse(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    XR_DCHECK(v->nargs >= 1, "drop_reuse: need value arg");
-    XmRef val = get_ref(ctx, v->args[0]);
-    XmRef extra = xm_const_i64(ctx->xm_func, 0);
-    XmRef args[1] = {val};
-    return emit_helper_call(ctx, blk, XM_HELPER_rc_drop_reuse, extra, args, 1);
-}
-
-static XmRef xi2xm_alloc_at(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    XR_DCHECK(v->nargs >= 1, "alloc_at: need token arg");
-    XmRef token = get_ref(ctx, v->args[0]);
-    XmRef extra_ref = xm_const_i64(ctx->xm_func, v->aux_int);
-    XmRef args[1] = {token};
-    return emit_helper_call(ctx, blk, XM_HELPER_rc_alloc_at, extra_ref, args, 1);
 }
 
 #define XI2XM_CMP_DRIVER(name, int_op, float_op, reverse, eq_like, ne_like)                        \

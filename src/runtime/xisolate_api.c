@@ -226,12 +226,6 @@ struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X) {
     return X ? X->analyzer_pool : NULL;
 }
 
-/* ========== Memory Tracker ========== */
-
-struct XrMemoryTracker *xr_isolate_get_memory_tracker(XrayIsolate *X) {
-    return X ? X->memory_tracker : NULL;
-}
-
 /* ========== Debug ========== */
 
 void *xr_isolate_get_debug_state(XrayIsolate *X) {

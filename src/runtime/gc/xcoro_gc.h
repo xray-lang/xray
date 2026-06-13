@@ -14,7 +14,7 @@
  *   - Coroutine teardown bulk-frees all Immix blocks and large objects.
  *
  * Allocation:
- *   - Small objects (≤4 KB): Immix bump-pointer inside 32 KB blocks;
+ *   - Small objects (≤4 KB): Immix bump-pointer inside 16 KB blocks;
  *     objects never move, C extensions are naturally safe.
  *   - Large objects (>4 KB): individual xr_malloc / os_mmap.
  *
@@ -127,10 +127,11 @@ typedef struct XrCoroGC {
     XrImmixHeap immix;
 
     // === Allocation accounting ===
-    int64_t totalbytes;   // Total allocated bytes (gc.count / gc.info stats)
-    uint8_t in_gc;        // Re-entry guard (teardown / reset)
-    uint8_t gc_disabled;  // gc.disable/enable counter (gc.isrunning)
-    uint8_t _pad1[6];     // alignment
+    int64_t totalbytes;        // Total allocated bytes (gc.count / gc.info stats)
+    uint8_t in_gc;             // Re-entry guard (teardown / reset)
+    uint8_t gc_disabled;       // gc.disable/enable counter (gc.isrunning)
+    uint8_t cycle_collecting;  // Re-entry guard for the auto-triggered cycle collector
+    uint8_t _pad1[5];          // alignment
 
     // === Large objects (malloc/mmap-backed; freed individually at teardown) ===
     XrGCPtrSet large_set;  // All large objects (O(1) insert/remove)
@@ -176,9 +177,10 @@ typedef struct XrCoroGC {
     // Potential cycle roots: objects whose type is XR_OBJ_CYCLE_CANDIDATE and
     // whose RC was decremented but did not reach zero. The collector runs on
     // gc.collect() and frees dead cycles that pure RC cannot reclaim.
-    XrGCHeader **cycle_roots;   // growable array of potential roots (NULL until first add)
-    uint32_t cycle_root_count;  // number of entries in cycle_roots
-    uint32_t cycle_root_cap;    // capacity of cycle_roots array
+    XrGCHeader **cycle_roots;          // growable array of potential roots (NULL until first add)
+    uint32_t cycle_root_count;         // number of entries in cycle_roots
+    uint32_t cycle_root_cap;           // capacity of cycle_roots array
+    uint32_t cycle_collect_threshold;  // auto-trigger fullgc when root count reaches this
 } XrCoroGC;
 
 /* ========== JIT Struct Offsets (compile-time constants) ========== */
@@ -248,30 +250,12 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj);
  * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
 XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 
-/* ========== Drop-Reuse API (Perceus-style in-place allocation) ==========
- *
- * When a unique (RC==1) object is dropped and the caller immediately needs
- * a new allocation of the same size class, the memory can be reused in-place
- * without going through the freelist. The compiler emits drop_reuse + alloc_at
- * pairs at match/constructor sites where the pattern applies.
- *
- * Flow:
- *   token = xr_rc_drop_reuse(gc, obj)
- *   new_obj = xr_rc_alloc_at(gc, token, type, size)
- *
- * If obj was unique → token is the reclaimed pointer (zero-alloc fast path).
- * If obj was shared  → token is NULL, normal alloc is used as fallback. */
-
-/* Drop an object and return its memory for immediate reuse if it was the last
- * reference (RC drops to zero). Returns the object pointer (reuse token) on
- * success, NULL if the object is still alive or is shared/region. The type
- * destructor is run before returning the token (fields are dead). */
-XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj);
-
-/* Allocate using a reuse token if available, otherwise fall back to normal
- * allocation. `token` is the result of xr_rc_drop_reuse (NULL = no reuse).
- * The returned object has a fresh header initialized to (type, size, rc=1). */
-XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type, size_t size);
+/* NOTE: Perceus-style drop-reuse (FBIP) is deliberately NOT implemented here.
+ * The per-coroutine size-class freelist above already reclaims and reuses
+ * same-size blocks correctly and automatically; a block-level drop-reuse would
+ * only duplicate it. True FBIP (in-place data-buffer/field reuse, e.g. a unique
+ * array map) requires consuming-receiver methods plus uniqueness/move proof and
+ * is tracked as a dedicated future effort, not a half-built op pair. */
 
 // Convenience macros
 #define xr_coro_gc_new_typed(gc, type, Type)                                                       \
@@ -280,6 +264,13 @@ XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type
 // Full GC cycle: runs the Bacon-Rajan trial deletion cycle collector on
 // accumulated cycle_roots, then clears the roots list. Called by gc.collect().
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
+
+/* Whole-block reclaim: return fully-dead Immix blocks to the heap's free pool
+ * so a later allocation of ANY size class can reuse them. Bounds peak
+ * retention of long-lived coroutines under shifting size-class loads, where a
+ * per-size-class RC freelist alone never lets size B reuse size A's memory.
+ * Not on the alloc/free hot path — called from xr_coro_gc_fullgc (gc.collect). */
+XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc);
 
 /* === Cycle collector API === */
 
@@ -297,6 +288,14 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
 
 /* Sentinel value for _rsv meaning "not in cycle_roots". */
 #define XR_CYCLE_NOT_IN_ROOTS 0xFFFFFFFFu
+
+/* Cycle-collector auto-trigger thresholds (root-count based, Nim ORC style).
+ * The collector runs automatically once cycle_roots grows past the current
+ * threshold; the threshold then adapts to the collection's productivity:
+ * a productive collect lowers it (collect more eagerly), an unproductive one
+ * raises it (avoid churn). Bounded below by _MIN so it never thrashes. */
+#define XR_CYCLE_COLLECT_THRESHOLD_INIT 128u
+#define XR_CYCLE_COLLECT_THRESHOLD_MIN 16u
 
 /* ========== Unified Compile-Time RC Primitives ==========
  *
@@ -364,9 +363,10 @@ static inline void xr_rc_release_value(XrCoroGC *gc, XrValue value) {
 /* ========== External Memory Accounting ========== */
 
 /*
- * Notify GC about non-GC malloc'd memory (e.g., array data buffers).
- * Without this, GC has no visibility into external memory pressure
- * and may delay collection when large arrays are abandoned.
+ * Track non-GC malloc'd memory (e.g., array/map/set data buffers) in the
+ * coroutine's byte counter. Under reference counting this no longer drives
+ * collection (RC owns reclamation); it keeps gc.count()/gc.info() byte stats
+ * accurate so abandoned large buffers are reflected in reported usage.
  */
 static inline void xr_gc_add_external(XrCoroGC *gc, int64_t bytes) {
     if (!gc)

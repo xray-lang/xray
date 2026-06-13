@@ -8,13 +8,15 @@
  * xgc.h - Garbage Collector public API
  *
  * KEY CONCEPT:
- *   - Per-coroutine Immix mark-region GC (XrCoroGC) is the primary heap
- *     for runtime objects. See xcoro_gc.h for the full state machine,
- *     tri-color invariants, and block/line layout.
+ *   - Per-coroutine Immix bump heap (XrCoroGC) is the primary heap for
+ *     runtime objects. Reclamation is compile-time reference counting: a
+ *     per-size-class freelist reuses dropped blocks, whole-block reclaim
+ *     returns emptied blocks, and a Bacon-Rajan cycle collector handles
+ *     cycles. There is no tracing/mark-sweep. See xcoro_gc.h.
  *   - Isolate-level fixedgc (XrGC) is a malloc-backed linked list used
  *     for bootstrap, fallback, and a small set of fixed-lifetime objects
- *     (e.g. enum metadata, bound methods). It does not run mark/sweep;
- *     destroy hooks are invoked once at isolate cleanup.
+ *     (e.g. enum metadata, bound methods). Destroy hooks are invoked once
+ *     at isolate cleanup.
  *   - System heap (xsysheap) holds class metadata and shared/refcounted
  *     objects (channels, deep-copied shared values). These are not GC'd.
  *

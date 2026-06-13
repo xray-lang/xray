@@ -160,7 +160,10 @@ void *xr_gc_alloc(XrGC *gc, size_t size, uint8_t type) {
     if (obj) {
         obj->type = type;
         obj->extra = XR_OBJ_MANAGED;
-        obj->refcount = 0;
+        /* Fixed objects are immortal: the sign-tagged RC must be sticky so
+         * the hot-path drop (which frees on rc == 0) routes them to the
+         * cold path's immortal no-op instead of freeing them. */
+        obj->refcount = XR_RC_STICKY;
         obj->objsize = (uint32_t) size;
         obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
         node->obj = obj;

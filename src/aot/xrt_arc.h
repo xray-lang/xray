@@ -88,7 +88,7 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
 typedef struct {
     uint16_t flags;    // XRT_ARC_* flags
     uint16_t type;     // object type tag for type-table dispatch
-    int32_t refcount;  // ARC reference count (0 = unmanaged, >0 = live)
+    int32_t refcount;  // 0-based RC: rc == N means N+1 live refs (rc 0 = unique)
     uint64_t _pad;     // keeps sizeof == 16 so user data stays 16-byte aligned
 } XrtArcHdr;
 
@@ -124,12 +124,25 @@ char *xrt_bump_cursor;
 char *xrt_bump_end;
 XrtBumpBlock *xrt_bump_blocks;
 int xrt_bump_enabled = 0;  // 0 = calloc (safe default); 1 = bump (fast, no per-object free)
+/* Depth-bounded recursive release (mirrors the VM's deferred_drops): when a
+ * destructor cascade gets too deep, dead objects are queued here and drained
+ * iteratively by the outermost xrt_release instead of recursing, so freeing a
+ * deep data structure (10k+ node list/tree) cannot overflow the C stack.
+ * Single global to match the bump allocator's threading model. */
+int xrt_release_depth;
+void *xrt_deferred_head;
 #else
 extern char *xrt_bump_cursor;
 extern char *xrt_bump_end;
 extern XrtBumpBlock *xrt_bump_blocks;
 extern int xrt_bump_enabled;
+extern int xrt_release_depth;
+extern void *xrt_deferred_head;
 #endif
+
+/* Outermost release recurses at most this deep before queuing dead objects for
+ * iterative draining (matches XR_DESTROY_DEPTH_LIMIT on the VM side). */
+#define XRT_RELEASE_DEPTH_LIMIT 64
 
 static void xrt_bump_new_block(size_t min_size) {
     size_t bsize = XRT_BUMP_BLOCK_SIZE;
@@ -199,7 +212,7 @@ static inline int xrt_arc_value_has_header(XrValue v) {
            v.tag == XR_TAG_STRUCT_REF;
 }
 
-/* ARC retain: increment refcount.
+/* ARC retain: acquire a new owning reference (0-based: rc++ adds one ref).
  * Called by generated code for values with escape > NO_ESCAPE.
  * No-op for values that do not carry an XrtArcHdr. */
 static inline void xrt_retain(XrValue v) {
@@ -211,53 +224,54 @@ static inline void xrt_retain(XrValue v) {
     hdr->refcount++;
 }
 
-/* ARC release: decrement refcount, free on zero.
+/* ARC release: release one owning reference, free on the LAST one.
+ * 0-based RC (matching the VM/JIT unified header): rc == 0 means a single
+ * owner, so a release at rc == 0 frees; otherwise it just decrements. The
+ * old `--rc <= 0` form freed one reference too early for multi-owner objects
+ * (rc == 1 means two owners, but `--rc == 0 <= 0` would have freed it).
  * No-op for values that do not carry an XrtArcHdr. */
+/* Finalize one dead object (run its destructor, free its block). The
+ * destructor releases child references, which may recurse back into
+ * xrt_release. */
+static inline void xrt_finalize_one(XrtArcHdr *hdr) {
+    void *obj = (char *) hdr + sizeof(XrtArcHdr);
+    if (hdr->flags & XRT_ARC_HAS_DEINIT)
+        xrt_dispatch_destructor(hdr->type, obj);
+    XRT_FREE(hdr);
+}
+
 static inline void xrt_release(XrValue v) {
     if (!xrt_arc_value_has_header(v))
         return;
     XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
     if (hdr->flags & XRT_ARC_BUMP)
         return;
-    if (--hdr->refcount <= 0) {
-        /* Run the type's destructor (closes resources / frees side buffers)
-         * before releasing the block. No-op if the type has no destructor. */
-        if (hdr->flags & XRT_ARC_HAS_DEINIT)
-            xrt_dispatch_destructor(hdr->type, v.ptr);
-        XRT_FREE(hdr);
+    if (hdr->refcount != 0) {
+        hdr->refcount--; /* not the last owner: just drop one reference */
+        return;
     }
-}
 
-/* Drop-Reuse: drop an object and return its memory for immediate reuse
- * if it was the last reference. Returns raw pointer (reuse token) or NULL. */
-static inline void *xrt_drop_reuse(XrValue v) {
-    if (!xrt_arc_value_has_header(v))
-        return NULL;
-    XrtArcHdr *hdr = XRT_ARC_HDR(v.ptr);
-    if (hdr->flags & XRT_ARC_BUMP)
-        return NULL;
-    if (--hdr->refcount <= 0) {
-        if (hdr->flags & XRT_ARC_HAS_DEINIT)
-            xrt_dispatch_destructor(hdr->type, v.ptr);
-        /* Return the header for reuse instead of freeing. */
-        return (void *) hdr;
+    /* Last owner (rc == 0). Depth-bound the destructor cascade: queue and
+     * drain iteratively past the limit so deep graphs cannot blow the stack.
+     * The dead object's user data is free, so reuse its first word as the
+     * deferred-list link. */
+    if (xrt_release_depth >= XRT_RELEASE_DEPTH_LIMIT) {
+        *(void **) v.ptr = xrt_deferred_head;
+        xrt_deferred_head = hdr;
+        return;
     }
-    return NULL; /* still alive */
-}
 
-/* Allocate using a reuse token if non-NULL, else fall back to fresh alloc.
- * gc_type and size are compile-time constants from the reuse pass. */
-static inline void *xrt_alloc_at(void *token, unsigned gc_type, unsigned size) {
-    (void) gc_type;
-    if (token) {
-        /* Reinitialize the header for the new object. */
-        XrtArcHdr *hdr = (XrtArcHdr *) token;
-        hdr->refcount = 1;
-        hdr->flags = 0;
-        hdr->type = (uint16_t) gc_type;
-        return (void *) (hdr + 1);
+    xrt_release_depth++;
+    xrt_finalize_one(hdr);
+    xrt_release_depth--;
+
+    if (xrt_release_depth == 0) {
+        while (xrt_deferred_head) {
+            XrtArcHdr *d = (XrtArcHdr *) xrt_deferred_head;
+            xrt_deferred_head = *(void **) ((char *) d + sizeof(XrtArcHdr));
+            xrt_finalize_one(d);
+        }
     }
-    return xrt_arc_alloc(size);
 }
 
 static inline void xrt_arc_init(void) {

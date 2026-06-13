@@ -319,18 +319,6 @@
   :jit-xm (driver xi2xm_release)
   :aot-c (driver xicgen_release))
 
-(lower xi.drop.reuse
-  :match ()
-  :required-targets (jit-xm aot-c)
-  :jit-xm (driver xi2xm_drop_reuse)
-  :aot-c (driver xicgen_drop_reuse))
-
-(lower xi.alloc.at
-  :match ()
-  :required-targets (jit-xm aot-c)
-  :jit-xm (driver xi2xm_alloc_at)
-  :aot-c (driver xicgen_alloc_at))
-
 (lower xi.stack.alloc
   :match ()
   :required-targets (aot-c)

@@ -14,6 +14,8 @@
 #include "../../../src/ir/xi.h"
 #include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_arc.h"
+#include "../../../src/base/xchecks.h"
+#include "../../../src/base/xmalloc.h"
 #include "../../../src/runtime/value/xtype.h"
 #include <stdio.h>
 #include <string.h>
@@ -44,6 +46,13 @@ static XiFunc *make_func(const char *name, XrType *ret) {
     XiBlock *entry = xi_block_new(f);
     entry->sealed = true;
     return f;
+}
+
+static void set_single_param(XiFunc *f, XiValue *param) {
+    f->nparams = 1;
+    f->params = (XiValue **) xr_calloc(1, sizeof(XiValue *));
+    XR_CHECK(f->params != NULL, "test_xi_escape: param allocation failed");
+    f->params[0] = param;
 }
 
 /* ========== Test: local array does not escape ========== */
@@ -344,10 +353,61 @@ static void test_arc_heap_gets_retain_release(void) {
     xi_arc_insert(f);
 
     ASSERT_EQ(count_ops(f, XI_RETAIN), 0, "array moved into field: 0 dup");
-    /* Exactly one drop: the borrowed receiver `obj` at function exit.
-     * obj is discovered as a tracked RC value via the block scan (it is an
-     * XI_PARAM value in the entry block); the array was moved, so no drop. */
-    ASSERT_EQ(count_ops(f, XI_RELEASE), 1, "borrowed receiver dropped once at exit");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "borrowed receiver is not dropped by callee");
+    xi_func_free(f);
+}
+
+/* ========== Test: ARC elim keeps borrowed single-consumer dup ========== */
+
+static void test_arc_elim_keeps_borrowed_single_consumer_retain(void) {
+    XiFunc *f = make_func("arc_borrowed_single_consume", &t_int);
+    f->receiver_borrowed = true;
+    XiBlock *b0 = f->entry;
+
+    XiValue *self = xi_param(f, b0, 0, &t_array);
+    set_single_param(f, self);
+    XiValue *set = xi_value_new(f, b0, XI_SET_SHARED, &t_any, 1);
+    set->args[0] = self;
+    set->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+
+    XiValue *zero = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, zero);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "borrowed stored receiver needs one retain");
+    xi_arc_elim(f);
+    ASSERT_EQ(count_ops(f, XI_RETAIN), 1, "ARC elim must keep borrowed transfer retain");
+    ASSERT_EQ(count_ops(f, XI_RELEASE), 0, "borrowed receiver is not owned by callee");
+    xi_func_free(f);
+}
+
+/* ========== Test: ARC handles more than the old fixed site cap ========== */
+
+static void test_arc_many_consume_sites(void) {
+    enum {
+        NCONSUMES = 300
+    };
+    XiFunc *f = make_func("arc_many_consume_sites", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *value = xi_param(f, b0, 0, &t_array);
+    set_single_param(f, value);
+    for (int i = 0; i < NCONSUMES; i++) {
+        XiValue *set = xi_value_new(f, b0, XI_SET_SHARED, &t_any, 1);
+        set->args[0] = value;
+        set->flags = XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
+    }
+
+    XiValue *zero = xi_const_int(f, b0, 0, &t_int);
+    xi_block_set_return(b0, zero);
+
+    xi_escape_analyze(f);
+    xi_arc_insert(f);
+
+    ASSERT_EQ(count_ops(f, XI_RETAIN), NCONSUMES - 1,
+              "all non-last consumes need retains beyond 256 sites");
     xi_func_free(f);
 }
 
@@ -405,6 +465,8 @@ int main(void) {
     test_arc_no_escape_skipped();
     test_arc_return_gets_retain();
     test_arc_heap_gets_retain_release();
+    test_arc_elim_keeps_borrowed_single_consumer_retain();
+    test_arc_many_consume_sites();
     test_stack_alloc_local_array();
     test_stack_alloc_escaping_stays();
 

@@ -45,8 +45,6 @@
     X(ERR_CHECK, "xi.err.check", xi2xm_err_check) \
     X(RETAIN, "xi.retain", xi2xm_retain) \
     X(RELEASE, "xi.release", xi2xm_release) \
-    X(DROP_REUSE, "xi.drop.reuse", xi2xm_drop_reuse) \
-    X(ALLOC_AT, "xi.alloc.at", xi2xm_alloc_at) \
     X(SHL, "xi.shl", xi2xm_shl) \
     X(SHR, "xi.shr", xi2xm_shr) \
     X(EQ, "xi.eq", xi2xm_eq) \

@@ -2735,7 +2735,10 @@ static void test_alloc_inline(void) {
 
     XmBlock *entry = xm_func_add_block(func, "entry");
 
-    // XM_ALLOC: type=5 (Json), size=48
+    // XM_ALLOC: type=5, size=48. Must be a NON-finalize type so the inline
+    // bump-alloc fast path is taken (finalize types — containers, instances —
+    // force the slow CALL_C path that registers the finalizer, which this fake
+    // ownerless GC cannot service).
     XmRef type_ref = xm_const_i64(func, 5);
     XmRef size_ref = xm_const_i64(func, 48);
     XmRef v0 = xm_emit(func, entry, XM_ALLOC, XR_REP_PTR, type_ref, size_ref);
@@ -2770,10 +2773,10 @@ static void test_alloc_inline(void) {
     assert(type == 5);
     // extra = 0 at offset 2-3
     assert(hdr[2] == 0 && hdr[3] == 0);
-    // refcount = 1 at offset 4
-    int32_t refcount = 0;
+    // refcount = 0 at offset 4 (RC is 0-based: a fresh object is unique == 0)
+    int32_t refcount = -1;
     memcpy(&refcount, hdr + 4, 4);
-    assert(refcount == 1);
+    assert(refcount == 0);
     // objsize = 48 at offset 8
     uint32_t objsize = 0;
     memcpy(&objsize, hdr + 8, 4);

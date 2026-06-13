@@ -81,14 +81,18 @@
 struct XrGCHeader;
 
 typedef struct XrImmixBlock {
-    struct XrImmixBlock *next;  // 8B
-    uint64_t alloc_marks[2];    // 16B - line occupancy
-    uint8_t next_scan_line;     // 1B  - resume position for hole scanning
-    uint8_t is_young;           // 1B  - Sticky Immix: 1=young block, 0=old block
-    uint8_t _pad2[2];           // 2B  - padding
-    uint32_t alloc_count;       // 4B  - number of allocated objects in the block
-    int64_t alloc_bytes;        // 8B  - total allocated bytes in the block
-    // Total: 40B (with alignment padding), fits in Line 0 (128B)
+    struct XrImmixBlock *next;    // 8B
+    uint64_t alloc_marks[2];      // 16B - line occupancy
+    uint8_t next_scan_line;       // 1B  - resume position for hole scanning
+    uint8_t is_young;             // 1B  - Sticky Immix: 1=young block, 0=old block
+    uint8_t _pad2[2];             // 2B  - padding
+    uint32_t alloc_count;         // 4B  - distinct slots bump-allocated in this block
+    int64_t alloc_bytes;          // 8B  - total allocated bytes in the block
+    uint32_t reclaim_dead_count;  // 4B - transient: dead-slot tally during whole-block
+                                  //      reclaim (see xr_coro_gc_reclaim_blocks). Not on
+                                  //      the alloc hot path; appended after the JIT-read
+                                  //      fields so their offsets are unchanged.
+    // Fits in Line 0 (128B).
 } XrImmixBlock;
 
 _Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE, "XrImmixBlock must fit in Line 0");
@@ -199,18 +203,6 @@ static inline void xr_immix_mark_alloc_lines_fast(void *obj_ptr, size_t obj_size
 
 // Count live lines in a block (excluding reserved line 0)
 XR_FUNC int xr_immix_count_live_lines(XrImmixBlock *block);
-
-// Post-sweep: classify blocks into free / recycle / full.
-XR_FUNC void xr_immix_reclaim(XrImmixHeap *heap);
-
-// Sticky Immix: reclaim only young blocks after minor GC
-XR_FUNC void xr_immix_reclaim_young(XrImmixHeap *heap);
-
-// Sticky Immix: check if an object pointer is in a young block
-static inline bool xr_immix_is_young_ptr(void *ptr) {
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(ptr);
-    return block->is_young;
-}
 
 /* ========== Block Cache API ========== */
 

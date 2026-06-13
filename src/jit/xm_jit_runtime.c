@@ -442,32 +442,28 @@ XrJitResult xr_jit_rc_drop(XrCoroutine *coro, int64_t unused) {
     return XR_JIT_OK();
 }
 
-// Called from JIT code for XI_DROP_REUSE: drop the object and return the
-// reclaimed memory as a reuse token if it was the last reference. Returns
-// the token (raw pointer) in jit_retval, or 0 (NULL) if still alive.
-XrJitResult xr_jit_rc_drop_reuse(XrCoroutine *coro, int64_t unused) {
-    (void) unused;
-    XrValue v = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0],
-                                   xr_coro_jit_state(coro)->scratch->call_arg_tags[0]);
-    if (!XR_IS_PTR(v))
-        return XR_JIT_PTR(NULL);
-    XrObjHeader *o = (XrObjHeader *) XR_VALUE_GCPTR(v);
-    XrGCHeader *token = xr_rc_drop_reuse(coro ? coro->coro_gc : NULL, o);
-    return XR_JIT_PTR(token);
+// Slow-path helpers for the inlined RC fast path (XM_RETAIN / XM_RELEASE).
+// The JIT inlines the thread-local common case (rc >= 0 dup / rc > 0 drop)
+// directly in machine code and only calls these for the cold cases:
+//   - retain slow: rc < 0 (atomic / managed / immortal)
+//   - release slow: rc <= 0 (unique → destroy, or atomic / managed / immortal)
+// The object pointer (already null-checked and known to be a GC pointer by the
+// inline) arrives via the CALL_C_EXTRA_ARG ABI, not the tagged call_args path.
+// They re-run the unified primitives, which re-read refcount, so the inline's
+// fast-path decision and these never double-count.
+XrJitResult xr_jit_rc_dup_ptr(XrCoroutine *coro, int64_t ptr_arg) {
+    (void) coro;
+    XrObjHeader *o = (XrObjHeader *) (uintptr_t) ptr_arg;
+    if (o)
+        xr_rc_retain(o);
+    return XR_JIT_OK();
 }
 
-// Called from JIT code for XI_ALLOC_AT: allocate using a reuse token if
-// non-NULL, otherwise fall back to normal allocation. extra_arg encodes
-// (gc_type << 16) | alloc_size.
-XrJitResult xr_jit_rc_alloc_at(XrCoroutine *coro, int64_t extra_arg) {
-    XrValue tv = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0],
-                                    xr_coro_jit_state(coro)->scratch->call_arg_tags[0]);
-    XrGCHeader *token = (XrGCHeader *) (XR_IS_PTR(tv) ? XR_VALUE_GCPTR(tv) : NULL);
-    uint8_t gc_type = (uint8_t) ((extra_arg >> 16) & 0xFF);
-    size_t size = (size_t) (extra_arg & 0xFFFF);
-    XR_DCHECK(size >= sizeof(XrGCHeader), "alloc_at: size too small");
-    XrGCHeader *obj = xr_rc_alloc_at(coro ? coro->coro_gc : NULL, token, gc_type, size);
-    return XR_JIT_PTR(obj);
+XrJitResult xr_jit_rc_drop_ptr(XrCoroutine *coro, int64_t ptr_arg) {
+    XrObjHeader *o = (XrObjHeader *) (uintptr_t) ptr_arg;
+    if (o)
+        xr_rc_release(coro ? coro->coro_gc : NULL, o);
+    return XR_JIT_OK();
 }
 
 /* ========== Generic Index Operations ========== */

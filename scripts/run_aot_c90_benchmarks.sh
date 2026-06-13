@@ -15,6 +15,7 @@ XRAY_BIN="${XRAY_BIN:-$REPO_ROOT/build/xray}"
 CC_BIN="${CC:-cc}"
 RUSTC_BIN="${RUSTC:-rustc}"
 OPT_LEVEL="3"
+CPU=""
 SAMPLES=31
 FILTER=""
 JSON_OUTPUT=""
@@ -32,6 +33,7 @@ Options:
   --rust             Also benchmark Rust references (*.rs) when rustc exists
   --rustc PATH       Rust compiler (default: rustc)
   --opt LEVEL        xray build optimization level (default: 3)
+  --cpu CPU          Tune host builds (Xray --cpu, C -march/-mcpu, Rust target-cpu)
   --samples N        Samples per runtime (default: 31)
   --quick            One sample, useful for smoke tests
   --bench LIST       Comma-separated benchmark basenames or relative names
@@ -67,6 +69,10 @@ while [ "$#" -gt 0 ]; do
             ;;
         --opt)
             OPT_LEVEL="$2"
+            shift 2
+            ;;
+        --cpu)
+            CPU="$2"
             shift 2
             ;;
         --samples)
@@ -128,6 +134,18 @@ fi
 if [ ! -d "$BENCH_ROOT" ]; then
     echo "Missing benchmark directory: $BENCH_ROOT" >&2
     exit 2
+fi
+
+CC_CPU_ARG=""
+if [ -n "$CPU" ]; then
+    case "$(uname -m 2>/dev/null || echo unknown)" in
+        arm64|aarch64|arm*)
+            CC_CPU_ARG="-mcpu=$CPU"
+            ;;
+        *)
+            CC_CPU_ARG="-march=$CPU"
+            ;;
+    esac
 fi
 
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/xray_aot_c90.XXXXXX")"
@@ -240,6 +258,9 @@ metric_from_audit() {
 
 printf '=== Xray AOT C90 Benchmarks ===\n'
 printf 'xray=%s\ncc=%s\nsamples=%s\ngate=%s\n' "$XRAY_BIN" "$CC_BIN" "$SAMPLES" "$GATE"
+if [ -n "$CPU" ]; then
+    printf 'cpu=%s\n' "$CPU"
+fi
 if $RUST; then
     printf 'rustc=%s (%s)\n' "$RUSTC_BIN" "$("$RUSTC_BIN" --version 2>/dev/null || echo unknown)"
 fi
@@ -281,21 +302,36 @@ while IFS= read -r xr_file; do
         continue
     fi
 
-    if ! "$XRAY_BIN" build --native -c -O "$OPT_LEVEL" -C "$CC_BIN" -o "$gen_c" "$xr_file" > "$aot_build_log" 2>&1; then
+    xray_gen_args=(build --native -c -O "$OPT_LEVEL" -C "$CC_BIN" -o "$gen_c")
+    if [ -n "$CPU" ]; then
+        xray_gen_args+=(--cpu "$CPU")
+    fi
+    xray_gen_args+=("$xr_file")
+    if ! "$XRAY_BIN" "${xray_gen_args[@]}" > "$aot_build_log" 2>&1; then
         echo "FAIL: AOT C generation failed"
         sed -n '1,20p' "$aot_build_log" | sed 's/^/  /'
         FAIL=$((FAIL + 1))
         continue
     fi
 
-    if ! "$XRAY_BIN" build --native -O "$OPT_LEVEL" -C "$CC_BIN" -o "$aot_bin" "$xr_file" >> "$aot_build_log" 2>&1; then
+    xray_build_args=(build --native -O "$OPT_LEVEL" -C "$CC_BIN" -o "$aot_bin")
+    if [ -n "$CPU" ]; then
+        xray_build_args+=(--cpu "$CPU")
+    fi
+    xray_build_args+=("$xr_file")
+    if ! "$XRAY_BIN" "${xray_build_args[@]}" >> "$aot_build_log" 2>&1; then
         echo "FAIL: AOT binary build failed"
         sed -n '1,20p' "$aot_build_log" | sed 's/^/  /'
         FAIL=$((FAIL + 1))
         continue
     fi
 
-    if ! "$CC_BIN" -O"$OPT_LEVEL" "$c_file" -o "$c_bin" -lm > "$c_build_log" 2>&1; then
+    c_build_args=(-O"$OPT_LEVEL")
+    if [ -n "$CC_CPU_ARG" ]; then
+        c_build_args+=("$CC_CPU_ARG")
+    fi
+    c_build_args+=("$c_file" -o "$c_bin" -lm)
+    if ! "$CC_BIN" "${c_build_args[@]}" > "$c_build_log" 2>&1; then
         echo "FAIL: C reference build failed"
         sed -n '1,20p' "$c_build_log" | sed 's/^/  /'
         FAIL=$((FAIL + 1))
@@ -306,8 +342,12 @@ while IFS= read -r xr_file; do
     if $RUST && [ -f "$rs_file" ]; then
         rust_bin="$bench_work/$base.rust"
         rust_build_log="$bench_work/rust_build.log"
-        if ! "$RUSTC_BIN" -C opt-level=3 -C lto=fat -C panic=abort --edition 2021 \
-                "$rs_file" -o "$rust_bin" > "$rust_build_log" 2>&1; then
+        rust_build_args=(-C "opt-level=$OPT_LEVEL" -C lto=fat -C panic=abort --edition 2021)
+        if [ -n "$CPU" ]; then
+            rust_build_args+=(-C "target-cpu=$CPU")
+        fi
+        rust_build_args+=("$rs_file" -o "$rust_bin")
+        if ! "$RUSTC_BIN" "${rust_build_args[@]}" > "$rust_build_log" 2>&1; then
             echo "FAIL: Rust reference build failed"
             sed -n '1,20p' "$rust_build_log" | sed 's/^/  /'
             FAIL=$((FAIL + 1))
@@ -457,6 +497,13 @@ if [ -n "$JSON_OUTPUT" ]; then
         printf '{\n'
         printf '  "xray": '; json_string "$XRAY_BIN"; printf ',\n'
         printf '  "cc": '; json_string "$CC_BIN"; printf ',\n'
+        printf '  "cpu": '
+        if [ -n "$CPU" ]; then
+            json_string "$CPU"
+        else
+            printf 'null'
+        fi
+        printf ',\n'
         if $RUST; then
             printf '  "rustc": '; json_string "$("$RUSTC_BIN" --version 2>/dev/null || echo unknown)"; printf ',\n'
         fi

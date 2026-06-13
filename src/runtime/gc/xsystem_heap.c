@@ -210,6 +210,13 @@ void *xr_sysheap_alloc_shared(XrSystemHeap *heap, size_t size, uint8_t type) {
     }
 
     if (obj) {
+        /* Establish the shared-object invariant in the allocator itself:
+         * atomic RC = 1 (XR_OBJ_ATOMIC set, refcount stored as -1). Callers
+         * may still call xr_shared_set_refc with their own count; doing so is
+         * idempotent. Leaving refcount at 0 here (thread-local "unique"
+         * encoding) was a latent hazard: a drop before the caller's set_refc
+         * would free a live shared object. */
+        xr_shared_set_refc(obj, 1);
         atomic_fetch_add(&heap->stats.shared_alloc_count, 1);
     }
     return obj;

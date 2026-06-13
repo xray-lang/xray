@@ -65,7 +65,9 @@ TEST(array_destroy_releases_child_array) {
     XrArray *child = xr_array_new(main_coro);
 
     xr_array_push(parent, xr_value_from_array(child));
-    ASSERT_EQ_INT(child->gc.refcount, 1);
+    /* 0-based RC: a uniquely-owned child reads 0 (push transfers ownership,
+     * it does not retain). */
+    ASSERT_EQ_INT(child->gc.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
@@ -82,8 +84,8 @@ TEST(map_destroy_releases_key_and_value) {
     XrArray *value = xr_array_new(main_coro);
 
     xr_map_set(map, xr_value_from_array(key), xr_value_from_array(value));
-    ASSERT_EQ_INT(key->gc.refcount, 1);
-    ASSERT_EQ_INT(value->gc.refcount, 1);
+    ASSERT_EQ_INT(key->gc.refcount, 0);
+    ASSERT_EQ_INT(value->gc.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
@@ -100,7 +102,7 @@ TEST(set_destroy_releases_value) {
     XrArray *child = xr_array_new(main_coro);
 
     ASSERT_TRUE(xr_set_add(set, xr_value_from_array(child)));
-    ASSERT_EQ_INT(child->gc.refcount, 1);
+    ASSERT_EQ_INT(child->gc.refcount, 0);
 
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
@@ -153,6 +155,53 @@ TEST(dynamic_instance_destroy_releases_overflow_fields) {
     teardown();
 }
 
+TEST(whole_block_reclaim_returns_empty_blocks) {
+    setup();
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+
+    /* Fill several Immix blocks with freelistable blobs (256B → ~63 per 16KB
+     * block; 256 objects span ~4 blocks), then free every one. */
+    enum {
+        N = 256,
+        SZ = 256
+    };
+    XrGCHeader *objs[N];
+    for (int i = 0; i < N; i++) {
+        objs[i] = xr_coro_gc_newobj(gc, XR_TBLOB, SZ);
+        ASSERT_NOT_NULL(objs[i]);
+    }
+
+    XrImmixStats before;
+    xr_immix_get_stats(&gc->immix, &before);
+    ASSERT_TRUE(before.full_blocks >= 1);
+
+    for (int i = 0; i < N; i++)
+        xr_coro_gc_rc_destroy(gc, objs[i]);
+
+    /* Reclaim: fully-dead retired blocks return to the free pool so memory is
+     * reusable by ANY size class (bounds peak retention under shifting loads). */
+    xr_coro_gc_reclaim_blocks(gc);
+
+    XrImmixStats after;
+    xr_immix_get_stats(&gc->immix, &after);
+    ASSERT_TRUE(after.free_blocks > before.free_blocks);
+    ASSERT_TRUE(after.full_blocks < before.full_blocks);
+    /* Memory kept for reuse (not returned to OS), so total is unchanged. */
+    ASSERT_TRUE(after.total_blocks == before.total_blocks);
+
+    /* A later allocation of a DIFFERENT size class reuses the reclaimed
+     * blocks without growing the heap. */
+    size_t total_after = after.total_blocks;
+    XrGCHeader *reuse = xr_coro_gc_newobj(gc, XR_TBLOB, 512);
+    ASSERT_NOT_NULL(reuse);
+    XrImmixStats reused;
+    xr_immix_get_stats(&gc->immix, &reused);
+    ASSERT_TRUE(reused.total_blocks <= total_after);
+
+    teardown();
+}
+
 int main(void) {
     printf("\n=== RC Container Release Tests ===\n");
     RUN_TEST(array_destroy_releases_child_array);
@@ -160,6 +209,7 @@ int main(void) {
     RUN_TEST(set_destroy_releases_value);
     RUN_TEST(tuple_instance_destroy_releases_elements);
     RUN_TEST(dynamic_instance_destroy_releases_overflow_fields);
+    RUN_TEST(whole_block_reclaim_returns_empty_blocks);
     TEST_REPORT();
     return TEST_EXIT();
 }
