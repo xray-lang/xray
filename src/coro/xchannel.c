@@ -496,11 +496,14 @@ static void channel_note_participant_locked(XrChannel *ch, XrCoroutine *coro, bo
     if (!ch)
         return;
 
-    XrWorker *worker = xr_current_worker();
-    XrRuntime *runtime = worker ? worker->p.runtime : channel_stats_runtime(ch);
-    if (!xr_sched_stats_enabled(runtime))
+    /* Stats-only bookkeeping that runs on every send/recv. Resolve the runtime
+     * from the channel first (cheap pointer chase + flag) and bail before the
+     * TLS current-worker read when stats are disabled -- the common case. */
+    XrRuntime *runtime = channel_stats_runtime(ch);
+    if (!runtime)
         return;
 
+    XrWorker *worker = xr_current_worker();
     channel_note_worker_locked(ch, worker, producer);
     XrChannelKind logical_kind = xr_channel_logical_kind_snapshot(ch);
     XrChannelKind worker_kind = channel_worker_kind_snapshot(ch);
