@@ -80,7 +80,7 @@ typedef enum {
     XR_TCOROUTINE,
     XR_TCHANNEL,
     XR_TCOROPOOL,
-    XR_TBLOB,         // Raw byte buffer on Immix heap (no traverse/destroy)
+    XR_TBLOB,         // Raw byte buffer on Region heap (no traverse/destroy)
     XR_TCELL,         // Single-slot mutable capture cell (32B)
     XR_TTASK,         // Lightweight GC-managed coroutine handle (Task/Executor separation)
     XR_TATOMIC,       // Atomic<T> shared primitive wrapper (lock-free, system heap)

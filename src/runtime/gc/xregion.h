@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * ximmix.h - Immix Mark-Region memory allocator
+ * xregion.h - Region Mark-Region memory allocator
  *
  * KEY CONCEPT:
  *   Block-Line architecture for fast bump-pointer allocation with
@@ -28,8 +28,8 @@
  *   - Spawn coroutines bulk-free all blocks at once
  */
 
-#ifndef XIMMIX_H
-#define XIMMIX_H
+#ifndef XREGION_H
+#define XREGION_H
 
 #include <stddef.h>
 #include <stdint.h>
@@ -40,11 +40,11 @@
 
 /* ========== Constants ========== */
 
-#define XR_IMMIX_BLOCK_SIZE (16 * 1024)
-#define XR_IMMIX_LINE_SIZE 128
-#define XR_IMMIX_LINES (XR_IMMIX_BLOCK_SIZE / XR_IMMIX_LINE_SIZE)  // 128
-#define XR_IMMIX_FIRST_LINE 1  // Line 0 reserved for metadata pointer
-#define XR_IMMIX_USABLE_LINES (XR_IMMIX_LINES - XR_IMMIX_FIRST_LINE)  // 127
+#define XR_REGION_BLOCK_SIZE (16 * 1024)
+#define XR_REGION_LINE_SIZE 128
+#define XR_REGION_LINES (XR_REGION_BLOCK_SIZE / XR_REGION_LINE_SIZE)  // 128
+#define XR_REGION_FIRST_LINE 1  // Line 0 reserved for metadata pointer
+#define XR_REGION_USABLE_LINES (XR_REGION_LINES - XR_REGION_FIRST_LINE)  // 127
 
 /* ========== Line Mark Bitmap ========== */
 
@@ -54,23 +54,23 @@
  *   alloc_marks - the only bitmap, always reflects true line occupancy.
  *   SET on allocation, rebuilt during sweep (per-block).
  */
-#define XR_IMMIX_LINE_SET(bm, line) ((bm)[(line) >> 6] |= (1ULL << ((line) & 63)))
+#define XR_REGION_LINE_SET(bm, line) ((bm)[(line) >> 6] |= (1ULL << ((line) & 63)))
 
-#define XR_IMMIX_LINE_GET(bm, line) ((bm)[(line) >> 6] & (1ULL << ((line) & 63)))
+#define XR_REGION_LINE_GET(bm, line) ((bm)[(line) >> 6] & (1ULL << ((line) & 63)))
 
 /* ========== Address-to-Block/Line Mapping ========== */
 
 // Block data is BLOCK_SIZE-aligned
-#define XR_IMMIX_BLOCK_DATA(ptr)                                                                   \
-    ((char *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_IMMIX_BLOCK_SIZE - 1))))
+#define XR_REGION_BLOCK_DATA(ptr)                                                                  \
+    ((char *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_REGION_BLOCK_SIZE - 1))))
 
-// Get XrImmixBlock metadata directly from any object pointer (no indirection)
+// Get XrRegionBlock metadata directly from any object pointer (no indirection)
 // Metadata is embedded in Line 0 of the aligned block
-#define XR_IMMIX_BLOCK_FROM_PTR(ptr)                                                               \
-    ((XrImmixBlock *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_IMMIX_BLOCK_SIZE - 1))))
+#define XR_REGION_BLOCK_FROM_PTR(ptr)                                                              \
+    ((XrRegionBlock *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_REGION_BLOCK_SIZE - 1))))
 
-#define XR_IMMIX_LINE_INDEX(ptr)                                                                   \
-    ((int) (((uintptr_t) (ptr) & (XR_IMMIX_BLOCK_SIZE - 1)) / XR_IMMIX_LINE_SIZE))
+#define XR_REGION_LINE_INDEX(ptr)                                                                  \
+    ((int) (((uintptr_t) (ptr) & (XR_REGION_BLOCK_SIZE - 1)) / XR_REGION_LINE_SIZE))
 
 /* ========== Block Metadata ========== */
 
@@ -81,11 +81,11 @@
 struct XrGCHeader;
 struct XrSystemHeap;
 
-typedef struct XrImmixBlock {
-    struct XrImmixBlock *next;    // 8B
+typedef struct XrRegionBlock {
+    struct XrRegionBlock *next;   // 8B
     uint64_t alloc_marks[2];      // 16B - line occupancy
     uint8_t next_scan_line;       // 1B  - resume position for hole scanning
-    uint8_t is_young;             // 1B  - Sticky Immix: 1=young block, 0=old block
+    uint8_t is_young;             // 1B  - Sticky Region: 1=young block, 0=old block
     uint8_t _pad2[2];             // 2B  - padding
     uint32_t alloc_count;         // 4B  - distinct slots bump-allocated in this block
     int64_t alloc_bytes;          // 8B  - total allocated bytes in the block
@@ -94,11 +94,11 @@ typedef struct XrImmixBlock {
                                   //      the alloc hot path; appended after the JIT-read
                                   //      fields so their offsets are unchanged.
     // Fits in Line 0 (128B).
-} XrImmixBlock;
+} XrRegionBlock;
 
-_Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE, "XrImmixBlock must fit in Line 0");
+_Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must fit in Line 0");
 
-/* ========== Per-Coroutine Immix Heap ========== */
+/* ========== Per-Coroutine Region Heap ========== */
 
 /*
  * Each block is on exactly ONE of these lists, or is the current_block.
@@ -107,75 +107,75 @@ _Static_assert(sizeof(XrImmixBlock) <= XR_IMMIX_LINE_SIZE, "XrImmixBlock must fi
  *   recycle_blocks - has free holes (rebuilt after each GC reclaim)
  *   free_blocks    - completely empty, reusable
  */
-typedef struct XrImmixHeap {
+typedef struct XrRegionHeap {
     // Hot path: bump allocation (JIT inline candidates)
-    char *cursor;                 // offset 0 — JIT hardcoded
-    char *limit;                  // offset 8 — JIT hardcoded
-    XrImmixBlock *current_block;  // offset 16
+    char *cursor;                  // offset 0 — JIT hardcoded
+    char *limit;                   // offset 8 — JIT hardcoded
+    XrRegionBlock *current_block;  // offset 16
 
     // Deferred alloc_marks: JIT fast path bumps cursor without setting marks.
     // Before hole-scanning, flush marks from mark_cursor to cursor.
     char *mark_cursor;
 
     // Cold path: block list management (young blocks only in gen mode)
-    XrImmixBlock *full_blocks;
-    XrImmixBlock *recycle_blocks;
-    XrImmixBlock *free_blocks;
+    XrRegionBlock *full_blocks;
+    XrRegionBlock *recycle_blocks;
+    XrRegionBlock *free_blocks;
     size_t total_blocks;
     size_t total_block_bytes;
 
-    // Sticky Immix: old blocks (skipped by minor GC)
-    XrImmixBlock *old_blocks;
+    // Sticky Region: old blocks (skipped by minor GC)
+    XrRegionBlock *old_blocks;
     size_t old_block_count;
 
     // Per-isolate L2 block cache owner (opaque). Set after init from the
     // owning coroutine's isolate; NULL during bootstrap (falls back to the
     // OS allocator). Block reuse is thus scoped to the isolate, not global.
     struct XrSystemHeap *sys_heap;
-} XrImmixHeap;
+} XrRegionHeap;
 
 /* ========== Lifecycle API ========== */
 
-XR_FUNC void xr_immix_init(XrImmixHeap *heap);
-XR_FUNC void xr_immix_destroy(XrImmixHeap *heap);
+XR_FUNC void xr_region_init(XrRegionHeap *heap);
+XR_FUNC void xr_region_destroy(XrRegionHeap *heap);
 
 // Reset heap for reuse (bulk free all blocks, reinitialize state)
-XR_FUNC void xr_immix_reset(XrImmixHeap *heap);
+XR_FUNC void xr_region_reset(XrRegionHeap *heap);
 
 /* ========== Allocation API ========== */
 
 // Slow path for allocation (hole scanning, new block)
-XR_FUNC void *xr_immix_alloc_slow(XrImmixHeap *heap, size_t size);
+XR_FUNC void *xr_region_alloc_slow(XrRegionHeap *heap, size_t size);
 
 // Bump-pointer allocate `size` bytes (8-byte aligned).
 // Fast path inlined for cross-unit performance.
-static inline void *xr_immix_alloc(XrImmixHeap *heap, size_t size) {
-    XR_DCHECK(size > 0 && size <= XR_IMMIX_BLOCK_SIZE, "immix_alloc: invalid size");
+static inline void *xr_region_alloc(XrRegionHeap *heap, size_t size) {
+    XR_DCHECK(size > 0 && size <= XR_REGION_BLOCK_SIZE, "region_alloc: invalid size");
     size = (size + 7) & ~(size_t) 7;
     char *result = heap->cursor;
     if (__builtin_expect(result != NULL, 1)) {
         char *new_cursor = result + size;
         if (new_cursor <= heap->limit) {
             heap->cursor = new_cursor;
-            XR_DCHECK(heap->cursor <= heap->limit, "immix_alloc: cursor > limit");
+            XR_DCHECK(heap->cursor <= heap->limit, "region_alloc: cursor > limit");
             return result;
         }
     }
-    return xr_immix_alloc_slow(heap, size);
+    return xr_region_alloc_slow(heap, size);
 }
 
 /* ========== Deferred Mark Flush ========== */
 
 // Flush deferred alloc_marks: mark all lines from mark_cursor to cursor.
 // Must be called before any hole-scanning (slow path entry).
-static inline void xr_immix_flush_marks(XrImmixHeap *heap) {
+static inline void xr_region_flush_marks(XrRegionHeap *heap) {
     char *mc = heap->mark_cursor;
     char *c = heap->cursor;
     if (mc >= c || !mc)
         return;
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(mc);
-    int first = XR_IMMIX_LINE_INDEX(mc);
-    int last = XR_IMMIX_LINE_INDEX(c - 1);
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(mc);
+    int first = XR_REGION_LINE_INDEX(mc);
+    int last = XR_REGION_LINE_INDEX(c - 1);
     // Bulk set bits [first..last] using bitmask operations
     uint64_t lo_mask = ~((1ULL << (first & 63)) - 1);  // bits [first%64 .. 63]
     uint64_t hi_bit = (last & 63) == 63 ? UINT64_MAX : (1ULL << ((last & 63) + 1)) - 1;
@@ -191,24 +191,24 @@ static inline void xr_immix_flush_marks(XrImmixHeap *heap) {
 /* ========== GC Integration API (Single Bitmap) ========== */
 
 // Mark alloc_marks for a newly allocated object.
-XR_FUNC void xr_immix_mark_alloc_lines(void *obj_ptr, size_t obj_size);
+XR_FUNC void xr_region_mark_alloc_lines(void *obj_ptr, size_t obj_size);
 
 /*
  * Inline fast path for marking alloc_marks for all lines an object spans.
  * An object smaller than a line can still cross a line boundary
  * (e.g., 40B object at offset 120 of a 128B line extends into the next line).
  */
-static inline void xr_immix_mark_alloc_lines_fast(void *obj_ptr, size_t obj_size) {
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj_ptr);
-    int first = XR_IMMIX_LINE_INDEX(obj_ptr);
-    int last = XR_IMMIX_LINE_INDEX((char *) obj_ptr + obj_size - 1);
-    XR_IMMIX_LINE_SET(block->alloc_marks, first);
+static inline void xr_region_mark_alloc_lines_fast(void *obj_ptr, size_t obj_size) {
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj_ptr);
+    int first = XR_REGION_LINE_INDEX(obj_ptr);
+    int last = XR_REGION_LINE_INDEX((char *) obj_ptr + obj_size - 1);
+    XR_REGION_LINE_SET(block->alloc_marks, first);
     for (int l = first + 1; l <= last; l++)
-        XR_IMMIX_LINE_SET(block->alloc_marks, l);
+        XR_REGION_LINE_SET(block->alloc_marks, l);
 }
 
 // Count live lines in a block (excluding reserved line 0)
-XR_FUNC int xr_immix_count_live_lines(XrImmixBlock *block);
+XR_FUNC int xr_region_count_live_lines(XrRegionBlock *block);
 
 /* ========== Block Cache API ========== */
 
@@ -216,16 +216,16 @@ XR_FUNC int xr_immix_count_live_lines(XrImmixBlock *block);
 // Called from worker destroy to avoid block leaks. Blocks that don't fit are
 // returned to the OS. Pass sys_heap=NULL to force every block to the OS.
 struct XrSystemHeap;
-XR_FUNC void xr_immix_flush_block_cache(struct XrSystemHeap *sys_heap, void *block_cache[],
-                                        int *count);
+XR_FUNC void xr_region_flush_block_cache(struct XrSystemHeap *sys_heap, void *block_cache[],
+                                         int *count);
 
 // Return a raw aligned block (as cached in the L2 pool) to the OS. Used by the
 // system heap when draining its block pool at isolate teardown.
-XR_FUNC void xr_immix_free_raw_block(void *block);
+XR_FUNC void xr_region_free_raw_block(void *block);
 
 /* ========== Debug API ========== */
 
-typedef struct XrImmixStats {
+typedef struct XrRegionStats {
     size_t total_blocks;
     size_t free_blocks;
     size_t recycle_blocks;
@@ -233,8 +233,8 @@ typedef struct XrImmixStats {
     size_t total_bytes;
     size_t live_lines;
     size_t free_lines;
-} XrImmixStats;
+} XrRegionStats;
 
-XR_FUNC void xr_immix_get_stats(XrImmixHeap *heap, XrImmixStats *stats);
+XR_FUNC void xr_region_get_stats(XrRegionHeap *heap, XrRegionStats *stats);
 
-#endif  // XIMMIX_H
+#endif  // XREGION_H

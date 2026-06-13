@@ -229,8 +229,8 @@ static XrValue gc_fragmentation(XrayIsolate *isolate, XrValue *args, int argc) {
     if (!gc)
         return xr_float(0.0);
 
-    XrImmixStats stats;
-    xr_immix_get_stats(&gc->immix, &stats);
+    XrRegionStats stats;
+    xr_region_get_stats(&gc->region, &stats);
 
     size_t total = stats.live_lines + stats.free_lines;
     if (total == 0)
@@ -276,9 +276,9 @@ static XrValue gc_info(XrayIsolate *isolate, XrValue *args, int argc) {
     // Monitoring stats
     MAP_SET(map, "finalizerCount", xr_int((int64_t) gc->finalizer_count));
 
-    // Immix block/line stats
-    XrImmixStats istats;
-    xr_immix_get_stats(&gc->immix, &istats);
+    // Region block/line stats
+    XrRegionStats istats;
+    xr_region_get_stats(&gc->region, &istats);
     MAP_SET(map, "blocks", xr_int((int64_t) istats.total_blocks));
     MAP_SET(map, "freeBlocks", xr_int((int64_t) istats.free_blocks));
     MAP_SET(map, "recycleBlocks", xr_int((int64_t) istats.recycle_blocks));

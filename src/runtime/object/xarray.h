@@ -72,7 +72,7 @@ struct XrArray {
     uint8_t elem_size;        // Cached: bytes per element
     uint8_t elem_tid;         // XrTypeId: semantic type for reified generics (0=any)
     uint8_t has_gc_ptrs;      // Monotonic flag: 1 if any GC pointer was ever stored
-    uint8_t data_on_gc_heap;  // 1 if data buffer is on Immix GC heap (no free needed)
+    uint8_t data_on_gc_heap;  // 1 if data buffer is on Region GC heap (no free needed)
     uint8_t _pad[3];          // Alignment / reserved
 };
 typedef struct XrArray XrArray;

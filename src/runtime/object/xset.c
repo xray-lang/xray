@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   - Set object: GC allocated
- *   - Coroutine-heap sets: entries[] as GC blob on Immix heap (no malloc/free)
+ *   - Coroutine-heap sets: entries[] as GC blob on Region heap (no malloc/free)
  *   - System-heap sets: entries[] via xr_malloc(freed by destructor)
  */
 
@@ -222,7 +222,7 @@ void xr_set_resize(XrSet *set, uint32_t new_capacity) {
     XR_DCHECK(new_capacity > 0, "set_resize: zero capacity");
     XR_DCHECK((new_capacity & (new_capacity - 1)) == 0, "set_resize: capacity not power-of-2");
     size_t alloc_bytes = sizeof(XrSetEntry) * new_capacity;
-    // entries[] always lives on malloc — this avoids Immix line
+    // entries[] always lives on malloc — this avoids Region line
     // recycling overlapping with the old entries during the rehash
     // loop below.
     XrSetEntry *new_entries = (XrSetEntry *) xr_malloc(alloc_bytes);

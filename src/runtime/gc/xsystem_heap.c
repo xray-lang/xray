@@ -16,7 +16,7 @@
 #include "xsystem_heap.h"
 #include "../../base/xchecks.h"
 #include "xgc_internal.h"
-#include "ximmix.h"  // xr_immix_free_raw_block (drain pooled blocks)
+#include "xregion.h"  // xr_region_free_raw_block (drain pooled blocks)
 #include "../../base/xmalloc.h"
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
@@ -51,8 +51,8 @@ static void sysheap_block_pool_drain(XrSystemHeap *heap) {
     xr_mutex_lock(&heap->block_pool_mu);
     void *b = heap->block_pool_head;
     while (b) {
-        void *next = *(void **) b; /* linked via XrImmixBlock.next (first word) */
-        xr_immix_free_raw_block(b);
+        void *next = *(void **) b; /* linked via XrRegionBlock.next (first word) */
+        xr_region_free_raw_block(b);
         b = next;
     }
     heap->block_pool_head = NULL;
@@ -129,7 +129,7 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     heap->gc_pool_head = NULL;
     heap->gc_pool_count = 0;
 
-    // Initialize Immix block L2 pool
+    // Initialize Region block L2 pool
     xr_mutex_init(&heap->block_pool_mu);
     heap->block_pool_head = NULL;
     heap->block_pool_count = 0;
@@ -153,7 +153,7 @@ void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
     // shells are being released.
     sysheap_gc_pool_drain(heap);
 
-    // Drain the Immix block L2 pool: coroutine heap teardown and worker exit
+    // Drain the Region block L2 pool: coroutine heap teardown and worker exit
     // push recycled blocks here; return them to the OS now.
     sysheap_block_pool_drain(heap);
 }

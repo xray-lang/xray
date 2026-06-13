@@ -676,7 +676,7 @@ void xr_coro_recycle_local(XrWorker *worker, XrCoroutine *coro) {
     if (coro->ext)
         xr_io_wait_token_cancel(&coro->ext->wait.io_token);
 
-    // Reset GC context: finalize objects, bulk free Immix blocks, reset state.
+    // Reset GC context: finalize objects, bulk free Region blocks, reset state.
     // Uses xr_coro_gc_reset which handles large objects and finalizers
     // correctly (the previous partial reset skipped those).
     if (coro->coro_gc) {

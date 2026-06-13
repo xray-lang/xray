@@ -12,7 +12,7 @@
  *   These objects are NOT subject to per-coroutine GC.
  *
  * VS xcoro_gc (Per-Coroutine GC):
- *   - xcoro_gc: Per-coroutine Immix bump + reference counting, freed when coro ends
+ *   - xcoro_gc: Per-coroutine Region bump + reference counting, freed when coro ends
  *   - xsystem_heap: Global, Arena-allocated (never freed) or ref-counted
  *
  * OBJECT TYPES:
@@ -98,14 +98,14 @@ typedef struct XrSystemHeap {
     struct XrCoroGC *gc_pool_head;
     int gc_pool_count;
 
-    /* Per-isolate L2 cache of recycled 16KB Immix blocks. The L1 cache lives
+    /* Per-isolate L2 cache of recycled 16KB Region blocks. The L1 cache lives
      * on each worker (XrProc.block_cache); on overflow or worker teardown
      * blocks are pushed here, and L1 misses pop from here before a fresh
      * aligned allocation. Scoping this per-isolate (rather than a process
      * global) keeps block reuse inside isolate boundaries and returns the
      * cached blocks at isolate teardown instead of at process exit. Blocks
-     * are linked through their first word (XrImmixBlock.next), kept opaque
-     * here as void* so the system heap needs no Immix layout dependency. */
+     * are linked through their first word (XrRegionBlock.next), kept opaque
+     * here as void* so the system heap needs no Region layout dependency. */
     xr_mutex_t block_pool_mu;
     void *block_pool_head;
     int block_pool_count;
@@ -160,7 +160,7 @@ XR_FUNC void xr_sysheap_free_shared(void *ptr, size_t size);
 XR_FUNC struct XrCoroGC *xr_sysheap_gc_pool_pop(XrSystemHeap *heap);
 XR_FUNC bool xr_sysheap_gc_pool_push(XrSystemHeap *heap, struct XrCoroGC *gc);
 
-/* ========== Immix Block Pool (L2) ==========
+/* ========== Region Block Pool (L2) ==========
  *
  * Recycled 16KB blocks (linked through their first word). Bounded; blocks
  * that don't fit are returned to the OS by the caller. */

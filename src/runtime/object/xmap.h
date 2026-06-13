@@ -61,7 +61,7 @@ typedef struct XrMap {
 // Flags
 #define XR_MAP_FLAG_WEAK 0x01
 #define XR_MAP_FLAG_DUMMY 0x02
-#define XR_MAP_FLAG_NODES_ON_GC 0x04  // node[] allocated as GC blob on Immix heap
+#define XR_MAP_FLAG_NODES_ON_GC 0x04  // node[] allocated as GC blob on Region heap
 
 #define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
 

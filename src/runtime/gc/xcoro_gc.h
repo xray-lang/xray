@@ -5,16 +5,16 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_gc.h - Per-Coroutine Memory Manager (Immix bump + RC reclamation)
+ * xcoro_gc.h - Per-Coroutine Memory Manager (Region bump + RC reclamation)
  *
  * Reclamation model:
  *   - Compile-time RC (xi_arc) owns object lifetime; drop-to-zero frees
  *     through the per-coroutine RC freelist (same-size-class reuse).
  *   - Shared objects (cross-coroutine) use atomic refcounting (xshared.h).
- *   - Coroutine teardown bulk-frees all Immix blocks and large objects.
+ *   - Coroutine teardown bulk-frees all Region blocks and large objects.
  *
  * Allocation:
- *   - Small objects (≤4 KB): Immix bump-pointer inside 16 KB blocks;
+ *   - Small objects (≤4 KB): Region bump-pointer inside 16 KB blocks;
  *     objects never move, C extensions are naturally safe.
  *   - Large objects (>4 KB): individual xr_malloc / os_mmap.
  *
@@ -33,7 +33,7 @@
 #include "../../base/xdefs.h"
 #include "../../base/xmalloc.h"
 #include "../value/xvalue.h"
-#include "ximmix.h"
+#include "xregion.h"
 #include "xgc_internal.h"
 
 /* ========== Forward Declarations ========== */
@@ -54,7 +54,7 @@ struct XrGC;
  * Small RC-managed objects (≤ XR_LARGE_OBJECT_THRESHOLD) are returned to a
  * per-coroutine segregated freelist when their refcount hits zero, then
  * reused by subsequent allocations of the same size class. This gives RC a
- * real single-object reclamation path on top of the Immix bump allocator,
+ * real single-object reclamation path on top of the Region bump allocator,
  * which itself never frees individual objects.
  *
  * Size classes use EXACT 8-byte granularity — the same alignment the
@@ -118,13 +118,13 @@ static inline bool xr_gc_ptrset_slot_live(XrGCHeader *slot) {
     return slot != NULL && slot != XR_GC_PTRSET_TOMBSTONE;
 }
 
-/* ========== Coroutine GC Structure (Immix bump + RC reclamation) ========== */
+/* ========== Coroutine GC Structure (Region bump + RC reclamation) ========== */
 
 typedef struct XrCoroGC {
-    // === Cache line 0: Immix allocator hot path ===
-    // cursor/limit/current_block are the first 3 fields of XrImmixHeap.
+    // === Cache line 0: Region allocator hot path ===
+    // cursor/limit/current_block are the first 3 fields of XrRegionHeap.
     // JIT inline allocation reads cursor/limit at fixed offsets.
-    XrImmixHeap immix;
+    XrRegionHeap region;
 
     // === Allocation accounting ===
     int64_t totalbytes;        // Total allocated bytes (gc.count / gc.info stats)
@@ -160,7 +160,7 @@ typedef struct XrCoroGC {
     // === RC per-object freelist (RC reclaims small objects) ===
     // Segregated free lists by size class, lazily allocated; on drop-to-zero a
     // small object's memory is pushed here and reused by a later same-class
-    // allocation before falling back to Immix bump. NULL until the first free.
+    // allocation before falling back to Region bump. NULL until the first free.
     XrGCHeader **rc_freelist;  // array[XR_RC_FREECLASSES] of list heads
 
     // === Stackless recursive free ===
@@ -184,15 +184,15 @@ typedef struct XrCoroGC {
 } XrCoroGC;
 
 /* ========== JIT Struct Offsets (compile-time constants) ========== */
-/* Only the Immix bump fields and totalbytes are read by JIT inline alloc now;
+/* Only the Region bump fields and totalbytes are read by JIT inline alloc now;
  * the tracing offsets (gcstate / currentwhite / GCdebt / gc_requested) were
  * removed along with the fields. */
 
-#define XR_COROGC_OFFSET_IMMIX offsetof(XrCoroGC, immix)
+#define XR_COROGC_OFFSET_REGION offsetof(XrCoroGC, region)
 #define XR_COROGC_OFFSET_TOTALBYTES offsetof(XrCoroGC, totalbytes)
 
-#define XR_IMMIX_OFFSET_CURSOR offsetof(XrImmixHeap, cursor)
-#define XR_IMMIX_OFFSET_LIMIT offsetof(XrImmixHeap, limit)
+#define XR_REGION_OFFSET_CURSOR offsetof(XrRegionHeap, cursor)
+#define XR_REGION_OFFSET_LIMIT offsetof(XrRegionHeap, limit)
 
 /* ========== Coroutine GC Configuration ========== */
 
@@ -246,7 +246,7 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj);
  * the block to the freelist. Routes shared objects to xr_shared_destroy. */
 XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj);
 
-/* Release the freelist array itself (block memory is owned by Immix and
+/* Release the freelist array itself (block memory is owned by Region and
  * freed in bulk at coroutine teardown). Called from gc destroy/reset. */
 XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 
@@ -265,7 +265,7 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc);
 // accumulated cycle_roots, then clears the roots list. Called by gc.collect().
 XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc);
 
-/* Whole-block reclaim: return fully-dead Immix blocks to the heap's free pool
+/* Whole-block reclaim: return fully-dead Region blocks to the heap's free pool
  * so a later allocation of ANY size class can reuse them. Bounds peak
  * retention of long-lived coroutines under shifting size-class loads, where a
  * per-size-class RC freelist alone never lets size B reuse size A's memory.

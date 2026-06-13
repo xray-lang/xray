@@ -42,7 +42,7 @@ XR_FUNC XrCoroGC *xr_coro_get_coro_gc(struct XrCoroutine *coro);
 // Get current coroutine's GC context via TLS
 XR_FUNC XrCoroGC *xr_current_coro_gc(void);
 
-// Allocate raw byte buffer on coroutine's Immix GC heap (XR_TBLOB)
+// Allocate raw byte buffer on coroutine's Region GC heap (XR_TBLOB)
 static inline void *xr_coro_alloc_blob(XrCoroGC *gc, size_t data_size) {
     if (!gc)
         return NULL;

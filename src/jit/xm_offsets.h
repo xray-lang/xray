@@ -132,8 +132,8 @@
 
 /* ========== GC / Allocation offsets ========== */
 
-#define XM_IMMIX_CURSOR_OFFSET 0     // offsetof(XrImmixHeap, cursor)
-#define XM_IMMIX_LIMIT_OFFSET 8      // offsetof(XrImmixHeap, limit)
+#define XM_REGION_CURSOR_OFFSET 0    // offsetof(XrRegionHeap, cursor)
+#define XM_REGION_LIMIT_OFFSET 8     // offsetof(XrRegionHeap, limit)
 #define XM_GC_HDR_TYPE_OFFSET 0      // offsetof(XrGCHeader, type)
 #define XM_GC_HDR_EXTRA_OFFSET 2     // offsetof(XrGCHeader, extra)
 #define XM_GC_HDR_REFCOUNT_OFFSET 4  // offsetof(XrGCHeader, refcount)
@@ -141,15 +141,15 @@
 #define XM_GC_HDR_RSV_OFFSET 12      // offsetof(XrGCHeader, _rsv)
 
 /* ========== GC bookkeeping offsets (for inline alloc_post) ========== */
-/* Inline allocation bumps the Immix cursor, updates block accounting, and
+/* Inline allocation bumps the Region cursor, updates block accounting, and
  * adds to totalbytes. */
 
-#define XM_GC_TOTALBYTES_OFFSET 96            // offsetof(XrCoroGC, totalbytes)
-#define XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrImmixBlock, alloc_marks)
-#define XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET 28  // offsetof(XrImmixBlock, alloc_count)
-#define XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET 32  // offsetof(XrImmixBlock, alloc_bytes)
-#define XM_IMMIX_BLOCK_SIZE_MASK 0x3FFF       // XR_IMMIX_BLOCK_SIZE - 1
-#define XM_IMMIX_LINE_SIZE_SHIFT 7            // log2(128) = 7
+#define XM_GC_TOTALBYTES_OFFSET 96             // offsetof(XrCoroGC, totalbytes)
+#define XM_REGION_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrRegionBlock, alloc_marks)
+#define XM_REGION_BLOCK_ALLOC_COUNT_OFFSET 28  // offsetof(XrRegionBlock, alloc_count)
+#define XM_REGION_BLOCK_ALLOC_BYTES_OFFSET 32  // offsetof(XrRegionBlock, alloc_bytes)
+#define XM_REGION_BLOCK_SIZE_MASK 0x3FFF       // XR_REGION_BLOCK_SIZE - 1
+#define XM_REGION_LINE_SIZE_SHIFT 7            // log2(128) = 7
 
 /* ========== Compile-time offset verification ========== */
 
@@ -201,19 +201,19 @@ _Static_assert(offsetof(XrProto, stack_map) == XM_PROTO_STACK_MAP_OFFSET,
                "stack_map offset mismatch");
 
 #include "../runtime/gc/xcoro_gc.h"
-#include "../runtime/gc/ximmix.h"
+#include "../runtime/gc/xregion.h"
 _Static_assert(offsetof(XrCoroGC, totalbytes) == XM_GC_TOTALBYTES_OFFSET,
                "totalbytes offset mismatch");
-_Static_assert(offsetof(XrImmixBlock, alloc_marks) == XM_IMMIX_BLOCK_ALLOC_MARKS_OFFSET,
+_Static_assert(offsetof(XrRegionBlock, alloc_marks) == XM_REGION_BLOCK_ALLOC_MARKS_OFFSET,
                "alloc_marks offset mismatch");
-_Static_assert(offsetof(XrImmixBlock, alloc_count) == XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET,
+_Static_assert(offsetof(XrRegionBlock, alloc_count) == XM_REGION_BLOCK_ALLOC_COUNT_OFFSET,
                "alloc_count offset mismatch");
-_Static_assert(offsetof(XrImmixBlock, alloc_bytes) == XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET,
+_Static_assert(offsetof(XrRegionBlock, alloc_bytes) == XM_REGION_BLOCK_ALLOC_BYTES_OFFSET,
                "alloc_bytes offset mismatch");
-_Static_assert(offsetof(XrImmixHeap, cursor) == XM_IMMIX_CURSOR_OFFSET,
-               "ImmixHeap.cursor offset mismatch");
-_Static_assert(offsetof(XrImmixHeap, limit) == XM_IMMIX_LIMIT_OFFSET,
-               "ImmixHeap.limit offset mismatch");
+_Static_assert(offsetof(XrRegionHeap, cursor) == XM_REGION_CURSOR_OFFSET,
+               "RegionHeap.cursor offset mismatch");
+_Static_assert(offsetof(XrRegionHeap, limit) == XM_REGION_LIMIT_OFFSET,
+               "RegionHeap.limit offset mismatch");
 
 // XrGCHeader detailed field checks
 _Static_assert(offsetof(XrGCHeader, extra) == XM_GC_HDR_EXTRA_OFFSET,

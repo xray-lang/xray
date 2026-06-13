@@ -37,7 +37,7 @@ add_xray_unit_test(test_arena util/test_arena.c)
 # gc/ — Garbage collector
 # ============================================================================
 
-add_xray_unit_test(test_immix_gc gc/test_immix_gc.c)
+add_xray_unit_test(test_region_gc gc/test_region_gc.c)
 add_xray_unit_test(test_obj_header gc/test_obj_header.c)
 
 # ============================================================================
