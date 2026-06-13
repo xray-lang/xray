@@ -56,10 +56,9 @@
 /* Color encoding for trial deletion (extra bits 8-9, see xgc_header.h).
  * Every reachable object is recolored before its color is read in each
  * phase, so stale colors from a previous collect round are harmless. */
-#define COLOR_BLACK 0   /* definitely live */
-#define COLOR_GRAY 1    /* trial-decremented, unknown liveness */
-#define COLOR_WHITE 2   /* presumed dead (cycle garbage) */
-#define COLOR_FREEING 3 /* white, queued in the collect buffer */
+#define COLOR_BLACK 0 /* definitely live */
+#define COLOR_GRAY 1  /* in the reachable set / trial-decremented */
+#define COLOR_WHITE 2 /* presumed dead (cycle garbage) */
 
 static inline void set_color(XrGCHeader *obj, uint8_t color) {
     obj->extra = (uint16_t) ((obj->extra & ~(uint16_t) XR_OBJ_CYCLE_COLOR_MASK) |
@@ -246,114 +245,89 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc) {
     gc->cycle_root_cap = 0;
 }
 
-/* ========== Bacon-Rajan Trial Deletion ========== */
+/* ========== Bacon-Rajan Trial Deletion (iterative, OOM-safe) ==========
+ *
+ * Rewritten as breadth-first passes over an explicit work array so a deep
+ * object graph cannot overflow the C stack (the previous version recursed
+ * once per GC edge). Every allocation happens UP FRONT, before any refcount
+ * is mutated: on allocation failure the collection is skipped cleanly, so a
+ * trial decrement is never left unbalanced (no recursive abort path needed).
+ *
+ * Passes:
+ *   A. BFS the eligible subgraph reachable from the roots into `R`, coloring
+ *      each member GRAY (GRAY doubles as the "in R" marker). No mutation.
+ *   B. markGray: decrement every internal edge exactly once (each R node's
+ *      eligible children) — R is closed under eligible edges, so this is the
+ *      trial deletion of all in-cycle references.
+ *   C. scanBlack every still-GRAY node with refcount >= 0 (an external
+ *      reference survived): restore its reachable subtree's edges and color
+ *      it BLACK (live). Any node left GRAY afterwards is dead → WHITE.
+ *   D. Restore the WHITE nodes' out-edges, then run the RC destroy cascade.
+ */
 
-/* markGray: trial-decrement children's RC. Recurse into gray children. */
-static void mark_gray_visitor(XrGCHeader *child, void *ctx) {
-    (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
-        return;
-    child->refcount--;
-    if (get_color(child) != COLOR_GRAY) {
-        set_color(child, COLOR_GRAY);
-        visit_children(child, mark_gray_visitor, NULL);
-    }
-}
-
-static void mark_gray(XrGCHeader *obj) {
-    set_color(obj, COLOR_GRAY);
-    visit_children(obj, mark_gray_visitor, NULL);
-}
-
-/* scanBlack: restore children's RC (object is confirmed live). */
-static void scan_black_visitor(XrGCHeader *child, void *ctx) {
-    (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
-        return;
-    child->refcount++;
-    if (get_color(child) != COLOR_BLACK) {
-        set_color(child, COLOR_BLACK);
-        visit_children(child, scan_black_visitor, NULL);
-    }
-}
-
-static void scan_black(XrGCHeader *obj) {
-    set_color(obj, COLOR_BLACK);
-    visit_children(obj, scan_black_visitor, NULL);
-}
-
-/* scan: after markGray, check if root is still live. */
-static void scan_visitor(XrGCHeader *child, void *ctx);
-
-static void scan(XrGCHeader *obj) {
-    if (get_color(obj) != COLOR_GRAY)
-        return;
-    /* 0-based RC: references = refcount + 1. After trial-decrementing every
-     * internal cycle edge, refcount == external_refs - 1, so refcount >= 0
-     * means an external reference survives (live); refcount == -1 means all
-     * references were internal (dead cycle member). */
-    if (obj->refcount >= 0) {
-        /* Still reachable from outside the cycle — restore. */
-        scan_black(obj);
-    } else {
-        /* Presumed dead cycle member. */
-        set_color(obj, COLOR_WHITE);
-        visit_children(obj, scan_visitor, NULL);
-    }
-}
-
-static void scan_visitor(XrGCHeader *child, void *ctx) {
-    (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
-        return;
-    scan(child);
-}
-
-/* ========== Collect Phase (restore-then-destroy) ========== */
-
-/* Growable buffer of white objects. Buffering first means we never have to
- * traverse object payloads after any destructor/free has run. */
 typedef struct {
     XrGCHeader **items;
     uint32_t count;
     uint32_t cap;
     bool oom;
-} WhiteBuf;
+} CycleVec;
 
-static void white_buf_push(WhiteBuf *buf, XrGCHeader *obj) {
-    if (buf->oom)
-        return;
-    if (buf->count >= buf->cap) {
-        uint32_t new_cap = buf->cap ? buf->cap * 2 : 64;
-        XrGCHeader **tmp = (XrGCHeader **) xr_realloc(buf->items, sizeof(XrGCHeader *) * new_cap);
-        if (!tmp) {
-            buf->oom = true;
-            return;
+static bool cvec_push(CycleVec *v, XrGCHeader *o) {
+    if (v->count == v->cap) {
+        uint32_t nc = v->cap ? v->cap * 2 : 64;
+        XrGCHeader **t = (XrGCHeader **) xr_realloc(v->items, (size_t) nc * sizeof(*t));
+        if (!t) {
+            v->oom = true;
+            return false;
         }
-        buf->items = tmp;
-        buf->cap = new_cap;
+        v->items = t;
+        v->cap = nc;
     }
-    buf->items[buf->count++] = obj;
+    v->items[v->count++] = o;
+    return true;
 }
 
-/* Gather all white objects reachable from `obj` into the buffer, recoloring
- * them FREEING as the visited marker. No RC mutation, no freeing here. */
-static void collect_white_visitor(XrGCHeader *child, void *ctx);
-
-static void collect_white(XrGCHeader *obj, WhiteBuf *buf) {
-    if (get_color(obj) != COLOR_WHITE)
+/* Pass A visitor: add an eligible, not-yet-seen child to the reachable set. */
+static void cycle_reach_visitor(XrGCHeader *child, void *ctx) {
+    CycleVec *R = (CycleVec *) ctx;
+    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
-    if (obj->extra & XR_OBJ_DEAD)
-        return;
-    set_color(obj, COLOR_FREEING);
-    white_buf_push(buf, obj);
-    visit_children(obj, collect_white_visitor, buf);
+    if (get_color(child) != COLOR_GRAY) {
+        set_color(child, COLOR_GRAY);
+        cvec_push(R, child); /* sets R->oom on failure */
+    }
 }
 
-static void collect_white_visitor(XrGCHeader *child, void *ctx) {
-    if (!child || !cycle_child_eligible(child))
+/* Pass B visitor: trial-decrement one internal edge. */
+static void mark_gray_dec_visitor(XrGCHeader *child, void *ctx) {
+    (void) ctx;
+    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
-    collect_white(child, (WhiteBuf *) ctx);
+    child->refcount--;
+}
+
+/* Pass C visitor: restore one edge of a live node and queue newly-black
+ * children. `work` is pre-sized to |R| and every pushed node is a distinct
+ * member of R, so the push never exceeds capacity. */
+static void scan_black_inc_visitor(XrGCHeader *child, void *ctx) {
+    CycleVec *work = (CycleVec *) ctx;
+    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
+        return;
+    child->refcount++;
+    if (get_color(child) != COLOR_BLACK) {
+        set_color(child, COLOR_BLACK);
+        work->items[work->count++] = child;
+    }
+}
+
+static void scan_black_flat(XrGCHeader *root, CycleVec *work) {
+    set_color(root, COLOR_BLACK);
+    work->count = 0;
+    work->items[work->count++] = root;
+    while (work->count) {
+        XrGCHeader *obj = work->items[--work->count];
+        visit_children(obj, scan_black_inc_visitor, work);
+    }
 }
 
 /* Restore one out-edge of a white object (undo its markGray decrement).
@@ -363,27 +337,6 @@ static void restore_edge_visitor(XrGCHeader *child, void *ctx) {
     if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
         return;
     child->refcount++;
-}
-
-/* OOM abort: recolor every still-white/freeing object black and restore its
- * out-edge decrements WITHOUT destroying anything. The cycle leaks (it can
- * be retried on a later collect), but no refcount is left understated. */
-static void abort_restore_visitor(XrGCHeader *child, void *ctx);
-
-static void abort_restore(XrGCHeader *obj) {
-    uint8_t c = get_color(obj);
-    if (c != COLOR_WHITE && c != COLOR_FREEING)
-        return;
-    set_color(obj, COLOR_BLACK);
-    visit_children(obj, restore_edge_visitor, NULL);
-    visit_children(obj, abort_restore_visitor, NULL);
-}
-
-static void abort_restore_visitor(XrGCHeader *child, void *ctx) {
-    (void) ctx;
-    if (!child || (child->extra & XR_OBJ_DEAD) || !cycle_child_eligible(child))
-        return;
-    abort_restore(child);
 }
 
 /* Main entry: run the Bacon-Rajan cycle collector on accumulated roots.
@@ -406,58 +359,86 @@ XR_FUNC void xr_coro_gc_fullgc(XrCoroGC *gc) {
     gc->gc_count++;
 
     uint32_t n = gc->cycle_root_count;
+    CycleVec R = {0};
+    CycleVec work = {0};
+    uint32_t freed = 0;
 
-    /* markGray all roots. */
+    /* Pass A: collect the reachable eligible set (colors members GRAY). */
+    bool ok = true;
     for (uint32_t i = 0; i < n; i++) {
-        XrGCHeader *obj = gc->cycle_roots[i];
-        if (obj && !(obj->extra & XR_OBJ_DEAD) && cycle_child_eligible(obj)) {
-            set_color(obj, COLOR_BLACK); /* initialize */
-            mark_gray(obj);
+        XrGCHeader *o = gc->cycle_roots[i];
+        if (o && !(o->extra & XR_OBJ_DEAD) && cycle_child_eligible(o) &&
+            get_color(o) != COLOR_GRAY) {
+            set_color(o, COLOR_GRAY);
+            if (!cvec_push(&R, o)) {
+                ok = false;
+                break;
+            }
         }
     }
-
-    /* scan: determine which are truly dead. */
-    for (uint32_t i = 0; i < n; i++) {
-        XrGCHeader *obj = gc->cycle_roots[i];
-        if (obj && !(obj->extra & XR_OBJ_DEAD) && cycle_child_eligible(obj))
-            scan(obj);
-    }
-
-    /* Gather the white set (no mutation yet). */
-    WhiteBuf buf = {0};
-    for (uint32_t i = 0; i < n; i++) {
-        XrGCHeader *obj = gc->cycle_roots[i];
-        if (obj && cycle_child_eligible(obj))
-            collect_white(obj, &buf);
-    }
-
-    if (buf.oom) {
-        /* Could not buffer the full white set: restore all trial decrements
-         * and bail without freeing (leak-safe, retryable). */
-        for (uint32_t i = 0; i < n; i++) {
-            XrGCHeader *obj = gc->cycle_roots[i];
-            if (obj && !(obj->extra & XR_OBJ_DEAD) && cycle_child_eligible(obj))
-                abort_restore(obj);
+    for (uint32_t s = 0; ok && s < R.count; s++) {
+        visit_children(R.items[s], cycle_reach_visitor, &R);
+        if (R.oom) {
+            ok = false;
+            break;
         }
-    } else {
-        /* Restore every white object's out-edges, THEN run the normal
-         * destroy cascade. After restoration the refcounts are exact, so
-         * the type destructors drop each edge exactly once: live children
-         * referenced from the dead cycle end up with a correct refcount,
-         * and owned side buffers (map nodes, array data, ...) are freed.
-         * The XR_OBJ_DEAD guard in xr_coro_gc_rc_destroy makes the
-         * cascade idempotent across cycle edges. */
-        for (uint32_t i = 0; i < buf.count; i++)
-            visit_children(buf.items[i], restore_edge_visitor, NULL);
-        for (uint32_t i = 0; i < buf.count; i++) {
-            XrGCHeader *obj = buf.items[i];
-            if (!(obj->extra & XR_OBJ_DEAD))
+    }
+    /* Pre-size the scanBlack frontier to |R| so passes B-D never allocate. */
+    if (ok && R.count > 0) {
+        work.items = (XrGCHeader **) xr_malloc((size_t) R.count * sizeof(XrGCHeader *));
+        if (!work.items)
+            ok = false;
+        else
+            work.cap = R.count;
+    }
+
+    if (!ok) {
+        /* Allocation failed before any mutation: reset colors and skip this
+         * collection (the cycle stays, retried on a later collect). */
+        for (uint32_t i = 0; i < R.count; i++)
+            set_color(R.items[i], COLOR_BLACK);
+    } else if (R.count > 0) {
+        /* Pass B: trial-decrement every internal edge once. */
+        for (uint32_t i = 0; i < R.count; i++)
+            visit_children(R.items[i], mark_gray_dec_visitor, NULL);
+
+        /* Pass C: nodes with a surviving external reference are live. */
+        for (uint32_t i = 0; i < R.count; i++) {
+            XrGCHeader *obj = R.items[i];
+            if (get_color(obj) == COLOR_GRAY && obj->refcount >= 0)
+                scan_black_flat(obj, &work);
+        }
+        for (uint32_t i = 0; i < R.count; i++) {
+            if (get_color(R.items[i]) == COLOR_GRAY)
+                set_color(R.items[i], COLOR_WHITE); /* dead cycle member */
+        }
+
+        /* Pass D: restore WHITE out-edges so the destroy cascade drops each
+         * edge exactly once, then destroy. The XR_OBJ_DEAD guard in
+         * xr_coro_gc_rc_destroy makes the cascade idempotent across edges. */
+        for (uint32_t i = 0; i < R.count; i++) {
+            if (get_color(R.items[i]) == COLOR_WHITE)
+                visit_children(R.items[i], restore_edge_visitor, NULL);
+        }
+        for (uint32_t i = 0; i < R.count; i++) {
+            XrGCHeader *obj = R.items[i];
+            if (get_color(obj) == COLOR_WHITE && !(obj->extra & XR_OBJ_DEAD)) {
+                freed++;
                 xr_coro_gc_rc_destroy(gc, obj);
+            }
+        }
+
+        /* Reset colors on survivors so a stale GRAY/WHITE cannot mislead the
+         * next collection's "in R" test. */
+        for (uint32_t i = 0; i < R.count; i++) {
+            XrGCHeader *obj = R.items[i];
+            if (!(obj->extra & XR_OBJ_DEAD))
+                set_color(obj, COLOR_BLACK);
         }
     }
-    /* Productivity of this collection: objects reclaimed vs roots scanned. */
-    uint32_t freed = buf.oom ? 0u : buf.count;
-    xr_free(buf.items);
+
+    xr_free(R.items);
+    xr_free(work.items);
 
     /* Reset the roots list. Surviving (non-dead) entries get their _rsv
      * sentinel back so future RC decrements can re-track them; without
