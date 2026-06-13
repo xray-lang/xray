@@ -144,12 +144,10 @@
 /* Inline allocation bumps the Region cursor, updates block accounting, and
  * adds to totalbytes. */
 
-#define XM_GC_TOTALBYTES_OFFSET 96             // offsetof(XrCoroGC, totalbytes)
-#define XM_REGION_BLOCK_ALLOC_MARKS_OFFSET 8   // offsetof(XrRegionBlock, alloc_marks)
-#define XM_REGION_BLOCK_ALLOC_COUNT_OFFSET 28  // offsetof(XrRegionBlock, alloc_count)
-#define XM_REGION_BLOCK_ALLOC_BYTES_OFFSET 32  // offsetof(XrRegionBlock, alloc_bytes)
+#define XM_GC_TOTALBYTES_OFFSET 64             // offsetof(XrCoroGC, totalbytes)
+#define XM_REGION_BLOCK_ALLOC_COUNT_OFFSET 8   // offsetof(XrRegionBlock, alloc_count)
+#define XM_REGION_BLOCK_ALLOC_BYTES_OFFSET 16  // offsetof(XrRegionBlock, alloc_bytes)
 #define XM_REGION_BLOCK_SIZE_MASK 0x3FFF       // XR_REGION_BLOCK_SIZE - 1
-#define XM_REGION_LINE_SIZE_SHIFT 7            // log2(128) = 7
 
 /* ========== Compile-time offset verification ========== */
 
@@ -204,8 +202,6 @@ _Static_assert(offsetof(XrProto, stack_map) == XM_PROTO_STACK_MAP_OFFSET,
 #include "../runtime/gc/xregion.h"
 _Static_assert(offsetof(XrCoroGC, totalbytes) == XM_GC_TOTALBYTES_OFFSET,
                "totalbytes offset mismatch");
-_Static_assert(offsetof(XrRegionBlock, alloc_marks) == XM_REGION_BLOCK_ALLOC_MARKS_OFFSET,
-               "alloc_marks offset mismatch");
 _Static_assert(offsetof(XrRegionBlock, alloc_count) == XM_REGION_BLOCK_ALLOC_COUNT_OFFSET,
                "alloc_count offset mismatch");
 _Static_assert(offsetof(XrRegionBlock, alloc_bytes) == XM_REGION_BLOCK_ALLOC_BYTES_OFFSET,

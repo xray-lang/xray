@@ -164,25 +164,18 @@ static const XaBuiltinMember g_gen_encoding_functions[] = {
 
 // gc module functions
 static const XaBuiltinMember g_gen_gc_functions[] = {
-    {"collect", "(): int", "Force full GC, return cycle count", true, false},
-    {"step", "(): bool", "Run one incremental GC step, return true if cycle completed", true,
+    {"collect", "(): int", "Run cycle collection + whole-block reclaim, return cycle count", true,
      false},
-    {"disable", "(): ()", "Disable automatic GC", true, false},
-    {"enable", "(): ()", "Enable automatic GC", true, false},
-    {"isrunning", "(): bool", "Check if GC is enabled", true, false},
-    {"count", "(): float", "Get memory usage in KB", true, false},
-    {"countb", "(): int", "Get memory usage in bytes", true, false},
-    {"objects", "(): int", "Get total GC object count", true, false},
-    {"gccount", "(): int", "Get completed GC cycle count", true, false},
-    {"debt", "(): int", "Get current GC debt in bytes", true, false},
-    {"state", "(): string", "Get current GC state name", true, false},
-    {"info", "(): Map", "Get detailed GC info as Map", true, false},
-    {"timems", "(): float", "Get cumulative GC time in milliseconds", true, false},
-    {"fragmentation", "(): float", "Get heap fragmentation ratio (0.0-1.0)", true, false},
-    {"setpause", "(pause: int): int", "Set GC pause factor, return old value", true, false},
-    {"setstepmul", "(mul: int): int", "Set GC step multiplier, return old value", true, false},
+    {"disable", "(): ()", "Pause the automatic cycle collector", true, false},
+    {"enable", "(): ()", "Resume the automatic cycle collector", true, false},
+    {"isrunning", "(): bool", "Check if automatic cycle collection is enabled", true, false},
+    {"count", "(): float", "Get live memory usage in KB", true, false},
+    {"countb", "(): int", "Get live memory usage in bytes", true, false},
+    {"objects", "(): int", "Get live GC object count", true, false},
+    {"cycles", "(): int", "Get number of cycle collections run", true, false},
+    {"info", "(): Map", "Get RC-native GC info as Map", true, false},
 };
-#define GEN_GC_FUNCTION_COUNT 16
+#define GEN_GC_FUNCTION_COUNT 9
 
 // http.HttpResponse handle fields
 static const XaBuiltinHandleField g_gen_http_httpresponse_fields[] = {

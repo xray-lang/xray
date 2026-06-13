@@ -10,7 +10,10 @@
  * KEY CONCEPT:
  *   Chase-Lev deque for million-coroutine load balancing.
  *   Local ops (push/pop) lock-free, steal uses single CAS.
- *   FIFO: push to tail, steal from head. Dynamic resize supported.
+ *   Owner pops LIFO from the bottom; thieves steal FIFO from the top.
+ *   Fixed-capacity ring (set once at init, clamped to XR_STEAL_QUEUE_MAX_SIZE);
+ *   it does NOT resize — push returns false when full and the caller spills the
+ *   overflow to the per-worker XrRunQueue.
  */
 
 #ifndef XSTEAL_QUEUE_H

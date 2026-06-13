@@ -17,6 +17,21 @@
 #include "../base/xdefs.h"
 #include <stdint.h>
 
+/* Pointer-keyed open-addressing index: maps an XiValue or XiFunc pointer to
+ * its row in the corresponding plan array, turning the per-lookup linear
+ * scan over the whole-bundle plan tables into O(1).  Stores array indices
+ * (not row pointers) so plan-array realloc never invalidates it. */
+typedef struct XaotPtrIndexSlot {
+    const void *key;
+    uint32_t idx;
+} XaotPtrIndexSlot;
+
+typedef struct XaotPtrIndex {
+    XaotPtrIndexSlot *slots;
+    uint32_t cap; /* power of two; 0 = unallocated */
+    uint32_t count;
+} XaotPtrIndex;
+
 typedef struct XaotFuncPlan {
     XiFunc *func;
     uint32_t module_index;
@@ -220,6 +235,14 @@ typedef struct XaotBundle {
     XaotBoundaryStep *boundary_steps;
     uint32_t nboundary_steps;
     uint32_t boundary_step_cap;
+    XaotPtrIndex value_index;             /* XiValue* -> value_plans row */
+    XaotPtrIndex func_index;              /* XiFunc*  -> func_plans row */
+    XaotPtrIndex array_storage_index;     /* XiValue* (value) -> array_storage_plans row */
+    XaotPtrIndex array_cache_index;       /* XiValue* (value) -> array_cache_plans row */
+    XaotPtrIndex array_class_field_index; /* XiValue* (origin) -> array_class_field_alloc row */
+    XaotPtrIndex func_attr_index;         /* XiFunc*  -> func_attr_plans row */
+    XaotPtrIndex bounds_index;            /* XiValue* (access) -> bounds_plans row */
+    XaotPtrIndex alias_index;             /* XiValue* (value) -> alias_plans row */
     XaotPrepareStats stats;
     const char *error_msg;
 } XaotBundle;

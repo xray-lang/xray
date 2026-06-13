@@ -113,11 +113,8 @@ static XrRegionBlock *block_new(XrRegionHeap *heap) {
         block = (XrRegionBlock *) data;
     }
 
-    // Common init: zero metadata line, set non-zero fields
+    // Zero the metadata line (line 0); object area starts at line 1.
     memset(block, 0, XR_REGION_LINE_SIZE);
-    block->alloc_marks[0] = 1ULL;  // line 0 reserved for metadata
-    block->next_scan_line = XR_REGION_FIRST_LINE;
-    block->is_young = 1;
 
     XR_DCHECK(((uintptr_t) block & (XR_REGION_BLOCK_SIZE - 1)) == 0,
               "block_new: block not aligned to BLOCK_SIZE");
@@ -146,73 +143,6 @@ static void free_block_list(XrRegionHeap *heap, XrRegionBlock *list) {
     }
 }
 
-/* ========== Hole Finding ========== */
-
-/*
- * Scan alloc_marks starting from `start_line` to find the next contiguous
- * run of unmarked lines (a "hole").
- * Returns true if found, sets *hole_start and *hole_end (exclusive).
- */
-static bool find_next_hole(XrRegionBlock *block, int start_line, int *hole_start, int *hole_end) {
-    XR_DCHECK(block != NULL, "find_next_hole: NULL block");
-    XR_DCHECK(start_line >= XR_REGION_FIRST_LINE && start_line <= XR_REGION_LINES,
-              "find_next_hole: start_line out of range");
-    XR_DCHECK(hole_start != NULL && hole_end != NULL, "find_next_hole: NULL output");
-    // Build "free lines" bitmap (invert alloc_marks)
-    uint64_t free0 = ~block->alloc_marks[0];
-    uint64_t free1 = ~block->alloc_marks[1];
-
-    // Mask out lines before start_line
-    if (start_line < 64) {
-        free0 &= ~((1ULL << start_line) - 1);
-    } else {
-        free0 = 0;
-        if (start_line < 128)
-            free1 &= ~((1ULL << (start_line - 64)) - 1);
-        else
-            free1 = 0;
-    }
-
-    // Find first free line
-    int first_free;
-    if (free0) {
-        first_free = __builtin_ctzll(free0);
-    } else if (free1) {
-        first_free = 64 + __builtin_ctzll(free1);
-    } else {
-        return false;
-    }
-
-    *hole_start = first_free;
-
-    // Find end of hole: first marked line after hole_start
-    // Build "marked" bitmap from hole_start onwards
-    uint64_t mark0 = block->alloc_marks[0];
-    uint64_t mark1 = block->alloc_marks[1];
-
-    if (first_free < 64) {
-        mark0 &= ~((1ULL << first_free) - 1);  // mask bits below first_free
-        if (mark0) {
-            *hole_end = __builtin_ctzll(mark0);
-            return true;
-        }
-        // No marked line in word 0; check word 1
-        if (mark1) {
-            *hole_end = 64 + __builtin_ctzll(mark1);
-            return true;
-        }
-    } else {
-        mark1 &= ~((1ULL << (first_free - 64)) - 1);
-        if (mark1) {
-            *hole_end = 64 + __builtin_ctzll(mark1);
-            return true;
-        }
-    }
-
-    *hole_end = XR_REGION_LINES;  // hole extends to end of block
-    return true;
-}
-
 /* ========== Lifecycle ========== */
 
 void xr_region_init(XrRegionHeap *heap) {
@@ -227,19 +157,14 @@ void xr_region_destroy(XrRegionHeap *heap) {
         heap->current_block = NULL;
     }
     free_block_list(heap, heap->full_blocks);
-    free_block_list(heap, heap->recycle_blocks);
     free_block_list(heap, heap->free_blocks);
-    free_block_list(heap, heap->old_blocks);
 
     heap->full_blocks = NULL;
-    heap->recycle_blocks = NULL;
     heap->free_blocks = NULL;
-    heap->old_blocks = NULL;
     heap->cursor = NULL;
     heap->limit = NULL;
     heap->total_blocks = 0;
     heap->total_block_bytes = 0;
-    heap->old_block_count = 0;
 }
 
 void xr_region_reset(XrRegionHeap *heap) {
@@ -250,63 +175,19 @@ void xr_region_reset(XrRegionHeap *heap) {
 
 /* ========== Allocation — Slow Path Helpers ========== */
 
-// Try to find a suitable hole in the current block
-static bool try_current_block_hole(XrRegionHeap *heap, size_t size) {
-    XR_DCHECK(heap != NULL, "try_current_block_hole: NULL heap");
-    XR_DCHECK(size > 0, "try_current_block_hole: zero size");
-    XrRegionBlock *block = heap->current_block;
-    if (!block)
-        return false;
-
-    int hole_start, hole_end;
-    while (find_next_hole(block, block->next_scan_line, &hole_start, &hole_end)) {
-        size_t hole_size = (size_t) (hole_end - hole_start) * XR_REGION_LINE_SIZE;
-        block->next_scan_line = (uint8_t) hole_end;
-        if (hole_size >= size) {
-            heap->cursor = (char *) block + (size_t) hole_start * XR_REGION_LINE_SIZE;
-            heap->limit = (char *) block + (size_t) hole_end * XR_REGION_LINE_SIZE;
-            heap->mark_cursor = heap->cursor;
-            return true;
-        }
-    }
-    return false;
-}
-
-// Move current_block to full_blocks, then try recycle list
-static bool try_recycle_blocks(XrRegionHeap *heap, size_t size) {
-    XR_DCHECK(heap != NULL, "try_recycle_blocks: NULL heap");
-    // Retire current block
+// Retire the current block to full_blocks (its bump space is used up).
+static void retire_current_block(XrRegionHeap *heap) {
     if (heap->current_block) {
         heap->current_block->next = heap->full_blocks;
         heap->full_blocks = heap->current_block;
         heap->current_block = NULL;
     }
-
-    while (heap->recycle_blocks) {
-        XrRegionBlock *block = heap->recycle_blocks;
-        heap->recycle_blocks = block->next;
-        block->next = NULL;
-        block->next_scan_line = XR_REGION_FIRST_LINE;
-        heap->current_block = block;
-
-        if (try_current_block_hole(heap, size)) {
-            return true;
-        }
-        // No suitable hole, retire to full
-        block->next = heap->full_blocks;
-        heap->full_blocks = block;
-        heap->current_block = NULL;
-    }
-    return false;
 }
 
 // Reset a free block and set it as current
 static void activate_block(XrRegionHeap *heap, XrRegionBlock *block) {
     XR_DCHECK(heap != NULL, "activate_block: NULL heap");
     XR_DCHECK(block != NULL, "activate_block: NULL block");
-    block->alloc_marks[0] = 1ULL;  // Line 0 reserved
-    block->alloc_marks[1] = 0;
-    block->next_scan_line = XR_REGION_FIRST_LINE;
     /* Reused block starts a fresh allocation generation: the old objects
      * were reclaimed (whole-block reclaim) or the block came from the cache.
      * alloc_count must count only the new generation, or the whole-block
@@ -317,7 +198,6 @@ static void activate_block(XrRegionHeap *heap, XrRegionBlock *block) {
 
     heap->cursor = (char *) block + (size_t) XR_REGION_FIRST_LINE * XR_REGION_LINE_SIZE;
     heap->limit = (char *) block + XR_REGION_BLOCK_SIZE;
-    heap->mark_cursor = heap->cursor;
     heap->current_block = block;
     XR_DCHECK(heap->cursor <= heap->limit, "activate_block: cursor > limit");
 }
@@ -348,7 +228,6 @@ static bool alloc_new_block(XrRegionHeap *heap) {
     heap->current_block = block;
     heap->cursor = (char *) block + (size_t) XR_REGION_FIRST_LINE * XR_REGION_LINE_SIZE;
     heap->limit = (char *) block + XR_REGION_BLOCK_SIZE;
-    heap->mark_cursor = heap->cursor;
     heap->total_blocks++;
     heap->total_block_bytes += XR_REGION_BLOCK_SIZE;
     XR_DCHECK(heap->cursor < heap->limit, "alloc_new_block: cursor >= limit");
@@ -360,33 +239,17 @@ static bool alloc_new_block(XrRegionHeap *heap) {
 void *xr_region_alloc_slow(XrRegionHeap *heap, size_t size) {
     XR_DCHECK(heap != NULL, "region_alloc_slow: NULL heap");
     XR_DCHECK(size > 0, "region_alloc_slow: zero size");
-    // Flush deferred alloc_marks before hole-scanning
-    xr_region_flush_marks(heap);
 
-    // 1. Try remaining holes in current block
-    if (try_current_block_hole(heap, size)) {
-        char *result = heap->cursor;
-        heap->cursor = result + size;
-        return result;
-    }
+    // Current block's bump space is exhausted: retire it to full_blocks
+    // before pulling a fresh block (whole-block reclaim refills free_blocks).
+    // Under pure RC there is no intra-block hole reuse — dead small objects
+    // return to the per-coroutine size-class freelist, not to the block.
+    retire_current_block(heap);
 
-    // 2. Try recycle blocks
-    if (try_recycle_blocks(heap, size)) {
-        char *result = heap->cursor;
-        heap->cursor = result + size;
-        return result;
-    }
-
-    // 3. Try free blocks
-    if (try_free_block(heap)) {
-        char *result = heap->cursor;
-        heap->cursor = result + size;
-        return result;
-    }
-
-    // 4. Allocate new block
-    if (!alloc_new_block(heap))
+    // Try a reclaimed empty block, else allocate a new one.
+    if (!try_free_block(heap) && !alloc_new_block(heap))
         return NULL;
+
     char *result = heap->cursor;
     heap->cursor = result + size;
     XR_DCHECK(heap->cursor <= heap->limit, "alloc_slow: cursor > limit after alloc");
@@ -395,52 +258,6 @@ void *xr_region_alloc_slow(XrRegionHeap *heap, size_t size) {
 
 // xr_region_alloc() is now static inline in xregion.h
 
-/* ========== GC Integration (Single Bitmap) ========== */
-
-void xr_region_mark_alloc_lines(void *obj_ptr, size_t obj_size) {
-    if (!obj_ptr || obj_size == 0)
-        return;
-    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj_ptr);
-    char *block_data = (char *) block;
-    uintptr_t base = (uintptr_t) block_data;
-    uintptr_t start = (uintptr_t) obj_ptr;
-    uintptr_t end = start + obj_size - 1;
-    int first_line = (int) ((start - base) / XR_REGION_LINE_SIZE);
-    int last_line = (int) ((end - base) / XR_REGION_LINE_SIZE);
-    XR_DCHECK(first_line >= 0 && first_line < XR_REGION_LINES,
-              "mark_alloc_lines: first_line out of range");
-    XR_DCHECK(last_line >= 0 && last_line < XR_REGION_LINES,
-              "mark_alloc_lines: last_line out of range");
-    for (int l = first_line; l <= last_line; l++) {
-        XR_REGION_LINE_SET(block->alloc_marks, l);
-    }
-}
-
-/*
- * Count live lines in a block (excluding the reserved line 0).
- * Uses popcount on the bitmap words with line-0 bit masked out.
- */
-int xr_region_count_live_lines(XrRegionBlock *block) {
-    XR_DCHECK(block != NULL, "count_live_lines: NULL block");
-    uint64_t w0 = block->alloc_marks[0] & ~1ULL;  // Exclude bit 0 (line 0)
-    uint64_t w1 = block->alloc_marks[1];
-
-#if defined(__GNUC__) || defined(__clang__)
-    return __builtin_popcountll(w0) + __builtin_popcountll(w1);
-#else
-    int count = 0;
-    while (w0) {
-        count++;
-        w0 &= w0 - 1;
-    }
-    while (w1) {
-        count++;
-        w1 &= w1 - 1;
-    }
-    return count;
-#endif
-}
-
 /* ========== Debug ========== */
 
 void xr_region_get_stats(XrRegionHeap *heap, XrRegionStats *stats) {
@@ -448,37 +265,16 @@ void xr_region_get_stats(XrRegionHeap *heap, XrRegionStats *stats) {
     XR_DCHECK(stats != NULL, "region_get_stats: NULL stats");
     memset(stats, 0, sizeof(XrRegionStats));
 
-// Helper: accumulate stats for a block list
-#define SCAN_LIST(list, counter)                                                                   \
-    do {                                                                                           \
-        for (XrRegionBlock *b = (list); b; b = b->next) {                                          \
-            stats->total_blocks++;                                                                 \
-            stats->counter++;                                                                      \
-            int live = xr_region_count_live_lines(b);                                              \
-            stats->live_lines += (size_t) live;                                                    \
-            stats->free_lines += (size_t) (XR_REGION_USABLE_LINES - live);                         \
-        }                                                                                          \
-    } while (0)
-
-    SCAN_LIST(heap->full_blocks, full_blocks);
-    SCAN_LIST(heap->recycle_blocks, recycle_blocks);
-
-    // Free blocks: all usable lines are free
+    for (XrRegionBlock *b = heap->full_blocks; b; b = b->next) {
+        stats->total_blocks++;
+        stats->full_blocks++;
+    }
     for (XrRegionBlock *b = heap->free_blocks; b; b = b->next) {
         stats->total_blocks++;
         stats->free_blocks++;
-        stats->free_lines += XR_REGION_USABLE_LINES;
     }
-
-    // Current block
-    if (heap->current_block) {
+    if (heap->current_block)
         stats->total_blocks++;
-        int live = xr_region_count_live_lines(heap->current_block);
-        stats->live_lines += (size_t) live;
-        stats->free_lines += (size_t) (XR_REGION_USABLE_LINES - live);
-    }
-
-#undef SCAN_LIST
 
     stats->total_bytes = stats->total_blocks * XR_REGION_BLOCK_SIZE;
 }

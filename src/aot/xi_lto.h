@@ -18,13 +18,11 @@
 typedef struct XiLtoContext {
     XiModule **modules;
     uint32_t nmodules;
-    /* Flat lookup: export name → callee XiFunc* */
-    XiFunc **export_funcs;
-    const char **export_names;
-    uint32_t nexports;
 } XiLtoContext;
 
-/* Build cross-module export index from linked modules. */
+/* Bind the LTO context to the linked module set.  Import resolution is
+ * module-scoped (keyed on each import's resolved module identity), so no
+ * cross-module name index is built. */
 XR_FUNC bool xi_lto_context_init(XiLtoContext *ctx, XiModule **modules, uint32_t nmodules);
 
 XR_FUNC void xi_lto_context_free(XiLtoContext *ctx);

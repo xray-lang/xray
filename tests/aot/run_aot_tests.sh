@@ -39,8 +39,10 @@ run_test() {
         fi
     done
     if [ "$ok" -eq 0 ]; then
-        echo "SKIP (transpile failed)"
-        SKIP=$((SKIP + 1))
+        # Positive dirs must transpile; a persistent failure is a regression,
+        # not a skip (expected-unsupported cases live under negative/).
+        echo "FAIL (transpile failed after retries)"
+        FAIL=$((FAIL + 1))
         return
     fi
 
@@ -62,12 +64,17 @@ run_test() {
         fi
     fi
 
-    # Step 3: Run VM and AOT, capture stdout only
-    "$XRAY" run "$xr_file" > "$vm_out" 2>/dev/null || true
-    "$bin_out" > "$aot_out" 2>/dev/null || true
+    # Step 3: Run VM and AOT, capturing stdout AND exit code (if-form keeps
+    # set -e from aborting on a non-zero program exit).
+    if "$XRAY" run "$xr_file" > "$vm_out" 2>/dev/null; then vm_rc=0; else vm_rc=$?; fi
+    if "$bin_out" > "$aot_out" 2>/dev/null; then aot_rc=0; else aot_rc=$?; fi
 
-    # Step 4: Diff outputs
-    if diff -u "$vm_out" "$aot_out" > /dev/null 2>&1; then
+    # Step 4: Compare exit codes, then stdout
+    if [ "$vm_rc" != "$aot_rc" ]; then
+        echo "FAIL (exit code: VM=$vm_rc AOT=$aot_rc)"
+        FAIL=$((FAIL + 1))
+        rm -f "$bin_out" "$vm_out" "$aot_out"
+    elif diff -u "$vm_out" "$aot_out" > /dev/null 2>&1; then
         echo "PASS"
         PASS=$((PASS + 1))
         rm -f "$c_out" "$bin_out" "$vm_out" "$aot_out"

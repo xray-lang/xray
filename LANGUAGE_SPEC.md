@@ -3426,9 +3426,9 @@ xray's concurrency model is **goroutine-style coroutines + channels + strong sta
 |--|--|
 | Scheduling model | M:N (user-space coroutines on multiple OS threads) |
 | Scheduling policy | Cooperative (GC safepoints) + work stealing |
-| Stack model | Segmented stacks (grow on demand) |
-| Creation cost | ~microsecond, KB-scale initial stack |
-| Context switch | User-space stack switch, no syscall |
+| Stack model | Stackless (per-coroutine VM value stack + frame array, grows on demand, no native C stack) |
+| Creation cost | ~microsecond (initial VM value stack ~64 slots + 4 frames, not a native stack) |
+| Context switch | VM context switch (save/restore VM frames), no native stack switch, no syscall |
 
 Coroutines are distributed across multiple worker threads by default; the runtime sets a Go-style `GOMAXPROCS` parallelism level based on the CPU core count.
 
@@ -3545,6 +3545,8 @@ match t.poll() {
 ```
 
 **Cancellation semantics**: `cancel()` sets the cancellation flag; the coroutine throws a cancellation exception at the next safepoint (GC checkpoint, channel operation, `await`, `yield`). Plain `await` on a cancelled task throws `TaskCancelled`; use `awaitResult()` or `awaitTimeout(ms)` when you want a status value.
+
+**Watchdog forced cancellation**: the runtime monitor thread (sysmon) force-cancels coroutines that run **too long without crossing a safepoint**—a coroutine whose heartbeat stays frozen while RUNNING beyond a threshold (default 5 seconds) is marked for cancellation. The threshold is configurable via the `XRAY_SYSMON_CANCEL_MS` environment variable (milliseconds); setting it to `0` **disables** forced cancellation (only a one-time warning around ~100ms remains). A pure-CPU tight loop that may run long should insert `yield` inside the loop to provide a safepoint and avoid spurious watchdog cancellation.
 
 ### 10.5 Channel
 

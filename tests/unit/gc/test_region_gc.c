@@ -5,11 +5,12 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_region_gc.c - Unit tests for Region single-bitmap GC
+ * test_region_gc.c - Unit tests for the Region bump allocator (pure RC)
  *
  * KEY CONCEPT:
- *   Tests the single bitmap (alloc_marks only) design with
- *   rebuild_alloc_marks after each GC cycle.
+ *   Region is a bump allocator (no per-line bitmap under RC): objects start
+ *   at line 1, per-block alloc_count/alloc_bytes drive whole-block reclaim,
+ *   and reclamation of individual objects is the per-coroutine RC freelist.
  */
 
 #include <stdio.h>
@@ -95,10 +96,34 @@ static uint64_t time_ns(void) {
 #endif
 }
 
-/* ========== 1. Region Block & Bitmap Tests ========== */
+/* ========== 1. Region Bump Allocator Tests ==========
+ *
+ * Pure RC: there is no per-line occupancy bitmap. The region is a plain
+ * bump allocator (objects start at line 1; line 0 holds block metadata),
+ * with per-block alloc_count/alloc_bytes driving whole-block reclaim. */
 
-static void test_block_init_marks(void) {
-    TEST("block init: alloc_marks has line 0 reserved");
+static void test_region_bump_alloc(void) {
+    TEST("region: bump allocation advances within one block");
+
+    XrRegionHeap heap;
+    xr_region_init(&heap);
+
+    void *p1 = xr_region_alloc(&heap, 64);
+    void *p2 = xr_region_alloc(&heap, 64);
+    ASSERT(p1 != NULL && p2 != NULL, "alloc failed");
+    ASSERT((char *) p2 > (char *) p1, "bump pointer should advance");
+    ASSERT(((uintptr_t) p1 & 7) == 0, "pointer not 8-byte aligned");
+
+    XrRegionBlock *b1 = XR_REGION_BLOCK_FROM_PTR(p1);
+    XrRegionBlock *b2 = XR_REGION_BLOCK_FROM_PTR(p2);
+    ASSERT(b1 == b2 && b1 == heap.current_block, "both allocs in current block");
+
+    xr_region_destroy(&heap);
+    PASS();
+}
+
+static void test_region_objects_skip_metadata_line(void) {
+    TEST("region: objects never alias the line-0 metadata");
 
     XrRegionHeap heap;
     xr_region_init(&heap);
@@ -106,81 +131,30 @@ static void test_block_init_marks(void) {
     void *p = xr_region_alloc(&heap, 64);
     ASSERT(p != NULL, "alloc failed");
 
-    XrRegionBlock *block = heap.current_block;
-    ASSERT(block != NULL, "no current block");
-
-    ASSERT(block->alloc_marks[0] & 1ULL, "alloc_marks line 0 not set");
-
-    xr_region_destroy(&heap);
-    PASS();
-}
-
-static void test_mark_alloc_lines(void) {
-    TEST("mark_alloc_lines: sets alloc_marks correctly");
-
-    XrRegionHeap heap;
-    xr_region_init(&heap);
-
-    void *p = xr_region_alloc(&heap, 64);
-    ASSERT(p != NULL, "alloc failed");
-
-    XrRegionBlock *block = heap.current_block;
-
-    // Clear alloc_marks (except line 0)
-    block->alloc_marks[0] = 1ULL;
-    block->alloc_marks[1] = 0;
-
-    xr_region_mark_alloc_lines(p, 64);
-
-    int line = XR_REGION_LINE_INDEX(p);
-    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set");
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(p);
+    uintptr_t off = (uintptr_t) p - (uintptr_t) block;
+    ASSERT(off >= (uintptr_t) (XR_REGION_FIRST_LINE * XR_REGION_LINE_SIZE),
+           "object overlaps the reserved metadata line 0");
 
     xr_region_destroy(&heap);
     PASS();
 }
 
-static void test_mark_alloc_lines_fast(void) {
-    TEST("mark_alloc_lines_fast: inline fast path works");
+static void test_region_block_accounting(void) {
+    TEST("region: per-block alloc_count tracks bumped slots");
 
-    XrRegionHeap heap;
-    xr_region_init(&heap);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
+    ASSERT(gc != NULL, "create failed");
 
-    void *p = xr_region_alloc(&heap, 64);
-    ASSERT(p != NULL, "alloc failed");
+    XrGCHeader *a = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
+    XrGCHeader *b = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
+    ASSERT(a != NULL && b != NULL, "alloc failed");
 
-    XrRegionBlock *block = heap.current_block;
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(a);
+    ASSERT(block->alloc_count >= 2, "alloc_count should count bumped slots");
+    ASSERT(block->alloc_bytes >= 128, "alloc_bytes should track allocated size");
 
-    block->alloc_marks[0] = 1ULL;
-    block->alloc_marks[1] = 0;
-
-    xr_region_mark_alloc_lines_fast(p, 64);
-
-    int line = XR_REGION_LINE_INDEX(p);
-    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set by fast path");
-
-    xr_region_destroy(&heap);
-    PASS();
-}
-
-static void test_hole_scanning_uses_alloc_marks(void) {
-    TEST("hole scanning: uses alloc_marks for free line detection");
-
-    XrRegionHeap heap;
-    xr_region_init(&heap);
-
-    // Allocate and mark alloc_marks
-    for (int i = 0; i < 80; i++) {
-        void *p = xr_region_alloc(&heap, 128);
-        xr_region_mark_alloc_lines(p, 128);
-    }
-
-    XrRegionBlock *block = heap.current_block;
-    ASSERT(block != NULL, "no current block");
-
-    uint64_t alloc_bits = (block->alloc_marks[0] & ~1ULL) | block->alloc_marks[1];
-    ASSERT(alloc_bits != 0, "alloc_marks should have live lines");
-
-    xr_region_destroy(&heap);
+    xr_coro_gc_destroy(gc);
     PASS();
 }
 
@@ -189,27 +163,9 @@ static void test_hole_scanning_uses_alloc_marks(void) {
 static void test_gc_create_destroy(void) {
     TEST("CoroGC create/destroy");
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
     ASSERT(gc->totalbytes == 0, "initial bytes should be 0");
-
-    xr_coro_gc_destroy(gc);
-    PASS();
-}
-
-static void test_newobj_marks_alloc(void) {
-    TEST("newobj: marks alloc_marks for new object");
-
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
-    ASSERT(gc != NULL, "create failed");
-
-    XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
-    ASSERT(obj != NULL, "alloc failed");
-
-    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj);
-    int line = XR_REGION_LINE_INDEX(obj);
-
-    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set for new obj");
 
     xr_coro_gc_destroy(gc);
     PASS();
@@ -218,7 +174,7 @@ static void test_newobj_marks_alloc(void) {
 static void test_large_object(void) {
     TEST("large object: goes to malloc, not Region");
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
@@ -235,7 +191,7 @@ static void test_teardown_finalizer_registry(void) {
     setup_test_ext_finalizer();
     g_destroy_count = 0;
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
     XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
@@ -253,7 +209,7 @@ static void test_rc_destroy_unregisters_finalizer(void) {
     setup_test_ext_finalizer();
     g_destroy_count = 0;
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
     XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TEST_EXT_TYPE, 64);
@@ -271,7 +227,7 @@ static void test_rc_destroy_unregisters_finalizer(void) {
 static void test_large_object_rc_free_unregisters_node(void) {
     TEST("large object: RC free unregisters large object node");
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     ASSERT(gc != NULL, "create failed");
 
     XrGCHeader *large = xr_coro_gc_newobj(gc, XR_TSTRING, 8 * 1024);
@@ -291,7 +247,7 @@ static void test_large_object_rc_free_unregisters_node(void) {
 static void perf_allocation_throughput(void) {
     TEST("perf: allocation throughput");
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     gc->gc_disabled++;
 
     const int COUNT = 100000;
@@ -314,7 +270,7 @@ static void perf_allocation_throughput(void) {
 static void perf_bulk_destroy(void) {
     TEST("perf: bulk destroy (coroutine exit)");
 
-    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
+    XrCoroGC *gc = xr_coro_gc_create(&dummy_coro);
     gc->gc_disabled++;
 
     const int COUNT = 100000;
@@ -342,15 +298,13 @@ int main(void) {
     printf("  Region Single-Bitmap GC Unit Tests\n");
     printf("========================================\n\n");
 
-    printf("--- Region Bitmap ---\n");
-    test_block_init_marks();
-    test_mark_alloc_lines();
-    test_mark_alloc_lines_fast();
-    test_hole_scanning_uses_alloc_marks();
+    printf("--- Region Bump Allocator ---\n");
+    test_region_bump_alloc();
+    test_region_objects_skip_metadata_line();
+    test_region_block_accounting();
 
     printf("\n--- CoroGC Integration ---\n");
     test_gc_create_destroy();
-    test_newobj_marks_alloc();
     test_large_object();
     test_teardown_finalizer_registry();
     test_rc_destroy_unregisters_finalizer();

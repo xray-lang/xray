@@ -25,6 +25,7 @@
 #include "../gc/xgc_header.h"
 #include "../gc/xgc.h"
 #include "../gc/xalloc_unified.h"
+#include "../gc/xcoro_gc.h"
 #include "../class/xclass.h"
 #include "../class/xclass_builder.h"
 #include "../class/xclass_system.h"
@@ -58,6 +59,9 @@ XrIterator *xr_iterator_new_from_map(struct XrCoroutine *coro, struct XrMap *map
     iter->coro = coro;
     iter->type = XR_ITERATOR_MAP;
     iter->mode = XR_ITER_MODE_PAIRS;
+    /* The iterator borrows its source by raw pointer; own a reference so the
+     * source outlives the iterator even after the caller drops its own. */
+    xr_rc_retain((XrObjHeader *) map_param);
     return iter;
 }
 
@@ -83,6 +87,7 @@ XrIterator *xr_iterator_new_from_set(struct XrCoroutine *coro, struct XrSet *set
     iter->scan_index = 0;
     iter->coro = coro;
     iter->mode = XR_ITER_MODE_VALUES;  // Set has no separate key projection.
+    xr_rc_retain((XrObjHeader *) set_param);
     return iter;
 }
 
@@ -98,6 +103,7 @@ XrIterator *xr_iterator_new_from_array(struct XrCoroutine *coro, struct XrArray 
     iter->scan_index = 0;
     iter->coro = coro;
     iter->total_count = 0;
+    xr_rc_retain((XrObjHeader *) arr);
     iter->context = NULL;
     iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
@@ -117,6 +123,7 @@ XrIterator *xr_iterator_new_from_string(struct XrCoroutine *coro, struct XrStrin
     iter->scan_index = 0;
     iter->coro = coro;
     iter->total_count = (uint32_t) xr_string_char_length(s);
+    xr_rc_retain((XrObjHeader *) s);
     iter->context = (void *) isolate;
     iter->mode = XR_ITER_MODE_PAIRS;
     return iter;
@@ -136,6 +143,7 @@ XrIterator *xr_iterator_new_from_json(struct XrCoroutine *coro, XrJson *json,
     iter->scan_index = 0;
     iter->coro = coro;
     iter->context = (void *) isolate;
+    xr_rc_retain((XrObjHeader *) json);
 
     iter->total_count = json && json->klass ? json->klass->field_count : 0;
     iter->mode = XR_ITER_MODE_PAIRS;
@@ -373,14 +381,43 @@ XrIterator *xr_value_to_iterator(XrValue value) {
 
 /* ========== Native Body Lifecycle ========== */
 
-#include "../gc/xcoro_gc.h"
+/* Release the borrowed source when the iterator itself is reclaimed. The
+ * iterator held one reference (taken in each constructor) so the collection
+ * could not be freed out from under an in-progress iteration; balance it here.
+ * `body` points at the native body (offsetof(XrIterator, type)); recover the
+ * enclosing iterator to read its tagged source union. */
+static void iterator_body_destroy(void *body) {
+    XrIterator *iter = (XrIterator *) ((char *) body - offsetof(XrIterator, type));
+    XrObjHeader *src = NULL;
+    switch (iter->type) {
+        case XR_ITERATOR_MAP:
+            src = (XrObjHeader *) iter->source.map;
+            break;
+        case XR_ITERATOR_SET:
+            src = (XrObjHeader *) iter->source.set;
+            break;
+        case XR_ITERATOR_ARRAY:
+            src = (XrObjHeader *) iter->source.array;
+            break;
+        case XR_ITERATOR_STRING:
+            src = (XrObjHeader *) iter->source.string;
+            break;
+        case XR_ITERATOR_JSON:
+            src = (XrObjHeader *) iter->source.json;
+            break;
+        default:
+            break;
+    }
+    if (src)
+        xr_rc_release(xr_coro_get_coro_gc(iter->coro), src);
+}
 
 static XrNativeBodyDesc g_iterator_body_desc = {
     .body_size = sizeof(XrIterator) - offsetof(XrIterator, type),
     .body_align = _Alignof(void *),
     .copy_policy = XR_NATIVE_BODY_COPY_FORBID,
     .init = NULL,
-    .destroy = NULL,
+    .destroy = iterator_body_destroy,
     .deep_copy = NULL,
     .to_shared = NULL,
 };

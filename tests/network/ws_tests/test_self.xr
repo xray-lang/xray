@@ -39,12 +39,12 @@ go fn() {
     
     // I1: Basic local echo
     let conn1 = ws.connect(URL, null)
-    if (conn1.error) {
-        print("  FAIL  I1 local echo -- " + conn1.error)
+    if (conn1 == null) {
+        print("  FAIL  I1 local echo -- connect failed")
         failed = failed + 1
     } else {
-        ws.send(conn1, "hello self", null)
-        let resp = ws.recv(conn1, null)
+        ws.send(conn1, "hello self", false)
+        let resp = ws.recv(conn1, 5000)
         if (resp != null && resp.data == "hello self") {
             print("  PASS  I1 local echo")
             passed = passed + 1
@@ -52,26 +52,26 @@ go fn() {
             print("  FAIL  I1 local echo -- mismatch")
             failed = failed + 1
         }
-        ws.close(conn1, null, null)
+        ws.close(conn1)
     }
     
     // I2: Multiple messages round-trip (20 messages)
     let conn2 = ws.connect(URL, null)
-    if (conn2.error) {
-        print("  FAIL  I2 multi messages -- " + conn2.error)
+    if (conn2 == null) {
+        print("  FAIL  I2 multi messages -- connect failed")
         failed = failed + 1
     } else {
         let count = 20
         let success = 0
         for (let i = 0; i < count; i = i + 1) {
             let msg = "self-msg-" + i.toString()
-            ws.send(conn2, msg, null)
-            let resp = ws.recv(conn2, null)
+            ws.send(conn2, msg, false)
+            let resp = ws.recv(conn2, 5000)
             if (resp != null && resp.data == msg) {
                 success = success + 1
             }
         }
-        ws.close(conn2, null, null)
+        ws.close(conn2)
         if (success == count) {
             print("  PASS  I2 multi messages (" + count.toString() + "/" + count.toString() + ")")
             passed = passed + 1
@@ -85,20 +85,20 @@ go fn() {
     let allOk = true
     for (let c = 0; c < 3; c = c + 1) {
         let conn = ws.connect(URL, null)
-        if (conn.error) {
+        if (conn == null) {
             allOk = false
             break
         }
         for (let i = 0; i < 5; i = i + 1) {
             let msg = "client" + c.toString() + "-" + i.toString()
-            ws.send(conn, msg, null)
-            let resp = ws.recv(conn, null)
+            ws.send(conn, msg, false)
+            let resp = ws.recv(conn, 5000)
             if (resp == null || resp.data != msg) {
                 allOk = false
                 break
             }
         }
-        ws.close(conn, null, null)
+        ws.close(conn)
     }
     if (allOk) {
         print("  PASS  I3 multi clients (3x5 messages)")

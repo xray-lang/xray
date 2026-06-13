@@ -93,8 +93,11 @@ typedef struct {
  * Supports single and multi-module bundles.
  * Returns 0 on success, non-zero on failure.
  * On success, result->c_source is a complete C program.
+ * When emit_plan_dump is true, result->plan_dump holds the stable AOT plan
+ * text (for --dump-xaot-plan); otherwise it stays NULL and the O(N) dump is
+ * skipped (it is pure diagnostics and most builds discard it).
  * Caller frees result->c_source via xr_free(). */
-XR_FUNC int xaot_build(const char *input_path, XaotBuildResult *result);
+XR_FUNC int xaot_build(const char *input_path, bool emit_plan_dump, XaotBuildResult *result);
 XR_FUNC void xaot_build_result_free(XaotBuildResult *result);
 
 #endif  // XAOT_DRIVER_H

@@ -18,6 +18,10 @@
 #include "../../src/base/xmalloc.h"
 #include "../../src/os/os_time.h"
 #include "../../src/coro/xsocket.h"
+#include "../../src/coro/xyieldable.h"
+#include "../../src/coro/xnetpoll.h"
+#include "../../src/coro/xworker.h"
+#include "../../src/runtime/xisolate_internal.h"
 #include "../../src/base/xutf8.h"
 #include "../base64/base64.h"
 #include "../net/io.h"
@@ -241,37 +245,6 @@ static int parse_ws_url(const char *url, char **host, int *port, char **path, bo
 }
 
 /*
- * Raw recv (TLS-aware).
- *
- * All reads route through coroutine-aware I/O: plain-TCP via xr_socket_read
- * (yields on EAGAIN via netpoll), TLS via xr_tls_conn_read (yields when
- * the supplied isolate has a runtime to suspend the calling coroutine).
- *
- * Requires ws->isolate to be bound (enforced by xr_ws_connect and
- * xr_ws_upgrade). There is no legacy fallback.
- */
-static ssize_t ws_raw_recv(XrWebSocket *ws, void *buf, size_t len) {
-    XR_DCHECK(ws->isolate != NULL, "ws: isolate required for I/O");
-    if (ws->is_secure && ws->tls_conn) {
-        return xr_tls_conn_read(ws->isolate, (XrTlsConn *) ws->tls_conn, buf, len);
-    }
-    int n = xr_socket_read(ws->isolate, ws->fd, (char *) buf, len);
-    return (ssize_t) n;
-}
-
-/*
- * recv with timeout.
- *
- * Used by the client handshake where a bounded wait is needed.
- * timeout_ms is informational — cancellation comes from scheduler
- * deadlines. The actual read yields via netpoll.
- */
-static ssize_t ws_recv_timeout(XrWebSocket *ws, void *buf, size_t len, int timeout_ms) {
-    (void) timeout_ms;  // enforced by scheduler deadlines, not poll()
-    return ws_raw_recv(ws, buf, len);
-}
-
-/*
  * Send all data (TLS-aware).
  *
  * Plain-TCP sends route through xr_socket_write which auto-yields on
@@ -489,26 +462,85 @@ static int ws_send_frame_writev(XrWebSocket *ws, XrWsOpcode opcode, const void *
     return ret;
 }
 
-// Non-blocking send attempt result
-typedef struct {
-    int result;   // 0 = success, -1 = error, -2 = would block
-    size_t sent;  // bytes sent so far (for partial send)
-} WsSendTryResult;
+// Ensure the persistent staged-frame buffer holds at least `need` bytes.
+static int ws_send_frame_buf_ensure(XrWebSocket *ws, size_t need) {
+    if (ws->send_frame_cap >= need)
+        return 0;
+    size_t cap = ws->send_frame_cap ? ws->send_frame_cap : 256;
+    while (cap < need)
+        cap *= 2;
+    char *nb = (char *) xr_realloc(ws->send_frame_buf, cap);
+    if (!nb)
+        return -1;
+    ws->send_frame_buf = nb;
+    ws->send_frame_cap = cap;
+    return 0;
+}
 
-// Non-blocking send frame - for yieldable integration
-// Returns: 0 = complete, -1 = error, -2 = would block (need to wait for write)
+// Drain the staged frame (send_frame_buf[off..len]) without blocking the worker.
+// Returns 0 = complete, -1 = error, -2 = would block (ws->send_wait_event set).
+static int ws_send_frame_drain(XrWebSocket *ws) {
+    ws->send_wait_event = XR_WAIT_WRITE;
+    while (ws->send_frame_off < ws->send_frame_len) {
+        const char *p = ws->send_frame_buf + ws->send_frame_off;
+        size_t remain = ws->send_frame_len - ws->send_frame_off;
+        if (ws->is_secure && ws->tls_conn) {
+            // -1 WANT_WRITE, -2 WANT_READ, -3 err, 0 EOF.
+            int tn = xr_tls_conn_write_try((XrTlsConn *) ws->tls_conn, p, remain);
+            if (tn > 0) {
+                ws->send_frame_off += (size_t) tn;
+                continue;
+            }
+            if (tn == 0 || tn == -3) {
+                ws->send_frame_pending = false;
+                return -1;
+            }
+            ws->send_wait_event = (tn == -1) ? XR_WAIT_WRITE : XR_WAIT_READ;
+            ws->send_frame_pending = true;
+            return -2;
+        }
+        ssize_t n = send(ws->fd, p, remain, 0);
+        if (n > 0) {
+            ws->send_frame_off += (size_t) n;
+            continue;
+        }
+        if (n == 0) {
+            ws->send_frame_pending = false;
+            return -1;
+        }
+        if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            ws->send_wait_event = XR_WAIT_WRITE;
+            ws->send_frame_pending = true;
+            return -2;
+        }
+        ws->send_frame_pending = false;
+        return -1;
+    }
+    ws->send_frame_pending = false;
+    return 0;
+}
+
+// Non-blocking send frame - for yieldable integration.
+// Returns: 0 = complete, -1 = error, -2 = would block (ws->send_wait_event set).
+// The complete frame (header + masked payload) is staged in a persistent
+// per-connection buffer and drained across coroutine yields: a stable buffer is
+// mandatory because a client mask cannot be re-derived on retry and a TLS
+// SSL_write must resend the identical bytes. The binding re-calls this with the
+// same args on resume; a pending drain ignores the args and continues.
 int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, size_t len) {
     if (!ws || ws->state != WS_STATE_OPEN)
         return -1;
 
-    // Build header on stack
+    // Resume an in-progress staged send.
+    if (ws->send_frame_pending)
+        return ws_send_frame_drain(ws);
+
+    bool mask = !ws->is_server;
     char header[WS_MAX_HEADER_SIZE];
     unsigned char mask_key[4] = {0};
-    bool mask = !ws->is_server;
-
     size_t header_len = build_frame_header(header, opcode, len, mask, mask_key, false);
 
-    // Cork mode: append frame to wbuf, no syscall
+    // Cork mode (server only): append frame to wbuf, no syscall.
     if (ws->corked && !mask) {
         size_t frame_len = header_len + len;
         int need = ws->wbuf_len + (int) frame_len;
@@ -529,164 +561,22 @@ int xr_ws_send_frame_try(XrWebSocket *ws, XrWsOpcode opcode, const void *data, s
         return 0;
     }
 
-    if (!mask) {
-        // Server: send header + payload
-        // TLS path: always blocking (TLS has its own buffering)
-        if (ws->is_secure && ws->tls_conn) {
-            if (ws_send_all(ws, header, header_len) < 0)
-                return -1;
-            if (len > 0) {
-                if (ws_send_all(ws, data, len) < 0)
-                    return -1;
-            }
-            return 0;
-        }
-
-        // Resume partial send from previous non-blocking attempt
-        if (ws->send_header_sent) {
-            const char *p = (const char *) data + ws->send_offset;
-            size_t remain = len - ws->send_offset;
-            ssize_t n = send(ws->fd, p, remain, 0);
-            if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
-                    return -2;
-                ws->send_header_sent = false;
-                return -1;
-            }
-            ws->send_offset += (size_t) n;
-            if (ws->send_offset >= len) {
-                ws->send_header_sent = false;
-                return 0;
-            }
-            return -2;
-        }
-
-        size_t total = header_len + len;
-
-        // Fast path: small frame → stack memcpy + single send (no iov overhead)
-        if (total <= WS_STACK_THRESHOLD) {
-            char sbuf[WS_STACK_THRESHOLD];
-            memcpy(sbuf, header, header_len);
-            if (len > 0)
-                memcpy(sbuf + header_len, data, len);
-            ssize_t n = send(ws->fd, sbuf, total, 0);
-            if (n < 0) {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
-                    n = 0;
-                else
-                    return -1;
-            }
-            if ((size_t) n >= total)
-                return 0;
-            // Partial: header always fits in first send attempt
-            size_t data_sent = ((size_t) n > header_len) ? (size_t) n - header_len : 0;
-            if ((size_t) n < header_len) {
-                if (ws_send_all(ws, sbuf + n, header_len - n) < 0)
-                    return -1;
-            }
-            if (data_sent >= len)
-                return 0;
-            ws->send_header_sent = true;
-            ws->send_offset = data_sent;
-            return -2;
-        }
-
-        // Large frame: writev header + payload
-        struct iovec iov[2];
-        iov[0].iov_base = header;
-        iov[0].iov_len = header_len;
-        iov[1].iov_base = (void *) data;
-        iov[1].iov_len = len;
-
-        ssize_t n = writev(ws->fd, iov, 2);
-        if (n < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK)
-                n = 0;
-            else
-                return -1;
-        }
-        if ((size_t) n >= total)
-            return 0;
-
-        // Partial send: finish header (tiny), then handle payload
-        size_t sent = (size_t) n;
-        if (sent < header_len) {
-            if (ws_send_all(ws, header + sent, header_len - sent) < 0)
-                return -1;
-            sent = header_len;
-        }
-
-        size_t data_sent = sent - header_len;
-        if (data_sent >= len)
-            return 0;
-        ws->send_header_sent = true;
-        ws->send_offset = data_sent;
-        return -2;
-    }
-
-    // Client: need to mask - use pooled buffer
+    // Stage the complete frame (header + masked/plain payload), then drain.
     size_t frame_len = header_len + len;
-    char *frame = NULL;
-    char stack_buf[WS_STACK_THRESHOLD];
-    bool use_stack = (frame_len <= sizeof(stack_buf));
-
-    if (use_stack) {
-        frame = stack_buf;
-    } else {
-        frame = ws_buffer_alloc(frame_len);
-        if (!frame)
-            return -1;
-    }
-
-    // Build frame
-    memcpy(frame, header, header_len);
-    if (data && len > 0) {
-        apply_mask((const unsigned char *) data, (unsigned char *) (frame + header_len), len,
-                   mask_key);
-    }
-
-    // Try non-blocking send
-    ssize_t n;
-    if (ws->is_secure && ws->tls_conn) {
-        n = xr_tls_conn_write(ws->isolate, (XrTlsConn *) ws->tls_conn, frame, frame_len);
-    } else {
-        n = send(ws->fd, frame, frame_len, 0);
-    }
-
-    if (n < 0) {
-        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-            // Complete send with blocking helper (masked buffer can't be rebuilt)
-            if (ws_send_all(ws, frame, frame_len) < 0) {
-                if (!use_stack)
-                    ws_buffer_free(frame, frame_len);
-                return -1;
-            }
-            if (!use_stack)
-                ws_buffer_free(frame, frame_len);
-            return 0;
-        }
-        if (!use_stack)
-            ws_buffer_free(frame, frame_len);
+    if (ws_send_frame_buf_ensure(ws, frame_len) < 0)
         return -1;
+    memcpy(ws->send_frame_buf, header, header_len);
+    if (len > 0) {
+        if (mask)
+            apply_mask((const unsigned char *) data,
+                       (unsigned char *) (ws->send_frame_buf + header_len), len, mask_key);
+        else
+            memcpy(ws->send_frame_buf + header_len, data, len);
     }
-
-    if ((size_t) n < frame_len) {
-        // Partial send: complete remaining with blocking helper
-        // Can't return -2 because masked buffer would be freed and rebuilt
-        // with different mask keys on retry, corrupting the data stream
-        if (ws_send_all(ws, frame + n, frame_len - (size_t) n) < 0) {
-            if (!use_stack)
-                ws_buffer_free(frame, frame_len);
-            return -1;
-        }
-        if (!use_stack)
-            ws_buffer_free(frame, frame_len);
-        return 0;
-    }
-
-    if (!use_stack)
-        ws_buffer_free(frame, frame_len);
-    return 0;
+    ws->send_frame_len = frame_len;
+    ws->send_frame_off = 0;
+    ws->send_frame_pending = true;
+    return ws_send_frame_drain(ws);
 }
 
 /* ========== Fragment Buffer Management ========== */
@@ -949,6 +839,23 @@ void xr_ws_set_isolate(XrWebSocket *ws, struct XrayIsolate *X) {
     ws->isolate = X;
 }
 
+// Release the netpoll PollDesc bound to ws->fd before the fd is closed.
+// Without this the PollDesc lingers in the fd map; when the OS later reuses the
+// same fd number, xr_netpoll_open returns the stale descriptor and the new
+// waiter never gets woken (a missed-wakeup hang under rapid connect/close,
+// e.g. an in-process client+server). Mirrors net.c's net_close_fd cleanup.
+static void ws_netpoll_release_fd(XrWebSocket *ws) {
+    if (!ws || ws->fd < 0 || !ws->isolate)
+        return;
+    XrRuntime *rt = (XrRuntime *) ws->isolate->vm.runtime;
+    if (!rt)
+        return;
+    XrPollDesc *pd = xr_fdmap_get(&rt->netpoll, ws->fd);
+    if (pd && !atomic_load(&pd->closing))
+        xr_netpoll_close(&rt->netpoll, pd);
+    ws->cached_pd = NULL;
+}
+
 void xr_ws_free(XrWebSocket *ws) {
     if (!ws)
         return;
@@ -968,13 +875,19 @@ void xr_ws_free(XrWebSocket *ws) {
         ws->tls_ctx = NULL;
     }
 
-    if (ws->fd >= 0)
+    if (ws->fd >= 0) {
+        ws_netpoll_release_fd(ws);
         xr_closesocket(ws->fd);
+    }
 
     xr_free(ws->rbuf);
     ws->rbuf = NULL;
     xr_free(ws->wbuf);
     ws->wbuf = NULL;
+    xr_free(ws->send_frame_buf);
+    ws->send_frame_buf = NULL;
+    xr_free(ws->connect_buf);
+    ws->connect_buf = NULL;
 
     xr_free(ws->host);
     xr_free(ws->path);
@@ -987,181 +900,80 @@ void xr_ws_free(XrWebSocket *ws) {
     xr_free(ws);
 }
 
-XrWsError xr_ws_connect(XrWebSocket *ws) {
-    if (!ws)
-        return WS_ERR_URL;
-    if (ws->state == WS_STATE_OPEN)
-        return WS_OK;
+/* ========== Client connect: non-blocking phase machine ========== */
+//
+// The client handshake never blocks a worker thread. xr_ws_connect_start does
+// the (self-handed-off) DNS lookup then arms a non-blocking connect();
+// xr_ws_connect_pump advances CONNECT -> [TLS] -> SEND -> RECV using only
+// non-blocking primitives, returning a poll event whenever it must wait. The
+// yieldable ws.connect cfunc suspends the coroutine on that event (no P handoff,
+// so no contention on the handed-off P's timer wheel). xr_ws_connect() below is
+// the blocking wrapper that block_syncs on each event for non-coroutine callers.
 
-    XrWsError err = WS_OK;
-    char *accept_key = NULL;
-    char *request = NULL;
-    char *response = NULL;
-    ws->state = WS_STATE_CONNECTING;
+typedef enum {
+    WS_CONN_PHASE_CONNECT = 0,  // TCP connect in flight (wait writable)
+    WS_CONN_PHASE_TLS,          // TLS handshake loop
+    WS_CONN_PHASE_SEND,         // draining the upgrade request
+    WS_CONN_PHASE_RECV,         // reading the upgrade response
+} WsConnectPhase;
 
-    // DNS resolution (with cache, IPv4/IPv6 dual-stack).
-    // NOTE: xr_dns_resolve is still synchronous — it calls getaddrinfo
-    // which blocks the worker thread until the resolver returns.
-    // Async DNS would need a resolver pool or c-ares integration and
-    // is tracked as a separate item; WS and cluster share the same
-    // getaddrinfo dependency today so improving here would be a net
-    // improvement only when the full resolver path is revamped.
-    XrSockAddr resolved_addr;
-    if (!xr_dns_resolve(ws->isolate, ws->host, &resolved_addr, XR_AF_UNSPEC)) {
-        err = WS_ERR_DNS;
-        goto fail_early;
+// Release every resource an in-flight or failed connect owns.
+static void ws_connect_cleanup(XrWebSocket *ws) {
+    if (ws->connect_buf) {
+        xr_free(ws->connect_buf);
+        ws->connect_buf = NULL;
     }
-
-    // Create socket
-    ws->fd = socket(resolved_addr.family, SOCK_STREAM, 0);
-    if (ws->fd < 0) {
-        err = WS_ERR_CONNECT;
-        goto fail_early;
+    ws->connect_buf_cap = 0;
+    ws->connect_len = 0;
+    ws->connect_off = 0;
+    if (ws->tls_conn) {
+        xr_tls_conn_close((XrTlsConn *) ws->tls_conn);
+        xr_tls_conn_free((XrTlsConn *) ws->tls_conn);
+        ws->tls_conn = NULL;
     }
-
-    // Set TCP_NODELAY + low-latency options
-    xr_socket_set_nodelay(ws->fd, true);
-#ifdef TCP_NOTSENT_LOWAT
-    int lowat = 16384;
-    setsockopt(ws->fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
-#endif
-#ifdef SO_NOSIGPIPE
-    int flag = 1;
-    setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &flag, sizeof(flag));
-#endif
-
-    /*
-     * Make the socket non-blocking BEFORE connect(). The old code
-     * called connect() blocking and only set O_NONBLOCK after the
-     * WS handshake finished (see the post-handshake fcntl below),
-     * which meant every WS client connect pinned the worker thread
-     * for the full TCP handshake + connect_timeout_ms — a problem
-     * under high concurrency or unreachable hosts.
-     *
-     * The new flow:
-     *   1. O_NONBLOCK on the fd.
-     *   2. connect() returns -1 with EINPROGRESS for the common case
-     *      (remote handshake in flight) or 0 on instant success
-     *      (loopback, already-established).
-     *   3. When EINPROGRESS, we yield via xr_socket_wait_writable —
-     *      the coroutine suspends, the worker picks up other work,
-     *      and netpoll wakes us when the socket is writable or the
-     *      connect_timeout_ms deadline fires.
-     *   4. Readable-via-SO_ERROR check distinguishes genuine
-     *      success from an async connect failure (ECONNREFUSED,
-     *      EHOSTUNREACH, etc.).
-     */
-    {
-        (void) xr_socket_set_nonblocking(ws->fd);
+    if (ws->tls_ctx) {
+        xr_tls_context_free((XrTlsContext *) ws->tls_ctx);
+        ws->tls_ctx = NULL;
     }
-
-    // Connect
-    struct sockaddr *sa;
-    socklen_t sa_len;
-    if (resolved_addr.family == AF_INET) {
-        resolved_addr.addr.v4.sin_port = htons(ws->port);
-        sa = (struct sockaddr *) &resolved_addr.addr.v4;
-        sa_len = sizeof(struct sockaddr_in);
-    } else {
-        resolved_addr.addr.v6.sin6_port = htons(ws->port);
-        sa = (struct sockaddr *) &resolved_addr.addr.v6;
-        sa_len = sizeof(struct sockaddr_in6);
+    if (ws->fd >= 0) {
+        ws_netpoll_release_fd(ws);
+        xr_closesocket(ws->fd);
+        ws->fd = -1;
     }
+}
 
-    int cret = connect(ws->fd, sa, sa_len);
-    if (cret < 0 && errno != EINPROGRESS) {
-        // Immediate failure (e.g. ECONNREFUSED on loopback). No point
-        // yielding — report and bail.
-        err = WS_ERR_CONNECT;
-        goto fail_cleanup;
-    }
-
-    if (cret < 0) {
-        /*
-         * EINPROGRESS path: yield via netpoll until socket is writable
-         * or the per-config connect_timeout_ms fires.
-         */
-        int connect_timeout = ws->config.connect_timeout_ms > 0 ? ws->config.connect_timeout_ms
-                                                                : 10000;  // match cluster default
-
-        XR_DCHECK(ws->isolate != NULL, "ws: isolate required for connect");
-        int wr = xr_socket_wait_writable(ws->isolate, ws->fd, connect_timeout);
-        if (wr <= 0) {
-            err = (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
-            goto fail_cleanup;
-        }
-
-        // The socket became writable — pull SO_ERROR to distinguish
-        // async-success from async-failure (peer RST after SYN etc.).
-        int so_error = 0;
-        socklen_t so_len = sizeof(so_error);
-        if (getsockopt(ws->fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len) < 0 || so_error != 0) {
-            err = WS_ERR_CONNECT;
-            goto fail_cleanup;
-        }
-    }
-
-    // Establish TLS connection if wss://
-    if (ws->is_secure) {
-        XrTlsContext *tls_ctx = xr_tls_context_new_client();
-        if (!tls_ctx) {
-            err = WS_ERR_CONNECT;
-            goto fail_cleanup;
-        }
-        ws->tls_ctx = tls_ctx;
-
-        XrTlsConn *tls_conn = xr_tls_conn_new(tls_ctx, ws->fd);
-        if (!tls_conn) {
-            err = WS_ERR_CONNECT;
-            goto fail_cleanup;
-        }
-        ws->tls_conn = tls_conn;
-
-        xr_tls_conn_set_hostname(tls_conn, ws->host);
-
-        XrTlsError tls_err = xr_tls_conn_handshake_client(ws->isolate, tls_conn);
-        if (tls_err != XR_TLS_OK) {
-            err = WS_ERR_HANDSHAKE;
-            goto fail_cleanup;
-        }
-    }
-
-    // Generate Sec-WebSocket-Key
+// Build the upgrade request into ws->connect_buf. Returns 0 or -XrWsError.
+static int ws_build_handshake_request(XrWebSocket *ws) {
     ws->sec_key = generate_sec_key();
-    if (!ws->sec_key) {
-        err = WS_ERR_MEMORY;
-        goto fail_cleanup;
-    }
+    if (!ws->sec_key)
+        return -WS_ERR_MEMORY;
 
-    // Build handshake request (dynamic buffer for large header sets)
     size_t req_cap = 2048;
-    request = (char *) xr_malloc(req_cap);
-    if (!request) {
-        err = WS_ERR_MEMORY;
-        goto fail_cleanup;
-    }
+    char *request = (char *) xr_malloc(req_cap);
+    if (!request)
+        return -WS_ERR_MEMORY;
     size_t req_len = 0;
 
 #define WS_APPEND(fmt, ...)                                                                        \
     do {                                                                                           \
         int _n = snprintf(request + req_len, req_cap - req_len, fmt, ##__VA_ARGS__);               \
         if (_n < 0) {                                                                              \
-            err = WS_ERR_MEMORY;                                                                   \
-            goto fail_cleanup;                                                                     \
+            xr_free(request);                                                                      \
+            return -WS_ERR_MEMORY;                                                                 \
         }                                                                                          \
         if (req_len + (size_t) _n >= req_cap) {                                                    \
             size_t new_cap = (req_cap + (size_t) _n + 1) * 2;                                      \
             char *tmp = (char *) xr_realloc(request, new_cap);                                     \
             if (!tmp) {                                                                            \
-                err = WS_ERR_MEMORY;                                                               \
-                goto fail_cleanup;                                                                 \
+                xr_free(request);                                                                  \
+                return -WS_ERR_MEMORY;                                                             \
             }                                                                                      \
             request = tmp;                                                                         \
             req_cap = new_cap;                                                                     \
             _n = snprintf(request + req_len, req_cap - req_len, fmt, ##__VA_ARGS__);               \
             if (_n < 0) {                                                                          \
-                err = WS_ERR_MEMORY;                                                               \
-                goto fail_cleanup;                                                                 \
+                xr_free(request);                                                                  \
+                return -WS_ERR_MEMORY;                                                             \
             }                                                                                      \
         }                                                                                          \
         req_len += (size_t) _n;                                                                    \
@@ -1197,118 +1009,287 @@ XrWsError xr_ws_connect(XrWebSocket *ws) {
     WS_APPEND("\r\n");
 #undef WS_APPEND
 
-    // Send handshake request
-    if (ws_send_all(ws, request, req_len) < 0) {
-        err = WS_ERR_SEND;
-        goto fail_cleanup;
-    }
-    xr_free(request);
-    request = NULL;
+    ws->connect_buf = request;
+    ws->connect_buf_cap = req_cap;
+    ws->connect_len = req_len;
+    ws->connect_off = 0;
+    return 0;
+}
 
-    // Receive handshake response (dynamic buffer)
-    size_t resp_cap = 4096;
-    response = (char *) xr_malloc(resp_cap);
-    if (!response) {
-        err = WS_ERR_MEMORY;
-        goto fail_cleanup;
-    }
-    size_t resp_len = 0;
-
-    while (resp_len < resp_cap - 1) {
-        ssize_t n = ws_recv_timeout(ws, response + resp_len, resp_cap - 1 - resp_len,
-                                    ws->config.connect_timeout_ms);
-        if (n <= 0) {
-            err = WS_ERR_RECV;
-            goto fail_cleanup;
+// Drain the staged request (connect_buf[off..len]) without blocking.
+// Returns 0 (fully sent), a poll event to wait for, or -XrWsError.
+static int ws_connect_drain_request(XrWebSocket *ws) {
+    while (ws->connect_off < ws->connect_len) {
+        const char *p = ws->connect_buf + ws->connect_off;
+        size_t remain = ws->connect_len - ws->connect_off;
+        if (ws->is_secure && ws->tls_conn) {
+            int n = xr_tls_conn_write_try((XrTlsConn *) ws->tls_conn, p, remain);
+            if (n > 0) {
+                ws->connect_off += (size_t) n;
+                continue;
+            }
+            if (n == -1)
+                return XR_WAIT_WRITE;  // SSL_ERROR_WANT_WRITE
+            if (n == -2)
+                return XR_WAIT_READ;  // SSL_ERROR_WANT_READ
+            return -WS_ERR_SEND;
         }
-        resp_len += n;
-        response[resp_len] = '\0';
-        if (strstr(response, "\r\n\r\n"))
-            break;
+        ssize_t n = send(ws->fd, p, remain, 0);
+        if (n > 0) {
+            ws->connect_off += (size_t) n;
+            continue;
+        }
+        if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+            return XR_WAIT_WRITE;
+        return -WS_ERR_SEND;
     }
+    return 0;
+}
 
-    // Validate response
-    if (strncmp(response, "HTTP/1.1 101", 12) != 0) {
-        err = WS_ERR_HANDSHAKE;
-        goto fail_cleanup;
+// Read the response into connect_buf until the header terminator is seen.
+// Returns 0 (full headers), a poll event to wait for, or -XrWsError.
+static int ws_connect_fill_response(XrWebSocket *ws) {
+    for (;;) {
+        if (ws->connect_len + 1 >= ws->connect_buf_cap) {
+            size_t new_cap = ws->connect_buf_cap ? ws->connect_buf_cap * 2 : 4096;
+            char *tmp = (char *) xr_realloc(ws->connect_buf, new_cap);
+            if (!tmp)
+                return -WS_ERR_MEMORY;
+            ws->connect_buf = tmp;
+            ws->connect_buf_cap = new_cap;
+        }
+        char *wp = ws->connect_buf + ws->connect_len;
+        size_t room = ws->connect_buf_cap - 1 - ws->connect_len;
+        ssize_t n;
+        if (ws->is_secure && ws->tls_conn) {
+            int tn = xr_tls_conn_read_try((XrTlsConn *) ws->tls_conn, wp, room);
+            if (tn == -1)
+                return XR_WAIT_READ;  // SSL_ERROR_WANT_READ
+            if (tn == -2)
+                return XR_WAIT_WRITE;  // SSL_ERROR_WANT_WRITE
+            if (tn <= 0)
+                return -WS_ERR_RECV;
+            n = tn;
+        } else {
+            n = recv(ws->fd, wp, room, 0);
+            if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                return XR_WAIT_READ;
+            if (n <= 0)
+                return -WS_ERR_RECV;
+        }
+        ws->connect_len += (size_t) n;
+        ws->connect_buf[ws->connect_len] = '\0';
+        if (strstr(ws->connect_buf, "\r\n\r\n"))
+            return 0;
     }
+}
 
-    // Validate Sec-WebSocket-Accept with strict exact-match against the
-    // full trimmed header value. The old `strstr(response, accept_key)` was
-    // a substring scan over the whole response; any header whose value
-    // happened to contain the base64 digest (e.g. custom diagnostic echo,
-    // proxy inserted fields) would have been accepted (W-12).
-    accept_key = compute_accept_key(ws->sec_key);
-    if (!accept_key) {
-        err = WS_ERR_MEMORY;
-        goto fail_cleanup;
-    }
+// Validate the server's upgrade response (status line, accept key, extensions).
+// Returns 0 or -XrWsError. Operates on the full headers in ws->connect_buf.
+static int ws_connect_parse_response(XrWebSocket *ws) {
+    char *response = ws->connect_buf;
 
+    if (strncmp(response, "HTTP/1.1 101", 12) != 0)
+        return -WS_ERR_HANDSHAKE;
+
+    // Strict exact-match of Sec-WebSocket-Accept against the trimmed header
+    // value (a substring scan would accept any header echoing the digest).
+    char *accept_key = compute_accept_key(ws->sec_key);
+    if (!accept_key)
+        return -WS_ERR_MEMORY;
     char accept_val[64];
     if (!ws_get_header_value(response, "Sec-WebSocket-Accept", accept_val, sizeof(accept_val))) {
-        err = WS_ERR_HANDSHAKE;
-        goto fail_cleanup;
+        xr_free(accept_key);
+        return -WS_ERR_HANDSHAKE;
     }
     if (strcmp(accept_val, accept_key) != 0) {
-        err = WS_ERR_HANDSHAKE;
-        goto fail_cleanup;
+        xr_free(accept_key);
+        return -WS_ERR_HANDSHAKE;
     }
     xr_free(accept_key);
-    accept_key = NULL;
 
-    // Parse Sec-WebSocket-Extensions to detect permessage-deflate. The old
-    // `strstr(response, "permessage-deflate")` also triggered on cookie
-    // values, custom headers, error strings — even if the server did not
-    // actually negotiate the extension (W-13). Now we walk the header's
-    // comma-separated token list and match only the `name` part.
-    {
-        char ext_val[512];
-        if (ws_get_header_value(response, "Sec-WebSocket-Extensions", ext_val, sizeof(ext_val))) {
-            if (ws_header_list_has_token(ext_val, "permessage-deflate")) {
-                ws->deflate_enabled = true;
-                ws->deflate_no_context = true;  // we requested no_context_takeover
-            }
+    // Detect a genuinely negotiated permessage-deflate (token match, not a
+    // substring scan that custom headers could trip).
+    char ext_val[512];
+    if (ws_get_header_value(response, "Sec-WebSocket-Extensions", ext_val, sizeof(ext_val))) {
+        if (ws_header_list_has_token(ext_val, "permessage-deflate")) {
+            ws->deflate_enabled = true;
+            ws->deflate_no_context = true;  // we requested no_context_takeover
+        }
+    }
+    return 0;
+}
+
+int xr_ws_connect_start(XrWebSocket *ws) {
+    if (!ws)
+        return -WS_ERR_URL;
+
+    ws->state = WS_STATE_CONNECTING;
+    ws->connect_buf = NULL;
+    ws->connect_buf_cap = 0;
+    ws->connect_len = 0;
+    ws->connect_off = 0;
+
+    // DNS resolution (synchronous getaddrinfo). It runs entersyscall/exitsyscall
+    // internally, so it hands off P while blocking and does not pin the worker's
+    // run queue; only this lookup blocks an OS thread, the rest yields.
+    XrSockAddr resolved_addr;
+    if (!xr_dns_resolve(ws->isolate, ws->host, &resolved_addr, XR_AF_UNSPEC))
+        return -WS_ERR_DNS;
+
+    ws->fd = socket(resolved_addr.family, SOCK_STREAM, 0);
+    if (ws->fd < 0)
+        return -WS_ERR_CONNECT;
+
+    xr_socket_set_nodelay(ws->fd, true);
+#ifdef TCP_NOTSENT_LOWAT
+    int lowat = 16384;
+    setsockopt(ws->fd, IPPROTO_TCP, TCP_NOTSENT_LOWAT, (const char *) &lowat, sizeof(lowat));
+#endif
+#ifdef SO_NOSIGPIPE
+    int flag = 1;
+    setsockopt(ws->fd, SOL_SOCKET, SO_NOSIGPIPE, (const char *) &flag, sizeof(flag));
+#endif
+    (void) xr_socket_set_nonblocking(ws->fd);
+
+    struct sockaddr *sa;
+    socklen_t sa_len;
+    if (resolved_addr.family == AF_INET) {
+        resolved_addr.addr.v4.sin_port = htons(ws->port);
+        sa = (struct sockaddr *) &resolved_addr.addr.v4;
+        sa_len = sizeof(struct sockaddr_in);
+    } else {
+        resolved_addr.addr.v6.sin6_port = htons(ws->port);
+        sa = (struct sockaddr *) &resolved_addr.addr.v6;
+        sa_len = sizeof(struct sockaddr_in6);
+    }
+
+    int cret = connect(ws->fd, sa, sa_len);
+    if (cret < 0 && errno != EINPROGRESS) {
+        xr_closesocket(ws->fd);
+        ws->fd = -1;
+        return -WS_ERR_CONNECT;
+    }
+
+    ws->connect_phase = WS_CONN_PHASE_CONNECT;
+    // Wait for writable next: an instantly-connected socket is already writable
+    // (pump's SO_ERROR check then passes), and EINPROGRESS resolves to writable
+    // when the TCP handshake completes or fails.
+    return XR_WAIT_WRITE;
+}
+
+int xr_ws_connect_pump(XrWebSocket *ws) {
+    if (!ws)
+        return -WS_ERR_URL;
+
+    if (ws->connect_phase == WS_CONN_PHASE_CONNECT) {
+        // The socket is writable — pull SO_ERROR to tell async-success from an
+        // async connect failure (peer RST after SYN, ECONNREFUSED, ...).
+        int so_error = 0;
+        socklen_t so_len = sizeof(so_error);
+        if (getsockopt(ws->fd, SOL_SOCKET, SO_ERROR, &so_error, &so_len) < 0 || so_error != 0)
+            return -WS_ERR_CONNECT;
+        if (ws->is_secure) {
+            XrTlsContext *tls_ctx = xr_tls_context_new_client();
+            if (!tls_ctx)
+                return -WS_ERR_CONNECT;
+            ws->tls_ctx = tls_ctx;
+            XrTlsConn *tls_conn = xr_tls_conn_new(tls_ctx, ws->fd);
+            if (!tls_conn)
+                return -WS_ERR_CONNECT;
+            ws->tls_conn = tls_conn;
+            xr_tls_conn_set_hostname(tls_conn, ws->host);
+            ws->connect_phase = WS_CONN_PHASE_TLS;
+        } else {
+            int rc = ws_build_handshake_request(ws);
+            if (rc < 0)
+                return rc;
+            ws->connect_phase = WS_CONN_PHASE_SEND;
         }
     }
 
-    /*
-     * Re-assert O_NONBLOCK defensively. The socket was already set
-     * non-blocking before the TCP connect() in the updated client
-     * flow (see the pre-connect fcntl block above), so this is
-     * normally a no-op. Kept in place because some TLS client
-     * libraries (rare) temporarily toggle the flag during their
-     * own SSL_connect plumbing; re-arming here guarantees the
-     * post-handshake read/write paths consistently yield via
-     * netpoll instead of blocking the worker thread.
-     */
-    xr_socket_set_nonblocking(ws->fd);
-
-    // Connection successful
-    ws->state = WS_STATE_OPEN;
-    xr_free(response);
-
-    return WS_OK;
-
-fail_cleanup:
-    xr_free(accept_key);
-    xr_free(request);
-    xr_free(response);
-    if (ws->tls_conn) {
-        xr_tls_conn_close((XrTlsConn *) ws->tls_conn);
-        xr_tls_conn_free((XrTlsConn *) ws->tls_conn);
-        ws->tls_conn = NULL;
+    if (ws->connect_phase == WS_CONN_PHASE_TLS) {
+        int hs = xr_tls_conn_handshake_try((XrTlsConn *) ws->tls_conn);
+        if (hs == 1)
+            return XR_WAIT_READ;  // SSL wants readable
+        if (hs == 2)
+            return XR_WAIT_WRITE;  // SSL wants writable
+        if (hs < 0)
+            return -WS_ERR_HANDSHAKE;
+        int rc = ws_build_handshake_request(ws);
+        if (rc < 0)
+            return rc;
+        ws->connect_phase = WS_CONN_PHASE_SEND;
     }
-    if (ws->tls_ctx) {
-        xr_tls_context_free((XrTlsContext *) ws->tls_ctx);
-        ws->tls_ctx = NULL;
+
+    if (ws->connect_phase == WS_CONN_PHASE_SEND) {
+        int rc = ws_connect_drain_request(ws);
+        if (rc != 0)
+            return rc;  // poll event or -XrWsError
+        // Request fully sent: reuse the buffer to read the response.
+        xr_free(ws->connect_buf);
+        ws->connect_buf_cap = 4096;
+        ws->connect_buf = (char *) xr_malloc(ws->connect_buf_cap);
+        if (!ws->connect_buf) {
+            ws->connect_buf_cap = 0;
+            return -WS_ERR_MEMORY;
+        }
+        ws->connect_len = 0;
+        ws->connect_off = 0;
+        ws->connect_phase = WS_CONN_PHASE_RECV;
     }
-    if (ws->fd >= 0) {
-        xr_closesocket(ws->fd);
-        ws->fd = -1;
+
+    if (ws->connect_phase == WS_CONN_PHASE_RECV) {
+        int rc = ws_connect_fill_response(ws);
+        if (rc != 0)
+            return rc;  // poll event or -XrWsError
+        int prc = ws_connect_parse_response(ws);
+        xr_free(ws->connect_buf);
+        ws->connect_buf = NULL;
+        ws->connect_buf_cap = 0;
+        ws->connect_len = 0;
+        if (prc < 0)
+            return prc;
+        // Keep the fd non-blocking so the steady-state send/recv paths yield.
+        xr_socket_set_nonblocking(ws->fd);
+        ws->state = WS_STATE_OPEN;
+        return 0;
     }
-fail_early:
-    ws->state = WS_STATE_CLOSED;
-    return err;
+
+    return -WS_ERR_CONNECT;
+}
+
+XrWsError xr_ws_connect(XrWebSocket *ws) {
+    if (!ws)
+        return WS_ERR_URL;
+    if (ws->state == WS_STATE_OPEN)
+        return WS_OK;
+
+    int ev = xr_ws_connect_start(ws);
+    if (ev < 0) {
+        ws_connect_cleanup(ws);
+        ws->state = WS_STATE_CLOSED;
+        return (XrWsError) (-ev);
+    }
+
+    int timeout = ws->config.connect_timeout_ms > 0 ? ws->config.connect_timeout_ms : 10000;
+    for (;;) {
+        int wr = (ev == XR_WAIT_READ) ? xr_socket_wait_readable(ws->isolate, ws->fd, timeout)
+                                      : xr_socket_wait_writable(ws->isolate, ws->fd, timeout);
+        if (wr <= 0) {
+            ws_connect_cleanup(ws);
+            ws->state = WS_STATE_CLOSED;
+            return (wr == 0) ? WS_ERR_TIMEOUT : WS_ERR_CONNECT;
+        }
+        ev = xr_ws_connect_pump(ws);
+        if (ev == 0)
+            return WS_OK;
+        if (ev < 0) {
+            ws_connect_cleanup(ws);
+            ws->state = WS_STATE_CLOSED;
+            return (XrWsError) (-ev);
+        }
+    }
 }
 
 XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
@@ -1360,6 +1341,7 @@ XrWsError xr_ws_close(XrWebSocket *ws, int code, const char *reason) {
     }
 
     if (ws->fd >= 0) {
+        ws_netpoll_release_fd(ws);
         xr_closesocket(ws->fd);
         ws->fd = -1;
     }
@@ -1514,12 +1496,31 @@ static ssize_t ws_rbuf_fill(XrWebSocket *ws) {
         if (avail <= 0)
             break;
         char *wp = ws->rbuf + ws->rbuf_off + ws->rbuf_len;
-        ssize_t n;
         if (ws->is_secure && ws->tls_conn) {
-            n = xr_tls_conn_read(ws->isolate, (XrTlsConn *) ws->tls_conn, wp, avail);
-        } else {
-            n = recv(ws->fd, wp, avail, 0);
+            // Non-blocking TLS read; -1 WANT_READ, -2 WANT_WRITE, -3 err, 0 EOF.
+            // WANT_WRITE means SSL must write (e.g. renegotiation) before it can
+            // return plaintext, so the caller must wait for the socket to become
+            // writable instead of readable.
+            int tn = xr_tls_conn_read_try((XrTlsConn *) ws->tls_conn, wp, (size_t) avail);
+            if (tn > 0) {
+                ws->rbuf_len += tn;
+                total += tn;
+                continue;
+            }
+            if (tn == 0) {
+                if (total > 0)
+                    break;
+                return -2;
+            }
+            if (tn == -2) {
+                ws->recv_wait_event = XR_WAIT_WRITE;
+                break;
+            }
+            if (tn == -1)
+                break;  // WANT_READ: wait for readable (default recv_wait_event)
+            return -1;  // -3: TLS error
         }
+        ssize_t n = recv(ws->fd, wp, avail, 0);
         if (n < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 break;
@@ -1544,6 +1545,10 @@ XrWsMessage *xr_ws_recv_try(XrWebSocket *ws, bool *need_more) {
         *need_more = false;
     if (!ws || ws->state != WS_STATE_OPEN)
         return NULL;
+
+    // Default wait direction for a need_more yield; ws_rbuf_fill overrides to
+    // XR_WAIT_WRITE on a TLS WANT_WRITE.
+    ws->recv_wait_event = XR_WAIT_READ;
 
     // Declared at function scope so `goto read_payload` (bypasses parse_header)
     // and the subsequent process_frame path read a deterministic value.

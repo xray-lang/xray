@@ -42,35 +42,14 @@
 
 #define XR_REGION_BLOCK_SIZE (16 * 1024)
 #define XR_REGION_LINE_SIZE 128
-#define XR_REGION_LINES (XR_REGION_BLOCK_SIZE / XR_REGION_LINE_SIZE)  // 128
-#define XR_REGION_FIRST_LINE 1  // Line 0 reserved for metadata pointer
-#define XR_REGION_USABLE_LINES (XR_REGION_LINES - XR_REGION_FIRST_LINE)  // 127
+#define XR_REGION_FIRST_LINE 1  // Line 0 reserved for block metadata; objects start at line 1
 
-/* ========== Line Mark Bitmap ========== */
+/* ========== Address-to-Block Mapping ========== */
 
-/*
- * 128 lines = 2 x uint64_t bitmap.
- * Single bitmap design:
- *   alloc_marks - the only bitmap, always reflects true line occupancy.
- *   SET on allocation, rebuilt during sweep (per-block).
- */
-#define XR_REGION_LINE_SET(bm, line) ((bm)[(line) >> 6] |= (1ULL << ((line) & 63)))
-
-#define XR_REGION_LINE_GET(bm, line) ((bm)[(line) >> 6] & (1ULL << ((line) & 63)))
-
-/* ========== Address-to-Block/Line Mapping ========== */
-
-// Block data is BLOCK_SIZE-aligned
-#define XR_REGION_BLOCK_DATA(ptr)                                                                  \
-    ((char *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_REGION_BLOCK_SIZE - 1))))
-
-// Get XrRegionBlock metadata directly from any object pointer (no indirection)
-// Metadata is embedded in Line 0 of the aligned block
+// Get XrRegionBlock metadata directly from any object pointer (no indirection).
+// Blocks are BLOCK_SIZE-aligned; metadata is embedded in Line 0.
 #define XR_REGION_BLOCK_FROM_PTR(ptr)                                                              \
     ((XrRegionBlock *) ((uintptr_t) (ptr) & ~((uintptr_t) (XR_REGION_BLOCK_SIZE - 1))))
-
-#define XR_REGION_LINE_INDEX(ptr)                                                                  \
-    ((int) (((uintptr_t) (ptr) & (XR_REGION_BLOCK_SIZE - 1)) / XR_REGION_LINE_SIZE))
 
 /* ========== Block Metadata ========== */
 
@@ -82,18 +61,13 @@ struct XrGCHeader;
 struct XrSystemHeap;
 
 typedef struct XrRegionBlock {
-    struct XrRegionBlock *next;   // 8B
-    uint64_t alloc_marks[2];      // 16B - line occupancy
-    uint8_t next_scan_line;       // 1B  - resume position for hole scanning
-    uint8_t is_young;             // 1B  - Sticky Region: 1=young block, 0=old block
-    uint8_t _pad2[2];             // 2B  - padding
-    uint32_t alloc_count;         // 4B  - distinct slots bump-allocated in this block
-    int64_t alloc_bytes;          // 8B  - total allocated bytes in the block
-    uint32_t reclaim_dead_count;  // 4B - transient: dead-slot tally during whole-block
-                                  //      reclaim (see xr_coro_gc_reclaim_blocks). Not on
-                                  //      the alloc hot path; appended after the JIT-read
-                                  //      fields so their offsets are unchanged.
-    // Fits in Line 0 (128B).
+    struct XrRegionBlock *next;   // 8B  @0
+    uint32_t alloc_count;         // 4B  @8  - distinct slots bump-allocated in this block
+    int64_t alloc_bytes;          // 8B  @16 - total allocated bytes in the block (JIT-read)
+    uint32_t reclaim_dead_count;  // 4B  @24 - transient: dead-slot tally during whole-block
+                                  //      reclaim (see xr_coro_gc_reclaim_blocks).
+    // alloc_count/alloc_bytes offsets are JIT-hardcoded (xm_offsets.h); keep
+    // their layout stable. Fits in Line 0 (128B).
 } XrRegionBlock;
 
 _Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must fit in Line 0");
@@ -103,9 +77,14 @@ _Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must
 /*
  * Each block is on exactly ONE of these lists, or is the current_block.
  *
- *   full_blocks    - all usable lines occupied by live objects
- *   recycle_blocks - has free holes (rebuilt after each GC reclaim)
- *   free_blocks    - completely empty, reusable
+ *   full_blocks - retired blocks (current block once its bump space is used up)
+ *   free_blocks - completely empty, reusable (refilled by whole-block reclaim)
+ *
+ * Under pure RC there is no line-level reclamation: dead small objects return
+ * to the per-coroutine size-class freelist, and a block re-enters free_blocks
+ * only when whole-block reclaim finds every slot dead (see
+ * xr_coro_gc_reclaim_blocks). There is therefore no "partially free / recycle"
+ * list to maintain.
  */
 typedef struct XrRegionHeap {
     // Hot path: bump allocation (JIT inline candidates)
@@ -113,20 +92,11 @@ typedef struct XrRegionHeap {
     char *limit;                   // offset 8 — JIT hardcoded
     XrRegionBlock *current_block;  // offset 16
 
-    // Deferred alloc_marks: JIT fast path bumps cursor without setting marks.
-    // Before hole-scanning, flush marks from mark_cursor to cursor.
-    char *mark_cursor;
-
-    // Cold path: block list management (young blocks only in gen mode)
+    // Cold path: block list management
     XrRegionBlock *full_blocks;
-    XrRegionBlock *recycle_blocks;
     XrRegionBlock *free_blocks;
     size_t total_blocks;
     size_t total_block_bytes;
-
-    // Sticky Region: old blocks (skipped by minor GC)
-    XrRegionBlock *old_blocks;
-    size_t old_block_count;
 
     // Per-isolate L2 block cache owner (opaque). Set after init from the
     // owning coroutine's isolate; NULL during bootstrap (falls back to the
@@ -164,52 +134,6 @@ static inline void *xr_region_alloc(XrRegionHeap *heap, size_t size) {
     return xr_region_alloc_slow(heap, size);
 }
 
-/* ========== Deferred Mark Flush ========== */
-
-// Flush deferred alloc_marks: mark all lines from mark_cursor to cursor.
-// Must be called before any hole-scanning (slow path entry).
-static inline void xr_region_flush_marks(XrRegionHeap *heap) {
-    char *mc = heap->mark_cursor;
-    char *c = heap->cursor;
-    if (mc >= c || !mc)
-        return;
-    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(mc);
-    int first = XR_REGION_LINE_INDEX(mc);
-    int last = XR_REGION_LINE_INDEX(c - 1);
-    // Bulk set bits [first..last] using bitmask operations
-    uint64_t lo_mask = ~((1ULL << (first & 63)) - 1);  // bits [first%64 .. 63]
-    uint64_t hi_bit = (last & 63) == 63 ? UINT64_MAX : (1ULL << ((last & 63) + 1)) - 1;
-    if ((first >> 6) == (last >> 6)) {
-        block->alloc_marks[first >> 6] |= lo_mask & hi_bit;
-    } else {
-        block->alloc_marks[0] |= lo_mask;
-        block->alloc_marks[1] |= hi_bit;
-    }
-    heap->mark_cursor = c;
-}
-
-/* ========== GC Integration API (Single Bitmap) ========== */
-
-// Mark alloc_marks for a newly allocated object.
-XR_FUNC void xr_region_mark_alloc_lines(void *obj_ptr, size_t obj_size);
-
-/*
- * Inline fast path for marking alloc_marks for all lines an object spans.
- * An object smaller than a line can still cross a line boundary
- * (e.g., 40B object at offset 120 of a 128B line extends into the next line).
- */
-static inline void xr_region_mark_alloc_lines_fast(void *obj_ptr, size_t obj_size) {
-    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj_ptr);
-    int first = XR_REGION_LINE_INDEX(obj_ptr);
-    int last = XR_REGION_LINE_INDEX((char *) obj_ptr + obj_size - 1);
-    XR_REGION_LINE_SET(block->alloc_marks, first);
-    for (int l = first + 1; l <= last; l++)
-        XR_REGION_LINE_SET(block->alloc_marks, l);
-}
-
-// Count live lines in a block (excluding reserved line 0)
-XR_FUNC int xr_region_count_live_lines(XrRegionBlock *block);
-
 /* ========== Block Cache API ========== */
 
 // Flush a per-worker L1 block cache to the isolate's L2 pool (`sys_heap`).
@@ -228,11 +152,8 @@ XR_FUNC void xr_region_free_raw_block(void *block);
 typedef struct XrRegionStats {
     size_t total_blocks;
     size_t free_blocks;
-    size_t recycle_blocks;
     size_t full_blocks;
     size_t total_bytes;
-    size_t live_lines;
-    size_t free_lines;
 } XrRegionStats;
 
 XR_FUNC void xr_region_get_stats(XrRegionHeap *heap, XrRegionStats *stats);

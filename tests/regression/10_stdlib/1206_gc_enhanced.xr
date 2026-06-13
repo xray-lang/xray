@@ -1,5 +1,4 @@
-// Test enhanced gc module - covers new APIs and edge cases
-// Added after gc module optimization (P0-P3)
+// Test enhanced gc module - RC-native API and edge cases
 //
 // REGRESSION: Bugs #8 / #10 / #11 - GC chain corruption under
 //             --jit-force (commits 5f7a535 + 2e1dacc).
@@ -42,7 +41,7 @@
 
 import gc
 
-// @test gc.disable/enable pairing works
+// @test gc.disable/enable pairing toggles the automatic cycle collector
 @test
 fn test_gc_disable_enable() {
     assert_eq(gc.isrunning(), true)
@@ -52,87 +51,45 @@ fn test_gc_disable_enable() {
     assert_eq(gc.isrunning(), true)
 }
 
-// @test gc.disable prevents GC from running
+// @test gc.disable pauses the automatic cycle collector
 @test
 fn test_gc_disable_prevents_gc() {
     gc.disable()
-    let before_count = gc.gccount()
+    let before_count = gc.cycles()
     // Allocate a bunch of objects
     let arr: Array<Json> = []
     for (let i = 0; i < 500; i++) {
         arr.push(#{"idx": i, "data": "item_" + string(i)})
     }
-    // GC should not have run while disabled
-    let after_count = gc.gccount()
+    // Automatic cycle collection must not have run while disabled
+    let after_count = gc.cycles()
     assert_eq(before_count, after_count)
+    assert(arr.length == 500)
     gc.enable()
 }
 
-// @test gc.setpause returns old value
-@test
-fn test_gc_setpause_returns_old() {
-    let old1 = gc.setpause(150)
-    let old2 = gc.setpause(200)
-    assert_eq(old2, 150)
-    // Restore
-    gc.setpause(old1)
-}
-
-// @test gc.setstepmul returns old value
-@test
-fn test_gc_setstepmul_returns_old() {
-    let old1 = gc.setstepmul(300)
-    let old2 = gc.setstepmul(100)
-    assert_eq(old2, 300)
-    // Restore
-    gc.setstepmul(old1)
-}
-
-// @test gc.info contains expected keys
+// @test gc.info contains the RC-native keys
 @test
 fn test_gc_info_keys() {
     let info = gc.info()
-    // Memory stats
+    // Live memory + object stats
     assert(info["totalBytes"] >= 0)
     assert(info["totalKB"] >= 0.0)
-    // GC state — reference counting reports a single steady state "rc".
-    assert(info["state"].length > 0)
-    assert(info["gcCount"] >= 0)
-    // Tuning
-    assert(info["pause"] > 0)
-    assert(info["stepMul"] > 0)
-    // Timing (new)
-    assert(info["gcTimeMs"] >= 0.0)
-    assert(info["lastGcTimeUs"] >= 0.0)
-    // Immix stats (new)
+    assert(info["objects"] >= 0)
+    // Automatic cycle collector state
+    assert(info["cycles"] >= 0)
+    assert(info["finalizerCount"] >= 0)
+    // Region block stats
     assert(info["blocks"] >= 0)
     assert(info["freeBlocks"] >= 0)
-    assert(info["recycleBlocks"] >= 0)
     assert(info["fullBlocks"] >= 0)
-    assert(info["liveLines"] >= 0)
-    assert(info["freeLines"] >= 0)
-    // Monitoring
-    assert(info["finalizerCount"] >= 0)
-}
-
-// @test gc.collect timing stat is exposed and non-negative
-@test
-fn test_gc_collect_updates_timing() {
-    // RC owns reclamation: gc.collect() is a no-op (reference counting
-    // reclaims incrementally, the tracing collector is retired). It does not
-    // run a timed cycle, so lastGcTimeUs stays 0 rather than going positive.
-    gc.collect()
-    let info = gc.info()
-    assert(info["lastGcTimeUs"] >= 0.0)
-    assert(info["gcTimeMs"] >= 0.0)
 }
 
 // @test gc.collect returns a monotonic cycle count
 @test
 fn test_gc_collect_returns_count() {
-    // Under RC the cycle counter never decreases. The tracing collector that
-    // used to advance it on every collect() is retired, so two collects may
-    // report the same count — assert monotonicity, not strict growth.
+    // Under RC the cycle counter never decreases. A cycle-free program may
+    // report the same count across collects — assert monotonicity, not growth.
     let count1 = gc.collect()
     let count2 = gc.collect()
     assert(count2 >= count1)
@@ -155,7 +112,7 @@ fn test_gc_countb_decreases_after_collect() {
     assert(after_alloc >= baseline)
     gc.collect()
     let after_gc = gc.countb()
-    // Memory should decrease (garbage was collected)
+    // Memory should not grow after collecting the garbage
     assert(after_gc <= after_alloc)
 }
 
@@ -167,53 +124,15 @@ fn test_gc_objects_tracks_alloc() {
     for (let i = 0; i < 10; i++) {
         arr.push(#{"k": i})
     }
+    // Xray reclaims by reference counting: a value is freed at its LAST use, not
+    // at the end of the enclosing scope. `arr` must therefore be used again
+    // AFTER `after` is sampled, otherwise ARC would have already released `arr`
+    // (and its 10 elements) by this line and the live-object count would read
+    // back as `before`. The touch below extends arr's lifetime across the
+    // measurement so the just-allocated objects are still counted.
     let after = gc.objects()
+    assert(arr.length == 10)
     assert(after > before)
-}
-
-// @test gc.fragmentation returns valid ratio
-@test
-fn test_gc_fragmentation() {
-    let frag = gc.fragmentation()
-    assert(frag >= 0.0)
-    assert(frag <= 1.0)
-}
-
-// @test gc.fragmentation changes after churn
-@test
-fn test_gc_fragmentation_after_churn() {
-    gc.collect()
-    let frag_before = gc.fragmentation()
-    // Create and discard lots of objects to cause fragmentation
-    for (let round = 0; round < 10; round++) {
-        let temp: Array<Array<int>> = []
-        for (let j = 0; j < 100; j++) {
-            temp.push([j, j + 1])
-        }
-    }
-    gc.collect()
-    let frag_after = gc.fragmentation()
-    // Both should be valid ratios
-    assert(frag_after >= 0.0)
-    assert(frag_after <= 1.0)
-}
-
-// @test gc.debt basic behavior
-@test
-fn test_gc_debt() {
-    gc.collect()
-    let debt_after_gc = gc.debt()
-    // After full GC, debt should be non-positive (budget remaining)
-    assert(debt_after_gc <= 0)
-}
-
-// @test gc.state returns valid state names
-@test
-fn test_gc_state_valid() {
-    let state = gc.state()
-    // Reference counting has no mark/sweep state machine: gc.state() reports
-    // a single steady state "rc".
-    assert_eq(state, "rc")
 }
 
 print("All enhanced gc tests passed")

@@ -65,7 +65,6 @@ XR_FUNC void xr_jit_barrier_fwd(struct XrCoroutine *coro, void *parent, void *ch
 XR_FUNC void xr_jit_barrier_back(struct XrCoroutine *coro, void *container);
 XR_FUNC struct XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size);
 XR_FUNC void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr);
-XR_FUNC void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr);
 
 /* ========== Call / Invoke ========== */
 

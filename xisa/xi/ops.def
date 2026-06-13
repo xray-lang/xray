@@ -561,6 +561,8 @@
 (define-xi-op xi.bytes.copy.within
   :class memory-write
   :arity 4
+  :result-ownership borrowed
+  :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
   :requires (bytes bounds overlap-safe)
   :observable (in-place-copy)
@@ -570,6 +572,8 @@
 (define-xi-op xi.bytes.copy.from
   :class memory-write
   :arity 5
+  :result-ownership borrowed
+  :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
   :requires (bytes bounds)
   :observable (in-place-copy)
@@ -579,6 +583,8 @@
 (define-xi-op xi.bytes.repeat.from
   :class memory-write
   :arity 4
+  :result-ownership borrowed
+  :own-use borrow
   :effects (side-effect may-throw memory-read memory-write)
   :requires (bytes bounds overlap-repeat)
   :observable (lz-match-copy)
@@ -902,6 +908,7 @@
   :class coroutine
   :arity variadic
   :result-ownership none
+  :own-use borrow
   :escape-use global
   :effects (side-effect memory-write)
   :requires ()

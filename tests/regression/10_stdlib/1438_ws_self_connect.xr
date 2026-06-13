@@ -1,0 +1,111 @@
+// 1438_ws_self_connect.xr
+// 作者：xingleixu@gmail.com
+// 测试：WebSocket 进程内自连接（server + client 在同进程跨协程）。
+//
+// 回归护栏：客户端把 `passed`/`failed` 计数器（声明为函数首个局部 = 变量 #0）
+// 维持在「跨循环 + 内含 `&&` 条件」的活跃区间，并在循环结束后再次读取它们。
+// 这一控制流曾触发 Xi 寄存器分配把临时 phi（`&&` 结果，因构造时漏初始化
+// var_id 而退化为 0）与变量 #0 合并到同一寄存器，污染计数器，使客户端协程
+// 在 `passed = passed + 1` 处静默抛出 "addition requires numeric types"，
+// 表象却是「服务器自连接挂起」。本用例同时为之前仅手动运行、不在自动套件里
+// 的 ws 自连接提供回归覆盖。
+
+import ws
+import time
+
+// Echo server: bounce every text/binary frame back until the peer closes.
+fn startEchoServer(port: int) {
+    ws.serve(port, fn(conn) {
+        while (ws.isOpen(conn)) {
+            let msg = ws.recv(conn, null)
+            if (msg == null || msg.error) {
+                break
+            }
+            if (msg.data) {
+                ws.send(conn, msg.data, null)
+            }
+        }
+    })
+}
+
+@test
+fn test_ws_self_connect() {
+    // `passed` MUST stay the first declared local so it maps to variable #0 —
+    // the exact slot the temporary `&&` phi wrongly coalesced onto.
+    let passed = 0
+    let failed = 0
+    let url = "ws://127.0.0.1:9189"
+
+    go startEchoServer(9189)
+    time.sleep(300)
+
+    // I1: single echo. The `&&` over a nullable response is the miscompile site.
+    let conn1 = ws.connect(url, null)
+    if (conn1 == null) {
+        failed = failed + 1
+    } else {
+        ws.send(conn1, "hello self", false)
+        let resp = ws.recv(conn1, 5000)
+        if (resp != null && resp.data == "hello self") {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+        ws.close(conn1)
+    }
+
+    // I2: 20-message round trip; inner counter read after the loop.
+    let conn2 = ws.connect(url, null)
+    if (conn2 == null) {
+        failed = failed + 1
+    } else {
+        let count = 20
+        let success = 0
+        for (let i = 0; i < count; i = i + 1) {
+            let m = "self-msg-" + i.toString()
+            ws.send(conn2, m, false)
+            let resp = ws.recv(conn2, 5000)
+            if (resp != null && resp.data == m) {
+                success = success + 1
+            }
+        }
+        ws.close(conn2)
+        if (success == count) {
+            passed = passed + 1
+        } else {
+            failed = failed + 1
+        }
+    }
+
+    // I3: three sequential clients, five messages each.
+    let allOk = true
+    for (let c = 0; c < 3; c = c + 1) {
+        let conn = ws.connect(url, null)
+        if (conn == null) {
+            allOk = false
+            break
+        }
+        for (let i = 0; i < 5; i = i + 1) {
+            let m = "client" + c.toString() + "-" + i.toString()
+            ws.send(conn, m, false)
+            let resp = ws.recv(conn, 5000)
+            if (resp == null || resp.data != m) {
+                allOk = false
+                break
+            }
+        }
+        ws.close(conn)
+    }
+    if (allOk) {
+        passed = passed + 1
+    } else {
+        failed = failed + 1
+    }
+
+    ws.stopServer()
+
+    // If the counters were clobbered by the register-coalescing bug, either
+    // these assertions fail or the client already threw mid-loop.
+    assert_eq(failed, 0)
+    assert_eq(passed, 3)
+}

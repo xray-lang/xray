@@ -306,6 +306,13 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
 
     // active_coros/spawned now tracked per-Worker, no global init needed
     runtime->sched_stats_enabled = env_flag_enabled("XRAY_SCHED_STATS");
+    // Watchdog forced-cancel threshold (ms via env, stored as us). 0 disables
+    // forced cancel (sysmon still warns). Default = XR_SYSMON_CANCEL_US.
+    {
+        int cancel_ms =
+            env_int_clamped("XRAY_SYSMON_CANCEL_MS", XR_SYSMON_CANCEL_US / 1000, 0, 3600000);
+        runtime->sysmon_cancel_us = (int64_t) cancel_ms * 1000;
+    }
     xr_mutex_init(&runtime->task_lock);
     runtime->task_list = NULL;
     runtime->task_count = 0;

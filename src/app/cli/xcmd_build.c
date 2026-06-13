@@ -86,7 +86,13 @@ static int invoke_cc(const char *cc, const char *opt_flag, const char *output_fi
     spawn_argv[ai++] = lib_flag;
     spawn_argv[ai++] = "-lxray_core";
 #ifdef XR_OS_MACOS
-    spawn_argv[ai++] = "-L/opt/homebrew/opt/openssl@3/lib";
+    /* Override for Intel Homebrew (/usr/local) or custom openssl prefixes;
+     * default stays Apple-Silicon Homebrew. ssl_flag outlives the spawn. */
+    const char *ssl_libdir = getenv("XRAY_OPENSSL_LIBDIR");
+    char ssl_flag[512];
+    snprintf(ssl_flag, sizeof(ssl_flag), "-L%s",
+             ssl_libdir && ssl_libdir[0] ? ssl_libdir : "/opt/homebrew/opt/openssl@3/lib");
+    spawn_argv[ai++] = ssl_flag;
 #endif
 #ifdef XR_ENABLE_TLS
     spawn_argv[ai++] = "-lssl";
@@ -701,7 +707,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
                             const XrCliBuildTarget *target,
                             const XrCliToolchainPlan *toolchain_plan) {
     XaotBuildResult aot_result;
-    int rc = xaot_build(input, &aot_result);
+    int rc = xaot_build(input, dump_xaot_plan, &aot_result);
     if (rc != 0)
         return rc;
     if (target && target->name) {

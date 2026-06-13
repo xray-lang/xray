@@ -302,6 +302,11 @@ typedef struct XrRuntime {
     /* === I/O & Async === */
     XrNetpoll netpoll;
     xr_thread_t sysmon_thread;  // Sysmon: heartbeat monitoring + stuck detection
+    /* Watchdog: a coroutine whose heartbeat is frozen this many microseconds
+     * while RUNNING is force-cancelled by sysmon (safety net for code that
+     * never reaches a safepoint). Default XR_SYSMON_CANCEL_US; overridable via
+     * XRAY_SYSMON_CANCEL_MS. <= 0 disables forced cancel (warn-only). */
+    int64_t sysmon_cancel_us;
     struct XrAsyncPool *async_pool;
     struct XrIoRuntime *io;  // DNS cache + future handle registry / deadline policy
 

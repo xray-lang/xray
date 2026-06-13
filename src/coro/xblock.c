@@ -1109,8 +1109,13 @@ XrCoroBlockResult xr_coro_scope_enter(XrayIsolate *isolate, XrCoroutine *coro, u
     atomic_init(&scope->child_lock, false);
     scope->first_error = xr_null();
     scope->first_error_is_value = false;
+    /* errors[] is a cross-coroutine collection point: child coroutines on other
+     * workers push into it under scope->child_lock. Allocate it on the shared
+     * heap so its growth/teardown carries no per-coroutine gc accounting (a
+     * per-coro array would underflow the owner's byte counter when a child grows
+     * it). */
     scope->errors =
-        (scope_mode == XR_SCOPE_SUPERVISOR && coro) ? xr_array_with_capacity(coro, 4) : NULL;
+        (scope_mode == XR_SCOPE_SUPERVISOR && coro) ? xr_array_new_shared(coro->isolate, 4) : NULL;
     scope->first_child = NULL;
     scope->owner = coro;
     if (coro) {

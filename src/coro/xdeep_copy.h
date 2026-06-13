@@ -111,6 +111,30 @@ XR_FUNC XrValue xr_deep_copy_with_ctx(XrCopyContext *ctx, XrValue value);
 XR_FUNC XrValue xr_deep_copy_to_transit(struct XrayIsolate *X, XrValue value);
 XR_FUNC void xr_chan_transit_release(XrValue value);
 
+/* ========== Zero-copy buffer move for self-contained scalar arrays ==========
+ *
+ * A typed (non-ANY) array's data buffer holds only scalars — no interior
+ * pointers into any coroutine heap — so when the sender holds the unique
+ * reference (move semantics) the buffer can be re-homed across heaps instead
+ * of malloc+memcpy'd twice (send→transit, transit→recv). The small XrArray
+ * struct is still allocated per side; only the (potentially large) data
+ * buffer pointer moves.
+ *
+ * Preconditions are re-checked inside each helper; both fall back (return
+ * false) to the normal deep-copy path for anything not provably safe to move
+ * (ANY arrays, slices, Region-blob-backed data, aliased/non-unique refs).
+ *
+ * xr_chan_try_move_array_to_transit: send side. Caller must already own the
+ *   last reference (it has done the drop). On success *out is a TRANSIT array
+ *   that stole the source buffer; the now-empty source struct is the caller's
+ *   to free.
+ * xr_chan_try_adopt_array_from_transit: recv side. On success *out is a
+ *   receiver-heap array that stole the transit buffer, and the emptied transit
+ *   struct has been released. */
+XR_FUNC bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out);
+XR_FUNC bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
+                                                  struct XrCoroutine *recv_coro, XrValue *out);
+
 XR_FUNC bool xr_can_relocate(XrValue value);
 XR_FUNC XrValue xr_to_shared(struct XrayIsolate *X, XrValue value);
 

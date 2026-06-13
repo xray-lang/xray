@@ -10,16 +10,52 @@
 
 #include "xi_lto.h"
 #include "../ir/xi.h"
-#include "../base/xmalloc.h"
 #include <string.h>
 
-static XiFunc *resolve_export(const XiLtoContext *ctx, const char *name) {
-    if (!ctx || !name)
+/* Resolve an exported function within a single module by member name. */
+static XiFunc *lto_export_in_module(const XiModule *mod, const char *name) {
+    if (!mod || !name)
         return NULL;
-    for (uint32_t i = 0; i < ctx->nexports; i++) {
-        if (ctx->export_names[i] && strcmp(ctx->export_names[i], name) == 0)
-            return ctx->export_funcs[i];
+    for (uint16_t ei = 0; ei < mod->nexports; ei++) {
+        const XiModuleExport *exp = &mod->exports[ei];
+        if (exp->function && exp->name && strcmp(exp->name, name) == 0)
+            return exp->function;
     }
+    return NULL;
+}
+
+/* Module-aware import resolution.
+ *
+ * The import's target module identity is resolved before LTO runs
+ * (xi_resolve_imports fills resolved_mod_index), so direct binding keys on
+ * that identity, never on a global by-name match.  A name-only lookup would
+ * misbind when two modules export the same member name (e.g. both export
+ * `run`): a flattened table returns whichever entry appears first and
+ * silently calls the wrong module's function.  Resolution therefore stays
+ * scoped to the resolved module, with a module-path match as the only
+ * fallback. */
+static XiFunc *lto_resolve_import(const XiLtoContext *ctx, const XiImportRef *ref) {
+    if (!ctx || !ref || !ref->member_name)
+        return NULL;
+
+    if (ref->resolved_mod_index >= 0 && (uint32_t) ref->resolved_mod_index < ctx->nmodules) {
+        XiFunc *target =
+            lto_export_in_module(ctx->modules[ref->resolved_mod_index], ref->member_name);
+        if (target)
+            return target;
+    }
+
+    if (ref->module_path) {
+        for (uint32_t mi = 0; mi < ctx->nmodules; mi++) {
+            const XiModule *mod = ctx->modules[mi];
+            if (!mod)
+                continue;
+            if ((mod->path && strcmp(mod->path, ref->module_path) == 0) ||
+                (mod->name && strcmp(mod->name, ref->module_path) == 0))
+                return lto_export_in_module(mod, ref->member_name);
+        }
+    }
+
     return NULL;
 }
 
@@ -30,49 +66,12 @@ XR_FUNC bool xi_lto_context_init(XiLtoContext *ctx, XiModule **modules, uint32_t
     memset(ctx, 0, sizeof(*ctx));
     ctx->modules = modules;
     ctx->nmodules = nmodules;
-
-    uint32_t cap = 16;
-    ctx->export_funcs = (XiFunc **) xr_malloc(cap * sizeof(XiFunc *));
-    ctx->export_names = (const char **) xr_malloc(cap * sizeof(const char *));
-    if (!ctx->export_funcs || !ctx->export_names) {
-        xi_lto_context_free(ctx);
-        return false;
-    }
-
-    for (uint32_t mi = 0; mi < nmodules; mi++) {
-        XiModule *mod = modules[mi];
-        if (!mod)
-            continue;
-        for (uint16_t ei = 0; ei < mod->nexports; ei++) {
-            XiModuleExport *exp = &mod->exports[ei];
-            if (!exp->function || !exp->name)
-                continue;
-            if (ctx->nexports >= cap) {
-                cap *= 2;
-                XiFunc **nf = (XiFunc **) xr_realloc(ctx->export_funcs, cap * sizeof(XiFunc *));
-                const char **nn =
-                    (const char **) xr_realloc(ctx->export_names, cap * sizeof(const char *));
-                if (!nf || !nn) {
-                    xi_lto_context_free(ctx);
-                    return false;
-                }
-                ctx->export_funcs = nf;
-                ctx->export_names = nn;
-            }
-            ctx->export_funcs[ctx->nexports] = exp->function;
-            ctx->export_names[ctx->nexports] = exp->name;
-            ctx->nexports++;
-        }
-    }
-
     return true;
 }
 
 XR_FUNC void xi_lto_context_free(XiLtoContext *ctx) {
     if (!ctx)
         return;
-    xr_free(ctx->export_funcs);
-    xr_free(ctx->export_names);
     memset(ctx, 0, sizeof(*ctx));
 }
 
@@ -98,7 +97,7 @@ static uint32_t resolve_in_func(XiFunc *f, const XiLtoContext *ctx) {
             if (!ref->member_name)
                 continue;
 
-            XiFunc *target = resolve_export(ctx, ref->member_name);
+            XiFunc *target = lto_resolve_import(ctx, ref);
             if (!target)
                 continue;
 

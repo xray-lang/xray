@@ -214,7 +214,8 @@ XR_FUNC void xr_cycle_add_root(XrCoroGC *gc, XrGCHeader *obj) {
      * releases child references, which can call back here; cycle_collecting
      * suppresses a nested collection (and the threshold check) until the
      * current one finishes. */
-    if (!gc->cycle_collecting && gc->cycle_root_count >= gc->cycle_collect_threshold)
+    if (!gc->cycle_collecting && !gc->gc_disabled &&
+        gc->cycle_root_count >= gc->cycle_collect_threshold)
         xr_coro_gc_fullgc(gc);
 }
 

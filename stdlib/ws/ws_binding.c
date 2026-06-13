@@ -335,32 +335,111 @@ static void remove_ws(XrWsContext *ctx, int id) {
  *
  * The returned object can be used with ws.send(), ws.recv(), ws.close()
  */
-static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
-    if (argc < 1)
-        return xr_null();
+// State for the yieldable client handshake. The XrWebSocket itself carries the
+// connect phase machine progress (see ws.c); this only holds cfunc-level data
+// needed to build the result handle after the coroutine resumes.
+typedef struct WsConnectState {
+    XrWebSocket *ws;
+    char *url;  // owned copy, for the result handle's url field
+    size_t url_len;
+    int timeout_ms;
+} WsConnectState;
 
+// Build the success handle: { _wsId, url, state: "open" }.
+static XrCFuncResult ws_connect_finish_ok(XrayIsolate *X, WsConnectState *state, XrValue *result) {
     XrWsContext *ctx = get_ws_context(X);
-    if (!ctx)
-        return xr_null();
+    int id = store_ws(X, state->ws);
+    XrJson *r = xr_json_new(xr_current_coro(X));
+    if (ctx) {
+        xr_json_set(X, r, ctx->sym_wsid, xr_int(id));
+        xr_json_set(X, r, ctx->sym_url, ws_make_string(X, state->url, state->url_len));
+        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "open"));
+    }
+    *result = xr_json_value(r);
+    xr_free(state->url);
+    xr_free(state);
+    return XR_CFUNC_DONE;
+}
+
+// Build the failure handle: { _wsId: -1, error, state: "closed" } and free ws.
+static XrCFuncResult ws_connect_finish_err(XrayIsolate *X, WsConnectState *state, XrWsError err,
+                                           XrValue *result) {
+    XrWsContext *ctx = get_ws_context(X);
+    XrJson *r = xr_json_new(xr_current_coro(X));
+    if (ctx) {
+        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
+        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(err)));
+        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
+    }
+    *result = xr_json_value(r);
+    xr_ws_free(state->ws);
+    xr_free(state->url);
+    xr_free(state);
+    return XR_CFUNC_DONE;
+}
+
+static XrCFuncResult ws_connect_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *cbx, XrValue *result);
+
+// Advance the handshake; finish on success/error, otherwise yield for the next
+// I/O event the phase machine is waiting on.
+static XrCFuncResult ws_connect_drive(XrayIsolate *X, WsConnectState *state, XrValue *result) {
+    int ev = xr_ws_connect_pump(state->ws);
+    if (ev == 0)
+        return ws_connect_finish_ok(X, state, result);
+    if (ev < 0)
+        return ws_connect_finish_err(X, state, (XrWsError) (-ev), result);
+    return xr_yield_for_io(X, state->ws->fd, ev, state->timeout_ms, ws_connect_continue, state,
+                           result);
+}
+
+static XrCFuncResult ws_connect_continue(XrayIsolate *X, int status, XrValue resume_value,
+                                         void *cbx, XrValue *result) {
+    (void) resume_value;
+    WsConnectState *state = (WsConnectState *) cbx;
+    if (status == XR_RESUME_TIMEOUT)
+        return ws_connect_finish_err(X, state, WS_ERR_TIMEOUT, result);
+    if (status == XR_RESUME_CANCELLED)
+        return ws_connect_finish_err(X, state, WS_ERR_CONNECT, result);
+    return ws_connect_drive(X, state, result);
+}
+
+/*
+ * ws.connect(url, options?) -> WsConn? (yieldable)
+ *
+ * DNS is resolved synchronously (getaddrinfo self-hands-off P while it blocks);
+ * the TCP connect, optional TLS handshake and the WebSocket upgrade exchange all
+ * run non-blocking and suspend the coroutine via netpoll. No worker thread is
+ * pinned and no P is handed off for the handshake's duration, so there is no
+ * cross-thread contention on the handed-off P's timer wheel.
+ */
+static XrCFuncResult ws_connect_yieldable(XrayIsolate *X, XrValue *args, int argc,
+                                          XrValue *result) {
+    XrWsContext *ctx = get_ws_context(X);
+    if (argc < 1 || !ctx) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
 
     size_t url_len;
     const char *url = xrs_string_arg(args[0], &url_len);
-    if (!url)
-        return xr_null();
+    if (!url) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
 
-    // Copy URL
     char *url_copy = (char *) xr_malloc(url_len + 1);
-    if (!url_copy)
-        return xr_null();
+    if (!url_copy) {
+        *result = xr_null();
+        return XR_CFUNC_DONE;
+    }
     memcpy(url_copy, url, url_len);
     url_copy[url_len] = '\0';
 
-    // Create config
     XrWsConfig config;
     xr_ws_config_init(&config);
     config.url = url_copy;
 
-    // Parse options from args[1] if provided
     if (argc >= 2 && XR_IS_PTR(args[1])) {
         XrJson *opts = (XrJson *) XR_TO_PTR(args[1]);
         if (opts) {
@@ -380,42 +459,44 @@ static XrValue ws_connect(XrayIsolate *X, XrValue *args, int argc) {
         }
     }
 
-    // Create WebSocket
     XrWebSocket *ws = xr_ws_new(&config);
     xr_free(url_copy);
 
-    XrJson *result = xr_json_new(xr_current_coro(X));
-
     if (!ws) {
-        xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, result, ctx->sym_error, xrs_string_value_c(X, "Failed to create WebSocket"));
-        xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "closed"));
-        return xr_json_value(result);
+        XrJson *r = xr_json_new(xr_current_coro(X));
+        xr_json_set(X, r, ctx->sym_wsid, xr_int(-1));
+        xr_json_set(X, r, ctx->sym_error, xrs_string_value_c(X, "Failed to create WebSocket"));
+        xr_json_set(X, r, ctx->sym_state, xrs_string_value_c(X, "closed"));
+        *result = xr_json_value(r);
+        return XR_CFUNC_DONE;
     }
 
-    // Bind the scheduler isolate so xr_ws_connect / send / recv cooperate
-    // with netpoll instead of blocking the worker on poll(5000).
+    // Bind the scheduler isolate so the handshake cooperates with netpoll.
     xr_ws_set_isolate(ws, X);
 
-    // Connect
-    XrWsError err = xr_ws_connect(ws);
-
-    if (err != WS_OK) {
-        xr_json_set(X, result, ctx->sym_wsid, xr_int(-1));
-        xr_json_set(X, result, ctx->sym_error, xrs_string_value_c(X, xr_ws_error_string(err)));
-        xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "closed"));
+    WsConnectState *state = (WsConnectState *) xr_malloc(sizeof(WsConnectState));
+    if (!state) {
         xr_ws_free(ws);
-        return xr_json_value(result);
+        *result = xr_null();
+        return XR_CFUNC_ERROR;
     }
+    state->ws = ws;
+    state->url_len = url_len;
+    state->url = (char *) xr_malloc(url_len + 1);
+    if (!state->url) {
+        xr_ws_free(ws);
+        xr_free(state);
+        *result = xr_null();
+        return XR_CFUNC_ERROR;
+    }
+    memcpy(state->url, url, url_len);
+    state->url[url_len] = '\0';
+    state->timeout_ms = config.connect_timeout_ms > 0 ? config.connect_timeout_ms : 10000;
 
-    // Store connection (no limit)
-    int id = store_ws(X, ws);
-
-    xr_json_set(X, result, ctx->sym_wsid, xr_int(id));
-    xr_json_set(X, result, ctx->sym_url, ws_make_string(X, url, url_len));
-    xr_json_set(X, result, ctx->sym_state, xrs_string_value_c(X, "open"));
-
-    return xr_json_value(result);
+    int ev = xr_ws_connect_start(ws);
+    if (ev < 0)
+        return ws_connect_finish_err(X, state, (XrWsError) (-ev), result);
+    return xr_yield_for_io(X, ws->fd, ev, state->timeout_ms, ws_connect_continue, state, result);
 }
 
 /* ========== Yieldable send implementation ========== */
@@ -477,8 +558,10 @@ static XrCFuncResult ws_send_step(XrayIsolate *X, WsSendState *state, XrValue *r
     }
 
     if (ret == -2) {
-        // Would block - yield and wait for write
-        return xr_yield_for_io(X, ws->fd, XR_WAIT_WRITE, 5000, ws_send_continue, state, result);
+        // Would block - yield for the event the send path needs (TLS may want
+        // read during a write, e.g. renegotiation).
+        return xr_yield_for_io(X, ws->fd, ws->send_wait_event, 5000, ws_send_continue, state,
+                               result);
     }
 
     // Error
@@ -699,8 +782,8 @@ static XrCFuncResult ws_recv_step(XrayIsolate *X, WsRecvState *state, XrValue *r
         return XR_CFUNC_DONE;
     }
 
-    return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, state->timeout_ms, ws_recv_continue, state,
-                           result);
+    return xr_yield_for_io(X, ws->fd, ws->recv_wait_event, state->timeout_ms, ws_recv_continue,
+                           state, result);
 }
 
 /*
@@ -795,8 +878,8 @@ static XrCFuncResult ws_recv_yieldable(XrayIsolate *X, XrValue *args, int argc, 
     state->ws_id = id;
     state->timeout_ms = timeout_ms;
 
-    return xr_yield_for_io(X, ws->fd, XR_WAIT_READ, state->timeout_ms, ws_recv_continue, state,
-                           result);
+    return xr_yield_for_io(X, ws->fd, ws->recv_wait_event, state->timeout_ms, ws_recv_continue,
+                           state, result);
 }
 
 /*
@@ -1876,7 +1959,7 @@ XrValue xr_ws_upgrade_and_wrap(XrayIsolate *X, int fd, const char *request_heade
 // @handle WsConn { const wsid: int, url: string, state: string }
 // @handle WsMessage { const data: string, const binary: bool, const error: string }
 
-XR_DEFINE_BUILTIN(ws_connect, "connect", "(url: string, options?: Json): WsConn?",
+XR_DEFINE_BUILTIN(ws_connect_yieldable, "connect", "(url: string, options?: Json): WsConn?",
                   "Connect to a WebSocket server")
 XR_DEFINE_BUILTIN(ws_send_yieldable, "send", "(conn: WsConn, data: string, binary?: bool): bool",
                   "Send data over WebSocket connection")
@@ -1906,7 +1989,7 @@ XR_FUNC XrModule *xr_load_module_ws(XrayIsolate *isolate) {
 #endif
 
     // WebSocket client functions (directly exported, no script wrapper needed)
-    XRS_EXPORT_SLOW(mod, isolate, "connect", ws_connect);
+    XRS_EXPORT_YIELDABLE(mod, isolate, "connect", ws_connect_yieldable);
     XRS_EXPORT_YIELDABLE(mod, isolate, "send", ws_send_yieldable);
     XRS_EXPORT_YIELDABLE(mod, isolate, "recv", ws_recv_yieldable);
     XRS_EXPORT(mod, isolate, "close", ws_close);

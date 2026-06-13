@@ -604,6 +604,36 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
         return;
     }
 
+    /* Indirect call through a closure value.  A function value is always a
+     * closure whose stored `fn` is the boxed entry point
+     * `XrValue (xrt_closure_t *, XrValue...)` (see emit_closure_new_expr), so
+     * any closure can be invoked by casting fn to that signature, passing the
+     * arguments boxed, and converting the boxed result to the call's rep.
+     * Static targets are handled above; this covers function values flowing
+     * through params / phis / containers / returns that cannot be statically
+     * resolved.  Coroutine-suspending callees are not reachable here (they go
+     * through the coroutine emitter). */
+    {
+        const XiValue *fn_val = cg_unwrap_identity_value(callee);
+        if (fn_val && fn_val->type && XR_TYPE_IS_FUNCTION(fn_val->type)) {
+            bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED,
+                                                  cg_value_plan_storage_rep(ctx, v));
+            fprintf(out, "({ xrt_closure_t *_icl = (xrt_closure_t *)");
+            emit_value_as_rep(out, callee, XR_REP_TAGGED);
+            fprintf(out, ".ptr; ((XrValue (*)(xrt_closure_t *");
+            for (uint16_t a = 1; a < v->nargs; a++)
+                fprintf(out, ", XrValue");
+            fprintf(out, ")) _icl->fn)(_icl");
+            for (uint16_t a = 1; a < v->nargs; a++) {
+                fprintf(out, ", ");
+                emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+            }
+            fprintf(out, "); })");
+            emit_conversion_suffix(out, wrapped);
+            return;
+        }
+    }
+
     ctx->error = true;
     fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT indirect call\n");
     emit_codegen_abort_expr(out);

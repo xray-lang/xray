@@ -41,6 +41,11 @@ struct XrVmCoroState {
     XrVMContext ctx;
     XrCoroEntryType entry_type;
     XrCoroEntry entry;
+    /* gc that owns entry.closure (the spawning coroutine's gc, captured at
+     * bind). The coroutine holds one reference to its entry closure; the final
+     * release must return the block to the owner's per-coroutine heap, not to
+     * whatever coroutine happens to drop the last reference. */
+    struct XrCoroGC *entry_closure_owner;
     XrValue *args;
     int arg_count;
     XrValue inline_args[4];

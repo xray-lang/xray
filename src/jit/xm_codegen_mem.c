@@ -846,8 +846,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, rd, XM_GC_HDR_RSV_OFFSET));
 
             // --- Inline alloc_post: GC bookkeeping without CALL_C stub ---
-            // alloc_marks are DEFERRED: xr_region_flush_marks() at slow path
-            // entry marks all lines from mark_cursor to cursor in one batch.
+            // Pure RC: no per-line occupancy bitmap; only per-block
+            // alloc_count/alloc_bytes accounting (drives whole-block reclaim).
 
             // 1. Block allocation accounting.
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t) XM_REGION_BLOCK_SIZE_MASK);

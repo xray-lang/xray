@@ -60,8 +60,12 @@
 
 /* ========== Scheduler Constants ========== */
 
-// Max worker threads (P count)
-#define XR_MAX_WORKERS 32
+// Max worker threads (P count).
+// Capped at 64: worker presence/idle/timer/channel-waiter routing uses
+// uint64 bitmasks (one bit per worker), so 64 is the hard ceiling for the
+// single-word mask design. Going beyond 64 cores requires multi-word
+// bitmaps or per-NUMA sharding (tracked separately, not yet implemented).
+#define XR_MAX_WORKERS 64
 
 // Per-worker local run queue capacity
 #define XR_LOCAL_QUEUE_SIZE 256

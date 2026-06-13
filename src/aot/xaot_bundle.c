@@ -16,6 +16,92 @@
 #include <stdio.h>
 #include <string.h>
 
+/* ========== Pointer index (XiValue / XiFunc pointer -> plan row) ========== */
+
+static uint32_t xaot_ptr_hash(const void *p) {
+    uint64_t x = (uint64_t) (uintptr_t) p;
+    x ^= x >> 33;
+    x *= UINT64_C(0xff51afd7ed558ccd);
+    x ^= x >> 33;
+    x *= UINT64_C(0xc4ceb9fe1a85ec53);
+    x ^= x >> 33;
+    return (uint32_t) x;
+}
+
+static bool xaot_ptr_index_rehash(XaotPtrIndex *ix, uint32_t new_cap) {
+    XaotPtrIndexSlot *slots = (XaotPtrIndexSlot *) xr_calloc(new_cap, sizeof(XaotPtrIndexSlot));
+    uint32_t mask = new_cap - 1;
+    uint32_t i;
+    if (!slots)
+        return false;
+    for (i = 0; i < ix->cap; i++) {
+        uint32_t j;
+        if (!ix->slots[i].key)
+            continue;
+        j = xaot_ptr_hash(ix->slots[i].key) & mask;
+        while (slots[j].key)
+            j = (j + 1) & mask;
+        slots[j] = ix->slots[i];
+    }
+    xr_free(ix->slots);
+    ix->slots = slots;
+    ix->cap = new_cap;
+    return true;
+}
+
+/* Insert key->idx, keeping the first binding for a key (matches the prior
+ * linear scan's "first match wins").  Returns false only on allocation
+ * failure, so callers can fail the build instead of leaving a row
+ * unindexed (which would make find report a missing plan). */
+static bool xaot_ptr_index_put(XaotPtrIndex *ix, const void *key, uint32_t idx) {
+    uint32_t mask;
+    uint32_t j;
+    if (!ix || !key)
+        return false;
+    if (ix->cap == 0 && !xaot_ptr_index_rehash(ix, 16))
+        return false;
+    if ((ix->count + 1) * 4 >= ix->cap * 3 && !xaot_ptr_index_rehash(ix, ix->cap * 2))
+        return false;
+    mask = ix->cap - 1;
+    j = xaot_ptr_hash(key) & mask;
+    while (ix->slots[j].key) {
+        if (ix->slots[j].key == key)
+            return true; /* keep first */
+        j = (j + 1) & mask;
+    }
+    ix->slots[j].key = key;
+    ix->slots[j].idx = idx;
+    ix->count++;
+    return true;
+}
+
+static bool xaot_ptr_index_get(const XaotPtrIndex *ix, const void *key, uint32_t *out_idx) {
+    uint32_t mask;
+    uint32_t j;
+    if (!ix || !key || ix->cap == 0)
+        return false;
+    mask = ix->cap - 1;
+    j = xaot_ptr_hash(key) & mask;
+    while (ix->slots[j].key) {
+        if (ix->slots[j].key == key) {
+            if (out_idx)
+                *out_idx = ix->slots[j].idx;
+            return true;
+        }
+        j = (j + 1) & mask;
+    }
+    return false;
+}
+
+static void xaot_ptr_index_free(XaotPtrIndex *ix) {
+    if (!ix)
+        return;
+    xr_free(ix->slots);
+    ix->slots = NULL;
+    ix->cap = 0;
+    ix->count = 0;
+}
+
 static const char *safe_str(const char *s) {
     return s ? s : "?";
 }
@@ -101,6 +187,14 @@ XR_FUNC void xaot_bundle_free(XaotBundle *bundle) {
     xr_free(bundle->bounds_plans);
     xr_free(bundle->alias_plans);
     xr_free(bundle->boundary_steps);
+    xaot_ptr_index_free(&bundle->value_index);
+    xaot_ptr_index_free(&bundle->func_index);
+    xaot_ptr_index_free(&bundle->array_storage_index);
+    xaot_ptr_index_free(&bundle->array_cache_index);
+    xaot_ptr_index_free(&bundle->array_class_field_index);
+    xaot_ptr_index_free(&bundle->func_attr_index);
+    xaot_ptr_index_free(&bundle->bounds_index);
+    xaot_ptr_index_free(&bundle->alias_index);
     memset(bundle, 0, sizeof(*bundle));
 }
 
@@ -123,18 +217,20 @@ XR_FUNC XaotFuncPlan *xaot_bundle_add_func_plan(XaotBundle *bundle, XiFunc *func
     plan->func = func;
     plan->module_index = module_index;
     plan->depth = depth;
+    if (!xaot_ptr_index_put(&bundle->func_index, func, bundle->nfunc_plans - 1)) {
+        bundle->error_msg = "failed to index AOT function plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotFuncPlan *xaot_bundle_find_func_plan(const XaotBundle *bundle,
                                                        const XiFunc *func) {
-    uint32_t i;
+    uint32_t idx;
     if (!bundle || !func)
         return NULL;
-    for (i = 0; i < bundle->nfunc_plans; i++) {
-        if (bundle->func_plans[i].func == func)
-            return &bundle->func_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->func_index, func, &idx) && idx < bundle->nfunc_plans)
+        return &bundle->func_plans[idx];
     return NULL;
 }
 
@@ -158,19 +254,21 @@ XR_FUNC XaotValuePlan *xaot_bundle_add_value_plan(XaotBundle *bundle, const XiFu
     plan->func = func;
     plan->value = value;
     plan->rep = xaot_value_rep_for_value(value);
+    if (!xaot_ptr_index_put(&bundle->value_index, value, bundle->nvalue_plans - 1)) {
+        bundle->error_msg = "failed to index AOT value plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotValuePlan *xaot_bundle_find_value_plan(const XaotBundle *bundle,
                                                          const XiValue *value) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !value)
         return NULL;
-    for (i = 0; i < bundle->nvalue_plans; i++) {
-        if (bundle->value_plans[i].value == value)
-            return &bundle->value_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->value_index, value, &idx) && idx < bundle->nvalue_plans)
+        return &bundle->value_plans[idx];
     return NULL;
 }
 
@@ -243,19 +341,23 @@ xaot_bundle_add_array_storage_plan(XaotBundle *bundle, const XiFunc *func, const
     plan->origin = origin ? origin : value;
     plan->flags = flags & (XAOT_ARRAY_STORAGE_READ | XAOT_ARRAY_STORAGE_MUTABLE);
     plan->elem = *elem;
+    if (!xaot_ptr_index_put(&bundle->array_storage_index, value,
+                            bundle->narray_storage_plans - 1)) {
+        bundle->error_msg = "failed to index AOT array storage plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotArrayStoragePlan *xaot_bundle_find_array_storage_plan(const XaotBundle *bundle,
                                                                         const XiValue *value) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !value)
         return NULL;
-    for (i = 0; i < bundle->narray_storage_plans; i++) {
-        if (bundle->array_storage_plans[i].value == value)
-            return &bundle->array_storage_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->array_storage_index, value, &idx) &&
+        idx < bundle->narray_storage_plans)
+        return &bundle->array_storage_plans[idx];
     return NULL;
 }
 
@@ -292,19 +394,22 @@ XR_FUNC XaotArrayCachePlan *xaot_bundle_add_array_cache_plan(XaotBundle *bundle,
                            XAOT_ARRAY_CACHE_VIEW | XAOT_ARRAY_CACHE_FILL_LOOP |
                            XAOT_ARRAY_CACHE_NATIVE_LOCAL | XAOT_ARRAY_CACHE_CLASS_FIELD);
     plan->elem = *elem;
+    if (!xaot_ptr_index_put(&bundle->array_cache_index, value, bundle->narray_cache_plans - 1)) {
+        bundle->error_msg = "failed to index AOT array cache plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotArrayCachePlan *xaot_bundle_find_array_cache_plan(const XaotBundle *bundle,
                                                                     const XiValue *value) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !value)
         return NULL;
-    for (i = 0; i < bundle->narray_cache_plans; i++) {
-        if (bundle->array_cache_plans[i].value == value)
-            return &bundle->array_cache_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->array_cache_index, value, &idx) &&
+        idx < bundle->narray_cache_plans)
+        return &bundle->array_cache_plans[idx];
     return NULL;
 }
 
@@ -339,17 +444,22 @@ XR_FUNC XaotArrayClassFieldAllocPlan *xaot_bundle_add_array_class_field_alloc_pl
     plan->class_data = class_data;
     plan->field_idx = field_idx;
     plan->elem = *elem;
+    if (!xaot_ptr_index_put(&bundle->array_class_field_index, origin,
+                            bundle->narray_class_field_alloc_plans - 1)) {
+        bundle->error_msg = "failed to index AOT array class-field alloc plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotArrayClassFieldAllocPlan *
 xaot_bundle_find_array_class_field_alloc_plan(const XaotBundle *bundle, const XiValue *origin) {
+    uint32_t idx;
     if (!bundle || !origin)
         return NULL;
-    for (uint32_t i = 0; i < bundle->narray_class_field_alloc_plans; i++) {
-        if (bundle->array_class_field_alloc_plans[i].origin == origin)
-            return &bundle->array_class_field_alloc_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->array_class_field_index, origin, &idx) &&
+        idx < bundle->narray_class_field_alloc_plans)
+        return &bundle->array_class_field_alloc_plans[idx];
     return NULL;
 }
 
@@ -407,19 +517,21 @@ XR_FUNC XaotFuncAttrPlan *xaot_bundle_add_func_attr_plan(XaotBundle *bundle, con
     memset(plan, 0, sizeof(*plan));
     plan->func = func;
     plan->flags = flags & (XAOT_FN_ATTR_CONST | XAOT_FN_ATTR_PURE);
+    if (!xaot_ptr_index_put(&bundle->func_attr_index, func, bundle->nfunc_attr_plans - 1)) {
+        bundle->error_msg = "failed to index AOT function attribute plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotFuncAttrPlan *xaot_bundle_find_func_attr_plan(const XaotBundle *bundle,
                                                                 const XiFunc *func) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !func)
         return NULL;
-    for (i = 0; i < bundle->nfunc_attr_plans; i++) {
-        if (bundle->func_attr_plans[i].func == func)
-            return &bundle->func_attr_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->func_attr_index, func, &idx) && idx < bundle->nfunc_attr_plans)
+        return &bundle->func_attr_plans[idx];
     return NULL;
 }
 
@@ -450,19 +562,21 @@ XR_FUNC XaotBoundsPlan *xaot_bundle_add_bounds_plan(XaotBundle *bundle, const Xi
     plan->access = access;
     plan->evidence = evidence;
     plan->unproven_reason = unproven_reason;
+    if (!xaot_ptr_index_put(&bundle->bounds_index, access, bundle->nbounds_plans - 1)) {
+        bundle->error_msg = "failed to index AOT bounds plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotBoundsPlan *xaot_bundle_find_bounds_plan(const XaotBundle *bundle,
                                                            const XiValue *access) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !access)
         return NULL;
-    for (i = 0; i < bundle->nbounds_plans; i++) {
-        if (bundle->bounds_plans[i].access == access)
-            return &bundle->bounds_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->bounds_index, access, &idx) && idx < bundle->nbounds_plans)
+        return &bundle->bounds_plans[idx];
     return NULL;
 }
 
@@ -491,19 +605,21 @@ XR_FUNC XaotAliasPlan *xaot_bundle_add_alias_plan(XaotBundle *bundle, const XiFu
     plan->value = value;
     plan->kind = kind;
     plan->evidence = evidence;
+    if (!xaot_ptr_index_put(&bundle->alias_index, value, bundle->nalias_plans - 1)) {
+        bundle->error_msg = "failed to index AOT alias plan";
+        return NULL;
+    }
     return plan;
 }
 
 XR_FUNC const XaotAliasPlan *xaot_bundle_find_alias_plan(const XaotBundle *bundle,
                                                          const XiValue *value) {
-    uint32_t i;
+    uint32_t idx;
 
     if (!bundle || !value)
         return NULL;
-    for (i = 0; i < bundle->nalias_plans; i++) {
-        if (bundle->alias_plans[i].value == value)
-            return &bundle->alias_plans[i];
-    }
+    if (xaot_ptr_index_get(&bundle->alias_index, value, &idx) && idx < bundle->nalias_plans)
+        return &bundle->alias_plans[idx];
     return NULL;
 }
 

@@ -464,18 +464,31 @@ static int cmp_site(const void *pa, const void *pb) {
  * correct; we insert after the value preceding `user`. */
 static void insert_dup_before(XiFunc *f, XiBlock *blk, XiValue *user, XiValue *target) {
     /* Find the slot before `user` to use as anchor (insert-after). */
-    XiValue *anchor = NULL;
+    uint32_t user_idx = blk->nvalues; /* sentinel: not found */
     for (uint32_t i = 0; i < blk->nvalues; i++) {
         if (blk->values[i] == user) {
-            anchor = (i > 0) ? blk->values[i - 1] : NULL;
+            user_idx = i;
             break;
         }
     }
+    XiValue *anchor = (user_idx > 0 && user_idx < blk->nvalues) ? blk->values[user_idx - 1] : NULL;
     XiValue *dup = xi_value_insert_after(f, blk, anchor, XI_RETAIN, target->type, 1);
     XR_DCHECK(dup != NULL, "xi_arc: failed to create RETAIN");
     dup->args[0] = target;
     dup->flags = XI_FLAG_SIDE_EFFECT;
     dup->escape = target->escape;
+    /* xi_value_insert_after(anchor=NULL) appends to the block tail, but when the
+     * consume is the block's first value the dup must sit at the HEAD so it runs
+     * BEFORE the consume. This is critical for `go closure(...)`: the spawned
+     * coroutine can run on another worker the instant GO returns, so a dup that
+     * landed after GO would let the coroutine release the closure before this +1
+     * executes (a cross-thread use-after-free / "closure invalid"). Rotate the
+     * appended dup to the front. */
+    if (user_idx == 0 && blk->nvalues > 1 && blk->values[blk->nvalues - 1] == dup) {
+        for (uint32_t i = blk->nvalues - 1; i > 0; i--)
+            blk->values[i] = blk->values[i - 1];
+        blk->values[0] = dup;
+    }
 }
 
 static void insert_dup_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue *target) {
@@ -484,6 +497,21 @@ static void insert_dup_after(XiFunc *f, XiBlock *blk, XiValue *anchor, XiValue *
     dup->args[0] = target;
     dup->flags = XI_FLAG_SIDE_EFFECT;
     dup->escape = target->escape;
+}
+
+/* Anchor for an end-of-block dup (a phi-edge consume): the last value that is
+ * NOT part of the block's trailing XI_RELEASE run. A value promoted for a phi
+ * edge must be retained BEFORE any death-drop at the block end, otherwise a
+ * release of its source (e.g. the parent of a borrowed projection) would free
+ * it first — a use-after-free. Retain-before-release is always safe, so placing
+ * the dup ahead of the trailing releases fixes the ordering for both insertion
+ * orders (the source drop and the projection dup are inserted by separate
+ * passes). */
+static XiValue *phi_dup_anchor(XiBlock *blk) {
+    uint32_t n = blk->nvalues;
+    while (n > 0 && blk->values[n - 1] && blk->values[n - 1]->op == XI_RELEASE)
+        n--;
+    return n > 0 ? blk->values[n - 1] : NULL;
 }
 
 /* Insert a XI_RELEASE(target) right after `anchor` in `blk`. */
@@ -589,16 +617,34 @@ static XiValue **arc_collect_borrow_closure(XiFunc *f, XiValue *target, uint32_t
                 continue;
             for (uint32_t i = 0; i < blk->nvalues; i++) {
                 XiValue *u = blk->values[i];
-                if (!u || !op_produces_borrow(u->op) || !xi_own_type_is_rc(u->type))
+                if (!u)
                     continue;
-                bool uses_member = false;
-                for (uint16_t a = 0; a < u->nargs; a++) {
-                    if (u->args[a] == member) {
-                        uses_member = true;
-                        break;
+                bool is_member_borrow = false;
+                if (op_produces_borrow(u->op) && xi_own_type_may_be_ref(u->type)) {
+                    /* A projection (GETFIELD / INDEX_GET / ...) borrows through
+                     * any argument that is the tracked member. The result need
+                     * only be a POSSIBLE reference: a Json field typed `null`
+                     * from its initializer still aliases the owner's storage
+                     * once it holds an object, so its narrow static type must
+                     * not exclude it from the owner's borrow closure. */
+                    for (uint16_t a = 0; a < u->nargs; a++) {
+                        if (u->args[a] == member) {
+                            is_member_borrow = true;
+                            break;
+                        }
                     }
+                } else if ((u->op == XI_CALL_METHOD || u->op == XI_CALL_METHOD_DIRECT) &&
+                           xi_own_type_is_rc(u->type) && !call_returns_fresh(u)) {
+                    /* A method whose RC result may alias its receiver — a getter
+                     * like Map.get / WeakMap.get hands back a stored reference,
+                     * not a fresh +1 — keeps the receiver (arg 0) live until the
+                     * result's last use; otherwise releasing the receiver frees
+                     * storage the borrowed result still points into. Proven
+                     * fresh-returning callees return an independent +1 and do not
+                     * pin the receiver. */
+                    is_member_borrow = u->nargs >= 1 && u->args[0] == member;
                 }
-                if (!uses_member)
+                if (!is_member_borrow)
                     continue;
                 bool seen = false;
                 for (uint32_t t = 0; t < ntracked; t++) {
@@ -689,7 +735,13 @@ static bool arc_place_frontier_drops(XiFunc *f, XiValue *target, const ArcLive *
                                      const uint32_t *pos_by_id, const XiBlock *def_blk) {
     bool split_any = false;
     uint32_t def_pos = pos_by_id[def_blk->id] ? pos_by_id[def_blk->id] - 1 : 0;
-    for (uint32_t b = 0; b < f->nblocks; b++) {
+    /* Snapshot the block count. arc_split_edge() below appends fresh
+     * edge-split blocks (each fully handled at creation), which have no
+     * entry in live[] or pos_by_id[] — both were sized to the pre-split
+     * CFG. Iterating the live f->nblocks would revisit those blocks and
+     * read past the end of live[]. */
+    uint32_t nblocks = f->nblocks;
+    for (uint32_t b = 0; b < nblocks; b++) {
         XiBlock *blk = f->blocks[b];
         if (!blk)
             continue;
@@ -910,9 +962,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
             if (sites.items[i].user == NULL || sites.items[i].user->op == XI_PHI) {
                 /* Return terminator, or a phi edge consume (site->blk is the
                  * predecessor): dup at the end of that block. */
-                XiValue *last = sites.items[i].blk->nvalues > 0
-                                    ? sites.items[i].blk->values[sites.items[i].blk->nvalues - 1]
-                                    : NULL;
+                XiValue *last = phi_dup_anchor(sites.items[i].blk);
                 insert_dup_after(f, sites.items[i].blk, last, target);
                 continue;
             }
@@ -932,9 +982,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
             if (sites.items[i].user == NULL)
                 continue; /* return terminator can only be the single last site */
             if (sites.items[i].user->op == XI_PHI) {
-                XiValue *last = sites.items[i].blk->nvalues > 0
-                                    ? sites.items[i].blk->values[sites.items[i].blk->nvalues - 1]
-                                    : NULL;
+                XiValue *last = phi_dup_anchor(sites.items[i].blk);
                 insert_dup_after(f, sites.items[i].blk, last, target);
                 continue;
             }
@@ -962,9 +1010,7 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
             if (sites.items[i].user == NULL)
                 continue;
             if (sites.items[i].user->op == XI_PHI) {
-                XiValue *last = sites.items[i].blk->nvalues > 0
-                                    ? sites.items[i].blk->values[sites.items[i].blk->nvalues - 1]
-                                    : NULL;
+                XiValue *last = phi_dup_anchor(sites.items[i].blk);
                 insert_dup_after(f, sites.items[i].blk, last, target);
                 continue;
             }
@@ -1006,10 +1052,10 @@ static bool process_value_ex(XiFunc *f, XiValue *target, XiArcOwnMode mode) {
             continue; /* return terminator: last use, never live after */
         if (sites.items[i].user->op == XI_PHI) {
             /* Edge consume: dup at the end of the predecessor block so the
-             * +1 executes only on this incoming path. */
-            XiValue *last = sites.items[i].blk->nvalues > 0
-                                ? sites.items[i].blk->values[sites.items[i].blk->nvalues - 1]
-                                : NULL;
+             * +1 executes only on this incoming path. Anchor ahead of any
+             * trailing death-drop so the promote-retain precedes a release of
+             * the projection's source. */
+            XiValue *last = phi_dup_anchor(sites.items[i].blk);
             insert_dup_after(f, sites.items[i].blk, last, target);
             continue;
         }

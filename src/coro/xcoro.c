@@ -1239,6 +1239,16 @@ static bool wake_waiter_record_child_error_locked(XrCoroutine *coro, XrScopeCont
     if (scope->mode == XR_SCOPE_LINKED) {
         // linked scope: deterministic "first failure wins" under the lock.
         if (XR_IS_NULL(scope->first_error)) {
+            /* err lives in the failing child's per-coroutine heap; the scope
+             * owner re-throws and releases it later through ITS gc. Deep-copy it
+             * into the owner's heap so the cross-coroutine handoff does not free
+             * a child-owned object against the owner's gc (byte-counter
+             * underflow / wrong freelist). Safe under child_lock: only the first
+             * failing child writes first_error and the owner is parked in the
+             * scope wait, so its gc has no concurrent mutator. */
+            XrayIsolate *iso2 = coro->isolate;
+            if (scope->owner && iso2 && xr_value_needs_copy(err))
+                err = xr_deep_copy_to_coro(iso2, err, scope->owner);
             scope->first_error = err;
             scope->first_error_is_value = coro->error_is_value;
         }
