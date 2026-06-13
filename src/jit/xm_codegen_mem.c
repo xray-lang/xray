@@ -49,6 +49,80 @@ static bool isnull_uses_runtime_tag(CodegenCtx *ctx, XmRef ref, uint32_t *out_vi
     }
 }
 
+/* ========== Inlined RC fast path (XM_RETAIN / XM_RELEASE) ========== */
+/*
+ * The operand is a GC pointer or null (its XrType lowered to XR_REP_PTR; see
+ * xi2xm_retain). The 0-based sign-tagged refcount makes the common case a
+ * single load + sign test + inc/dec:
+ *   retain : rc >= 0 → rc++          (thread-local owner added)
+ *   release: rc >  0 → rc--          (still has other owners)
+ * Cold cases (rc < 0 atomic/managed/immortal; rc == 0 unique destroy) call
+ * xr_jit_rc_{dup,drop}_ptr through the CALL_C stub, passing the pointer as the
+ * extra arg. SCRATCH_REG/SCRATCH_REG2 (x16/x17) are the only scratch used; the
+ * register allocator never assigns them, so the operand R is x1..x15 or x16,
+ * never x17 — making x17 safe as the refcount temp and slow-path arg.
+ */
+static void a64_emit_rc_ins(CodegenCtx *ctx, XmIns *ins, bool is_release) {
+    A64Reg R = xra_arg(ctx, ins->args[0], SCRATCH_REG);
+
+    // CBZ R, done  (null pointer → nothing to do)
+    uint32_t cbz_idx = ctx->buf.count;
+    a64_buf_emit(&ctx->buf, a64_nop());  // patched to CBZ R, done
+
+    // LDR w17, [R, #refcount]
+    a64_buf_emit(&ctx->buf, a64_ldr_w(SCRATCH_REG2, R, XM_GC_HDR_REFCOUNT_OFFSET));
+
+    uint32_t bcond_idx;
+    if (is_release) {
+        // SUBS w17, w17, #1  (w17 = rc - 1; flags from the subtraction)
+        a64_buf_emit(&ctx->buf, a64_subs_imm_w(SCRATCH_REG2, SCRATCH_REG2, 1));
+        // B.LT slow  (rc - 1 < 0 → rc <= 0: unique destroy / atomic / immortal)
+        bcond_idx = ctx->buf.count;
+        a64_buf_emit(&ctx->buf, a64_nop());
+        // fast: STR w17, [R, #refcount]  (store rc - 1)
+        a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, R, XM_GC_HDR_REFCOUNT_OFFSET));
+    } else {
+        // SUBS WZR, w17, #0  (test sign of rc)
+        a64_buf_emit(&ctx->buf, a64_subs_imm_w(A64_XZR, SCRATCH_REG2, 0));
+        // B.MI slow  (rc < 0: atomic / managed / immortal)
+        bcond_idx = ctx->buf.count;
+        a64_buf_emit(&ctx->buf, a64_nop());
+        // fast: ADD x17, x17, #1; STR w17, [R, #refcount]
+        a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG2, SCRATCH_REG2, 1));
+        a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, R, XM_GC_HDR_REFCOUNT_OFFSET));
+    }
+
+    // B done  (skip slow path)
+    uint32_t b_done_idx = ctx->buf.count;
+    a64_buf_emit(&ctx->buf, a64_nop());
+
+    // --- slow path: CALL_C to rc_{dup,drop} with the pointer as extra arg ---
+    uint32_t slow_idx = ctx->buf.count;
+    // MOV x17 = R  (extra arg = pointer; set before x16 = func entry)
+    a64_buf_emit(&ctx->buf, a64_mov(SCRATCH_REG2, R));
+    uintptr_t entry =
+        xm_runtime_stub_entry(is_release ? XM_RUNTIME_STUB_rc_drop : XM_RUNTIME_STUB_rc_dup,
+                              XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+    if (entry == 0) {
+        ctx->had_error = true;
+        return;
+    }
+    a64_load_imm64(&ctx->buf, SCRATCH_REG, (uint64_t) entry);
+    add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
+    a64_buf_emit(&ctx->buf, a64_nop());  // patched to BL call_c_stub
+    ctx->has_call_c = true;
+
+    // done:
+    uint32_t done_idx = ctx->buf.count;
+
+    int32_t cbz_off = a64_patch_offset(ctx, cbz_idx, done_idx, true, "rc cbz");
+    ctx->buf.code[cbz_idx] = a64_cbz(R, cbz_off);
+    int32_t bcond_off = a64_patch_offset(ctx, bcond_idx, slow_idx, true, "rc bcond");
+    ctx->buf.code[bcond_idx] = a64_b_cond(is_release ? A64_CC_LT : A64_CC_MI, bcond_off);
+    int32_t bdone_off = a64_patch_offset(ctx, b_done_idx, done_idx, false, "rc done");
+    ctx->buf.code[b_done_idx] = a64_b(bdone_off);
+}
+
 bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     XR_DCHECK(ctx != NULL, "emit_mem_ops: NULL ctx");
     XR_DCHECK(ins != NULL, "emit_mem_ops: NULL ins");
@@ -764,9 +838,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             } else {
                 a64_buf_emit(&ctx->buf, a64_strh(A64_XZR, rd, XM_GC_HDR_EXTRA_OFFSET));
             }
-            // MOV w17, #1; STR w17, [rd, #refcount]  — refcount = 1 (RC 1-based)
-            a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, 1, 0));
-            a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG2, rd, XM_GC_HDR_REFCOUNT_OFFSET));
+            // STR wzr, [rd, #refcount]  — refcount = 0 (RC is 0-based: unique == 0)
+            a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, rd, XM_GC_HDR_REFCOUNT_OFFSET));
             // MOV w16, #alloc_size; STR w16, [rd, #objsize]  — objsize
             a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG, alloc_size & 0xFFFF, 0));
             a64_buf_emit(&ctx->buf, a64_str_w(SCRATCH_REG, rd, XM_GC_HDR_OBJSIZE_OFFSET));
@@ -854,6 +927,14 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             break;
         }
+
+        case XM_RETAIN:
+            a64_emit_rc_ins(ctx, ins, false);
+            break;
+
+        case XM_RELEASE:
+            a64_emit_rc_ins(ctx, ins, true);
+            break;
 
         case XM_NOP:
             a64_buf_emit(&ctx->buf, a64_nop());

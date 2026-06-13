@@ -41,8 +41,6 @@
     X(THROW, "xi.throw", xicgen_throw) \
     X(RETAIN, "xi.retain", xicgen_retain) \
     X(RELEASE, "xi.release", xicgen_release) \
-    X(DROP_REUSE, "xi.drop.reuse", xicgen_drop_reuse) \
-    X(ALLOC_AT, "xi.alloc.at", xicgen_alloc_at) \
     X(STACK_ALLOC, "xi.stack.alloc", xicgen_stack_alloc) \
     X(SHL, "xi.shl", xicgen_shl) \
     X(SHR, "xi.shr", xicgen_shr) \

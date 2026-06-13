@@ -92,9 +92,6 @@ XR_FUNC XrTypeInferContext *xr_isolate_get_type_infer_context(XrayIsolate *X);
 XR_FUNC XrTypeTable *xr_isolate_get_type_table(XrayIsolate *X);
 XR_FUNC struct XrTypePool *xr_isolate_get_analyzer_pool(XrayIsolate *X);
 
-// Memory tracker
-XR_FUNC struct XrMemoryTracker *xr_isolate_get_memory_tracker(XrayIsolate *X);
-
 // Debug
 XR_FUNC void *xr_isolate_get_debug_state(XrayIsolate *X);
 XR_FUNC void xr_isolate_set_debug_state(XrayIsolate *X, void *state);

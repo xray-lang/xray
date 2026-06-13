@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 125);
+    assert(XI_LOWERING_ENTRY_COUNT == 123);
     assert(xi_lowering_generated_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CONST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_CONST) == (0));
@@ -291,18 +291,6 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_RELEASE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_RELEASE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_RELEASE) == false);
-    assert(xi_lowering_generated_targets(XI_DROP_REUSE) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM));
-    assert(xi_lowering_required_targets(XI_DROP_REUSE) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
-    assert(xi_lowering_rejected_targets(XI_DROP_REUSE) == (0));
-    assert(xi_emit_vm_requires_fresh_dst(XI_DROP_REUSE) == false);
-    assert(xi_emit_vm_uses_raw_cell_args(XI_DROP_REUSE) == false);
-    assert(xi_emit_vm_handles_cell_dst(XI_DROP_REUSE) == false);
-    assert(xi_lowering_generated_targets(XI_ALLOC_AT) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM));
-    assert(xi_lowering_required_targets(XI_ALLOC_AT) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
-    assert(xi_lowering_rejected_targets(XI_ALLOC_AT) == (0));
-    assert(xi_emit_vm_requires_fresh_dst(XI_ALLOC_AT) == false);
-    assert(xi_emit_vm_uses_raw_cell_args(XI_ALLOC_AT) == false);
-    assert(xi_emit_vm_handles_cell_dst(XI_ALLOC_AT) == false);
     assert(xi_lowering_generated_targets(XI_STACK_ALLOC) == (XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_required_targets(XI_STACK_ALLOC) == (XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_STACK_ALLOC) == (0));

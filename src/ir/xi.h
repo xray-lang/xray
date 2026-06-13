@@ -402,12 +402,6 @@ typedef enum {
     XI_RELEASE, /* args[0]=value; decrement refcount, free if zero (no-op for scalars) */
     XI_MOVE,    /* args[0]=value; ownership transfer (consume source, no refcount change) */
 
-    /* Drop-Reuse: Perceus-style in-place allocation reuse.
-     * Inserted by xi_reuse pass when a unique object is dropped and an alloc
-     * of the same size class immediately follows in the same branch. */
-    XI_DROP_REUSE, /* args[0]=value; drop + return reuse token (ptr if RC==0, NULL if alive) */
-    XI_ALLOC_AT,   /* args[0]=reuse_token; aux_int=GC type tag; result=fresh obj (reused or new) */
-
     /* Stack allocation (replaces heap alloc for NO_ESCAPE values).
      * aux_int = original op (XI_ARRAY_NEW etc.) for codegen dispatch.
      * Inherits args from the original op. Freed automatically at return. */

@@ -79,9 +79,8 @@ struct XrayIsolate {
     // - Runtime objects allocated on coroutine-private heap
     // - System objects (coroutines, classes, modules) on system heap
     // - Entire heap freed when coroutine exits
-    XrGC gc;                          // GC instance (manages fixedgc list only)
-    struct XrSystemHeap *sys_heap;    // System heap (coroutine pool, class Arena)
-    XrMemoryTracker *memory_tracker;  // Memory allocation tracker
+    XrGC gc;                        // GC instance (manages fixedgc list only)
+    struct XrSystemHeap *sys_heap;  // System heap (coroutine pool, class Arena)
 
     // Main coroutine (unified GC architecture)
     // - All coroutines (including main) use XrCoroGC + XrCoroHeap

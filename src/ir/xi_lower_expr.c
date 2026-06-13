@@ -82,6 +82,8 @@ static XrStructLayout *xi_lower_value_struct_layout(XiValue *v) {
 
 static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiValue *val,
                                                  uint8_t native_type);
+static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fallback,
+                                                 XrStructLayout *layout, int field_index);
 
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
@@ -558,6 +560,7 @@ static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     if (slayout) {
         int sidx = xi_lower_struct_field_index(slayout, ma->name);
         if (sidx >= 0) {
+            result_type = xi_lower_struct_field_type(l, result_type, slayout, sidx);
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_STRUCT_GET, result_type, 1);
             if (!v)
                 return NULL;
@@ -671,6 +674,78 @@ static XiValue *lower_member_set(XiLower *l, AstNode *node) {
 
 #include "xi_lower_native_width.inc.c"
 
+static bool xi_lower_type_is_unknown(struct XrType *type) {
+    return !type || XR_TYPE_IS_UNKNOWN(type);
+}
+
+static struct XrType *xi_lower_type_for_native_layout(XiLower *l, struct XrType *fallback,
+                                                      uint8_t native_type) {
+    if (!l)
+        return fallback;
+    switch (native_type) {
+        case XR_NATIVE_I64:
+            return l->type_int ? l->type_int : fallback;
+        case XR_NATIVE_U64:
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32: {
+            struct XrType *type = xr_type_new_int_width(l->isolate, native_type);
+            return type ? type : fallback;
+        }
+        case XR_NATIVE_F64:
+            return l->type_float ? l->type_float : fallback;
+        case XR_NATIVE_F32: {
+            struct XrType *type = xr_type_new_float_width(l->isolate, native_type);
+            return type ? type : fallback;
+        }
+        case XR_NATIVE_BOOL:
+            return l->type_bool ? l->type_bool : fallback;
+        case XR_NATIVE_STRING:
+            return l->type_string ? l->type_string : fallback;
+        default:
+            return fallback;
+    }
+}
+
+static struct XrType *xi_lower_widened_elem_type(XiLower *l, struct XrType *fallback,
+                                                 struct XrType *elem_type) {
+    if (!elem_type)
+        return fallback;
+    switch (elem_type->native_width) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+            return l && l->type_int ? l->type_int : fallback;
+        case XR_NATIVE_F32:
+            return l && l->type_float ? l->type_float : fallback;
+        default:
+            return elem_type;
+    }
+}
+
+static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fallback,
+                                                 XrStructLayout *layout, int field_index) {
+    if (!layout || field_index < 0 || field_index >= layout->field_count)
+        return fallback;
+    XrStructFieldLayout *field = &layout->fields[field_index];
+    if (field->native_type == XR_NATIVE_ARRAY) {
+        struct XrType *elem_type =
+            xi_lower_type_for_native_layout(l, NULL, field->elem_native_type);
+        if (!elem_type || !l || !l->isolate || field->elem_count == 0)
+            return fallback;
+        struct XrType *array_type =
+            xr_type_new_fixed_array(l->isolate, elem_type, (int) field->elem_count);
+        return array_type ? array_type : fallback;
+    }
+    return xi_lower_type_for_native_layout(l, fallback, field->native_type);
+}
+
 static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     IndexGetNode *ig = &node->as.index_get;
     XiValue *obj = xi_lower_expr(l, ig->array);
@@ -681,7 +756,10 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (obj->type && XR_TYPE_IS_MAP(obj->type))
         idx = xi_lower_narrow_for_static_type(l, node, idx, obj->type->map.key_type);
-    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, result_type, 2);
+    struct XrType *elem_type = xi_get_container_elem_type(obj->type);
+    struct XrType *index_type =
+        xi_lower_type_is_unknown(result_type) && elem_type ? elem_type : result_type;
+    XiValue *v = xi_value_new(l->func, l->cur_block, XI_INDEX_GET, index_type, 2);
     if (!v)
         return NULL;
     v->args[0] = obj;
@@ -689,10 +767,12 @@ static XiValue *lower_index_get(XiLower *l, AstNode *node) {
     v->line = (uint32_t) node->line;
 
     /* Insert XI_WIDEN after reading from a sub-width typed array */
-    struct XrType *elem_type = xi_get_container_elem_type(obj->type);
     uint16_t widen_op = xi_widen_op_for_elem(elem_type);
     if (widen_op) {
-        XiValue *w = xi_value_new(l->func, l->cur_block, widen_op, result_type, 1);
+        struct XrType *widen_type = xi_lower_type_is_unknown(result_type)
+                                        ? xi_lower_widened_elem_type(l, result_type, elem_type)
+                                        : result_type;
+        XiValue *w = xi_value_new(l->func, l->cur_block, widen_op, widen_type, 1);
         if (!w)
             return v;
         w->args[0] = v;

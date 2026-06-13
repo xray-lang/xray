@@ -45,8 +45,8 @@ static void check_stub(const char *label, XmRuntimeStubId id, const char *name,
 }
 
 int main(void) {
-    check_bool("stub count", XM_RUNTIME_STUB_COUNT == 3);
-    check_bool("stub id count", XM_RUNTIME_STUB__COUNT == 3);
+    check_bool("stub count", XM_RUNTIME_STUB_COUNT == 5);
+    check_bool("stub id count", XM_RUNTIME_STUB__COUNT == 5);
     check_bool("ABI count", XM_RUNTIME_STUB_ABI__COUNT == 3);
 
     check_stub("alloc", XM_RUNTIME_STUB_alloc, "alloc", "xr_jit_alloc",
@@ -58,6 +58,10 @@ int main(void) {
     check_stub("barrier_back", XM_RUNTIME_STUB_barrier_back, "barrier_back", "xr_jit_barrier_back",
                XM_RUNTIME_STUB_ABI_BARRIER_BACK_FIXED, 2, XR_REP_VOID, XM_HF_GC | XM_HF_STACKMAP,
                XM_HPT_NONE, 0);
+    check_stub("rc_dup", XM_RUNTIME_STUB_rc_dup, "rc_dup", "xr_jit_rc_dup_ptr",
+               XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0);
+    check_stub("rc_drop", XM_RUNTIME_STUB_rc_drop, "rc_drop", "xr_jit_rc_drop_ptr",
+               XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG, 2, XR_REP_VOID, 0, XM_HPT_NONE, 0);
 
     if (g_fail > 0) {
         fprintf(stderr, "%d runtime stub checks failed\n", g_fail);

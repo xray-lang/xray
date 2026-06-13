@@ -908,9 +908,7 @@ static void verify_owned(VerifyCtx *ctx, const XiFunc *f) {
             }
 
             /* RC ops must reference a value */
-            if ((v->op == XI_RETAIN || v->op == XI_RELEASE || v->op == XI_DROP_REUSE ||
-                 v->op == XI_ALLOC_AT) &&
-                (v->nargs < 1 || !v->args[0])) {
+            if ((v->op == XI_RETAIN || v->op == XI_RELEASE) && (v->nargs < 1 || !v->args[0])) {
                 verr(ctx, "func '%s': v%u %s in b%u has no argument", f->name, v->id,
                      xi_op_name(v->op), blk->id);
                 return;

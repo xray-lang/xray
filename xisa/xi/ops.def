@@ -312,6 +312,7 @@
 (define-xi-op xi.narrow.i8
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type i8
   :speculation safe
   :vn-kind pure
@@ -324,6 +325,7 @@
 (define-xi-op xi.narrow.u8
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type u8
   :speculation safe
   :vn-kind pure
@@ -336,6 +338,7 @@
 (define-xi-op xi.narrow.i16
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type i16
   :speculation safe
   :vn-kind pure
@@ -348,6 +351,7 @@
 (define-xi-op xi.narrow.u16
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type u16
   :speculation safe
   :vn-kind pure
@@ -360,6 +364,7 @@
 (define-xi-op xi.narrow.i32
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type i32
   :speculation safe
   :vn-kind pure
@@ -372,6 +377,7 @@
 (define-xi-op xi.narrow.u32
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type u32
   :speculation safe
   :vn-kind pure
@@ -384,6 +390,7 @@
 (define-xi-op xi.narrow.f32
   :class conversion
   :arity 1
+  :own-use borrow
   :result-native-type f32
   :speculation safe
   :vn-kind pure
@@ -396,6 +403,7 @@
 (define-xi-op xi.widen.i8
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -407,6 +415,7 @@
 (define-xi-op xi.widen.u8
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -418,6 +427,7 @@
 (define-xi-op xi.widen.i16
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -429,6 +439,7 @@
 (define-xi-op xi.widen.u16
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -440,6 +451,7 @@
 (define-xi-op xi.widen.i32
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -451,6 +463,7 @@
 (define-xi-op xi.widen.u32
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -462,6 +475,7 @@
 (define-xi-op xi.widen.f32
   :class conversion
   :arity 1
+  :own-use borrow
   :speculation safe
   :vn-kind pure
   :effects ()
@@ -1404,25 +1418,6 @@
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
-
-(define-xi-op xi.drop.reuse
-  :class ownership
-  :arity 1
-  :result-ownership none
-  :effects (side-effect)
-  :requires ()
-  :observable ()
-  :targets (jit-xm aot-c aot-verify)
-  :jit-policy catch-up)
-
-(define-xi-op xi.alloc.at
-  :class allocation
-  :arity 1
-  :effects (side-effect memory-write allocates)
-  :requires ()
-  :observable ()
-  :targets (jit-xm aot-c aot-verify)
   :jit-policy catch-up)
 
 (define-xi-op xi.stack.alloc

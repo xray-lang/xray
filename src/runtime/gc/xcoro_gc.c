@@ -123,6 +123,8 @@ static void gc_init_runtime_state(XrCoroGC *gc) {
     gc->large_bytes = 0;
     gc->in_gc = 0;
     gc->gc_disabled = 0;
+    gc->cycle_collecting = 0;
+    gc->cycle_collect_threshold = XR_CYCLE_COLLECT_THRESHOLD_INIT;
     gc->gc_count = 0;
     gc->object_count = 0;
     gc->gc_time_ns = 0;
@@ -493,6 +495,101 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
     gc->rc_freelist = NULL;
 }
 
+/* Marker stored in XrImmixBlock.reclaim_dead_count once a block is decided
+ * fully dead, so the freelist-rebuild and list-rebuild passes can recognize
+ * it after the per-block dead-slot tally has been consumed. */
+#define XR_BLOCK_RECLAIM_MARK 0xFFFFFFFFu
+
+XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
+    if (!gc || !gc->rc_freelist)
+        return; /* nothing has been RC-freed yet → no dead slots to reclaim */
+    XrImmixHeap *h = &gc->immix;
+
+    /* Pass 1: zero the dead-slot tally on every reclaim candidate (the
+     * bump-retired lists) plus the current block. Freelist entries can point
+     * into the current block; it is never reclaimed, but its stale tally must
+     * not be misread as the reclaim marker below. free_blocks are empty and
+     * hold no freelist entries, so they need no reset (activate_block clears
+     * a block's counters when it is reused). */
+    for (XrImmixBlock *b = h->full_blocks; b; b = b->next)
+        b->reclaim_dead_count = 0;
+    for (XrImmixBlock *b = h->recycle_blocks; b; b = b->next)
+        b->reclaim_dead_count = 0;
+    if (h->current_block)
+        h->current_block->reclaim_dead_count = 0;
+
+    /* Pass 2: tally dead slots per block from the RC freelists. Every slot a
+     * block bump-allocated is either live or on a freelist, so a block whose
+     * tally equals alloc_count has no live object left. */
+    for (int cls = 0; cls < XR_RC_FREECLASSES; cls++) {
+        for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
+            void **link = (void **) ((char *) o + sizeof(XrGCHeader));
+            XrGCHeader *next = (XrGCHeader *) *link;
+            XR_IMMIX_BLOCK_FROM_PTR(o)->reclaim_dead_count++;
+            o = next;
+        }
+    }
+
+    /* Pass 3a: mark fully-dead retired blocks. Objects too small to be
+     * freelisted (cls < 0) never appear in the tally, so a block holding one
+     * simply will not reach alloc_count and is conservatively kept. */
+    for (XrImmixBlock *b = h->full_blocks; b; b = b->next) {
+        if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
+            b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
+    }
+    for (XrImmixBlock *b = h->recycle_blocks; b; b = b->next) {
+        if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
+            b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
+    }
+
+    /* Pass 3b: rebuild the freelists, dropping entries that live in a block
+     * about to be reclaimed (their backing memory becomes reusable, so the
+     * stale link words must not survive). Done BEFORE any block is reused. */
+    for (int cls = 0; cls < XR_RC_FREECLASSES; cls++) {
+        XrGCHeader *kept = NULL;
+        for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
+            void **link = (void **) ((char *) o + sizeof(XrGCHeader));
+            XrGCHeader *next = (XrGCHeader *) *link;
+            if (XR_IMMIX_BLOCK_FROM_PTR(o)->reclaim_dead_count != XR_BLOCK_RECLAIM_MARK) {
+                *link = kept;
+                kept = o;
+            }
+            o = next;
+        }
+        gc->rc_freelist[cls] = kept;
+    }
+
+    /* Pass 3c: move marked blocks from the retired lists to free_blocks for
+     * size-class-agnostic reuse. activate_block resets their counters. */
+    XrImmixBlock *new_full = NULL;
+    for (XrImmixBlock *b = h->full_blocks; b;) {
+        XrImmixBlock *next = b->next;
+        if (b->reclaim_dead_count == XR_BLOCK_RECLAIM_MARK) {
+            b->next = h->free_blocks;
+            h->free_blocks = b;
+        } else {
+            b->next = new_full;
+            new_full = b;
+        }
+        b = next;
+    }
+    h->full_blocks = new_full;
+
+    XrImmixBlock *new_recycle = NULL;
+    for (XrImmixBlock *b = h->recycle_blocks; b;) {
+        XrImmixBlock *next = b->next;
+        if (b->reclaim_dead_count == XR_BLOCK_RECLAIM_MARK) {
+            b->next = h->free_blocks;
+            h->free_blocks = b;
+        } else {
+            b->next = new_recycle;
+            new_recycle = b;
+        }
+        b = next;
+    }
+    h->recycle_blocks = new_recycle;
+}
+
 /* Maximum recursive destroy depth before switching to deferred mode.
  * Prevents stack overflow on deep data structures (linked lists 10K+
  * nodes, deeply nested trees). When exceeded, child objects are pushed
@@ -601,89 +698,6 @@ XR_FUNC void xr_coro_gc_rc_destroy(XrCoroGC *gc, XrGCHeader *obj) {
     }
 }
 
-/* ========== Drop-Reuse (Perceus-style in-place allocation) ========== */
-
-XR_FUNC XrGCHeader *xr_rc_drop_reuse(XrCoroGC *gc, XrGCHeader *obj) {
-    if (!obj)
-        return NULL;
-    if (!coro_gc_header_is_heap_value(obj))
-        return NULL;
-    /* Shared / region / managed objects cannot be reused locally. */
-    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED))
-        return NULL;
-    if (XR_GC_IS_SHARED(obj)) {
-        xr_shared_destroy(obj);
-        return NULL;
-    }
-
-    /* Attempt to take the last reference. If RC > 1, just decrement and
-     * return NULL — the object is still alive. */
-    if (!xr_obj_drop_is_last((XrObjHeader *) obj))
-        return NULL;
-
-    /* RC reached zero. Run the type destructor so fields are properly
-     * released (destructors drop child references). The memory stays. */
-    obj->extra |= XR_OBJ_DEAD;
-    /* Same cycle-root invariant as rc_destroy_one: unlink before the memory
-     * is handed back for reuse so no stale roots[] pointer survives. */
-    if (gc && (obj->extra & XR_OBJ_CYCLE_CANDIDATE))
-        xr_cycle_remove_root(gc, obj);
-    if (gc && xr_gc_needs_finalize_ext(gc, obj->type)) {
-        XrGCDestroyFn destroy = get_destroy_func_ext(gc, obj->type);
-        if (destroy) {
-            destroy(obj, gc);
-            gc->finalizer_count++;
-        }
-        gc_unregister_finalizer(gc, obj);
-    }
-
-    if (gc && gc->object_count > 0)
-        gc->object_count--;
-
-    /* Return the raw memory for immediate reuse. The caller will
-     * reinitialize the header via xr_rc_alloc_at. Do NOT push to
-     * the freelist — the whole point is to skip the freelist. */
-    return obj;
-}
-
-XR_FUNC XrGCHeader *xr_rc_alloc_at(XrCoroGC *gc, XrGCHeader *token, uint8_t type, size_t size) {
-    XR_DCHECK(type < XGC_MAX_TYPES, "xr_rc_alloc_at: invalid type");
-    XR_DCHECK(size >= sizeof(XrGCHeader), "xr_rc_alloc_at: size too small");
-
-    size_t total = XGC_ALIGN(size);
-    XrGCHeader *obj;
-
-    if (token != NULL && token->objsize >= (uint32_t) total) {
-        /* Reuse: the reclaimed block is large enough. Reinitialize header. */
-        obj = token;
-    } else {
-        /* Fallback: token is NULL (object was shared / still alive) or the
-         * reclaimed block is too small. Free the token if it exists and
-         * allocate fresh. */
-        if (token && gc)
-            xr_coro_gc_rc_free(gc, token);
-        obj = xr_coro_gc_newobj(gc, type, total);
-        return obj; /* newobj already initializes the header */
-    }
-
-    /* Reinitialize the header for the new type/size. Clear all flags
-     * except storage bits that are inherited from the block's origin
-     * (shared/normal). Actually, for reused blocks the caller always
-     * owns them locally, so clear everything. */
-    memset(obj, 0, sizeof(XrGCHeader));
-    obj->type = type;
-    obj->refcount = 1;
-    obj->objsize = (uint32_t) total;
-    /* memset zeroed _rsv; restore the "not in cycle_roots" sentinel (0 is a
-     * valid roots index, so it must never be the default — see newobj). */
-    obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
-
-    if (gc)
-        gc->object_count++;
-
-    return obj;
-}
-
 XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
     if (!gc)
         return NULL;
@@ -740,9 +754,11 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
      * 0", so add_root would refuse it and remove_root would corrupt roots[0]. */
     obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     /* RC: a freshly allocated object has exactly one owning reference (its
-     * definition site). dup/drop are 1-based, so initialize to 1. Immix
-     * memory is reused/uninitialized, so this must be set explicitly. */
-    obj->refcount = 1;
+     * definition site). The count is 0-based and sign-tagged, so the unique
+     * value is XR_RC_INIT (0). Immix memory is reused/uninitialized, so this
+     * must be set explicitly. Relaxed store: a fresh object is not yet shared
+     * across threads, so no ordering is needed (matches the JIT inline init). */
+    atomic_store_explicit(&obj->refcount, XR_RC_INIT, memory_order_relaxed);
     if (use_mmap)
         XR_GC_SET_MMAP(obj);
     if (needs_finalize)

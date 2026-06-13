@@ -1145,9 +1145,9 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
         rv64_buf_emit(&ctx->buf, rv64_sh(RV64_X0, rd, (int32_t) XM_GC_HDR_EXTRA_OFFSET));
     }
 
-    /* refcount = 1 (RC 1-based: fresh object has one owning reference) */
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, 1);
-    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG2, rd, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET));
+    /* refcount = 0 (RC is 0-based: a fresh object has exactly one owner,
+     * encoded as 0 == unique) */
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_X0, rd, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET));
 
     /* objsize = alloc_size (32-bit store) */
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) alloc_size);
@@ -1251,6 +1251,72 @@ static void rv64_h_alloc(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, tag_off));
         }
     }
+}
+
+/* ========== Inlined RC fast path (XM_RETAIN / XM_RELEASE) ========== */
+/* See a64_emit_rc_ins (xm_codegen_mem.c) for the shared design. LW
+ * sign-extends the int32 refcount on RV64, so a signed branch against x0
+ * implements the 0-based sign test. Cold cases call xr_jit_rc_{dup,drop}_ptr
+ * via the CALL_C stub with the pointer as the extra arg. The operand R is a
+ * vreg or RV64_SCRATCH_REG2 (its fallback), never RV64_SCRATCH_REG, so the
+ * latter is safe as the refcount temp and slow-path func register. */
+static void rv64_emit_rc_ins(Rv64CodegenCtx *ctx, XmIns *ins, bool is_release) {
+    Rv64Reg R = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG2);
+
+    // BEQ R, x0, done  (null pointer → nothing to do)
+    uint32_t beq_done_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_beq(R, RV64_X0, 0)); /* placeholder */
+
+    // LW t, [R + refcount]  (sign-extended)
+    rv64_buf_emit(&ctx->buf, rv64_lw(RV64_SCRATCH_REG, R, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET));
+
+    // branch to slow: retain BLT t,x0 (rc<0); release BGE x0,t (0>=rc → rc<=0)
+    uint32_t bslow_idx = ctx->buf.count;
+    if (is_release)
+        rv64_buf_emit(&ctx->buf, rv64_bge(RV64_X0, RV64_SCRATCH_REG, 0)); /* placeholder */
+    else
+        rv64_buf_emit(&ctx->buf, rv64_blt(RV64_SCRATCH_REG, RV64_X0, 0)); /* placeholder */
+
+    // fast: addi t, t, +/-1; sw t, [R + refcount]
+    rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SCRATCH_REG, RV64_SCRATCH_REG, is_release ? -1 : 1));
+    rv64_buf_emit(&ctx->buf, rv64_sw(RV64_SCRATCH_REG, R, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET));
+
+    // J done
+    uint32_t j_done_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_j(0)); /* placeholder */
+
+    // --- slow path: CALL_C to rc_{dup,drop} with pointer as extra arg ---
+    uint32_t slow_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_sd(R, RV64_JIT_CTX_REG, (int32_t) RV64_EXTRA_ARG_OFFSET));
+    uintptr_t entry =
+        xm_runtime_stub_entry(is_release ? XM_RUNTIME_STUB_rc_drop : XM_RUNTIME_STUB_rc_dup,
+                              XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+    RV64_CODEGEN_CHECK(ctx, entry != 0, "rc runtime stub ABI mismatch");
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, (uint64_t) entry);
+    rv64_add_patch(ctx, RV64_PATCH_CALL_C, 0, RV64_CC_EQ, 0, 0);
+    rv64_buf_emit(&ctx->buf, rv64_call(0));
+    ctx->has_call_c = true;
+
+    // done:
+    uint32_t done_idx = ctx->buf.count;
+    ctx->buf.code[beq_done_idx] = rv64_beq(R, RV64_X0, (int32_t) (done_idx - beq_done_idx) * 4);
+    if (is_release)
+        ctx->buf.code[bslow_idx] =
+            rv64_bge(RV64_X0, RV64_SCRATCH_REG, (int32_t) (slow_idx - bslow_idx) * 4);
+    else
+        ctx->buf.code[bslow_idx] =
+            rv64_blt(RV64_SCRATCH_REG, RV64_X0, (int32_t) (slow_idx - bslow_idx) * 4);
+    ctx->buf.code[j_done_idx] = rv64_j((int32_t) (done_idx - j_done_idx) * 4);
+}
+
+static void rv64_h_retain(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    rv64_emit_rc_ins(ctx, ins, false);
+}
+
+static void rv64_h_release(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
+    (void) rd;
+    rv64_emit_rc_ins(ctx, ins, true);
 }
 
 /* ========== Catch ========== */
@@ -1577,6 +1643,8 @@ static const Rv64InsHandler rv64_ins_handlers[XM_OP_COUNT] = {
     [XM_BARRIER_FWD] = rv64_h_barrier_fwd,
     [XM_BARRIER_BACK] = rv64_h_barrier_back,
     [XM_ALLOC] = rv64_h_alloc,
+    [XM_RETAIN] = rv64_h_retain,
+    [XM_RELEASE] = rv64_h_release,
     [XM_CATCH] = rv64_h_catch,
 
     /* Calls */

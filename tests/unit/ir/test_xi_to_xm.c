@@ -1277,55 +1277,6 @@ TEST(lower_str_concat) {
     xi_func_free(f);
 }
 
-TEST(lower_reuse_helpers) {
-    XiFunc *f = make_func("reuse_helpers", &stub_int);
-    XiBlock *entry = f->entry;
-
-    XiValue *obj = xi_param(f, entry, 0, &stub_int);
-    XiValue *drop = xi_value_new(f, entry, XI_DROP_REUSE, &stub_int, 1);
-    drop->args[0] = obj;
-    XiValue *alloc = xi_value_new(f, entry, XI_ALLOC_AT, &stub_int, 1);
-    alloc->args[0] = drop;
-    alloc->aux_int = (INT64_C(7) << 16) | 64;
-    xi_block_set_return(entry, alloc);
-
-    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
-    assert(xm != NULL && "drop.reuse/alloc.at lowering should succeed");
-
-    XmBlock *blk0 = xm->blocks[0];
-    bool found_drop = false;
-    bool found_alloc = false;
-    for (uint32_t i = 0; i < blk0->nins; i++) {
-        if (blk0->ins[i].op != XM_CALL_C || blk0->ins[i].args[0] == XM_NONE)
-            continue;
-        uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
-        uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
-        assert(fn_ci < xm->nconst);
-        assert(extra_ci < xm->nconst);
-        uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
-        assert(vi < xm->nvreg);
-        if (xm->consts[fn_ci].val.ptr == (void *) xr_jit_rc_drop_reuse) {
-            assert(xm->consts[extra_ci].val.i64 == 0);
-            assert((blk0->ins[i].flags & XM_FLAG_MAY_GC) != 0);
-            assert((blk0->ins[i].flags & XM_FLAG_SAFEPOINT) != 0);
-            assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_rc_drop_reuse));
-            assert(xm->vregs[vi].call_nargs == 1);
-            found_drop = true;
-        } else if (xm->consts[fn_ci].val.ptr == (void *) xr_jit_rc_alloc_at) {
-            assert(xm->consts[extra_ci].val.i64 == alloc->aux_int);
-            assert((blk0->ins[i].flags & XM_FLAG_MAY_GC) != 0);
-            assert((blk0->ins[i].flags & XM_FLAG_SAFEPOINT) != 0);
-            assert(blk0->ins[i].ctype.kind == xm_helper_type_kind(XM_HELPER_rc_alloc_at));
-            assert(xm->vregs[vi].call_nargs == 1);
-            found_alloc = true;
-        }
-    }
-    assert(found_drop && found_alloc && "reuse ops should lower through RC helper calls");
-
-    xm_func_destroy(xm);
-    xi_func_free(f);
-}
-
 TEST(reject_bytes_memory_ops_until_jit_driver_exists) {
     XiFunc *f = make_func("bytes_mem", &stub_int);
     XiBlock *entry = f->entry;
@@ -1408,7 +1359,6 @@ int main(void) {
     run_lower_tuple_get();
     run_reject_tuple_new_above_jit_call_arg_limit();
     run_lower_str_concat();
-    run_lower_reuse_helpers();
     run_reject_bytes_memory_ops_until_jit_driver_exists();
     run_reject_unsupported_semantic_ops_until_jit_driver_exists();
 

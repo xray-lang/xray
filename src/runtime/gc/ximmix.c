@@ -356,6 +356,13 @@ static void activate_block(XrImmixHeap *heap, XrImmixBlock *block) {
     block->alloc_marks[0] = 1ULL;  // Line 0 reserved
     block->alloc_marks[1] = 0;
     block->next_scan_line = XR_IMMIX_FIRST_LINE;
+    /* Reused block starts a fresh allocation generation: the old objects
+     * were reclaimed (whole-block reclaim) or the block came from the cache.
+     * alloc_count must count only the new generation, or the whole-block
+     * reclaim invariant (dead-slot tally == alloc_count) would be wrong. */
+    block->alloc_count = 0;
+    block->alloc_bytes = 0;
+    block->reclaim_dead_count = 0;
 
     heap->cursor = (char *) block + (size_t) XR_IMMIX_FIRST_LINE * XR_IMMIX_LINE_SIZE;
     heap->limit = (char *) block + XR_IMMIX_BLOCK_SIZE;
@@ -481,132 +488,6 @@ int xr_immix_count_live_lines(XrImmixBlock *block) {
     }
     return count;
 #endif
-}
-
-/*
- * Sticky Immix: reclaim only young blocks after minor GC.
- * Young blocks with zero live lines become free blocks.
- * Young blocks with some live lines become recycle (or full) young blocks.
- * Old blocks are untouched.
- */
-void xr_immix_reclaim_young(XrImmixHeap *heap) {
-    XR_DCHECK(heap != NULL, "immix_reclaim_young: NULL heap");
-    XrImmixBlock *new_full = NULL;
-    XrImmixBlock *new_recycle = NULL;
-    XrImmixBlock *new_free = heap->free_blocks;
-    size_t young_count = 0;
-
-#define CLASSIFY_BLOCK(blk, is_young_mode)                                                         \
-    do {                                                                                           \
-        int live = xr_immix_count_live_lines(blk);                                                 \
-        if (live == 0) {                                                                           \
-            if (is_young_mode) {                                                                   \
-                (blk)->is_young = 1;                                                               \
-            }                                                                                      \
-            (blk)->next = new_free;                                                                \
-            new_free = (blk);                                                                      \
-        } else if (live < XR_IMMIX_USABLE_LINES) {                                                 \
-            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                                           \
-            (blk)->next = new_recycle;                                                             \
-            new_recycle = (blk);                                                                   \
-        } else {                                                                                   \
-            (blk)->next = new_full;                                                                \
-            new_full = (blk);                                                                      \
-        }                                                                                          \
-        young_count++;                                                                             \
-    } while (0)
-
-    XrImmixBlock *b = heap->full_blocks;
-    while (b) {
-        XrImmixBlock *next = b->next;
-        CLASSIFY_BLOCK(b, true);
-        b = next;
-    }
-    b = heap->recycle_blocks;
-    while (b) {
-        XrImmixBlock *next = b->next;
-        CLASSIFY_BLOCK(b, true);
-        b = next;
-    }
-    if (heap->current_block) {
-        CLASSIFY_BLOCK(heap->current_block, true);
-        heap->current_block = NULL;
-    }
-#undef CLASSIFY_BLOCK
-
-    heap->full_blocks = new_full;
-    heap->recycle_blocks = new_recycle;
-    heap->free_blocks = new_free;
-
-    heap->total_blocks = heap->old_block_count + young_count;
-    heap->total_block_bytes = heap->total_blocks * XR_IMMIX_BLOCK_SIZE;
-
-    heap->cursor = NULL;
-    heap->limit = NULL;
-}
-
-void xr_immix_reclaim(XrImmixHeap *heap) {
-    XR_DCHECK(heap != NULL, "immix_reclaim: NULL heap");
-    XrImmixBlock *new_full = NULL;
-    XrImmixBlock *new_recycle = NULL;
-    XrImmixBlock *new_free = heap->free_blocks;  // Keep existing free blocks
-    size_t block_count = 0;
-    // Count pre-existing free blocks (they won't go through CLASSIFY_BLOCK)
-    for (XrImmixBlock *p = new_free; p; p = p->next)
-        block_count++;
-
-// Helper: classify one block and count
-#define CLASSIFY_BLOCK(blk)                                                                        \
-    do {                                                                                           \
-        int live = xr_immix_count_live_lines(blk);                                                 \
-        if (live == 0) {                                                                           \
-            (blk)->next = new_free;                                                                \
-            new_free = (blk);                                                                      \
-        } else if (live < XR_IMMIX_USABLE_LINES) {                                                 \
-            (blk)->next_scan_line = XR_IMMIX_FIRST_LINE;                                           \
-            (blk)->next = new_recycle;                                                             \
-            new_recycle = (blk);                                                                   \
-        } else {                                                                                   \
-            (blk)->next = new_full;                                                                \
-            new_full = (blk);                                                                      \
-        }                                                                                          \
-        block_count++;                                                                             \
-    } while (0)
-
-    // Process full_blocks
-    XrImmixBlock *b = heap->full_blocks;
-    while (b) {
-        XrImmixBlock *next = b->next;
-        CLASSIFY_BLOCK(b);
-        b = next;
-    }
-
-    // Process recycle_blocks
-    b = heap->recycle_blocks;
-    while (b) {
-        XrImmixBlock *next = b->next;
-        CLASSIFY_BLOCK(b);
-        b = next;
-    }
-
-    // Process current_block
-    if (heap->current_block) {
-        CLASSIFY_BLOCK(heap->current_block);
-        heap->current_block = NULL;
-    }
-
-#undef CLASSIFY_BLOCK
-
-    heap->full_blocks = new_full;
-    heap->recycle_blocks = new_recycle;
-    heap->free_blocks = new_free;
-
-    heap->total_blocks = block_count;
-    heap->total_block_bytes = block_count * XR_IMMIX_BLOCK_SIZE;
-
-    // Reset allocation state; next alloc will pick from recycle/free/new
-    heap->cursor = NULL;
-    heap->limit = NULL;
 }
 
 /* ========== Debug ========== */

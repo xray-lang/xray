@@ -1557,6 +1557,75 @@ static void x64_h_alloc(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_emit_alloc_ins(ctx, ins, rd, gc_type, gc_extra, alloc_size);
 }
 
+/* ========== Inlined RC fast path (XM_RETAIN / XM_RELEASE) ========== */
+/* See a64_emit_rc_ins (xm_codegen_mem.c) for the shared design. The operand
+ * is a GC pointer or null; the 0-based sign-tagged refcount makes the common
+ * case load + sign test + inc/dec. Cold cases call xr_jit_rc_{dup,drop}_ptr
+ * via the CALL_C stub with the pointer as the extra arg. RCX is reserved
+ * scratch here (same as x64_emit_alloc_ins), so it never aliases the
+ * operand. */
+static void x64_emit_rc_ins(X64CodegenCtx *ctx, XmIns *ins, bool is_release) {
+    X64Reg R = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
+
+    // TEST R, R; JZ done  (null pointer → nothing to do)
+    x64_test_rr(&ctx->buf, R, R);
+    x64_jcc_rel32(&ctx->buf, X64_CC_E, 0);
+    uint32_t jz_done = ctx->buf.pos - 4;
+
+    // MOVSXD RCX, [R + refcount]  (sign-extend the int32 count to 64 bits)
+    x64_movsxd_rm(&ctx->buf, X64_RCX, R, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET);
+    x64_cmp_ri(&ctx->buf, X64_RCX, 0);
+    // retain: JS slow (rc < 0); release: JLE slow (rc <= 0)
+    x64_jcc_rel32(&ctx->buf, is_release ? X64_CC_LE : X64_CC_S, 0);
+    uint32_t j_slow = ctx->buf.pos - 4;
+
+    // fast: inc/dec; store low 32 bits back
+    if (is_release)
+        x64_sub_ri(&ctx->buf, X64_RCX, 1);
+    else
+        x64_add_ri(&ctx->buf, X64_RCX, 1);
+    x64_mov_mr32(&ctx->buf, R, (int32_t) XM_GC_HDR_REFCOUNT_OFFSET, X64_RCX);
+
+    // JMP done
+    x64_jmp_rel32(&ctx->buf, 0);
+    uint32_t jmp_done = ctx->buf.pos - 4;
+
+    // --- slow path: CALL_C to rc_{dup,drop} with pointer as extra arg ---
+    uint32_t slow = ctx->buf.pos;
+    x64_patch_rel32(&ctx->buf, j_slow, slow);
+    // store extra_arg = R (pointer) before SCRATCH_REG is reused for the func
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, R);
+    uintptr_t entry =
+        xm_runtime_stub_entry(is_release ? XM_RUNTIME_STUB_rc_drop : XM_RUNTIME_STUB_rc_dup,
+                              XM_RUNTIME_STUB_ABI_CALL_C_EXTRA_ARG);
+    CODEGEN_CHECK(ctx, entry != 0, "rc runtime stub ABI mismatch");
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) entry);
+    CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
+    X64BranchPatch *cp = &ctx->patches[ctx->npatch];
+    x64_call_rel32(&ctx->buf, 0);
+    cp->emit_pos = ctx->buf.pos - 4;
+    cp->target_blk = 0;
+    cp->type = X64_PATCH_CALL_C;
+    cp->cc = X64_CC_E;
+    ctx->npatch++;
+    ctx->has_call_c = true;
+
+    // done:
+    uint32_t done = ctx->buf.pos;
+    x64_patch_rel32(&ctx->buf, jz_done, done);
+    x64_patch_rel32(&ctx->buf, jmp_done, done);
+}
+
+static void x64_h_retain(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
+    (void) rd;
+    x64_emit_rc_ins(ctx, ins, false);
+}
+
+static void x64_h_release(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
+    (void) rd;
+    x64_emit_rc_ins(ctx, ins, true);
+}
+
 /* ========== Catch ========== */
 
 static void x64_h_catch(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
@@ -1699,6 +1768,8 @@ static const X64InsHandler x64_ins_handlers[XM_OP_COUNT] = {
     [XM_BARRIER_FWD] = x64_h_barrier_fwd,
     [XM_BARRIER_BACK] = x64_h_barrier_back,
     [XM_ALLOC] = x64_h_alloc,
+    [XM_RETAIN] = x64_h_retain,
+    [XM_RELEASE] = x64_h_release,
     [XM_CATCH] = x64_h_catch,
     [XM_CALL_C] = x64_h_call,
     [XM_CALL_C_LEAF] = x64_h_call,

@@ -20,7 +20,6 @@
 #include "xi_escape.h"
 #include "xi_own.h"
 #include "xi_arc.h"
-#include "xi_reuse.h"
 #include "../frontend/canonical/xcanon.h"
 #include "../frontend/parser/xast.h"
 #include "../runtime/xisolate_api.h"
@@ -191,11 +190,6 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
          * the value is merely forwarded (copy→move optimization). Runs on
          * all backends including VM (fewer RC ops = faster interpretation). */
         xi_arc_elim(ir);
-        /* Drop-Reuse: convert RELEASE+ALLOC pairs to DROP_REUSE+ALLOC_AT
-         * for in-place memory reuse. Only for JIT/AOT (the VM emitter
-         * does not handle these ops — it uses OP_DUP/OP_DROP directly). */
-        if (cfg->run_backend_lower)
-            xi_reuse_insert(ir);
         xi_func_set_stage_recursive(ir, XI_STAGE_OWNED);
     }
 

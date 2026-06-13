@@ -14,7 +14,7 @@
  * MEMORY LAYOUT (16 bytes):
  *   [0-1]   type     (2B) - object type tag -> destructor dispatch
  *   [2-3]   flags    (2B) - XR_OBJ_* (REGION/ATOMIC/HAS_DTOR/WEAKABLE) + storage/mmap
- *   [4-7]   refcount (4B) - compile-time RC; ignored when REGION; atomic when ATOMIC
+ *   [4-7]   refcount (4B) - 0-based sign-tagged RC (see "Signed RC Encoding")
  *   [8-11]  objsize  (4B) - allocation size (region sweep / munmap)
  *   [12-15] _rsv     (4B) - reserved (weak table slot / cycle-report id)
  */
@@ -91,11 +91,18 @@ typedef enum {
 /* ========== Unified Object Header (16 bytes) ========== */
 
 typedef struct XrGCHeader {
-    uint16_t type;    /* [0-1] object type tag */
-    uint16_t extra;   /* [2-3] flags word: storage/mmap + XR_OBJ_* */
-    int32_t refcount; /* [4-7] compile-time RC (0 = unmanaged / region) */
-    uint32_t objsize; /* [8-11] allocation size */
-    uint32_t _rsv;    /* [12-15] reserved (weak slot / cycle-report id) */
+    uint16_t type;            /* [0-1] object type tag */
+    uint16_t extra;           /* [2-3] flags word: storage/mmap + XR_OBJ_* */
+    _Atomic int32_t refcount; /* [4-7] 0-based sign-tagged RC (XR_RC_* below).
+                               * Atomic so the thread-shared (rc<0) band and the
+                               * thread-local fast path share one well-defined
+                               * object: the hot path uses relaxed loads/stores
+                               * (identical codegen to a plain int on x86/arm64)
+                               * and the shared band uses the stronger orders
+                               * below. A plain int here made every fast-path
+                               * read of a shared object a data race (UB/TSan). */
+    uint32_t objsize;         /* [8-11] allocation size */
+    uint32_t _rsv;            /* [12-15] reserved (weak slot / cycle-report id) */
 } XrGCHeader;
 
 _Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
@@ -194,54 +201,116 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
            t == XR_TATOMIC || t == XR_TWORKQUEUE || t == XR_TRESULTGROUP;
 }
 
-/* ========== RC dup/drop Primitives ==========
+/* ========== Signed RC Encoding ==========
  *
- * Header-only refcount arithmetic, following Nim's nimIncRef /
- * nimDecRefIsLast contract (lib/system/arc.nim): the primitive only
- * adjusts the count and reports whether the object died; the CALLER runs
- * the destructor and frees, because freeing needs coroutine/region
- * context that does not belong in this header.
+ * The refcount field is a 0-based, sign-tagged count shared verbatim by the
+ * VM, JIT, and AOT runtimes. The sign routes every object to one of two
+ * paths with a single load and a single branch — the property that lets the
+ * JIT inline dup/drop down to a handful of instructions (Koka's kklib
+ * signed scheme, refcount.c, inspired this).
  *
- *   - REGION objects: dup/drop are no-ops (freed in bulk at coro end).
- *   - ATOMIC objects: refcount is adjusted atomically (cross-coroutine).
- *   - others: plain non-atomic refcount (the common, fast case).
+ *   rc >= 0   THREAD-LOCAL (non-atomic, the common fast path).
+ *             Live references = rc + 1, so rc == 0 means UNIQUE (exactly one
+ *             owner; a drop frees it and it is eligible for in-place reuse).
+ *               dup : rc++
+ *               drop: rc == 0 ? free : rc--
  *
- * refcount is 1-based here (1 == one owner). xr_obj_drop_is_last returns
- * true exactly when the last owning reference is released.
+ *   rc < 0    SLOW PATH (cold), resolved by value/flags:
+ *             - rc <= XR_RC_STICKY_BAND : immortal / region / fixed object.
+ *               dup and drop are no-ops (RC never frees it).
+ *             - otherwise (atomic band) : THREAD-SHARED, references = -rc.
+ *                 * MANAGED objects (Channel/Coroutine/Task/...) hand their
+ *                   lifetime to the runtime/scheduler; the compiler-inserted
+ *                   dup/drop are no-ops (the runtime counts via xshared.h).
+ *                 * other shared objects (shared const) are inc/dec'd
+ *                   atomically: more-negative = more refs; the last drop
+ *                   (old == -1) frees.
+ *
+ * The primitive only adjusts the count and reports whether the object died;
+ * the CALLER runs the destructor and frees, because freeing needs the
+ * coroutine context that does not belong in this header (Nim arc.nim
+ * nimDecRefIsLast contract).
  */
 
 #include <stdatomic.h>
 
-/* Acquire a new owning reference.
- *
- * REGION and MANAGED objects are no-ops: region objects are bulk-freed at
- * coroutine end, and MANAGED objects (Channel/Coroutine/Task/CoroPool/Atomic)
- * are owned by the runtime/scheduler via the atomic shared-RC, never by the
- * compiler-inserted per-coroutine RC. */
+/* Immortal sentinel and its saturation band. INT32_MIN is the canonical
+ * immortal value; any rc <= XR_RC_STICKY_BAND is treated as immortal so the
+ * atomic count (which grows downward from -1) can never wrap through the band
+ * into the thread-local (rc >= 0) range. */
+#define XR_RC_STICKY ((int32_t) INT32_MIN)
+#define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))
+
+/* Fresh thread-local object: exactly one owner. 0-based, so unique == 0. */
+#define XR_RC_INIT ((int32_t) 0)
+
+static inline bool xr_rc_is_sticky(int32_t rc) {
+    return rc <= XR_RC_STICKY_BAND;
+}
+
+/* Cold path for dup on a non-thread-local object (rc < 0). */
+static inline void xr_obj_dup_slow(XrObjHeader *o) {
+    _Atomic(int32_t) *rcp = &o->refcount;
+    int32_t rc = atomic_load_explicit(rcp, memory_order_relaxed);
+    if (xr_rc_is_sticky(rc))
+        return; /* immortal / region: never counted */
+    if (o->extra & XR_OBJ_MANAGED)
+        return; /* runtime-owned: the compiler must not touch the count */
+    /* thread-shared atomic: references = -rc, so a new reference moves the
+     * count one step more negative; saturate to immortal near the band. */
+    int32_t old = atomic_fetch_sub_explicit(rcp, 1, memory_order_relaxed);
+    if (old - 1 <= XR_RC_STICKY_BAND)
+        atomic_store_explicit(rcp, XR_RC_STICKY, memory_order_relaxed);
+}
+
+/* Cold path for drop on a non-thread-local object (rc < 0). Returns true
+ * when the last shared reference is released and the caller must destroy. */
+static inline bool xr_obj_drop_slow_is_last(XrObjHeader *o) {
+    _Atomic(int32_t) *rcp = &o->refcount;
+    int32_t rc = atomic_load_explicit(rcp, memory_order_relaxed);
+    if (xr_rc_is_sticky(rc))
+        return false; /* immortal / region: bulk-freed, never RC-freed */
+    if (o->extra & XR_OBJ_MANAGED)
+        return false; /* runtime-owned */
+    /* thread-shared atomic: references = -rc; releasing moves toward zero.
+     * acq_rel so the destructor observes all prior writes (Rust Arc). */
+    int32_t old = atomic_fetch_add_explicit(rcp, 1, memory_order_acq_rel);
+    return old == -1; /* -1 == exactly one reference → now zero */
+}
+
+/* Acquire a new owning reference. Thread-local fast path is a plain inc;
+ * shared/managed/immortal objects (rc < 0) take the cold path. */
 static inline void xr_obj_dup(XrObjHeader *o) {
-    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
+    if (!o)
         return;
-    if (o->extra & XR_OBJ_ATOMIC)
-        atomic_fetch_add_explicit((_Atomic(int32_t) *) &o->refcount, 1, memory_order_relaxed);
-    else
-        o->refcount++;
+    int32_t rc = atomic_load_explicit(&o->refcount, memory_order_relaxed);
+    if (rc >= 0) {
+        atomic_store_explicit(&o->refcount, rc + 1, memory_order_relaxed);
+        return;
+    }
+    xr_obj_dup_slow(o);
 }
 
 /* Release an owning reference. Returns true if this was the last reference
- * (refcount reached 0) and the caller must destroy + free the object.
- *
- * REGION and MANAGED objects always return false: a compiler-inserted drop
- * must never free a region object (bulk-freed at coroutine end) nor a
- * runtime-managed object the executor still holds. */
+ * and the caller must destroy + free the object. Thread-local fast path is a
+ * plain compare + dec; rc == 0 (unique) reports death; rc < 0 is cold. */
 static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
-    if (!o || (o->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED)))
-        return false; /* region: bulk-freed at coro end; managed: runtime-owned */
-    if (o->extra & XR_OBJ_ATOMIC) {
-        /* acq_rel so the destructor sees all prior writes (Rust Arc pattern). */
-        return atomic_fetch_sub_explicit((_Atomic(int32_t) *) &o->refcount, 1,
-                                         memory_order_acq_rel) == 1;
+    if (!o)
+        return false;
+    int32_t rc = atomic_load_explicit(&o->refcount, memory_order_relaxed);
+    if (rc > 0) {
+        atomic_store_explicit(&o->refcount, rc - 1, memory_order_relaxed);
+        return false;
     }
-    return --o->refcount == 0;
+    if (rc == 0)
+        return true;
+    return xr_obj_drop_slow_is_last(o);
+}
+
+/* Whether a thread-local object is uniquely owned (drop-reuse eligibility).
+ * Shared/immortal objects (rc < 0) are never unique to a single coroutine. */
+static inline bool xr_obj_is_unique(const XrObjHeader *o) {
+    return o && atomic_load_explicit(&o->refcount, memory_order_relaxed) == 0;
 }
 
 /* ========== Initialization Functions ========== */

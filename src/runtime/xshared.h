@@ -37,28 +37,41 @@
 #include <stdatomic.h>
 #include "gc/xgc_header.h"
 
-/* ========== Shared Reference Count Operations ========== */
+/* ========== Shared Reference Count Operations ==========
+ *
+ * Shared (cross-coroutine) objects use the same sign-tagged refcount field
+ * as the per-coroutine RC, in the atomic (negative) band: a live count of N
+ * is stored as -N, so the compiler's hot-path sign test routes every shared
+ * object to its cold/atomic path automatically (see xgc_header.h). These
+ * helpers present a conventional positive count to the runtime while doing
+ * the atomic arithmetic on the negative encoding. */
 
 static inline _Atomic(int32_t) *xr_shared_refc_ptr(XrGCHeader *gc) {
-    return (_Atomic(int32_t) *) &gc->refcount;
+    /* refcount is declared _Atomic in the header; no cast needed. */
+    return &gc->refcount;
 }
 
 static inline int xr_shared_get_refc(XrGCHeader *gc) {
-    return (int) atomic_load(xr_shared_refc_ptr(gc));
+    return (int) (-atomic_load(xr_shared_refc_ptr(gc)));
 }
 
 static inline void xr_shared_set_refc(XrGCHeader *gc, int refc) {
     XR_OBJ_SET_FLAG(gc, XR_OBJ_ATOMIC);
-    atomic_store(xr_shared_refc_ptr(gc), (int32_t) refc);
+    /* Negative encoding: references = -rc, so N refs are stored as -N. */
+    atomic_store(xr_shared_refc_ptr(gc), (int32_t) (-refc));
 }
 
 static inline int xr_shared_incref(XrGCHeader *gc) {
-    return (int) atomic_fetch_add(xr_shared_refc_ptr(gc), 1) + 1;
+    /* More references = more negative. Returns the new (positive) count. */
+    int32_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
+    return (int) (-(old - 1));
 }
 
 static inline int xr_shared_decref(XrGCHeader *gc) {
-    int32_t old = atomic_fetch_sub(xr_shared_refc_ptr(gc), 1);
-    return (old <= 1) ? 0 : (int) (old - 1);
+    /* Releasing moves toward zero. old == -1 means this was the last
+     * reference (count drops to 0). Returns the new (positive) count. */
+    int32_t old = atomic_fetch_add(xr_shared_refc_ptr(gc), 1);
+    return (old == -1) ? 0 : (int) (-(old + 1));
 }
 
 static inline void xr_shared_init(XrGCHeader *gc) {
