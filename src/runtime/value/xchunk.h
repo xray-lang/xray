@@ -328,11 +328,6 @@ typedef struct XrProto {
     // registers and spill slots hold GC pointers. Populated by JIT codegen.
     void *stack_map;  // XrStackMapTable* (opaque, from xm_codegen.h)
 
-    // Bytecode stack map: compile-time liveness bitmap for interpreter GC.
-    // Safepoints at alloc instructions (OP_NEWARRAY, OP_NEWMAP, etc.).
-    // For other PCs (CALL/INVOKE), GC falls back to conservative scan.
-    void *bc_stackmap;  // XrBcStackMap* (opaque, from xbc_stackmap.h)
-
     // Parent proto: set by xr_vm_proto_add_proto when this proto is added
     // as a child. Used by JIT to walk up to module root and build
     // shared_protos mapping for CALL_KNOWN optimization.

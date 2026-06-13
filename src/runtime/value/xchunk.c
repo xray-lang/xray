@@ -16,7 +16,6 @@
 #include "../object/xstring.h"
 #include "../../base/xmalloc.h"
 #include "xtype_feedback.h"
-#include "../gc/xbc_stackmap.h"
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
@@ -189,12 +188,6 @@ void xr_vm_proto_free(XrProto *proto) {
     if (proto->deopt_table != NULL) {
         xr_free(proto->deopt_table);
         proto->deopt_table = NULL;
-    }
-
-    // Free bytecode stack map (precise GC for interpreter)
-    if (proto->bc_stackmap != NULL) {
-        xr_bc_stackmap_destroy((XrBcStackMap *) proto->bc_stackmap);
-        proto->bc_stackmap = NULL;
     }
 
     // Free XrProto itself

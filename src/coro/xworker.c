@@ -238,13 +238,15 @@ void xr_worker_destroy(XrWorker *worker) {
         worker->p.blocked_buckets[i] = NULL;
     }
 
-    // Flush Per-Worker Immix block cache L1 → L2
-    xr_immix_flush_block_cache(worker->p.block_cache, &worker->p.block_cache_count);
-
-    // Flush Per-Worker CoroGC free list L1 → L2 (per-isolate pool)
+    // Per-isolate L2 pool for both block and CoroGC-struct flushes below.
     XrSystemHeap *gc_heap = (worker->p.runtime && worker->p.runtime->isolate)
                                 ? worker->p.runtime->isolate->sys_heap
                                 : NULL;
+
+    // Flush Per-Worker Immix block cache L1 → L2 (per-isolate pool)
+    xr_immix_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
+
+    // Flush Per-Worker CoroGC free list L1 → L2 (per-isolate pool)
     xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);
 }
 

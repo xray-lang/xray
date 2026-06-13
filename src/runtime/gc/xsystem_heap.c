@@ -16,6 +16,7 @@
 #include "xsystem_heap.h"
 #include "../../base/xchecks.h"
 #include "xgc_internal.h"
+#include "ximmix.h"  // xr_immix_free_raw_block (drain pooled blocks)
 #include "../../base/xmalloc.h"
 #include "../xshared.h"
 #include "../../coro/xcoro_pool.h"
@@ -43,6 +44,48 @@ static void sysheap_gc_pool_drain(XrSystemHeap *heap) {
     heap->gc_pool_head = NULL;
     heap->gc_pool_count = 0;
     xr_mutex_unlock(&heap->gc_pool_mu);
+}
+
+static void sysheap_block_pool_drain(XrSystemHeap *heap) {
+    XR_DCHECK(heap != NULL, "sysheap_block_pool_drain: NULL heap");
+    xr_mutex_lock(&heap->block_pool_mu);
+    void *b = heap->block_pool_head;
+    while (b) {
+        void *next = *(void **) b; /* linked via XrImmixBlock.next (first word) */
+        xr_immix_free_raw_block(b);
+        b = next;
+    }
+    heap->block_pool_head = NULL;
+    heap->block_pool_count = 0;
+    xr_mutex_unlock(&heap->block_pool_mu);
+}
+
+void *xr_sysheap_block_pool_pop(XrSystemHeap *heap) {
+    if (!heap || !heap->initialized)
+        return NULL;
+    xr_mutex_lock(&heap->block_pool_mu);
+    void *b = heap->block_pool_head;
+    if (b) {
+        heap->block_pool_head = *(void **) b;
+        heap->block_pool_count--;
+    }
+    xr_mutex_unlock(&heap->block_pool_mu);
+    return b;
+}
+
+bool xr_sysheap_block_pool_push(XrSystemHeap *heap, void *block) {
+    if (!heap || !heap->initialized || !block)
+        return false;
+    xr_mutex_lock(&heap->block_pool_mu);
+    if (heap->block_pool_count >= XR_SYSHEAP_BLOCK_POOL_MAX) {
+        xr_mutex_unlock(&heap->block_pool_mu);
+        return false;
+    }
+    *(void **) block = heap->block_pool_head;
+    heap->block_pool_head = block;
+    heap->block_pool_count++;
+    xr_mutex_unlock(&heap->block_pool_mu);
+    return true;
 }
 
 bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
@@ -86,6 +129,11 @@ bool xr_sysheap_init(XrSystemHeap *heap, const XrSysHeapConfig *config) {
     heap->gc_pool_head = NULL;
     heap->gc_pool_count = 0;
 
+    // Initialize Immix block L2 pool
+    xr_mutex_init(&heap->block_pool_mu);
+    heap->block_pool_head = NULL;
+    heap->block_pool_count = 0;
+
     heap->initialized = true;
     return true;
 }
@@ -104,6 +152,10 @@ void xr_sysheap_destroy_coro_storage(XrSystemHeap *heap) {
     // finalizers may recycle GC structs back into this pool while their
     // shells are being released.
     sysheap_gc_pool_drain(heap);
+
+    // Drain the Immix block L2 pool: coroutine heap teardown and worker exit
+    // push recycled blocks here; return them to the OS now.
+    sysheap_block_pool_drain(heap);
 }
 
 void xr_sysheap_destroy(XrSystemHeap *heap) {
@@ -112,6 +164,7 @@ void xr_sysheap_destroy(XrSystemHeap *heap) {
 
     xr_sysheap_destroy_coro_storage(heap);
     xr_mutex_destroy(&heap->gc_pool_mu);
+    xr_mutex_destroy(&heap->block_pool_mu);
 
     // Destroy class arena
     xr_arena_destroy(&heap->class_arena);

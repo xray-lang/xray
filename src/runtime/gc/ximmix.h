@@ -79,6 +79,7 @@
  * No separate malloc needed — block pointer IS the data pointer.
  */
 struct XrGCHeader;
+struct XrSystemHeap;
 
 typedef struct XrImmixBlock {
     struct XrImmixBlock *next;    // 8B
@@ -126,6 +127,11 @@ typedef struct XrImmixHeap {
     // Sticky Immix: old blocks (skipped by minor GC)
     XrImmixBlock *old_blocks;
     size_t old_block_count;
+
+    // Per-isolate L2 block cache owner (opaque). Set after init from the
+    // owning coroutine's isolate; NULL during bootstrap (falls back to the
+    // OS allocator). Block reuse is thus scoped to the isolate, not global.
+    struct XrSystemHeap *sys_heap;
 } XrImmixHeap;
 
 /* ========== Lifecycle API ========== */
@@ -206,9 +212,16 @@ XR_FUNC int xr_immix_count_live_lines(XrImmixBlock *block);
 
 /* ========== Block Cache API ========== */
 
-// Flush per-worker L1 block cache to global L2.
-// Called from worker destroy to avoid block leaks.
-XR_FUNC void xr_immix_flush_block_cache(void *block_cache[], int *count);
+// Flush a per-worker L1 block cache to the isolate's L2 pool (`sys_heap`).
+// Called from worker destroy to avoid block leaks. Blocks that don't fit are
+// returned to the OS. Pass sys_heap=NULL to force every block to the OS.
+struct XrSystemHeap;
+XR_FUNC void xr_immix_flush_block_cache(struct XrSystemHeap *sys_heap, void *block_cache[],
+                                        int *count);
+
+// Return a raw aligned block (as cached in the L2 pool) to the OS. Used by the
+// system heap when draining its block pool at isolate teardown.
+XR_FUNC void xr_immix_free_raw_block(void *block);
 
 /* ========== Debug API ========== */
 
