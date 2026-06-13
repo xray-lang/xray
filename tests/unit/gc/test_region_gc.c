@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * test_immix_gc.c - Unit tests for Immix single-bitmap GC
+ * test_region_gc.c - Unit tests for Region single-bitmap GC
  *
  * KEY CONCEPT:
  *   Tests the single bitmap (alloc_marks only) design with
@@ -21,7 +21,7 @@
 #endif
 
 #include "../../../src/runtime/gc/xcoro_gc.h"
-#include "../../../src/runtime/gc/ximmix.h"
+#include "../../../src/runtime/gc/xregion.h"
 #include "../../../src/runtime/gc/xgc_header.h"
 #include "../../../src/runtime/value/xvalue.h"
 #include "../../../src/runtime/xisolate_internal.h"
@@ -95,92 +95,92 @@ static uint64_t time_ns(void) {
 #endif
 }
 
-/* ========== 1. Immix Block & Bitmap Tests ========== */
+/* ========== 1. Region Block & Bitmap Tests ========== */
 
 static void test_block_init_marks(void) {
     TEST("block init: alloc_marks has line 0 reserved");
 
-    XrImmixHeap heap;
-    xr_immix_init(&heap);
+    XrRegionHeap heap;
+    xr_region_init(&heap);
 
-    void *p = xr_immix_alloc(&heap, 64);
+    void *p = xr_region_alloc(&heap, 64);
     ASSERT(p != NULL, "alloc failed");
 
-    XrImmixBlock *block = heap.current_block;
+    XrRegionBlock *block = heap.current_block;
     ASSERT(block != NULL, "no current block");
 
     ASSERT(block->alloc_marks[0] & 1ULL, "alloc_marks line 0 not set");
 
-    xr_immix_destroy(&heap);
+    xr_region_destroy(&heap);
     PASS();
 }
 
 static void test_mark_alloc_lines(void) {
     TEST("mark_alloc_lines: sets alloc_marks correctly");
 
-    XrImmixHeap heap;
-    xr_immix_init(&heap);
+    XrRegionHeap heap;
+    xr_region_init(&heap);
 
-    void *p = xr_immix_alloc(&heap, 64);
+    void *p = xr_region_alloc(&heap, 64);
     ASSERT(p != NULL, "alloc failed");
 
-    XrImmixBlock *block = heap.current_block;
+    XrRegionBlock *block = heap.current_block;
 
     // Clear alloc_marks (except line 0)
     block->alloc_marks[0] = 1ULL;
     block->alloc_marks[1] = 0;
 
-    xr_immix_mark_alloc_lines(p, 64);
+    xr_region_mark_alloc_lines(p, 64);
 
-    int line = XR_IMMIX_LINE_INDEX(p);
-    ASSERT(XR_IMMIX_LINE_GET(block->alloc_marks, line), "alloc_marks not set");
+    int line = XR_REGION_LINE_INDEX(p);
+    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set");
 
-    xr_immix_destroy(&heap);
+    xr_region_destroy(&heap);
     PASS();
 }
 
 static void test_mark_alloc_lines_fast(void) {
     TEST("mark_alloc_lines_fast: inline fast path works");
 
-    XrImmixHeap heap;
-    xr_immix_init(&heap);
+    XrRegionHeap heap;
+    xr_region_init(&heap);
 
-    void *p = xr_immix_alloc(&heap, 64);
+    void *p = xr_region_alloc(&heap, 64);
     ASSERT(p != NULL, "alloc failed");
 
-    XrImmixBlock *block = heap.current_block;
+    XrRegionBlock *block = heap.current_block;
 
     block->alloc_marks[0] = 1ULL;
     block->alloc_marks[1] = 0;
 
-    xr_immix_mark_alloc_lines_fast(p, 64);
+    xr_region_mark_alloc_lines_fast(p, 64);
 
-    int line = XR_IMMIX_LINE_INDEX(p);
-    ASSERT(XR_IMMIX_LINE_GET(block->alloc_marks, line), "alloc_marks not set by fast path");
+    int line = XR_REGION_LINE_INDEX(p);
+    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set by fast path");
 
-    xr_immix_destroy(&heap);
+    xr_region_destroy(&heap);
     PASS();
 }
 
 static void test_hole_scanning_uses_alloc_marks(void) {
     TEST("hole scanning: uses alloc_marks for free line detection");
 
-    XrImmixHeap heap;
-    xr_immix_init(&heap);
+    XrRegionHeap heap;
+    xr_region_init(&heap);
 
     // Allocate and mark alloc_marks
     for (int i = 0; i < 80; i++) {
-        void *p = xr_immix_alloc(&heap, 128);
-        xr_immix_mark_alloc_lines(p, 128);
+        void *p = xr_region_alloc(&heap, 128);
+        xr_region_mark_alloc_lines(p, 128);
     }
 
-    XrImmixBlock *block = heap.current_block;
+    XrRegionBlock *block = heap.current_block;
     ASSERT(block != NULL, "no current block");
 
     uint64_t alloc_bits = (block->alloc_marks[0] & ~1ULL) | block->alloc_marks[1];
     ASSERT(alloc_bits != 0, "alloc_marks should have live lines");
 
-    xr_immix_destroy(&heap);
+    xr_region_destroy(&heap);
     PASS();
 }
 
@@ -206,17 +206,17 @@ static void test_newobj_marks_alloc(void) {
     XrGCHeader *obj = xr_coro_gc_newobj(gc, XR_TBLOB, 64);
     ASSERT(obj != NULL, "alloc failed");
 
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
-    int line = XR_IMMIX_LINE_INDEX(obj);
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj);
+    int line = XR_REGION_LINE_INDEX(obj);
 
-    ASSERT(XR_IMMIX_LINE_GET(block->alloc_marks, line), "alloc_marks not set for new obj");
+    ASSERT(XR_REGION_LINE_GET(block->alloc_marks, line), "alloc_marks not set for new obj");
 
     xr_coro_gc_destroy(gc);
     PASS();
 }
 
 static void test_large_object(void) {
-    TEST("large object: goes to malloc, not Immix");
+    TEST("large object: goes to malloc, not Region");
 
     XrCoroGC *gc = xr_coro_gc_create(&dummy_coro, NULL);
     ASSERT(gc != NULL, "create failed");
@@ -323,8 +323,8 @@ static void perf_bulk_destroy(void) {
     }
     gc->gc_disabled--;
 
-    XrImmixStats stats;
-    xr_immix_get_stats(&gc->immix, &stats);
+    XrRegionStats stats;
+    xr_region_get_stats(&gc->region, &stats);
 
     uint64_t start = time_ns();
     xr_coro_gc_destroy(gc);
@@ -339,10 +339,10 @@ static void perf_bulk_destroy(void) {
 int main(void) {
     xr_test_suppress_dialogs();
     printf("\n========================================\n");
-    printf("  Immix Single-Bitmap GC Unit Tests\n");
+    printf("  Region Single-Bitmap GC Unit Tests\n");
     printf("========================================\n\n");
 
-    printf("--- Immix Bitmap ---\n");
+    printf("--- Region Bitmap ---\n");
     test_block_init_marks();
     test_mark_alloc_lines();
     test_mark_alloc_lines_fast();
@@ -359,7 +359,7 @@ int main(void) {
      * has been removed: reference counting owns reclamation. The tests that
      * asserted tracing-cycle behavior (gc_count increment, PROPAGATE state
      * walk, sweep-driven totalbytes decrease, tri-color barriers) are gone
-     * with it. What remains here covers the Immix bump allocator + alloc-mark
+     * with it. What remains here covers the Region bump allocator + alloc-mark
      * bookkeeping, which RC still relies on for region allocation. */
 
     printf("\n--- Performance ---\n");

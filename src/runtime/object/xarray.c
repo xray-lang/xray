@@ -8,7 +8,7 @@
  * xarray.c - Dynamic array implementation
  *
  * KEY CONCEPT:
- *   Array objects and element storage both live on Immix GC heap.
+ *   Array objects and element storage both live on Region GC heap.
  *   Element data uses XR_TBLOB (GC header + raw bytes), so GC sweep
  *   preserves the lines. Old data buffers are reclaimed automatically.
  *   System heap arrays (shared) still use malloc for element storage.
@@ -104,7 +104,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     arr->data_on_gc_heap = 0;
     memset(arr->_pad, 0, sizeof(arr->_pad));
 
-    // Allocate data as GC blob on Immix heap (no free needed, GC reclaims)
+    // Allocate data as GC blob on Region heap (no free needed, GC reclaims)
     if (capacity > 0) {
         size_t data_bytes = (size_t) esz * capacity;
         XrCoroGC *gc = xr_coro_get_coro_gc(coro);
@@ -973,7 +973,7 @@ void xr_array_grow(XrArray *arr) {
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
     if (arr->data_on_gc_heap) {
-        /* Force malloc during grow to avoid Immix blob overlap.
+        /* Force malloc during grow to avoid Region blob overlap.
          * GC blob allocation may return memory overlapping with
          * the old data array, making memcpy undefined behavior. */
         void *new_data = xr_malloc(new_bytes);
@@ -1027,7 +1027,7 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
 
     if (arr->data_on_gc_heap) {
-        // Force malloc during ensure_capacity to avoid Immix blob overlap.
+        // Force malloc during ensure_capacity to avoid Region blob overlap.
         void *new_data = xr_malloc(new_bytes);
         if (!new_data)
             return;

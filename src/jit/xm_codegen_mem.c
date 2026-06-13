@@ -809,12 +809,12 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // CBZ x16, slow_path  (gc == NULL → slow path)
             uint32_t cbz_idx = ctx->buf.count;
             a64_buf_emit(&ctx->buf, a64_cbz(SCRATCH_REG, 0));  // patched below
-            // LDR x17, [x16, #0]  — cursor = gc->immix.cursor
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG, XM_IMMIX_CURSOR_OFFSET));
+            // LDR x17, [x16, #0]  — cursor = gc->region.cursor
+            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG, XM_REGION_CURSOR_OFFSET));
             // ADD x17, x17, #size  — new_cursor = cursor + size
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG2, SCRATCH_REG2, alloc_size));
             // LDR rd, [x16, #8]  — limit (borrow rd temporarily)
-            a64_buf_emit(&ctx->buf, a64_ldr(rd, SCRATCH_REG, XM_IMMIX_LIMIT_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_ldr(rd, SCRATCH_REG, XM_REGION_LIMIT_OFFSET));
             // CMP x17, rd  — new_cursor <= limit?
             a64_buf_emit(&ctx->buf, a64_cmp(SCRATCH_REG2, rd));
             // B.HI slow_path
@@ -822,7 +822,7 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_nop());  // patched below
 
             // Commit: STR x17, [x16, #0]  — gc->cursor = new_cursor
-            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, SCRATCH_REG, XM_IMMIX_CURSOR_OFFSET));
+            a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, SCRATCH_REG, XM_REGION_CURSOR_OFFSET));
             // SUB rd, x17, #size  — rd = allocated GCHeader*
             a64_buf_emit(&ctx->buf, a64_sub_imm(rd, SCRATCH_REG2, alloc_size));
 
@@ -846,22 +846,22 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             a64_buf_emit(&ctx->buf, a64_str_w(A64_XZR, rd, XM_GC_HDR_RSV_OFFSET));
 
             // --- Inline alloc_post: GC bookkeeping without CALL_C stub ---
-            // alloc_marks are DEFERRED: xr_immix_flush_marks() at slow path
+            // alloc_marks are DEFERRED: xr_region_flush_marks() at slow path
             // entry marks all lines from mark_cursor to cursor in one batch.
 
             // 1. Block allocation accounting.
-            a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t) XM_IMMIX_BLOCK_SIZE_MASK);
+            a64_load_imm64(&ctx->buf, SCRATCH_REG2, ~(uint64_t) XM_REGION_BLOCK_SIZE_MASK);
             a64_buf_emit(&ctx->buf, a64_and(SCRATCH_REG2, rd, SCRATCH_REG2));  // x17 = block
             a64_buf_emit(&ctx->buf,
-                         a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+                         a64_ldr_w(SCRATCH_REG, SCRATCH_REG2, XM_REGION_BLOCK_ALLOC_COUNT_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, 1));
             a64_buf_emit(&ctx->buf,
-                         a64_str_w(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_COUNT_OFFSET));
+                         a64_str_w(SCRATCH_REG, SCRATCH_REG2, XM_REGION_BLOCK_ALLOC_COUNT_OFFSET));
             a64_buf_emit(&ctx->buf,
-                         a64_ldr(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+                         a64_ldr(SCRATCH_REG, SCRATCH_REG2, XM_REGION_BLOCK_ALLOC_BYTES_OFFSET));
             a64_buf_emit(&ctx->buf, a64_add_imm(SCRATCH_REG, SCRATCH_REG, alloc_size));
             a64_buf_emit(&ctx->buf,
-                         a64_str(SCRATCH_REG, SCRATCH_REG2, XM_IMMIX_BLOCK_ALLOC_BYTES_OFFSET));
+                         a64_str(SCRATCH_REG, SCRATCH_REG2, XM_REGION_BLOCK_ALLOC_BYTES_OFFSET));
 
             // 2. GC stats: totalbytes += size (RC has no GCdebt/collection
             //    trigger; only the bytes counter is kept for gc.info()).

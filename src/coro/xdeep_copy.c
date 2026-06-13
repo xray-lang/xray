@@ -97,7 +97,7 @@ static void *copy_ctx_alloc_transit(XrCopyContext *ctx, size_t size, uint8_t typ
     return obj;
 }
 
-// Unified allocation: transit sysheap, Immix heap, or fixed GC fallback
+// Unified allocation: transit sysheap, Region heap, or fixed GC fallback
 static inline void *copy_ctx_alloc(XrCopyContext *ctx, size_t size, uint8_t type) {
     if (ctx->to_transit) {
         return copy_ctx_alloc_transit(ctx, size, type);

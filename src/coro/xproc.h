@@ -268,7 +268,7 @@ typedef struct XrProc {
     uint32_t arena_cache_end;    // End of cached range (exclusive)
     void *arena_cache_block;     // Cached block pointer (invalidate if pool expands)
 
-/* === Immix Block Cache L1 (per-worker, no lock needed) === */
+/* === Region Block Cache L1 (per-worker, no lock needed) === */
 #define XR_BLOCK_CACHE_L1_MAX 8
     void *block_cache[XR_BLOCK_CACHE_L1_MAX];  // Cached aligned blocks
     int block_cache_count;                     // Number of cached blocks

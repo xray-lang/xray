@@ -84,7 +84,7 @@ typedef struct XrGCObjectNode {
  * this table's slot is empty. */
 typedef struct {
     XrGCDestroyFn destroy;     // Release malloc-backed side resources
-    XrGCDeepCopyFn deep_copy;  // Cross-coroutine deep copy (Immix heap)
+    XrGCDeepCopyFn deep_copy;  // Cross-coroutine deep copy (Region heap)
     XrGCToSharedFn to_shared;  // Cross-coroutine shared/refcount copy
 } XrTypeOps;
 

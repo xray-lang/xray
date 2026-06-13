@@ -8,7 +8,7 @@
  * xgc.h - Garbage Collector public API
  *
  * KEY CONCEPT:
- *   - Per-coroutine Immix bump heap (XrCoroGC) is the primary heap for
+ *   - Per-coroutine Region bump heap (XrCoroGC) is the primary heap for
  *     runtime objects. Reclamation is compile-time reference counting: a
  *     per-size-class freelist reuses dropped blocks, whole-block reclaim
  *     returns emptied blocks, and a Bacon-Rajan cycle collector handles

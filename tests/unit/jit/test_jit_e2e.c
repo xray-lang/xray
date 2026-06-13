@@ -2705,13 +2705,13 @@ static void test_spill_only_param_init(void) {
  *     v0 =ptr alloc const(5), const(48)  // type=5(Json), size=48
  *     ret v0
  *
- * Creates a fake coro with a minimal immix heap to test the fast path.
+ * Creates a fake coro with a minimal region heap to test the fast path.
  */
 static void test_alloc_inline(void) {
     fprintf(stderr, "  test_alloc_inline...");
 
     // Reuse global fake env so the JIT prologue can deref the backend JIT scratch.
-    // We only need to attach a fake coro_gc + immix heap on top of it.
+    // We only need to attach a fake coro_gc + region heap on top of it.
     static uint8_t fake_gc[512];
     // Oversized buffer to manually align to 16KB boundary.
     // The inline alloc_post writes alloc_count and alloc_bytes in the block header.
@@ -2721,10 +2721,10 @@ static void test_alloc_inline(void) {
     uintptr_t aligned = ((uintptr_t) heap_raw + 16383) & ~(uintptr_t) 0x3FFF;
     uint8_t *heap_buf = (uint8_t *) aligned;
 
-    // gc->immix.cursor at offset 256 (past the block header)
+    // gc->region.cursor at offset 256 (past the block header)
     char *cursor = (char *) heap_buf + 256;
     memcpy(fake_gc + 0, &cursor, 8);
-    // gc->immix.limit at offset 8
+    // gc->region.limit at offset 8
     char *limit = (char *) heap_buf + 16384;
     memcpy(fake_gc + 8, &limit, 8);
     jit_env_reset();

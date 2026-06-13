@@ -5,7 +5,7 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xcoro_gc.c - Per-Coroutine Memory Manager (Immix bump + RC reclamation)
+ * xcoro_gc.c - Per-Coroutine Memory Manager (Region bump + RC reclamation)
  */
 
 #include "xcoro_gc.h"
@@ -114,7 +114,7 @@ static inline XrGCDestroyFn get_destroy_func_ext(XrCoroGC *gc, uint8_t type) {
 /*
  * Reset GC runtime state fields to initial values.
  * Shared by xr_coro_gc_create and xr_coro_gc_reset.
- * Does NOT touch: immix heap, tuning params (gc_pause, gc_stepmul),
+ * Does NOT touch: region heap, tuning params (gc_pause, gc_stepmul),
  * or owner pointer.
  */
 static void gc_init_runtime_state(XrCoroGC *gc) {
@@ -157,10 +157,10 @@ XrCoroGC *xr_coro_gc_create(struct XrCoroutine *coro, const XrCoroGCConfig *conf
 
     memset(gc, 0, sizeof(XrCoroGC));
 
-    // Initialize Immix heap
-    xr_immix_init(&gc->immix);
+    // Initialize Region heap
+    xr_region_init(&gc->region);
     // Wire the per-isolate L2 block cache (NULL during bootstrap → OS alloc).
-    gc->immix.sys_heap = coro->isolate ? coro->isolate->sys_heap : NULL;
+    gc->region.sys_heap = coro->isolate ? coro->isolate->sys_heap : NULL;
 
     gc_init_runtime_state(gc);
 
@@ -351,7 +351,7 @@ void xr_coro_gc_destroy(XrCoroGC *gc) {
     XR_DCHECK(!gc->in_gc, "gc_destroy called during GC");
 
     gc_finalize_registered_objects(gc);
-    xr_immix_destroy(&gc->immix);
+    xr_region_destroy(&gc->region);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
     xr_cycle_roots_destroy(gc);
@@ -398,24 +398,24 @@ void xr_coro_gc_reset(XrCoroGC *gc, struct XrCoroutine *new_owner) {
     XR_DCHECK(!gc->in_gc, "gc_reset called during GC");
 
     gc_finalize_registered_objects(gc);
-    xr_immix_reset(&gc->immix);
+    xr_region_reset(&gc->region);
     gc_free_large_objects(gc);
     xr_coro_gc_rc_freelist_destroy(gc);
     xr_cycle_roots_destroy(gc);
 
     gc_init_runtime_state(gc);
     gc->owner = new_owner;
-    // Re-wire the per-isolate L2 block cache (immix reset cleared it).
-    gc->immix.sys_heap = new_owner->isolate ? new_owner->isolate->sys_heap : NULL;
+    // Re-wire the per-isolate L2 block cache (region reset cleared it).
+    gc->region.sys_heap = new_owner->isolate ? new_owner->isolate->sys_heap : NULL;
 }
 
 /* ========== Allocation Helpers ========== */
 
-static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t type,
-                                       uint32_t total) {
+static inline void gc_post_region_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t type,
+                                        uint32_t total) {
     (void) gc;
     (void) type;
-    XrImmixBlock *block = XR_IMMIX_BLOCK_FROM_PTR(obj);
+    XrRegionBlock *block = XR_REGION_BLOCK_FROM_PTR(obj);
     block->alloc_count++;
     block->alloc_bytes += (int64_t) total;
 
@@ -425,7 +425,7 @@ static inline void gc_post_immix_alloc(XrCoroGC *gc, XrGCHeader *obj, uint8_t ty
     // skip those unmarked lines, causing hole scanner to treat them as
     // free. flush_marks (called in slow path) will batch-mark from
     // mark_cursor to cursor, covering both JIT and interpreter allocs.
-    xr_immix_mark_alloc_lines_fast(obj, total);
+    xr_region_mark_alloc_lines_fast(obj, total);
 }
 
 /*
@@ -492,13 +492,13 @@ XR_FUNC void xr_coro_gc_rc_free(XrCoroGC *gc, XrGCHeader *obj) {
 XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
     if (!gc || !gc->rc_freelist)
         return;
-    /* The blocks themselves live in Immix and are released in bulk when the
+    /* The blocks themselves live in Region and are released in bulk when the
      * coroutine's heap is torn down; only the index array is owned here. */
     xr_free(gc->rc_freelist);
     gc->rc_freelist = NULL;
 }
 
-/* Marker stored in XrImmixBlock.reclaim_dead_count once a block is decided
+/* Marker stored in XrRegionBlock.reclaim_dead_count once a block is decided
  * fully dead, so the freelist-rebuild and list-rebuild passes can recognize
  * it after the per-block dead-slot tally has been consumed. */
 #define XR_BLOCK_RECLAIM_MARK 0xFFFFFFFFu
@@ -506,7 +506,7 @@ XR_FUNC void xr_coro_gc_rc_freelist_destroy(XrCoroGC *gc) {
 XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
     if (!gc || !gc->rc_freelist)
         return; /* nothing has been RC-freed yet → no dead slots to reclaim */
-    XrImmixHeap *h = &gc->immix;
+    XrRegionHeap *h = &gc->region;
 
     /* Pass 1: zero the dead-slot tally on every reclaim candidate (the
      * bump-retired lists) plus the current block. Freelist entries can point
@@ -514,9 +514,9 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
      * not be misread as the reclaim marker below. free_blocks are empty and
      * hold no freelist entries, so they need no reset (activate_block clears
      * a block's counters when it is reused). */
-    for (XrImmixBlock *b = h->full_blocks; b; b = b->next)
+    for (XrRegionBlock *b = h->full_blocks; b; b = b->next)
         b->reclaim_dead_count = 0;
-    for (XrImmixBlock *b = h->recycle_blocks; b; b = b->next)
+    for (XrRegionBlock *b = h->recycle_blocks; b; b = b->next)
         b->reclaim_dead_count = 0;
     if (h->current_block)
         h->current_block->reclaim_dead_count = 0;
@@ -528,7 +528,7 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
         for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
             void **link = (void **) ((char *) o + sizeof(XrGCHeader));
             XrGCHeader *next = (XrGCHeader *) *link;
-            XR_IMMIX_BLOCK_FROM_PTR(o)->reclaim_dead_count++;
+            XR_REGION_BLOCK_FROM_PTR(o)->reclaim_dead_count++;
             o = next;
         }
     }
@@ -536,11 +536,11 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
     /* Pass 3a: mark fully-dead retired blocks. Objects too small to be
      * freelisted (cls < 0) never appear in the tally, so a block holding one
      * simply will not reach alloc_count and is conservatively kept. */
-    for (XrImmixBlock *b = h->full_blocks; b; b = b->next) {
+    for (XrRegionBlock *b = h->full_blocks; b; b = b->next) {
         if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
             b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
     }
-    for (XrImmixBlock *b = h->recycle_blocks; b; b = b->next) {
+    for (XrRegionBlock *b = h->recycle_blocks; b; b = b->next) {
         if (b->alloc_count > 0 && b->reclaim_dead_count == b->alloc_count)
             b->reclaim_dead_count = XR_BLOCK_RECLAIM_MARK;
     }
@@ -553,7 +553,7 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
         for (XrGCHeader *o = gc->rc_freelist[cls]; o;) {
             void **link = (void **) ((char *) o + sizeof(XrGCHeader));
             XrGCHeader *next = (XrGCHeader *) *link;
-            if (XR_IMMIX_BLOCK_FROM_PTR(o)->reclaim_dead_count != XR_BLOCK_RECLAIM_MARK) {
+            if (XR_REGION_BLOCK_FROM_PTR(o)->reclaim_dead_count != XR_BLOCK_RECLAIM_MARK) {
                 *link = kept;
                 kept = o;
             }
@@ -564,9 +564,9 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
 
     /* Pass 3c: move marked blocks from the retired lists to free_blocks for
      * size-class-agnostic reuse. activate_block resets their counters. */
-    XrImmixBlock *new_full = NULL;
-    for (XrImmixBlock *b = h->full_blocks; b;) {
-        XrImmixBlock *next = b->next;
+    XrRegionBlock *new_full = NULL;
+    for (XrRegionBlock *b = h->full_blocks; b;) {
+        XrRegionBlock *next = b->next;
         if (b->reclaim_dead_count == XR_BLOCK_RECLAIM_MARK) {
             b->next = h->free_blocks;
             h->free_blocks = b;
@@ -578,9 +578,9 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
     }
     h->full_blocks = new_full;
 
-    XrImmixBlock *new_recycle = NULL;
-    for (XrImmixBlock *b = h->recycle_blocks; b;) {
-        XrImmixBlock *next = b->next;
+    XrRegionBlock *new_recycle = NULL;
+    for (XrRegionBlock *b = h->recycle_blocks; b;) {
+        XrRegionBlock *next = b->next;
         if (b->reclaim_dead_count == XR_BLOCK_RECLAIM_MARK) {
             b->next = h->free_blocks;
             h->free_blocks = b;
@@ -733,7 +733,7 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
         }
     } else {
         /* RC freelist fast path: reuse a same-size-class block freed by a
-         * previous drop-to-zero before falling back to Immix bump. */
+         * previous drop-to-zero before falling back to Region bump. */
         int cls = xr_rc_size_class(total);
         if (cls >= 0 && gc->rc_freelist && gc->rc_freelist[cls]) {
             obj = gc->rc_freelist[cls];
@@ -742,23 +742,23 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
             /* Reused block: its allocation line is still occupied. type/refcount/extra
              * are reset below; XR_OBJ_DEAD is cleared by extra = 0. */
         } else {
-            obj = (XrGCHeader *) xr_immix_alloc(&gc->immix, total);
+            obj = (XrGCHeader *) xr_region_alloc(&gc->region, total);
             if (!obj)
                 return NULL;
-            gc_post_immix_alloc(gc, obj, type, (uint32_t) total);
+            gc_post_region_alloc(gc, obj, type, (uint32_t) total);
         }
     }
 
     obj->type = type;
     obj->objsize = (uint32_t) total;
-    obj->extra = 0;  // Always clear extra (Immix memory may be uninitialized)
+    obj->extra = 0;  // Always clear extra (Region memory may be uninitialized)
     /* Not in cycle_roots yet. MUST be the sentinel, never 0: a freelist-reused
      * block that still read _rsv==0 would be treated as "already at roots index
      * 0", so add_root would refuse it and remove_root would corrupt roots[0]. */
     obj->_rsv = XR_CYCLE_NOT_IN_ROOTS;
     /* RC: a freshly allocated object has exactly one owning reference (its
      * definition site). The count is 0-based and sign-tagged, so the unique
-     * value is XR_RC_INIT (0). Immix memory is reused/uninitialized, so this
+     * value is XR_RC_INIT (0). Region memory is reused/uninitialized, so this
      * must be set explicitly. Relaxed store: a fresh object is not yet shared
      * across threads, so no ordering is needed (matches the JIT inline init). */
     atomic_store_explicit(&obj->refcount, XR_RC_INIT, memory_order_relaxed);
@@ -782,18 +782,18 @@ void xr_coro_gc_print_stats(XrCoroGC *gc) {
         return;
     }
 
-    printf("=== XrCoroGC (Immix bump + RC) ===\n");
+    printf("=== XrCoroGC (Region bump + RC) ===\n");
     printf("Total bytes:  %lld\n", (long long) gc->totalbytes);
     printf("GC count:     %u\n", gc->gc_count);
     printf("GC pause:     %d%%\n", gc->gc_pause);
     printf("GC stepmul:   %d\n", gc->gc_stepmul);
 
-    XrImmixStats istats;
-    xr_immix_get_stats(&gc->immix, &istats);
-    printf("Immix blocks:   %zu (full=%zu recycle=%zu free=%zu)\n", istats.total_blocks,
+    XrRegionStats istats;
+    xr_region_get_stats(&gc->region, &istats);
+    printf("Region blocks:   %zu (full=%zu recycle=%zu free=%zu)\n", istats.total_blocks,
            istats.full_blocks, istats.recycle_blocks, istats.free_blocks);
-    printf("Immix memory:   %zu bytes\n", istats.total_bytes);
-    printf("Immix lines:    live=%zu free=%zu\n", istats.live_lines, istats.free_lines);
+    printf("Region memory:   %zu bytes\n", istats.total_bytes);
+    printf("Region lines:    live=%zu free=%zu\n", istats.live_lines, istats.free_lines);
 
     printf("Object count:   %u\n", gc->object_count);
 
@@ -821,7 +821,7 @@ XrGCHeader *xr_jit_alloc(struct XrCoroutine *coro, uint64_t type_and_size) {
     // own allocation. Without this flush, lines occupied by prior JIT
     // inline allocs would never be marked, causing the hole scanner to
     // treat them as free and allocate overlapping objects.
-    xr_immix_flush_marks(&coro->coro_gc->immix);
+    xr_region_flush_marks(&coro->coro_gc->region);
     return xr_coro_gc_newobj(coro->coro_gc, type, size);
 }
 
@@ -834,7 +834,7 @@ void xr_jit_mark_lines(struct XrCoroutine *coro, uint64_t obj_ptr) {
     if (!p)
         return;
     XrGCHeader *obj = (XrGCHeader *) p;
-    xr_immix_mark_alloc_lines_fast(obj, obj->objsize);
+    xr_region_mark_alloc_lines_fast(obj, obj->objsize);
 }
 
 // Fast path post-alloc: GC bookkeeping after inline bump succeeds
@@ -850,9 +850,9 @@ void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr) {
     XrGCHeader *obj = (XrGCHeader *) obj_ptr;
     uint32_t total = obj->objsize;
     XR_DCHECK(total > 0, "jit_alloc_post: zero objsize");
-    XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Immix");
+    XR_DCHECK(total <= XR_LARGE_OBJECT_THRESHOLD, "jit_alloc_post: oversized for Region");
 
-    gc_post_immix_alloc(gc, obj, obj->type, total);
+    gc_post_region_alloc(gc, obj, obj->type, total);
     XR_CHECK(gc_register_finalizer_after_inline_alloc(gc, obj),
              "jit_alloc_post: finalizer registration failed");
     gc_update_alloc_stats(gc, total);

@@ -87,7 +87,7 @@ struct XrCoroGC;
 typedef struct XrCopyContext {
     struct XrayIsolate *X;
     struct XrGC *dst_gc;           // fixed GC fallback
-    struct XrCoroGC *dst_coro_gc;  // Immix heap (preferred when non-NULL)
+    struct XrCoroGC *dst_coro_gc;  // Region heap (preferred when non-NULL)
     bool to_transit;               // channel-transit copy: sysheap + XR_OBJ_TRANSIT
     XrSeenEntry **buckets;
     int bucket_count;

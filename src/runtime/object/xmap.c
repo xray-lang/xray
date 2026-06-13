@@ -246,7 +246,7 @@ static void setnodevector(XrMap *map, uint32_t size) {
             return;
         XR_MAP_PROFILE_ALLOC_NODES(alloc_bytes);
         // Tell the per-coro GC about external memory. Only the malloc
-        // branch counts: the GC blob branch is already part of immix
+        // branch counts: the GC blob branch is already part of region
         // accounting via xr_coro_alloc_blob.
         if (malloc_path) {
             xr_gc_add_external(xr_current_coro_gc(), (int64_t) alloc_bytes);
@@ -391,7 +391,7 @@ static void rehash(XrMap *map) {
 
     /* Force malloc for new nodes during rehash (the flag stays cleared:
      * the node vector is malloc-backed from here on).
-     * Immix bump allocator may return memory overlapping the old GC blob
+     * Region bump allocator may return memory overlapping the old GC blob
      * (line recycling within the same block), and setnodevector's init
      * loop would zero out old entries before we can re-insert them. */
     map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;

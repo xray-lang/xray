@@ -32,7 +32,7 @@
 #include "xtask.h"
 #include "../base/xchecks.h"
 #include "../base/xlog.h"
-#include "../runtime/gc/ximmix.h"
+#include "../runtime/gc/xregion.h"
 #include "../runtime/gc/xcoro_gc.h"
 #include "../io/xio_runtime.h"  // xr_io_runtime_new / xr_io_runtime_free
 #include "xjit_hooks.h"
@@ -243,8 +243,8 @@ void xr_worker_destroy(XrWorker *worker) {
                                 ? worker->p.runtime->isolate->sys_heap
                                 : NULL;
 
-    // Flush Per-Worker Immix block cache L1 → L2 (per-isolate pool)
-    xr_immix_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
+    // Flush Per-Worker Region block cache L1 → L2 (per-isolate pool)
+    xr_region_flush_block_cache(gc_heap, worker->p.block_cache, &worker->p.block_cache_count);
 
     // Flush Per-Worker CoroGC free list L1 → L2 (per-isolate pool)
     xr_coro_gc_flush_pool(gc_heap, &worker->p.gc_free_list, &worker->p.gc_free_count);

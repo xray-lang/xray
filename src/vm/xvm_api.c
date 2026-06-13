@@ -322,7 +322,7 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     // Single authoritative ctx resolver.
     XrVMContext *ctx = xr_vm_current_ctx(isolate);
 
-    // Create module closure on current coroutine's Immix heap (if any).
+    // Create module closure on current coroutine's Region heap (if any).
     XrCoroutine *coro = (XrCoroutine *) ctx->current_coro;
     XrClosure *closure = xr_closure_new(isolate, proto, coro);
     if (closure == NULL) {

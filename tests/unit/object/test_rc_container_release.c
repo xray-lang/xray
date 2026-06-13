@@ -160,7 +160,7 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
     XrCoroGC *gc = test_gc();
     ASSERT_NOT_NULL(gc);
 
-    /* Fill several Immix blocks with freelistable blobs (256B → ~63 per 16KB
+    /* Fill several Region blocks with freelistable blobs (256B → ~63 per 16KB
      * block; 256 objects span ~4 blocks), then free every one. */
     enum {
         N = 256,
@@ -172,8 +172,8 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
         ASSERT_NOT_NULL(objs[i]);
     }
 
-    XrImmixStats before;
-    xr_immix_get_stats(&gc->immix, &before);
+    XrRegionStats before;
+    xr_region_get_stats(&gc->region, &before);
     ASSERT_TRUE(before.full_blocks >= 1);
 
     for (int i = 0; i < N; i++)
@@ -183,8 +183,8 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
      * reusable by ANY size class (bounds peak retention under shifting loads). */
     xr_coro_gc_reclaim_blocks(gc);
 
-    XrImmixStats after;
-    xr_immix_get_stats(&gc->immix, &after);
+    XrRegionStats after;
+    xr_region_get_stats(&gc->region, &after);
     ASSERT_TRUE(after.free_blocks > before.free_blocks);
     ASSERT_TRUE(after.full_blocks < before.full_blocks);
     /* Memory kept for reuse (not returned to OS), so total is unchanged. */
@@ -195,8 +195,8 @@ TEST(whole_block_reclaim_returns_empty_blocks) {
     size_t total_after = after.total_blocks;
     XrGCHeader *reuse = xr_coro_gc_newobj(gc, XR_TBLOB, 512);
     ASSERT_NOT_NULL(reuse);
-    XrImmixStats reused;
-    xr_immix_get_stats(&gc->immix, &reused);
+    XrRegionStats reused;
+    xr_region_get_stats(&gc->region, &reused);
     ASSERT_TRUE(reused.total_blocks <= total_after);
 
     teardown();
