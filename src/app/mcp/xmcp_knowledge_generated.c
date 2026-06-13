@@ -369,82 +369,47 @@ static const XmcpGeneratedStdlibSymbol _symbols_gc[] = {
     {
         .name = "collect",
         .signature = "(): int",
-        .summary = "Force full GC, return cycle count",
+        .summary = "Run cycle collection + whole-block reclaim, return cycle count",
     },
     {
         .name = "count",
         .signature = "(): float",
-        .summary = "Get memory usage in KB",
+        .summary = "Get live memory usage in KB",
     },
     {
         .name = "countb",
         .signature = "(): int",
-        .summary = "Get memory usage in bytes",
+        .summary = "Get live memory usage in bytes",
     },
     {
-        .name = "debt",
+        .name = "cycles",
         .signature = "(): int",
-        .summary = "Get current GC debt in bytes",
+        .summary = "Get number of cycle collections run",
     },
     {
         .name = "disable",
         .signature = "(): ()",
-        .summary = "Disable automatic GC",
+        .summary = "Pause the automatic cycle collector",
     },
     {
         .name = "enable",
         .signature = "(): ()",
-        .summary = "Enable automatic GC",
-    },
-    {
-        .name = "fragmentation",
-        .signature = "(): float",
-        .summary = "Get heap fragmentation ratio (0.0-1.0)",
-    },
-    {
-        .name = "gccount",
-        .signature = "(): int",
-        .summary = "Get completed GC cycle count",
+        .summary = "Resume the automatic cycle collector",
     },
     {
         .name = "info",
         .signature = "(): Map",
-        .summary = "Get detailed GC info as Map",
+        .summary = "Get RC-native GC info as Map",
     },
     {
         .name = "isrunning",
         .signature = "(): bool",
-        .summary = "Check if GC is enabled",
+        .summary = "Check if automatic cycle collection is enabled",
     },
     {
         .name = "objects",
         .signature = "(): int",
-        .summary = "Get total GC object count",
-    },
-    {
-        .name = "setpause",
-        .signature = "(pause: int): int",
-        .summary = "Set GC pause factor, return old value",
-    },
-    {
-        .name = "setstepmul",
-        .signature = "(mul: int): int",
-        .summary = "Set GC step multiplier, return old value",
-    },
-    {
-        .name = "state",
-        .signature = "(): string",
-        .summary = "Get current GC state name",
-    },
-    {
-        .name = "step",
-        .signature = "(): bool",
-        .summary = "Run one incremental GC step, return true if cycle completed",
-    },
-    {
-        .name = "timems",
-        .signature = "(): float",
-        .summary = "Get cumulative GC time in milliseconds",
+        .summary = "Get live GC object count",
     },
 };
 
@@ -3594,22 +3559,15 @@ XR_DATADEF const XmcpGeneratedStdlibEntry xmcp_generated_stdlib[] = {
             "\n"
             "| Symbol | Signature | Summary |\n"
             "|--|--|--|\n"
-            "| `gc.collect` | `(): int` | Force full GC, return cycle count |\n"
-            "| `gc.count` | `(): float` | Get memory usage in KB |\n"
-            "| `gc.countb` | `(): int` | Get memory usage in bytes |\n"
-            "| `gc.debt` | `(): int` | Get current GC debt in bytes |\n"
-            "| `gc.disable` | `(): ()` | Disable automatic GC |\n"
-            "| `gc.enable` | `(): ()` | Enable automatic GC |\n"
-            "| `gc.fragmentation` | `(): float` | Get heap fragmentation ratio (0.0-1.0) |\n"
-            "| `gc.gccount` | `(): int` | Get completed GC cycle count |\n"
-            "| `gc.info` | `(): Map` | Get detailed GC info as Map |\n"
-            "| `gc.isrunning` | `(): bool` | Check if GC is enabled |\n"
-            "| `gc.objects` | `(): int` | Get total GC object count |\n"
-            "| `gc.setpause` | `(pause: int): int` | Set GC pause factor, return old value |\n"
-            "| `gc.setstepmul` | `(mul: int): int` | Set GC step multiplier, return old value |\n"
-            "| `gc.state` | `(): string` | Get current GC state name |\n"
-            "| `gc.step` | `(): bool` | Run one incremental GC step, return true if cycle completed |\n"
-            "| `gc.timems` | `(): float` | Get cumulative GC time in milliseconds |\n"
+            "| `gc.collect` | `(): int` | Run cycle collection + whole-block reclaim, return cycle count |\n"
+            "| `gc.count` | `(): float` | Get live memory usage in KB |\n"
+            "| `gc.countb` | `(): int` | Get live memory usage in bytes |\n"
+            "| `gc.cycles` | `(): int` | Get number of cycle collections run |\n"
+            "| `gc.disable` | `(): ()` | Pause the automatic cycle collector |\n"
+            "| `gc.enable` | `(): ()` | Resume the automatic cycle collector |\n"
+            "| `gc.info` | `(): Map` | Get RC-native GC info as Map |\n"
+            "| `gc.isrunning` | `(): bool` | Check if automatic cycle collection is enabled |\n"
+            "| `gc.objects` | `(): int` | Get live GC object count |\n"
             "",
         .symbols = _symbols_gc,
         .symbol_count = (int)(sizeof(_symbols_gc) / sizeof(_symbols_gc[0])),
