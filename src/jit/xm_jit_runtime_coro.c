@@ -153,8 +153,17 @@ static XrJitResult jit_channel_method_deopt(XrCoroutine *coro, uint32_t deopt_id
 }
 
 XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
+    /* Immutable property of the bytecode -- compute once, then serve from the
+     * cached tri-state. Relaxed atomics: every thread derives the same value
+     * from the same immutable code array, so a benign recompute under a race
+     * is harmless and no ordering is required. */
+    uint8_t cached = atomic_load_explicit(&proto->exc_control_state, memory_order_relaxed);
+    if (cached != 0)
+        return cached == 2;
+
+    bool has = false;
     const XrInstruction *code = (const XrInstruction *) proto->code.data;
-    for (int i = 0; i < proto->code.count; i++) {
+    for (int i = 0; i < proto->code.count && !has; i++) {
         switch (GET_OPCODE(code[i])) {
             case OP_TRY:
             case OP_CATCH:
@@ -178,12 +187,15 @@ XR_FUNC bool xm_proto_has_exception_control(const XrProto *proto) {
             case OP_SCOPE_EXIT:
             case OP_SLEEP:
             case OP_SELECT_BLOCK:
-                return true;
+                has = true;
+                break;
             default:
-                continue;
+                break;
         }
     }
-    return false;
+    atomic_store_explicit((_Atomic uint8_t *) &proto->exc_control_state, (uint8_t) (has ? 2 : 1),
+                          memory_order_relaxed);
+    return has;
 }
 
 // Called from JIT via CALL_C for OP_CHAN_NEW / OP_CHAN_NEW_CAP.

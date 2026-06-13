@@ -261,6 +261,15 @@ typedef struct XrProto {
     bool is_coro_safe;  // safe to call in coroutine
 
     /*
+     * Cached result of xm_proto_has_exception_control(): an immutable property
+     * of the bytecode (presence of try/throw/yield/await/channel-timeout/...).
+     * The CALL dispatch consults it per call to gate the JIT fast path, so
+     * rescanning the whole code array every time was a measurable hot spot in
+     * channel-dense workloads. Tri-state: 0=unknown (zero-init), 1=no, 2=yes.
+     */
+    _Atomic uint8_t exc_control_state;
+
+    /*
      * JIT/AOT metadata: type information preserved from compile-time analysis.
      *
      * WHY THIS DESIGN:

@@ -434,9 +434,10 @@ op_call_closure:
                     }
                 }
             }
-            bool _jit_fast_ok = !xm_proto_has_exception_control(proto);
-            // JIT fast path: call compiled code directly
-            if (_jit_fast_ok && proto->jit_entry) {
+            // JIT fast path: call compiled code directly. The (cached)
+            // exception-control probe is consulted only when a JIT entry or an
+            // active JIT exists, so a --no-jit interpreter run never pays for it.
+            if (proto->jit_entry && !xm_proto_has_exception_control(proto)) {
                 XrValue jit_result;
                 XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
                 xr_coro_jit_state(_jit_coro)->scratch->call_proto = proto;
@@ -500,7 +501,7 @@ op_call_closure:
             }
 
             // Hot function detection: try JIT compilation
-            if (_jit_fast_ok && isolate->vm.jit && !proto->jit_entry &&
+            if (isolate->vm.jit && !proto->jit_entry && !xm_proto_has_exception_control(proto) &&
                 atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1 ==
                     (uint32_t) isolate->vm.jit_threshold) {
                 xm_jit_try_compile(isolate->vm.jit, proto);
@@ -743,9 +744,10 @@ vmcase(OP_CALLSELF) {
 #ifdef XRAY_HAS_JIT
     {
         XrProto *proto = closure->proto;
-        bool _jit_fast_ok = !xm_proto_has_exception_control(proto);
-        // JIT fast path: call compiled code directly
-        if (_jit_fast_ok && proto->jit_entry) {
+        // JIT fast path: call compiled code directly. The (cached)
+        // exception-control probe is consulted only when a JIT entry or an
+        // active JIT exists, so a --no-jit interpreter run never pays for it.
+        if (proto->jit_entry && !xm_proto_has_exception_control(proto)) {
             XrValue jit_result;
             XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
             xr_coro_jit_state(_jit_coro)->scratch->call_proto = proto;
@@ -803,7 +805,7 @@ vmcase(OP_CALLSELF) {
         }
 
         // Hot function detection: try JIT compilation
-        if (_jit_fast_ok && isolate->vm.jit && !proto->jit_entry &&
+        if (isolate->vm.jit && !proto->jit_entry && !xm_proto_has_exception_control(proto) &&
             atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1 ==
                 (uint32_t) isolate->vm.jit_threshold) {
             xm_jit_try_compile(isolate->vm.jit, proto);
