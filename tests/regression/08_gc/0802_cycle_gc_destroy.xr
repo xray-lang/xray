@@ -149,3 +149,27 @@ fn test_many_collect_rounds() {
     }
     assert(true)
 }
+
+// ===== 6. Deep cycle does not overflow the C stack =====
+
+// Build a long chain closed into one big cycle, then drop all external
+// handles so the whole chain is dead-cycle garbage. The previous collector
+// recursed once per GC edge and would overflow the C stack at this depth;
+// the iterative (BFS work-array) collector walks it without recursion.
+fn build_deep_cycle(n: int) {
+    let head = new Node("head")
+    let cur = head
+    for (i in 0..n) {
+        let m = new Node("n")
+        cur.next = m
+        cur = m
+    }
+    cur.next = head // close the cycle; locals dropped at return → garbage
+}
+
+@test
+fn test_deep_cycle_no_stack_overflow() {
+    build_deep_cycle(50000)
+    gc.collect() // must not overflow the stack
+    assert(true)
+}
