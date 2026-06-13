@@ -2368,8 +2368,13 @@ TEST(cgen_runtime_managed_types_skip_arc) {
 
     task_type.instance.class_name = "Task";
 
+    /* Only Task/Coroutine are runtime-managed (executor-owned): the compiler
+     * skips ARC for them. Channel is pure cross-coroutine shared DATA with no
+     * executor owner, so it uses the atomic shared-RC like a string — the
+     * compiler DOES track it (last drop frees), which is what stops channels
+     * created and discarded in a loop from leaking. */
     assert(!xi_own_type_is_rc(&task_type) && "Task is owned by the coroutine runtime");
-    assert(!xi_own_type_is_rc(&channel_type) && "Channel is owned by the coroutine runtime");
+    assert(xi_own_type_is_rc(&channel_type) && "Channel is atomic shared-RC, compiler-tracked");
     assert(xi_own_type_is_rc(&string_type) && "String remains compiler ARC managed");
 }
 

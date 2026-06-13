@@ -222,23 +222,22 @@ static inline bool xr_type_is_named_class(const XrType *t, const char *name) {
 }
 
 /* Whether a type denotes a runtime-managed object whose lifetime belongs to
- * the runtime/scheduler (and the atomic shared-RC in xshared.h), NOT the
- * compiler's per-coroutine RC. The compiler (xi_arc / xi_own) must not insert
- * dup/drop for such values: they are reachable across coroutines and held by
- * the executor, so an IR-local drop could free an object still in use.
+ * the runtime/scheduler, NOT the compiler's per-coroutine RC. The compiler
+ * (xi_arc / xi_own) must not insert dup/drop for such values: they are held by
+ * the executor past the code handle's death, so an IR-local drop could free an
+ * object still in use.
  *
- * Statically identifiable in the type system: Channel (own kind) plus native
- * Task, Coroutine, and Atomic classes. The XR_OBJ_MANAGED object-header
- * backstop still protects runtime values whose static type was erased or
- * unknown. */
+ * Only Task and Coroutine qualify: the scheduler owns them. Channel, Atomic,
+ * WorkQueue, and ResultGroup are pure cross-coroutine shared DATA with no
+ * executor owner, so they use the atomic shared-RC exactly like `shared const`
+ * — the compiler DOES track them (dup = atomic incref, last drop frees). Timer
+ * channels keep a per-instance XR_OBJ_MANAGED backstop (the timer wheel owns
+ * the embedded node asynchronously), so the runtime dup/drop primitives no-op
+ * them even though the compiler emits the ops. */
 static inline bool xr_type_is_runtime_managed(const XrType *t) {
     if (!t)
         return false;
-    if (t->kind == XR_KIND_CHANNEL)
-        return true;
     if (xr_type_is_named_class(t, "Task") || xr_type_is_named_class(t, "Coroutine"))
-        return true;
-    if (xr_type_is_named_class(t, "Atomic"))
         return true;
     return false;
 }

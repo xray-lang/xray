@@ -705,11 +705,12 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
     if (!ch)
         return NULL;
 
-    // Set initial refcount to 1
+    // Atomic shared-RC, one owning reference for the creating handle. A channel
+    // is pure cross-coroutine shared data (no executor owner), so the compiler
+    // tracks it like `shared const`: dup = atomic incref, the last drop frees.
+    // NOT XR_OBJ_MANAGED — that backstop is only for the timer-channel variant,
+    // whose embedded node the timer wheel owns asynchronously.
     xr_shared_set_refc(&ch->gc_header, 1);
-    // Runtime-managed: lifetime owned by the shared atomic-RC, not the
-    // compiler's per-coroutine RC. dup/drop become no-ops. See docs/design/706.
-    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // xr_sysheap_alloc_shared already memset(0) the entire allocation.
     // All fields default to 0/NULL/false which is correct for:
@@ -790,7 +791,12 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
 
     // Set initial refcount to 1
     xr_shared_set_refc(&ch->gc_header, 1);
-    // Runtime-managed: see xr_channel_new. dup/drop become no-ops.
+    // Timer channels are the one MANAGED channel variant: the timer wheel owns
+    // the embedded tw_timer node asynchronously (fire callback holds `ch`), so
+    // the node can outlive every code handle. The MANAGED backstop makes the
+    // compiler-inserted dup/drop no-ops, keeping the channel alive until the
+    // wheel is done with it (freed at isolate teardown). Regular channels in
+    // xr_channel_new use the plain atomic shared-RC and are freed at last drop.
     XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // Inline single-element buffer

@@ -357,8 +357,9 @@ XrResultGroup *xr_result_group_new(XrayIsolate *X, uint32_t batch_size) {
     if (!g)
         return NULL;
 
+    /* Atomic shared-RC like `shared const`: the compiler tracks the handle and
+     * the last drop frees. NOT XR_OBJ_MANAGED (that no-ops drop -> leak). */
     xr_shared_set_refc(&g->gc, 1);
-    XR_OBJ_SET_FLAG(&g->gc, XR_OBJ_MANAGED);
     xr_amutex_init(&g->lock);
     atomic_store_explicit(&g->length, 0, memory_order_relaxed);
     atomic_store_explicit(&g->pending_count, 0, memory_order_relaxed);

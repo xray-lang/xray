@@ -193,12 +193,15 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_IS_MANAGED(o) XR_OBJ_GET_FLAG(o, XR_OBJ_MANAGED)
 
 /* Whether an object TYPE is runtime-managed: its lifetime belongs to the
- * runtime/scheduler (cross-coroutine reachable, held by the executor or the
- * atomic shared-RC), not the compiler's per-coroutine RC. The compiler must
- * not insert dup/drop for such objects. */
+ * scheduler/executor, not the compiler's per-coroutine RC. Only Coroutine,
+ * Task, and CoroPool qualify (the executor holds them past the code handle's
+ * death). Channel, Atomic, WorkQueue, and ResultGroup are pure shared DATA and
+ * use the atomic shared-RC like `shared const` (compiler-tracked, last drop
+ * frees). The authoritative per-instance signal is the XR_OBJ_MANAGED flag,
+ * set only on Coroutine/Task and on the timer-channel variant (whose embedded
+ * node the timer wheel owns asynchronously). */
 static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
-    return t == XR_TCHANNEL || t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL ||
-           t == XR_TATOMIC || t == XR_TWORKQUEUE || t == XR_TRESULTGROUP;
+    return t == XR_TCOROUTINE || t == XR_TTASK || t == XR_TCOROPOOL;
 }
 
 /* ========== Signed RC Encoding ==========

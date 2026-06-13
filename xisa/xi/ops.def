@@ -931,6 +931,11 @@
   :result-ownership none
   :tbaa-group chan
   :escape-use global
+  ;; arg0 = channel (borrowed receiver), arg1 = value (consumed into the buffer).
+  ;; The channel must NOT be consumed: send neither owns nor releases it, so a
+  ;; consuming use would atomic-incref the channel handle without a matching
+  ;; release and leak it (channels are now plain atomic shared-RC objects).
+  :own-use stored-value
   :effects (side-effect may-suspend memory-write)
   :requires ()
   :observable ()
@@ -941,6 +946,9 @@
   :class coroutine
   :arity 1
   :tbaa-group chan
+  ;; arg0 = channel (borrowed): recv reads from it and returns a fresh result;
+  ;; it neither owns nor releases the channel handle.
+  :own-use borrow
   :effects (side-effect may-suspend memory-read)
   :requires ()
   :observable ()
@@ -964,6 +972,8 @@
   :result-ownership none
   :tbaa-group chan
   :escape-use global
+  ;; arg0 = channel (borrowed receiver), arg1 = value (consumed). See xi.chan.send.
+  :own-use stored-value
   :effects (side-effect memory-write)
   :requires ()
   :observable ()
@@ -974,6 +984,8 @@
   :class coroutine
   :arity 1
   :tbaa-group chan
+  ;; arg0 = channel (borrowed): see xi.chan.recv.
+  :own-use borrow
   :effects (side-effect memory-read)
   :requires ()
   :observable ()
@@ -984,6 +996,7 @@
   :class coroutine
   :arity 1
   :tbaa-group chan
+  ;; arg0 = channel (borrowed): a pure read of channel state.
   :own-use borrow
   :effects (side-effect memory-read)
   :requires ()
@@ -1006,6 +1019,9 @@
   :class coroutine
   :arity variadic
   :tbaa-group chan
+  ;; All operands are channels (and a timeout) read by the select; none are
+  ;; consumed. Consuming them would leak the channel handles (atomic shared-RC).
+  :own-use borrow
   :effects (side-effect may-suspend memory-read)
   :requires ()
   :observable ()
