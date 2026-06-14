@@ -90,7 +90,7 @@
     X(ITER_VALID, "xi.iter.valid", xi2xm_reject_unsupported) \
     X(GO, "xi.go", xi2xm_reject_unsupported) \
     X(AWAIT, "xi.await", xi2xm_reject_unsupported) \
-    X(CHAN_SEND, "xi.chan.send", xi2xm_reject_unsupported) \
+    X(CHAN_SEND, "xi.chan.send", xi2xm_chan_send) \
     X(CHAN_RECV, "xi.chan.recv", xi2xm_reject_unsupported) \
     X(CHAN_RECV_STATUS, "xi.chan.recv.status", xi2xm_reject_unsupported) \
     X(CHAN_TRY_SEND, "xi.chan.try.send", xi2xm_reject_unsupported) \

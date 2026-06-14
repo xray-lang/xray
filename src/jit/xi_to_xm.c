@@ -1505,6 +1505,32 @@ static XmRef xi2xm_chan_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_chan_new(ctx, blk, v);
 }
 
+/* Direct `ch.send(x)` op (XI_CHAN_SEND: args[0]=channel, args[1]=value).
+ * Routes through the same suspend-bridged helper pair the XI_CALL_METHOD
+ * channel path uses, so send shares one runtime contract across both forms. */
+static XmRef xi2xm_chan_send(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (v->nargs < 2 || !v->args[0] || !v->args[1]) {
+        ctx->error = true;
+        ctx->error_op = v->op;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef call_args[2];
+    call_args[0] = get_ref(ctx, v->args[0]); /* channel (receiver) */
+    call_args[1] = get_ref(ctx, v->args[1]); /* send value */
+    int bc_pc = slot_map_bc_pc(ctx, v->id);
+    uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
+    if (did == 0xFFFF) {
+        ctx->error = true;
+        ctx->error_op = v->op;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef extra = xm_const_i64(ctx->xm_func, (int64_t) did);
+    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_send,
+                                             XM_HELPER_chan_method_send_block, extra, call_args, 2);
+    set_result_slot_metadata(ctx, v->id, result);
+    return result;
+}
+
 static XmRef xi2xm_err_check(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XmRef zero = xm_const_i64(ctx->xm_func, 0);
     XmRef tag = emit_helper_call(ctx, blk, XM_HELPER_pending_error_tag, zero, NULL, 0);
