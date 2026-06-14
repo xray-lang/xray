@@ -404,6 +404,21 @@ XR_FUNC void xi_emit_time_after(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABC(OP_TIME_AFTER, dst, timeout, 0));
 }
 
+/* Dispose a select-owned timer channel (emitted at the select merge for the
+ * `after` case). Releases the channel the compiler cannot drop across the
+ * select.block suspend. R[A] = timer channel. See design/885. */
+XR_FUNC void xi_emit_chan_timer_dispose(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+    (void) dst;
+    if (v->nargs < 1) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
+    uint8_t chan = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_CHAN_TIMER_DISPOSE, chan, 0, 0));
+}
+
 /* Blocking select wait. Channel operands are copied into a contiguous
  * register window because OP_SELECT_BLOCK uses base/count encoding. */
 XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, uint8_t dst) {

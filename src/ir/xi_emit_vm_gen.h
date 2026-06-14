@@ -108,6 +108,7 @@
     X(CHAN_TRY_RECV, xi_emit_chan_try_recv) \
     X(CHAN_IS_CLOSED, xi_emit_chan_is_closed) \
     X(TIME_AFTER, xi_emit_time_after) \
+    X(CHAN_TIMER_DISPOSE, xi_emit_chan_timer_dispose) \
     X(SELECT_BLOCK, xi_emit_select_block) \
     X(YIELD, xi_emit_yield) \
     X(CORO_OP, xi_emit_coro_op) \

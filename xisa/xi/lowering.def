@@ -677,6 +677,12 @@
   :vm-bytecode (driver xi_emit_time_after)
   :jit-xm (reject xi2xm_reject_unsupported))
 
+(lower xi.chan.timer.dispose
+  :match ()
+  :required-targets (vm-bytecode jit-xm)
+  :vm-bytecode (driver xi_emit_chan_timer_dispose)
+  :jit-xm (reject xi2xm_reject_unsupported))
+
 (lower xi.select.block
   :match ()
   :required-targets (vm-bytecode jit-xm)

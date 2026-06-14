@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 int main(void) {
-    assert(XI_LOWERING_ENTRY_COUNT == 123);
+    assert(XI_LOWERING_ENTRY_COUNT == 124);
     assert(xi_lowering_generated_targets(XI_CONST) == (XI_LOWER_TARGET_AOT_C | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CONST) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_AOT_C));
     assert(xi_lowering_rejected_targets(XI_CONST) == (0));
@@ -609,6 +609,12 @@ int main(void) {
     assert(xi_emit_vm_requires_fresh_dst(XI_TIME_AFTER) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_TIME_AFTER) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_TIME_AFTER) == false);
+    assert(xi_lowering_generated_targets(XI_CHAN_TIMER_DISPOSE) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
+    assert(xi_lowering_required_targets(XI_CHAN_TIMER_DISPOSE) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
+    assert(xi_lowering_rejected_targets(XI_CHAN_TIMER_DISPOSE) == (XI_LOWER_TARGET_JIT_XM));
+    assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_TIMER_DISPOSE) == false);
+    assert(xi_emit_vm_uses_raw_cell_args(XI_CHAN_TIMER_DISPOSE) == false);
+    assert(xi_emit_vm_handles_cell_dst(XI_CHAN_TIMER_DISPOSE) == false);
     assert(xi_lowering_generated_targets(XI_SELECT_BLOCK) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_SELECT_BLOCK) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
     assert(xi_lowering_rejected_targets(XI_SELECT_BLOCK) == (XI_LOWER_TARGET_JIT_XM));

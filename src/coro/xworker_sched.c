@@ -231,6 +231,10 @@ void worker_drain_inbox(XrWorker *worker) {
             if (sw) {
                 xr_worker_unblock_select(worker, list);
                 xr_select_wait_cancel(sw);
+                // DONE while blocked in select: the bytecode dispose never ran,
+                // so release the `after` timer channel here. See design/885.
+                if (sw->timer_channel)
+                    xr_channel_timer_dispose((XrChannel *) sw->timer_channel);
                 xr_coro_clear_select_wait(list);
                 if (list->ext && list->ext->wait_bucket &&
                     list->ext->wait_bucket_owner == worker->p.id) {
