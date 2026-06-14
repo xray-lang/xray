@@ -644,13 +644,13 @@
   :match ()
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_chan_recv :fresh-dst yes)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (driver xi2xm_chan_recv))
 
 (lower xi.chan.recv.status
   :match ()
   :required-targets (vm-bytecode jit-xm aot-c)
   :vm-bytecode (driver xi_emit_chan_recv_status)
-  :jit-xm (reject xi2xm_reject_unsupported)
+  :jit-xm (driver xi2xm_chan_recv_status)
   :aot-c (driver xicgen_chan_recv_status))
 
 (lower xi.chan.try.send

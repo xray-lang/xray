@@ -561,6 +561,21 @@ XrJitResult xr_jit_chan_method_recv_wrap(XrCoroutine *coro, int64_t extra_arg) {
     return XR_JIT_VAL(jit_recv_value(coro->isolate, value));
 }
 
+// Project the fused `match (ch.recv())` readiness bit as a raw 0/1 (I64 rep,
+// matching the AOT xr_aot_recv_is_value contract): 1 when the paired
+// chan_method_recv delivered a value, 0 on channel close. Reads the status the
+// recv helper parked in scratch; the lowering passes the recv value as an
+// ordering arg so this never runs before its recv.
+XrJitResult xr_jit_chan_method_recv_is_value(XrCoroutine *coro, int64_t extra_arg) {
+    JIT_CORO_HELPER(coro);
+    (void) extra_arg;
+    if (!coro || !coro->isolate)
+        return XR_JIT_INT(0);
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    int64_t status = scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT];
+    return XR_JIT_INT(status == XR_JIT_CHAN_METHOD_RECV_VALUE ? 1 : 0);
+}
+
 /* ========== Blocking Channel Send/Recv (JIT CPS) ========== */
 
 // Fast path for OP_CHAN_SEND: try non-blocking send.
