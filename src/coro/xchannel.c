@@ -737,8 +737,11 @@ XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size) {
 // Fires once when the timeout elapses, writes current time to the channel
 // buffer so that any subsequent recv/tryRecv finds data immediately.
 // If a receiver is already blocked on this channel, wake it directly.
-static void timer_channel_fire_cb(void *arg) {
-    XrChannel *ch = (XrChannel *) arg;
+// Deliver the timer value into the channel: hand it to a blocked receiver, or
+// leave it in the buffer for a later recv. No refcount side effects — shared by
+// the inline-elapsed arm path and the wheel fire callback. Idempotent via the
+// timer_fired latch.
+static void timer_channel_deliver(XrChannel *ch) {
     /* Timer wheel callbacks may, in principle, fire after the channel
      * scheduling slot has been drained on a different worker; tolerate
      * the missing pointer instead of asserting. */
@@ -775,6 +778,20 @@ static void timer_channel_fire_cb(void *arg) {
     }
 }
 
+// Timer wheel fire callback for an ARMED timer channel. Delivers the value,
+// then releases the wheel's counted reference taken in xr_channel_timer_arm.
+// Only queued timers reach here; the inline-elapsed arm path calls
+// timer_channel_deliver directly and never takes the wheel reference. See
+// design/885 for the wheel-ref / select-handle-ref accounting.
+static void timer_channel_fire_cb(void *arg) {
+    XrChannel *ch = (XrChannel *) arg;
+    if (!ch)
+        return;
+    timer_channel_deliver(ch);
+    if (xr_obj_drop_is_last(&ch->gc_header))
+        xr_shared_destroy(&ch->gc_header);
+}
+
 // Create Timer Channel
 // Returns a read-only channel that sends current time after timeout.
 // Uses the channel's embedded tw_timer for timer wheel registration.
@@ -789,15 +806,16 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     if (!ch)
         return NULL;
 
-    // Set initial refcount to 1
+    // Atomic shared-RC, NOT XR_OBJ_MANAGED. refc=1 is the select handle
+    // reference: the select that created this timer channel via OP_TIME_AFTER
+    // owns it and drops it on completion (xr_channel_timer_dispose). The
+    // compiler never dup/drops it (xi.time.after result-ownership = borrowed),
+    // so select is the sole handle manager. The timer wheel takes its own
+    // counted reference in xr_channel_timer_arm (incref on queue, decref on
+    // fire/cancel), so the embedded tw_timer node the wheel holds asynchronously
+    // can never outlive a freed channel. The last drop routes through
+    // xr_shared_destroy. See design/885.
     xr_shared_set_refc(&ch->gc_header, 1);
-    // Timer channels are the one MANAGED channel variant: the timer wheel owns
-    // the embedded tw_timer node asynchronously (fire callback holds `ch`), so
-    // the node can outlive every code handle. The MANAGED backstop makes the
-    // compiler-inserted dup/drop no-ops, keeping the channel alive until the
-    // wheel is done with it (freed at isolate teardown). Regular channels in
-    // xr_channel_new use the plain atomic shared-RC and are freed at last drop.
-    XR_OBJ_SET_FLAG(&ch->gc_header, XR_OBJ_MANAGED);
 
     // Inline single-element buffer
     ch->buffer = (XrValue *) (ch + 1);
@@ -829,6 +847,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->tw_timer.next = NULL;
     atomic_init(&ch->tw_timer.cancel_next, NULL);
     ch->tw_timer.slot = XR_TW_SLOT_INACTIVE;
+    ch->tw_timer.owner_worker_id = -1;  // set on arm; dispose only reads it when armed
     atomic_init(&ch->tw_timer.state, XR_TIMER_STATE_ACTIVE);
 
     ch->elem_tid = 0;
@@ -853,11 +872,64 @@ void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw) {
     int64_t timeout_pos = ch->timer_start_ticks + ch->timer_timeout_ms;
     int64_t now = xr_monotonic_ticks();
     if (now >= timeout_pos) {
-        // Already elapsed: fire callback inline (avoids round-trip via wheel)
-        timer_channel_fire_cb(ch);
+        // Already elapsed: deliver inline (avoids round-trip via wheel). No wheel
+        // reference is taken — the node is never queued.
+        timer_channel_deliver(ch);
         return;
     }
-    xr_twheel_set_timer(tw, &ch->tw_timer, timer_channel_fire_cb, ch, timeout_pos);
+    // Take the wheel's counted reference before queuing the node; it is released
+    // on fire (timer_channel_fire_cb) or on cancel (xr_channel_timer_dispose).
+    // This keeps the channel alive while the wheel holds the embedded tw_timer.
+    xr_shared_incref(&ch->gc_header);
+    if (!xr_twheel_set_timer(tw, &ch->tw_timer, timer_channel_fire_cb, ch, timeout_pos)) {
+        // Could not queue (e.g. zombie reuse race): deliver inline so the select
+        // timeout still resolves, then release the wheel reference we took.
+        timer_channel_deliver(ch);
+        if (xr_obj_drop_is_last(&ch->gc_header))
+            xr_shared_destroy(&ch->gc_header);
+    }
+}
+
+// Release the select-owned timer channel created by OP_TIME_AFTER, called by the
+// select machinery on every select resolution path. Drops the select handle
+// reference (the drop the compiler omits across the select.block suspend). If
+// the timer is still armed and we are on its owner worker, cancels it first so
+// the channel frees promptly instead of lingering until the timeout elapses.
+//
+// Race-freedom: the timer wheel is owner-private — fire (timer_channel_fire_cb,
+// from xr_bump_timers) and cancel (xr_twheel_cancel_timer) both run only on the
+// owner worker and never overlap select-completion dispatch on that same worker.
+// So when we observe !timer_fired on the owner thread the node is still queued
+// and the cancel removes it, letting us release the wheel reference exactly once.
+// A timer that already fired released its wheel reference in the fire callback;
+// a cross-worker dispose skips the cancel and lets the eventual fire release it
+// (bounded residency until the timeout, never a leak or UAF). See design/885.
+void xr_channel_timer_dispose(XrChannel *ch) {
+    if (!ch || !atomic_load_explicit(&ch->is_timer, memory_order_relaxed))
+        return;
+
+    // Account this timer channel as cleaned up (mirrors channel_create_count in
+    // xr_channel_new_timer) so the teardown leak check is not tripped by timer
+    // channels, which are disposed rather than close()d. Called once per channel.
+    if (ch->isolate && xr_isolate_get_sys_heap(ch->isolate)) {
+        atomic_fetch_add(&xr_isolate_get_sys_heap(ch->isolate)->stats.channel_close_count, 1);
+    }
+
+    XrWorker *worker = xr_current_worker();
+    if (worker && worker->p.timer_wheel && worker->p.id == ch->tw_timer.owner_worker_id &&
+        !atomic_load_explicit(&ch->timer_fired, memory_order_acquire)) {
+        // Owner thread, not fired: the node is still queued. Cancel removes it
+        // and we release the wheel reference (refc drops but is never the last
+        // drop here — the select handle reference below still holds one).
+        xr_twheel_cancel_timer(worker->p.timer_wheel, &ch->tw_timer);
+        if (xr_obj_drop_is_last(&ch->gc_header))
+            xr_shared_destroy(&ch->gc_header);
+    }
+
+    // Drop the select handle reference. Frees the channel once the wheel is also
+    // done with it (fire/cancel released the wheel reference).
+    if (xr_obj_drop_is_last(&ch->gc_header))
+        xr_shared_destroy(&ch->gc_header);
 }
 
 // Check if Timer Channel has fired (thin atomic check, no polling).

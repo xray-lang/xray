@@ -946,6 +946,10 @@ static bool coro_cancel_detach_select_waiter(XrCoroutine *coro, XrWorker *curren
     if (current_worker && current_worker->p.id == owner_id) {
         xr_worker_unblock_select(current_worker, coro);
         xr_select_wait_cancel(sw);
+        // Cancelled while blocked in select: the bytecode dispose at the select
+        // merge never runs, so release the `after` timer channel here. See design/885.
+        if (sw->timer_channel)
+            xr_channel_timer_dispose((XrChannel *) sw->timer_channel);
         xr_coro_clear_select_wait(coro);
         return true;
     }

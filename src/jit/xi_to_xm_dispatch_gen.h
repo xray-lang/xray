@@ -97,6 +97,7 @@
     X(CHAN_TRY_RECV, "xi.chan.try.recv", xi2xm_reject_unsupported) \
     X(CHAN_IS_CLOSED, "xi.chan.is.closed", xi2xm_reject_unsupported) \
     X(TIME_AFTER, "xi.time.after", xi2xm_reject_unsupported) \
+    X(CHAN_TIMER_DISPOSE, "xi.chan.timer.dispose", xi2xm_reject_unsupported) \
     X(SELECT_BLOCK, "xi.select.block", xi2xm_reject_unsupported) \
     X(YIELD, "xi.yield", xi2xm_reject_unsupported) \
     X(CHAN_NEW, "xi.chan.new", xi2xm_chan_new) \

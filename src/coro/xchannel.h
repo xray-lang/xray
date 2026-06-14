@@ -303,6 +303,9 @@ XR_FUNC void xr_channel_record_ready_wake_retarget_metric(struct XrRuntime *runt
 XR_FUNC XrChannel *xr_channel_new(struct XrayIsolate *X, uint32_t buffer_size);
 XR_FUNC XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms);
 XR_FUNC void xr_channel_timer_arm(XrChannel *ch, XrTimerWheel *tw);
+// Release a select-owned timer channel (drops the select handle reference, and
+// cancels the still-armed wheel timer when on its owner worker). See design/885.
+XR_FUNC void xr_channel_timer_dispose(XrChannel *ch);
 XR_FUNC bool xr_channel_timer_ready(XrChannel *ch);
 XR_FUNC void xr_channel_destroy(XrChannel *ch);
 XR_FUNC bool xr_channel_try_send(XrChannel *ch, XrValue value);

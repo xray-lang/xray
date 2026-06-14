@@ -1007,9 +1007,31 @@
 (define-xi-op xi.time.after
   :class coroutine
   :arity 1
+  ;; The timer channel is owned by the select that created it (runtime-managed
+  ;; lifetime: armed on the timer wheel, freed by select on completion), not by
+  ;; the compiler's per-coroutine RC. Mark the result borrowed so ARC inserts
+  ;; neither a death-drop (it would race the wheel) nor a dup; select is the sole
+  ;; reference manager. See design/885.
+  :result-ownership borrowed
   :tbaa-group chan
   :own-use borrow
   :effects (side-effect memory-write allocates)
+  :requires ()
+  :observable ()
+  :targets (vm-bytecode jit-xm aot-verify)
+  :jit-policy catch-up)
+
+(define-xi-op xi.chan.timer.dispose
+  :class coroutine
+  :arity 1
+  :result-kind void
+  :result-ownership none
+  :tbaa-group chan
+  ;; Borrows the timer channel and drops the select handle reference explicitly
+  ;; (the drop the compiler omits across the select.block suspend). Emitted at the
+  ;; select merge for the `after` case. See design/885.
+  :own-use borrow
+  :effects (side-effect memory-write)
   :requires ()
   :observable ()
   :targets (vm-bytecode jit-xm aot-verify)

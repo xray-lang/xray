@@ -257,6 +257,51 @@ static void lower_select_recv_ready_branch(XiLower *l, XiValue *recv_status, XiV
         xi_block_set_if(l->cur_block, ready, body_blk, next_blk);
 }
 
+/* Emit the explicit dispose of the `after` timer channel at the select merge.
+ * The timer value dominates merge; this performs the drop the compiler omits
+ * across the select.block suspend. See design/885. */
+static void lower_select_emit_timer_dispose(XiLower *l, XiValue *timer_chan_val, int line) {
+    if (!timer_chan_val || !l->cur_block)
+        return;
+    XiValue *dispose = xi_value_new(l->func, l->cur_block, XI_CHAN_TIMER_DISPOSE, l->type_unit, 1);
+    if (dispose) {
+        dispose->args[0] = timer_chan_val;
+        dispose->flags |= XI_FLAG_SIDE_EFFECT;
+        dispose->line = (uint32_t) line;
+    }
+}
+
+/* After the case loop: park the select (SELECT_BLOCK over the collected
+ * channels, or YIELD for a send-only select with no timeout) and wire the
+ * back-edge to try_head, or fall through to merge for a default select. */
+static void lower_select_park(XiLower *l, bool has_default, bool has_send, bool has_timeout,
+                              XiValue **block_channels, int block_channel_count, XiBlock *try_head,
+                              XiBlock *merge, int line) {
+    if (!l->cur_block || l->cur_block == merge)
+        return;
+    if (has_default) {
+        xi_block_set_jump(l->cur_block, merge);
+        return;
+    }
+    if ((!has_send || has_timeout) && block_channel_count > 0) {
+        XiValue *block = xi_value_new(l->func, l->cur_block, XI_SELECT_BLOCK, l->type_unit,
+                                      (uint16_t) block_channel_count);
+        if (block) {
+            block->aux_int = block_channel_count;
+            block->line = (uint32_t) line;
+            for (int i = 0; i < block_channel_count; i++)
+                block->args[i] = block_channels[i];
+        }
+    } else {
+        XiValue *yield = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
+        if (yield) {
+            yield->flags |= XI_FLAG_SIDE_EFFECT;
+            yield->line = (uint32_t) line;
+        }
+    }
+    xi_block_set_jump(l->cur_block, try_head ? try_head : merge);
+}
+
 XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     SelectStmtNode *sel = &node->as.select_stmt;
     int n = sel->case_count;
@@ -272,6 +317,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     XiValue *case_send_values[32] = {0};
     XiValue *block_channels[32];
     int block_channel_count = 0;
+    XiValue *timer_chan_val = NULL;  // `after` timer channel; disposed at merge (design/885)
     for (int i = 0; i < max_cases; i++) {
         SelectCaseNode *sc = &sel->cases[i]->as.select_case;
         if (sc->is_default)
@@ -290,6 +336,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
                 continue;
             if (sc->is_timeout) {
                 case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
+                timer_chan_val = case_channels[i];
                 continue;
             }
             case_channels[i] = xi_lower_expr(l, sc->channel);
@@ -306,11 +353,25 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
         l->cur_block = try_head;
     }
 
+    // Create the `after` timer up front (non-blocking selects skip the pre-pass)
+    // so every case body can dispose it before any non-local exit. See design/885.
+    if (!timer_chan_val) {
+        for (int i = 0; i < max_cases; i++) {
+            SelectCaseNode *sc = &sel->cases[i]->as.select_case;
+            if (sc->is_timeout) {
+                case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
+                timer_chan_val = case_channels[i];
+                break;
+            }
+        }
+    }
+
     for (int i = 0; i < max_cases; i++) {
         AstNode *case_node = sel->cases[i];
         SelectCaseNode *sc = &case_node->as.select_case;
 
         if (sc->is_default) {
+            lower_select_emit_timer_dispose(l, timer_chan_val, node->line);
             xi_lower_stmt(l, sc->body);
             if (l->cur_block)
                 xi_block_set_jump(l->cur_block, merge);
@@ -364,6 +425,7 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             xi_lower_braun_seal(l, next_blk);
 
             l->cur_block = body_blk;
+            lower_select_emit_timer_dispose(l, timer_chan_val, node->line);
             xi_lower_stmt(l, sc->body);
             if (l->cur_block)
                 xi_block_set_jump(l->cur_block, merge);
@@ -372,33 +434,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
         }
     }
 
-    if (l->cur_block && l->cur_block != merge) {
-        if (!has_default_case) {
-            if ((!has_send_case || has_timeout_case) && block_channel_count > 0) {
-                XiValue *block = xi_value_new(l->func, l->cur_block, XI_SELECT_BLOCK, l->type_unit,
-                                              (uint16_t) block_channel_count);
-                if (block) {
-                    block->aux_int = block_channel_count;
-                    block->line = (uint32_t) node->line;
-                    for (int i = 0; i < block_channel_count; i++) {
-                        block->args[i] = block_channels[i];
-                    }
-                }
-            } else {
-                XiValue *yield = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
-                if (yield) {
-                    yield->flags |= XI_FLAG_SIDE_EFFECT;
-                    yield->line = (uint32_t) node->line;
-                }
-            }
-            if (try_head)
-                xi_block_set_jump(l->cur_block, try_head);
-            else
-                xi_block_set_jump(l->cur_block, merge);
-        } else {
-            xi_block_set_jump(l->cur_block, merge);
-        }
-    }
+    lower_select_park(l, has_default_case, has_send_case, has_timeout_case, block_channels,
+                      block_channel_count, try_head, merge, node->line);
 
     if (try_head)
         xi_lower_braun_seal(l, try_head);

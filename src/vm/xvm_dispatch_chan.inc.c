@@ -267,6 +267,18 @@ vmcase(OP_CHAN_CLOSE) {
     vmbreak;
 }
 
+vmcase(OP_CHAN_TIMER_DISPOSE) {
+    // Release a select-owned timer channel (emitted at the select merge for the
+    // `after` case). Drops the select handle reference and cancels the still-armed
+    // wheel timer when on its owner worker. See design/885.
+    int a = GETARG_A(i);
+    XrValue ch_val = R(a);
+    if (xr_value_is_channel(ch_val)) {
+        xr_channel_timer_dispose(xr_value_to_channel(ch_val));
+    }
+    vmbreak;
+}
+
 vmcase(OP_CHAN_IS_CLOSED) {
     // R[A] = R[B].isClosed() - check if Channel is closed
     int a = GETARG_A(i);

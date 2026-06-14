@@ -296,6 +296,7 @@
     _(TIME_AFTER, FMT_AB, KOP_AB_UNARY, "R[A] = time.after(R[B]) ms")                              \
     _(SELECT_BLOCK, FMT_ABC, KOP_ABC_BIN_LIT,                                                      \
       "select block wait: A=ch_base, B=ch_count, C=case_count")                                    \
+    _(CHAN_TIMER_DISPOSE, FMT_A, KOP_A_USE, "dispose select-owned timer channel R[A]")             \
     _(GETSHARED, FMT_GLOBAL, KOP_GLOBAL_GET, "R[A] = shared[Bx]")                                  \
     _(DUP, FMT_A, KOP_A_USE, "dup(R[A]): refcount++ (no-op for scalars/region)")                   \
     _(DROP, FMT_A, KOP_A_USE, "drop(R[A]): refcount--, destroy+free if zero")                      \
