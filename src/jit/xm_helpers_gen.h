@@ -121,15 +121,16 @@ typedef enum {
     XM_HELPER_chan_method_recv = 84,
     XM_HELPER_chan_method_recv_block = 85,
     XM_HELPER_chan_method_recv_wrap = 86,
-    XM_HELPER_chan_send = 87,
-    XM_HELPER_chan_send_block = 88,
-    XM_HELPER_chan_recv = 89,
-    XM_HELPER_chan_recv_block = 90,
-    XM_HELPER_scope_enter = 91,
-    XM_HELPER_scope_exit = 92,
-    XM_HELPER_go = 93,
-    XM_HELPER_await = 94,
-    XM_HELPER_await_block = 95,
+    XM_HELPER_chan_method_recv_is_value = 87,
+    XM_HELPER_chan_send = 88,
+    XM_HELPER_chan_send_block = 89,
+    XM_HELPER_chan_recv = 90,
+    XM_HELPER_chan_recv_block = 91,
+    XM_HELPER_scope_enter = 92,
+    XM_HELPER_scope_exit = 93,
+    XM_HELPER_go = 94,
+    XM_HELPER_await = 95,
+    XM_HELPER_await_block = 96,
     XM_HELPER__COUNT
 } XmHelperId;
 
@@ -597,6 +598,11 @@ typedef struct {
 #define XM_HELPER_FLAGS_chan_method_recv_wrap (XM_HF_GC | XM_HF_STACKMAP)
 #define XM_HELPER_POINTER_TRUST_chan_method_recv_wrap XM_HPT_GC
 #define XM_HELPER_POST_CALL_chan_method_recv_wrap 0
+#define XM_HELPER_RET_REP_chan_method_recv_is_value XR_REP_I64
+#define XM_HELPER_NARGS_chan_method_recv_is_value 1
+#define XM_HELPER_FLAGS_chan_method_recv_is_value 0
+#define XM_HELPER_POINTER_TRUST_chan_method_recv_is_value XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_method_recv_is_value 0
 #define XM_HELPER_RET_REP_chan_send XR_REP_TAGGED
 #define XM_HELPER_NARGS_chan_send 0
 #define XM_HELPER_FLAGS_chan_send (XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
@@ -767,6 +773,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
                                           XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
                                           XM_HPT_NONE, XM_HPC_SUSPEND},
     [XM_HELPER_chan_method_recv_wrap] = {XR_REP_TAGGED, 1, XM_HF_GC | XM_HF_STACKMAP, XM_HPT_GC, 0},
+    [XM_HELPER_chan_method_recv_is_value] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_chan_send] = {XR_REP_TAGGED, 0,
                              XM_HF_GC | XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP, XM_HPT_GC,
                              XM_HPC_SUSPEND},
@@ -879,6 +886,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(chan_method_recv)                                                                            \
     _(chan_method_recv_block)                                                                      \
     _(chan_method_recv_wrap)                                                                       \
+    _(chan_method_recv_is_value)                                                                   \
     _(chan_send)                                                                                   \
     _(chan_send_block)                                                                             \
     _(chan_recv)                                                                                   \

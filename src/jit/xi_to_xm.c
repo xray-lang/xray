@@ -1531,6 +1531,45 @@ static XmRef xi2xm_chan_send(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return result;
 }
 
+/* Fused `match (ch.recv())` payload op (XI_CHAN_RECV: args[0]=channel).
+ * Same suspend-bridged recv helper the XI_CALL_METHOD path uses; returns the
+ * raw payload (the match form reads the discriminant via XI_CHAN_RECV_STATUS
+ * instead of wrapping into Recv<T>). */
+static XmRef xi2xm_chan_recv(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (v->nargs < 1 || !v->args[0]) {
+        ctx->error = true;
+        ctx->error_op = v->op;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef call_args[1];
+    call_args[0] = get_ref(ctx, v->args[0]); /* channel */
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
+    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_recv,
+                                             XM_HELPER_chan_method_recv_block, zero, call_args, 1);
+    set_result_slot_metadata(ctx, v->id, result);
+    return result;
+}
+
+/* Readiness bit of a fused recv (XI_CHAN_RECV_STATUS: args[0]=the paired
+ * XI_CHAN_RECV value). The helper returns a raw 0/1 read from the recv status
+ * parked in scratch; the recv value is passed as an ordering arg so the
+ * projection can never be scheduled ahead of its recv. */
+static XmRef xi2xm_chan_recv_status(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (v->nargs < 1 || !v->args[0]) {
+        ctx->error = true;
+        ctx->error_op = v->op;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
+    XmRef order_args[1];
+    order_args[0] = get_ref(ctx, v->args[0]); /* paired recv value (ordering only) */
+    XmRef zero = xm_const_i64(ctx->xm_func, 0);
+    XmRef result =
+        emit_helper_call(ctx, blk, XM_HELPER_chan_method_recv_is_value, zero, order_args, 1);
+    blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
+    set_result_slot_metadata(ctx, v->id, result);
+    return result;
+}
+
 static XmRef xi2xm_err_check(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XmRef zero = xm_const_i64(ctx->xm_func, 0);
     XmRef tag = emit_helper_call(ctx, blk, XM_HELPER_pending_error_tag, zero, NULL, 0);

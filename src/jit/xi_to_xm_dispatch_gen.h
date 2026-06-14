@@ -91,8 +91,8 @@
     X(GO, "xi.go", xi2xm_reject_unsupported) \
     X(AWAIT, "xi.await", xi2xm_reject_unsupported) \
     X(CHAN_SEND, "xi.chan.send", xi2xm_chan_send) \
-    X(CHAN_RECV, "xi.chan.recv", xi2xm_reject_unsupported) \
-    X(CHAN_RECV_STATUS, "xi.chan.recv.status", xi2xm_reject_unsupported) \
+    X(CHAN_RECV, "xi.chan.recv", xi2xm_chan_recv) \
+    X(CHAN_RECV_STATUS, "xi.chan.recv.status", xi2xm_chan_recv_status) \
     X(CHAN_TRY_SEND, "xi.chan.try.send", xi2xm_reject_unsupported) \
     X(CHAN_TRY_RECV, "xi.chan.try.recv", xi2xm_reject_unsupported) \
     X(CHAN_IS_CLOSED, "xi.chan.is.closed", xi2xm_reject_unsupported) \
