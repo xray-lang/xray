@@ -638,7 +638,7 @@
   :match ()
   :required-targets (vm-bytecode jit-xm)
   :vm-bytecode (driver xi_emit_chan_send)
-  :jit-xm (reject xi2xm_reject_unsupported))
+  :jit-xm (driver xi2xm_chan_send))
 
 (lower xi.chan.recv
   :match ()

@@ -569,7 +569,7 @@ int main(void) {
     assert(xi_emit_vm_handles_cell_dst(XI_AWAIT) == false);
     assert(xi_lowering_generated_targets(XI_CHAN_SEND) == (XI_LOWER_TARGET_JIT_XM | XI_LOWER_TARGET_VM_BYTECODE));
     assert(xi_lowering_required_targets(XI_CHAN_SEND) == (XI_LOWER_TARGET_VM_BYTECODE | XI_LOWER_TARGET_JIT_XM));
-    assert(xi_lowering_rejected_targets(XI_CHAN_SEND) == (XI_LOWER_TARGET_JIT_XM));
+    assert(xi_lowering_rejected_targets(XI_CHAN_SEND) == (0));
     assert(xi_emit_vm_requires_fresh_dst(XI_CHAN_SEND) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_CHAN_SEND) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_CHAN_SEND) == false);
