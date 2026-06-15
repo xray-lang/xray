@@ -7,6 +7,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include "xi.h"
+#include "../runtime/value/xchunk.h"
 
 #define XI_EMIT_VM_LOWERING_HANDLERS(X) \
     X(CONST, emit_const) \
@@ -133,6 +134,59 @@
     X(BYTES_COPY_FROM, xi_emit_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, xi_emit_bytes_repeat_from)
 
+
+static inline OpCode xi_emit_vm_template_opcode(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return OP_ADD;
+        case XI_SUB: return OP_SUB;
+        case XI_MUL: return OP_MUL;
+        case XI_DIV: return OP_DIV;
+        case XI_MOD: return OP_MOD;
+        case XI_NEG: return OP_UNM;
+        case XI_BAND: return OP_BAND;
+        case XI_BOR: return OP_BOR;
+        case XI_BXOR: return OP_BXOR;
+        case XI_BNOT: return OP_BNOT;
+        case XI_NOT: return OP_NOT;
+        case XI_SHL: return OP_SHL;
+        case XI_SHR: return OP_SHR;
+        case XI_EQ: return OP_CMP_EQ;
+        case XI_NE: return OP_CMP_NE;
+        case XI_EQ_STRICT: return OP_CMP_EQ_STRICT;
+        case XI_NE_STRICT: return OP_CMP_NE_STRICT;
+        case XI_LT: return OP_CMP_LT;
+        case XI_LE: return OP_CMP_LE;
+        case XI_GT: return OP_CMP_LT;
+        case XI_GE: return OP_CMP_LE;
+        case XI_NARROW_I8: return OP_NARROW_I8;
+        case XI_NARROW_U8: return OP_NARROW_U8;
+        case XI_NARROW_I16: return OP_NARROW_I16;
+        case XI_NARROW_U16: return OP_NARROW_U16;
+        case XI_NARROW_I32: return OP_NARROW_I32;
+        case XI_NARROW_U32: return OP_NARROW_U32;
+        case XI_NARROW_F32: return OP_NARROW_F32;
+        case XI_WIDEN_I8: return OP_WIDEN_I8;
+        case XI_WIDEN_U8: return OP_WIDEN_U8;
+        case XI_WIDEN_I16: return OP_WIDEN_I16;
+        case XI_WIDEN_U16: return OP_WIDEN_U16;
+        case XI_WIDEN_I32: return OP_WIDEN_I32;
+        case XI_WIDEN_U32: return OP_WIDEN_U32;
+        case XI_WIDEN_F32: return OP_WIDEN_F32;
+        case XI_OP_COUNT: return OP_NOP;
+        default: return OP_NOP;
+    }
+    return OP_NOP;
+}
+
+static inline bool xi_emit_vm_template_swaps_args(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_GT: return true;
+        case XI_GE: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
 
 static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {
     switch ((XiOp) op) {

@@ -2528,6 +2528,49 @@ VALID_XI_LOWERING_TEMPLATES = {
     'widen',
 }
 
+XI_VM_TEMPLATE_OPCODES = {
+    'xi.add': 'OP_ADD',
+    'xi.sub': 'OP_SUB',
+    'xi.mul': 'OP_MUL',
+    'xi.div': 'OP_DIV',
+    'xi.mod': 'OP_MOD',
+    'xi.neg': 'OP_UNM',
+    'xi.band': 'OP_BAND',
+    'xi.bor': 'OP_BOR',
+    'xi.bxor': 'OP_BXOR',
+    'xi.bnot': 'OP_BNOT',
+    'xi.not': 'OP_NOT',
+    'xi.shl': 'OP_SHL',
+    'xi.shr': 'OP_SHR',
+    'xi.eq': 'OP_CMP_EQ',
+    'xi.ne': 'OP_CMP_NE',
+    'xi.eq.strict': 'OP_CMP_EQ_STRICT',
+    'xi.ne.strict': 'OP_CMP_NE_STRICT',
+    'xi.lt': 'OP_CMP_LT',
+    'xi.le': 'OP_CMP_LE',
+    'xi.gt': 'OP_CMP_LT',
+    'xi.ge': 'OP_CMP_LE',
+    'xi.narrow.i8': 'OP_NARROW_I8',
+    'xi.narrow.u8': 'OP_NARROW_U8',
+    'xi.narrow.i16': 'OP_NARROW_I16',
+    'xi.narrow.u16': 'OP_NARROW_U16',
+    'xi.narrow.i32': 'OP_NARROW_I32',
+    'xi.narrow.u32': 'OP_NARROW_U32',
+    'xi.narrow.f32': 'OP_NARROW_F32',
+    'xi.widen.i8': 'OP_WIDEN_I8',
+    'xi.widen.u8': 'OP_WIDEN_U8',
+    'xi.widen.i16': 'OP_WIDEN_I16',
+    'xi.widen.u16': 'OP_WIDEN_U16',
+    'xi.widen.i32': 'OP_WIDEN_I32',
+    'xi.widen.u32': 'OP_WIDEN_U32',
+    'xi.widen.f32': 'OP_WIDEN_F32',
+}
+
+XI_VM_TEMPLATE_SWAP_ARGS = {
+    'xi.gt',
+    'xi.ge',
+}
+
 
 @dataclass
 class XiLoweringDef:
@@ -2793,6 +2836,17 @@ def generate_xi_lowering_coverage_header(entries: list[XiLoweringDef]) -> str:
 
 def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     vm_entries = [entry for entry in entries if 'vm-bytecode' in entry.target_drivers]
+    template_entries = [
+        entry for entry in vm_entries
+        if entry.template != 'custom'
+    ]
+    missing_template_opcodes = [
+        entry.op_name for entry in template_entries
+        if entry.op_name not in XI_VM_TEMPLATE_OPCODES
+    ]
+    if missing_template_opcodes:
+        die("xi-lowering: missing VM template opcode(s) for " +
+            ", ".join(missing_template_opcodes))
     fresh_dst_entries = [
         entry for entry in vm_entries
         if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst', False)
@@ -2815,6 +2869,7 @@ def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('#include <stdbool.h>')
     lines.append('#include <stdint.h>')
     lines.append('#include "xi.h"')
+    lines.append('#include "../runtime/value/xchunk.h"')
     lines.append('')
     lines.append('#define XI_EMIT_VM_LOWERING_HANDLERS(X) \\')
     for i, entry in enumerate(vm_entries):
@@ -2822,6 +2877,27 @@ def generate_xi_vm_dispatch_header(entries: list[XiLoweringDef]) -> str:
         suffix = ' \\' if i + 1 < len(vm_entries) else ''
         lines.append(f'    X({entry.ident}, {driver}){suffix}')
     lines.append('')
+    lines.append('')
+    lines.append('static inline OpCode xi_emit_vm_template_opcode(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in template_entries:
+        lines.append(f'        case XI_{entry.ident}: return {XI_VM_TEMPLATE_OPCODES[entry.op_name]};')
+    lines.append('        case XI_OP_COUNT: return OP_NOP;')
+    lines.append('        default: return OP_NOP;')
+    lines.append('    }')
+    lines.append('    return OP_NOP;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline bool xi_emit_vm_template_swaps_args(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in template_entries:
+        if entry.op_name in XI_VM_TEMPLATE_SWAP_ARGS:
+            lines.append(f'        case XI_{entry.ident}: return true;')
+    lines.append('        case XI_OP_COUNT: return false;')
+    lines.append('        default: return false;')
+    lines.append('    }')
+    lines.append('    return false;')
+    lines.append('}')
     lines.append('')
     lines.append('static inline bool xi_emit_vm_requires_fresh_dst(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
@@ -2926,6 +3002,11 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
         lines.append(f'    assert(xi_lowering_rejected_targets(XI_{entry.ident}) == ({reject_bits}));')
         lines.append(f'    assert(xi_lowering_template_kind(XI_{entry.ident}) == {template});')
         lines.append(f'    assert(xi_lowering_is_patterned(XI_{entry.ident}) == {patterned});')
+        if 'vm-bytecode' in entry.target_drivers and entry.template != 'custom':
+            opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
+            swaps = 'true' if entry.op_name in XI_VM_TEMPLATE_SWAP_ARGS else 'false'
+            lines.append(f'    assert(xi_emit_vm_template_opcode(XI_{entry.ident}) == {opcode});')
+            lines.append(f'    assert(xi_emit_vm_template_swaps_args(XI_{entry.ident}) == {swaps});')
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
                                                                             False) else 'false'
         lines.append(f'    assert(xi_emit_vm_requires_fresh_dst(XI_{entry.ident}) == {fresh_dst});')
@@ -8376,6 +8457,8 @@ def _test_xi_lowering_parser():
     assert 'case XI_COPY: return XI_LOWER_TARGET_JIT_XM;' in header
     vm_header = generate_xi_vm_dispatch_header(entries)
     assert 'X(ADD, xi_emit_add)' in vm_header
+    assert 'case XI_ADD: return OP_ADD;' in vm_header
+    assert 'xi_emit_vm_template_swaps_args' in vm_header
     assert 'case XI_ADD: return true;' in vm_header
     assert 'xi_emit_vm_uses_raw_cell_args' in vm_header
     assert 'xi_emit_vm_handles_cell_dst' in vm_header
