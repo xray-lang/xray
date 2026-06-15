@@ -322,15 +322,10 @@ typedef struct XrProto {
                               // each failure, max 10000)
     uint32_t deopt_reset_at;  // call_count snapshot taken when backoff was last set
 
-    // OSR entry points (populated by JIT compilation, NULL if no loops)
-    void *osr_entries;  // XmOsrEntry array (opaque, from xm_codegen.h)
-    uint32_t nosr;      // number of OSR entry points
-
-    // Deopt table: per-guard snapshot for precise deoptimization
-    // Each entry records bc_pc + live slot→physical_reg/spill mappings
-    // Populated by JIT compilation, freed on proto destruction
-    void *deopt_table;  // XmRtDeoptEntry array (opaque)
-    uint32_t ndeopt;
+    // Unified JIT safepoint table: deopt, OSR, and suspend metadata entries.
+    // Populated by JIT compilation, freed on proto destruction.
+    void *jit_safepoints;  // XmSafepoint array (opaque, from xm_codegen.h)
+    uint32_t nsafepoints;
 
     // GC stack map: compile-time bitmap for precise GC root scanning.
     // Each safepoint (call/loop back-edge) has a bitmap recording which

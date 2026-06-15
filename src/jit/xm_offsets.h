@@ -99,13 +99,12 @@
 /*
  * Hardcoded XrProto byte offsets consumed by JIT codegen; static_asserts
  * below validate them against the live struct layout. Update these in
- * lockstep whenever XrProto fields are added/removed (most recently the
- * raw constant pool fields were removed, shifting everything by -16).
+ * lockstep whenever XrProto fields are added/removed.
  */
 #define XM_PROTO_JIT_ENTRY_OFFSET 328
 #define XM_PROTO_JIT_FAST_ENTRY_OFFSET 336
 #define XM_PROTO_JIT_RESUME_ENTRY_OFFSET 344
-#define XM_PROTO_STACK_MAP_OFFSET 424
+#define XM_PROTO_STACK_MAP_OFFSET 408
 
 /* ========== Object layout constants ========== */
 

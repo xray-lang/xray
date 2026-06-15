@@ -249,7 +249,7 @@ XmPassChange xm_pass_copy_prop(XmFunc *func) {
         }
 
         // Deopt info slot refs: keep them in sync with copy chains
-        // so build_runtime_deopt_table can find physical registers.
+        // so a64_build_deopt_safepoints can find physical registers.
         for (uint32_t d = 0; d < func->ndeopt; d++) {
             XmDeoptInfo *info = &func->deopt_infos[d];
             for (uint16_t s = 0; s < info->nslots; s++) {

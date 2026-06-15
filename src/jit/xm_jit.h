@@ -155,17 +155,17 @@ typedef struct {
     void *resume_entry;  // resume entry for suspend/resume (NULL = none)
     uint8_t opt_level;   // XM_OPT_BASIC or XM_OPT_FULL
     void *stack_map;     // XrStackMapTable* (ownership transferred)
-    void *deopt_table;   // XmRtDeoptEntry* (heap-allocated, ownership transferred)
-    uint32_t ndeopt;
-    void *osr_entries;  // XmOsrEntry* (heap-allocated, ownership transferred)
-    uint32_t nosr;
+    void *safepoints;    // XmSafepoint* (heap-allocated, ownership transferred)
+    uint32_t nsafepoints;
 } XmInstallData;
 
 // Install compiled JIT code into proto fields with correct memory ordering.
 // All metadata is written BEFORE jit_entry (the publish point).
 // A release fence ensures visibility on ARM64 weak memory order.
-// Frees old metadata (stack_map, deopt_table, osr_entries) if present.
+// Frees old metadata (stack_map, safepoints) if present.
 XR_FUNC void xm_jit_install_to_proto(XrProto *proto, const XmInstallData *data);
+
+XR_FUNC bool xm_jit_proto_has_osr(const XrProto *proto);
 
 // Install a completed background compilation result into proto fields.
 // Thread-safe: uses CAS to prevent double-install from racing workers.

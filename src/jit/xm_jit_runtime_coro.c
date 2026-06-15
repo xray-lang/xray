@@ -1188,18 +1188,16 @@ void xm_jit_install_bg_result(XrProto *proto) {
 
     XmBgResult *bgr = (XmBgResult *) pending;
     // Use unified install helper — single write sequence with release fence.
-    // Ownership of heap-allocated fields (stack_map, deopt_table, osr_entries)
-    // is transferred to proto; bgr itself is freed after.
+    // Ownership of heap-allocated fields (stack_map, safepoints) is
+    // transferred to proto; bgr itself is freed after.
     XmInstallData idata = {
         .code = bgr->code,
         .fast_entry = bgr->fast_entry,
         .resume_entry = bgr->resume_entry,
         .opt_level = bgr->opt_level,
         .stack_map = bgr->stack_map,
-        .deopt_table = bgr->deopt_table,
-        .ndeopt = bgr->ndeopt,
-        .osr_entries = bgr->osr_entries,
-        .nosr = bgr->nosr,
+        .safepoints = bgr->safepoints,
+        .nsafepoints = bgr->nsafepoints,
     };
     xm_jit_install_to_proto(proto, &idata);
     const char *fname = proto->name ? XR_STRING_CHARS(proto->name) : "?";
@@ -1230,18 +1228,12 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
         }
     }
 
-    // Step 2: find OSR entry matching this loop header
-    if (!proto->osr_entries || proto->nosr == 0)
+    // Step 2: find OSR safepoint matching this loop header
+    if (!proto->jit_safepoints || proto->nsafepoints == 0)
         return XM_JIT_DEOPT;
 
-    XmOsrEntry *entries = (XmOsrEntry *) proto->osr_entries;
-    XmOsrEntry *match = NULL;
-    for (uint32_t i = 0; i < proto->nosr; i++) {
-        if (entries[i].bc_offset == bc_pc) {
-            match = &entries[i];
-            break;
-        }
-    }
+    const XmSafepoint *match = xm_safepoint_find_osr((const XmSafepoint *) proto->jit_safepoints,
+                                                     proto->nsafepoints, bc_pc);
     if (!match) {
         return XM_JIT_DEOPT;
     }
@@ -1255,7 +1247,7 @@ int xm_jit_osr_trigger(XmJitState *jit, XrProto *proto, XrCoroutine *coro, uint3
     }
 
     // Step 4: compute absolute OSR entry address
-    void *osr_entry = (uint8_t *) proto->jit_entry + match->entry_offset;
+    void *osr_entry = (uint8_t *) proto->jit_entry + match->code_offset;
 
     // Step 5: set closure pointer for upvalue access
     // The closure is in the current call frame

@@ -8,7 +8,7 @@
  * xm_codegen_stub.c - ARM64 codegen: stubs, OSR, patching, deopt, resume
  *
  * Contains barrier/deopt/call_c stubs, OSR entry stubs,
- * branch patching, runtime deopt table, and suspend/resume.
+ * branch patching, runtime deopt safepoints, and suspend/resume.
  * Split from xm_codegen.c to keep each file under 3000 lines.
  */
 
@@ -285,20 +285,17 @@ static void osr_materialize_const(CodegenCtx *ctx, XmIns *def, int8_t phys, int8
 XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
     if (ctx->nosr_snap == 0)
         return;
-    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
-    if (!result->osr_entries)
-        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         OsrSnapshot *snap = &ctx->osr_snaps[i];
-        XmOsrEntry *entry = &result->osr_entries[result->nosr];
 
-        entry->block_id = snap->block_id;
+        uint32_t block_id = snap->block_id;
+        uint32_t bc_offset = 0;
         // Copy bytecode PC from the Xm block for VM-side OSR matching
         if (snap->block_id < ctx->func->nblk) {
-            entry->bc_offset = ctx->func->blocks[snap->block_id]->bc_offset;
+            bc_offset = ctx->func->blocks[snap->block_id]->bc_offset;
         }
         // Record byte offset of this stub
-        entry->entry_offset = ctx->buf.count * 4;
+        uint32_t entry_offset = ctx->buf.count * 4;
 
         // Emit standard prologue (SUB SP patched later with final frame size)
         xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap,
@@ -409,7 +406,10 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         int32_t target_offset = (int32_t) snap->block_offset - (int32_t) ctx->buf.count;
         a64_buf_emit(&ctx->buf, a64_b(target_offset));
 
-        result->nosr++;
+        if (!xm_codegen_result_add_osr_safepoint(result, block_id, bc_offset, entry_offset)) {
+            ctx->had_error = true;
+            return;
+        }
     }
 }
 
@@ -540,44 +540,30 @@ XR_FUNC void a64_patch_branches(CodegenCtx *ctx) {
 
 /* ========== Runtime Deopt Table Construction ========== */
 
-// Convert Xm deopt infos to runtime deopt entries using final regalloc state.
+// Convert Xm deopt infos to runtime deopt safepoints using final regalloc state.
 // Must be called after codegen (regalloc is finalized) but before ctx is freed.
-XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *result) {
+XR_FUNC void a64_build_deopt_safepoints(CodegenCtx *ctx, XmCodegenResult *result) {
     XmFunc *func = ctx->func;
-    result->deopt_entries = NULL;
-    result->ndeopt = 0;
     if (!func->deopt_infos || func->ndeopt == 0)
         return;
 
-    /* One contiguous block: the XmRtDeoptEntry array immediately followed by
-     * every entry's slots. total_slots is an upper bound (the loop below skips
-     * unmapped slots); any tail is simply unused. A single xr_free of the entry
-     * array releases the whole table (see XrProto.deopt_table teardown). */
     uint32_t nentries = func->ndeopt;
-    size_t total_slots = 0;
-    for (uint32_t d = 0; d < nentries; d++)
-        total_slots += func->deopt_infos[d].nslots;
-
-    size_t entries_bytes = (size_t) nentries * sizeof(XmRtDeoptEntry);
-    char *block = (char *) xr_malloc(entries_bytes + total_slots * sizeof(XmRtDeoptSlot));
-    if (!block)
-        return;
-    XmRtDeoptEntry *entries = (XmRtDeoptEntry *) block;
-    XmRtDeoptSlot *slots_base = (XmRtDeoptSlot *) (block + entries_bytes);
-    result->deopt_entries = entries;
-
-    size_t slot_cursor = 0;
     for (uint32_t d = 0; d < nentries; d++) {
         XmDeoptInfo *src = &func->deopt_infos[d];
-        XmRtDeoptEntry *dst = &entries[d];
-        dst->bc_pc = src->bc_pc;
-        dst->deopt_id = src->deopt_id;
-        dst->nslots = 0;
-        dst->slots = slots_base + slot_cursor;
+        XmLiveSlot *slots = NULL;
+        if (src->nslots > 0) {
+            slots = (XmLiveSlot *) xr_calloc(src->nslots, sizeof(XmLiveSlot));
+            if (!slots) {
+                ctx->had_error = true;
+                return;
+            }
+        }
+
+        uint16_t nslots = 0;
 
         for (uint16_t s = 0; s < src->nslots; s++) {
             XmDeoptSlot *slot = &src->slots[s];
-            XmRtDeoptSlot *rs = &dst->slots[dst->nslots];
+            XmLiveSlot *rs = &slots[nslots];
             rs->bc_slot = slot->bc_slot;
             rs->type = slot->rep;
             rs->xr_tag = slot->xr_tag;
@@ -670,11 +656,31 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
                 if (!found)
                     continue;
             }
-            dst->nslots++;
+            nslots++;
         }
-        slot_cursor += dst->nslots;
+
+        XmSafepoint sp = {
+            .kind = XM_SAFEPOINT_DEOPT,
+            .id = src->deopt_id,
+            .land_pc = src->bc_pc,
+            .code_offset = 0,
+            .block_id = UINT32_MAX,
+            .smap_id = UINT32_MAX,
+            .result_bc_slot = -1,
+            .result_tag_offset = -1,
+            .nslots = nslots,
+            .slots = nslots > 0 ? slots : NULL,
+        };
+        if (nslots == 0 && slots) {
+            xr_free(slots);
+            slots = NULL;
+        }
+        if (!xm_codegen_result_add_safepoint(result, &sp)) {
+            xr_free(slots);
+            ctx->had_error = true;
+            return;
+        }
     }
-    result->ndeopt = nentries;
 }
 
 /* ========== Resume Entry Stub (JIT Suspend/Resume) ========== */

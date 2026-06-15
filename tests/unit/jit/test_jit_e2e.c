@@ -1632,7 +1632,8 @@ static void test_osr_entry(void) {
     xm_code_alloc_init(&alloc);
     XmCodegenResult res = xm_codegen_native(func, &alloc);
     assert(res.success);
-    fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
+    uint32_t nosr = xm_safepoint_count_kind(res.safepoints, res.nsafepoints, XM_SAFEPOINT_OSR);
+    fprintf(stderr, " code=%u nosr=%u", res.code_size, nosr);
 
     // Test 1: normal call — sum_loop(5, 1, 0) = 1+2+3+4+5 = 15
     int64_t r1 = jit_call3(res.code, 5, 1, 0);
@@ -1641,9 +1642,16 @@ static void test_osr_entry(void) {
 
     // Test 2: OSR entry — enter loop with count=3, step=1, idx=7, sum=10
     // Expected: iteration 1: idx=8,sum=18; iter 2: idx=9,sum=27; iter 3: idx=10,sum=37
-    if (res.nosr > 0) {
-        XmOsrEntry *osr = &res.osr_entries[0];
-        void *osr_code = (uint8_t *) res.code + osr->entry_offset;
+    if (nosr > 0) {
+        const XmSafepoint *osr = NULL;
+        for (uint32_t i = 0; i < res.nsafepoints; i++) {
+            if (res.safepoints[i].kind == XM_SAFEPOINT_OSR) {
+                osr = &res.safepoints[i];
+                break;
+            }
+        }
+        assert(osr != NULL);
+        void *osr_code = (uint8_t *) res.code + osr->code_offset;
 
         // Prepare values array indexed by vreg
         // We need to know which vregs the OSR stub loads.
@@ -2665,7 +2673,8 @@ static void test_osr_entry_pressure(void) {
     // them mid-snapshot.
     XmCodegenResult res = xm_codegen_native(func, &alloc);
     assert(res.success);
-    fprintf(stderr, " code=%u nosr=%u", res.code_size, res.nosr);
+    uint32_t nosr = xm_safepoint_count_kind(res.safepoints, res.nsafepoints, XM_SAFEPOINT_OSR);
+    fprintf(stderr, " code=%u nosr=%u", res.code_size, nosr);
 
     // Run the same compiled code 4 rounds with different inputs to
     // verify no stale frame state leaks across calls.
