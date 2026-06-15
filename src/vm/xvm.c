@@ -493,6 +493,7 @@ XrVMResult run(XrayIsolate *isolate, XrVMContext *vm_ctx) {
                                      "Stack overflow: recursion exceeds %d levels (grow failed)",  \
                                      vm_ctx->frame_count);                                         \
                 }                                                                                  \
+                (void) _old_stack;                                                                 \
                 (void) _old_cap;                                                                   \
                 /* Update cached local variables (don't goto startfunc - that restarts execution!) \
                  */                                                                                \

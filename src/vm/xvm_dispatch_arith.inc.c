@@ -488,113 +488,78 @@ vmcase(OP_MODK) {
     vmbreak;
 }
 
-vmcase(OP_UNM) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue vb = R(b);
+#define XVM_TRY_UNARY_OP_OVERLOAD(value, dest, op_name)                                            \
+    do {                                                                                           \
+        if (xr_value_is_instance(value)) {                                                         \
+            XrInstance *inst_obj = xr_value_to_instance(value);                                    \
+            XrClass *cls = xr_instance_get_class(inst_obj);                                        \
+            XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;                    \
+            int op_sym = xr_symbol_register_in_table(sym_table, op_name);                          \
+            XrMethod *op_method = xr_class_lookup_method(cls, op_sym);                             \
+            if (op_method != NULL && op_method->type == XMETHOD_OPERATOR &&                        \
+                op_method->as.closure != NULL) {                                                   \
+                XrClosure *closure = op_method->as.closure;                                        \
+                XrProto *proto = closure->proto;                                                   \
+                if (1 != proto->numparams) {                                                       \
+                    VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT,                                       \
+                                     "unary operator " op_name " takes no arguments");             \
+                }                                                                                  \
+                if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {                                             \
+                    VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");                     \
+                }                                                                                  \
+                VM_STACK_CHECK((dest) + 1 + proto->maxstacksize);                                  \
+                R((dest) + 1) = (value);                                                           \
+                savepc();                                                                          \
+                int _fidx = VM_FRAME_COUNT;                                                        \
+                VM_INC_FRAME_COUNT;                                                                \
+                XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];                                      \
+                new_frame->closure = closure;                                                      \
+                new_frame->pc = PROTO_CODE_BASE(proto);                                            \
+                new_frame->base_offset = (int) ((base + (dest) + 1) - VM_STACK);                   \
+                goto startfunc;                                                                    \
+            }                                                                                      \
+        }                                                                                          \
+    } while (0)
 
-    // Fast path: numeric negation (wrap on overflow)
-    if (XR_IS_INT(vb)) {
-        XR_SET_INT(R(a), (int64_t) (-(uint64_t) XR_TO_INT(vb)));
-        vmbreak;
-    }
-    if (XR_IS_FLOAT(vb)) {
-        R(a) = xr_float(-XR_TO_FLOAT(vb));
-        vmbreak;
-    }
-
-    // BigInt negation
-    if (XR_IS_BIGINT(vb)) {
-        XrBigInt *bigint = (XrBigInt *) XR_TO_PTR(vb);
-        XrBigInt *result = xr_bigint_neg(VM_CURRENT_CORO, bigint);
-        R(a) = XR_FROM_PTR(result);
-        vmbreak;
-    }
-
-    // Operator overload: unary minus uses "-" symbol
-    if (xr_value_is_instance(vb)) {
-        XrInstance *inst_obj = xr_value_to_instance(vb);
-        XrClass *cls = xr_instance_get_class(inst_obj);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
-        int op_sym = xr_symbol_register_in_table(sym_table, "-");
-        XrMethod *op_method = xr_class_lookup_method(cls, op_sym);
-
-        if (op_method != NULL && op_method->type == XMETHOD_OPERATOR &&
-            op_method->as.closure != NULL) {
-            XrClosure *closure = op_method->as.closure;
-            XrProto *proto = closure->proto;
-
-            if (1 != proto->numparams) {
-                VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "unary operator - takes no arguments");
-            }
-            if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
-                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
-            /* Stack/frames capacity check before frame push: prevents
-             * the operator method's register file from overflowing
-             * into frames[] in the combined slab layout. */
-            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
-
-            R(a + 1) = vb;  // this
-            savepc();
-            int _fidx = VM_FRAME_COUNT;
-            VM_INC_FRAME_COUNT;
-            XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-            goto startfunc;
-        }
+#define XVM_TEMPLATE_UNARY_NEG_CASE(op, op_name)                                                   \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        if (XR_IS_INT(vb)) {                                                                       \
+            XR_SET_INT(R(a), (int64_t) (-(uint64_t) XR_TO_INT(vb)));                               \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_FLOAT(vb)) {                                                                     \
+            R(a) = xr_float(-XR_TO_FLOAT(vb));                                                     \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_BIGINT(vb)) {                                                                    \
+            XrBigInt *bigint = (XrBigInt *) XR_TO_PTR(vb);                                         \
+            XrBigInt *result = xr_bigint_neg(VM_CURRENT_CORO, bigint);                             \
+            R(a) = XR_FROM_PTR(result);                                                            \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        XVM_TRY_UNARY_OP_OVERLOAD(vb, a, op_name);                                                 \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "operand must be numeric");                         \
     }
 
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "operand must be numeric");
-}
-
-vmcase(OP_NOT) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue vb = R(b);
-
-    // Fast path: boolean negation
-    if (XR_IS_BOOL(vb)) {
-        R(a) = xr_bool(!XR_TO_BOOL(vb));
-        vmbreak;
+#define XVM_TEMPLATE_UNARY_NOT_CASE(op, op_name)                                                   \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        if (XR_IS_BOOL(vb)) {                                                                      \
+            R(a) = xr_bool(!XR_TO_BOOL(vb));                                                       \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        XVM_TRY_UNARY_OP_OVERLOAD(vb, a, op_name);                                                 \
+        R(a) = xr_bool(!xr_vm_is_truthy(vb));                                                      \
+        vmbreak;                                                                                   \
     }
 
-    // Operator overload: logical not uses "!" symbol
-    if (xr_value_is_instance(vb)) {
-        XrInstance *inst_obj = xr_value_to_instance(vb);
-        XrClass *cls = xr_instance_get_class(inst_obj);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
-        int op_sym = xr_symbol_register_in_table(sym_table, "!");
-        XrMethod *op_method = xr_class_lookup_method(cls, op_sym);
+#include "xvm_template_unary_gen.inc.c"
 
-        if (op_method != NULL && op_method->type == XMETHOD_OPERATOR &&
-            op_method->as.closure != NULL) {
-            XrClosure *closure = op_method->as.closure;
-            XrProto *proto = closure->proto;
-
-            if (1 != proto->numparams) {
-                VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "unary operator ! takes no arguments");
-            }
-            if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
-                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
-            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
-
-            R(a + 1) = vb;  // this
-            savepc();
-            int _fidx = VM_FRAME_COUNT;
-            VM_INC_FRAME_COUNT;
-            XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-            goto startfunc;
-        }
-    }
-
-    // Default: negate truthiness
-    R(a) = xr_bool(!xr_vm_is_truthy(vb));
-    vmbreak;
-}
+#undef XVM_TEMPLATE_UNARY_NOT_CASE
+#undef XVM_TEMPLATE_UNARY_NEG_CASE
+#undef XVM_TRY_UNARY_OP_OVERLOAD
