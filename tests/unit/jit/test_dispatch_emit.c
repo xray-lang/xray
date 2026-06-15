@@ -5,7 +5,7 @@
 #include <string.h>
 
 static int test_dispatch_emit_coverage_metadata(void) {
-    if (XM_DISPATCH_EMIT_WRAPPER_COUNT != 31)
+    if (XM_DISPATCH_EMIT_WRAPPER_COUNT != 33)
         return 1;
     if (XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT != 336)
         return 1;
@@ -13,7 +13,7 @@ static int test_dispatch_emit_coverage_metadata(void) {
         return 1;
     if (XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT != 176)
         return 1;
-    if (XM_DISPATCH_EMIT_GENERATED_CASE_COUNT != 116)
+    if (XM_DISPATCH_EMIT_GENERATED_CASE_COUNT != 122)
         return 1;
 
     if (XM_DISPATCH_EMIT_DECLARED_X64_COUNT != 112 ||
@@ -27,9 +27,9 @@ static int test_dispatch_emit_coverage_metadata(void) {
         XM_DISPATCH_EMIT_PATTERNED_ARM64_COUNT != 60 ||
         XM_DISPATCH_EMIT_PATTERNED_RISCV64_COUNT != 60)
         return 1;
-    if (XM_DISPATCH_EMIT_GENERATED_X64_COUNT != 37 ||
-        XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT != 40 ||
-        XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT != 39)
+    if (XM_DISPATCH_EMIT_GENERATED_X64_COUNT != 39 ||
+        XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT != 42 ||
+        XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT != 41)
         return 1;
 
     if (XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT !=
@@ -109,6 +109,28 @@ static int test_riscv64_gp_rrr(void) {
     if (xm_dispatch_emit_riscv64_gp_rrr(XM_DIV, &buf, RV64_A0, RV64_A1, RV64_A2))
         return 1;
     if (buf.count != 11)
+        return 1;
+    return 0;
+}
+
+static int test_riscv64_gp_r(void) {
+    uint32_t code[2] = {0};
+    Rv64Buf buf;
+    rv64_buf_init(&buf, code, 2);
+
+    if (!xm_dispatch_emit_riscv64_gp_r(XM_MOV, &buf, RV64_A0, RV64_A1))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_gp_r(XM_REDEFINE, &buf, RV64_A2, RV64_A3))
+        return 1;
+    if (buf.count != 2)
+        return 1;
+    if (code[0] != rv64_mv(RV64_A0, RV64_A1))
+        return 1;
+    if (code[1] != rv64_mv(RV64_A2, RV64_A3))
+        return 1;
+    if (xm_dispatch_emit_riscv64_gp_r(XM_ADD, &buf, RV64_A0, RV64_A1))
+        return 1;
+    if (buf.count != 2)
         return 1;
     return 0;
 }
@@ -756,6 +778,34 @@ static int test_x64_gp_r(void) {
     return 0;
 }
 
+static int test_x64_gp_mov_r(void) {
+    uint8_t code[32];
+    uint8_t expected[32];
+    X64Buf buf;
+    X64Buf exp;
+    memset(code, 0, sizeof(code));
+    memset(expected, 0, sizeof(expected));
+    x64_buf_init(&buf, code, (uint32_t) sizeof(code));
+    x64_buf_init(&exp, expected, (uint32_t) sizeof(expected));
+
+    if (!xm_dispatch_emit_x64_gp_mov_r(XM_MOV, &buf, X64_RAX, X64_RBX))
+        return 1;
+    x64_mov_rr(&exp, X64_RAX, X64_RBX);
+    if (!xm_dispatch_emit_x64_gp_mov_r(XM_REDEFINE, &buf, X64_R12, X64_R13))
+        return 1;
+    x64_mov_rr(&exp, X64_R12, X64_R13);
+    if (buf.pos != exp.pos)
+        return 1;
+    if (memcmp(code, expected, buf.pos) != 0)
+        return 1;
+    uint32_t pos_before = buf.pos;
+    if (xm_dispatch_emit_x64_gp_mov_r(XM_NOT, &buf, X64_RAX, X64_RBX))
+        return 1;
+    if (buf.pos != pos_before)
+        return 1;
+    return 0;
+}
+
 static int test_x64_conv_i2f(void) {
     uint8_t code[32];
     X64Buf buf;
@@ -859,23 +909,31 @@ static int test_x64_mem_gp(void) {
 
 #ifdef __aarch64__
 static int test_arm64_gp_r(void) {
-    uint32_t code[2] = {0};
+    uint32_t code[4] = {0};
     A64Buf buf;
-    a64_buf_init(&buf, code, 2);
+    a64_buf_init(&buf, code, 4);
 
     if (!xm_dispatch_emit_arm64_gp_r(XM_NEG, &buf, A64_X0, A64_X1))
         return 1;
     if (!xm_dispatch_emit_arm64_gp_r(XM_NOT, &buf, A64_X2, A64_X3))
         return 1;
-    if (buf.count != 2)
+    if (!xm_dispatch_emit_arm64_gp_r(XM_MOV, &buf, A64_X4, A64_X5))
+        return 1;
+    if (!xm_dispatch_emit_arm64_gp_r(XM_REDEFINE, &buf, A64_X6, A64_X7))
+        return 1;
+    if (buf.count != 4)
         return 1;
     if (code[0] != a64_neg(A64_X0, A64_X1))
         return 1;
     if (code[1] != a64_mvn(A64_X2, A64_X3))
         return 1;
+    if (code[2] != a64_mov(A64_X4, A64_X5))
+        return 1;
+    if (code[3] != a64_mov(A64_X6, A64_X7))
+        return 1;
     if (xm_dispatch_emit_arm64_gp_r(XM_ADD, &buf, A64_X0, A64_X1))
         return 1;
-    if (buf.count != 2)
+    if (buf.count != 4)
         return 1;
     return 0;
 }
@@ -1012,6 +1070,10 @@ int main(void) {
         fprintf(stderr, "test_riscv64_gp_rrr failed\n");
         return 1;
     }
+    if (test_riscv64_gp_r() != 0) {
+        fprintf(stderr, "test_riscv64_gp_r failed\n");
+        return 1;
+    }
     if (test_riscv64_fp_rrr() != 0) {
         fprintf(stderr, "test_riscv64_fp_rrr failed\n");
         return 1;
@@ -1063,6 +1125,10 @@ int main(void) {
     }
     if (test_x64_gp_r() != 0) {
         fprintf(stderr, "test_x64_gp_r failed\n");
+        return 1;
+    }
+    if (test_x64_gp_mov_r() != 0) {
+        fprintf(stderr, "test_x64_gp_mov_r failed\n");
         return 1;
     }
     if (test_x64_conv_i2f() != 0) {

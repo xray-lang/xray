@@ -513,7 +513,8 @@ static void x64_h_mov(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     } else {
         X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
         if (rn != rd)
-            x64_mov_rr(&ctx->buf, rd, rn);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_gp_mov_r(ins->op, &ctx->buf, rd, rn),
+                          "x64 generated gp_mov_r dispatch rejected op");
     }
 }
 

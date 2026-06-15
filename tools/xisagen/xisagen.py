@@ -1061,6 +1061,16 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             ],
         },
         {
+            'name': 'xm_dispatch_emit_x64_gp_mov_r',
+            'target': 'x64',
+            'pattern': 'GP_R',
+            'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs)',
+            'cases': [
+                ('MOV', 'x64.mov.rr', 'x64_mov_rr(buf, rd, rs);'),
+                ('REDEFINE', 'x64.mov.rr', 'x64_mov_rr(buf, rd, rs);'),
+            ],
+        },
+        {
             'name': 'xm_dispatch_emit_arm64_gp_r',
             'target': 'arm64',
             'pattern': 'GP_R',
@@ -1068,6 +1078,18 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'cases': [
                 ('NEG', 'arm64.neg.rr', 'a64_buf_emit(buf, a64_neg(rd, rm));'),
                 ('NOT', 'arm64.mvn.rr', 'a64_buf_emit(buf, a64_mvn(rd, rm));'),
+                ('MOV', 'arm64.mov.rr', 'a64_buf_emit(buf, a64_mov(rd, rm));'),
+                ('REDEFINE', 'arm64.mov.rr', 'a64_buf_emit(buf, a64_mov(rd, rm));'),
+            ],
+        },
+        {
+            'name': 'xm_dispatch_emit_riscv64_gp_r',
+            'target': 'riscv64',
+            'pattern': 'GP_R',
+            'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs)',
+            'cases': [
+                ('MOV', 'riscv64.addi', 'rv64_buf_emit(buf, rv64_mv(rd, rs));'),
+                ('REDEFINE', 'riscv64.addi', 'rv64_buf_emit(buf, rv64_mv(rd, rs));'),
             ],
         },
         {

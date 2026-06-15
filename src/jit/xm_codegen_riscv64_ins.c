@@ -298,7 +298,8 @@ static void rv64_h_mov(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     } else {
         Rv64Reg rs = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
         if (rs != rd)
-            rv64_buf_emit(&ctx->buf, rv64_mv(rd, rs));
+            RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_r(ins->op, &ctx->buf, rd, rs),
+                               "riscv64 generated gp_r dispatch rejected op");
     }
 }
 

@@ -355,8 +355,8 @@ static void a64_h_mov(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     if (rd != rn) {
         if (ins->rep == XR_REP_F64)
             a64_buf_emit(&ctx->buf, a64_fmov(rd, rn));
-        else
-            a64_buf_emit(&ctx->buf, a64_mov(rd, rn));
+        else if (!xm_dispatch_emit_arm64_gp_r(ins->op, &ctx->buf, rd, rn))
+            ctx->had_error = true;
     }
 }
 
