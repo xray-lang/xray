@@ -2614,6 +2614,23 @@ XI_JIT_TEMPLATE_LOGICAL_NOT = {
     'xi.not',
 }
 
+XI_JIT_TEMPLATE_WIDTH = {
+    'xi.narrow.i8': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 56, 'INT64_C(0)'),
+    'xi.narrow.u8': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFF)'),
+    'xi.narrow.i16': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 48, 'INT64_C(0)'),
+    'xi.narrow.u16': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFFFF)'),
+    'xi.narrow.i32': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 32, 'INT64_C(0)'),
+    'xi.narrow.u32': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFFFFFFFF)'),
+    'xi.narrow.f32': ('XM_WIDTH_TEMPLATE_IDENTITY', 0, 'INT64_C(0)'),
+    'xi.widen.i8': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 56, 'INT64_C(0)'),
+    'xi.widen.u8': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFF)'),
+    'xi.widen.i16': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 48, 'INT64_C(0)'),
+    'xi.widen.u16': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFFFF)'),
+    'xi.widen.i32': ('XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT', 32, 'INT64_C(0)'),
+    'xi.widen.u32': ('XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK', 0, 'INT64_C(0xFFFFFFFF)'),
+    'xi.widen.f32': ('XM_WIDTH_TEMPLATE_IDENTITY', 0, 'INT64_C(0)'),
+}
+
 
 @dataclass
 class XiLoweringDef:
@@ -3005,12 +3022,22 @@ def generate_xi_to_xm_dispatch_header(entries: list[XiLoweringDef]) -> str:
         entry for entry in target_entries
         if entry.template in {'value-binary', 'value-unary', 'compare'}
     ]
+    width_entries = [
+        entry for entry in target_entries
+        if entry.template in {'narrow', 'widen'}
+    ]
     missing_template_ops = [
         entry.op_name for entry in template_entries
         if entry.op_name not in XI_JIT_TEMPLATE_OPS
     ]
     if missing_template_ops:
         die("xi-lowering: missing JIT template op(s) for " + ", ".join(missing_template_ops))
+    missing_width_ops = [
+        entry.op_name for entry in width_entries
+        if entry.op_name not in XI_JIT_TEMPLATE_WIDTH
+    ]
+    if missing_width_ops:
+        die("xi-lowering: missing JIT width template op(s) for " + ", ".join(missing_width_ops))
 
     def emit_template_driver_macro(lines: list[str], macro: str, template: str) -> None:
         template_driver_entries = [entry for entry in template_entries if entry.template == template]
@@ -3044,6 +3071,19 @@ def generate_xi_to_xm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     emit_template_driver_macro(lines, 'XI_TO_XM_TEMPLATE_BINARY_DRIVERS', 'value-binary')
     emit_template_driver_macro(lines, 'XI_TO_XM_TEMPLATE_UNARY_DRIVERS', 'value-unary')
     emit_template_driver_macro(lines, 'XI_TO_XM_TEMPLATE_COMPARE_DRIVERS', 'compare')
+    lines.append('#define XI_TO_XM_TEMPLATE_WIDTH_DRIVERS(X) \\')
+    for i, entry in enumerate(width_entries):
+        driver = entry.target_drivers['jit-xm']
+        suffix = ' \\' if i + 1 < len(width_entries) else ''
+        lines.append(f'    X({entry.ident}, {driver}){suffix}')
+    lines.append('')
+    lines.append('')
+    lines.append('typedef enum {')
+    lines.append('    XM_WIDTH_TEMPLATE_IDENTITY = 0,')
+    lines.append('    XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT = 1,')
+    lines.append('    XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK = 2,')
+    lines.append('} XiToXmWidthTemplateKind;')
+    lines.append('')
     lines.append('static inline XmOp xi_to_xm_template_int_op(uint16_t op) {')
     lines.append('    switch ((XiOp) op) {')
     for entry in template_entries:
@@ -3108,6 +3148,41 @@ def generate_xi_to_xm_dispatch_header(entries: list[XiLoweringDef]) -> str:
     lines.append('        default: return false;')
     lines.append('    }')
     lines.append('    return false;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline XiToXmWidthTemplateKind xi_to_xm_template_width_kind(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in width_entries:
+        kind, _, _ = XI_JIT_TEMPLATE_WIDTH[entry.op_name]
+        lines.append(f'        case XI_{entry.ident}: return {kind};')
+    lines.append('        case XI_OP_COUNT: return XM_WIDTH_TEMPLATE_IDENTITY;')
+    lines.append('        default: return XM_WIDTH_TEMPLATE_IDENTITY;')
+    lines.append('    }')
+    lines.append('    return XM_WIDTH_TEMPLATE_IDENTITY;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline uint8_t xi_to_xm_template_width_shift(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in width_entries:
+        _, shift, _ = XI_JIT_TEMPLATE_WIDTH[entry.op_name]
+        if shift != 0:
+            lines.append(f'        case XI_{entry.ident}: return {shift};')
+    lines.append('        case XI_OP_COUNT: return 0;')
+    lines.append('        default: return 0;')
+    lines.append('    }')
+    lines.append('    return 0;')
+    lines.append('}')
+    lines.append('')
+    lines.append('static inline int64_t xi_to_xm_template_width_mask(uint16_t op) {')
+    lines.append('    switch ((XiOp) op) {')
+    for entry in width_entries:
+        _, _, mask = XI_JIT_TEMPLATE_WIDTH[entry.op_name]
+        if mask != 'INT64_C(0)':
+            lines.append(f'        case XI_{entry.ident}: return {mask};')
+    lines.append('        case XI_OP_COUNT: return INT64_C(0);')
+    lines.append('        default: return INT64_C(0);')
+    lines.append('    }')
+    lines.append('    return INT64_C(0);')
     lines.append('}')
     lines.append('')
     lines.append('#endif  /* XI_TO_XM_DISPATCH_GEN_H */')
@@ -3182,6 +3257,11 @@ def generate_xi_lowering_test(entries: list[XiLoweringDef]) -> str:
             lines.append(f'    assert(xi_to_xm_template_ne_like(XI_{entry.ident}) == {ne_like});')
             lines.append(
                 f'    assert(xi_to_xm_template_is_logical_not(XI_{entry.ident}) == {logical_not});')
+        if 'jit-xm' in entry.target_drivers and entry.template in {'narrow', 'widen'}:
+            kind, shift, mask = XI_JIT_TEMPLATE_WIDTH[entry.op_name]
+            lines.append(f'    assert(xi_to_xm_template_width_kind(XI_{entry.ident}) == {kind});')
+            lines.append(f'    assert(xi_to_xm_template_width_shift(XI_{entry.ident}) == {shift});')
+            lines.append(f'    assert(xi_to_xm_template_width_mask(XI_{entry.ident}) == {mask});')
         fresh_dst = 'true' if entry.target_attrs.get('vm-bytecode', {}).get('fresh-dst',
                                                                             False) else 'false'
         lines.append(f'    assert(xi_emit_vm_requires_fresh_dst(XI_{entry.ident}) == {fresh_dst});')
@@ -8650,6 +8730,9 @@ def _test_xi_lowering_parser():
     assert 'case XI_ADD: return XM_FADD;' in jit_header
     assert 'xi_to_xm_template_eq_like' in jit_header
     assert 'xi_to_xm_template_is_logical_not' in jit_header
+    assert 'XI_TO_XM_TEMPLATE_WIDTH_DRIVERS' in jit_header
+    assert 'XiToXmWidthTemplateKind' in jit_header
+    assert 'xi_to_xm_template_width_kind' in jit_header
     stmt_header = generate_xi_target_dispatch_header(entries, 'aot-c-stmt', 'TEST_STMT_H',
                                                      'TEST_STMT')
     assert 'X(COPY, "xi.copy", xicgen_stmt_copy)' in stmt_header

@@ -1437,63 +1437,26 @@ static XmRef xi2xm_sign_extend_shift(LowerCtx *ctx, XmBlock *blk, XiValue *v, in
     return xm_emit(ctx->xm_func, blk, XM_SHR, XR_REP_I64, t, sh);
 }
 
-static XmRef xi2xm_narrow_i8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 56);
+static XmRef xi2xm_template_width(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    switch (xi_to_xm_template_width_kind(v->op)) {
+        case XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT:
+            return xi2xm_sign_extend_shift(ctx, blk, v, xi_to_xm_template_width_shift(v->op));
+        case XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK:
+            return xi2xm_zero_extend(ctx, blk, v, xi_to_xm_template_width_mask(v->op));
+        case XM_WIDTH_TEMPLATE_IDENTITY:
+            return get_ref(ctx, v->args[0]);
+    }
+    return xi2xm_template_missing(ctx, v);
 }
 
-static XmRef xi2xm_narrow_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFF);
-}
+#define XI2XM_DEFINE_TEMPLATE_WIDTH_DRIVER(ident, driver)                                          \
+    static XmRef driver(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                                 \
+        return xi2xm_template_width(ctx, blk, v);                                                  \
+    }
 
-static XmRef xi2xm_narrow_i16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 48);
-}
+XI_TO_XM_TEMPLATE_WIDTH_DRIVERS(XI2XM_DEFINE_TEMPLATE_WIDTH_DRIVER)
 
-static XmRef xi2xm_narrow_u16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFFFF);
-}
-
-static XmRef xi2xm_narrow_i32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 32);
-}
-
-static XmRef xi2xm_narrow_u32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFFFFFFFF);
-}
-
-static XmRef xi2xm_narrow_f32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    (void) blk;
-    return get_ref(ctx, v->args[0]);
-}
-
-static XmRef xi2xm_widen_i8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 56);
-}
-
-static XmRef xi2xm_widen_u8(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFF);
-}
-
-static XmRef xi2xm_widen_i16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 48);
-}
-
-static XmRef xi2xm_widen_u16(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFFFF);
-}
-
-static XmRef xi2xm_widen_i32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_sign_extend_shift(ctx, blk, v, 32);
-}
-
-static XmRef xi2xm_widen_u32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return xi2xm_zero_extend(ctx, blk, v, 0xFFFFFFFF);
-}
-
-static XmRef xi2xm_widen_f32(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    (void) blk;
-    return get_ref(ctx, v->args[0]);
-}
+#undef XI2XM_DEFINE_TEMPLATE_WIDTH_DRIVER
 
 static XmRef xi2xm_isnull(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XR_DCHECK(v->nargs == 1, "isnull: expected 1 arg");
