@@ -65,9 +65,11 @@ VM_GENERATED_BODY_TEMPLATES = {"narrow", "widen"}
 VM_GENERATED_WIDTH_FILE = "src/vm/xvm_template_width_gen.inc.c"
 VM_GENERATED_BITWISE_BINARY_FILE = "src/vm/xvm_template_bitwise_binary_gen.inc.c"
 VM_GENERATED_BITWISE_UNARY_FILE = "src/vm/xvm_template_bitwise_unary_gen.inc.c"
+VM_GENERATED_UNARY_FILE = "src/vm/xvm_template_unary_gen.inc.c"
 VM_GENERATED_SHIFT_FILE = "src/vm/xvm_template_shift_gen.inc.c"
 VM_GENERATED_COMPARE_FILE = "src/vm/xvm_template_compare_gen.inc.c"
 VM_BODY_SCAN_FILES = (
+    "src/vm/xvm_dispatch_arith.inc.c",
     "src/vm/xvm_dispatch_data.inc.c",
     "src/vm/xvm_dispatch_bitwise.inc.c",
     "src/vm/xvm_dispatch_compare.inc.c",
@@ -130,6 +132,16 @@ def vm_generated_bitwise_unary_opcodes(root: Path, entries) -> set[str]:
     for entry in entries:
         if ('vm-bytecode' in entry.target_drivers and
                 entry.op_name in xisagen.XI_VM_TEMPLATE_BITWISE_UNARY):
+            opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
+    return opcodes
+
+
+def vm_generated_unary_opcodes(root: Path, entries) -> set[str]:
+    xisagen = load_xisagen(root)
+    opcodes: set[str] = set()
+    for entry in entries:
+        if ('vm-bytecode' in entry.target_drivers and
+                entry.op_name in xisagen.XI_VM_TEMPLATE_UNARY):
             opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
     return opcodes
 
@@ -317,11 +329,13 @@ def run_check(root: Path) -> list[Violation]:
     vm_width_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
     vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text()
     vm_bitwise_unary_generated_text = (root / VM_GENERATED_BITWISE_UNARY_FILE).read_text()
+    vm_unary_generated_text = (root / VM_GENERATED_UNARY_FILE).read_text()
     vm_shift_generated_text = (root / VM_GENERATED_SHIFT_FILE).read_text()
     vm_compare_generated_text = (root / VM_GENERATED_COMPARE_FILE).read_text()
     vm_width_opcodes = vm_generated_body_opcodes(root, entries)
     vm_bitwise_opcodes = vm_generated_bitwise_binary_opcodes(root, entries)
     vm_bitwise_unary_opcodes = vm_generated_bitwise_unary_opcodes(root, entries)
+    vm_unary_opcodes = vm_generated_unary_opcodes(root, entries)
     vm_shift_opcodes = vm_generated_shift_opcodes(root, entries)
     vm_compare_opcodes = vm_generated_compare_opcodes(root, entries)
     violations: list[Violation] = []
@@ -347,6 +361,12 @@ def run_check(root: Path) -> list[Violation]:
         r"\bXVM_TEMPLATE_BITWISE_UNARY_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "bitwise unary"))
     violations.extend(check_vm_generated_body_coverage(
+        vm_unary_opcodes,
+        vm_unary_generated_text,
+        VM_GENERATED_UNARY_FILE,
+        r"\bXVM_TEMPLATE_UNARY_(?:NEG|NOT)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "unary"))
+    violations.extend(check_vm_generated_body_coverage(
         vm_shift_opcodes,
         vm_shift_generated_text,
         VM_GENERATED_SHIFT_FILE,
@@ -364,6 +384,8 @@ def run_check(root: Path) -> list[Violation]:
         vm_bitwise_opcodes, vm_body_texts, VM_GENERATED_BITWISE_BINARY_FILE))
     violations.extend(check_vm_handwritten_body_cases(
         vm_bitwise_unary_opcodes, vm_body_texts, VM_GENERATED_BITWISE_UNARY_FILE))
+    violations.extend(check_vm_handwritten_body_cases(
+        vm_unary_opcodes, vm_body_texts, VM_GENERATED_UNARY_FILE))
     violations.extend(check_vm_handwritten_body_cases(
         vm_shift_opcodes, vm_body_texts, VM_GENERATED_SHIFT_FILE))
     violations.extend(check_vm_handwritten_body_cases(
@@ -449,6 +471,19 @@ def run_self_test() -> None:
         VM_GENERATED_BITWISE_UNARY_FILE)
     assert (len(vm_bitwise_unary_handwritten) == 1 and
             "OP_BNOT" in vm_bitwise_unary_handwritten[0].message)
+
+    vm_unary_opcodes = {"OP_UNM"}
+    vm_unary_coverage = check_vm_generated_body_coverage(
+        vm_unary_opcodes,
+        "XVM_TEMPLATE_UNARY_NEG_CASE(OP_UNM, \"-\")\n",
+        VM_GENERATED_UNARY_FILE,
+        r"\bXVM_TEMPLATE_UNARY_(?:NEG|NOT)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "unary")
+    assert not vm_unary_coverage
+    vm_unary_handwritten = check_vm_handwritten_body_cases(
+        vm_unary_opcodes, {"src/vm/xvm_dispatch_arith.inc.c": "vmcase(OP_UNM) {\n"},
+        VM_GENERATED_UNARY_FILE)
+    assert len(vm_unary_handwritten) == 1 and "OP_UNM" in vm_unary_handwritten[0].message
 
     vm_shift_opcodes = {"OP_SHL"}
     vm_shift_coverage = check_vm_generated_body_coverage(
