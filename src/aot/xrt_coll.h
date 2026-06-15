@@ -778,16 +778,21 @@ static inline void xrt_map_alloc_slots(xrt_map_t *m, int64_t slots) {
     }
 }
 
-static inline XrValue xrt_map_new(int64_t cap) {
+static inline XrValue xrt_map_new_flags(int64_t cap, uint8_t flags) {
     xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
     if (XR_UNLIKELY(!m)) {
         fprintf(stderr, "xrt_map_new: out of memory\n");
         abort();
     }
     xrt_map_init_header(m);
+    m->flags |= (uint8_t) (flags & XR_MAP_FLAG_WEAK);
     if (cap > 0)
         xrt_map_resize_tagged(m, (uint32_t) cap);
     return xr_mkptr(m, XR_TAG_MAP);
+}
+
+static inline XrValue xrt_map_new(int64_t cap) {
+    return xrt_map_new_flags(cap, 0);
 }
 
 #include "xrt_map_typed.inc.c"
@@ -1061,6 +1066,12 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
         xrt_set_alloc_slots(s, xrt_swiss_slots_for(cap));
     }
     return xr_mkptr(s, XR_TAG_SET);
+}
+
+static inline XrValue xrt_set_new_flags(int64_t cap, uint8_t flags) {
+    XrValue v = xrt_set_new_typed(cap, XR_ELEM_ANY);
+    ((xrt_set_t *) v.ptr)->flags |= (uint8_t) (flags & XR_SET_FLAG_WEAK);
+    return v;
 }
 
 static inline XrValue xrt_set_new(int64_t cap) {
@@ -1477,6 +1488,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             xrt_map_t *src = (xrt_map_t *) val.ptr;
             if (!src)
                 return val;
+            if (!xrt_map_is_typed(src) && (src->flags & XR_MAP_FLAG_WEAK))
+                return xrt_map_new_flags(0, XR_MAP_FLAG_WEAK);
             XrValue dstv = xrt_map_is_typed(src)
                                ? xrt_map_new_typed(src->len, src->key_type, src->value_type)
                                : xrt_map_new(xrt_map_len(src));
@@ -1516,6 +1529,8 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
             xrt_set_t *src = (xrt_set_t *) val.ptr;
             if (!src)
                 return val;
+            if (!xrt_set_is_typed(src) && (src->flags & XR_SET_FLAG_WEAK))
+                return xrt_set_new_flags(0, XR_SET_FLAG_WEAK);
             XrValue dstv = xrt_set_new_typed(xrt_set_len(src), src->elem_type);
             xrt_set_t *dst = (xrt_set_t *) dstv.ptr;
             if (src->elem_type != XR_ELEM_ANY && dst->cap == src->cap) {

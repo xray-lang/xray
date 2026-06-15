@@ -764,8 +764,11 @@ static void xicgen_map_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     (void) f;
     (void) prefix;
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    if (!emit_typed_map_new_expr(ctx, out, v, cap))
+    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
+    if (!flags && !emit_typed_map_new_expr(ctx, out, v, cap))
         fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
+    else if (flags)
+        fprintf(out, "xrt_map_new_flags(%" PRId64 ", XR_MAP_FLAG_WEAK)", cap);
 }
 
 static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -774,8 +777,11 @@ static void xicgen_set_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     (void) f;
     (void) prefix;
     int64_t cap = xicgen_capacity_arg_or_default(v, 8);
-    if (!emit_typed_set_new_expr(ctx, out, v, cap))
+    uint8_t flags = (uint8_t) ((v ? v->aux_int : 0) & 0x02);
+    if (!flags && !emit_typed_set_new_expr(ctx, out, v, cap))
         fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
+    else if (flags)
+        fprintf(out, "xrt_set_new_flags(%" PRId64 ", XR_SET_FLAG_WEAK)", cap);
 }
 
 static void xicgen_str_concat(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1293,12 +1299,18 @@ static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         /* map: fallback to heap until stack map storage is available */
         int64_t cap =
             (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
-        if (!emit_typed_map_new_expr(ctx, out, v, cap))
+        uint8_t flags = (uint8_t) (v->aux_int & 0x02);
+        if (flags)
+            fprintf(out, "xrt_map_new_flags(%" PRId64 ", XR_MAP_FLAG_WEAK)", cap);
+        else if (!emit_typed_map_new_expr(ctx, out, v, cap))
             fprintf(out, "xrt_map_new(%" PRId64 ")", cap);
     } else if (orig_op == XI_SET_NEW) {
         int64_t cap =
             (v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST) ? v->args[0]->aux_int : 8;
-        if (!emit_typed_set_new_expr(ctx, out, v, cap))
+        uint8_t flags = (uint8_t) (v->aux_int & 0x02);
+        if (flags)
+            fprintf(out, "xrt_set_new_flags(%" PRId64 ", XR_SET_FLAG_WEAK)", cap);
+        else if (!emit_typed_set_new_expr(ctx, out, v, cap))
             fprintf(out, "xrt_set_new(%" PRId64 ")", cap);
     } else if (orig_op == XI_STR_CONCAT) {
         emit_str_concat_expr(ctx, out, v);
