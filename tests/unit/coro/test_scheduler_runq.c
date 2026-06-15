@@ -113,6 +113,7 @@ typedef struct StealFixture {
     bool inject_initialized;
     bool worker_initialized[2];
     bool task_lock_initialized;
+    bool manual_threads;
 } StealFixture;
 
 static bool steal_fixture_init(StealFixture *f) {
@@ -144,6 +145,10 @@ static bool steal_fixture_init(StealFixture *f) {
 }
 
 static void steal_fixture_cleanup(StealFixture *f) {
+    if (f->manual_threads) {
+        atomic_store(&f->runtime.threads_started, false);
+        f->manual_threads = false;
+    }
     xr_runtime_stop(&f->runtime);
     for (int i = 1; i >= 0; i--) {
         if (f->worker_initialized[i]) {
@@ -166,6 +171,16 @@ static void steal_fixture_cleanup(StealFixture *f) {
         xr_sysheap_destroy(&f->sys_heap);
         f->sys_heap_initialized = false;
     }
+}
+
+static void steal_fixture_enter_manual_threads(StealFixture *f) {
+    /* These unit tests inspect one worker's continuation-stealing state.
+     * worker_exec_with_cont_stealing lazily starts helper threads on spawn;
+     * mark them started so the policy sees a multi-worker runtime without
+     * a background worker racing the assertions. */
+    atomic_store(&f->runtime.started_workers, f->runtime.worker_count - 1);
+    atomic_store(&f->runtime.threads_started, true);
+    f->manual_threads = true;
 }
 
 static void init_ready_coro(XrCoroutine *coro, int id, XrayIsolate *isolate) {
@@ -400,6 +415,7 @@ TEST(work_stealing_moves_batch_and_returns_direct_item) {
 TEST(spawn_burst_shares_same_parent_fanout) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
+    steal_fixture_enter_manual_threads(&f);
     tls_current_worker = &f.workers[0];
     tls_current_machine = f.workers[0].m;
 
@@ -429,6 +445,7 @@ TEST(spawn_burst_shares_same_parent_fanout) {
 TEST(spawn_burst_resets_after_yield) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
+    steal_fixture_enter_manual_threads(&f);
     tls_current_worker = &f.workers[0];
     tls_current_machine = f.workers[0].m;
 
@@ -481,6 +498,7 @@ TEST(spawn_burst_resets_after_yield) {
 TEST(spawn_burst_resets_after_block) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
+    steal_fixture_enter_manual_threads(&f);
     tls_current_worker = &f.workers[0];
     tls_current_machine = f.workers[0].m;
 
