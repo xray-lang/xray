@@ -777,3 +777,10 @@ add_test(
     COMMAND bash ${CMAKE_SOURCE_DIR}/scripts/check_xi_invariants.sh
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
+
+add_test(
+    NAME check_xi_template_lowering
+    COMMAND ${XRAY_PYTHON}
+        ${CMAKE_SOURCE_DIR}/scripts/check_xi_template_lowering.py
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+)
