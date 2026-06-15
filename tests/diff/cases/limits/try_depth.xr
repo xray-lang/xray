@@ -1,0 +1,36 @@
+// anchor: jit-try-depth-limit
+// diff-backends: vm,jit
+// Lifted JIT lowering cap XI2XM_MAX_TRY_DEPTH (was a fixed 8-deep stack): the
+// try-handler stack now grows on demand, so >8 nested try / catch-panic blocks
+// keep tracking every handler instead of silently dropping the deepest ones.
+// AOT excluded: `catch panic` AOT codegen leaves a dangling goto (separate,
+// pre-existing exception-lowering gap).
+fn boom(b: int) -> int { return 100 / b }
+
+fn deep(b: int) -> int {
+    try {
+        try {
+            try {
+                try {
+                    try {
+                        try {
+                            try {
+                                try {
+                                    try {
+                                        try {
+                                            return boom(b)
+                                        } catch panic (p) { return 10 }
+                                    } catch panic (p) { return 9 }
+                                } catch panic (p) { return 8 }
+                            } catch panic (p) { return 7 }
+                        } catch panic (p) { return 6 }
+                    } catch panic (p) { return 5 }
+                } catch panic (p) { return 4 }
+            } catch panic (p) { return 3 }
+        } catch panic (p) { return 2 }
+    } catch panic (p) { return 1 }
+    return 0
+}
+
+print(deep(0))
+print(deep(7))
