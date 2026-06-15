@@ -880,26 +880,6 @@ startfunc:
 /* Exception opcodes — see xvm_dispatch_exception.inc.c. */
 #include "xvm_dispatch_exception.inc.c"
 
-    /* === Register spill instructions (fully inlined) === */
-    vmcase(OP_SPILL) {
-        /* ========== OP_SPILL - Register spill to stack frame spill slot (fully inlined) ==========
-         */
-        // S[A] = R[B], spill slot located after register area: base[MAXREGS + slot]
-        int slot = GETARG_A(i);
-        int reg = GETARG_B(i);
-        base[MAXREGS + slot] = R(reg);
-        vmbreak;
-    }
-
-    vmcase(OP_RELOAD) {
-        /* ========== OP_RELOAD - Restore from spill slot to register (fully inlined) ========== */
-        // R[A] = S[B]
-        int reg = GETARG_A(i);
-        int slot = GETARG_B(i);
-        R(reg) = base[MAXREGS + slot];
-        vmbreak;
-    }
-
 /* Module opcodes — see xvm_dispatch_module.inc.c. */
 #include "xvm_dispatch_module.inc.c"
 

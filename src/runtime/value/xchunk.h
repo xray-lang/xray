@@ -249,7 +249,6 @@ typedef struct XrProto {
     int numparams;              // parameter count
     int min_params;             // minimum required params (for default params)
     int num_globals;            // global variable count
-    int num_spill_slots;        // spill slot count
     uint16_t struct_area_size;  // bytes needed for struct_area in stack frame (0 = none)
 
     // Struct layout cache for JIT: compile-time struct_layout pointers indexed by
