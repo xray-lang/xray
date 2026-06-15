@@ -112,6 +112,58 @@ TEST(set_destroy_releases_value) {
     teardown();
 }
 
+TEST(weak_map_does_not_retain_key_and_purges_value) {
+    setup();
+    XrMap *map = xr_map_new(main_coro);
+    map->flags |= XR_MAP_FLAG_WEAK;
+    XrArray *key = xr_array_new(main_coro);
+    XrArray *value = xr_array_new(main_coro);
+
+    /* Simulate language-call ownership: the local `key` owns one reference and
+     * the WeakMap.set argument owns a temporary duplicate. WeakMap must consume
+     * that duplicate without keeping the key alive. */
+    xr_rc_retain_value(xr_value_from_array(key));
+    xr_map_set(map, xr_value_from_array(key), xr_value_from_array(value));
+    ASSERT_EQ_INT(key->gc.refcount, 0);
+    ASSERT_EQ_INT(map->count, 1);
+    ASSERT_FALSE(is_dead(&key->gc));
+    ASSERT_FALSE(is_dead(&value->gc));
+
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+    xr_rc_release_value(gc, xr_value_from_array(key));
+    ASSERT_TRUE(is_dead(&key->gc));
+    ASSERT_TRUE(is_dead(&value->gc));
+    ASSERT_EQ_INT(map->count, 0);
+
+    xr_rc_release_value(gc, xr_value_from_map(map));
+    ASSERT_TRUE(is_dead(&map->gc));
+    teardown();
+}
+
+TEST(weak_set_does_not_retain_element) {
+    setup();
+    XrSet *set = xr_set_new(main_coro);
+    set->flags |= XR_SET_FLAG_WEAK;
+    XrArray *elem = xr_array_new(main_coro);
+
+    xr_rc_retain_value(xr_value_from_array(elem));
+    ASSERT_TRUE(xr_set_add(set, xr_value_from_array(elem)));
+    ASSERT_EQ_INT(elem->gc.refcount, 0);
+    ASSERT_EQ_INT(set->count, 1);
+    ASSERT_FALSE(is_dead(&elem->gc));
+
+    XrCoroGC *gc = test_gc();
+    ASSERT_NOT_NULL(gc);
+    xr_rc_release_value(gc, xr_value_from_array(elem));
+    ASSERT_TRUE(is_dead(&elem->gc));
+    ASSERT_EQ_INT(set->count, 0);
+
+    xr_rc_release_value(gc, xr_value_from_set(set));
+    ASSERT_TRUE(is_dead(&set->gc));
+    teardown();
+}
+
 TEST(tuple_instance_destroy_releases_elements) {
     setup();
     XrTuple *tuple = xr_tuple_new(main_coro, 2);
@@ -207,6 +259,8 @@ int main(void) {
     RUN_TEST(array_destroy_releases_child_array);
     RUN_TEST(map_destroy_releases_key_and_value);
     RUN_TEST(set_destroy_releases_value);
+    RUN_TEST(weak_map_does_not_retain_key_and_purges_value);
+    RUN_TEST(weak_set_does_not_retain_element);
     RUN_TEST(tuple_instance_destroy_releases_elements);
     RUN_TEST(dynamic_instance_destroy_releases_overflow_fields);
     RUN_TEST(whole_block_reclaim_returns_empty_blocks);

@@ -290,10 +290,17 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     new_map->indices = NULL;
     new_map->entries = NULL;
     new_map->flags = XR_MAP_FLAG_DUMMY;
+    if (map->flags & XR_MAP_FLAG_WEAK)
+        new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
 
     XrValue result = XR_FROM_PTR(new_map);
+    if (map->flags & XR_MAP_FLAG_WEAK) {
+        xr_copy_context_record(ctx, map, result);
+        ctx->objects_copied++;
+        return result;
+    }
     if (xr_map_isdummy(map) || map->count == 0) {
         xr_copy_context_record(ctx, map, result);
         ctx->objects_copied++;
@@ -360,11 +367,15 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     if (!new_set)
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
+    if (set->flags & XR_SET_FLAG_WEAK)
+        new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
 
     XrValue result = XR_FROM_PTR(new_set);
     xr_copy_context_record(ctx, set, result);
     ctx->objects_copied++;
+    if (set->flags & XR_SET_FLAG_WEAK)
+        return result;
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (!XR_SET_ENTRY_EMPTY(entry))
@@ -801,11 +812,13 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrGCHeader *obj) {
     if (!new_map)
         return XR_NULL_VAL;
     xr_map_init_inplace(new_map, 8);
+    if (map->flags & XR_MAP_FLAG_WEAK)
+        new_map->flags |= XR_MAP_FLAG_WEAK;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
     XR_GC_SET_STORAGE(&new_map->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_map->gc, 1);
-    if (!xr_map_isdummy(map)) {
+    if (!(map->flags & XR_MAP_FLAG_WEAK) && !xr_map_isdummy(map)) {
         for (uint32_t i = 0; i < map->nentries; i++) {
             XrMapEntry *node = &map->entries[i];
             if (!XR_MAP_ENTRY_EMPTY(node))
@@ -824,9 +837,13 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrGCHeader *obj) {
     if (!new_set)
         return XR_NULL_VAL;
     xr_set_init_inplace(new_set);
+    if (set->flags & XR_SET_FLAG_WEAK)
+        new_set->flags |= XR_SET_FLAG_WEAK;
     new_set->elem_tid = set->elem_tid;
     XR_GC_SET_STORAGE(&new_set->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_set->gc, 1);
+    if (set->flags & XR_SET_FLAG_WEAK)
+        return XR_FROM_PTR(new_set);
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
         if (!XR_SET_ENTRY_EMPTY(entry))

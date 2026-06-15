@@ -26,6 +26,7 @@
 #include "xstring.h"
 #include "../xisolate_api.h"
 #include "../gc/xalloc_unified.h"
+#include "../gc/xweak_registry.h"
 #include "../../base/xchecks.h"
 #include "../value/xvalue_hash.h"
 #include "../../base/xmalloc.h"
@@ -35,6 +36,8 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc_internal.h"
+#include "../gc/xcoro_gc.h"
+#include "../../coro/xcoroutine.h"
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -125,11 +128,45 @@ static uint32_t calc_indices_size(uint32_t needed) {
     return size;
 }
 
-static void xr_map_release_entry_values(XrMapEntry *e, XrCoroGC *gc) {
-    xr_rc_release_value(gc, e->key);
+static inline bool map_is_weak(const XrMap *map) {
+    return (map->flags & XR_MAP_FLAG_WEAK) != 0;
+}
+
+static XrayIsolate *map_owning_isolate(XrCoroGC *gc) {
+    if (gc && gc->owner)
+        return gc->owner->isolate;
+    return xray_isolate_current();
+}
+
+static void xr_map_release_entry_values(XrMap *map, XrMapEntry *e, XrCoroGC *gc) {
+    if (!map_is_weak(map))
+        xr_rc_release_value(gc, e->key);
     xr_rc_release_value(gc, e->value);
     e->key = xr_null();
     e->value = xr_null();
+}
+
+static void xr_map_prepare_weak_key(XrMap *map, XrValue key) {
+    if (!map_is_weak(map) || !XR_IS_PTR(key))
+        return;
+    XrGCHeader *target = XR_VALUE_GCPTR(key);
+    XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
+    xr_weak_registry_register_map(xray_isolate_current(), map);
+}
+
+static void map_tombstone_entry_index(XrMap *map, uint32_t eidx, XrCoroGC *gc) {
+    XrMapEntry *e = &map->entries[eidx];
+    xr_map_release_entry_values(map, e, gc);
+    e->key_tt = XR_MAP_ENTRY_NIL_KEY;
+    for (uint32_t slot = 0; slot < map->indices_size; slot++) {
+        if (map->indices[slot] == (int32_t) eidx) {
+            map->indices[slot] = XR_MAP_IX_EMPTY;
+            xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
+            break;
+        }
+    }
+    if (map->count > 0)
+        map->count--;
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -435,6 +472,10 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     map->count++;
 
     indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
+    if (map_is_weak(map)) {
+        xr_map_prepare_weak_key(map, key);
+        xr_rc_release_value(gc, key);
+    }
     XR_GC_BARRIER_BACK_SAFE(gc, map);
 }
 
@@ -479,12 +520,28 @@ bool xr_map_delete(XrMap *map, XrValue key) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrMapEntry *e = &map->entries[ix];
-    xr_map_release_entry_values(e, xr_current_coro_gc());
+    xr_map_release_entry_values(map, e, xr_current_coro_gc());
     e->key_tt = XR_MAP_ENTRY_NIL_KEY;
     map->indices[slot] = XR_MAP_IX_EMPTY;
     xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
     map->count--;
     return true;
+}
+
+uint32_t xr_map_purge_weak_target(XrMap *map, XrGCHeader *target, XrCoroGC *owning_gc) {
+    if (!map || !target || !map_is_weak(map) || xr_map_isdummy(map) || !map->entries ||
+        (map->gc.extra & XR_OBJ_DEAD))
+        return 0;
+    uint32_t removed = 0;
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *e = &map->entries[i];
+        if (e->key_tt == XR_MAP_ENTRY_NIL_KEY || !XR_IS_PTR(e->key) ||
+            XR_VALUE_GCPTR(e->key) != target)
+            continue;
+        map_tombstone_entry_index(map, i, owning_gc);
+        removed++;
+    }
+    return removed;
 }
 
 void xr_map_clear(XrMap *map) {
@@ -496,7 +553,7 @@ void xr_map_clear(XrMap *map) {
     for (uint32_t i = 0; i < map->nentries; i++) {
         XrMapEntry *e = &map->entries[i];
         if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
-            xr_map_release_entry_values(e, gc);
+            xr_map_release_entry_values(map, e, gc);
             e->key_tt = XR_MAP_ENTRY_NIL_KEY;
         }
     }
@@ -636,11 +693,13 @@ void xr_map_debug_print(XrMap *map) {
 
 void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrMap *map = (XrMap *) obj;
+    if (map->flags & XR_MAP_FLAG_WEAK_REGISTERED)
+        xr_weak_registry_unregister_map(map_owning_isolate(owning_gc), map);
     if (!xr_map_isdummy(map) && map->entries) {
         for (uint32_t i = 0; i < map->nentries; i++) {
             XrMapEntry *e = &map->entries[i];
             if (e->key_tt != XR_MAP_ENTRY_NIL_KEY)
-                xr_map_release_entry_values(e, owning_gc);
+                xr_map_release_entry_values(map, e, owning_gc);
         }
         size_t bytes = (size_t) map->indices_size + XR_SWISS_GROUP +
                        sizeof(int32_t) * (size_t) map->indices_size +

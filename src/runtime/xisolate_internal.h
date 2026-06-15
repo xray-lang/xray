@@ -173,6 +173,11 @@ struct XrayIsolate {
     // Per-isolate active type pool (replaces XR_THREAD_LOCAL g_current_pool)
     struct XrTypePool *current_type_pool;
 
+    /* WeakMap / WeakSet registry. Lazily allocated by the first weak insert
+     * and swept when a weakable target reaches RC zero. Kept opaque here so
+     * the isolate core does not depend on container internals. */
+    void *weak_registry;  // XrWeakContainerRegistry*
+
     /* ========== VM Engine State ========== */
 
     // VM state uses independent type XrVMState (defined in xr_vm_state.h)

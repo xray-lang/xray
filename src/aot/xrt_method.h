@@ -27,6 +27,27 @@
 #include "xrt_range_methods.inc.c"
 #include "xrt_sort.inc.c"
 
+static inline int xrt_weak_value_is_heap_object(XrValue v) {
+    if (!v.ptr)
+        return 0;
+    switch (v.tag) {
+        case XR_TAG_PTR:
+        case XR_TAG_STR:
+        case XR_TAG_ARRAY:
+        case XR_TAG_MAP:
+        case XR_TAG_STRBUF:
+        case XR_TAG_CLOSURE:
+        case XR_TAG_STR_ARC:
+        case XR_TAG_CELL:
+        case XR_TAG_TUPLE:
+        case XR_TAG_SET:
+        case XR_TAG_STRUCT_REF:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 /* toString helper. */
 
 static XrValue xrt_tostring(XrValue val, int slot_hint) {
@@ -251,6 +272,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(xrt_map_len(m));
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_map_len(m) == 0);
+        if (m->flags & XR_MAP_FLAG_WEAK)
+            return XR_NULL_VAL;
         if (sym == XRT_SYM_KEYS)
             return xrt_map_keys(m);
         if (sym == XRT_SYM_VALUES)
@@ -266,6 +289,8 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_INT(xrt_set_len(s));
         if (sym == XRT_SYM_IS_EMPTY)
             return XR_FROM_BOOL(xrt_set_len(s) == 0);
+        if (s->flags & XR_SET_FLAG_WEAK)
+            return XR_NULL_VAL;
         if (sym == XRT_SYM_CLEAR) {
             xrt_set_clear(s);
             return XR_NULL_VAL;
@@ -622,6 +647,8 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (recv.tag == XR_TAG_SET) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
         if (sym == XRT_SYM_SET) {
+            if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
+                return XR_NULL_VAL;
             (void) xrt_set_add(s, arg0);
             return XR_NULL_VAL;
         }
@@ -780,7 +807,10 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
     if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
     if (recv.tag == XR_TAG_MAP && sym == XRT_SYM_SET) {
-        xrt_map_set((xrt_map_t *) recv.ptr, arg0, arg1);
+        xrt_map_t *m = (xrt_map_t *) recv.ptr;
+        if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
+            return XR_NULL_VAL;
+        xrt_map_set(m, arg0, arg1);
         return (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     }
     return (XrValue) {.i = 0, .tag = XR_TAG_NULL};

@@ -50,6 +50,7 @@ XR_FUNC XrSet *xr_set_from_array(struct XrCoroutine *coro, struct XrArray *arr);
 XR_FUNC bool xr_set_add(XrSet *set, XrValue value);
 XR_FUNC bool xr_set_has(XrSet *set, XrValue value);
 XR_FUNC bool xr_set_delete(XrSet *set, XrValue value);
+XR_FUNC uint32_t xr_set_purge_weak_target(XrSet *set, XrGCHeader *target);
 XR_FUNC void xr_set_clear(XrSet *set);
 XR_FUNC uint32_t xr_set_size(XrSet *set);
 XR_FUNC bool xr_set_is_empty(XrSet *set);

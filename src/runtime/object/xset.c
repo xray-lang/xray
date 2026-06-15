@@ -29,9 +29,12 @@
 #include "../../base/xmalloc.h"
 #include "../gc/xalloc_unified.h"
 #include "../gc/xgc_internal.h"
+#include "../gc/xweak_registry.h"
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc.h"
+#include "../gc/xcoro_gc.h"
+#include "../../coro/xcoroutine.h"
 #include "../../shared/xr_swiss_index.h"
 #include <stdlib.h>
 #include <string.h>
@@ -67,6 +70,46 @@ static uint32_t calc_indices_size(uint32_t needed) {
 static inline void xr_set_release_entry(XrSetEntry *e, XrCoroGC *gc) {
     xr_rc_release_value(gc, e->value);
     e->value = xr_null();
+}
+
+static inline bool set_is_weak(const XrSet *set) {
+    return (set->flags & XR_SET_FLAG_WEAK) != 0;
+}
+
+static XrayIsolate *set_owning_isolate(XrCoroGC *gc) {
+    if (gc && gc->owner)
+        return gc->owner->isolate;
+    return xray_isolate_current();
+}
+
+static void xr_set_release_stored_entry(XrSet *set, XrSetEntry *e, XrCoroGC *gc) {
+    if (!set_is_weak(set))
+        xr_set_release_entry(e, gc);
+    else
+        e->value = xr_null();
+}
+
+static void xr_set_prepare_weak_value(XrSet *set, XrValue value) {
+    if (!set_is_weak(set) || !XR_IS_PTR(value))
+        return;
+    XrGCHeader *target = XR_VALUE_GCPTR(value);
+    XR_OBJ_SET_FLAG(target, XR_OBJ_WEAKABLE);
+    xr_weak_registry_register_set(xray_isolate_current(), set);
+}
+
+static void set_tombstone_entry_index(XrSet *set, uint32_t eidx) {
+    XrSetEntry *e = &set->entries[eidx];
+    e->value = xr_null();
+    e->val_tt = XR_SET_ENTRY_NIL;
+    for (uint32_t slot = 0; slot < set->indices_size; slot++) {
+        if (set->indices[slot] == (int32_t) eidx) {
+            set->indices[slot] = XR_SET_IX_EMPTY;
+            xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
+            break;
+        }
+    }
+    if (set->count > 0)
+        set->count--;
 }
 
 /* ========== Swiss Index Lookup ========== */
@@ -312,6 +355,10 @@ bool xr_set_add(XrSet *set, XrValue value) {
     set->count++;
 
     indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
+    if (set_is_weak(set)) {
+        xr_set_prepare_weak_value(set, value);
+        xr_rc_release_value(gc, value);
+    }
     XR_GC_BARRIER_BACK_SAFE(gc, set);
     return true;
 }
@@ -339,12 +386,28 @@ bool xr_set_delete(XrSet *set, XrValue value) {
     // Tombstone the entry (keeps its slot so order is preserved) and mark the
     // ctrl slot DELETED so probing skips past it.
     XrSetEntry *e = &set->entries[ix];
-    xr_set_release_entry(e, xr_current_coro_gc());
+    xr_set_release_stored_entry(set, e, xr_current_coro_gc());
     e->val_tt = XR_SET_ENTRY_NIL;
     set->indices[slot] = XR_SET_IX_EMPTY;
     xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
     set->count--;
     return true;
+}
+
+uint32_t xr_set_purge_weak_target(XrSet *set, XrGCHeader *target) {
+    if (!set || !target || !set_is_weak(set) || xr_set_isdummy(set) || !set->entries ||
+        (set->gc.extra & XR_OBJ_DEAD))
+        return 0;
+    uint32_t removed = 0;
+    for (uint32_t i = 0; i < set->nentries; i++) {
+        XrSetEntry *e = &set->entries[i];
+        if (e->val_tt == XR_SET_ENTRY_NIL || !XR_IS_PTR(e->value) ||
+            XR_VALUE_GCPTR(e->value) != target)
+            continue;
+        set_tombstone_entry_index(set, i);
+        removed++;
+    }
+    return removed;
 }
 
 void xr_set_clear(XrSet *set) {
@@ -356,7 +419,7 @@ void xr_set_clear(XrSet *set) {
     for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *e = &set->entries[i];
         if (e->val_tt != XR_SET_ENTRY_NIL) {
-            xr_set_release_entry(e, gc);
+            xr_set_release_stored_entry(set, e, gc);
             e->val_tt = XR_SET_ENTRY_NIL;
         }
     }
@@ -530,11 +593,13 @@ bool xr_set_is_superset(XrSet *set1, XrSet *set2) {
 
 void xr_gc_destroy_set(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrSet *set = (XrSet *) obj;
+    if (set->flags & XR_SET_FLAG_WEAK_REGISTERED)
+        xr_weak_registry_unregister_set(set_owning_isolate(owning_gc), set);
     if (!xr_set_isdummy(set) && set->entries) {
         for (uint32_t i = 0; i < set->nentries; i++) {
             XrSetEntry *e = &set->entries[i];
             if (e->val_tt != XR_SET_ENTRY_NIL)
-                xr_set_release_entry(e, owning_gc);
+                xr_set_release_stored_entry(set, e, owning_gc);
         }
         size_t bytes = (size_t) set->indices_size + XR_SWISS_GROUP +
                        sizeof(int32_t) * (size_t) set->indices_size +

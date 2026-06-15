@@ -10,6 +10,7 @@
 
 #include "xcoro_gc.h"
 #include "xgc_internal.h"
+#include "xweak_registry.h"
 #include "../../coro/xcoroutine.h"
 #include "../../coro/xworker.h"
 #include "../value/xvalue.h"
@@ -572,6 +573,8 @@ XR_FUNC void xr_coro_gc_reclaim_blocks(XrCoroGC *gc) {
 /* Core destroy logic (shared by top-level and deferred-drain paths). */
 static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
     XR_DCHECK(obj != NULL, "rc_destroy_one: NULL obj");
+    if (gc && (obj->extra & XR_OBJ_WEAKABLE))
+        xr_weak_registry_target_dying(gc_get_isolate(gc), obj, gc);
     obj->extra |= XR_OBJ_DEAD;
 
     /* Destroy is the single convergence point for every drop path (VM

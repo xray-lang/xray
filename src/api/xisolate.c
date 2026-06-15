@@ -30,6 +30,7 @@
 #include "../base/xchecks.h"
 #include "../runtime/gc/xgc.h"
 #include "../runtime/gc/xsystem_heap.h"
+#include "../runtime/gc/xweak_registry.h"
 #include "../runtime/object/xstring.h"
 #include "../runtime/xstrbuf.h"
 #include "../base/xmalloc.h"
@@ -257,6 +258,7 @@ void xray_isolate_delete(XrayIsolate *isolate) {
 
     stage_start_ns = xr_time_monotonic_ns();
     xr_gc_cleanup(&isolate->gc);
+    xr_weak_registry_destroy(isolate);
     gc_cleanup_ms = isolate_teardown_elapsed_ms(stage_start_ns);
 
     stage_start_ns = xr_time_monotonic_ns();
