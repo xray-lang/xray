@@ -63,8 +63,10 @@ CASE_SCAN_FILES = (
 
 VM_GENERATED_BODY_TEMPLATES = {"narrow", "widen"}
 VM_GENERATED_WIDTH_FILE = "src/vm/xvm_template_width_gen.inc.c"
+VM_GENERATED_BITWISE_BINARY_FILE = "src/vm/xvm_template_bitwise_binary_gen.inc.c"
 VM_BODY_SCAN_FILES = (
     "src/vm/xvm_dispatch_data.inc.c",
+    "src/vm/xvm_dispatch_bitwise.inc.c",
 )
 
 
@@ -104,6 +106,16 @@ def vm_generated_body_opcodes(root: Path, entries) -> set[str]:
     opcodes: set[str] = set()
     for entry in entries:
         if 'vm-bytecode' in entry.target_drivers and entry.template in VM_GENERATED_BODY_TEMPLATES:
+            opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
+    return opcodes
+
+
+def vm_generated_bitwise_binary_opcodes(root: Path, entries) -> set[str]:
+    xisagen = load_xisagen(root)
+    opcodes: set[str] = set()
+    for entry in entries:
+        if ('vm-bytecode' in entry.target_drivers and
+                entry.op_name in xisagen.XI_VM_TEMPLATE_BITWISE_BINARY):
             opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
     return opcodes
 
@@ -215,10 +227,10 @@ def check_patterned_cases(entries, texts: dict[str, str]) -> list[Violation]:
     return violations
 
 
-def check_vm_generated_body_coverage(opcodes: set[str], generated_text: str) -> list[Violation]:
+def check_vm_generated_body_coverage(opcodes: set[str], generated_text: str, rel: str,
+                                     invocation_re: str, label: str) -> list[Violation]:
     emitted = set(
-        re.findall(r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
-                   generated_text)
+        re.findall(invocation_re, generated_text)
     )
     missing = sorted(opcodes - emitted)
     extra = sorted(emitted - opcodes)
@@ -226,23 +238,24 @@ def check_vm_generated_body_coverage(opcodes: set[str], generated_text: str) -> 
     for opcode in missing:
         violations.append(
             Violation(
-                VM_GENERATED_WIDTH_FILE,
+                rel,
                 0,
-                f"VM generated width body is missing {opcode}",
+                f"VM generated {label} body is missing {opcode}",
             )
         )
     for opcode in extra:
         violations.append(
             Violation(
-                VM_GENERATED_WIDTH_FILE,
+                rel,
                 0,
-                f"VM generated width body contains undeclared template opcode {opcode}",
+                f"VM generated {label} body contains undeclared template opcode {opcode}",
             )
         )
     return violations
 
 
-def check_vm_handwritten_body_cases(opcodes: set[str], texts: dict[str, str]) -> list[Violation]:
+def check_vm_handwritten_body_cases(opcodes: set[str], texts: dict[str, str],
+                                    generated_file: str) -> list[Violation]:
     if not opcodes:
         return []
     opcode_re = "|".join(re.escape(opcode) for opcode in sorted(opcodes))
@@ -257,7 +270,7 @@ def check_vm_handwritten_body_cases(opcodes: set[str], texts: dict[str, str]) ->
                         rel,
                         line_no,
                         f"{match.group(1)} has a handwritten VM handler; "
-                        "route it through xvm_template_width_gen.inc.c",
+                        f"route it through {generated_file}",
                     )
                 )
     return violations
@@ -268,14 +281,30 @@ def run_check(root: Path) -> list[Violation]:
     generated = load_generated_template_drivers(root)
     texts = gather_scan_files(root)
     vm_body_texts = read_rel_files(root, VM_BODY_SCAN_FILES)
-    vm_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
-    vm_body_opcodes = vm_generated_body_opcodes(root, entries)
+    vm_width_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
+    vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text()
+    vm_width_opcodes = vm_generated_body_opcodes(root, entries)
+    vm_bitwise_opcodes = vm_generated_bitwise_binary_opcodes(root, entries)
     violations: list[Violation] = []
     violations.extend(check_generated_driver_coverage(entries, generated))
     violations.extend(check_direct_driver_definitions(entries, texts))
     violations.extend(check_patterned_cases(entries, texts))
-    violations.extend(check_vm_generated_body_coverage(vm_body_opcodes, vm_generated_text))
-    violations.extend(check_vm_handwritten_body_cases(vm_body_opcodes, vm_body_texts))
+    violations.extend(check_vm_generated_body_coverage(
+        vm_width_opcodes,
+        vm_width_generated_text,
+        VM_GENERATED_WIDTH_FILE,
+        r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "width"))
+    violations.extend(check_vm_generated_body_coverage(
+        vm_bitwise_opcodes,
+        vm_bitwise_generated_text,
+        VM_GENERATED_BITWISE_BINARY_FILE,
+        r"\bXVM_TEMPLATE_BITWISE_BINARY(?:_BOOL)?_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "bitwise binary"))
+    violations.extend(check_vm_handwritten_body_cases(
+        vm_width_opcodes, vm_body_texts, VM_GENERATED_WIDTH_FILE))
+    violations.extend(check_vm_handwritten_body_cases(
+        vm_bitwise_opcodes, vm_body_texts, VM_GENERATED_BITWISE_BINARY_FILE))
     return violations
 
 
@@ -313,13 +342,36 @@ def run_self_test() -> None:
 
     vm_opcodes = {"OP_NARROW_I8"}
     vm_coverage = check_vm_generated_body_coverage(
-        vm_opcodes, "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, int8_t)\n")
+        vm_opcodes,
+        "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, int8_t)\n",
+        VM_GENERATED_WIDTH_FILE,
+        r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "width")
     assert not vm_coverage
-    vm_missing = check_vm_generated_body_coverage(vm_opcodes, "")
+    vm_missing = check_vm_generated_body_coverage(
+        vm_opcodes,
+        "",
+        VM_GENERATED_WIDTH_FILE,
+        r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "width")
     assert len(vm_missing) == 1 and "OP_NARROW_I8" in vm_missing[0].message
     vm_handwritten = check_vm_handwritten_body_cases(
-        vm_opcodes, {"src/vm/xvm_dispatch_data.inc.c": "vmcase(OP_NARROW_I8) {\n"})
+        vm_opcodes, {"src/vm/xvm_dispatch_data.inc.c": "vmcase(OP_NARROW_I8) {\n"},
+        VM_GENERATED_WIDTH_FILE)
     assert len(vm_handwritten) == 1 and "OP_NARROW_I8" in vm_handwritten[0].message
+
+    vm_bitwise_opcodes = {"OP_BAND"}
+    vm_bitwise_coverage = check_vm_generated_body_coverage(
+        vm_bitwise_opcodes,
+        "XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE(OP_BAND, &, &&, fn, flag, sym, name, err)\n",
+        VM_GENERATED_BITWISE_BINARY_FILE,
+        r"\bXVM_TEMPLATE_BITWISE_BINARY(?:_BOOL)?_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "bitwise binary")
+    assert not vm_bitwise_coverage
+    vm_bitwise_handwritten = check_vm_handwritten_body_cases(
+        vm_bitwise_opcodes, {"src/vm/xvm_dispatch_bitwise.inc.c": "vmcase(OP_BAND) {\n"},
+        VM_GENERATED_BITWISE_BINARY_FILE)
+    assert len(vm_bitwise_handwritten) == 1 and "OP_BAND" in vm_bitwise_handwritten[0].message
 
 
 def main() -> int:
