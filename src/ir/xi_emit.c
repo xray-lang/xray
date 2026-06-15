@@ -217,7 +217,7 @@ XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid) {
 XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val) {
     XrValue xv = xr_make_int_val(val, XR_TAG_I64);
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
-    if (idx > MAXARG_Bx) {
+    if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
     return idx;
@@ -226,7 +226,7 @@ XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val) {
 XR_FUNC int add_const_float(EmitCtx *ctx, double val) {
     XrValue xv = xr_make_float_val(val, XR_TAG_F64);
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
-    if (idx > MAXARG_Bx) {
+    if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
     return idx;
@@ -245,7 +245,7 @@ XR_FUNC int add_const_string(EmitCtx *ctx, const char *str) {
         xv = xr_null();
     }
     int idx = xr_vm_proto_add_constant(ctx->proto, xv);
-    if (idx > MAXARG_Bx) {
+    if (idx < 0 || (uint64_t) idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
     }
     return idx;
@@ -265,12 +265,12 @@ XR_FUNC int add_symbol(EmitCtx *ctx, const char *name) {
     int local = xr_proto_add_symbol(ctx->proto, (int32_t) global);
     if (local < 0) {
         /* OOM growing the symbol table. Without this check the -1 would
-         * be truncated to 255 by callers' (uint8_t) casts and silently
-         * bind the wrong symbol. */
+         * be truncated by callers' narrow casts and silently bind the
+         * wrong symbol. */
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return -1;
     }
-    if (local > MAXARG_B) {
+    if (local > (int) MAXARG_B) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return -1;
     }
@@ -356,7 +356,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
                     bi->klass = core->bigintClass;
                 XrValue xv = XR_FROM_PTR(bi);
                 int ki = xr_vm_proto_add_constant(ctx->proto, xv);
-                if (ki > MAXARG_Bx) {
+                if (ki < 0 || (uint64_t) ki > MAXARG_Bx) {
                     emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
                     return;
                 }
@@ -372,7 +372,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             if (ptr) {
                 XrValue xv = XR_FROM_PTR(ptr);
                 int ki = xr_vm_proto_add_constant(ctx->proto, xv);
-                if (ki > MAXARG_Bx) {
+                if (ki < 0 || (uint64_t) ki > MAXARG_Bx) {
                     emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
                     return;
                 }

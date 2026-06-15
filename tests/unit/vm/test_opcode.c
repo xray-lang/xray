@@ -74,36 +74,36 @@ TEST(opcode_name_nop) {
 
 TEST(opcode_count) {
     // NUM_OPCODES should include all opcodes
-    ASSERT_TRUE(NUM_OPCODES > 100);  // Should have many opcodes
-    ASSERT_TRUE(NUM_OPCODES < 256);  // Fits in 8 bits
+    ASSERT_TRUE(NUM_OPCODES > 100);    // Should have many opcodes
+    ASSERT_TRUE(NUM_OPCODES < 65536);  // Fits in 16 bits
     ASSERT_EQ_INT(NUM_OPCODES, OP_NOP + 1);
 }
 
-TEST(opcode_fits_8bits) {
-    // All opcodes should fit in 8 bits
-    ASSERT_TRUE(OP_NOP < 256);
+TEST(opcode_fits_16bits) {
+    // All opcodes should fit in 16 bits
+    ASSERT_TRUE(OP_NOP < 65536);
     ASSERT_TRUE(OP_MOVE == 0);  // First opcode
 }
 
 /* ========== Instruction Size Constants ========== */
 
 TEST(instruction_size_constants) {
-    ASSERT_EQ_INT(SIZE_OP, 8);
-    ASSERT_EQ_INT(SIZE_A, 8);
-    ASSERT_EQ_INT(SIZE_B, 8);
-    ASSERT_EQ_INT(SIZE_C, 8);
-    ASSERT_EQ_INT(SIZE_Bx, 16);
-    ASSERT_EQ_INT(SIZE_Ax, 24);
+    ASSERT_EQ_INT(SIZE_OP, 16);
+    ASSERT_EQ_INT(SIZE_A, 16);
+    ASSERT_EQ_INT(SIZE_B, 16);
+    ASSERT_EQ_INT(SIZE_C, 16);
+    ASSERT_EQ_INT(SIZE_Bx, 32);
+    ASSERT_EQ_INT(SIZE_Ax, 48);
 }
 
 TEST(instruction_max_constants) {
-    ASSERT_EQ_INT(MAXARG_A, 255);
-    ASSERT_EQ_INT(MAXARG_B, 255);
-    ASSERT_EQ_INT(MAXARG_C, 255);
-    ASSERT_EQ_INT(MAXARG_Bx, 65535);
-    ASSERT_EQ_INT(MAXARG_sBx, 32767);
-    ASSERT_EQ_INT(MAXARG_Ax, 16777215);
-    ASSERT_EQ_INT(MAXARG_sJ, 8388607);
+    ASSERT_EQ_UINT(MAXARG_A, 65535ull);
+    ASSERT_EQ_UINT(MAXARG_B, 65535ull);
+    ASSERT_EQ_UINT(MAXARG_C, 65535ull);
+    ASSERT_EQ_UINT(MAXARG_Bx, 4294967295ull);
+    ASSERT_EQ_INT(MAXARG_sBx, 2147483647);
+    ASSERT_EQ_UINT(MAXARG_Ax, 281474976710655ull);
+    ASSERT_EQ_UINT(MAXARG_sJ, 140737488355327ull);
 }
 
 /* ========== Opcode Category Tests ========== */
@@ -144,7 +144,7 @@ static void run_all_tests(void) {
 
     RUN_TEST_SUITE("Opcode Count");
     RUN_TEST(opcode_count);
-    RUN_TEST(opcode_fits_8bits);
+    RUN_TEST(opcode_fits_16bits);
 
     RUN_TEST_SUITE("Instruction Constants");
     RUN_TEST(instruction_size_constants);

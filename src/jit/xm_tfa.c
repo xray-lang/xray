@@ -493,8 +493,8 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
 
         switch (op) {
             case OP_CLOSURE: {
-                uint16_t bx = GETARG_Bx(ins);
-                if (a < TFA_REG_TRACK_MAX && bx < PROTO_PROTO_COUNT(proto)) {
+                uint32_t bx = GETARG_Bx(ins);
+                if (a < TFA_REG_TRACK_MAX && bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
                     reg_proto[a] = PROTO_PROTO(proto, bx);
                 }
                 break;
@@ -519,8 +519,8 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                 break;
             case OP_LOADK: {
                 if (a < TFA_REG_TRACK_MAX) {
-                    uint16_t bx = GETARG_Bx(ins);
-                    if (bx < PROTO_CONST_COUNT(proto)) {
+                    uint32_t bx = GETARG_Bx(ins);
+                    if (bx < (uint32_t) PROTO_CONST_COUNT(proto)) {
                         XrValue kv = PROTO_CONST_FAST(proto, bx);
                         uint32_t tag = kv.tag;
                         if (tag <= 8)

@@ -437,7 +437,7 @@ TEST(emit_const_float_large) {
 /* ========== Large Constants ========== */
 
 TEST(emit_const_int_large) {
-    /* fn() { return 100000 } - uses LOADK since > sBx range */
+    /* fn() { return 100000 } - fits the widened sBx range, so uses LOADI. */
     XiFunc *f = make_func("test", &stub_int);
     XiBlock *entry = f->entry;
 
@@ -449,7 +449,29 @@ TEST(emit_const_int_large) {
     assert(s == XI_EMIT_OK && proto != NULL);
 
     XrInstruction i0 = PROTO_CODE(proto, 0);
-    assert(GET_OPCODE(i0) == OP_LOADK && "large int should use LOADK");
+    assert(GET_OPCODE(i0) == OP_LOADI && "widened sBx int should use LOADI");
+    assert(GETARG_sBx(i0) == 100000);
+    assert(PROTO_CONST_COUNT(proto) == 0);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_const_int_beyond_sbx) {
+    /* fn() { return MAXARG_sBx + 1 } - uses LOADK outside sBx range. */
+    XiFunc *f = make_func("test", &stub_int);
+    XiBlock *entry = f->entry;
+
+    int64_t large = (int64_t) MAXARG_sBx + 1;
+    XiValue *c = xi_const_int(f, entry, large, &stub_int);
+    xi_block_set_return(entry, c);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    XrInstruction i0 = PROTO_CODE(proto, 0);
+    assert(GET_OPCODE(i0) == OP_LOADK && "int beyond sBx should use LOADK");
     assert(PROTO_CONST_COUNT(proto) == 1);
 
     xr_vm_proto_free(proto);
@@ -673,12 +695,12 @@ TEST(emit_addi_negative) {
 }
 
 TEST(emit_addk_large_const) {
-    /* fn(a) { return a + 1000 } -> ADDK (too large for ADDI's int8_t) */
+    /* fn(a) { return a + 40000 } -> ADDK (too large for ADDI's int16_t) */
     XiFunc *f = make_func("addk", &stub_int);
     XiBlock *entry = f->entry;
 
     XiValue *a = xi_param(f, entry, 0, &stub_int);
-    XiValue *ck = xi_const_int(f, entry, 1000, &stub_int);
+    XiValue *ck = xi_const_int(f, entry, 40000, &stub_int);
     XiValue *add = xi_binary(f, entry, XI_ADD, &stub_int, a, ck);
     xi_block_set_return(entry, add);
 
@@ -692,7 +714,7 @@ TEST(emit_addk_large_const) {
             found_addk = true;
         }
     }
-    assert(found_addk && "a + 1000 should use ADDK (const pool)");
+    assert(found_addk && "a + 40000 should use ADDK (const pool)");
 
     xr_vm_proto_free(proto);
     xi_func_free(f);
@@ -919,6 +941,7 @@ int main(void) {
 
     /* Large constants */
     run_emit_const_int_large();
+    run_emit_const_int_beyond_sbx();
 
     /* Optimization + emit */
     run_emit_after_optimization();

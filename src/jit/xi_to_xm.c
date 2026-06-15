@@ -832,7 +832,7 @@ static XmRef lower_chan_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs >= 1 && v->args[0]) {
         XiValue *cap = v->args[0];
         if (cap->op == XI_CONST && cap->type && cap->type->kind == XR_KIND_INT &&
-            cap->aux_int >= 0 && cap->aux_int <= MAXARG_Bx) {
+            cap->aux_int >= 0 && (uint64_t) cap->aux_int <= MAXARG_Bx) {
             extra |= (uint32_t) cap->aux_int;
         } else {
             extra |= XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG;

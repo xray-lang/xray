@@ -431,7 +431,11 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, (uint8_t) kidx, 0));
+    uint16_t karg;
+    if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
+        return;
+
+    emit_inst(ctx, CREATE_ABC(OP_NEWJSON, dst, karg, 0));
 }
 
 /* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
@@ -510,7 +514,11 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_JSON_DECODE, dst, data_reg, (uint8_t) kidx));
+    uint16_t karg;
+    if (!xi_emit_const_index_to_c(ctx, kidx, &karg))
+        return;
+
+    emit_inst(ctx, CREATE_ABC(OP_JSON_DECODE, dst, data_reg, karg));
 }
 
 /* Range creation */
@@ -1118,7 +1126,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
     /* Add descriptor to constant pool and emit bytecode */
     XrValue desc_val = XR_FROM_PTR(desc);
     int desc_idx = xr_vm_proto_add_constant(ctx->proto, desc_val);
-    if (desc_idx < 0 || desc_idx > MAXARG_Bx) {
+    if (desc_idx < 0 || (uint64_t) desc_idx > MAXARG_Bx) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
         return;
     }

@@ -23,12 +23,12 @@ TEST(instruction_create_abc) {
 }
 
 TEST(instruction_create_abc_max_values) {
-    XrInstruction i = CREATE_ABC(OP_MOVE, 255, 255, 255);
+    XrInstruction i = CREATE_ABC(OP_MOVE, MAXARG_A, MAXARG_B, MAXARG_C);
 
     ASSERT_EQ_INT(GET_OPCODE(i), OP_MOVE);
-    ASSERT_EQ_INT(GETARG_A(i), 255);
-    ASSERT_EQ_INT(GETARG_B(i), 255);
-    ASSERT_EQ_INT(GETARG_C(i), 255);
+    ASSERT_EQ_UINT(GETARG_A(i), MAXARG_A);
+    ASSERT_EQ_UINT(GETARG_B(i), MAXARG_B);
+    ASSERT_EQ_UINT(GETARG_C(i), MAXARG_C);
 }
 
 TEST(instruction_create_abc_zero) {
@@ -51,11 +51,11 @@ TEST(instruction_create_abx) {
 }
 
 TEST(instruction_create_abx_max) {
-    XrInstruction i = CREATE_ABx(OP_LOADK, 255, 65535);
+    XrInstruction i = CREATE_ABx(OP_LOADK, MAXARG_A, MAXARG_Bx);
 
     ASSERT_EQ_INT(GET_OPCODE(i), OP_LOADK);
-    ASSERT_EQ_INT(GETARG_A(i), 255);
-    ASSERT_EQ_INT(GETARG_Bx(i), 65535);
+    ASSERT_EQ_UINT(GETARG_A(i), MAXARG_A);
+    ASSERT_EQ_UINT(GETARG_Bx(i), MAXARG_Bx);
 }
 
 /* ========== AsBx Format Tests (Signed) ========== */
@@ -111,7 +111,7 @@ TEST(instruction_create_ax_max) {
     XrInstruction i = CREATE_Ax(OP_CLOSURE, MAXARG_Ax);
 
     ASSERT_EQ_INT(GET_OPCODE(i), OP_CLOSURE);
-    ASSERT_EQ_INT(GETARG_Ax(i), MAXARG_Ax);
+    ASSERT_EQ_UINT(GETARG_Ax(i), MAXARG_Ax);
 }
 
 /* ========== sJ Format Tests (Signed Jump) ========== */
@@ -168,34 +168,33 @@ TEST(instruction_setarg_c) {
 
 TEST(instruction_setarg_bx) {
     XrInstruction i = CREATE_ABx(OP_LOADK, 5, 100);
-    SETARG_Bx(i, 50000);
+    SETARG_Bx(i, 4000000000u);
 
     ASSERT_EQ_INT(GETARG_A(i), 5);  // unchanged
-    ASSERT_EQ_INT(GETARG_Bx(i), 50000);
+    ASSERT_EQ_UINT(GETARG_Bx(i), 4000000000u);
 }
 
 /* ========== Signed Argument Tests ========== */
 
 TEST(instruction_signed_b) {
-    XrInstruction i = CREATE_ABC(OP_ADDI, 0, 0, 200);  // 200 as unsigned
+    XrInstruction i = CREATE_ABC(OP_ADDI, 0, 0, (uint16_t) (int16_t) -1234);
 
-    // sC interprets as signed: 200 = -56 in signed 8-bit
-    int8_t sC = GETARG_sC(i);
-    ASSERT_EQ_INT(sC, -56);
+    int16_t sC = GETARG_sC(i);
+    ASSERT_EQ_INT(sC, -1234);
 }
 
 TEST(instruction_signed_b_positive) {
     XrInstruction i = CREATE_ABC(OP_ADDI, 0, 0, 50);
 
-    int8_t sC = GETARG_sC(i);
+    int16_t sC = GETARG_sC(i);
     ASSERT_EQ_INT(sC, 50);
 }
 
 /* ========== Opcode Range Tests ========== */
 
-TEST(instruction_opcodes_fit_8bits) {
-    // All opcodes should fit in 8 bits
-    ASSERT_TRUE(NUM_OPCODES <= 256);
+TEST(instruction_opcodes_fit_16bits) {
+    // All opcodes should fit in 16 bits.
+    ASSERT_TRUE(NUM_OPCODES <= 65536);
 }
 
 TEST(instruction_opcode_nop_is_last) {
@@ -311,7 +310,7 @@ static void run_all_tests(void) {
     RUN_TEST(instruction_signed_b_positive);
 
     RUN_TEST_SUITE("Opcode Range");
-    RUN_TEST(instruction_opcodes_fit_8bits);
+    RUN_TEST(instruction_opcodes_fit_16bits);
     RUN_TEST(instruction_opcode_nop_is_last);
 
     RUN_TEST_SUITE("Specific Instructions");

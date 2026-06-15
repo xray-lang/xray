@@ -144,6 +144,15 @@ XR_FUNC int add_const_int(EmitCtx *ctx, int64_t val);
 XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
+
+static inline bool xi_emit_const_index_to_c(EmitCtx *ctx, int ki, uint16_t *out) {
+    if (ki < 0 || (uint32_t) ki > MAXARG_C) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+        return false;
+    }
+    *out = (uint16_t) ki;
+    return true;
+}
 XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
 XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
 

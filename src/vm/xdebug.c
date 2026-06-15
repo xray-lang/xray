@@ -34,20 +34,20 @@ static int disasm_none(const char *name, int offset) {
 
 // Format: R[A]
 static int disasm_a(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    printf("%-16s R[%d]\n", name, a);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    printf("%-16s R[%u]\n", name, (unsigned) a);
     return offset + 1;
 }
 
 // Format: R[A] K[Bx] (constant)
 static int disasm_abx(const char *name, XrProto *proto, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint16_t bx = GETARG_Bx(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint32_t bx = GETARG_Bx(inst);
 
-    printf("%-16s R[%d] K[%d] ; ", name, a, bx);
+    printf("%-16s R[%u] K[%u] ; ", name, (unsigned) a, (unsigned) bx);
 
     // Print constant value
-    if (bx < PROTO_CONST_COUNT(proto)) {
+    if (bx < (uint32_t) PROTO_CONST_COUNT(proto)) {
         xr_value_print(PROTO_CONSTANT(proto, bx));
     } else {
         printf("???");
@@ -60,23 +60,23 @@ static int disasm_abx(const char *name, XrProto *proto, XrInstruction inst, int 
 // Format: R[A] G[Bx] (global variable)
 static int disasm_abx_global(const char *name, XrProto *proto, XrInstruction inst, int offset) {
     (void) proto;
-    uint8_t a = GETARG_A(inst);
-    uint16_t bx = GETARG_Bx(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint32_t bx = GETARG_Bx(inst);
 
-    printf("%-16s R[%d] G[%d]\n", name, a, bx);
+    printf("%-16s R[%u] G[%u]\n", name, (unsigned) a, (unsigned) bx);
 
     return offset + 1;
 }
 
 // Format: R[A] XrProto[Bx] (closure)
 static int disasm_proto(const char *name, XrProto *proto, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint16_t bx = GETARG_Bx(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint32_t bx = GETARG_Bx(inst);
 
-    printf("%-16s R[%d] XrProto[%d]", name, a, bx);
+    printf("%-16s R[%u] XrProto[%u]", name, (unsigned) a, (unsigned) bx);
 
     // Print function name (if any)
-    if (bx < PROTO_PROTO_COUNT(proto)) {
+    if (bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
         XrProto *child = PROTO_PROTO(proto, bx);
         if (child != NULL && child->name != NULL) {
             printf(" ; \"%s\"", child->name->data);
@@ -89,82 +89,82 @@ static int disasm_proto(const char *name, XrProto *proto, XrInstruction inst, in
 
 // Format: R[A] R[B] R[C]
 static int disasm_abc(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint8_t b = GETARG_B(inst);
-    uint8_t c = GETARG_C(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint16_t b = (uint16_t) GETARG_B(inst);
+    uint16_t c = (uint16_t) GETARG_C(inst);
 
-    printf("%-16s R[%d] R[%d] R[%d]\n", name, a, b, c);
+    printf("%-16s R[%u] R[%u] R[%u]\n", name, (unsigned) a, (unsigned) b, (unsigned) c);
     return offset + 1;
 }
 
 // Format: R[A] R[B]
 static int disasm_ab(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint8_t b = GETARG_B(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint16_t b = (uint16_t) GETARG_B(inst);
 
-    printf("%-16s R[%d] R[%d]\n", name, a, b);
+    printf("%-16s R[%u] R[%u]\n", name, (unsigned) a, (unsigned) b);
     return offset + 1;
 }
 
 // Format: R[A] <Bx as raw integer> (Bx is a direct integer, not a const index)
 static int disasm_abx_int(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint16_t bx = GETARG_Bx(inst);
-    printf("%-16s R[%d] %d\n", name, a, (int) bx);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint32_t bx = GETARG_Bx(inst);
+    printf("%-16s R[%u] %u\n", name, (unsigned) a, (unsigned) bx);
     return offset + 1;
 }
 
 // Format: R[A] B (B as immediate)
 static int disasm_ab_imm(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint8_t b = GETARG_B(inst);
-    uint8_t c = GETARG_C(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint16_t b = (uint16_t) GETARG_B(inst);
+    uint16_t c = (uint16_t) GETARG_C(inst);
 
     // Check if comparison instruction (need to show k flag)
     OpCode op = GET_OPCODE(inst);
     if (op == OP_EQ || op == OP_EQK || op == OP_LT || op == OP_LE || op == OP_TEST) {
-        printf("%-16s R[%d] R[%d] k=%d\n", name, a, b, c);
+        printf("%-16s R[%u] R[%u] k=%u\n", name, (unsigned) a, (unsigned) b, (unsigned) c);
     } else {
-        printf("%-16s R[%d] %d\n", name, a, b);
+        printf("%-16s R[%u] %u\n", name, (unsigned) a, (unsigned) b);
     }
     return offset + 1;
 }
 
 // Format: R[A] sBx (signed immediate)
 static int disasm_asbx(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    int sbx = GETARG_sBx(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    int64_t sbx = GETARG_sBx(inst);
 
-    printf("%-16s R[%d] %d\n", name, a, sbx);
+    printf("%-16s R[%u] %lld\n", name, (unsigned) a, (long long) sbx);
     return offset + 1;
 }
 
 // Format: R[A] R[B] sC (B is register, C is signed immediate)
 static int disasm_ab_sc(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    uint8_t b = GETARG_B(inst);
-    int sc = GETARG_sC(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint16_t b = (uint16_t) GETARG_B(inst);
+    int16_t sc = GETARG_sC(inst);
 
-    printf("%-16s R[%d] R[%d] %d\n", name, a, b, sc);
+    printf("%-16s R[%u] R[%u] %d\n", name, (unsigned) a, (unsigned) b, (int) sc);
     return offset + 1;
 }
 
 // Format: R[A] sB C (B is signed immediate, C is condition flag)
 static int disasm_asb_c(const char *name, XrInstruction inst, int offset) {
-    uint8_t a = GETARG_A(inst);
-    int sb = GETARG_sB(inst);
-    uint8_t k = GETARG_C(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    int16_t sb = GETARG_sB(inst);
+    uint16_t k = (uint16_t) GETARG_C(inst);
 
-    printf("%-16s R[%d] %d k=%d\n", name, a, sb, k);
+    printf("%-16s R[%u] %d k=%u\n", name, (unsigned) a, (int) sb, (unsigned) k);
     return offset + 1;
 }
 
 // Format: sJ (jump)
 static int disasm_sj(const char *name, XrInstruction inst, int offset) {
-    int sj = GETARG_sJ(inst);
-    int target = offset + 1 + sj;
+    int64_t sj = GETARG_sJ(inst);
+    int64_t target = (int64_t) offset + 1 + sj;
 
-    printf("%-16s %d -> %d\n", name, sj, target);
+    printf("%-16s %lld -> %lld\n", name, (long long) sj, (long long) target);
     return offset + 1;
 }
 
@@ -174,26 +174,26 @@ static int disasm_special(const char *name, XrProto *proto, XrInstruction inst, 
 
     if (op == OP_TRY) {
         // OP_TRY is followed by an instruction containing finally offset
-        uint16_t catch_offset = GETARG_Bx(inst);
-        printf("%-16s catch=%d ", name, catch_offset);
+        uint32_t catch_offset = GETARG_Bx(inst);
+        printf("%-16s catch=%u ", name, (unsigned) catch_offset);
 
         // Read next instruction (finally offset)
         if (offset + 1 < PROTO_CODE_COUNT(proto)) {
             XrInstruction next_inst = PROTO_CODE(proto, offset + 1);
-            uint16_t finally_offset = GETARG_Bx(next_inst);
-            printf("finally=%d\n", finally_offset);
+            uint32_t finally_offset = GETARG_Bx(next_inst);
+            printf("finally=%u\n", (unsigned) finally_offset);
         }
         return offset + 2;
     }
 
     // NOP with spawn metadata
     if (op == OP_NOP) {
-        uint8_t a = GETARG_A(inst);
-        uint16_t bx = GETARG_Bx(inst);
+        uint16_t a = (uint16_t) GETARG_A(inst);
+        uint32_t bx = GETARG_Bx(inst);
         if (a == 1) {
             // Coroutine name
-            printf("%-16s ; name=K[%d]", name, bx);
-            if (bx < PROTO_CONST_COUNT(proto)) {
+            printf("%-16s ; name=K[%u]", name, (unsigned) bx);
+            if (bx < (uint32_t) PROTO_CONST_COUNT(proto)) {
                 printf(" \"");
                 xr_value_print(PROTO_CONSTANT(proto, bx));
                 printf("\"");
@@ -202,7 +202,7 @@ static int disasm_special(const char *name, XrProto *proto, XrInstruction inst, 
         } else if (a == 3) {
             // Link mode
             const char *mode = bx == 1 ? "LINKED" : bx == 2 ? "MONITORED" : "?";
-            printf("%-16s ; link_mode=%s(%d)\n", name, mode, bx);
+            printf("%-16s ; link_mode=%s(%u)\n", name, mode, (unsigned) bx);
         } else {
             printf("%-16s\n", name);
         }

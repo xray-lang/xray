@@ -672,14 +672,15 @@ static char *format_instruction(XrProto *proto, int offset) {
     const char *name = xr_opcode_name(op);
 
     char buf[256];
-    uint8_t a = GETARG_A(inst);
-    uint8_t b = GETARG_B(inst);
-    uint8_t c = GETARG_C(inst);
-    int sbx = GETARG_sBx(inst);
-    uint16_t bx = GETARG_Bx(inst);
+    uint16_t a = (uint16_t) GETARG_A(inst);
+    uint16_t b = (uint16_t) GETARG_B(inst);
+    uint16_t c = (uint16_t) GETARG_C(inst);
+    int64_t sbx = GETARG_sBx(inst);
+    uint32_t bx = GETARG_Bx(inst);
     (void) proto;
 
-    snprintf(buf, sizeof(buf), "%-16s A=%d B=%d C=%d Bx=%d sBx=%d", name, a, b, c, bx, sbx);
+    snprintf(buf, sizeof(buf), "%-16s A=%u B=%u C=%u Bx=%u sBx=%lld", name, (unsigned) a,
+             (unsigned) b, (unsigned) c, (unsigned) bx, (long long) sbx);
 
     return xr_strdup(buf);
 }
@@ -687,10 +688,10 @@ static char *format_instruction(XrProto *proto, int offset) {
 static char *get_instruction_comment(XrProto *proto, int offset) {
     XrInstruction inst = PROTO_CODE(proto, offset);
     OpCode op = GET_OPCODE(inst);
-    uint16_t bx = GETARG_Bx(inst);
+    uint32_t bx = GETARG_Bx(inst);
 
     // Show constant value for LOADK
-    if (op == OP_LOADK && bx < (uint16_t) PROTO_CONST_COUNT(proto)) {
+    if (op == OP_LOADK && bx < (uint32_t) PROTO_CONST_COUNT(proto)) {
         XrValue val = PROTO_CONSTANT(proto, bx);
         if (XR_IS_STRING(val)) {
             XrString *str = XR_TO_STRING(val);
@@ -710,7 +711,7 @@ static char *get_instruction_comment(XrProto *proto, int offset) {
     }
 
     // Show function name for CLOSURE
-    if (op == OP_CLOSURE && bx < (uint16_t) PROTO_PROTO_COUNT(proto)) {
+    if (op == OP_CLOSURE && bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
         XrProto *child = PROTO_PROTO(proto, bx);
         if (child && child->name) {
             char buf[64];
