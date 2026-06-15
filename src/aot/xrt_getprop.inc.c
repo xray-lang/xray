@@ -13,16 +13,16 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     if (obj.tag == XR_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(m->len);
+            return XR_FROM_INT(xrt_map_len(m));
         if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(m->len == 0);
+            return XR_FROM_INT(xrt_map_len(m) == 0);
     }
     if (obj.tag == XR_TAG_SET) {
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(s->len);
+            return XR_FROM_INT(xrt_set_len(s));
         if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(s->len == 0);
+            return XR_FROM_INT(xrt_set_len(s) == 0);
     }
     if (XR_IS_STR(obj)) {
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)

@@ -34,14 +34,11 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
     xrt_map_t *m = (xrt_map_t *) XRT_MALLOC(sizeof(xrt_map_t));
     if (!m)
         xrt_map_typed_abort("xrt_map_new_typed", "out of memory");
-    m->len = 0;
+    xrt_map_init_header(m);
     m->key_type = key_type;
     m->value_type = value_type;
     m->key_size = XR_ELEM_SIZES[key_type];
     m->value_size = XR_ELEM_SIZES[value_type];
-    m->order = NULL;
-    m->order_len = 0;
-    m->order_cap = 0;
     xrt_map_alloc_slots(m, xrt_swiss_slots_for(cap));
     return xr_mkptr(m, XR_TAG_MAP);
 }
@@ -49,12 +46,12 @@ static inline XrValue xrt_map_new_typed(int64_t cap, uint8_t key_type, uint8_t v
 /* Slot accessors — valid only for slots whose ctrl byte is FULL. */
 static inline XrValue xrt_map_slot_key(xrt_map_t *m, int64_t slot) {
     return xrt_map_is_typed(m) ? xr_typed_get(m->keys, (int32_t) slot, m->key_type)
-                               : ((XrValue *) m->keys)[slot];
+                               : m->entries[slot].key;
 }
 
 static inline XrValue xrt_map_slot_value(xrt_map_t *m, int64_t slot) {
     return xrt_map_is_typed(m) ? xr_typed_get(m->values, (int32_t) slot, m->value_type)
-                               : ((XrValue *) m->values)[slot];
+                               : m->entries[slot].value;
 }
 
 /* ---- typed scalar key normalization ------------------------------------ */
@@ -200,16 +197,6 @@ static inline int xrt_map_probe_f64_eq(void *ctxp, int64_t slot) {
     return ((const double *) ctx->map->keys)[slot] == ctx->key;
 }
 
-typedef struct {
-    xrt_map_t *map;
-    XrValue key;
-} xrt_map_probe_tag_ctx;
-
-static inline int xrt_map_probe_tag_eq(void *ctxp, int64_t slot) {
-    xrt_map_probe_tag_ctx *ctx = (xrt_map_probe_tag_ctx *) ctxp;
-    return xrt_eq(((const XrValue *) ctx->map->keys)[slot], ctx->key) != 0;
-}
-
 static inline int64_t xrt_map_find_i64_hashed(xrt_map_t *m, uint64_t bits, uint64_t hash) {
     xrt_map_probe_i64_ctx ctx;
     ctx.map = m;
@@ -222,13 +209,6 @@ static inline int64_t xrt_map_find_f64_hashed(xrt_map_t *m, double key, uint64_t
     ctx.map = m;
     ctx.key = key;
     return xrt_swiss_find(m->ctrl, m->cap, hash, xrt_map_probe_f64_eq, &ctx);
-}
-
-static inline int64_t xrt_map_find_tagged(xrt_map_t *m, XrValue key) {
-    xrt_map_probe_tag_ctx ctx;
-    ctx.map = m;
-    ctx.key = key;
-    return xrt_swiss_find(m->ctrl, m->cap, xrt_hash_value(key), xrt_map_probe_tag_eq, &ctx);
 }
 
 /* ---- rehash ------------------------------------------------------------- */
