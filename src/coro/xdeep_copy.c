@@ -286,6 +286,7 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     new_map->nentries = 0;
     new_map->entries_cap = 0;
     new_map->indices_size = 0;
+    new_map->ctrl = NULL;
     new_map->indices = NULL;
     new_map->entries = NULL;
     new_map->flags = XR_MAP_FLAG_DUMMY;

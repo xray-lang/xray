@@ -10,9 +10,9 @@
  * KEY CONCEPT:
  *   - entries[] is a dense, append-only array in insertion order; iteration
  *     scans it directly so observable order is insertion order.
- *   - indices[] is an open-addressing (linear-probing) table mapping a key's
- *     hash bucket to an entries[] index (or EMPTY / DELETED sentinel).
- *   - Deletion tombstones the entry (key_tt=0) and marks its index DELETED;
+ *   - ctrl[] is a Swiss-style h2 control-byte table; indices[] maps FULL ctrl
+ *     slots to entries[] indices.
+ *   - Deletion tombstones the entry (key_tt=0) and marks its ctrl byte DELETED;
  *     dead slots are reclaimed when the table is resized/compacted.
  *   - Resizing is triggered when nentries reaches entries_cap. Because
  *     entries_cap = indices_size*2/3 and every append consumes one index slot,
@@ -132,41 +132,55 @@ static void xr_map_release_entry_values(XrMapEntry *e, XrCoroGC *gc) {
     e->value = xr_null();
 }
 
-/* ========== Index Table Lookup ========== */
+/* ========== Swiss Index Lookup ========== */
 
-// Returns entries[] index for `key`, or -1 if absent.
-static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt) {
+// Returns the ctrl/indices slot for `key`, or UINT32_MAX if absent.
+static uint32_t map_lookup_slot(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt,
+                                int32_t *out_eidx) {
     if (map->flags & XR_MAP_FLAG_DUMMY)
-        return -1;
+        return UINT32_MAX;
 
     uint32_t mask = map->indices_size - 1;
-    uint32_t slot = hash & mask;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (hash >> 7u) & mask;
+    uint32_t stride = 0;
 
     for (;;) {
-        int32_t ix = map->indices[slot];
-        if (ix == XR_MAP_IX_EMPTY)
-            return -1;
-        if (ix >= 0) {
-            XrMapEntry *e = &map->entries[ix];
-            if (e->hash == hash && entry_key_equal(e, key, key_tt))
-                return ix;
+        uint64_t group = xr_swiss_group_load(map->ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = map->indices[slot];
+            if (ix >= 0) {
+                XrMapEntry *e = &map->entries[ix];
+                if (e->hash == hash && entry_key_equal(e, key, key_tt)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
         }
-        slot = (slot + 1) & mask;  // Linear probing; passes over DELETED slots
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
     }
 }
 
-// Insert entry index into a fresh/EMPTY-or-DELETED slot (key known absent).
-static void indices_put(int32_t *indices, uint32_t indices_size, uint32_t hash, int32_t eidx) {
-    uint32_t mask = indices_size - 1;
-    uint32_t slot = hash & mask;
-    for (;;) {
-        int32_t cur = indices[slot];
-        if (cur == XR_MAP_IX_EMPTY || cur == XR_MAP_IX_DELETED) {
-            indices[slot] = eidx;
-            return;
-        }
-        slot = (slot + 1) & mask;
-    }
+// Returns entries[] index for `key`, or -1 if absent.
+static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt) {
+    int32_t eidx = -1;
+    return map_lookup_slot(map, key, hash, key_tt, &eidx) == UINT32_MAX ? -1 : eidx;
+}
+
+// Insert entry index into a fresh EMPTY-or-DELETED ctrl slot (key known absent).
+static void indices_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size, uint32_t hash,
+                        int32_t eidx) {
+    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
+    indices[slot] = eidx;
+    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
 }
 
 /* ========== Grow / Compact ========== */
@@ -177,6 +191,7 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     XrCoroGC *gc = xr_current_coro_gc();
     bool was_dummy = xr_map_isdummy(map);
     XrMapEntry *old_entries = was_dummy ? NULL : map->entries;
+    uint8_t *old_ctrl = was_dummy ? NULL : map->ctrl;
     int32_t *old_indices = was_dummy ? NULL : map->indices;
     uint32_t old_nentries = was_dummy ? 0 : map->nentries;
     uint32_t old_isize = was_dummy ? 0 : map->indices_size;
@@ -196,34 +211,44 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
     // we copy live entries out of it).
     bool new_on_gc = was_dummy && old_on_gc;
 
+    size_t cbytes = (size_t) new_isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) new_isize;
     size_t ebytes = sizeof(XrMapEntry) * (size_t) new_ecap;
+    uint8_t *new_ctrl = NULL;
     int32_t *new_indices = NULL;
     XrMapEntry *new_entries = NULL;
 
     if (new_on_gc && gc) {
+        new_ctrl = (uint8_t *) xr_coro_alloc_blob(gc, cbytes);
         new_indices = (int32_t *) xr_coro_alloc_blob(gc, ibytes);
         new_entries = (XrMapEntry *) xr_coro_alloc_blob(gc, ebytes);
-        if (!new_indices || !new_entries) {
+        if (!new_ctrl || !new_indices || !new_entries) {
+            xr_coro_free_blob(gc, new_ctrl);
+            xr_coro_free_blob(gc, new_indices);
+            xr_coro_free_blob(gc, new_entries);
             new_on_gc = false;
+            new_ctrl = (uint8_t *) xr_malloc(cbytes);
             new_indices = (int32_t *) xr_malloc(ibytes);
             new_entries = (XrMapEntry *) xr_malloc(ebytes);
         }
     } else {
         new_on_gc = false;
+        new_ctrl = (uint8_t *) xr_malloc(cbytes);
         new_indices = (int32_t *) xr_malloc(ibytes);
         new_entries = (XrMapEntry *) xr_malloc(ebytes);
     }
-    if (!new_indices || !new_entries) {
+    if (!new_ctrl || !new_indices || !new_entries) {
         if (!new_on_gc) {
+            xr_free(new_ctrl);
             xr_free(new_indices);
             xr_free(new_entries);
         }
         return false;
     }
     if (!new_on_gc)
-        xr_gc_add_external(gc, (int64_t) (ibytes + ebytes));
+        xr_gc_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
 
+    memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
         new_indices[i] = XR_MAP_IX_EMPTY;
     memset(new_entries, 0, ebytes);
@@ -235,10 +260,11 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
         if (oe->key_tt == XR_MAP_ENTRY_NIL_KEY)
             continue;
         new_entries[w] = *oe;
-        indices_put(new_indices, new_isize, oe->hash, (int32_t) w);
+        indices_put(new_ctrl, new_indices, new_isize, oe->hash, (int32_t) w);
         w++;
     }
 
+    map->ctrl = new_ctrl;
     map->indices = new_indices;
     map->entries = new_entries;
     map->indices_size = new_isize;
@@ -252,19 +278,22 @@ static bool map_resize(XrMap *map, uint32_t min_needed) {
 
     if (old_entries) {
         if (old_on_gc) {
+            xr_coro_free_blob(gc, old_ctrl);
             xr_coro_free_blob(gc, old_indices);
             xr_coro_free_blob(gc, old_entries);
         } else {
+            xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_gc_sub_external(gc, (int64_t) (sizeof(int32_t) * (size_t) old_isize +
+            xr_gc_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                              sizeof(int32_t) * (size_t) old_isize +
                                               sizeof(XrMapEntry) * (size_t) old_ecap));
         }
     }
     return true;
 }
 
-// Pre-allocate (malloc-backed) entries[]/indices[] sized for `count` live
+// Pre-allocate (malloc-backed) ctrl[]/indices[]/entries[] sized for `count` live
 // entries, charging the external-byte accounting to `gc` rather than the
 // current coroutine. Deep-copy runs off the destination coroutine and must
 // charge the destination's gc (which later frees the map), so this avoids the
@@ -280,22 +309,27 @@ bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc) {
     if (ecap < count)
         ecap = count;
 
+    size_t cbytes = (size_t) isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) isize;
     size_t ebytes = sizeof(XrMapEntry) * (size_t) ecap;
+    uint8_t *ctrl = (uint8_t *) xr_malloc(cbytes);
     int32_t *idx = (int32_t *) xr_malloc(ibytes);
     XrMapEntry *ent = (XrMapEntry *) xr_malloc(ebytes);
-    if (!idx || !ent) {
+    if (!ctrl || !idx || !ent) {
+        xr_free(ctrl);
         xr_free(idx);
         xr_free(ent);
         return false;
     }
     if (gc)
-        xr_gc_add_external(gc, (int64_t) (ibytes + ebytes));
+        xr_gc_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
 
+    memset(ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < isize; i++)
         idx[i] = XR_MAP_IX_EMPTY;
     memset(ent, 0, ebytes);
 
+    map->ctrl = ctrl;
     map->indices = idx;
     map->entries = ent;
     map->indices_size = isize;
@@ -320,6 +354,7 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
     map->nentries = 0;
     map->entries_cap = 0;
     map->indices_size = 0;
+    map->ctrl = NULL;
     map->indices = NULL;
     map->entries = NULL;
     map->flags = XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_NODES_ON_GC;
@@ -351,6 +386,7 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
     map->nentries = 0;
     map->entries_cap = 0;
     map->indices_size = 0;
+    map->ctrl = NULL;
     map->indices = NULL;
     map->entries = NULL;
     map->flags = XR_MAP_FLAG_DUMMY;  // system-heap: arrays via malloc
@@ -398,7 +434,7 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     map->nentries++;
     map->count++;
 
-    indices_put(map->indices, map->indices_size, hash, (int32_t) eidx);
+    indices_put(map->ctrl, map->indices, map->indices_size, hash, (int32_t) eidx);
     XR_GC_BARRIER_BACK_SAFE(gc, map);
 }
 
@@ -435,27 +471,20 @@ bool xr_map_delete(XrMap *map, XrValue key) {
 
     uint8_t key_tt = get_key_tt(key);
     uint32_t hash = hash_value(key);
-    uint32_t mask = map->indices_size - 1;
-    uint32_t slot = hash & mask;
+    int32_t ix = -1;
+    uint32_t slot = map_lookup_slot(map, key, hash, key_tt, &ix);
+    if (slot == UINT32_MAX)
+        return false;
 
-    for (;;) {
-        int32_t ix = map->indices[slot];
-        if (ix == XR_MAP_IX_EMPTY)
-            return false;  // Not found
-        if (ix >= 0) {
-            XrMapEntry *e = &map->entries[ix];
-            if (e->hash == hash && entry_key_equal(e, key, key_tt)) {
-                // Tombstone the entry (keeps its slot so order is preserved)
-                // and mark the index slot DELETED so probing skips past it.
-                xr_map_release_entry_values(e, xr_current_coro_gc());
-                e->key_tt = XR_MAP_ENTRY_NIL_KEY;
-                map->indices[slot] = XR_MAP_IX_DELETED;
-                map->count--;
-                return true;
-            }
-        }
-        slot = (slot + 1) & mask;
-    }
+    // Tombstone the entry (keeps its slot so order is preserved) and mark the
+    // ctrl slot DELETED so probing skips past it.
+    XrMapEntry *e = &map->entries[ix];
+    xr_map_release_entry_values(e, xr_current_coro_gc());
+    e->key_tt = XR_MAP_ENTRY_NIL_KEY;
+    map->indices[slot] = XR_MAP_IX_EMPTY;
+    xr_swiss_ctrl_set(map->ctrl, map->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    map->count--;
+    return true;
 }
 
 void xr_map_clear(XrMap *map) {
@@ -471,6 +500,7 @@ void xr_map_clear(XrMap *map) {
             e->key_tt = XR_MAP_ENTRY_NIL_KEY;
         }
     }
+    memset(map->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) map->indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < map->indices_size; i++)
         map->indices[i] = XR_MAP_IX_EMPTY;
     map->nentries = 0;
@@ -612,16 +642,20 @@ void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
             if (e->key_tt != XR_MAP_ENTRY_NIL_KEY)
                 xr_map_release_entry_values(e, owning_gc);
         }
-        size_t bytes = sizeof(int32_t) * (size_t) map->indices_size +
+        size_t bytes = (size_t) map->indices_size + XR_SWISS_GROUP +
+                       sizeof(int32_t) * (size_t) map->indices_size +
                        sizeof(XrMapEntry) * (size_t) map->entries_cap;
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
+            xr_coro_free_blob(owning_gc, map->ctrl);
             xr_coro_free_blob(owning_gc, map->indices);
             xr_coro_free_blob(owning_gc, map->entries);
         } else {
+            xr_free(map->ctrl);
             xr_free(map->indices);
             xr_free(map->entries);
             xr_gc_sub_external(owning_gc, (int64_t) bytes);
         }
+        map->ctrl = NULL;
         map->indices = NULL;
         map->entries = NULL;
     }

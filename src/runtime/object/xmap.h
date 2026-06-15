@@ -11,9 +11,9 @@
  *   - Insertion-ordered: entries[] is a dense, append-only array kept in the
  *     order keys were first inserted; iteration scans it directly, so order
  *     matches the language spec (Map preserves insertion order).
- *   - indices[] is an open-addressing (linear-probing) hash table of int32
- *     slots that hold an index into entries[] (or EMPTY / DELETED sentinels).
- *   - Deletion tombstones the entry (key_tt = 0) and marks its index slot
+ *   - ctrl[] is a Swiss-style h2 control-byte table; indices[] stores the
+ *     corresponding entries[] index for FULL ctrl slots.
+ *   - Deletion tombstones the entry (key_tt = 0) and marks its ctrl slot
  *     DELETED; dead entries are reclaimed when the table is resized/compacted.
  *   - Empty map allocates nothing (entries/indices NULL, DUMMY flag set); the
  *     first insertion allocates both arrays.
@@ -29,6 +29,7 @@
 #include "../gc/xgc_internal.h"
 #include "../gc/xalloc_unified.h"
 #include "xarray.h"
+#include "../../shared/xr_swiss_index.h"
 #include <stdint.h>
 #include <stdbool.h>
 
@@ -46,10 +47,9 @@ typedef struct XrMapEntry {
 #define XR_MAP_ENTRY_NIL_KEY 0
 #define XR_MAP_ENTRY_EMPTY(e) ((e)->key_tt == XR_MAP_ENTRY_NIL_KEY)
 
-/* Index-table sentinels (stored in indices[]). Non-negative values are a
- * direct index into entries[]. */
+/* Debug sentinel for indices[] slots whose ctrl byte is not FULL. FULL slots
+ * always store a direct entries[] index. */
 #define XR_MAP_IX_EMPTY (-1)
-#define XR_MAP_IX_DELETED (-2)
 
 /* ========== Map Object ========== */
 
@@ -59,7 +59,8 @@ typedef struct XrMap {
     uint32_t nentries;      // Used entries slots incl. tombstones (= next append index)
     uint32_t entries_cap;   // Allocated entries[] capacity
     uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
-    int32_t *indices;       // Open-addressing table -> entries index / sentinel
+    uint8_t *ctrl;          // Swiss control bytes, indices_size + XR_SWISS_GROUP
+    int32_t *indices;       // FULL ctrl slots -> entries index
     XrMapEntry *entries;    // Dense insertion-order array
     uint8_t flags;
     uint8_t key_tid;    // XrTypeId: key type for reified generics (0=any)
@@ -85,7 +86,7 @@ XR_FUNC void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint);
 
 /* ========== Inline Fast Path (VM optimization) ========== */
 
-// Inline string-key lookup over the compact-dict index table.
+// Inline string-key lookup over the compact-dict Swiss index table.
 // Assumes the probed key string is interned (pointer comparison), matching
 // how constant string keys are emitted by the front end.
 static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str) {
@@ -93,19 +94,31 @@ static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str)
         return NULL;
 
     uint32_t mask = map->indices_size - 1;
-    uint32_t slot = key_str->hash & mask;
+    uint32_t hash = key_str->hash;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (hash >> 7u) & mask;
+    uint32_t stride = 0;
 
     for (;;) {
-        int32_t ix = map->indices[slot];
-        if (ix == XR_MAP_IX_EMPTY)
-            return NULL;
-        if (ix >= 0) {
-            XrMapEntry *e = &map->entries[ix];
-            if (e->key_tt == (XR_TID_STRING + 1) && XR_TO_STRING(e->key) == key_str) {
-                return e;
+        uint64_t group = xr_swiss_group_load(map->ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = map->indices[slot];
+            if (ix >= 0) {
+                XrMapEntry *e = &map->entries[ix];
+                if (e->hash == hash && e->key_tt == (XR_TID_STRING + 1) &&
+                    XR_TO_STRING(e->key) == key_str) {
+                    return e;
+                }
             }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
         }
-        slot = (slot + 1) & mask;  // Linear probing; skips DELETED slots
+        if (xr_swiss_group_match_empty(group))
+            return NULL;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
     }
 }
 
