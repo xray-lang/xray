@@ -36,7 +36,7 @@ static XrProto *make_minimal_proto(void) {
     return proto;
 }
 
-TEST(bytecode_write_emits_v4_header_and_roundtrips_u64_instruction) {
+TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction) {
     XrayIsolate *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
@@ -63,7 +63,7 @@ TEST(bytecode_write_emits_v4_header_and_roundtrips_u64_instruction) {
     xray_isolate_delete(iso);
 }
 
-TEST(bytecode_reader_rejects_pre_spill_removal_v3_layout) {
+TEST(bytecode_reader_rejects_previous_layout_version) {
     XrayIsolate *iso = new_test_isolate();
     ASSERT_NOT_NULL(iso);
 
@@ -75,8 +75,9 @@ TEST(bytecode_reader_rejects_pre_spill_removal_v3_layout) {
     ASSERT_NOT_NULL(bytes);
     ASSERT_GT(size, 16);
 
-    bytes[4] = 3;
-    bytes[5] = 0;
+    uint16_t previous_version = (uint16_t) (XR_BC_VERSION - 1);
+    bytes[4] = (uint8_t) (previous_version & 0xff);
+    bytes[5] = (uint8_t) (previous_version >> 8);
 
     XrBcError error = XR_BC_OK;
     XrProto *bad = xr_bytecode_read(iso, bytes, size, &error);
@@ -88,10 +89,41 @@ TEST(bytecode_reader_rejects_pre_spill_removal_v3_layout) {
     xray_isolate_delete(iso);
 }
 
+TEST(bytecode_roundtrips_u16_upvalue_index) {
+    XrayIsolate *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = make_minimal_proto();
+    ASSERT_NOT_NULL(proto);
+    ASSERT_EQ_INT(xr_vm_proto_add_upvalue(proto, 300, 0, 1, 0, UPVAL_SRC_REG, NULL), 0);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+    ASSERT_GT(size, 16);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_UPVAL_COUNT(roundtrip), 1);
+
+    UpvalInfo info = PROTO_UPVALUE(roundtrip, 0);
+    ASSERT_EQ_UINT(info.index, 300);
+    ASSERT_EQ_UINT(info.source, UPVAL_SRC_REG);
+    ASSERT_EQ_UINT(info.is_const, 1);
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_isolate_delete(iso);
+}
+
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
-    RUN_TEST(bytecode_write_emits_v4_header_and_roundtrips_u64_instruction);
-    RUN_TEST(bytecode_reader_rejects_pre_spill_removal_v3_layout);
+    RUN_TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction);
+    RUN_TEST(bytecode_reader_rejects_previous_layout_version);
+    RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
 }
 
 TEST_MAIN_BEGIN()

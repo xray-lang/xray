@@ -575,7 +575,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Populate upvalue descriptors on child proto from captures */
     for (uint16_t ci = 0; ci < child_func->ncaptures; ci++) {
         XiCapture *cap = &child_func->captures[ci];
-        uint8_t uv_index = 0;
+        uint16_t uv_index = 0;
         if (cap->source == XI_CAPTURE_SRC_REG) {
             /* Use CLOSURE_NEW's arg (kept current by optimization passes)
              * instead of cap->value which may point to an eliminated PHI. */
@@ -967,7 +967,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
 
     for (uint16_t ui = 0; ui < child->ncaptures; ui++) {
         XiCapture *cap = &child->captures[ui];
-        uint8_t uv_idx = 0;
+        uint16_t uv_idx = 0;
         if (cap->source == XI_CAPTURE_SRC_REG) {
             XR_DCHECK(cap->value != NULL, "SRC_REG capture must have parent SSA value");
             uv_idx = reg_of(ctx, cap->value);

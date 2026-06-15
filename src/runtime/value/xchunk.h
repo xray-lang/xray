@@ -198,7 +198,7 @@ XR_FUNC int xr_valuearray_add(ValueArray *array, XrValue value);
 #define UPVAL_SRC_REG 2    // from enclosing frame's register (direct capture)
 
 typedef struct UpvalInfo {
-    uint8_t index;             // SRC_REG: register number; SRC_UPVAL: enclosing upval index
+    uint16_t index;            // SRC_REG: register number; SRC_UPVAL: enclosing upval index
     uint8_t storage_mode;      // 0=normal, 1=shared
     uint8_t is_const;          // const variable flag
     uint8_t slot_type;         // XrSlotType: storage class for GC traversal
@@ -403,7 +403,7 @@ XR_FUNC void xr_vm_proto_free(XrProto *proto);
 XR_FUNC void xr_vm_proto_write(XrProto *proto, XrInstruction inst, int line);
 XR_FUNC int xr_vm_proto_add_constant(XrProto *proto, XrValue value);
 XR_FUNC int xr_vm_proto_add_proto(XrProto *proto, XrProto *child);
-XR_FUNC int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t storage_mode,
+XR_FUNC int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode,
                                     uint8_t is_const, uint8_t slot_type, uint8_t source,
                                     struct XrType *type_info);
 XR_FUNC int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol);

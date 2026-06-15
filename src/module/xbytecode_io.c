@@ -466,7 +466,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
     for (uint32_t i = 0; i < upval_count; i++) {
         UpvalInfo info = PROTO_UPVALUE(proto, i);
-        if (!bc_put_u8(w, info.index))
+        if (!bc_put_u16(w, info.index))
             return false;
         if (!bc_put_u8(w, info.source))
             return false;
@@ -583,7 +583,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
     xr_dynarray_init(&proto->upvalues, sizeof(UpvalInfo));
     for (uint32_t i = 0; i < upval_count; i++) {
         UpvalInfo info = {0};
-        info.index = bc_get_u8(r);
+        info.index = bc_get_u16(r);
         info.source = bc_get_u8(r);
         info.storage_mode = bc_get_u8(r);
         info.is_const = bc_get_u8(r);
