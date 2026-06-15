@@ -666,6 +666,52 @@ static void xicgen_emit_json_set_field_expr(FILE *out, const XiValue *v) {
     fprintf(out, ")");
 }
 
+static void xicgen_emit_c_string_literal(FILE *out, const char *s) {
+    fputc('"', out);
+    for (const unsigned char *p = (const unsigned char *) (s ? s : ""); *p; p++) {
+        switch (*p) {
+            case '\\':
+                fputs("\\\\", out);
+                break;
+            case '"':
+                fputs("\\\"", out);
+                break;
+            case '\n':
+                fputs("\\n", out);
+                break;
+            case '\r':
+                fputs("\\r", out);
+                break;
+            case '\t':
+                fputs("\\t", out);
+                break;
+            default:
+                if (*p < 0x20 || *p >= 0x7f)
+                    fprintf(out, "\\%03o", (unsigned) *p);
+                else
+                    fputc((int) *p, out);
+                break;
+        }
+    }
+    fputc('"', out);
+}
+
+static void xicgen_emit_json_new_expr(FILE *out, const XiValue *v) {
+    int64_t field_count = v->aux_int > 0 ? v->aux_int : 0;
+    const char **field_names = (const char **) v->aux;
+    if (field_count <= 0 || !field_names) {
+        fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);
+        return;
+    }
+    fprintf(out, "xrt_json_new_named(%" PRId64 ", (const char*[]){", field_count);
+    for (int64_t i = 0; i < field_count; i++) {
+        if (i > 0)
+            fprintf(out, ", ");
+        xicgen_emit_c_string_literal(out, field_names[i] ? field_names[i] : "?");
+    }
+    fprintf(out, "})");
+}
+
 static void xicgen_json_init_f(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     (void) ctx;
@@ -890,8 +936,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     } else if (strcmp(bn, "set_new") == 0) {
         xicgen_set_new(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "json_new") == 0) {
-        int64_t fc = v->aux_int > 0 ? v->aux_int : 0;
-        fprintf(out, "xrt_json_new(%" PRId64 ")", fc);
+        xicgen_emit_json_new_expr(out, v);
     } else if (strcmp(bn, "json_init_f") == 0 || strcmp(bn, "json_set_f") == 0) {
         xicgen_emit_json_set_field_expr(out, v);
     } else if (strcmp(bn, "json_get_f") == 0) {
@@ -1294,8 +1339,7 @@ static void xicgen_json_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     (void) ctx;
     (void) f;
     (void) prefix;
-    int64_t field_count = v->aux_int > 0 ? v->aux_int : 0;
-    fprintf(out, "xrt_json_new(%" PRId64 ")", field_count);
+    xicgen_emit_json_new_expr(out, v);
 }
 
 static void xicgen_struct_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1633,11 +1677,19 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     } else {
         const char *conv_suffix =
             emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
-        fprintf(out, "xrt_map_get((xrt_map_t*)");
-        emit_vref(out, v->args[0]);
-        fprintf(out, ".ptr, ");
-        cg_emit_str_value(ctx, out, field ? field : "?");
-        fprintf(out, ")");
+        if (cg_value_type_is_json(v->args[0])) {
+            fprintf(out, "xrt_json_get_name(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", ");
+            xicgen_emit_c_string_literal(out, field ? field : "?");
+            fprintf(out, ")");
+        } else {
+            fprintf(out, "xrt_getprop_name(");
+            emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+            fprintf(out, ", ");
+            xicgen_emit_c_string_literal(out, field ? field : "?");
+            fprintf(out, ")");
+        }
         emit_conversion_suffix(out, conv_suffix);
     }
 }
@@ -1652,15 +1704,23 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (emit_class_native_receiver_field_store_expr(ctx, out, f, v))
         return;
     const char *field = (const char *) v->aux;
-    fprintf(out, "(xrt_map_set((xrt_map_t*)");
-    emit_vref(out, v->args[0]);
-    fprintf(out, ".ptr, ");
-    cg_emit_str_value(ctx, out, field ? field : "?");
-    fprintf(out, ", ");
-    emit_boxed_value_ref(out, v->args[1]);
-    fprintf(out, "), ");
-    emit_vref(out, v->args[1]);
-    fprintf(out, ")");
+    if (cg_value_type_is_json(v->args[0])) {
+        fprintf(out, "xrt_json_set_name(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        xicgen_emit_c_string_literal(out, field ? field : "?");
+        fprintf(out, ", ");
+        emit_boxed_value_ref(out, v->args[1]);
+        fprintf(out, ")");
+    } else {
+        fprintf(out, "xrt_setprop_name(");
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ", ");
+        xicgen_emit_c_string_literal(out, field ? field : "?");
+        fprintf(out, ", ");
+        emit_boxed_value_ref(out, v->args[1]);
+        fprintf(out, ")");
+    }
 }
 
 static void xicgen_index_get(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,

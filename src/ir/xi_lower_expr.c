@@ -873,10 +873,16 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
     int count = arr->count;
 
     /* Evaluate all elements first */
-    XiValue *elem_vals[64];
-    int n = count > 64 ? 64 : count;
+    int n = count;
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **elem_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!elem_vals)
+        return NULL;
     for (int i = 0; i < n; i++) {
         elem_vals[i] = xi_lower_expr(l, arr->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
     }
 
     /* Create array: XI_ARRAY_NEW with element count as aux */
@@ -1186,6 +1192,58 @@ static int coro_method_sub_type(const char *method) {
     return -1;
 }
 
+#define XI_LOWER_CALL_ARG_STACK_CAP 32
+#define XI_LOWER_MAX_CALL_ARGS ((int) UINT16_MAX - 1)
+
+typedef struct XiLowerArgList {
+    XiValue **items;
+    int count;
+    int cap;
+} XiLowerArgList;
+
+static void xi_lower_arg_list_init(XiLowerArgList *list, XiValue **stack_items, int stack_cap) {
+    list->items = stack_items;
+    list->count = 0;
+    list->cap = stack_cap;
+}
+
+static bool xi_lower_arg_list_grow(XiLower *l, XiLowerArgList *list, int max_args) {
+    int next_cap = list->cap > 0 ? list->cap * 2 : 1;
+    if (next_cap <= list->count)
+        next_cap = list->count + 1;
+    if (next_cap > max_args)
+        next_cap = max_args;
+    if (next_cap <= list->cap)
+        return false;
+
+    XiValue **items =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (next_cap * (int) sizeof(XiValue *)));
+    if (!items) {
+        l->had_error = true;
+        return false;
+    }
+    if (list->count > 0)
+        memcpy(items, list->items, (size_t) list->count * sizeof(XiValue *));
+    list->items = items;
+    list->cap = next_cap;
+    return true;
+}
+
+static bool xi_lower_arg_list_push(XiLower *l, XiLowerArgList *list, XiValue *value, int max_args,
+                                   int line) {
+    if (list->count >= max_args) {
+        fprintf(stderr, "[LOWER] call argument count exceeds %d at line %d\n", max_args, line);
+        l->had_error = true;
+        return false;
+    }
+    if (list->count >= list->cap && !xi_lower_arg_list_grow(l, list, max_args)) {
+        l->had_error = true;
+        return false;
+    }
+    list->items[list->count++] = value;
+    return true;
+}
+
 /* Lower Coro.method(args...) → XI_CORO_OP.
  * Returns NULL for unrecognized methods. */
 static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
@@ -1216,14 +1274,14 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
 
 /* Lower the argument list of a call, expanding any AST_SPREAD_EXPR
  * `...t` into one TUPLE_GET per static element of the source tuple.
- * Returns the effective argument count written into `out`. The
+ * Returns the effective argument count written into `args`. The
  * caller-supplied `pmodes`/`pcount` apply XR_PARAM_VALUE deep-copy
  * semantics to value-type slots; spread-expanded slots are not copied
  * (the source tuple already owns the element). */
-static int lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiValue **out, int max,
-                                         const uint8_t *pmodes, int pcount) {
-    int slot = 0;
-    for (int i = 0; i < call->arg_count && slot < max; i++) {
+static bool lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiLowerArgList *args,
+                                          int max_args, const uint8_t *pmodes, int pcount,
+                                          int line) {
+    for (int i = 0; i < call->arg_count; i++) {
         AstNode *child = call->arguments[i];
         if (!child)
             continue;
@@ -1231,25 +1289,26 @@ static int lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiValue
         if (child->type == AST_SPREAD_EXPR) {
             XiValue *src = xi_lower_expr(l, child->as.spread_expr.expr);
             if (!src)
-                return -1;
+                return false;
             int arity = src->type ? xr_type_tuple_count(src->type) : 0;
-            for (int j = 0; j < arity && slot < max; j++) {
+            for (int j = 0; j < arity; j++) {
                 struct XrType *et = xr_type_tuple_get(src->type, j);
                 XiValue *get =
                     xi_value_new(l->func, l->cur_block, XI_TUPLE_GET, et ? et : l->type_any, 1);
                 if (!get)
-                    return -1;
+                    return false;
                 get->args[0] = src;
                 get->aux_int = j;
-                out[slot++] = get;
+                if (!xi_lower_arg_list_push(l, args, get, max_args, line))
+                    return false;
             }
             continue;
         }
 
         XiValue *a = xi_lower_expr(l, child);
         if (!a)
-            return -1;
-        uint8_t mode = (pmodes && slot < pcount) ? pmodes[slot] : XR_PARAM_VALUE;
+            return false;
+        uint8_t mode = (pmodes && args->count < pcount) ? pmodes[args->count] : XR_PARAM_VALUE;
         if (a->type && a->type->is_value_type && mode == XR_PARAM_VALUE) {
             XiValue *cpy = xi_value_new(l->func, l->cur_block, XI_COPY, a->type, 1);
             if (cpy) {
@@ -1257,9 +1316,10 @@ static int lower_call_args_expand_spread(XiLower *l, CallExprNode *call, XiValue
                 a = cpy;
             }
         }
-        out[slot++] = a;
+        if (!xi_lower_arg_list_push(l, args, a, max_args, line))
+            return false;
     }
-    return slot;
+    return true;
 }
 
 static XiValue *lower_call(XiLower *l, AstNode *node) {
@@ -1343,10 +1403,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         if (!recv)
             return NULL;
 
-        XiValue *arg_vals[32];
-        int n = lower_call_args_expand_spread(l, call, arg_vals, 32, NULL, 0);
-        if (n < 0)
+        XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+        XiLowerArgList args;
+        xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
+                                           (int) node->line))
             return NULL;
+        XiValue **arg_vals = args.items;
+        int n = args.count;
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
@@ -1474,10 +1538,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         /* Non-null path: emit XI_CALL_METHOD */
         l->cur_block = call_blk;
-        XiValue *arg_vals[32];
-        int n = lower_call_args_expand_spread(l, call, arg_vals, 32, NULL, 0);
-        if (n < 0)
+        XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+        XiLowerArgList args;
+        xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
+                                           (int) node->line))
             return NULL;
+        XiValue **arg_vals = args.items;
+        int n = args.count;
 
         xi_lower_narrow_map_method_args(l, node, oc->name, obj, arg_vals, n);
         xi_lower_narrow_set_method_args(l, node, oc->name, obj, arg_vals, n);
@@ -1522,6 +1590,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
     /* Evaluate callee and all arguments before creating CALL */
     XiValue *callee_val = xi_lower_expr(l, call->callee);
+    if (!callee_val)
+        return NULL;
 
     /* Resolve callee function type to get parameter passing modes.
      * in/ref parameters skip deep copy at the call site. */
@@ -1533,10 +1603,14 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
         pcount = callee_type->function.param_count;
     }
 
-    XiValue *arg_vals[32];
-    int n = lower_call_args_expand_spread(l, call, arg_vals, 32, pmodes, pcount);
-    if (n < 0)
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, pmodes, pcount,
+                                       (int) node->line))
         return NULL;
+    XiValue **arg_vals = args.items;
+    int n = args.count;
 
     /* Implicit int→float promotion: when a parameter is declared as float
      * but the argument is int, insert XI_CONVERT to coerce at the call site.
@@ -1714,11 +1788,19 @@ static XiValue *lower_map_literal(XiLower *l, AstNode *node) {
     int count = map->count;
 
     /* Evaluate all keys and values first */
-    XiValue *key_vals[32], *val_vals[32];
-    int n = count > 32 ? 32 : count;
+    int n = count;
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **key_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    XiValue **val_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!key_vals || !val_vals)
+        return NULL;
     for (int i = 0; i < n; i++) {
         key_vals[i] = xi_lower_expr(l, map->keys[i]);
         val_vals[i] = xi_lower_expr(l, map->values[i]);
+        if (!key_vals[i] || !val_vals[i])
+            return NULL;
     }
 
     /* Create map: XI_MAP_NEW with capacity */
@@ -1982,11 +2064,18 @@ static XiValue *lower_new_expr(XiLower *l, AstNode *node) {
     }
 
     /* Generic class: resolve class name and invoke constructor */
-    XiValue *arg_vals[32];
-    int n = ne->arg_count > 32 ? 32 : ne->arg_count;
-    for (int i = 0; i < n; i++) {
-        arg_vals[i] = xi_lower_expr(l, ne->arguments[i]);
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    for (int i = 0; i < ne->arg_count; i++) {
+        XiValue *arg = xi_lower_expr(l, ne->arguments[i]);
+        if (!arg)
+            return NULL;
+        if (!xi_lower_arg_list_push(l, &args, arg, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
+            return NULL;
     }
+    XiValue **arg_vals = args.items;
+    int n = args.count;
 
     XiValue *cls = NULL;
     int var_id = xi_lower_var_find(l, 0, cname);
@@ -2089,13 +2178,14 @@ static XiValue *lower_go_expr(XiLower *l, AstNode *node) {
         XiValue *callee = xi_lower_expr(l, call->callee);
         if (!callee)
             return NULL;
-        XiValue *arg_vals[32];
-        int n = call->arg_count > 32 ? 32 : call->arg_count;
-        for (int i = 0; i < n; i++) {
-            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
-            if (!arg_vals[i])
-                return NULL;
-        }
+        XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+        XiLowerArgList args;
+        xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+        if (!lower_call_args_expand_spread(l, call, &args, XI_LOWER_MAX_CALL_ARGS, NULL, 0,
+                                           (int) node->line))
+            return NULL;
+        XiValue **arg_vals = args.items;
+        int n = args.count;
         uint16_t nargs = (uint16_t) (1 + n);
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_GO, result_type, nargs);
         if (!v)
@@ -2207,10 +2297,16 @@ static XiValue *lower_set_literal(XiLower *l, AstNode *node) {
     SetLiteralNode *sl = &node->as.set_literal;
     int count = sl->count;
 
-    XiValue *elem_vals[64];
-    int n = count > 64 ? 64 : count;
+    int n = count;
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **elem_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!elem_vals)
+        return NULL;
     for (int i = 0; i < n; i++) {
         elem_vals[i] = xi_lower_expr(l, sl->elements[i]);
+        if (!elem_vals[i])
+            return NULL;
     }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
@@ -2809,10 +2905,18 @@ static XiValue *lower_this_expr(XiLower *l, AstNode *node) {
 
 static XiValue *lower_super_call(XiLower *l, AstNode *node) {
     SuperCallNode *sc = &node->as.super_call;
-    XiValue *arg_vals[32];
-    int n = sc->arg_count > 32 ? 32 : sc->arg_count;
-    for (int i = 0; i < n; i++)
-        arg_vals[i] = xi_lower_expr(l, sc->arguments[i]);
+    XiValue *stack_args[XI_LOWER_CALL_ARG_STACK_CAP];
+    XiLowerArgList args;
+    xi_lower_arg_list_init(&args, stack_args, XI_LOWER_CALL_ARG_STACK_CAP);
+    for (int i = 0; i < sc->arg_count; i++) {
+        XiValue *arg = xi_lower_expr(l, sc->arguments[i]);
+        if (!arg)
+            return NULL;
+        if (!xi_lower_arg_list_push(l, &args, arg, XI_LOWER_MAX_CALL_ARGS, (int) node->line))
+            return NULL;
+    }
+    XiValue **arg_vals = args.items;
+    int n = args.count;
 
     /* 'this' is receiver for super call */
     struct XrType *this_type = l->type_any;
