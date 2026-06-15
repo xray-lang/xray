@@ -19,6 +19,13 @@ print("-- map delete+reinsert --")
 m.delete("second")
 m.set("second", 20)
 for (k in m) { print(k) }
+print("-- map tombstone append --")
+m.delete("first")
+m.delete("third")
+m.set("fourth", 4)
+m.set("fifth", 5)
+for (k, v in m) { print(k + "=" + v.toString()) }
+for (v in m.values()) { print(v.toString()) }
 print("-- set for e --")
 let s: Set<string> = #[]
 s.add("x")
@@ -30,6 +37,10 @@ print("-- set delete+reinsert --")
 s.delete("x")
 s.add("x")
 for (e in s) { print(e) }
+print("-- set tombstone append --")
+s.delete("y")
+s.add("w")
+for (e in s.values()) { print(e) }
 print("-- int set --")
 let n: Set<int> = #[]
 n.add(30)

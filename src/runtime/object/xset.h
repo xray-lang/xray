@@ -25,54 +25,19 @@
 #include "../value/xvalue.h"
 #include "../gc/xgc_header.h"
 #include "xarray.h"
+#include "../../shared/xr_map_set_abi.h"
 #include <stdint.h>
 #include <stdbool.h>
-
-/* ========== Set Entry (insertion-order dense slot) ========== */
-
-typedef struct XrSetEntry {
-    XrValue value;
-    uint32_t hash;   // Cached value hash (avoids recompute on resize/lookup)
-    uint8_t val_tt;  // Value type tag (+1); 0 = empty/tombstone slot
-    uint8_t _pad[3];
-} XrSetEntry;
-
-// Entry state
-#define XR_SET_ENTRY_NIL 0
-#define XR_SET_ENTRY_EMPTY(e) ((e)->val_tt == XR_SET_ENTRY_NIL)
-
-/* Debug sentinel for indices[] slots whose ctrl byte is not FULL. FULL slots
- * always store a direct entries[] index. */
-#define XR_SET_IX_EMPTY (-1)
 
 /* ========== Set Object ========== */
 
 typedef struct XrSet {
     XrGCHeader gc;
-    uint32_t count;         // Live entries (excludes tombstones)
-    uint32_t nentries;      // Used entry slots incl. tombstones (= next append index)
-    uint32_t entries_cap;   // Allocated entries[] capacity
-    uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
-    uint8_t *ctrl;          // Swiss control bytes, indices_size + XR_SWISS_GROUP
-    int32_t *indices;       // FULL ctrl slots -> entries index
-    XrSetEntry *entries;    // Dense insertion-order array
-    uint8_t flags;
-    uint8_t elem_tid;  // XrTypeId: element type for reified generics (0=any)
-    uint8_t _pad[2];   // Alignment
+    XR_SET_ABI_FIELDS;
 } XrSet;
 
 // Macros
 #define xr_set_entry(s, i) (&(s)->entries[i])
-
-// Flags
-#define XR_SET_FLAG_WEAK 0x01
-#define XR_SET_FLAG_DUMMY 0x02        // Empty set: no entries/indices allocation
-#define XR_SET_FLAG_NODES_ON_GC 0x04  // entries[]/indices[] live on Region GC heap
-
-#define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
-
-// Max index-table bits
-#define XR_SET_MAXHBITS 30
 
 /* ========== Basic Operations ========== */
 

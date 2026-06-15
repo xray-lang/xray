@@ -248,27 +248,13 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (recv.tag == XR_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-            return XR_FROM_INT(m->len);
+            return XR_FROM_INT(xrt_map_len(m));
         if (sym == XRT_SYM_IS_EMPTY)
-            return XR_FROM_BOOL(m->len == 0);
-        if (sym == XRT_SYM_KEYS) {
-            XrValue arr = xrt_array_new(m->len);
-            for (int64_t oi = 0; oi < m->order_len; oi++) {
-                int64_t slot = m->order[oi];
-                if (xrt_map_slot_is_full(m, slot))
-                    xrt_array_push(arr, xrt_map_slot_key(m, slot));
-            }
-            return arr;
-        }
-        if (sym == XRT_SYM_VALUES) {
-            XrValue arr = xrt_array_new(m->len);
-            for (int64_t oi = 0; oi < m->order_len; oi++) {
-                int64_t slot = m->order[oi];
-                if (xrt_map_slot_is_full(m, slot))
-                    xrt_array_push(arr, xrt_map_slot_value(m, slot));
-            }
-            return arr;
-        }
+            return XR_FROM_BOOL(xrt_map_len(m) == 0);
+        if (sym == XRT_SYM_KEYS)
+            return xrt_map_keys(m);
+        if (sym == XRT_SYM_VALUES)
+            return xrt_map_values(m);
         if (sym == XRT_SYM_ITERATOR)
             return xrt_iterator_new(recv, XRT_ITER_KEYS);
         if (sym == XRT_SYM_ENTRIES_ITERATOR)
@@ -277,9 +263,9 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (recv.tag == XR_TAG_SET) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
-            return XR_FROM_INT(s->len);
+            return XR_FROM_INT(xrt_set_len(s));
         if (sym == XRT_SYM_IS_EMPTY)
-            return XR_FROM_BOOL(s->len == 0);
+            return XR_FROM_BOOL(xrt_set_len(s) == 0);
         if (sym == XRT_SYM_CLEAR) {
             xrt_set_clear(s);
             return XR_NULL_VAL;

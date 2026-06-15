@@ -29,60 +29,22 @@
 #include "../gc/xgc_internal.h"
 #include "../gc/xalloc_unified.h"
 #include "xarray.h"
-#include "../../shared/xr_swiss_index.h"
+#include "../../shared/xr_map_set_abi.h"
 #include <stdint.h>
 #include <stdbool.h>
-
-/* ========== Map Entry (insertion-order dense slot) ========== */
-
-typedef struct XrMapEntry {
-    XrValue value;
-    XrValue key;
-    uint32_t hash;   // Cached key hash (avoids recompute on resize/lookup)
-    uint8_t key_tt;  // Key type tag (+1); 0 = empty/tombstone slot
-    uint8_t _pad[3];
-} XrMapEntry;
-
-// Entry state
-#define XR_MAP_ENTRY_NIL_KEY 0
-#define XR_MAP_ENTRY_EMPTY(e) ((e)->key_tt == XR_MAP_ENTRY_NIL_KEY)
-
-/* Debug sentinel for indices[] slots whose ctrl byte is not FULL. FULL slots
- * always store a direct entries[] index. */
-#define XR_MAP_IX_EMPTY (-1)
 
 /* ========== Map Object ========== */
 
 typedef struct XrMap {
     XrGCHeader gc;
-    uint32_t count;         // Live entries (excludes tombstones)
-    uint32_t nentries;      // Used entries slots incl. tombstones (= next append index)
-    uint32_t entries_cap;   // Allocated entries[] capacity
-    uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
-    uint8_t *ctrl;          // Swiss control bytes, indices_size + XR_SWISS_GROUP
-    int32_t *indices;       // FULL ctrl slots -> entries index
-    XrMapEntry *entries;    // Dense insertion-order array
-    uint8_t flags;
-    uint8_t key_tid;    // XrTypeId: key type for reified generics (0=any)
-    uint8_t value_tid;  // XrTypeId: value type for reified generics (0=any)
-    uint8_t _pad;
+    XR_MAP_ABI_FIELDS;
 } XrMap;
 
 // Macros
 #define xr_map_entry(m, i) (&(m)->entries[i])
 
-// Flags
-#define XR_MAP_FLAG_WEAK 0x01
-#define XR_MAP_FLAG_DUMMY 0x02        // Empty map: no entries/indices allocation
-#define XR_MAP_FLAG_NODES_ON_GC 0x04  // entries[]/indices[] live on Region GC heap
-
-#define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
-
 // Initialize map in-place
 XR_FUNC void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint);
-
-// Max index-table bits
-#define XR_MAP_MAXHBITS 30
 
 /* ========== Inline Fast Path (VM optimization) ========== */
 

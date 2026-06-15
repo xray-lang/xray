@@ -182,10 +182,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
     } else if (obj.tag == XR_TAG_SET && key.tag == XR_TAG_I64) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
-        int64_t idx = key.i;
-        if (idx >= 0 && idx < s->order_len)
-            return xrt_set_slot_item(s, s->order[idx]);
-        return XR_NULL_VAL;
+        return xrt_set_value_at(s, key.i);
     }
     return XR_NULL_VAL;
 }
