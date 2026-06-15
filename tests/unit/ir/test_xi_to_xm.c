@@ -6,12 +6,14 @@
  */
 
 #include "../../../src/ir/xi.h"
+#include "../../../src/ir/xi_opt.h"
 #include "../../../src/jit/xi_to_xm.h"
 #include "../../../src/jit/xm.h"
 #include "../../../src/jit/xm_ops.h"
 #include "../../../src/jit/xm_jit_runtime.h"
 #include "../../../src/jit/xm_helper_table.h"
 #include "../../../src/runtime/value/xtype.h"
+#include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/base/xglobal_indices.h"
 #include "../../../src/base/xmalloc.h"
 
@@ -25,6 +27,7 @@ static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_float = {.kind = XR_KIND_FLOAT, .id = 2, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 3, .frozen = true};
 static XrType stub_tuple = {.kind = XR_KIND_TUPLE, .id = 4, .frozen = true};
+static XrType stub_null = {.kind = XR_KIND_NULL, .id = 5, .frozen = true};
 static XrType stub_void = {.kind = XR_KIND_UNIT, .id = 6, .frozen = true};
 
 static int tests_passed = 0;
@@ -354,6 +357,57 @@ TEST(lower_select_tagged_condition) {
     }
     assert(found_helper_call && found_select &&
            "tagged select condition should lower through truthy helper");
+    xm_func_destroy(xm);
+    xi_func_free(f);
+}
+
+TEST(lower_default_param_guard_keeps_tagged_sentinel) {
+    XiFunc *f = make_func("default_param_guard", &stub_int);
+    f->entry_type = 1;
+    f->min_params = 1;
+    XiBlock *entry = f->entry;
+
+    XiValue *required = xi_param(f, entry, 0, &stub_int);
+    XiValue *optional = xi_param(f, entry, 1, &stub_int);
+    XiValue *params[2] = {required, optional};
+    register_func_params(f, params, 2);
+
+    XiValue *null_v = xi_const_null(f, entry, &stub_null);
+    XiValue *is_missing = xi_binary(f, entry, XI_EQ, &stub_bool, optional, null_v);
+    XiValue *default_v = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *resolved = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    assert(resolved != NULL);
+    resolved->args[0] = is_missing;
+    resolved->args[1] = default_v;
+    resolved->args[2] = optional;
+    XiValue *sum = xi_binary(f, entry, XI_ADD, &stub_int, required, resolved);
+    xi_block_set_return(entry, sum);
+
+    XiRepPolicy policy = xi_rep_policy_tagged_boundary();
+    xi_opt_select_rep_with_policy(f, &policy);
+    xi_opt_box_elim(f);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL);
+    assert(xm->nvreg >= 2);
+    assert(xm->vregs[1].rep == XR_REP_TAGGED &&
+           "optional default-parameter slot must preserve the null sentinel");
+
+    bool found_tagged_select = false;
+    bool found_unbox_after_select = false;
+    for (uint32_t i = 0; i < xm->blocks[0]->nins; i++) {
+        XmIns *ins = &xm->blocks[0]->ins[i];
+        if (ins->op == XM_SELECT) {
+            assert(ins->rep == XR_REP_TAGGED &&
+                   "default-parameter SELECT must choose while values are still tagged");
+            found_tagged_select = true;
+        }
+        if (found_tagged_select && ins->op == XM_UNBOX_I64)
+            found_unbox_after_select = true;
+    }
+    assert(found_tagged_select);
+    assert(found_unbox_after_select && "native use should unbox the selected value, not both arms");
+
     xm_func_destroy(xm);
     xi_func_free(f);
 }
@@ -888,6 +942,55 @@ TEST(lower_deopt_preserves_bc_slot_above_255) {
     xi_func_free(f);
 }
 
+TEST(lower_closure_cell_cache_var_id_above_255) {
+    XiFunc *f = make_func("wide_cell_parent", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *captured = xi_const_int(f, entry, 7, &stub_int);
+    captured->var_id = 300;
+
+    XiFunc *child = make_func("wide_cell_child", &stub_int);
+    child->parent_func = f;
+    child->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = true,
+        .type = &stub_int,
+        .value = captured,
+        .name = "captured",
+    };
+    child->ncaptures = 1;
+
+    XiValue *closure = xi_value_new(f, entry, XI_CLOSURE_NEW, &stub_int, 1);
+    assert(closure != NULL);
+    closure->aux = (void *) child;
+    closure->args[0] = captured;
+    xi_block_set_return(entry, captured);
+
+    XrProto *proto = xr_vm_proto_new();
+    XrProto *child_proto = xr_vm_proto_new();
+    assert(proto != NULL && child_proto != NULL);
+    child_proto->xi_func = child;
+    assert(xr_vm_proto_add_proto(proto, child_proto) == 0);
+
+    XmFunc *xm = xi_to_xm_lower(f, proto, NULL, NULL, NULL);
+    assert(xm != NULL && "needs_cell capture above var_id 255 should lower");
+
+    uint32_t call_c_count = 0;
+    for (uint32_t bi = 0; bi < xm->nblk; bi++) {
+        XmBlock *blk = xm->blocks[bi];
+        for (uint32_t ii = 0; ii < blk->nins; ii++) {
+            if (blk->ins[ii].op == XM_CALL_C)
+                call_c_count++;
+        }
+    }
+    assert(call_c_count >= 3 &&
+           "closure_new + cell_new + closure_set_upval helpers should be emitted");
+
+    xm_func_destroy(xm);
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 TEST(lower_builtin_metadata_ops_deopt_to_vm) {
     assert_op_deopts_to_vm(XI_TYPEOF, "typeof_deopt", 1, 0);
     assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
@@ -1376,6 +1479,7 @@ int main(void) {
     run_lower_div_mod_variants();
     run_lower_select_value();
     run_lower_select_tagged_condition();
+    run_lower_default_param_guard_keeps_tagged_sentinel();
     run_lower_if_branch();
     run_lower_phi();
     run_lower_neg_unary();
@@ -1390,6 +1494,7 @@ int main(void) {
     run_lower_throw();
     run_lower_assert_deopts_to_vm();
     run_lower_deopt_preserves_bc_slot_above_255();
+    run_lower_closure_cell_cache_var_id_above_255();
     run_lower_builtin_metadata_ops_deopt_to_vm();
     run_lower_get_builtin_via_helper();
     run_lower_is_deopts_to_vm();

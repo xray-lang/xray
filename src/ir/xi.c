@@ -313,7 +313,7 @@ void xi_block_add_pred(XiBlock *blk, XiBlock *pred) {
 /* Initialize the scalar fields every XiValue needs before any pass (notably
  * the register allocator) reads them. The arena is NOT zero-initialized
  * (xr_malloc), so this MUST set every field whose correct default is non-zero:
- * var_id (0xFF "no source variable", NOT 0 which is variable #0), rep
+ * var_id (XI_NO_VAR_ID "no source variable", NOT 0 which is variable #0), rep
  * (XR_REP_TAGGED) and uses (-1). Shared by value_alloc() and xi_phi_new() so
  * the two construction paths can never drift — a missing var_id init in the
  * phi path silently coalesced temporary phis (&& / || / ternary results) onto
@@ -324,8 +324,8 @@ static inline void xi_value_init_fields(XiValue *v, uint32_t id, uint16_t op, st
     v->id = id;
     v->op = op;
     v->flags = xi_op_default_effects(op);
-    v->rep = XR_REP_TAGGED; /* default until select_rep assigns concrete rep */
-    v->var_id = 0xFF;       /* no source variable */
+    v->rep = XR_REP_TAGGED;   /* default until select_rep assigns concrete rep */
+    v->var_id = XI_NO_VAR_ID; /* no source variable */
     v->type = type;
     v->nargs = nargs;
     v->uses = -1; /* not yet computed */
@@ -524,7 +524,7 @@ XiPhi *xi_phi_new(XiFunc *f, XiBlock *blk, struct XrType *type, uint16_t npreds)
     if (!phi)
         return NULL;
 
-    /* Shared field init (var_id=0xFF etc.); a real variable phi's var_id is
+    /* Shared field init (var_id=XI_NO_VAR_ID etc.); a real variable phi's var_id is
      * overwritten by the Braun SSA construction after this call. */
     xi_value_init_fields(&phi->value, f->next_value_id++, XI_PHI, type, npreds, blk);
 

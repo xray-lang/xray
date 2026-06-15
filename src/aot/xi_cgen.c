@@ -360,8 +360,9 @@ struct XiCgenCtx {
     int nmethod;
     XiModule *module; /* current module being emitted */
     bool pre_decl_all;
-    bool cell_vars[256];
-    const XiValue *cell_origins[256];
+    bool *cell_vars;
+    const XiValue **cell_origins;
+    uint32_t cell_var_count;
     const char *shared_name;
     CgImportEntry *imports;
     int imports_cap;
@@ -1382,11 +1383,11 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
 static void emit_declarations(XiCgenCtx *ctx, FILE *out, const XiFunc *f) {
     bool pre_decl_all = cg_has_exception_handling(f);
 
-    for (uint16_t var_id = 0; var_id < 256; var_id++) {
+    for (uint32_t var_id = 0; var_id < ctx->cell_var_count; var_id++) {
         if (!ctx->cell_vars[var_id])
             continue;
         fprintf(out, "    XrValue ");
-        emit_cell_ref(out, (uint8_t) var_id);
+        emit_cell_ref(out, (XiVarId) var_id);
         fprintf(out, " = XR_NULL_VAL;\n");
     }
 

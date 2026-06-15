@@ -138,6 +138,13 @@ XR_FUNC void alloc_registers(EmitCtx *ctx) {
                 uint16_t pidx = (uint16_t) v->aux_int;
                 if (v->id < ctx->reg_map_size && pidx < MAX_REGS) {
                     ctx->reg_map[v->id] = (XiEmitReg) pidx;
+                    if (xi_var_id_is_valid(v->var_id) && !xi_emit_var_id_in_state(ctx, v->var_id)) {
+                        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+                        return;
+                    }
+                    if (xi_emit_var_id_in_state(ctx, v->var_id) &&
+                        ctx->var_reg[v->var_id] == NO_REG)
+                        ctx->var_reg[v->var_id] = (XiEmitReg) pidx;
                     if (pidx + 1 > ctx->next_reg) {
                         ctx->next_reg = pidx + 1;
                         ctx->max_reg = ctx->next_reg;

@@ -597,6 +597,73 @@ TEST(emit_param_register_above_255) {
     xi_func_free(f);
 }
 
+TEST(emit_coalesces_var_id_above_255) {
+    XiFunc *f = make_func("wide_var_id", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *p0 = xi_param(f, entry, 0, &stub_int);
+    p0->var_id = 300;
+    XiValue *copy = xi_value_new(f, entry, XI_COPY, &stub_int, 1);
+    assert(copy != NULL);
+    copy->args[0] = p0;
+    copy->var_id = 300;
+    xi_block_set_return(entry, copy);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+    assert(proto->maxstacksize == 1 && "same high var_id should reuse the param register");
+
+    XrInstruction ret = PROTO_CODE(proto, PROTO_CODE_COUNT(proto) - 1);
+    assert(GET_OPCODE(ret) == OP_RETURN1);
+    assert(GETARG_A(ret) == 0);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
+TEST(emit_select_preserves_param_slot_alias) {
+    XiFunc *f = make_func("select_alias", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *p0 = xi_param(f, entry, 0, &stub_int);
+    p0->var_id = 7;
+    XiValue *cond = xi_const_bool(f, entry, false, &stub_bool);
+    XiValue *default_val = xi_const_int(f, entry, 99, &stub_int);
+    XiValue *select = xi_value_new(f, entry, XI_SELECT, &stub_int, 3);
+    assert(select != NULL);
+    select->args[0] = cond;
+    select->args[1] = default_val;
+    select->args[2] = p0;
+    select->var_id = 7;
+    xi_block_set_return(entry, select);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+
+    int test_pc = -1;
+    for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+        XrInstruction inst = PROTO_CODE(proto, pc);
+        if (GET_OPCODE(inst) == OP_TEST) {
+            test_pc = pc;
+            break;
+        }
+        assert(!(GET_OPCODE(inst) == OP_MOVE && GETARG_A(inst) == 0) &&
+               "SELECT must not overwrite the parameter slot before testing the condition");
+    }
+    assert(test_pc >= 0 && test_pc + 1 < PROTO_CODE_COUNT(proto));
+    XrInstruction test_inst = PROTO_CODE(proto, test_pc);
+    assert(GETARG_B(test_inst) == 1 &&
+           "dst=false alias should move true arm only when cond is true");
+    XrInstruction move_inst = PROTO_CODE(proto, test_pc + 1);
+    assert(GET_OPCODE(move_inst) == OP_MOVE);
+    assert(GETARG_A(move_inst) == 0 && "SELECT result should write back to the parameter slot");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== Instruction Fusion ========== */
 
 TEST(emit_addi_rhs_const) {
@@ -974,6 +1041,8 @@ int main(void) {
     run_emit_reg_recycling();
     run_emit_reg_pressure();
     run_emit_param_register_above_255();
+    run_emit_coalesces_var_id_above_255();
+    run_emit_select_preserves_param_slot_alias();
 
     /* Instruction fusion */
     run_emit_addi_rhs_const();

@@ -109,6 +109,18 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_IC_ATTACHED                                                                         \
     ((XiInvariantMask) (1u << 12)) /* call-site values carry IC snapshot metadata */
 
+typedef uint16_t XiVarId;
+
+/* Source-variable IDs are carried on XiValue for backend register/cell
+ * coalescing.  0xffff is reserved as the "no source variable" sentinel, so
+ * real variables occupy the closed range [0, 65534]. */
+#define XI_NO_VAR_ID ((XiVarId) UINT16_MAX)
+#define XI_MAX_VAR_ID ((uint32_t) UINT16_MAX - 1u)
+
+static inline bool xi_var_id_is_valid(XiVarId var_id) {
+    return var_id != XI_NO_VAR_ID;
+}
+
 /* Invariant mask implied by reaching a given stage. */
 static inline XiInvariantMask xi_stage_invariants(XiStage s) {
     switch (s) {
@@ -590,8 +602,8 @@ typedef struct XiClosureMeta {
 typedef struct XiValue {
     uint32_t id;           /* dense SSA value ID (unique within function) */
     uint16_t op;           /* XiOp */
+    XiVarId var_id;        /* source variable ID for coalescing (XI_NO_VAR_ID = none) */
     uint8_t flags;         /* XI_FLAG_* */
-    uint8_t var_id;        /* source variable ID for register coalescing (0xFF = none) */
     uint8_t rep;           /* XrRep: machine representation (set by select_rep,
                             * default XR_REP_TAGGED until STAGE_REPPED) */
     uint8_t escape;        /* XiEscapeLevel (2-bit): escape analysis result

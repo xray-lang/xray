@@ -65,6 +65,79 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *
     return true;
 }
 
+static void xi_emit_note_var_id(const XiValue *v, uint32_t *max_var_id, bool *has_var_id) {
+    if (!v || !xi_var_id_is_valid(v->var_id))
+        return;
+    if (!*has_var_id || v->var_id > *max_var_id)
+        *max_var_id = v->var_id;
+    *has_var_id = true;
+}
+
+static uint32_t xi_emit_var_state_count(const XiFunc *f) {
+    uint32_t max_var_id = 0;
+    bool has_var_id = false;
+    if (!f)
+        return 0;
+
+    for (uint16_t i = 0; i < f->nparams; i++)
+        xi_emit_note_var_id(f->params[i], &max_var_id, &has_var_id);
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control)
+            xi_emit_note_var_id(blk->control, &max_var_id, &has_var_id);
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next)
+            xi_emit_note_var_id(&phi->value, &max_var_id, &has_var_id);
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            xi_emit_note_var_id(v, &max_var_id, &has_var_id);
+            if (!v || v->op != XI_CLOSURE_NEW || !v->aux)
+                continue;
+            XiFunc *child = (XiFunc *) v->aux;
+            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                XiCapture *cap = &child->captures[ci];
+                xi_emit_note_var_id(cap->value, &max_var_id, &has_var_id);
+                if (ci < v->nargs)
+                    xi_emit_note_var_id(v->args[ci], &max_var_id, &has_var_id);
+            }
+        }
+    }
+
+    return has_var_id ? max_var_id + 1u : 0u;
+}
+
+static void xi_emit_free_var_state(EmitCtx *ctx) {
+    xr_free(ctx->cell_side_reg);
+    xr_free(ctx->cell_created);
+    xr_free(ctx->var_reg);
+    ctx->cell_side_reg = NULL;
+    ctx->cell_created = NULL;
+    ctx->var_reg = NULL;
+    ctx->var_state_count = 0;
+}
+
+static bool xi_emit_init_var_state(EmitCtx *ctx, XiFunc *f) {
+    ctx->var_state_count = xi_emit_var_state_count(f);
+    if (ctx->var_state_count == 0)
+        return true;
+
+    ctx->cell_side_reg =
+        (XiEmitReg *) xr_malloc((size_t) ctx->var_state_count * sizeof(*ctx->cell_side_reg));
+    ctx->cell_created = (bool *) xr_calloc(ctx->var_state_count, sizeof(*ctx->cell_created));
+    ctx->var_reg = (XiEmitReg *) xr_malloc((size_t) ctx->var_state_count * sizeof(*ctx->var_reg));
+    if (!ctx->cell_side_reg || !ctx->cell_created || !ctx->var_reg) {
+        xi_emit_free_var_state(ctx);
+        return false;
+    }
+    for (uint32_t i = 0; i < ctx->var_state_count; i++) {
+        ctx->cell_side_reg[i] = NO_REG;
+        ctx->var_reg[i] = NO_REG;
+    }
+    return true;
+}
+
 /* Return a register to the free pool for reuse. */
 XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg) {
     if (reg == NO_REG)
@@ -89,7 +162,11 @@ XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v) {
 
     if (ctx->reg_map[v->id] == NO_REG) {
         /* Variable coalescing: reuse the pinned register for this var_id */
-        if (v->var_id != 0xFF && ctx->var_reg[v->var_id] != NO_REG) {
+        if (xi_var_id_is_valid(v->var_id) && !xi_emit_var_id_in_state(ctx, v->var_id)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return 0;
+        }
+        if (xi_emit_var_id_in_state(ctx, v->var_id) && ctx->var_reg[v->var_id] != NO_REG) {
             ctx->reg_map[v->id] = ctx->var_reg[v->var_id];
             return ctx->reg_map[v->id];
         }
@@ -106,7 +183,7 @@ XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v) {
                 ctx->max_reg = ctx->next_reg;
         }
         /* Record as the pinned register for this variable */
-        if (v->var_id != 0xFF)
+        if (xi_emit_var_id_in_state(ctx, v->var_id))
             ctx->var_reg[v->var_id] = ctx->reg_map[v->id];
     }
     return ctx->reg_map[v->id];
@@ -120,7 +197,11 @@ XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
     XiEmitReg r = reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return r;
-    if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+    if (xi_var_id_is_valid(v->var_id) && !xi_emit_var_id_in_state(ctx, v->var_id)) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return r;
+    }
+    if (xi_emit_var_has_side_cell(ctx, v->var_id)) {
         if (ctx->next_reg >= MAX_REGS) {
             emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
             return r;
@@ -157,7 +238,11 @@ XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
             ctx->max_reg = ctx->next_reg;
         /* First definition via call-like op: pin var_reg so later defs
          * and exception-path reads coalesce to this register. */
-        if (v->var_id != 0xFF && ctx->var_reg[v->var_id] == NO_REG)
+        if (xi_var_id_is_valid(v->var_id) && !xi_emit_var_id_in_state(ctx, v->var_id)) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return 0;
+        }
+        if (xi_emit_var_id_in_state(ctx, v->var_id) && ctx->var_reg[v->var_id] == NO_REG)
             ctx->var_reg[v->var_id] = ctx->reg_map[v->id];
     }
     return ctx->reg_map[v->id];
@@ -165,14 +250,14 @@ XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
 
 /* Release registers of input args whose last use is at the current ordinal.
  * Called AFTER emitting an instruction that reads these args.
- * Coalesced registers (var_id != 0xFF) are never freed — they must remain
+ * Coalesced registers (var_id != XI_NO_VAR_ID) are never freed — they must remain
  * pinned so all SSA definitions of the variable share one VM register. */
 XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v) {
     for (uint16_t i = 0; i < v->nargs; i++) {
         const XiValue *arg = v->args[i];
         if (!arg || arg->id >= ctx->reg_map_size)
             continue;
-        if (arg->var_id != 0xFF)
+        if (xi_var_id_is_valid(arg->var_id))
             continue; /* pinned by coalescing */
         /* Free register if this is the last use of arg */
         if (ctx->last_use[arg->id] == ctx->current_ordinal) {
@@ -433,8 +518,9 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 /* Conditional select: dst = cond ? true_val : false_val.
- * Emitted as: MOVE dst, false_val; TEST cond, 0; MOVE dst, true_val.
- * TEST skips the next instruction when cond is falsy. */
+ * OP_TEST skips the next instruction when truthiness differs from B.  The
+ * alias cases are important for coalesced source variables: default-parameter
+ * guards often write the SELECT result back into the original parameter slot. */
 static void emit_select(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -445,11 +531,48 @@ static void emit_select(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiEmitReg false_r = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
+
+    if (true_r == false_r) {
+        if (dst != true_r)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, true_r, 0));
+        return;
+    }
+
+    if (dst == true_r) {
+        emit_inst(ctx, CREATE_ABC(OP_TEST, cond_r, 0, 0));
+        if (dst != false_r)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, false_r, 0));
+        return;
+    }
+
+    if (dst == false_r) {
+        emit_inst(ctx, CREATE_ABC(OP_TEST, cond_r, 1, 0));
+        if (dst != true_r)
+            emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, true_r, 0));
+        return;
+    }
+
+    bool copied_cond = false;
+    XiEmitReg test_r = cond_r;
+    if (dst == cond_r) {
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        test_r = (XiEmitReg) ctx->next_reg++;
+        if (ctx->next_reg > ctx->max_reg)
+            ctx->max_reg = ctx->next_reg;
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, test_r, cond_r, 0));
+        copied_cond = true;
+    }
+
     if (dst != false_r)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, false_r, 0));
-    emit_inst(ctx, CREATE_ABC(OP_TEST, cond_r, 0, 0));
+    emit_inst(ctx, CREATE_ABC(OP_TEST, test_r, 1, 0));
     if (dst != true_r)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, true_r, 0));
+    if (copied_cond)
+        free_reg(ctx, test_r);
 }
 
 /* ========== Dispatch Table ========== */
@@ -496,8 +619,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
             continue;
         if (raw_cell_args)
             continue;
-        if (!ctx->cell_wrapped[arg->id] &&
-            !(arg->var_id != 0xFF && ctx->cell_side_reg[arg->var_id] != NO_REG))
+        if (!ctx->cell_wrapped[arg->id] && !xi_emit_var_has_side_cell(ctx, arg->var_id))
             continue;
         XiEmitReg cell_reg = reg_of(ctx, arg);
         if (ctx->status != XI_EMIT_OK)
@@ -529,7 +651,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     XiEmitReg real_dst = dst;
     bool need_cell_set = false;
     bool need_cell_new = false;
-    if (!handles_cell_dst && v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+    if (!handles_cell_dst && xi_emit_var_has_side_cell(ctx, v->var_id)) {
         if (!ctx->cell_created[v->var_id]) {
             /* First definition: emit value to dst, then wrap with CELL_NEW */
             need_cell_new = true;
@@ -570,8 +692,8 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     /* Fresh-dst handlers reserve a VM register window around the result.
      * Copy the value back to a coalesced variable register so exception
      * edges and merge-point phi moves see the expected register. */
-    if (fresh_dst && ctx->status == XI_EMIT_OK && v->var_id != 0xFF && !need_cell_set &&
-        !need_cell_new) {
+    if (fresh_dst && ctx->status == XI_EMIT_OK && xi_emit_var_id_in_state(ctx, v->var_id) &&
+        !need_cell_set && !need_cell_new) {
         XiEmitReg vr = ctx->var_reg[v->var_id];
         XiEmitReg fresh_reg = ctx->reg_map[v->id];
         if (vr != NO_REG && vr != fresh_reg) {
@@ -677,7 +799,6 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
 
     ctx.rpo_order = rpo_order;
     ctx.rpo_count = rpo_count;
-    memset(ctx.var_reg, NO_REG, sizeof(ctx.var_reg));
 
     /* Allocate register map */
     ctx.reg_map_size = f->next_value_id;
@@ -723,13 +844,20 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
         return XI_EMIT_ERR_INTERNAL;
     }
 
-    /* Initialize side cell register map for hoisted function captures */
-    memset(ctx.cell_side_reg, NO_REG, sizeof(ctx.cell_side_reg));
-    memset(ctx.cell_created, 0, sizeof(ctx.cell_created));
+    if (!xi_emit_init_var_state(&ctx, f)) {
+        xr_free(ctx.cell_wrapped);
+        xr_free(ctx.last_use);
+        xr_free(ctx.block_pc);
+        xr_free(ctx.reg_map);
+        xr_vm_proto_free(ctx.proto);
+        xr_free(rpo_order);
+        return XI_EMIT_ERR_INTERNAL;
+    }
 
     /* Allocate per-value bytecode PC map for IC-guided JIT speculation */
     ctx.value_pc = (int *) xr_malloc(ctx.reg_map_size * sizeof(int));
     if (!ctx.value_pc) {
+        xi_emit_free_var_state(&ctx);
         xr_free(ctx.cell_wrapped);
         xr_free(ctx.last_use);
         xr_free(ctx.block_pc);
@@ -766,7 +894,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
                     continue;
                 if (!cap->value || cap->value->id >= ctx.reg_map_size)
                     continue;
-                if (cap->value->var_id == 0xFF)
+                if (!xi_emit_var_id_in_state(&ctx, cap->value->var_id))
                     continue;
                 XiEmitReg reg = ctx.reg_map[cap->value->id];
                 if (reg == NO_REG)
@@ -843,6 +971,7 @@ cleanup:;
         xr_vm_proto_free(ctx.proto);
     }
     xr_free(ctx.value_pc);
+    xi_emit_free_var_state(&ctx);
     xr_free(ctx.cell_wrapped);
     xr_free(ctx.last_use);
     xr_free(ctx.reg_map);

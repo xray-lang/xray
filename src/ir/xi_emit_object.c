@@ -605,12 +605,12 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
             if (ctx->status != XI_EMIT_OK)
                 return;
             bool already = ctx->cell_wrapped[cap_val->id];
-            if (!already && cap_val->var_id != 0xFF)
+            if (!already && xi_emit_var_id_in_state(ctx, cap_val->var_id))
                 already = ctx->cell_created[cap_val->var_id];
             if (!already) {
                 emit_inst(ctx, CREATE_ABC(OP_CELL_NEW, reg, 0, 0));
                 ctx->cell_wrapped[cap_val->id] = true;
-                if (cap_val->var_id != 0xFF) {
+                if (xi_emit_var_id_in_state(ctx, cap_val->var_id)) {
                     ctx->cell_side_reg[cap_val->var_id] = reg;
                     ctx->cell_created[cap_val->var_id] = true;
                 }
@@ -626,7 +626,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     }
 
     int proto_idx = xr_vm_proto_add_proto(ctx->proto, child_proto);
-    if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
+    if (xi_emit_var_has_side_cell(ctx, v->var_id)) {
         /* The destination register is cell-wrapped (hoisted function).
          * Emit closure to a temp register, then store into the cell. */
         if (ctx->next_reg >= MAX_REGS) {

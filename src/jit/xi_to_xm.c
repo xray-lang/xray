@@ -85,10 +85,11 @@ typedef struct {
 
     /* Per-var_id cell pointer cache for needs_cell mutable captures.
      * When multiple closures created in this function capture the same
-     * variable, all must share one Cell.  Indexed by var_id (0..255).
+     * variable, all must share one Cell.  Indexed by var_id.
      * xm_ref_is_none() means no cell allocated yet. */
-    XmRef cell_ref[256];
-    bool cell_present[256];
+    XmRef *cell_ref;
+    bool *cell_present;
+    uint32_t cell_count;
 
     bool error;
     uint16_t error_op;
@@ -99,6 +100,76 @@ typedef struct {
 /* Check if a type is floating-point */
 static bool is_float_type(struct XrType *type) {
     return type && type->kind == XR_KIND_FLOAT;
+}
+
+static void xi2xm_note_var_id(const XiValue *v, uint32_t *max_var_id, bool *has_var_id) {
+    if (!v || !xi_var_id_is_valid(v->var_id))
+        return;
+    if (!*has_var_id || v->var_id > *max_var_id)
+        *max_var_id = v->var_id;
+    *has_var_id = true;
+}
+
+static uint32_t xi2xm_cell_cache_count(const XiFunc *f) {
+    uint32_t max_var_id = 0;
+    bool has_var_id = false;
+    if (!f)
+        return 0;
+
+    for (uint16_t i = 0; i < f->nparams; i++)
+        xi2xm_note_var_id(f->params[i], &max_var_id, &has_var_id);
+
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control)
+            xi2xm_note_var_id(blk->control, &max_var_id, &has_var_id);
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next)
+            xi2xm_note_var_id(&phi->value, &max_var_id, &has_var_id);
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            XiValue *v = blk->values[vi];
+            xi2xm_note_var_id(v, &max_var_id, &has_var_id);
+            if (!v || v->op != XI_CLOSURE_NEW || !v->aux)
+                continue;
+            XiFunc *child = (XiFunc *) v->aux;
+            for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
+                XiCapture *cap = &child->captures[ci];
+                xi2xm_note_var_id(cap->value, &max_var_id, &has_var_id);
+                if (ci < v->nargs)
+                    xi2xm_note_var_id(v->args[ci], &max_var_id, &has_var_id);
+            }
+        }
+    }
+
+    return has_var_id ? max_var_id + 1u : 0u;
+}
+
+static bool xi2xm_var_id_in_cell_cache(const LowerCtx *ctx, XiVarId var_id) {
+    return ctx && xi_var_id_is_valid(var_id) && var_id < ctx->cell_count;
+}
+
+static void xi2xm_free_cell_cache(LowerCtx *ctx) {
+    xr_free(ctx->cell_ref);
+    xr_free(ctx->cell_present);
+    ctx->cell_ref = NULL;
+    ctx->cell_present = NULL;
+    ctx->cell_count = 0;
+}
+
+static bool xi2xm_init_cell_cache(LowerCtx *ctx, const XiFunc *f) {
+    ctx->cell_count = xi2xm_cell_cache_count(f);
+    if (ctx->cell_count == 0)
+        return true;
+    ctx->cell_ref = (XmRef *) xr_malloc((size_t) ctx->cell_count * sizeof(*ctx->cell_ref));
+    ctx->cell_present = (bool *) xr_calloc(ctx->cell_count, sizeof(*ctx->cell_present));
+    if (!ctx->cell_ref || !ctx->cell_present) {
+        xi2xm_free_cell_cache(ctx);
+        return false;
+    }
+    for (uint32_t i = 0; i < ctx->cell_count; i++)
+        ctx->cell_ref[i] = XM_NONE;
+    return true;
 }
 
 /* Get XmRef for a previously-lowered Xi value */
@@ -1108,9 +1179,9 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
             (child_xi && i < child_xi->ncaptures) ? child_xi->captures[i].needs_cell : false;
 
         /* Resolve stale capture: find real definition in the same block */
-        if (needs_cell && capture_val->var_id != 0xFF && capture_val->block) {
+        if (needs_cell && xi_var_id_is_valid(capture_val->var_id) && capture_val->block) {
             XiBlock *xi_blk = capture_val->block;
-            uint8_t target_var = capture_val->var_id;
+            XiVarId target_var = capture_val->var_id;
             for (uint32_t j = 0; j < xi_blk->nvalues; j++) {
                 XiValue *w = xi_blk->values[j];
                 if (!w || w->var_id != target_var || w == capture_val)
@@ -1142,8 +1213,12 @@ static XmRef lower_closure_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
          * variable share ONE Cell so writes are mutually visible.  The
          * cache keyed by var_id mirrors the bytecode emitter's
          * cell_side_reg / cell_created tracking. */
-        if (needs_cell && capture_val->var_id != 0xFF) {
-            uint8_t vid = capture_val->var_id;
+        if (needs_cell && xi_var_id_is_valid(capture_val->var_id)) {
+            if (!xi2xm_var_id_in_cell_cache(ctx, capture_val->var_id)) {
+                ctx->error = true;
+                return val;
+            }
+            XiVarId vid = capture_val->var_id;
             if (!ctx->cell_present[vid]) {
                 /* Allocate cell, initialize from current value.
                  * Use XR_REP_PTR so type prop tags result vreg as VTAG_PTR;
@@ -2041,6 +2116,13 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     for (uint32_t i = 0; i < ctx.ref_map_size; i++)
         ctx.ref_map[i] = XM_NONE;
 
+    if (!xi2xm_init_cell_cache(&ctx, xi_func)) {
+        xr_free(ctx.ref_map);
+        xr_free(ctx.block_map);
+        xm_func_destroy(func);
+        return NULL;
+    }
+
     /* Build direct-mapped index: value_id → slot_map entry.
      * Replaces O(n) linear scan with O(1) lookup per IC query. */
     ctx.slot_idx = NULL;
@@ -2174,6 +2256,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
 
     /* Cleanup */
     xr_free(ctx.slot_idx);
+    xi2xm_free_cell_cache(&ctx);
     xr_free(ctx.block_map);
     xr_free(ctx.ref_map);
     xr_free(ctx.try_stack);

@@ -407,7 +407,8 @@ static XiValue *resolve_copy(XiValue *v) {
     while (v && v->op == XI_COPY && v->nargs >= 1) {
         XiValue *src = v->args[0];
         /* Stop at variable-domain boundaries (prevents register corruption) */
-        if (v->var_id != 0xFF && src && src->var_id != 0xFF && v->var_id != src->var_id)
+        if (xi_var_id_is_valid(v->var_id) && src && xi_var_id_is_valid(src->var_id) &&
+            v->var_id != src->var_id)
             break;
         /* Stop at type-view boundaries. Nullable narrowing and native-width
          * narrowing carry semantic type information even when the runtime
@@ -453,7 +454,7 @@ XR_FUNC XiPassChange xi_opt_copy_prop(XiFunc *f) {
                     continue;
                 XiValue *resolved = resolve_copy(arg);
                 if (resolved && resolved != arg &&
-                    (arg->var_id == 0xFF || arg->var_id == resolved->var_id)) {
+                    (!xi_var_id_is_valid(arg->var_id) || arg->var_id == resolved->var_id)) {
                     phi->value.args[a] = resolved;
                     chg.values_changed = true;
                 }
@@ -1104,11 +1105,43 @@ static bool sr_map_get_has_present_guard(const XiValue *v) {
     return true;
 }
 
+static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy);
+
+static bool sr_param_uses_default_sentinel(const XiValue *v) {
+    if (!v || v->op != XI_PARAM || !v->block || !v->block->func)
+        return false;
+    const XiFunc *f = v->block->func;
+    if (f->entry_type != 1)
+        return false;
+    if (v->aux_int < 0)
+        return false;
+    uint64_t param_index = (uint64_t) v->aux_int;
+    return param_index >= f->min_params && param_index < f->nparams;
+}
+
+static bool sr_value_is_null_const(const XiValue *v) {
+    return v && v->op == XI_CONST && v->type && v->type->kind == XR_KIND_NULL;
+}
+
+static bool sr_compare_uses_null(const XiValue *user) {
+    return user && user->nargs >= 2 &&
+           (sr_value_is_null_const(user->args[0]) || sr_value_is_null_const(user->args[1]));
+}
+
+static bool sr_select_value_arms_need_tagged(const XiValue *v, const XiRepPolicy *policy) {
+    if (!v || v->op != XI_SELECT || v->nargs < 3)
+        return false;
+    return sr_def_rep(v->args[1], policy) == XR_REP_TAGGED ||
+           sr_def_rep(v->args[2], policy) == XR_REP_TAGGED;
+}
+
 static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
     if (!v || !v->type)
         return XR_REP_TAGGED;
     switch (v->op) {
         case XI_PARAM: {
+            if (sr_param_uses_default_sentinel(v))
+                return XR_REP_TAGGED;
             /* Typed boundary params get concrete rep.  The JIT/AOT can
              * use this directly instead of re-inferring from type->kind. */
             return sr_type_native_boundary_rep(v->type);
@@ -1149,6 +1182,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
              * the select_rep boundary inserts XI_BOX if a tagged use needs it. */
             return XR_REP_I64;
         case XI_SELECT: {
+            if (sr_select_value_arms_need_tagged(v, policy))
+                return XR_REP_TAGGED;
             return sr_type_scalar_rep(v->type);
         }
         case XI_CHAN_RECV:
@@ -1255,6 +1290,8 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_GE:
         case XI_EQ_STRICT:
         case XI_NE_STRICT:
+            if (sr_compare_uses_null(user))
+                return XR_REP_TAGGED;
             if (arg_idx < user->nargs && user->args[arg_idx] && user->args[arg_idx]->type) {
                 return sr_type_scalar_rep(user->args[arg_idx]->type);
             }
@@ -1267,7 +1304,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             if (arg_idx == 0 && user->args[0])
                 return sr_def_rep(user->args[0], policy);
             if (arg_idx < 3) {
-                return sr_type_scalar_rep(user->type);
+                return sr_def_rep(user, policy);
             }
             return XR_REP_TAGGED;
         case XI_CALL:
@@ -1380,6 +1417,7 @@ static XiValue *sr_make_convert(XiFunc *f, XiBlock *blk, uint16_t op, struct XrT
     memset(v, 0, sizeof(XiValue));
     v->id = f->next_value_id++;
     v->op = op;
+    v->var_id = arg->var_id;
     v->type = type;
     v->nargs = 1;
     v->uses = -1;
@@ -1860,7 +1898,7 @@ static void stats_merge(XiPipelineStats *dst, const XiPipelineStats *src) {
 static bool shuffle_touches_var(const XiBlock *blk, const XiValue *v) {
     if (!v)
         return false;
-    if (v->var_id != 0xFF)
+    if (xi_var_id_is_valid(v->var_id))
         return true;
     for (uint16_t a = 0; a < v->nargs; a++) {
         XiValue *arg = v->args[a];
@@ -1868,9 +1906,9 @@ static bool shuffle_touches_var(const XiBlock *blk, const XiValue *v) {
             continue;
         /* Read of a same-block SSA value that itself carries a var_id, or
          * a phi belonging to this block that does so. */
-        if (arg->block == blk && arg->var_id != 0xFF)
+        if (arg->block == blk && xi_var_id_is_valid(arg->var_id))
             return true;
-        if (arg->op == XI_PHI && arg->block == blk && arg->var_id != 0xFF)
+        if (arg->op == XI_PHI && arg->block == blk && xi_var_id_is_valid(arg->var_id))
             return true;
     }
     return false;

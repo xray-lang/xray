@@ -2088,7 +2088,8 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
      * explicit copy so the new variable gets its own SSA value.  Without
      * this, both variables map to the same physical register and
      * loop-carried updates to the source corrupt the snapshot. */
-    bool needs_copy = (init_val->var_id != 0xFF && init_val->var_id != (uint8_t) var_id);
+    bool needs_copy =
+        (xi_var_id_is_valid(init_val->var_id) && init_val->var_id != (XiVarId) var_id);
     /* Value types (structs) always need deep copy on assignment regardless
      * of var_id — the source could be a shared variable, upvalue, or
      * function return whose identity must not leak into the new binding. */
@@ -2790,7 +2791,7 @@ static void lower_stmts(XiLower *l, AstNode **stmts, int count) {
                     continue;
                 /* Resolve capture name back to parent var_id */
                 int vid = -1;
-                if (cap->value && cap->value->var_id != 0xFF)
+                if (cap->value && xi_var_id_is_valid(cap->value->var_id))
                     vid = (int) cap->value->var_id;
                 else if (cap->name)
                     vid = xi_lower_var_find(l, 0, cap->name);

@@ -241,6 +241,25 @@ static bool contains(const char *haystack, const char *needle) {
     return strstr(haystack, needle) != NULL;
 }
 
+static unsigned max_cell_ref_id(const char *code) {
+    unsigned max_id = 0;
+    bool found = false;
+    const char *p = code;
+    while ((p = strstr(p, "cell_")) != NULL) {
+        char *end = NULL;
+        unsigned long id = strtoul(p + 5, &end, 10);
+        if (end != p + 5) {
+            if (!found || id > max_id)
+                max_id = (unsigned) id;
+            found = true;
+            p = end;
+        } else {
+            p += 5;
+        }
+    }
+    return found ? max_id : 0;
+}
+
 static size_t count_between(const char *start, const char *end, const char *needle) {
     size_t count = 0;
     size_t needle_len = strlen(needle);
@@ -1872,6 +1891,59 @@ TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
     xi_func_free(ir);
 }
 
+TEST(cgen_closure_cell_var_id_above_255) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 900, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 901, .frozen = true};
+
+    XiFunc *ir = xi_func_new("manual_high_cell", &func_type);
+    assert(ir != NULL);
+    XiBlock *entry = xi_block_new(ir);
+    entry->sealed = true;
+
+    XiValue *captured = xi_const_int(ir, entry, 7, &int_type);
+    captured->var_id = 300;
+
+    XiFunc *child = xi_func_new("manual_child", &int_type);
+    assert(child != NULL);
+    child->parent_func = ir;
+    XiBlock *child_entry = xi_block_new(child);
+    child_entry->sealed = true;
+    XiValue *child_ret = xi_const_int(child, child_entry, 1, &int_type);
+    xi_block_set_return(child_entry, child_ret);
+    child->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = true,
+        .type = &int_type,
+        .value = captured,
+        .name = "captured",
+    };
+    child->ncaptures = 1;
+
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(ir->children != NULL);
+    ir->children[0] = child;
+    ir->children_cap = 1;
+    ir->nchildren = 1;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_CLOSURE_NEW, &func_type, 1);
+    assert(closure != NULL);
+    closure->aux = (void *) child;
+    closure->aux_int = 0;
+    closure->args[0] = captured;
+    xi_block_set_return(entry, closure);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "high var_id closure cell should generate");
+    assert(contains(code, "xrt_cell_new(") && "mutable capture should allocate a cell");
+    assert(max_cell_ref_id(code) > 255 && "cell var_id should exceed the old 8-bit wall");
+
+    printf("  Generated high-var closure cell path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     const char *src = "fn sum() -> int {\n"
                       "    let bytes: Array<uint8> = []\n"
@@ -3395,6 +3467,7 @@ int main(void) {
     run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_closure_cell_var_id_above_255();
     run_cgen_typed_array_filter_readonly_result_caches_data_pointer();
     run_cgen_typed_array_filter_captured_callback_uses_runtime_helper();
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();

@@ -33,8 +33,6 @@ typedef uint16_t XiEmitReg;
 /* 0xffff is reserved as the emitter's "no register" sentinel. */
 #define MAX_REGS ((uint32_t) UINT16_MAX)
 #define NO_REG ((XiEmitReg) UINT16_MAX)
-#define MAX_VAR_IDS 256
-#define NO_VAR_ID 0xFF
 
 #define XI_EMIT_STRUCT_PROMOTED_BIT ((int64_t) 1 << 32)
 #define XI_EMIT_STRUCT_IS_PROMOTED(v) (((v)->aux_int & XI_EMIT_STRUCT_PROMOTED_BIT) != 0)
@@ -114,24 +112,35 @@ typedef struct {
      * branch-form opcode (OP_LT/LE/EQ) directly in the terminator. */
     XiValue *fused_cmp;
 
+    /* Per-var_id state capacity, sized to max(var_id)+1 for this function. */
+    uint32_t var_state_count;
+
     /* Side cell register map: maps var_id → cell register for hoisted
      * function captures.  The cell is allocated in a separate register
      * so the original register remains usable for direct parent calls.
      * NO_REG (0xffff) means no cell allocated for this variable. */
-    XiEmitReg cell_side_reg[MAX_VAR_IDS]; /* var_id → cell register */
+    XiEmitReg *cell_side_reg; /* [var_state_count], var_id → cell register */
 
     /* Tracks whether OP_CELL_NEW has been emitted for a given var_id.
      * First write to a cell_side_reg variable emits CELL_NEW; subsequent
      * writes emit CELL_SET. */
-    bool cell_created[MAX_VAR_IDS]; /* var_id → true if CELL_NEW emitted */
+    bool *cell_created; /* [var_state_count], var_id → true if CELL_NEW emitted */
 
     /* Variable-based register coalescing: all SSA definitions of the same
      * source variable share one VM register.  This is required for correct
      * exception semantics — the VM's OP_THROW bypasses SSA phi resolution,
      * so catch-block modifications must write to the same register that
      * post-try-catch code reads from. */
-    XiEmitReg var_reg[MAX_VAR_IDS]; /* var_id -> pinned register (NO_REG = unassigned) */
+    XiEmitReg *var_reg; /* [var_state_count], var_id -> pinned register (NO_REG = unassigned) */
 } EmitCtx;
+
+static inline bool xi_emit_var_id_in_state(const EmitCtx *ctx, XiVarId var_id) {
+    return ctx && xi_var_id_is_valid(var_id) && var_id < ctx->var_state_count;
+}
+
+static inline bool xi_emit_var_has_side_cell(const EmitCtx *ctx, XiVarId var_id) {
+    return xi_emit_var_id_in_state(ctx, var_id) && ctx->cell_side_reg[var_id] != NO_REG;
+}
 
 /* ========== Shared Utility Functions ========== */
 
