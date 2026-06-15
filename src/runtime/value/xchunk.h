@@ -235,9 +235,10 @@ typedef struct XrProto {
      * VM dereferences: global_sym = proto->symbols[local_idx]
      *
      * WHY THIS DESIGN:
-     *   Global symbol IDs can exceed 255 (8-bit limit of iABC fields),
-     *   but per-function unique property count is always small (<255).
-     *   This eliminates symbol ID overflow by design.
+     *   Global symbol IDs are process-wide and can grow independently
+     *   of a function's bytecode operands.  Instructions therefore carry
+     *   compact per-function symbol indices, while this table maps them
+     *   back to global SymbolId values.
      */
     int32_t *symbols;     // local-to-global symbol mapping
     int symbol_count;     // number of symbols used

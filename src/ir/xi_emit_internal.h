@@ -159,14 +159,28 @@ XR_FUNC int add_const_float(EmitCtx *ctx, double val);
 XR_FUNC int add_const_string(EmitCtx *ctx, const char *str);
 XR_FUNC int add_symbol(EmitCtx *ctx, const char *name);
 
-static inline bool xi_emit_const_index_to_c(EmitCtx *ctx, int ki, uint16_t *out) {
-    if (ki < 0 || (uint32_t) ki > MAXARG_C) {
-        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_CONSTS);
+static inline bool xi_emit_u16_arg(EmitCtx *ctx, int64_t value, XiEmitStatus error, uint16_t *out) {
+    if (value < 0 || (uint64_t) value > MAXARG_A) {
+        emit_error(ctx, error);
         return false;
     }
-    *out = (uint16_t) ki;
+    *out = (uint16_t) value;
     return true;
 }
+
+static inline bool xi_emit_const_index_to_c(EmitCtx *ctx, int ki, uint16_t *out) {
+    return xi_emit_u16_arg(ctx, ki, XI_EMIT_ERR_TOO_MANY_CONSTS, out);
+}
+
+static inline bool xi_emit_symbol_index_to_arg(EmitCtx *ctx, int si, uint16_t *out) {
+    return xi_emit_u16_arg(ctx, si, XI_EMIT_ERR_TOO_MANY_CONSTS, out);
+}
+
+static inline bool xi_emit_index_to_arg(EmitCtx *ctx, int64_t idx, XiEmitStatus error,
+                                        uint16_t *out) {
+    return xi_emit_u16_arg(ctx, idx, error, out);
+}
+
 XR_FUNC void xi_emit_add_patch(EmitCtx *ctx, int pc, uint32_t target_bid);
 XR_FUNC void add_try_patch(EmitCtx *ctx, int pc, uint32_t catch_bid);
 

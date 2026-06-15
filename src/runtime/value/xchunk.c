@@ -201,12 +201,16 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     XR_DCHECK(proto->symbol_count >= 0, "proto_add_symbol: negative count");
     XR_DCHECK(proto->symbol_capacity >= 0, "proto_add_symbol: negative capacity");
     XR_DCHECK(proto->symbol_count <= proto->symbol_capacity, "proto_add_symbol: count > capacity");
+
     // Dedup: check if already registered
     for (int i = 0; i < proto->symbol_count; i++) {
         if (proto->symbols[i] == global_symbol) {
             return i;
         }
     }
+
+    XR_CHECK(proto->symbol_count <= (int) MAXARG_B,
+             "proto: too many unique symbols (>65536), function too complex");
 
     // Grow if needed
     if (proto->symbol_count >= proto->symbol_capacity) {
@@ -223,8 +227,6 @@ int xr_proto_add_symbol(XrProto *proto, int32_t global_symbol) {
     int local_idx = proto->symbol_count;
     proto->symbols[local_idx] = global_symbol;
     proto->symbol_count++;
-
-    XR_CHECK(local_idx < 255, "proto: too many unique symbols (>254), function too complex");
 
     return local_idx;
 }

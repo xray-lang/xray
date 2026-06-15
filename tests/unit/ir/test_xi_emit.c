@@ -11,6 +11,7 @@
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/base/xmalloc.h"
+#include "../../../include/xray_isolate.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -44,6 +45,13 @@ static XiFunc *make_func(const char *name, XrType *ret) {
     XiBlock *entry = xi_block_new(f);
     entry->sealed = true;
     return f;
+}
+
+static XrayIsolate *new_test_isolate(void) {
+    XrayIsolateParams p;
+    xray_isolate_params_init(&p);
+    xray_isolate_setup_full(&p);
+    return xray_isolate_new(&p);
 }
 
 /* ========== Basic Emission Tests ========== */
@@ -664,6 +672,56 @@ TEST(emit_select_preserves_param_slot_alias) {
     xi_func_free(f);
 }
 
+TEST(emit_symbol_index_above_255) {
+    XrayIsolate *iso = new_test_isolate();
+    assert(iso != NULL);
+
+    XiFunc *f = make_func("wide_symbols", &stub_int);
+    XiBlock *entry = f->entry;
+    XiValue *obj = xi_param(f, entry, 0, &stub_int);
+
+    char names[302][32];
+    XiValue *last_prop = NULL;
+    for (int i = 0; i <= 300; i++) {
+        snprintf(names[i], sizeof(names[i]), "prop_%03d", i);
+        XiValue *load = xi_value_new(f, entry, XI_LOAD_FIELD, &stub_int, 1);
+        assert(load != NULL);
+        load->args[0] = obj;
+        load->aux = names[i];
+        last_prop = load;
+    }
+
+    snprintf(names[301], sizeof(names[301]), "method_301");
+    XiValue *call = xi_value_new(f, entry, XI_CALL_METHOD, &stub_int, 1);
+    assert(call != NULL);
+    call->args[0] = obj;
+    call->aux = names[301];
+    call->aux_int = 0;
+    xi_block_set_return(entry, call);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, iso, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+    assert(PROTO_SYMBOL_COUNT(proto) == 302);
+
+    bool found_getprop = false;
+    bool found_invoke = false;
+    for (int pc = 0; pc < PROTO_CODE_COUNT(proto); pc++) {
+        XrInstruction inst = PROTO_CODE(proto, pc);
+        if (GET_OPCODE(inst) == OP_GETPROP && GETARG_C(inst) == 300)
+            found_getprop = true;
+        if (GET_OPCODE(inst) == OP_INVOKE && GETARG_B(inst) == 301)
+            found_invoke = true;
+    }
+    assert(last_prop != NULL);
+    assert(found_getprop && "GETPROP should preserve a proto-local symbol index above 255");
+    assert(found_invoke && "INVOKE should preserve a proto-local symbol index above 255");
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+    xray_isolate_delete(iso);
+}
+
 /* ========== Instruction Fusion ========== */
 
 TEST(emit_addi_rhs_const) {
@@ -1043,6 +1101,7 @@ int main(void) {
     run_emit_param_register_above_255();
     run_emit_coalesces_var_id_above_255();
     run_emit_select_preserves_param_slot_alias();
+    run_emit_symbol_index_above_255();
 
     /* Instruction fusion */
     run_emit_addi_rhs_const();
