@@ -463,6 +463,7 @@ endif()
 # AddressSanitizer configuration
 if(ENABLE_ASAN)
     message(STATUS "AddressSanitizer enabled")
+    add_compile_definitions(XR_BUILD_ASAN=1)
     add_compile_options(-fsanitize=address -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address)
 endif()
@@ -471,6 +472,7 @@ endif()
 option(ENABLE_UBSAN "Enable UndefinedBehaviorSanitizer" OFF)
 if(ENABLE_UBSAN)
     message(STATUS "UndefinedBehaviorSanitizer enabled")
+    add_compile_definitions(XR_BUILD_UBSAN=1)
     # Core UBSan checks for undefined behavior
     # Note: We only use -fsanitize=undefined (excludes unsigned-integer-overflow)
     # which catches real undefined behavior like:
@@ -490,6 +492,7 @@ endif()
 option(ENABLE_TSAN "Enable ThreadSanitizer data race detection" OFF)
 if(ENABLE_TSAN)
     message(STATUS "ThreadSanitizer enabled")
+    add_compile_definitions(XR_BUILD_TSAN=1)
     add_compile_options(-fsanitize=thread -fno-omit-frame-pointer)
     add_link_options(-fsanitize=thread)
 endif()
@@ -503,6 +506,7 @@ if(ENABLE_MSAN)
         message(FATAL_ERROR "ENABLE_MSAN requires Clang (current: ${CMAKE_C_COMPILER_ID})")
     endif()
     message(STATUS "MemorySanitizer enabled (track-origins=2)")
+    add_compile_definitions(XR_BUILD_MSAN=1)
     add_compile_options(
         -fsanitize=memory
         -fsanitize-memory-track-origins=2
@@ -531,6 +535,7 @@ option(ENABLE_FUZZING "Enable fuzzing tests (requires Clang)" OFF)
 option(ENABLE_SANITIZERS "Enable both ASan and UBSan" OFF)
 if(ENABLE_SANITIZERS)
     message(STATUS "Combined Sanitizers enabled (ASan + UBSan)")
+    add_compile_definitions(XR_BUILD_ASAN=1 XR_BUILD_UBSAN=1)
     add_compile_options(
         -fsanitize=address,undefined
         -fno-omit-frame-pointer

@@ -271,6 +271,67 @@ static void lower_select_emit_timer_dispose(XiLower *l, XiValue *timer_chan_val,
     }
 }
 
+#define XI_LOWER_SELECT_STACK_CAP 32
+#define XI_LOWER_MAX_SELECT_CASES ((int) UINT16_MAX)
+
+typedef struct LowerSelectLists {
+    XiValue **case_channels;
+    XiValue **case_send_values;
+    XiValue **block_channels;
+    int block_channel_count;
+    int cap;
+} LowerSelectLists;
+
+static bool lower_select_validate_case_count(XiLower *l, int case_count, int line) {
+    if (case_count < 0 || case_count > XI_LOWER_MAX_SELECT_CASES) {
+        fprintf(stderr, "[LOWER] select case count exceeds %d at line %d\n",
+                XI_LOWER_MAX_SELECT_CASES, line);
+        l->had_error = true;
+        return false;
+    }
+    return true;
+}
+
+static bool lower_select_lists_init(XiLower *l, LowerSelectLists *lists, int case_count,
+                                    XiValue **stack_case_channels, XiValue **stack_case_send_values,
+                                    XiValue **stack_block_channels) {
+    int cap = case_count > 0 ? case_count : 1;
+    lists->block_channel_count = 0;
+    lists->cap = cap;
+    if (cap <= XI_LOWER_SELECT_STACK_CAP) {
+        lists->case_channels = stack_case_channels;
+        lists->case_send_values = stack_case_send_values;
+        lists->block_channels = stack_block_channels;
+        return true;
+    }
+
+    lists->case_channels =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    lists->case_send_values =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    lists->block_channels =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    if (!lists->case_channels || !lists->case_send_values || !lists->block_channels) {
+        l->had_error = true;
+        return false;
+    }
+    memset(lists->case_channels, 0, (size_t) cap * sizeof(XiValue *));
+    memset(lists->case_send_values, 0, (size_t) cap * sizeof(XiValue *));
+    return true;
+}
+
+static bool lower_select_block_channel_add(XiLower *l, LowerSelectLists *lists, XiValue *chan,
+                                           int line) {
+    if (lists->block_channel_count >= lists->cap) {
+        fprintf(stderr, "[LOWER] select block channel count exceeds %d at line %d\n", lists->cap,
+                line);
+        l->had_error = true;
+        return false;
+    }
+    lists->block_channels[lists->block_channel_count++] = chan;
+    return true;
+}
+
 /* After the case loop: park the select (SELECT_BLOCK over the collected
  * channels, or YIELD for a send-only select with no timeout) and wire the
  * back-edge to try_head, or fall through to merge for a default select. */
@@ -284,6 +345,12 @@ static void lower_select_park(XiLower *l, bool has_default, bool has_send, bool 
         return;
     }
     if ((!has_send || has_timeout) && block_channel_count > 0) {
+        if (block_channel_count > XI_LOWER_MAX_SELECT_CASES) {
+            fprintf(stderr, "[LOWER] select block channel count exceeds %d at line %d\n",
+                    XI_LOWER_MAX_SELECT_CASES, line);
+            l->had_error = true;
+            return;
+        }
         XiValue *block = xi_value_new(l->func, l->cur_block, XI_SELECT_BLOCK, l->type_unit,
                                       (uint16_t) block_channel_count);
         if (block) {
@@ -305,20 +372,24 @@ static void lower_select_park(XiLower *l, bool has_default, bool has_send, bool 
 XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     SelectStmtNode *sel = &node->as.select_stmt;
     int n = sel->case_count;
+    if (!lower_select_validate_case_count(l, n, node->line))
+        return;
 
     XiBlock *merge = xi_block_new(l->func);
-    int max_cases = n > 32 ? 32 : n;
     bool has_default_case = false;
     bool has_timeout_case = false;
     bool has_send_case = false;
     bool blocking_select = false;
     XiBlock *try_head = NULL;
-    XiValue *case_channels[32] = {0};
-    XiValue *case_send_values[32] = {0};
-    XiValue *block_channels[32];
-    int block_channel_count = 0;
+    XiValue *stack_case_channels[XI_LOWER_SELECT_STACK_CAP] = {0};
+    XiValue *stack_case_send_values[XI_LOWER_SELECT_STACK_CAP] = {0};
+    XiValue *stack_block_channels[XI_LOWER_SELECT_STACK_CAP];
+    LowerSelectLists lists;
     XiValue *timer_chan_val = NULL;  // `after` timer channel; disposed at merge (design/885)
-    for (int i = 0; i < max_cases; i++) {
+    if (!lower_select_lists_init(l, &lists, n, stack_case_channels, stack_case_send_values,
+                                 stack_block_channels))
+        return;
+    for (int i = 0; i < n; i++) {
         SelectCaseNode *sc = &sel->cases[i]->as.select_case;
         if (sc->is_default)
             has_default_case = true;
@@ -330,18 +401,18 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
 
     blocking_select = !has_default_case;
     if (blocking_select) {
-        for (int i = 0; i < max_cases; i++) {
+        for (int i = 0; i < n; i++) {
             SelectCaseNode *sc = &sel->cases[i]->as.select_case;
             if (sc->is_default)
                 continue;
             if (sc->is_timeout) {
-                case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
-                timer_chan_val = case_channels[i];
+                lists.case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
+                timer_chan_val = lists.case_channels[i];
                 continue;
             }
-            case_channels[i] = xi_lower_expr(l, sc->channel);
+            lists.case_channels[i] = xi_lower_expr(l, sc->channel);
             if (sc->is_send)
-                case_send_values[i] = xi_lower_expr(l, sc->value);
+                lists.case_send_values[i] = xi_lower_expr(l, sc->value);
             if (!l->cur_block)
                 return;
         }
@@ -356,17 +427,17 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
     // Create the `after` timer up front (non-blocking selects skip the pre-pass)
     // so every case body can dispose it before any non-local exit. See design/885.
     if (!timer_chan_val) {
-        for (int i = 0; i < max_cases; i++) {
+        for (int i = 0; i < n; i++) {
             SelectCaseNode *sc = &sel->cases[i]->as.select_case;
             if (sc->is_timeout) {
-                case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
-                timer_chan_val = case_channels[i];
+                lists.case_channels[i] = lower_select_time_after(l, sc, sel->cases[i]->line);
+                timer_chan_val = lists.case_channels[i];
                 break;
             }
         }
     }
 
-    for (int i = 0; i < max_cases; i++) {
+    for (int i = 0; i < n; i++) {
         AstNode *case_node = sel->cases[i];
         SelectCaseNode *sc = &case_node->as.select_case;
 
@@ -380,9 +451,10 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             XiBlock *next_blk = xi_block_new(l->func);
 
             if (sc->is_send) {
-                XiValue *chan = case_channels[i] ? case_channels[i] : xi_lower_expr(l, sc->channel);
-                XiValue *val =
-                    case_send_values[i] ? case_send_values[i] : xi_lower_expr(l, sc->value);
+                XiValue *chan =
+                    lists.case_channels[i] ? lists.case_channels[i] : xi_lower_expr(l, sc->channel);
+                XiValue *val = lists.case_send_values[i] ? lists.case_send_values[i]
+                                                         : xi_lower_expr(l, sc->value);
                 if (chan && val) {
                     XiValue *send =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_SEND, l->type_bool, 2);
@@ -396,14 +468,14 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
             } else {
                 XiValue *chan = NULL;
                 if (sc->is_timeout)
-                    chan = case_channels[i] ? case_channels[i]
-                                            : lower_select_time_after(l, sc, case_node->line);
+                    chan = lists.case_channels[i] ? lists.case_channels[i]
+                                                  : lower_select_time_after(l, sc, case_node->line);
                 else
-                    chan = case_channels[i] ? case_channels[i] : xi_lower_expr(l, sc->channel);
+                    chan = lists.case_channels[i] ? lists.case_channels[i]
+                                                  : xi_lower_expr(l, sc->channel);
                 if (chan) {
-                    if (block_channel_count < 32) {
-                        block_channels[block_channel_count++] = chan;
-                    }
+                    if (!lower_select_block_channel_add(l, &lists, chan, case_node->line))
+                        return;
                     struct XrType *val_type = l->type_any;
                     XiValue *recv =
                         xi_value_new(l->func, l->cur_block, XI_CHAN_TRY_RECV, val_type, 1);
@@ -434,8 +506,8 @@ XR_FUNC void xi_lower_select(XiLower *l, AstNode *node) {
         }
     }
 
-    lower_select_park(l, has_default_case, has_send_case, has_timeout_case, block_channels,
-                      block_channel_count, try_head, merge, node->line);
+    lower_select_park(l, has_default_case, has_send_case, has_timeout_case, lists.block_channels,
+                      lists.block_channel_count, try_head, merge, node->line);
 
     if (try_head)
         xi_lower_braun_seal(l, try_head);

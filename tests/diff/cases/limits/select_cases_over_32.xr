@@ -1,0 +1,132 @@
+// anchor: lowerer-select-cases-over-32
+// A recv case after the old 32-case lowering cap must still be reachable.
+fn main() {
+    let ch00 = new Channel<int>(1)
+    let ch01 = new Channel<int>(1)
+    let ch02 = new Channel<int>(1)
+    let ch03 = new Channel<int>(1)
+    let ch04 = new Channel<int>(1)
+    let ch05 = new Channel<int>(1)
+    let ch06 = new Channel<int>(1)
+    let ch07 = new Channel<int>(1)
+    let ch08 = new Channel<int>(1)
+    let ch09 = new Channel<int>(1)
+    let ch10 = new Channel<int>(1)
+    let ch11 = new Channel<int>(1)
+    let ch12 = new Channel<int>(1)
+    let ch13 = new Channel<int>(1)
+    let ch14 = new Channel<int>(1)
+    let ch15 = new Channel<int>(1)
+    let ch16 = new Channel<int>(1)
+    let ch17 = new Channel<int>(1)
+    let ch18 = new Channel<int>(1)
+    let ch19 = new Channel<int>(1)
+    let ch20 = new Channel<int>(1)
+    let ch21 = new Channel<int>(1)
+    let ch22 = new Channel<int>(1)
+    let ch23 = new Channel<int>(1)
+    let ch24 = new Channel<int>(1)
+    let ch25 = new Channel<int>(1)
+    let ch26 = new Channel<int>(1)
+    let ch27 = new Channel<int>(1)
+    let ch28 = new Channel<int>(1)
+    let ch29 = new Channel<int>(1)
+    let ch30 = new Channel<int>(1)
+    let ch31 = new Channel<int>(1)
+    let ch32 = new Channel<int>(1)
+    let ch33 = new Channel<int>(1)
+    let ch34 = new Channel<int>(1)
+    let ch35 = new Channel<int>(1)
+    let ch36 = new Channel<int>(1)
+    let ch37 = new Channel<int>(1)
+    let ch38 = new Channel<int>(1)
+    let ch39 = new Channel<int>(1)
+
+    ch35.send(35)
+
+    select {
+        v from ch00 -> { print(v + 0) }
+        v from ch01 -> { print(v + 1) }
+        v from ch02 -> { print(v + 2) }
+        v from ch03 -> { print(v + 3) }
+        v from ch04 -> { print(v + 4) }
+        v from ch05 -> { print(v + 5) }
+        v from ch06 -> { print(v + 6) }
+        v from ch07 -> { print(v + 7) }
+        v from ch08 -> { print(v + 8) }
+        v from ch09 -> { print(v + 9) }
+        v from ch10 -> { print(v + 10) }
+        v from ch11 -> { print(v + 11) }
+        v from ch12 -> { print(v + 12) }
+        v from ch13 -> { print(v + 13) }
+        v from ch14 -> { print(v + 14) }
+        v from ch15 -> { print(v + 15) }
+        v from ch16 -> { print(v + 16) }
+        v from ch17 -> { print(v + 17) }
+        v from ch18 -> { print(v + 18) }
+        v from ch19 -> { print(v + 19) }
+        v from ch20 -> { print(v + 20) }
+        v from ch21 -> { print(v + 21) }
+        v from ch22 -> { print(v + 22) }
+        v from ch23 -> { print(v + 23) }
+        v from ch24 -> { print(v + 24) }
+        v from ch25 -> { print(v + 25) }
+        v from ch26 -> { print(v + 26) }
+        v from ch27 -> { print(v + 27) }
+        v from ch28 -> { print(v + 28) }
+        v from ch29 -> { print(v + 29) }
+        v from ch30 -> { print(v + 30) }
+        v from ch31 -> { print(v + 31) }
+        v from ch32 -> { print(v + 32) }
+        v from ch33 -> { print(v + 33) }
+        v from ch34 -> { print(v + 34) }
+        v from ch35 -> { print(v + 1000) }
+        v from ch36 -> { print(v + 36) }
+        v from ch37 -> { print(v + 37) }
+        v from ch38 -> { print(v + 38) }
+        v from ch39 -> { print(v + 39) }
+    }
+
+    ch00.close()
+    ch01.close()
+    ch02.close()
+    ch03.close()
+    ch04.close()
+    ch05.close()
+    ch06.close()
+    ch07.close()
+    ch08.close()
+    ch09.close()
+    ch10.close()
+    ch11.close()
+    ch12.close()
+    ch13.close()
+    ch14.close()
+    ch15.close()
+    ch16.close()
+    ch17.close()
+    ch18.close()
+    ch19.close()
+    ch20.close()
+    ch21.close()
+    ch22.close()
+    ch23.close()
+    ch24.close()
+    ch25.close()
+    ch26.close()
+    ch27.close()
+    ch28.close()
+    ch29.close()
+    ch30.close()
+    ch31.close()
+    ch32.close()
+    ch33.close()
+    ch34.close()
+    ch35.close()
+    ch36.close()
+    ch37.close()
+    ch38.close()
+    ch39.close()
+}
+
+main()
