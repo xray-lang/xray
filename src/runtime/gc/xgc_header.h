@@ -28,6 +28,7 @@
 #include "../value/xtype_names.h"
 #include "../../base/xchecks.h"
 #include "../../os/os_time.h"
+#include "../../shared/xr_obj_header.h" /* unified XrGCHeader/XrObjHeader + HAS_DTOR/STORAGE_BUMP */
 
 /* ========== GC Debug Options ========== */
 
@@ -88,28 +89,10 @@ typedef enum {
     XR_TRESULTGROUP,  // ResultGroup shared scalar reducer (system heap)
 } XrObjType;
 
-/* ========== Unified Object Header (16 bytes) ========== */
-
-typedef struct XrGCHeader {
-    uint16_t type;            /* [0-1] object type tag */
-    uint16_t extra;           /* [2-3] flags word: storage/mmap + XR_OBJ_* */
-    _Atomic int32_t refcount; /* [4-7] 0-based sign-tagged RC (XR_RC_* below).
-                               * Atomic so the thread-shared (rc<0) band and the
-                               * thread-local fast path share one well-defined
-                               * object: the hot path uses relaxed loads/stores
-                               * (identical codegen to a plain int on x86/arm64)
-                               * and the shared band uses the stronger orders
-                               * below. A plain int here made every fast-path
-                               * read of a shared object a data race (UB/TSan). */
-    uint32_t objsize;         /* [8-11] allocation size */
-    uint32_t _rsv;            /* [12-15] reserved (weak slot / cycle-report id) */
-} XrGCHeader;
-
-_Static_assert(sizeof(XrGCHeader) == 16, "XrGCHeader must be 16 bytes");
-
-/* Unified alias: the RC memory model refers to the object header as
- * XrObjHeader. */
-typedef struct XrGCHeader XrObjHeader;
+/* Unified object header (XrGCHeader / XrObjHeader, 16 bytes) +
+ * XR_OBJ_HAS_DTOR / XR_OBJ_STORAGE_BUMP now live in the self-contained
+ * src/shared/xr_obj_header.h (included above) so the AOT runtime can adopt the
+ * same layout. The remaining flag bits and accessors below share its bit space. */
 
 /* ========== Access Macros ========== */
 
@@ -146,9 +129,9 @@ typedef struct XrGCHeader XrObjHeader;
  *   HAS_DTOR - object's type has a destructor to run at refcount==0.
  *   WEAKABLE - object may be the target of a weak reference.
  */
-#define XR_OBJ_REGION 0x0002   /* extra bit 1 */
-#define XR_OBJ_ATOMIC 0x0004   /* extra bit 2 */
-#define XR_OBJ_HAS_DTOR 0x0008 /* extra bit 3 */
+#define XR_OBJ_REGION 0x0002 /* extra bit 1 */
+#define XR_OBJ_ATOMIC 0x0004 /* extra bit 2 */
+/* XR_OBJ_HAS_DTOR (bit 3) is defined in src/shared/xr_obj_header.h */
 #define XR_OBJ_WEAKABLE 0x0010 /* extra bit 4 */
 #define XR_OBJ_DEAD                                                                                \
     0x0020 /* extra bit 5: RC-freed (on freelist); skip                                            \
