@@ -129,10 +129,9 @@ XrValue xr_builtin_array_from(XrayIsolate *isolate, XrValue self, XrValue *args,
         XrArray *arr = xr_array_with_capacity(xr_current_coro(isolate), set->count);
 
         if (set->entries) {
-            for (uint32_t i = 0; i < set->capacity; i++) {
+            for (uint32_t i = 0; i < set->nentries; i++) {
                 XrSetEntry *entry = &set->entries[i];
-                // Check if entry is valid (state >= 0x80)
-                if (entry->state >= 0x80) {
+                if (!XR_SET_ENTRY_EMPTY(entry)) {
                     ((XrValue *) arr->data)[arr->length++] = entry->value;
                 }
             }

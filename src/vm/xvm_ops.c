@@ -393,9 +393,9 @@ static bool set_deep_equal(CompareContext *ctx, XrSet *a, XrSet *b) {
         return false;
 
     bool result = true;
-    for (size_t i = 0; i < a->capacity; i++) {
+    for (size_t i = 0; i < a->nentries; i++) {
         XrSetEntry *entry = &a->entries[i];
-        if (entry->state & XR_SET_VALID) {
+        if (!XR_SET_ENTRY_EMPTY(entry)) {
             if (!xr_set_has(b, entry->value)) {
                 result = false;
                 break;

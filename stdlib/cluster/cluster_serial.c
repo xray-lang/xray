@@ -230,8 +230,8 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     buf_put_varint(buf, (uint64_t) count);
 
                     uint32_t written = 0;
-                    for (uint32_t i = 0; i < set->capacity && written < count; i++) {
-                        if (set->entries[i].state & XR_SET_VALID) {
+                    for (uint32_t i = 0; i < set->nentries && written < count; i++) {
+                        if (!XR_SET_ENTRY_EMPTY(&set->entries[i])) {
                             if (encode_value(X, set->entries[i].value, buf, depth + 1) != 0)
                                 return -1;
                             written++;

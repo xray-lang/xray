@@ -204,9 +204,9 @@ static void dump_set(XrSet *set, DumpContext *ctx) {
 
     ctx->depth++;
     size_t output = 0;
-    for (size_t i = 0; i < set->capacity; i++) {
+    for (size_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
-        if (entry->state & XR_SET_VALID) {
+        if (!XR_SET_ENTRY_EMPTY(entry)) {
             if (output > 0)
                 printf(",");
             dump_newline(ctx);

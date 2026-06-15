@@ -147,9 +147,9 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
             XrSet *set = (XrSet *) obj;
             if (!set->entries)
                 break;
-            for (uint32_t i = 0; i < set->capacity; i++) {
+            for (uint32_t i = 0; i < set->nentries; i++) {
                 XrSetEntry *e = &set->entries[i];
-                if (e->state != XR_SET_VALID)
+                if (XR_SET_ENTRY_EMPTY(e))
                     continue;
                 if (XR_IS_PTR(e->value)) {
                     XrGCHeader *child = XR_VALUE_GCPTR(e->value);

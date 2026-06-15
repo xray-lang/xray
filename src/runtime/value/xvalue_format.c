@@ -117,9 +117,9 @@ static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth
 static void format_set(XrayIsolate *isolate, XrStrBuf *sb, XrSet *set, int depth) {
     xr_strbuf_append_cstr(sb, "#[", 2);
     int count = 0;
-    for (uint32_t i = 0; i < set->capacity && count < XR_FORMAT_MAX_ELEMENTS; i++) {
+    for (uint32_t i = 0; i < set->nentries && count < XR_FORMAT_MAX_ELEMENTS; i++) {
         XrSetEntry *entry = &set->entries[i];
-        if (entry->state & XR_SET_VALID) {
+        if (!XR_SET_ENTRY_EMPTY(entry)) {
             if (count > 0)
                 xr_strbuf_append_cstr(sb, ", ", 2);
             xr_value_to_strbuf(isolate, sb, entry->value, depth + 1);
