@@ -11,6 +11,7 @@
 #ifdef __aarch64__
 
 #include "xm_codegen_internal.h"
+#include "xm_dispatch_emit_gen.h"
 #include "xm_helper_table.h"
 #define XM_RUNTIME_STUBS_ENTRIES
 #include "xm_runtime_stubs_gen.h"
@@ -365,7 +366,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             XR_DCHECK(offset >= 0 && (offset % 4) == 0,
                       "LDRSW: byte offset must be non-negative and 4-byte aligned");
             XR_DCHECK((offset / 4) < 4096, "LDRSW: imm12 field (offset / 4) must fit in 12 bits");
-            a64_buf_emit(&ctx->buf, a64_ldrsw(rd, base, offset));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, base, offset))
+                ctx->had_error = true;
             break;
         }
 
@@ -373,7 +375,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // Encoding lives in xisa/arch/arm64.isa as arm64.ldrb.
         case XM_LOAD8Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            a64_buf_emit(&ctx->buf, a64_ldrb(rd, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0))
+                ctx->had_error = true;
             break;
         }
 
@@ -381,7 +384,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // Encoding lives in xisa/arch/arm64.isa as arm64.ldrsb.
         case XM_LOAD8S: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            a64_buf_emit(&ctx->buf, a64_ldrsb(rd, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0))
+                ctx->had_error = true;
             break;
         }
 
@@ -390,7 +394,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         case XM_STORE8: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            a64_buf_emit(&ctx->buf, a64_strb(val, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_store_gp(ins->op, &ctx->buf, addr, 0, val))
+                ctx->had_error = true;
             break;
         }
 
@@ -398,7 +403,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // Encoding lives in xisa/arch/arm64.isa as arm64.ldrh.
         case XM_LOAD16Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            a64_buf_emit(&ctx->buf, a64_ldrh(rd, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0))
+                ctx->had_error = true;
             break;
         }
 
@@ -407,7 +413,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // 0 here so the generated scale-by-2 on the imm12 field is a no-op.
         case XM_LOAD16S: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            a64_buf_emit(&ctx->buf, a64_ldrsh(rd, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0))
+                ctx->had_error = true;
             break;
         }
 
@@ -416,7 +423,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         case XM_STORE16: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            a64_buf_emit(&ctx->buf, a64_strh(val, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_store_gp(ins->op, &ctx->buf, addr, 0, val))
+                ctx->had_error = true;
             break;
         }
 
@@ -424,7 +432,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         // Encoding lives in xisa/arch/arm64.isa as arm64.ldr_w.
         case XM_LOAD32Z: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
-            a64_buf_emit(&ctx->buf, a64_ldr_w(rd, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0))
+                ctx->had_error = true;
             break;
         }
 
@@ -433,7 +442,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         case XM_STORE32: {
             A64Reg addr = xra_arg(ctx, ins->args[0], SCRATCH_REG);
             A64Reg val = xra_arg(ctx, ins->args[1], SCRATCH_REG2);
-            a64_buf_emit(&ctx->buf, a64_str_w(val, addr, 0));
+            if (!xm_dispatch_emit_arm64_mem_store_gp(ins->op, &ctx->buf, addr, 0, val))
+                ctx->had_error = true;
             break;
         }
 

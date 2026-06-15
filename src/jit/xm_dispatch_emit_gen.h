@@ -5,6 +5,7 @@
 #define XM_DISPATCH_EMIT_GEN_H
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #include "xm_arm64.h"
 #include "xm_ops_gen.h"
@@ -641,6 +642,237 @@ static inline bool xm_dispatch_emit_riscv64_fp_r(XmOp op, Rv64Buf *buf, Rv64Freg
             rv64_buf_emit(buf, rv64_fneg_d(fd, fs));
             XR_CHECK(buf->count - _es >= 1u,
                      "emit self-check: XM_FNEG emitted too few");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_x64_mem_load_gp(XmOp op, X64Buf *buf, X64Reg rd, X64Reg base, int32_t offset) {
+    switch (op) {
+        case XM_LOAD8Z: {
+            uint32_t _es = buf->pos;
+            x64_movzx_rm8(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD8Z emitted 0 bytes");
+            return true;
+        }
+        case XM_LOAD8S: {
+            uint32_t _es = buf->pos;
+            x64_movsx_rm8(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD8S emitted 0 bytes");
+            return true;
+        }
+        case XM_LOAD16Z: {
+            uint32_t _es = buf->pos;
+            x64_movzx_rm16(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD16Z emitted 0 bytes");
+            return true;
+        }
+        case XM_LOAD16S: {
+            uint32_t _es = buf->pos;
+            x64_movsx_rm16(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD16S emitted 0 bytes");
+            return true;
+        }
+        case XM_LOAD32Z: {
+            uint32_t _es = buf->pos;
+            x64_mov_rm32(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD32Z emitted 0 bytes");
+            return true;
+        }
+        case XM_LOAD32S: {
+            uint32_t _es = buf->pos;
+            x64_movsxd_rm(buf, rd, base, offset);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_LOAD32S emitted 0 bytes");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_x64_mem_store_gp(XmOp op, X64Buf *buf, X64Reg base, int32_t offset, X64Reg rs) {
+    switch (op) {
+        case XM_STORE8: {
+            uint32_t _es = buf->pos;
+            x64_mov_mr8(buf, base, offset, rs);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_STORE8 emitted 0 bytes");
+            return true;
+        }
+        case XM_STORE16: {
+            uint32_t _es = buf->pos;
+            x64_mov_mr16(buf, base, offset, rs);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_STORE16 emitted 0 bytes");
+            return true;
+        }
+        case XM_STORE32: {
+            uint32_t _es = buf->pos;
+            x64_mov_mr32(buf, base, offset, rs);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_STORE32 emitted 0 bytes");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_arm64_mem_load_gp(XmOp op, A64Buf *buf, A64Reg rd, A64Reg base, int32_t offset) {
+    switch (op) {
+        case XM_LOAD8Z: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldrb(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD8Z emitted too few");
+            return true;
+        }
+        case XM_LOAD8S: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldrsb(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD8S emitted too few");
+            return true;
+        }
+        case XM_LOAD16Z: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldrh(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD16Z emitted too few");
+            return true;
+        }
+        case XM_LOAD16S: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldrsh(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD16S emitted too few");
+            return true;
+        }
+        case XM_LOAD32Z: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldr_w(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD32Z emitted too few");
+            return true;
+        }
+        case XM_LOAD32S: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_ldrsw(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD32S emitted too few");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_arm64_mem_store_gp(XmOp op, A64Buf *buf, A64Reg base, int32_t offset, A64Reg rs) {
+    switch (op) {
+        case XM_STORE8: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_strb(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE8 emitted too few");
+            return true;
+        }
+        case XM_STORE16: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_strh(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE16 emitted too few");
+            return true;
+        }
+        case XM_STORE32: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_str_w(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE32 emitted too few");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_riscv64_mem_load_gp(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg base, int32_t offset) {
+    switch (op) {
+        case XM_LOAD8Z: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lbu(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD8Z emitted too few");
+            return true;
+        }
+        case XM_LOAD8S: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lb(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD8S emitted too few");
+            return true;
+        }
+        case XM_LOAD16Z: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lhu(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD16Z emitted too few");
+            return true;
+        }
+        case XM_LOAD16S: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lh(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD16S emitted too few");
+            return true;
+        }
+        case XM_LOAD32Z: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lwu(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD32Z emitted too few");
+            return true;
+        }
+        case XM_LOAD32S: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_lw(rd, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_LOAD32S emitted too few");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_riscv64_mem_store_gp(XmOp op, Rv64Buf *buf, Rv64Reg base, int32_t offset, Rv64Reg rs) {
+    switch (op) {
+        case XM_STORE8: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_sb(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE8 emitted too few");
+            return true;
+        }
+        case XM_STORE16: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_sh(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE16 emitted too few");
+            return true;
+        }
+        case XM_STORE32: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_sw(rs, base, offset));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_STORE32 emitted too few");
             return true;
         }
         default:

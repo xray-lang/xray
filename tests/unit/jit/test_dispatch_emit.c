@@ -617,6 +617,58 @@ static int test_riscv64_conv_f2i(void) {
     return 0;
 }
 
+static int test_riscv64_mem_subword(void) {
+    uint32_t code[9] = {0};
+    Rv64Buf buf;
+    rv64_buf_init(&buf, code, 9);
+
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD8Z, &buf, RV64_A0, RV64_A1, 1))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD8S, &buf, RV64_A2, RV64_A3, 2))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD16Z, &buf, RV64_A4, RV64_A5, 4))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD16S, &buf, RV64_A6, RV64_A7, 6))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD32Z, &buf, RV64_T0, RV64_T1, 8))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_load_gp(XM_LOAD32S, &buf, RV64_T2, RV64_T3, 12))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_store_gp(XM_STORE8, &buf, RV64_A1, 1, RV64_A0))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_store_gp(XM_STORE16, &buf, RV64_A3, 2, RV64_A2))
+        return 1;
+    if (!xm_dispatch_emit_riscv64_mem_store_gp(XM_STORE32, &buf, RV64_A5, 4, RV64_A4))
+        return 1;
+    if (buf.count != 9)
+        return 1;
+    if (code[0] != rv64_lbu(RV64_A0, RV64_A1, 1))
+        return 1;
+    if (code[1] != rv64_lb(RV64_A2, RV64_A3, 2))
+        return 1;
+    if (code[2] != rv64_lhu(RV64_A4, RV64_A5, 4))
+        return 1;
+    if (code[3] != rv64_lh(RV64_A6, RV64_A7, 6))
+        return 1;
+    if (code[4] != rv64_lwu(RV64_T0, RV64_T1, 8))
+        return 1;
+    if (code[5] != rv64_lw(RV64_T2, RV64_T3, 12))
+        return 1;
+    if (code[6] != rv64_sb(RV64_A0, RV64_A1, 1))
+        return 1;
+    if (code[7] != rv64_sh(RV64_A2, RV64_A3, 2))
+        return 1;
+    if (code[8] != rv64_sw(RV64_A4, RV64_A5, 4))
+        return 1;
+    if (xm_dispatch_emit_riscv64_mem_load_gp(XM_STORE8, &buf, RV64_A0, RV64_A1, 0))
+        return 1;
+    if (xm_dispatch_emit_riscv64_mem_store_gp(XM_LOAD8Z, &buf, RV64_A1, 0, RV64_A0))
+        return 1;
+    if (buf.count != 9)
+        return 1;
+    return 0;
+}
+
 #if defined(__x86_64__) || defined(_M_X64)
 static int test_x64_gp_r(void) {
     uint8_t code[16];
@@ -668,6 +720,58 @@ static int test_x64_conv_f2i(void) {
         return 1;
     uint32_t pos_before = buf.pos;
     if (xm_dispatch_emit_x64_conv_f2i(XM_I2F, &buf, X64_RAX, X64_XMM1))
+        return 1;
+    if (buf.pos != pos_before)
+        return 1;
+    return 0;
+}
+
+static int test_x64_mem_subword(void) {
+    uint8_t code[128];
+    uint8_t expected[128];
+    X64Buf buf;
+    X64Buf exp;
+    memset(code, 0, sizeof(code));
+    memset(expected, 0, sizeof(expected));
+    x64_buf_init(&buf, code, (uint32_t) sizeof(code));
+    x64_buf_init(&exp, expected, (uint32_t) sizeof(expected));
+
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD8Z, &buf, X64_RAX, X64_RBX, 1))
+        return 1;
+    x64_movzx_rm8(&exp, X64_RAX, X64_RBX, 1);
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD8S, &buf, X64_RCX, X64_RDX, 2))
+        return 1;
+    x64_movsx_rm8(&exp, X64_RCX, X64_RDX, 2);
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD16Z, &buf, X64_RSI, X64_RDI, 4))
+        return 1;
+    x64_movzx_rm16(&exp, X64_RSI, X64_RDI, 4);
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD16S, &buf, X64_R8, X64_R9, 6))
+        return 1;
+    x64_movsx_rm16(&exp, X64_R8, X64_R9, 6);
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD32Z, &buf, X64_R10, X64_R11, 8))
+        return 1;
+    x64_mov_rm32(&exp, X64_R10, X64_R11, 8);
+    if (!xm_dispatch_emit_x64_mem_load_gp(XM_LOAD32S, &buf, X64_R12, X64_R13, 12))
+        return 1;
+    x64_movsxd_rm(&exp, X64_R12, X64_R13, 12);
+    if (!xm_dispatch_emit_x64_mem_store_gp(XM_STORE8, &buf, X64_RBX, 1, X64_RAX))
+        return 1;
+    x64_mov_mr8(&exp, X64_RBX, 1, X64_RAX);
+    if (!xm_dispatch_emit_x64_mem_store_gp(XM_STORE16, &buf, X64_RDX, 2, X64_RCX))
+        return 1;
+    x64_mov_mr16(&exp, X64_RDX, 2, X64_RCX);
+    if (!xm_dispatch_emit_x64_mem_store_gp(XM_STORE32, &buf, X64_RDI, 4, X64_RSI))
+        return 1;
+    x64_mov_mr32(&exp, X64_RDI, 4, X64_RSI);
+
+    if (buf.pos != exp.pos)
+        return 1;
+    if (memcmp(code, expected, buf.pos) != 0)
+        return 1;
+    uint32_t pos_before = buf.pos;
+    if (xm_dispatch_emit_x64_mem_load_gp(XM_STORE8, &buf, X64_RAX, X64_RBX, 0))
+        return 1;
+    if (xm_dispatch_emit_x64_mem_store_gp(XM_LOAD8Z, &buf, X64_RBX, 0, X64_RAX))
         return 1;
     if (buf.pos != pos_before)
         return 1;
@@ -751,6 +855,58 @@ static int test_arm64_conv_f2i(void) {
         return 1;
     return 0;
 }
+
+static int test_arm64_mem_subword(void) {
+    uint32_t code[9] = {0};
+    A64Buf buf;
+    a64_buf_init(&buf, code, 9);
+
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD8Z, &buf, A64_X0, A64_X1, 1))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD8S, &buf, A64_X2, A64_X3, 2))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD16Z, &buf, A64_X4, A64_X5, 4))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD16S, &buf, A64_X6, A64_X7, 6))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD32Z, &buf, A64_X8, A64_X9, 8))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_load_gp(XM_LOAD32S, &buf, A64_X10, A64_X11, 12))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_store_gp(XM_STORE8, &buf, A64_X1, 1, A64_X0))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_store_gp(XM_STORE16, &buf, A64_X3, 2, A64_X2))
+        return 1;
+    if (!xm_dispatch_emit_arm64_mem_store_gp(XM_STORE32, &buf, A64_X5, 4, A64_X4))
+        return 1;
+    if (buf.count != 9)
+        return 1;
+    if (code[0] != a64_ldrb(A64_X0, A64_X1, 1))
+        return 1;
+    if (code[1] != a64_ldrsb(A64_X2, A64_X3, 2))
+        return 1;
+    if (code[2] != a64_ldrh(A64_X4, A64_X5, 4))
+        return 1;
+    if (code[3] != a64_ldrsh(A64_X6, A64_X7, 6))
+        return 1;
+    if (code[4] != a64_ldr_w(A64_X8, A64_X9, 8))
+        return 1;
+    if (code[5] != a64_ldrsw(A64_X10, A64_X11, 12))
+        return 1;
+    if (code[6] != a64_strb(A64_X0, A64_X1, 1))
+        return 1;
+    if (code[7] != a64_strh(A64_X2, A64_X3, 2))
+        return 1;
+    if (code[8] != a64_str_w(A64_X4, A64_X5, 4))
+        return 1;
+    if (xm_dispatch_emit_arm64_mem_load_gp(XM_STORE8, &buf, A64_X0, A64_X1, 0))
+        return 1;
+    if (xm_dispatch_emit_arm64_mem_store_gp(XM_LOAD8Z, &buf, A64_X1, 0, A64_X0))
+        return 1;
+    if (buf.count != 9)
+        return 1;
+    return 0;
+}
 #endif
 
 int main(void) {
@@ -786,6 +942,10 @@ int main(void) {
         fprintf(stderr, "test_riscv64_conv_f2i failed\n");
         return 1;
     }
+    if (test_riscv64_mem_subword() != 0) {
+        fprintf(stderr, "test_riscv64_mem_subword failed\n");
+        return 1;
+    }
 #if defined(__x86_64__) || defined(_M_X64)
     if (test_x64_gp_rr() != 0) {
         fprintf(stderr, "test_x64_gp_rr failed\n");
@@ -813,6 +973,10 @@ int main(void) {
     }
     if (test_x64_conv_f2i() != 0) {
         fprintf(stderr, "test_x64_conv_f2i failed\n");
+        return 1;
+    }
+    if (test_x64_mem_subword() != 0) {
+        fprintf(stderr, "test_x64_mem_subword failed\n");
         return 1;
     }
 #endif
@@ -847,6 +1011,10 @@ int main(void) {
     }
     if (test_arm64_conv_f2i() != 0) {
         fprintf(stderr, "test_arm64_conv_f2i failed\n");
+        return 1;
+    }
+    if (test_arm64_mem_subword() != 0) {
+        fprintf(stderr, "test_arm64_mem_subword failed\n");
         return 1;
     }
 #endif

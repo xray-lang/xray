@@ -569,6 +569,28 @@ static void x64_emit_gp_store(X64CodegenCtx *ctx, XmRef addr_ref, XmRef value_re
     emit_store(&ctx->buf, addr, 0, val);
 }
 
+static void x64_emit_gp_store_op(X64CodegenCtx *ctx, XmOp op, XmRef addr_ref, XmRef value_ref) {
+    X64Reg addr = x64_get_operand(ctx, addr_ref, X64_SCRATCH_REG);
+    if (addr == X64_SCRATCH_REG && addr_ref != value_ref &&
+        x64_arg_needs_scratch_gp(ctx, value_ref)) {
+        X64Reg temp = X64_RAX;
+        x64_push_r(&ctx->buf, temp);
+        x64_mov_rr(&ctx->buf, temp, X64_SCRATCH_REG);
+        X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
+        CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, temp, 0, val),
+                      "x64 generated mem_store_gp dispatch rejected op");
+        x64_pop_r(&ctx->buf, temp);
+        return;
+    }
+    X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
+    if (val == addr) {
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
+        val = X64_SCRATCH_REG;
+    }
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, addr, 0, val),
+                  "x64 generated mem_store_gp dispatch rejected op");
+}
+
 static void x64_h_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     X64Reg rn = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
     if (ins->rep == XR_REP_F64) {
@@ -602,35 +624,40 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     switch (ins->op) {
         case XM_LOAD8Z: {
             X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_movzx_rm8(&ctx->buf, rd, addr, 0);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD8S: {
             X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_movsx_rm8(&ctx->buf, rd, addr, 0);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE8: {
-            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr8);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
             break;
         }
         case XM_LOAD16Z: {
             X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_movzx_rm16(&ctx->buf, rd, addr, 0);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD16S: {
             X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_movsx_rm16(&ctx->buf, rd, addr, 0);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE16: {
-            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr16);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
             break;
         }
         case XM_LOAD32Z: {
             X64Reg addr = x64_get_operand(ctx, ins->args[0], X64_SCRATCH_REG);
-            x64_mov_rm32(&ctx->buf, rd, addr, 0);
+            CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, addr, 0),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD32S: {
@@ -640,11 +667,13 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 uint32_t ci = XM_REF_INDEX(ins->args[1]);
                 offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
-            x64_movsxd_rm(&ctx->buf, rd, base, offset);
+            CODEGEN_CHECK(ctx,
+                          xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, base, offset),
+                          "x64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE32: {
-            x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr32);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
             break;
         }
         default:
