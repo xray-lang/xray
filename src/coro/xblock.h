@@ -57,13 +57,12 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_recv_resume(struct XrayIsolate *isolate,
 XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrayIsolate *isolate, struct XrCoroutine *coro,
                                             XrChannel *ch, XrValue value, XrSlotRef result_slot,
                                             int64_t timeout_ms);
-/* deliver=true (untimed VM bytecode recv only) registers value_slot+ok_slot
- * for waker-side delivery: when the woken value needs no receive-side deep
- * copy, the waker stores value+ok directly and the coroutine resumes at the
- * next instruction without replaying the recv. Values that need a
- * receive-side deep copy — and all other callers (timeout variants,
- * method-call, cfunc/JIT/AOT continuations) — keep the replay/resume
- * protocol and must pass deliver=false. */
+/* deliver=true registers value_slot+ok_slot for waker-side delivery: when
+ * the woken value needs no receive-side deep copy, the waker stores value+ok
+ * directly and the coroutine can resume without replaying the channel
+ * operation. Values that need a receive-side deep copy, timeout variants,
+ * method-call, cfunc, and JIT continuations keep the replay/resume protocol
+ * and must pass deliver=false. */
 XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrayIsolate *isolate, struct XrCoroutine *coro,
                                             XrChannel *ch, XrSlotRef value_slot, XrSlotRef ok_slot,
                                             int64_t timeout_ms, bool deliver);

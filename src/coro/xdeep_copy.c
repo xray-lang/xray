@@ -287,12 +287,15 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
 
+    XrValue result = XR_FROM_PTR(new_map);
     if (xr_map_isdummy(map)) {
         new_map->lsizenode = 0;
         new_map->node = &xr_map_dummynode;
         new_map->lastfree = NULL;
         new_map->flags |= XR_MAP_FLAG_DUMMY;
-        return XR_FROM_PTR(new_map);
+        xr_copy_context_record(ctx, map, result);
+        ctx->objects_copied++;
+        return result;
     }
 
     uint32_t size = xr_map_sizenode(map);
@@ -313,9 +316,8 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
         new_map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
         new_map->node[i].next = 0;
     }
-    new_map->lastfree = &new_map->node[size - 1];
+    new_map->lastfree = &new_map->node[size];
 
-    XrValue result = XR_FROM_PTR(new_map);
     xr_copy_context_record(ctx, map, result);
     ctx->objects_copied++;
 

@@ -46,6 +46,8 @@
 #define XM_SUSPEND_CALLEE_SAVED_OFF offsetof(XrJitSuspendState, callee_saved)
 #define XM_SUSPEND_RESULT_OFF offsetof(XrJitSuspendState, result)
 #define XM_SUSPEND_RESULT_TAG_OFF offsetof(XrJitSuspendState, result_tag)
+#define XM_SUSPEND_RESULT_STATUS_OFF offsetof(XrJitSuspendState, result_status)
+#define XM_SUSPEND_RESULT_CLOSED_STATUS_OFF offsetof(XrJitSuspendState, result_closed_status)
 #define XM_SUSPEND_SPILL_OFF offsetof(XrJitSuspendState, spill)
 
 /* ========== XrJitScratch field offsets (relative to jit_ctx base) ========== */
@@ -232,14 +234,17 @@ _Static_assert(offsetof(XrValue, i) == XM_XRVALUE_PAYLOAD_OFFSET,
 _Static_assert(offsetof(XrClosure, proto) == XM_CLOSURE_PROTO_OFFSET,
                "Closure.proto offset mismatch");
 
-// JIT suspend state struct layout must match the old int64_t[40] layout
-_Static_assert(sizeof(XrJitSuspendState) == 40 * sizeof(int64_t),
+// JIT suspend state struct layout is consumed by generated native resume stubs.
+_Static_assert(sizeof(XrJitSuspendState) == 42 * sizeof(int64_t),
                "XrJitSuspendState size mismatch");
 _Static_assert(XM_SUSPEND_CALLER_SAVED_OFF == 0, "caller_saved offset mismatch");
 _Static_assert(XM_SUSPEND_CALLEE_SAVED_OFF == 15 * 8, "callee_saved offset mismatch");
 _Static_assert(XM_SUSPEND_RESULT_OFF == 23 * 8, "result offset mismatch");
 _Static_assert(XM_SUSPEND_RESULT_TAG_OFF == 24 * 8, "result_tag offset mismatch");
-_Static_assert(XM_SUSPEND_SPILL_OFF == 25 * 8, "spill offset mismatch");
+_Static_assert(XM_SUSPEND_RESULT_STATUS_OFF == 25 * 8, "result_status offset mismatch");
+_Static_assert(XM_SUSPEND_RESULT_CLOSED_STATUS_OFF == 26 * 8,
+               "result_closed_status offset mismatch");
+_Static_assert(XM_SUSPEND_SPILL_OFF == 27 * 8, "spill offset mismatch");
 _Static_assert(offsetof(XrCell, value) == XM_CELL_VALUE_OFFSET, "Cell.value offset mismatch");
 
 // XrArray checks

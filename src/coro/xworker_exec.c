@@ -369,6 +369,16 @@ static bool worker_handle_run_result(XrWorker *worker, XrCoroutine *coro, XrCoro
 
         case XR_CORO_RUN_CANCELLED:
             worker->p.yield_streak = 0;
+            /* A coroutine cancelled while parked in select (woken by the
+             * cooperative-cancel xr_coro_ready, not by a ready case) returns
+             * CANCELLED straight from the resume entry without passing through
+             * the select recheck that normally tears down its wait state. Its
+             * select bucket links and timer channel are still live, so tear them
+             * down here on the owner worker before the shell can be recycled —
+             * shared with the DONE drain path via xr_worker_teardown_select_wait
+             * (includes the `after` timer channel dispose, design/885). No-op for
+             * the common case of a coroutine cancelled while running. */
+            xr_worker_teardown_select_wait(worker, coro);
             xr_coro_flags_set(coro, XR_CORO_FLG_CANCELLED | XR_CORO_FLG_DONE);
             xr_coro_flags_clear(coro, XR_CORO_FLG_CANCEL_REQUESTED | XR_CORO_FLG_READY |
                                           XR_CORO_FLG_BLOCKED | XR_CORO_FLG_RUNNING);

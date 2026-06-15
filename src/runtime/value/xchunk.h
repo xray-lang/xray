@@ -337,6 +337,13 @@ typedef struct XrProto {
     // registers and spill slots hold GC pointers. Populated by JIT codegen.
     void *stack_map;  // XrStackMapTable* (opaque, from xm_codegen.h)
 
+    /*
+     * Static negative eligibility cache for bytecode shapes that the current
+     * JIT must keep on the VM. Dynamic misses such as missing type feedback do
+     * not set this bit, because later profiling may make them eligible.
+     */
+    _Atomic uint8_t jit_static_blocked;
+
     // Parent proto: set by xr_vm_proto_add_proto when this proto is added
     // as a child. Used by JIT to walk up to module root and build
     // shared_protos mapping for CALL_KNOWN optimization.

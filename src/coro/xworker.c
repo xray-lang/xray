@@ -188,8 +188,8 @@ void xr_worker_init(XrWorker *worker, int id, XrRuntime *runtime) {
     worker->p.blocked_count = 0;
 
     // Initialize run queue statistics
-    worker->p.runq_reds = 0;
-    worker->p.runq_max_len = 0;
+    atomic_store_explicit(&worker->p.runq_reds, 0, memory_order_relaxed);
+    atomic_store_explicit(&worker->p.runq_max_len, 0, memory_order_relaxed);
 
     // Create backend worker storage, if the active backend needs one.
     worker->p.backend_worker_storage = NULL;

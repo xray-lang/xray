@@ -240,7 +240,8 @@ static bool cg_value_needs_aot_coro(const XiFunc *f, const XiValue *v) {
         return false;
     if (cg_is_aot_suspend_op(v->op))
         return true;
-    return cg_channel_method_may_suspend(v) || cg_is_time_sleep_call(f, v);
+    return cg_channel_method_may_suspend(v) || cg_work_queue_method_needs_aot_coro(v) ||
+           cg_work_queue_constructor_needs_aot_coro(v) || cg_is_time_sleep_call(f, v);
 }
 
 static bool cg_func_needs_aot_coro(const XiFunc *f) {
@@ -735,6 +736,19 @@ static const char *cg_module_prefix_for_func(const XiCgenCtx *ctx, const XiFunc 
 
 #include "xi_cgen_call_resolve.inc.c"
 
+static bool cg_shared_static_function_ownership_is_noop(XiCgenCtx *ctx, const XiFunc *current,
+                                                        const XiValue *v) {
+    if (!ctx || !v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
+        return false;
+    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    if (!arg || arg->op != XI_GET_SHARED)
+        return false;
+    if (arg->type && XR_TYPE_IS_FUNCTION(arg->type))
+        return true;
+    CgStaticFunctionCall call = cg_resolve_static_function_call(ctx, current, arg);
+    return call.func && !call.is_class_constructor && call.func->ncaptures == 0;
+}
+
 /* Write a value reference: v<id> or phi<id> for phi nodes */
 static void emit_vref(FILE *out, const XiValue *v) {
     if (v->op == XI_PHI)
@@ -962,7 +976,7 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
          cg_value_is_elided_nested_struct_ref(f, v->args[0]) ||
          cg_value_is_elided_fixed_array_ref(f, v->args[0])))
         return;
-    if (cg_ownership_op_is_noop(v))
+    if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
 
     if (cg_class_native_value_stmt_is_elided(ctx, f, v))
@@ -1454,19 +1468,30 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
             emit_forward_decls(ctx, out, f->children[i], prefix);
     }
 
+    bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     fprintf(out, "static ");
     emit_func_attr_qualifier(ctx, out, f);
-    if (!emit_class_native_return_type(ctx, out, prefix, f))
+    if (needs_aot_coro) {
+        fprintf(out, "XrValue");
+    } else if (!emit_class_native_return_type(ctx, out, prefix, f)) {
         fprintf(out, "%s", cg_func_return_abi_c_type(ctx, f));
+    }
     fprintf(out, " ");
     emit_fname(ctx, out, prefix, f);
     fprintf(out, "(");
     fprintf(out, "xrt_closure_t *_cl");
-    for (uint16_t i = 0; i < f->nparams; i++)
-        fprintf(out, ", "), emit_class_native_param_decl(ctx, out, prefix, f, i);
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (needs_aot_coro) {
+            fprintf(out, ", XrValue p%u", i);
+        } else {
+            fprintf(out, ", ");
+            emit_class_native_param_decl(ctx, out, prefix, f, i);
+        }
+    }
     fprintf(out, ");\n");
 
-    if (cg_class_func_uses_native_receiver(ctx, f) || cg_func_uses_typed_abi(ctx, f)) {
+    if (!needs_aot_coro &&
+        (cg_class_func_uses_native_receiver(ctx, f) || cg_func_uses_typed_abi(ctx, f))) {
         fprintf(out, "static XrValue ");
         emit_typed_abi_fname(ctx, out, prefix, f);
         fprintf(out, "(xrt_closure_t *_cl");
@@ -1475,7 +1500,6 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
         fprintf(out, ");\n");
     }
 
-    bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     bool needs_sync_go = !needs_aot_coro && cg_func_needs_sync_go_wrapper_ctx(ctx, f);
     if (needs_aot_coro || needs_sync_go) {
         fprintf(out, "static void *");

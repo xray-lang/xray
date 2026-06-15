@@ -1563,6 +1563,37 @@ TEST(cross_block_load_same_shared_slot_eliminated) {
     xi_func_free(f);
 }
 
+TEST(load_dependent_expr_not_reused_after_shared_store) {
+    XiFunc *f = make_func("shared_store_dep", &stub_bool);
+    XiBlock *entry = f->entry;
+
+    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *one = xi_const_int(f, entry, 1, &stub_int);
+
+    XiValue *ld1 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    ld1->aux_int = 0;
+    XiValue *cmp1 = xi_binary(f, entry, XI_LT, &stub_bool, ld1, limit);
+
+    XiValue *next = xi_binary(f, entry, XI_ADD, &stub_int, ld1, one);
+    XiValue *store = xi_value_new(f, entry, XI_SET_SHARED, &stub_int, 1);
+    store->args[0] = next;
+    store->aux_int = 0;
+
+    XiValue *ld2 = xi_value_new(f, entry, XI_GET_SHARED, &stub_int, 0);
+    ld2->aux_int = 0;
+    XiValue *cmp2 = xi_binary(f, entry, XI_LT, &stub_bool, ld2, limit);
+    xi_block_set_return(entry, cmp2);
+
+    xi_tbaa_annotate(f);
+    xi_opt_gvn_pre(f);
+
+    assert(ld2->op == XI_GET_SHARED && "load after shared store must survive");
+    assert(cmp2->op == XI_LT && "dependent compare must not reuse the stale load");
+    assert(cmp2->args[0] == ld2);
+    (void) cmp1;
+    xi_func_free(f);
+}
+
 TEST(pre_bor_insertion) {
     XiFunc *f = make_func("pre_bor", &stub_int);
     XiBlock *entry = f->entry;
@@ -1743,6 +1774,7 @@ int main(void) {
     run_non_commutative_shr();
     run_non_commutative_gt();
     run_cross_block_load_same_shared_slot_eliminated();
+    run_load_dependent_expr_not_reused_after_shared_store();
     run_pre_bor_insertion();
     run_dom_mul_cross_block();
     run_verify_full_pipeline_diamond();

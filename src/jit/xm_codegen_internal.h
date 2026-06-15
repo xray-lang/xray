@@ -214,6 +214,7 @@ XR_FUNC void emit_epilogue(CodegenCtx *ctx);
 XR_FUNC void a64_emit_xm_ins(CodegenCtx *ctx, XmIns *ins);
 XR_FUNC bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd);
 XR_FUNC bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd);
+XR_FUNC bool xm_emit_suspend_op(CodegenCtx *ctx, XmIns *ins, A64Reg rd);
 
 /* Stubs, OSR, patching, deopt table, resume (xm_codegen_stub.c) */
 XR_FUNC void a64_emit_barrier_stubs(CodegenCtx *ctx);

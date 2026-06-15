@@ -46,6 +46,21 @@ static CgStaticFunctionCall cg_resolve_import_function_call(XiCgenCtx *ctx,
     return cg_no_static_function_call();
 }
 
+static const XiFunc *cg_resolve_local_shared_function(XiCgenCtx *ctx, const XiFunc *current,
+                                                      int slot) {
+    if (slot < 0)
+        return NULL;
+    for (const XiFunc *f = current; f; f = f->parent_func) {
+        if (f->shared_slot_funcs && slot < (int) f->shared_slot_func_count &&
+            f->shared_slot_funcs[slot])
+            return f->shared_slot_funcs[slot];
+    }
+    XiModule *mod = ctx && ctx->module ? ctx->module : (current ? current->module : NULL);
+    if (mod && mod->slot_funcs && slot < (int) mod->nslots && mod->slot_funcs[slot])
+        return mod->slot_funcs[slot];
+    return NULL;
+}
+
 static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, const XiFunc *current,
                                                             const XiValue *callee) {
     if (!callee)
@@ -73,6 +88,9 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
         int slot = (int) callee->aux_int;
         if (slot >= 0 && slot < ctx->nshared && ctx->shared_funcs[slot])
             return cg_static_function_call(ctx->shared_funcs[slot], NULL);
+        const XiFunc *local = cg_resolve_local_shared_function(ctx, current, slot);
+        if (local)
+            return cg_static_function_call(local, cg_module_prefix_for_func(ctx, local));
         const XiFunc *module_init = ctx->module ? ctx->module->init : current;
         const XiImportRef *ref = cg_shared_slot_import_ref(module_init, slot);
         CgStaticFunctionCall imported = cg_resolve_import_function_call(ctx, ref);

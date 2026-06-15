@@ -504,22 +504,30 @@ XR_FUNC XiPassChange xi_opt_gvn_pre(XiFunc *f) {
 
             XiValue *leader = NULL;
             uint32_t this_vn = vn_lookup(&vn, v->op, vn0, vn1, aux_key, v, bi, &leader);
-            vn_set(&vn, v, this_vn);
 
-            if (!leader)
+            if (!leader) {
+                vn_set(&vn, v, this_vn);
                 continue; /* First occurrence — nothing to eliminate. */
+            }
 
             /* Check dominance. */
-            if (!leader->block || !xi_dominates(leader->block, blk))
+            if (!leader->block || !xi_dominates(leader->block, blk)) {
+                if (gvn_is_load(v->op))
+                    vn_set(&vn, v, vn.next_vn++);
+                else
+                    vn_set(&vn, v, this_vn);
                 continue;
+            }
 
             /* For memory loads: check no aliasing store intervenes. */
             if (gvn_is_load(v->op)) {
-                if (!tbaa_active)
-                    continue; /* Cannot prove safety without TBAA. */
-                if (has_aliasing_store_between(f, leader, v, blk, vi, mssa))
+                if (!tbaa_active || has_aliasing_store_between(f, leader, v, blk, vi, mssa)) {
+                    vn_set(&vn, v, vn.next_vn++);
                     continue;
+                }
             }
+
+            vn_set(&vn, v, this_vn);
 
             /* Replace with copy of leader. */
             if (v->nargs == 0 || !v->args) {

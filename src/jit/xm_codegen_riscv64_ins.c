@@ -1430,6 +1430,16 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) (uintptr_t) block_helper);
     rv64_buf_emit(&ctx->buf, rv64_jalr(RV64_RA, RV64_SCRATCH_REG2, 0));
 
+    /* Check result: DEOPT_MARKER returns to VM recovery, 0 blocks, any
+     * other non-zero value continues inline. */
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG2, (uint64_t) XM_DEOPT_MARKER);
+    uint32_t not_deopt_idx = ctx->buf.count;
+    rv64_buf_emit(&ctx->buf, rv64_bne(RV64_A0, RV64_SCRATCH_REG2, 0));
+    rv64_load_imm64(&ctx->buf, RV64_A0, (uint64_t) XM_DEOPT_MARKER);
+    rv64_emit_epilogue(ctx);
+    int32_t not_deopt_off = (int32_t) (ctx->buf.count - not_deopt_idx) * 4;
+    ctx->buf.code[not_deopt_idx] = rv64_bne(RV64_A0, RV64_SCRATCH_REG2, not_deopt_off);
+
     /* Check result: a0 == 0 -> blocked (return SUSPEND_MARKER),
      * a0 != 0 -> inline resume */
     uint32_t bne_idx = ctx->buf.count;

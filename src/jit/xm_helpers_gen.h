@@ -126,11 +126,12 @@ typedef enum {
     XM_HELPER_chan_send_block = 89,
     XM_HELPER_chan_recv = 90,
     XM_HELPER_chan_recv_block = 91,
-    XM_HELPER_scope_enter = 92,
-    XM_HELPER_scope_exit = 93,
-    XM_HELPER_go = 94,
-    XM_HELPER_await = 95,
-    XM_HELPER_await_block = 96,
+    XM_HELPER_chan_recv_is_value = 92,
+    XM_HELPER_scope_enter = 93,
+    XM_HELPER_scope_exit = 94,
+    XM_HELPER_go = 95,
+    XM_HELPER_await = 96,
+    XM_HELPER_await_block = 97,
     XM_HELPER__COUNT
 } XmHelperId;
 
@@ -623,6 +624,11 @@ typedef struct {
 #define XM_HELPER_FLAGS_chan_recv_block (XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP)
 #define XM_HELPER_POINTER_TRUST_chan_recv_block XM_HPT_NONE
 #define XM_HELPER_POST_CALL_chan_recv_block (XM_HPC_SUSPEND)
+#define XM_HELPER_RET_REP_chan_recv_is_value XR_REP_I64
+#define XM_HELPER_NARGS_chan_recv_is_value 1
+#define XM_HELPER_FLAGS_chan_recv_is_value 0
+#define XM_HELPER_POINTER_TRUST_chan_recv_is_value XM_HPT_NONE
+#define XM_HELPER_POST_CALL_chan_recv_is_value 0
 #define XM_HELPER_RET_REP_scope_enter XR_REP_VOID
 #define XM_HELPER_NARGS_scope_enter 0
 #define XM_HELPER_FLAGS_scope_enter 0
@@ -784,6 +790,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
                              XM_HPC_SUSPEND},
     [XM_HELPER_chan_recv_block] = {XR_REP_VOID, 0, XM_HF_SUSPEND | XM_HF_ENTER_VM | XM_HF_STACKMAP,
                                    XM_HPT_NONE, XM_HPC_SUSPEND},
+    [XM_HELPER_chan_recv_is_value] = {XR_REP_I64, 1, 0, XM_HPT_NONE, 0},
     [XM_HELPER_scope_enter] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_scope_exit] = {XR_REP_VOID, 0, 0, XM_HPT_NONE, 0},
     [XM_HELPER_go] = {XR_REP_TAGGED, 0,
@@ -891,6 +898,7 @@ static const XmHelperStaticInfo xm_helper_meta[XM_HELPER__COUNT] = {
     _(chan_send_block)                                                                             \
     _(chan_recv)                                                                                   \
     _(chan_recv_block)                                                                             \
+    _(chan_recv_is_value)                                                                          \
     _(scope_enter)                                                                                 \
     _(scope_exit)                                                                                  \
     _(go)                                                                                          \

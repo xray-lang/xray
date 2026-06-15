@@ -28,6 +28,11 @@ run_test() {
     local bin_out="$WORK/${test_name}"
     local vm_out="$WORK/${test_name}.vm"
     local aot_out="$WORK/${test_name}.aot"
+    local test_args=()
+
+    case "$test_name" in
+        process_args*) test_args=("100000" "abc") ;;
+    esac
 
     printf "  %-30s" "$test_name"
 
@@ -66,8 +71,13 @@ run_test() {
 
     # Step 3: Run VM and AOT, capturing stdout AND exit code (if-form keeps
     # set -e from aborting on a non-zero program exit).
-    if "$XRAY" run "$xr_file" > "$vm_out" 2>/dev/null; then vm_rc=0; else vm_rc=$?; fi
-    if "$bin_out" > "$aot_out" 2>/dev/null; then aot_rc=0; else aot_rc=$?; fi
+    if [ "${#test_args[@]}" -gt 0 ]; then
+        if "$XRAY" run "$xr_file" -- "${test_args[@]}" > "$vm_out" 2>/dev/null; then vm_rc=0; else vm_rc=$?; fi
+        if "$bin_out" "${test_args[@]}" > "$aot_out" 2>/dev/null; then aot_rc=0; else aot_rc=$?; fi
+    else
+        if "$XRAY" run "$xr_file" > "$vm_out" 2>/dev/null; then vm_rc=0; else vm_rc=$?; fi
+        if "$bin_out" > "$aot_out" 2>/dev/null; then aot_rc=0; else aot_rc=$?; fi
+    fi
 
     # Step 4: Compare exit codes, then stdout
     if [ "$vm_rc" != "$aot_rc" ]; then

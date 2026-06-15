@@ -341,6 +341,16 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
             XiValue *src_v = src_blk->values[vi];
             if (!src_v)
                 continue;
+            /* Callee parameters are already bound to the actual call arguments
+             * (value_map[param->id] = call arg, set above). Cloning a PARAM
+             * would overwrite that binding with a fresh PARAM(aux_int=i) that
+             * aliases the CALLER's i-th parameter — a wrong-value, often
+             * wrong-type reference (e.g. a channel argument degrading into the
+             * caller's int param 0, which then miscompiles in the AOT/JIT
+             * backends). Skip params so their uses keep resolving to the real
+             * arguments. */
+            if (src_v->op == XI_PARAM)
+                continue;
             clone_value(caller, dst_blk, src_v, value_map, callee_max_id);
         }
 

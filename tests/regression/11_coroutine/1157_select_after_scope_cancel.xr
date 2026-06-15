@@ -1,0 +1,60 @@
+// Regression: a linked scope must wake a sibling blocked in select { after N }
+// when cascade-cancelling it, so the scope completes instead of hanging until
+// the (large) timeout elapses. Previously the cooperative cancel only set
+// CANCEL_REQUESTED + reduction poke, which never reaches a parked select
+// coroutine, so the scope owner waited on scope->count forever.
+
+enum CancelE { Boom }
+
+fn boom() -> int {
+    throw CancelE.Boom
+}
+
+fn blocked_in_select_after() -> int {
+    shared const ch = new Channel(1)
+    select {
+        msg from ch -> { return 1 }
+        after 1000000 -> { return 2 }
+    }
+    return 3
+}
+
+@test
+fn test_scope_cancel_wakes_blocked_select_after() {
+    // boom() fails and the linked scope must cancel the sibling that is parked
+    // in select-after. If the sibling is not woken, this hangs until the 1000s
+    // timeout (i.e. the regression).
+    let caught = false
+    try {
+        linked scope {
+            go blocked_in_select_after()
+            go boom()
+        }
+    } catch (e) {
+        caught = true
+    }
+    assert_true(caught)
+
+    // Run a few rounds so the cancel/wake path is exercised repeatedly.
+    let rounds = 0
+    let i = 0
+    while (i < 20) {
+        let c = false
+        try {
+            linked scope {
+                go blocked_in_select_after()
+                go boom()
+            }
+        } catch (e) {
+            c = true
+        }
+        if (c) {
+            rounds = rounds + 1
+        }
+        i = i + 1
+    }
+    assert_eq(rounds, 20)
+    print("scope-cancel-select-after ok")
+}
+
+test_scope_cancel_wakes_blocked_select_after()

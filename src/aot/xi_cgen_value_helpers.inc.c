@@ -274,12 +274,75 @@ static void emit_str_concat_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     }
 }
 
-static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const char *prefix, const XiValue *v) {
+static bool cg_aot_coro_closure_has_only_supported_uses(XiCgenCtx *ctx, const XiFunc *current,
+                                                        const XiValue *value, const XiFunc *child,
+                                                        int depth) {
+    if (!ctx || !current || !value || !child || depth > 8)
+        return false;
+
+    bool saw_use = false;
+    for (uint32_t bi = 0; bi < current->nblocks; bi++) {
+        const XiBlock *blk = current->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                saw_use = true;
+                switch ((XiOp) user->op) {
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                    case XI_SET_SHARED:
+                        break;
+                    case XI_BOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (!cg_aot_coro_closure_has_only_supported_uses(ctx, current, user, child,
+                                                                         depth + 1))
+                            return false;
+                        break;
+                    case XI_GO:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    case XI_CALL: {
+                        if (ai != 0 || !cg_func_needs_aot_coro_ctx(ctx, current))
+                            return false;
+                        CgStaticFunctionCall call =
+                            cg_resolve_static_function_call(ctx, current, user->args[0]);
+                        if (call.func != child)
+                            return false;
+                        break;
+                    }
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+    return saw_use;
+}
+
+static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *current,
+                                  const char *prefix, const XiValue *v) {
     if (v->aux) {
         XiFunc *child = (XiFunc *) v->aux;
+        if (cg_func_needs_aot_coro_ctx(ctx, child) &&
+            !cg_aot_coro_closure_has_only_supported_uses(ctx, current, v, child, 0)) {
+            ctx->error = true;
+            fprintf(stderr,
+                    "[xi_cgen] ERROR: unsupported AOT sync call to suspendable function '%s'\n",
+                    child->name ? child->name : "?");
+            fprintf(out, "XR_NULL_VAL /* unsupported suspendable closure */");
+            return;
+        }
         uint16_t ncap = child->ncaptures;
         fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
-        if (cg_func_uses_typed_abi(ctx, child))
+        if (cg_func_uses_typed_abi(ctx, child) && !cg_func_needs_aot_coro_ctx(ctx, child))
             emit_typed_abi_fname(ctx, out, prefix, child);
         else
             emit_fname(ctx, out, prefix, child);

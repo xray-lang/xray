@@ -143,14 +143,19 @@ static void vm_go_try_compile_entry(XrayIsolate *isolate, XrProto *proto, XrValu
 
     bool debug = vm_coro_entry_jit_debug_enabled();
     if (!XR_JIT_AVAILABLE() || !xr_jit_hooks->try_compile || !proto || proto->jit_entry ||
-        proto->deopt_count > 3 || proto->numparams != arg_count) {
+        proto->deopt_count > 3 ||
+        atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0 ||
+        proto->numparams != arg_count) {
         if (debug) {
             fprintf(stderr,
                     "[JIT-CORO-ENTRY] skip early available=%d try=%d proto=%p entry=%p "
-                    "deopt=%u params=%d args=%d\n",
+                    "deopt=%u static_blocked=%u params=%d args=%d\n",
                     XR_JIT_AVAILABLE() ? 1 : 0,
                     (XR_JIT_AVAILABLE() && xr_jit_hooks->try_compile) ? 1 : 0, (void *) proto,
                     proto ? proto->jit_entry : NULL, proto ? proto->deopt_count : 0,
+                    proto ? (unsigned) atomic_load_explicit(&proto->jit_static_blocked,
+                                                            memory_order_relaxed)
+                          : 0,
                     proto ? proto->numparams : -1, arg_count);
         }
         return;

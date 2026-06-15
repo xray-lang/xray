@@ -299,6 +299,55 @@ TEST(global_inject_spill_preserves_all_work) {
     scheduler_fixture_cleanup(&f);
 }
 
+TEST(global_coro_pool_get_pops_bounded_batches) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    enum {
+        TOTAL = XR_CORO_BATCH_SIZE * 3 + 7
+    };
+    XrCoroutine coros[TOTAL];
+    bool seen[TOTAL];
+    memset(coros, 0, sizeof(coros));
+    memset(seen, 0, sizeof(seen));
+
+    for (int i = 0; i < TOTAL; i++) {
+        coros[i].id = i;
+        coros[i].next = (i + 1 < TOTAL) ? &coros[i + 1] : NULL;
+    }
+
+    XrCoroStructPool *pool = f.sys_heap.coro_pool;
+    ASSERT_NOT_NULL(pool);
+    atomic_store_explicit(&pool->free_list, &coros[0], memory_order_release);
+
+    XrCoroutine *first = xr_coro_pool_get(&f.runtime);
+    ASSERT_NOT_NULL(first);
+    ASSERT_TRUE(first->id >= 0 && first->id < TOTAL);
+    seen[first->id] = true;
+    ASSERT_EQ_INT(f.worker.p.local_free_count, XR_CORO_BATCH_SIZE - 1);
+
+    int remaining_global = 0;
+    for (XrCoroutine *c = atomic_load_explicit(&pool->free_list, memory_order_acquire); c;
+         c = c->next) {
+        remaining_global++;
+    }
+    ASSERT_EQ_INT(remaining_global, TOTAL - XR_CORO_BATCH_SIZE);
+
+    for (int i = 1; i < TOTAL; i++) {
+        XrCoroutine *coro = xr_coro_pool_get(&f.runtime);
+        ASSERT_NOT_NULL(coro);
+        ASSERT_TRUE(coro->id >= 0 && coro->id < TOTAL);
+        ASSERT_FALSE(seen[coro->id]);
+        seen[coro->id] = true;
+    }
+
+    ASSERT_EQ_PTR(f.worker.p.local_free_list, NULL);
+    ASSERT_EQ_INT(f.worker.p.local_free_count, 0);
+    ASSERT_EQ_PTR(atomic_load_explicit(&pool->free_list, memory_order_acquire), NULL);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(coro_ext_init_sets_timer_and_owner_sentinels) {
     XrCoroutine coro;
     init_ready_coro(&coro, 350, NULL);
@@ -488,6 +537,7 @@ RUN_TEST_SUITE("Scheduler Run Queue");
 RUN_TEST(local_runq_pops_recent_owner_items_first);
 RUN_TEST(lifo_budget_flushes_run_next_to_local_queue);
 RUN_TEST(global_inject_spill_preserves_all_work);
+RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);

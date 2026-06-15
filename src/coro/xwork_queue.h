@@ -20,6 +20,11 @@
 #include "../runtime/gc/xgc_header.h"
 #include "../runtime/value/xvalue.h"
 
+#define XR_WORK_QUEUE_DEFAULT_SHARDS 1u
+#define XR_WORK_QUEUE_DEFAULT_CAPACITY 64u
+#define XR_WORK_QUEUE_MAX_SHARDS 65536u
+#define XR_WORK_QUEUE_MAX_CAPACITY (1u << 30)
+
 struct XrayIsolate;
 struct XrCoroGC;
 struct XrCoroutine;
@@ -47,12 +52,25 @@ typedef struct XrWorkQueue {
     XrWorkQueueShard shards[];
 } XrWorkQueue;
 
+typedef enum XrWorkQueuePopStatus {
+    XR_WORK_QUEUE_POP_DONE,
+    XR_WORK_QUEUE_POP_BLOCKED,
+    XR_WORK_QUEUE_POP_WOULD_BLOCK,
+    XR_WORK_QUEUE_POP_ERROR
+} XrWorkQueuePopStatus;
+
 XR_FUNC XrWorkQueue *xr_work_queue_new(struct XrayIsolate *X, uint32_t shard_count,
                                        uint32_t shard_capacity);
 XR_FUNC bool xr_work_queue_push(struct XrayIsolate *X, XrWorkQueue *q, XrValue value,
                                 int64_t shard_hint);
 XR_FUNC XrValue xr_work_queue_try_pop(struct XrayIsolate *X, XrWorkQueue *q, int64_t worker_hint,
                                       bool *ok);
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_for_coro(struct XrayIsolate *X, XrWorkQueue *q,
+                                                        struct XrCoroutine *coro,
+                                                        int64_t worker_hint, XrValue *result);
+XR_FUNC XrWorkQueuePopStatus xr_work_queue_pop_resume_for_coro(struct XrayIsolate *X,
+                                                               struct XrCoroutine *coro,
+                                                               XrValue *result);
 XR_FUNC void xr_work_queue_cancel_waiter(struct XrCoroutine *coro);
 XR_FUNC void xr_work_queue_close(XrWorkQueue *q);
 XR_FUNC bool xr_work_queue_is_closed(XrWorkQueue *q);

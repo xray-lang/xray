@@ -196,7 +196,7 @@ void xr_worker_inbox_enqueue_batch(XrRuntime *runtime, int target_id, XrCoroutin
 static void try_immigrate(XrWorker *worker) {
     XrRuntime *runtime = worker->p.runtime;
     XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
-    int source_id = mp->runq.target_worker;
+    int source_id = atomic_load_explicit(&mp->runq.target_worker, memory_order_relaxed);
     if (source_id < 0 || source_id >= runtime->worker_count)
         return;
 
@@ -210,12 +210,31 @@ static void try_immigrate(XrWorker *worker) {
     if (stolen > 0) {
         xr_proc_local_runq_dec(&source->p, stolen);
         xr_proc_local_runq_inc(&worker->p, stolen);
-        mp->runq.target_worker = -1;
+        atomic_store_explicit(&mp->runq.target_worker, -1, memory_order_relaxed);
     }
 }
 
 // ========== Shared Scheduling Helpers ==========
 // Used by both worker_loop and xr_handoff_thread_entry to avoid duplication.
+
+// Detach a coroutine still parked in select from its wait state on the owner
+// worker (see header doc). No-op when the coroutine holds no select wait.
+// Shared by the DONE drain path below and the CANCELLED completion path.
+void xr_worker_teardown_select_wait(XrWorker *worker, XrCoroutine *coro) {
+    XrSelectWait *sw = xr_coro_select_wait(coro);
+    if (!sw)
+        return;
+    xr_worker_unblock_select(worker, coro);
+    xr_select_wait_cancel(sw);
+    // Blocked in select at teardown: the bytecode dispose never ran, so release
+    // the `after` timer channel here (idempotent via timer_disposed). design/885.
+    if (sw->timer_channel)
+        xr_channel_timer_dispose((XrChannel *) sw->timer_channel);
+    xr_coro_clear_select_wait(coro);
+    if (coro->ext && coro->ext->wait_bucket && coro->ext->wait_bucket_owner == worker->p.id) {
+        xr_worker_unblock(worker, coro);
+    }
+}
 
 // Drain MPSC inbox into P's local run queue.
 void worker_drain_inbox(XrWorker *worker) {
@@ -227,19 +246,11 @@ void worker_drain_inbox(XrWorker *worker) {
         XrCoroutine *next = list->sched_link;
         list->sched_link = NULL;
         if (xr_coro_flags_has(list, XR_CORO_FLG_DONE)) {
-            XrSelectWait *sw = xr_coro_select_wait(list);
-            if (sw) {
-                xr_worker_unblock_select(worker, list);
-                xr_select_wait_cancel(sw);
-                // DONE while blocked in select: the bytecode dispose never ran,
-                // so release the `after` timer channel here. See design/885.
-                if (sw->timer_channel)
-                    xr_channel_timer_dispose((XrChannel *) sw->timer_channel);
-                xr_coro_clear_select_wait(list);
-                if (list->ext && list->ext->wait_bucket &&
-                    list->ext->wait_bucket_owner == worker->p.id) {
-                    xr_worker_unblock(worker, list);
-                }
+            // DONE while blocked in select: tear down the residual select wait
+            // (timer channel dispose included); otherwise drop the single-channel
+            // wait from its bucket + blocked queue.
+            if (xr_coro_select_wait(list)) {
+                xr_worker_teardown_select_wait(worker, list);
             } else {
                 xr_worker_unblock(worker, list);
             }
@@ -835,7 +846,9 @@ static bool worker_housekeeping(XrWorker *worker, XrRuntime *runtime, int *poll_
 
     XrMigrationLimit *ml = &runtime->migration_paths[worker->p.id].runq;
     int len = xr_runq_len(&worker->p.runq);
-    bool need_emigrate = len > ml->limit_here && ml->target_worker >= 0;
+    int limit_here = atomic_load_explicit(&ml->limit_here, memory_order_relaxed);
+    int target_worker = atomic_load_explicit(&ml->target_worker, memory_order_relaxed);
+    bool need_emigrate = len > limit_here && target_worker >= 0;
     bool need_immigrate = len == 0;
     if (need_emigrate) {
         int migrated = xr_try_emigrate(worker);

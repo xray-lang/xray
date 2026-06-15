@@ -44,7 +44,7 @@ static void channel_wake_coro_kind(XrCoroutine *coro, XrChannelKind kind, bool w
 // skip the instruction replay. Gated per value: heap values that need a
 // receive-side deep copy keep the replay protocol (the copy must run on
 // the receiver's own thread). Waiters without the registered capability
-// (timeout variants, cfunc/JIT/AOT, method-call paths) re-execute the
+// (timeout variants, cfunc/JIT, method-call paths) re-execute the
 // channel instruction and derive ok from resume_status.
 static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
     XrCoroExt *ext = receiver->ext;
@@ -841,6 +841,7 @@ XrChannel *xr_channel_new_timer(struct XrayIsolate *X, int64_t timeout_ms) {
     ch->timer_start_ticks = xr_monotonic_ticks();
 
     atomic_store_explicit(&ch->timer_fired, false, memory_order_relaxed);
+    atomic_store_explicit(&ch->timer_disposed, false, memory_order_relaxed);
 
     // Initialize the embedded timer-wheel node.
     ch->tw_timer.prev = NULL;
@@ -908,9 +909,20 @@ void xr_channel_timer_dispose(XrChannel *ch) {
     if (!ch || !atomic_load_explicit(&ch->is_timer, memory_order_relaxed))
         return;
 
+    // One-shot latch: the release accounting below (the refcount drops plus
+    // channel_close_count) must run exactly once per timer channel. Every
+    // caller path already disposes once, but this CAS makes the invariant
+    // self-enforcing: a stray second dispose returns here instead of
+    // double-dropping the refcount (use-after-free) or double-counting the
+    // close (teardown leak-check false trip).
+    bool expected_disposed = false;
+    if (!atomic_compare_exchange_strong_explicit(&ch->timer_disposed, &expected_disposed, true,
+                                                 memory_order_acq_rel, memory_order_relaxed))
+        return;
+
     // Account this timer channel as cleaned up (mirrors channel_create_count in
     // xr_channel_new_timer) so the teardown leak check is not tripped by timer
-    // channels, which are disposed rather than close()d. Called once per channel.
+    // channels, which are disposed rather than close()d.
     if (ch->isolate && xr_isolate_get_sys_heap(ch->isolate)) {
         atomic_fetch_add(&xr_isolate_get_sys_heap(ch->isolate)->stats.channel_close_count, 1);
     }
@@ -978,6 +990,9 @@ void xr_channel_destroy(XrChannel *ch) {
 static void channel_wake_coro_kind(XrCoroutine *coro, XrChannelKind kind, bool wake_sender);
 static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close, XrChannelKind kind,
                                  bool wake_sender);
+static bool channel_claim_dequeued_waiter(XrCoroutine *coro);
+static void channel_finish_claimed_wake(XrCoroutine *coro, bool is_close, XrChannelKind kind,
+                                        bool wake_sender);
 
 static void channel_wake_select_waiter(XrChannel *ch) {
     if (!ch || !ch->isolate)
@@ -1023,7 +1038,11 @@ static void channel_clear_drained_direction_masks(XrChannel *ch, bool send_drain
 // Direct transfer: hand value to a blocked receiver and wake it.
 // Returns true on success (lock released, wake dispatched).
 static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *producer) {
-    XrCoroutine *receiver = xr_waitq_dequeue(&ch->recvq);
+    XrCoroutine *receiver = NULL;
+    while ((receiver = xr_waitq_dequeue(&ch->recvq)) != NULL) {
+        if (channel_claim_dequeued_waiter(receiver))
+            break;
+    }
     if (!receiver)
         return false;
     CHANNEL_METRIC_INC(ch, chan_send_direct_count);
@@ -1033,7 +1052,7 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *produ
     (void) xr_coro_store_recv_value(receiver, v);
     chan_try_deliver_recv(receiver, v);
     xr_amutex_unlock(&ch->lock);
-    channel_wake_coro_kind(receiver, wake_kind, false);
+    channel_finish_claimed_wake(receiver, false, wake_kind, false);
     return true;
 }
 
@@ -1042,7 +1061,17 @@ static inline bool chan_direct_send(XrChannel *ch, XrValue v, XrCoroutine *produ
 // buffer head out, push sender's value to tail) cases.
 // Returns true on success (lock released, *out assigned).
 static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *consumer) {
-    XrCoroutine *sender = xr_waitq_dequeue(&ch->sendq);
+    XrCoroutine *sender = NULL;
+    while ((sender = xr_waitq_dequeue(&ch->sendq)) != NULL) {
+        if (ch->buf_size > 0 && ch->buf_count == 0) {
+            waitq_enqueue_front(&ch->sendq, sender);
+            return false;
+        }
+        if (channel_claim_dequeued_waiter(sender))
+            break;
+        xr_chan_abandon_send(sender->ext->send_value);
+        sender->ext->send_value = xr_null();
+    }
     if (!sender)
         return false;
     channel_note_participant_locked(ch, consumer, false);
@@ -1050,10 +1079,6 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *co
     if (ch->buf_size == 0) {
         direct_val = sender->ext->send_value;
     } else {
-        if (ch->buf_count == 0) {
-            waitq_enqueue_front(&ch->sendq, sender);
-            return false;
-        }
         direct_val = ch->buffer[ch->recv_idx];
         ch->recv_idx = chan_advance_idx(ch->recv_idx, ch->buf_size);
         ch->buffer[ch->send_idx] = sender->ext->send_value;
@@ -1066,7 +1091,7 @@ static inline bool chan_direct_recv(XrChannel *ch, XrValue *out, XrCoroutine *co
     sender->ext->send_value = xr_null();
     xr_amutex_unlock(&ch->lock);
     *out = direct_val;
-    channel_wake_coro_kind(sender, wake_kind, true);
+    channel_finish_claimed_wake(sender, false, wake_kind, true);
     return true;
 }
 
@@ -1228,15 +1253,9 @@ static XrRuntime *channel_wake_runtime(XrCoroutine *coro, XrWorker **out_current
     return runtime;
 }
 
-static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close, XrChannelKind kind,
-                                 bool wake_sender) {
-    XR_DCHECK(coro != NULL, "channel_wake_coro_ex: NULL coro");
-
-    XrWorker *current = NULL;
-    XrRuntime *runtime = channel_wake_runtime(coro, &current);
-    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
-        return;
-
+static bool channel_claim_dequeued_waiter(XrCoroutine *coro) {
+    if (!coro || !coro->ext)
+        return false;
     // Ownership: the caller dequeued this coro from the channel wait queue
     // under ch->lock, which is the single claim point (Go sudog semantics).
     // Cancel also unlinks under the lock before it may kill the coroutine,
@@ -1247,15 +1266,24 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close, XrChannelKind
     // fire concurrently without holding ch->lock, so those keep the
     // claim-wake arbitration.
     bool timed = atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed);
-    if (timed) {
-        if (!xr_coro_claim_wake(coro)) {
-            return;
-        }
-    } else {
-        XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED),
-                  "channel_wake_coro_ex: untimed waiter not BLOCKED");
-        xr_coro_flags_swap(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK, XR_CORO_FLG_READY);
-    }
+    if (timed)
+        return xr_coro_claim_wake(coro);
+    XR_DCHECK(xr_coro_flags_has(coro, XR_CORO_FLG_BLOCKED),
+              "channel_claim_dequeued_waiter: untimed waiter not BLOCKED");
+    xr_coro_flags_swap(coro, XR_CORO_FLG_BLOCKED | XR_CORO_WAIT_MASK, XR_CORO_FLG_READY);
+    return true;
+}
+
+static void channel_finish_claimed_wake(XrCoroutine *coro, bool is_close, XrChannelKind kind,
+                                        bool wake_sender) {
+    XR_DCHECK(coro != NULL, "channel_finish_claimed_wake: NULL coro");
+
+    XrWorker *current = NULL;
+    XrRuntime *runtime = channel_wake_runtime(coro, &current);
+    if (!runtime || !runtime->workers || runtime->worker_count <= 0)
+        return;
+
+    bool timed = coro->ext && atomic_load_explicit(&coro->ext->timer_active, memory_order_relaxed);
 
     xr_channel_wait_token_resolve(&coro->ext->chan_wait_token);
     xr_coro_resume_store(coro, is_close ? XR_RESUME_CHANNEL_CLOSED : XR_RESUME_CHANNEL);
@@ -1351,6 +1379,14 @@ static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close, XrChannelKind
         atomic_store_explicit(&coro->affinity_p, current->p.id, memory_order_relaxed);
     }
     xr_worker_push_lifo(current, coro);
+}
+
+static void channel_wake_coro_ex(XrCoroutine *coro, bool is_close, XrChannelKind kind,
+                                 bool wake_sender) {
+    XR_DCHECK(coro != NULL, "channel_wake_coro_ex: NULL coro");
+    if (!channel_claim_dequeued_waiter(coro))
+        return;
+    channel_finish_claimed_wake(coro, is_close, kind, wake_sender);
 }
 
 // Normal wake (send/recv complete)
@@ -1542,6 +1578,7 @@ send_locked:
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = true;
     coro->ext->send_value = value;  // Save value to send
+    xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_SEND >> XR_CORO_WAIT_SHIFT);
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing
@@ -1641,6 +1678,7 @@ recv_locked:
                                         xr_channel_logical_kind_snapshot(ch), false);
     atomic_store_explicit(&coro->ext->wait_channel, ch, memory_order_release);
     coro->ext->wait_send = false;
+    xr_coro_resume_store(coro, XR_RESUME_OK);
     xr_coro_set_wait_reason(coro, XR_CORO_WAIT_CHANNEL_RECV >> XR_CORO_WAIT_SHIFT);
     (void) xr_coro_publish_wait_block(coro);
     // Set affinity_p for cross-Worker wake + waiter mask for routing

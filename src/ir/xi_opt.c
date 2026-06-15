@@ -704,6 +704,26 @@ static XrRep sr_type_scalar_rep(const struct XrType *type) {
     return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
 }
 
+static bool sr_convert_can_return_null(const XiValue *v) {
+    if (!v || v->op != XI_CONVERT || v->nargs < 1 || !v->type)
+        return false;
+    if (v->type->kind != XR_KIND_INT && v->type->kind != XR_KIND_FLOAT)
+        return false;
+
+    const XrType *src = v->args[0] ? v->args[0]->type : NULL;
+    if (!src || src->is_nullable)
+        return true;
+
+    switch (src->kind) {
+        case XR_KIND_INT:
+        case XR_KIND_FLOAT:
+        case XR_KIND_BOOL:
+            return false;
+        default:
+            return true;
+    }
+}
+
 static bool sr_type_is_task_instance(const XrType *type) {
     if (!type)
         return false;
@@ -1089,6 +1109,10 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_IS:
         case XI_CHAN_TRY_SEND:
         case XI_CHAN_IS_CLOSED:
+        case XI_CHAN_RECV_STATUS:
+            /* bool result (recv_is_value): unboxed i64, never an XrValue.
+             * Matches the JIT helper rep and the ISNULL/IS_CLOSED siblings;
+             * the select_rep boundary inserts XI_BOX if a tagged use needs it. */
             return XR_REP_I64;
         case XI_SELECT: {
             return sr_type_scalar_rep(v->type);
@@ -1142,6 +1166,8 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_TAGGED;
         }
         case XI_CONVERT: {
+            if (sr_convert_can_return_null(v))
+                return XR_REP_TAGGED;
             return sr_type_scalar_rep(v->type);
         }
         /* NARROW/WIDEN: value stays in machine register, only range changes.

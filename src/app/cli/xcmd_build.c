@@ -454,7 +454,8 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
     // Bundle-generated data (module bytecode arrays, module table, lookup function)
     fprintf(f, "%s\n\n", bundle_source);
 
-    // Main: use XR_INIT_RUNTIME for minimal footprint (no compiler/analyzer/stdlib)
+    // Main: default bytecode bundles run with full runtime support so imports
+    // and runtime exception objects behave like `xray run`.
     fprintf(f, "#include \"xray_isolate.h\"\n"
                "extern int xr_eval_bytecode(void*, const uint8_t*, size_t);\n"
                "extern void xr_multicore_init(void*, int);\n"
@@ -463,13 +464,15 @@ static void write_bytecode_main(FILE *f, const char *bundle_source) {
                "int main(int argc, char **argv) {\n"
                "    XrayIsolateParams params;\n"
                "    xray_isolate_params_init(&params);\n"
-               "    params.init_flags = XR_INIT_RUNTIME;\n"
+               "    xray_isolate_setup_full(&params);\n"
                "    params.script_argc = argc > 1 ? argc - 1 : 0;\n"
                "    params.script_argv = argc > 1 ? argv + 1 : NULL;\n"
                "    XrayIsolate *X = xray_isolate_new(&params);\n"
                "    if (!X) { fprintf(stderr, \"Failed to create runtime\\n\"); return 1; }\n"
                "    xr_multicore_init(X, 0);\n"
                "    const XrEmbeddedModule *entry = &xr_app_modules[xr_app_entry_index];\n"
+               "    xray_isolate_set_script_info(X, entry->path, params.script_argc, "
+               "params.script_argv);\n"
                "    int result = xr_eval_bytecode(X, entry->bc, entry->size);\n"
                "    xr_multicore_destroy(X);\n"
                "    xray_isolate_delete(X);\n"

@@ -1,0 +1,37 @@
+fn send_timeout_worker(ch: Channel<int>, timeout_ms: int, value: int) -> bool {
+    return match (ch.sendTimeout(value, timeout_ms)) {
+        SendResult.Timeout -> true
+        _ -> false
+    }
+}
+
+fn run_once(count: int, timeout_ms: int) -> int {
+    shared const ch = new Channel(1)
+    ch.send(1)
+
+    let tasks: Array<Task> = []
+    for (let i = 0; i < count; i++) {
+        tasks.push(go send_timeout_worker(ch, timeout_ms, i + 2))
+    }
+
+    let timeouts = 0
+    for (task in tasks) {
+        if (await task) {
+            timeouts++
+        }
+    }
+
+    let _drain = ch.recv()
+    ch.close()
+    return timeouts
+}
+
+let count = 10000
+let ok = true
+for (let round = 0; round < 3; round++) {
+    if (run_once(count, 10) != count) {
+        ok = false
+    }
+}
+
+print(ok)

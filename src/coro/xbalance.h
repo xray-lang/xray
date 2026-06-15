@@ -42,9 +42,9 @@ struct XrCoroutine;
 // ========== Migration Path Structures ==========
 
 typedef struct {
-    int limit_here;     // Local queue threshold (emigrate if exceeded)
-    int limit_other;    // Target queue threshold (immigrate if below)
-    int target_worker;  // Target Worker ID (-1 = none)
+    _Atomic int limit_here;     // Local queue threshold (emigrate if exceeded)
+    _Atomic int limit_other;    // Target queue threshold (immigrate if below)
+    _Atomic int target_worker;  // Target Worker ID (-1 = none)
 } XrMigrationLimit;
 
 // Worker migration path

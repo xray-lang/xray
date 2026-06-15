@@ -119,6 +119,24 @@ typedef struct XrValue {
 #define XR_TAG_TUPLE 21   /* AOT tuple */
 #define XR_TAG_SET 22     /* AOT set */
 #define XR_TAG_RANGE 23   /* AOT range */
+#define XR_TAG_ENUM 24    /* AOT bridged enum key */
+
+typedef struct XrAotEnumValueView {
+    uint64_t gc_words[2];
+    void *klass;
+    const char *enum_name;
+    const char *member_name;
+} XrAotEnumValueView;
+
+static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
+    const XrAotEnumValueView *ev = (const XrAotEnumValueView *) v.ptr;
+    if (ev && ev->enum_name && ev->member_name) {
+        snprintf(buf, bufsz, "%s.%s", ev->enum_name, ev->member_name);
+        return buf;
+    }
+    snprintf(buf, bufsz, "<enum@%p>", v.ptr);
+    return buf;
+}
 
 /* Native field tags mirror XrNativeType for standalone generated C. */
 #define XR_NATIVE_I64 0
@@ -271,6 +289,8 @@ static inline int64_t xrt_eq(XrValue a, XrValue b) {
     uint32_t tb = (b.tag == XR_TAG_STR_ARC) ? XR_TAG_STR : b.tag;
     if (ta != tb)
         return 0;
+    if (ta == XR_TAG_ENUM)
+        return a.ptr == b.ptr && a.ext == b.ext;
     if (ta == XR_TAG_I64 || ta == XR_TAG_BOOL)
         return a.i == b.i;
     if (ta == XR_TAG_F64)
@@ -354,6 +374,8 @@ static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {
             return v.i ? "true" : "false";
         case XR_TAG_NULL:
             return "null";
+        case XR_TAG_ENUM:
+            return xrt_enum_to_cstr(v, buf, bufsz);
         default:
             snprintf(buf, bufsz, "<object@%p>", v.ptr);
             return buf;

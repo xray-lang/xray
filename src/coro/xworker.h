@@ -522,6 +522,15 @@ XR_FUNC XrCoroutine *xr_worker_wake_select(XrWorker *worker, void *channel);
 XR_FUNC int xr_worker_wake_select_all_with_status(XrWorker *worker, void *channel,
                                                   int resume_status);
 XR_FUNC void xr_worker_unblock_select(XrWorker *worker, XrCoroutine *coro);
+/* Fully detach a coroutine still parked in select from its wait state on the
+ * owner worker: drop every case from its channel bucket + the blocked queue,
+ * mark the wait cancelled, dispose the select-owned `after` timer channel
+ * (idempotent via the timer_disposed latch; design/885), and clear the
+ * select-wait pointer. No-op when the coroutine holds no select wait. Shared by
+ * the DONE drain path (worker_drain_inbox) and the CANCELLED completion path
+ * (worker_handle_run_result). Must run on the coroutine's select-owner worker
+ * (its affinity worker; see xr_coro_wake_target_id). */
+XR_FUNC void xr_worker_teardown_select_wait(XrWorker *worker, XrCoroutine *coro);
 XR_FUNC int xr_runtime_next_coro_id(XrRuntime *runtime);
 
 /* ========== Syscall Enter/Exit (P Handoff) ========== */
