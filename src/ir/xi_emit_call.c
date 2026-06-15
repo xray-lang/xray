@@ -202,13 +202,19 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int ci = add_const_string(ctx, method_name);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_SUPERINVOKE, dst, (uint8_t) ci, nargs));
+        uint16_t ci_arg = 0;
+        if (!xi_emit_const_index_to_c(ctx, ci, &ci_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_SUPERINVOKE, dst, ci_arg, nargs));
     } else {
         int sym = add_symbol(ctx, method_name);
         if (ctx->status != XI_EMIT_OK)
             return;
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
         OpCode invoke_op = (v->flags & XI_FLAG_TAIL) ? OP_INVOKE_TAIL : OP_INVOKE;
-        emit_inst(ctx, CREATE_ABC(invoke_op, dst, (uint8_t) sym, nargs));
+        emit_inst(ctx, CREATE_ABC(invoke_op, dst, sym_arg, nargs));
         /* Record IC-relevant instruction offset for JIT */
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
@@ -216,7 +222,7 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 }
 
 XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs < 1 || v->aux_int < 0 || v->aux_int > 255 || v->nargs - 1 > 127) {
+    if (v->nargs < 1 || v->aux_int < 0 || (uint64_t) v->aux_int > MAXARG_B || v->nargs - 1 > 127) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
@@ -250,7 +256,10 @@ XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
     XiEmitReg c = nargs;
     if (v->flags & XI_FLAG_TAIL)
         c |= 0x80;
-    emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, (uint8_t) v->aux_int, c));
+    uint16_t method_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &method_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, method_arg, c));
 }
 
 static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {

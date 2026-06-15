@@ -59,7 +59,7 @@ typedef struct XrModule {
     SymbolId *export_symbols;  // Dense array of SymbolIds [export_count] (for iteration)
     uint8_t *export_flags;     // Dense array of flags [export_count] (bit 0 = const)
 
-    int16_t *symbol_to_index;  // Sparse lookup: [max_symbol - min_symbol + 1], -1 = not found
+    int32_t *symbol_to_index;  // Sparse lookup: [max_symbol - min_symbol + 1], -1 = not found
     SymbolId min_symbol;
     SymbolId max_symbol;
     uint16_t export_count;
@@ -79,7 +79,7 @@ static inline XrValue xr_module_get_sym(XrModule *m, SymbolId sym) {
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return xr_null();
-        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
         return (idx >= 0) ? m->export_values[idx] : xr_null();
     }
     // Fallback: linear scan (during loading or before index built)
@@ -94,7 +94,7 @@ static inline void xr_module_set_sym(XrModule *m, SymbolId sym, XrValue val) {
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return;
-        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
         if (idx >= 0)
             m->export_values[idx] = val;
         return;
@@ -111,7 +111,7 @@ static inline bool xr_module_is_const_sym(XrModule *m, SymbolId sym) {
     if (m->symbol_to_index) {
         if (sym < m->min_symbol || sym > m->max_symbol)
             return false;
-        int16_t idx = m->symbol_to_index[sym - m->min_symbol];
+        int32_t idx = m->symbol_to_index[sym - m->min_symbol];
         return (idx >= 0) && (m->export_flags[idx] & XR_EXPORT_CONST);
     }
     for (uint16_t i = 0; i < m->export_count; i++) {

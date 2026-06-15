@@ -58,12 +58,18 @@ XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym = add_symbol(ctx, prop);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, (uint8_t) sym));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, sym_arg));
         /* Record IC-relevant instruction offset for JIT */
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     } else {
-        emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, obj, (uint8_t) v->aux_int));
+        uint16_t field_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_GETFIELD, dst, obj, field_arg));
     }
 }
 
@@ -83,11 +89,17 @@ XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym = add_symbol(ctx, prop);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, (uint8_t) sym, val));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, sym_arg, val));
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     } else {
-        emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, (uint8_t) v->aux_int, val));
+        uint16_t field_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_SETFIELD, obj, field_arg, val));
     }
 }
 
@@ -214,7 +226,10 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym = add_symbol(ctx, "constructor");
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) sym, 0));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, sym_arg, 0));
 
         /* Move result from scratch to actual destination */
         if (base != dst)
@@ -241,7 +256,10 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (promoted) {
         XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
                   "XI_STRUCT_GET: field_idx out of range");
-        emit_inst(ctx, CREATE_ABC(OP_STRUCT_GET, dst, obj, (uint8_t) v->aux_int));
+        uint16_t field_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_STRUCT_GET, dst, obj, field_arg));
     } else {
         /* Heap path: OP_GETPROP with field name from layout */
         XrStructLayout *sl = (XrStructLayout *) v->aux;
@@ -252,7 +270,10 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym = add_symbol(ctx, fname);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, (uint8_t) sym));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, sym_arg));
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
@@ -279,7 +300,10 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (promoted) {
         XR_DCHECK(v->aux_int >= 0 && v->aux_int < XR_MAX_STRUCT_FIELDS,
                   "XI_STRUCT_SET: field_idx out of range");
-        emit_inst(ctx, CREATE_ABC(OP_STRUCT_SET, obj, (uint8_t) v->aux_int, val));
+        uint16_t field_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_STRUCT_SET, obj, field_arg, val));
     } else {
         /* Heap path: OP_SETPROP with field name */
         XrStructLayout *sl = (XrStructLayout *) v->aux;
@@ -290,7 +314,10 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym = add_symbol(ctx, fname);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, (uint8_t) sym, val));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, sym_arg, val));
         if (v->id < ctx->reg_map_size)
             ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
@@ -333,8 +360,8 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
      * from registers and typed storage crashes on uninitialized slots. */
     uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST && v->args[0]->aux_int >= 0 &&
-        v->args[0]->aux_int <= 255) {
-        emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, (uint8_t) v->args[0]->aux_int, c_field));
+        (uint64_t) v->args[0]->aux_int <= MAXARG_B) {
+        emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, (uint16_t) v->args[0]->aux_int, c_field));
         return;
     }
     if (v->nargs < 1) {
@@ -744,11 +771,14 @@ XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int sym = add_symbol(ctx, method);
     if (ctx->status != XI_EMIT_OK)
         return;
+    uint16_t sym_arg = 0;
+    if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
+        return;
 
     XiEmitReg base = dst;
     if (obj != base + 1)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1, obj, 0));
-    emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) sym, 1));
+    emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, sym_arg, 1));
 }
 
 /* Class creation wrapper */
@@ -793,7 +823,7 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
         }
     }
     xr_free(abs_path);
-    if (target_topo < 0 || target_topo > 255)
+    if (target_topo < 0 || (uint64_t) target_topo > MAXARG_B)
         return false;
 
     ref->resolved_mod_index = target_topo;
@@ -812,15 +842,15 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
 
     /* Dense index lookup via sparse table */
     if (target->symbol_to_index && sym >= target->min_symbol && sym <= target->max_symbol) {
-        int16_t slot = target->symbol_to_index[sym - target->min_symbol];
-        if (slot >= 0 && slot <= 255) {
+        int32_t slot = target->symbol_to_index[sym - target->min_symbol];
+        if (slot >= 0 && (uint64_t) slot <= MAXARG_C) {
             ref->resolved_shared_slot = slot;
             return true;
         }
     }
     /* Fallback: linear scan */
     for (uint16_t ei = 0; ei < target->export_count; ei++) {
-        if (target->export_symbols[ei] == sym && ei <= 255) {
+        if (target->export_symbols[ei] == sym) {
             ref->resolved_shared_slot = (int) ei;
             return true;
         }
@@ -847,8 +877,14 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
     /* Selective import: OP_LOAD_MODULE_SLOT */
     if (ref->resolved_mod_index >= 0 && ref->resolved_shared_slot >= 0 && ref->member_name) {
-        emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, (uint8_t) ref->resolved_mod_index,
-                                  (uint8_t) ref->resolved_shared_slot));
+        uint16_t mod_arg = 0;
+        uint16_t slot_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, ref->resolved_mod_index, XI_EMIT_ERR_TOO_MANY_CONSTS,
+                                  &mod_arg) ||
+            !xi_emit_index_to_arg(ctx, ref->resolved_shared_slot, XI_EMIT_ERR_TOO_MANY_CONSTS,
+                                  &slot_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, mod_arg, slot_arg));
         return;
     }
 
@@ -868,7 +904,10 @@ XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         int sym_idx = add_symbol(ctx, ref->member_name);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, dst, (uint8_t) sym_idx));
+        uint16_t sym_arg = 0;
+        if (!xi_emit_symbol_index_to_arg(ctx, sym_idx, &sym_arg))
+            return;
+        emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, dst, sym_arg));
     }
 }
 

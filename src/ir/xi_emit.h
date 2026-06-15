@@ -37,7 +37,7 @@ struct XrayIsolate;
 /* Emit result status */
 typedef enum {
     XI_EMIT_OK = 0,
-    XI_EMIT_ERR_TOO_MANY_REGS,   /* function needs > 255 registers */
+    XI_EMIT_ERR_TOO_MANY_REGS,   /* encoded register space exhausted */
     XI_EMIT_ERR_TOO_MANY_CONSTS, /* constant pool overflow */
     XI_EMIT_ERR_UNSUPPORTED_OP,  /* unhandled XiOp */
     XI_EMIT_ERR_INTERNAL,        /* unexpected internal error */

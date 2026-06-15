@@ -125,14 +125,119 @@ static void emit_module_exports(EmitCtx *ctx) {
     for (uint16_t ei = 0; ei < mod->nexports; ei++) {
         const XiModuleExport *exp = &mod->exports[ei];
         XR_DCHECK(exp->name != NULL, "emit_module_exports: NULL export name");
-        XR_DCHECK(ei <= 255, "emit_module_exports: too many exports for ABC format");
         int name_idx = add_const_string(ctx, exp->name);
         if (ctx->status != XI_EMIT_OK)
             return;
-        XR_DCHECK(name_idx <= 255, "emit_module_exports: name const index overflow");
+        uint16_t export_arg = 0;
+        uint16_t name_arg = 0;
+        if (!xi_emit_index_to_arg(ctx, ei, XI_EMIT_ERR_TOO_MANY_CONSTS, &export_arg) ||
+            !xi_emit_const_index_to_c(ctx, name_idx, &name_arg))
+            return;
         emit_inst(ctx, CREATE_ABx(OP_GETSHARED, tmp, (int) exp->shared_slot));
-        emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) ei, tmp, (uint8_t) name_idx));
+        emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, export_arg, tmp, name_arg));
     }
+}
+
+static int find_module_topo_index(EmitCtx *ctx, XrModule *src) {
+    XrModuleRegistry *mreg = (XrModuleRegistry *) xr_isolate_get_module_registry(ctx->isolate);
+    if (!mreg || !mreg->module_table)
+        return -1;
+    for (int ti = 0; ti < mreg->module_table_count; ti++) {
+        if (mreg->module_table[ti] == src)
+            return ti;
+    }
+    return -1;
+}
+
+static int find_export_slot(XrModule *src, SymbolId sym) {
+    if (sym < 0)
+        return -1;
+    if (src->symbol_to_index && sym >= src->min_symbol && sym <= src->max_symbol) {
+        int32_t slot = src->symbol_to_index[sym - src->min_symbol];
+        if (slot >= 0)
+            return slot;
+    }
+    for (uint16_t ei = 0; ei < src->export_count; ei++) {
+        if (src->export_symbols[ei] == sym)
+            return (int) ei;
+    }
+    return -1;
+}
+
+static bool emit_load_module_slot_checked(EmitCtx *ctx, XiEmitReg dst, int src_topo, int src_slot) {
+    if (src_topo < 0 || src_slot < 0 || (uint64_t) src_topo > MAXARG_B ||
+        (uint64_t) src_slot > MAXARG_C)
+        return false;
+    uint16_t topo_arg = 0;
+    uint16_t slot_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, src_topo, XI_EMIT_ERR_TOO_MANY_CONSTS, &topo_arg) ||
+        !xi_emit_index_to_arg(ctx, src_slot, XI_EMIT_ERR_TOO_MANY_CONSTS, &slot_arg))
+        return false;
+    emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, dst, topo_arg, slot_arg));
+    return true;
+}
+
+static bool emit_import_member_fallback(EmitCtx *ctx, XiEmitReg dst, XiEmitReg import_reg,
+                                        const char *path, const char *name) {
+    int path_idx = add_const_string(ctx, path);
+    if (ctx->status != XI_EMIT_OK)
+        return false;
+    int sym_idx = add_symbol(ctx, name);
+    if (ctx->status != XI_EMIT_OK)
+        return false;
+    uint16_t sym_arg = 0;
+    if (!xi_emit_symbol_index_to_arg(ctx, sym_idx, &sym_arg))
+        return false;
+    emit_inst(ctx, CREATE_ABx(OP_IMPORT, import_reg, path_idx));
+    emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, import_reg, sym_arg));
+    return true;
+}
+
+static bool emit_reexport_load(EmitCtx *ctx, XiEmitReg dst, XiEmitReg import_reg, const char *path,
+                               const char *name, int src_topo, int src_slot) {
+    if (emit_load_module_slot_checked(ctx, dst, src_topo, src_slot))
+        return true;
+    if (ctx->status != XI_EMIT_OK)
+        return false;
+    return emit_import_member_fallback(ctx, dst, import_reg, path, name);
+}
+
+static bool emit_set_export_checked(EmitCtx *ctx, uint32_t slot, XiEmitReg value_reg,
+                                    const char *name) {
+    int name_idx = add_const_string(ctx, name);
+    if (ctx->status != XI_EMIT_OK)
+        return false;
+    uint16_t export_arg = 0;
+    uint16_t name_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, slot, XI_EMIT_ERR_TOO_MANY_CONSTS, &export_arg) ||
+        !xi_emit_const_index_to_c(ctx, name_idx, &name_arg))
+        return false;
+    emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, export_arg, value_reg, name_arg));
+    return true;
+}
+
+static bool emit_star_reexports(EmitCtx *ctx, XiReexportEntry *re, XrModule *src,
+                                XiEmitReg member_reg, int src_topo, uint32_t *next_export_slot) {
+    XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
+    if ((uint32_t) member_reg + 2 > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return false;
+    }
+    XiEmitReg mod_scratch = (XiEmitReg) (member_reg + 1);
+    if ((uint32_t) member_reg + 2 > ctx->max_reg)
+        ctx->max_reg = (uint32_t) member_reg + 2;
+
+    for (uint16_t ei = 0; ei < src->export_count; ei++) {
+        const char *exp_name = xr_symbol_get_name_in_table(sym_table, src->export_symbols[ei]);
+        if (!exp_name)
+            continue;
+        if (!emit_reexport_load(ctx, member_reg, mod_scratch, re->from_path, exp_name, src_topo,
+                                (int) ei) ||
+            !emit_set_export_checked(ctx, *next_export_slot, member_reg, exp_name))
+            return false;
+        (*next_export_slot)++;
+    }
+    return true;
 }
 
 /* Emit re-export bytecodes using OP_LOAD_MODULE_SLOT + OP_SET_EXPORT.
@@ -154,7 +259,7 @@ static void emit_reexports(EmitCtx *ctx) {
     /* Re-exports are appended after direct exports, so the export
      * slot starts at f->module->nexports (the module's own exports). */
     XiModule *mod = f->module;
-    uint16_t next_export_slot = mod ? mod->nexports : 0;
+    uint32_t next_export_slot = mod ? mod->nexports : 0;
 
     for (uint16_t i = 0; i < f->reexport_count; i++) {
         XiReexportEntry *re = &f->reexports[i];
@@ -172,114 +277,29 @@ static void emit_reexports(EmitCtx *ctx) {
         if (!src)
             continue;
 
-        /* Find the source module's topo index for graph-resolved emit */
-        XrModuleRegistry *mreg = (XrModuleRegistry *) xr_isolate_get_module_registry(ctx->isolate);
-        int src_topo = -1;
-        if (mreg && mreg->module_table) {
-            for (int ti = 0; ti < mreg->module_table_count; ti++) {
-                if (mreg->module_table[ti] == src) {
-                    src_topo = ti;
-                    break;
-                }
-            }
-        }
+        int src_topo = find_module_topo_index(ctx, src);
 
         XiEmitReg member_reg = val_reg;
         if ((uint32_t) member_reg + 1 > ctx->max_reg)
             ctx->max_reg = (uint32_t) member_reg + 1;
 
         if (!re->name) {
-            /* Star re-export: expand all exports from source module.
-             * Enumerate source exports and emit load + SET_EXPORT for each. */
-            XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
-
-            /* Need a second scratch reg for IMPORT + GETPROP fallback */
-            if ((uint32_t) member_reg + 2 > MAX_REGS) {
-                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            if (!emit_star_reexports(ctx, re, src, member_reg, src_topo, &next_export_slot))
                 return;
-            }
-            XiEmitReg mod_scratch = (XiEmitReg) (member_reg + 1);
-            if ((uint32_t) member_reg + 2 > ctx->max_reg)
-                ctx->max_reg = (uint32_t) member_reg + 2;
-
-            for (uint16_t ei = 0; ei < src->export_count; ei++) {
-                if (ctx->status != XI_EMIT_OK)
-                    return;
-                XR_DCHECK(next_export_slot <= 255, "emit_reexports: too many slots");
-
-                const char *exp_name =
-                    xr_symbol_get_name_in_table(sym_table, src->export_symbols[ei]);
-                if (!exp_name)
-                    continue;
-
-                if (src_topo >= 0 && src_topo <= 255 && ei <= 255) {
-                    /* Graph-resolved fast path */
-                    emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, member_reg, (uint8_t) src_topo,
-                                              (uint8_t) ei));
-                } else {
-                    /* Fallback: OP_IMPORT + OP_GETPROP */
-                    int path_idx = add_const_string(ctx, re->from_path);
-                    if (ctx->status != XI_EMIT_OK)
-                        return;
-                    int sym_idx = add_symbol(ctx, exp_name);
-                    if (ctx->status != XI_EMIT_OK)
-                        return;
-                    emit_inst(ctx, CREATE_ABx(OP_IMPORT, mod_scratch, path_idx));
-                    emit_inst(ctx,
-                              CREATE_ABC(OP_GETPROP, member_reg, mod_scratch, (uint8_t) sym_idx));
-                }
-
-                int exp_name_idx = add_const_string(ctx, exp_name);
-                if (ctx->status != XI_EMIT_OK)
-                    return;
-                XR_DCHECK(exp_name_idx <= 255, "emit_reexports: name overflow");
-                emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) next_export_slot, member_reg,
-                                          (uint8_t) exp_name_idx));
-                next_export_slot++;
-            }
             continue;
         }
 
         /* Selective re-export: find member's export slot in source module */
         XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
         SymbolId sym = xr_symbol_lookup_in_table(sym_table, re->name);
-        int src_slot = -1;
-        if (sym >= 0) {
-            if (src->symbol_to_index && sym >= src->min_symbol && sym <= src->max_symbol) {
-                src_slot = src->symbol_to_index[sym - src->min_symbol];
-            }
-            if (src_slot < 0) {
-                for (uint16_t ei = 0; ei < src->export_count; ei++) {
-                    if (src->export_symbols[ei] == sym) {
-                        src_slot = (int) ei;
-                        break;
-                    }
-                }
-            }
-        }
-
-        if (src_topo >= 0 && src_slot >= 0 && src_topo <= 255 && src_slot <= 255) {
-            emit_inst(ctx, CREATE_ABC(OP_LOAD_MODULE_SLOT, member_reg, (uint8_t) src_topo,
-                                      (uint8_t) src_slot));
-        } else {
-            int path_idx = add_const_string(ctx, re->from_path);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            int sym_idx = add_symbol(ctx, re->name);
-            if (ctx->status != XI_EMIT_OK)
-                return;
-            emit_inst(ctx, CREATE_ABx(OP_IMPORT, member_reg, path_idx));
-            emit_inst(ctx, CREATE_ABC(OP_GETPROP, member_reg, member_reg, (uint8_t) sym_idx));
-        }
-
-        XR_DCHECK(next_export_slot <= 255, "emit_reexports: too many export slots");
-        const char *export_name = re->alias ? re->alias : re->name;
-        int exp_name_idx = add_const_string(ctx, export_name);
-        if (ctx->status != XI_EMIT_OK)
+        int src_slot = find_export_slot(src, sym);
+        if (!emit_reexport_load(ctx, member_reg, member_reg, re->from_path, re->name, src_topo,
+                                src_slot))
             return;
-        XR_DCHECK(exp_name_idx <= 255, "emit_reexports: name const index overflow");
-        emit_inst(ctx, CREATE_ABC(OP_SET_EXPORT, (uint8_t) next_export_slot, member_reg,
-                                  (uint8_t) exp_name_idx));
+
+        const char *export_name = re->alias ? re->alias : re->name;
+        if (!emit_set_export_checked(ctx, next_export_slot, member_reg, export_name))
+            return;
         next_export_slot++;
     }
 }

@@ -12,6 +12,8 @@
 
 #include "base/xmalloc.h"
 #include "module/xbytecode_io.h"
+#include "runtime/xisolate_api.h"
+#include "runtime/symbol/xsymbol_table.h"
 #include "runtime/value/xchunk.h"
 #include "xray_isolate.h"
 
@@ -119,11 +121,61 @@ TEST(bytecode_roundtrips_u16_upvalue_index) {
     xray_isolate_delete(iso);
 }
 
+TEST(bytecode_roundtrips_symbol_index_above_255) {
+    XrayIsolate *iso = new_test_isolate();
+    ASSERT_NOT_NULL(iso);
+
+    XrProto *proto = xr_vm_proto_new();
+    ASSERT_NOT_NULL(proto);
+    proto->source_file = "<bytecode-symbol-test>";
+    proto->maxstacksize = 2;
+
+    XrSymbolTable *st = (XrSymbolTable *) xr_isolate_get_symbol_table(iso);
+    ASSERT_NOT_NULL(st);
+
+    char name[32];
+    int local_idx = -1;
+    for (int i = 0; i <= 300; i++) {
+        snprintf(name, sizeof(name), "wide_symbol_%03d", i);
+        SymbolId sym = xr_symbol_register_in_table(st, name);
+        ASSERT_TRUE(sym > 0);
+        local_idx = xr_proto_add_symbol(proto, (int32_t) sym);
+        ASSERT_EQ_INT(local_idx, i);
+    }
+    ASSERT_EQ_INT(local_idx, 300);
+    ASSERT_EQ_INT(PROTO_SYMBOL_COUNT(proto), 301);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_GETPROP, 1, 0, local_idx), 1);
+    xr_vm_proto_write(proto, CREATE_ABC(OP_RETURN, 1, 2, 0), 1);
+
+    size_t size = 0;
+    uint8_t *bytes = xr_bytecode_write(iso, proto, 0, &size);
+    ASSERT_NOT_NULL(bytes);
+
+    XrBcError error = XR_BC_OK;
+    XrProto *roundtrip = xr_bytecode_read(iso, bytes, size, &error);
+    ASSERT_NOT_NULL(roundtrip);
+    ASSERT_EQ_INT(error, XR_BC_OK);
+    ASSERT_EQ_INT(PROTO_SYMBOL_COUNT(roundtrip), 301);
+    ASSERT_EQ_INT(GET_OPCODE(PROTO_CODE(roundtrip, 0)), OP_GETPROP);
+    ASSERT_EQ_UINT(GETARG_C(PROTO_CODE(roundtrip, 0)), 300);
+
+    const char *roundtrip_name =
+        xr_symbol_get_name_in_table(st, (SymbolId) PROTO_SYMBOL(roundtrip, 300));
+    ASSERT_NOT_NULL(roundtrip_name);
+    ASSERT_STR_EQ(roundtrip_name, "wide_symbol_300");
+
+    xr_vm_proto_free(roundtrip);
+    xr_free(bytes);
+    xr_vm_proto_free(proto);
+    xray_isolate_delete(iso);
+}
+
 static void run_all_tests(void) {
     RUN_TEST_SUITE("Bytecode I/O");
     RUN_TEST(bytecode_write_emits_v5_header_and_roundtrips_u64_instruction);
     RUN_TEST(bytecode_reader_rejects_previous_layout_version);
     RUN_TEST(bytecode_roundtrips_u16_upvalue_index);
+    RUN_TEST(bytecode_roundtrips_symbol_index_above_255);
 }
 
 TEST_MAIN_BEGIN()
