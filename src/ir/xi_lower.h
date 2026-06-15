@@ -46,8 +46,12 @@ struct XrayIsolate;
  * small (< 1000 each) for typical functions.
  */
 
-#define XI_LOWER_MAX_VARS 256
-#define XI_LOWER_MAX_BLOCKS 256
+/* Initial capacities for the per-function variable and basic-block maps.
+ * These are no longer hard caps: vars, the parallel shared-slot tables, and
+ * the 2D var_defs map grow on demand (see xi_lower_grow_vars/_blocks), so a
+ * function/module is bounded only by memory, not by a fixed 256. */
+#define XI_LOWER_INIT_VARS 256
+#define XI_LOWER_INIT_BLOCKS 256
 #define XI_LOWER_MAX_INCOMPLETE 256
 
 typedef struct XiVarEntry {
@@ -89,11 +93,13 @@ typedef struct XiLower {
      * Each entry is keyed by symbol_id from the analyzer.  Scope resolution
      * is done by the analyzer (which assigns unique IDs even for same-named
      * variables in different scopes), so no scope stack is needed here. */
-    XiVarEntry vars[XI_LOWER_MAX_VARS];
+    XiVarEntry *vars;
     int var_count;
+    int var_cap;   /* allocated length of vars / shared_map / shared_slot_* */
+    int block_cap; /* allocated block dimension (stride) of var_defs */
 
-    /* 2D def map: var_defs[var_id * max_blocks + block_id] = XiValue*
-     * Heap-allocated (256*256*8 = 512KB — too large for stack). */
+    /* 2D def map: var_defs[var_id * block_cap + block_id] = XiValue*
+     * Heap-allocated; grows in either dimension on demand. */
     XiValue **var_defs;
 
     /* Incomplete phis for unsealed blocks */
@@ -135,13 +141,14 @@ typedef struct XiLower {
     /* Shared variable map: var_id → shared_index.
      * -1 means the variable is not shared.  Only used in top-level program
      * lowering to support forward references and cross-closure access. */
-    int16_t shared_map[XI_LOWER_MAX_VARS];
+    int16_t *shared_map;
 
     /* Shared slot → function/class tracking (built during lowering).
-     * Enables direct construction of XiModule.exports without IR scanning. */
-    struct XiFunc *shared_slot_funcs[XI_LOWER_MAX_VARS];
-    struct XiClassData *shared_slot_classes[XI_LOWER_MAX_VARS];
-    XiEnumData *shared_slot_enums[XI_LOWER_MAX_VARS];
+     * Enables direct construction of XiModule.exports without IR scanning.
+     * Parallel to vars (length var_cap), grown together. */
+    struct XiFunc **shared_slot_funcs;
+    struct XiClassData **shared_slot_classes;
+    XiEnumData **shared_slot_enums;
 
     /* Whether this lowering context is for a top-level program */
     bool is_program;

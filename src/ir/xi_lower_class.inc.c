@@ -47,7 +47,7 @@ static bool class_has_complex_instance_initializer(ClassDeclNode *cd) {
 static XiClassData *class_find_native_super(XiLower *l, const ClassDeclNode *cd) {
     if (!l || !cd || !cd->super_name || cd->super_module)
         return NULL;
-    for (int i = 0; i < XI_LOWER_MAX_VARS; i++) {
+    for (int i = 0; i < l->var_cap; i++) {
         XiClassData *data = l->shared_slot_classes[i];
         if (data && data->class_name && strcmp(data->class_name, cd->super_name) == 0 &&
             data->instance_layout)
@@ -509,7 +509,7 @@ XR_FUNC void xi_lower_class_decl(XiLower *l, AstNode *node) {
         b.type = l->vars[var_id].type;
         xi_lower_emit_top_store(l, b, v);
         /* Track class → shared slot for module export metadata */
-        if (slot >= 0 && slot < XI_LOWER_MAX_VARS)
+        if (slot >= 0 && slot < l->var_cap)
             l->shared_slot_classes[slot] = data;
     }
 }

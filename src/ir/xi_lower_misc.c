@@ -279,7 +279,7 @@ XR_FUNC void xi_lower_enum_decl(XiLower *l, AstNode *node) {
         binding.name = l->vars[var_id].name;
         binding.type = l->type_any;
         xi_lower_emit_top_store(l, binding, cv);
-        if (binding.slot < XI_LOWER_MAX_VARS)
+        if (binding.slot < l->var_cap)
             l->shared_slot_enums[binding.slot] = enum_data;
     }
 }

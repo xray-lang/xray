@@ -1820,7 +1820,7 @@ XR_FUNC XiValue *xi_lower_function_decl(XiLower *l, AstNode *node) {
             b.type = l->vars[var_id].type;
             xi_lower_emit_top_store(l, b, v);
             /* Track function → shared slot for module export metadata */
-            if (slot >= 0 && slot < XI_LOWER_MAX_VARS) {
+            if (slot >= 0 && slot < l->var_cap) {
                 l->shared_slot_funcs[slot] = child;
                 if (l->func->shared_slot_funcs && slot < (int) l->func->shared_slot_func_count)
                     l->func->shared_slot_funcs[slot] = child;

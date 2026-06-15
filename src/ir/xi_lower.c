@@ -35,6 +35,65 @@
 /* Forward declarations */
 static void finalize_capture_metadata(XiFunc *f);
 
+/* ========== Dynamic capacity growth (vars / blocks) ========== */
+
+/* Grow the variable dimension: vars, the parallel shared-slot tables, and the
+ * row dimension of var_defs.  var_defs is row-major (var_id*block_cap+block_id),
+ * so adding rows preserves existing entries — a plain realloc + zero-new-rows,
+ * no re-layout.  New shared_map entries are seeded to -1 (not shared). */
+static void xi_lower_grow_vars(XiLower *l, int need) {
+    if (need <= l->var_cap)
+        return;
+    int nc = l->var_cap > 0 ? l->var_cap : XI_LOWER_INIT_VARS;
+    while (nc < need)
+        nc *= 2;
+
+    l->vars = (XiVarEntry *) xr_realloc(l->vars, (size_t) nc * sizeof(XiVarEntry));
+    l->shared_map = (int16_t *) xr_realloc(l->shared_map, (size_t) nc * sizeof(int16_t));
+    l->shared_slot_funcs =
+        (struct XiFunc **) xr_realloc(l->shared_slot_funcs, (size_t) nc * sizeof(struct XiFunc *));
+    l->shared_slot_classes = (struct XiClassData **) xr_realloc(
+        l->shared_slot_classes, (size_t) nc * sizeof(struct XiClassData *));
+    l->shared_slot_enums =
+        (XiEnumData **) xr_realloc(l->shared_slot_enums, (size_t) nc * sizeof(XiEnumData *));
+    l->var_defs = (XiValue **) xr_realloc(l->var_defs,
+                                          (size_t) nc * (size_t) l->block_cap * sizeof(XiValue *));
+    XR_CHECK(l->vars && l->shared_map && l->shared_slot_funcs && l->shared_slot_classes &&
+                 l->shared_slot_enums && l->var_defs,
+             "xi_lower: grow vars OOM");
+
+    int added = nc - l->var_cap;
+    memset(&l->vars[l->var_cap], 0, (size_t) added * sizeof(XiVarEntry));
+    for (int i = l->var_cap; i < nc; i++)
+        l->shared_map[i] = -1;
+    memset(&l->shared_slot_funcs[l->var_cap], 0, (size_t) added * sizeof(struct XiFunc *));
+    memset(&l->shared_slot_classes[l->var_cap], 0, (size_t) added * sizeof(struct XiClassData *));
+    memset(&l->shared_slot_enums[l->var_cap], 0, (size_t) added * sizeof(XiEnumData *));
+    memset(&l->var_defs[(size_t) l->var_cap * (size_t) l->block_cap], 0,
+           (size_t) added * (size_t) l->block_cap * sizeof(XiValue *));
+    l->var_cap = nc;
+}
+
+/* Grow the block dimension (stride) of var_defs.  Changing the stride moves
+ * every row, so this reallocates and re-lays-out the existing entries. */
+static void xi_lower_grow_blocks(XiLower *l, int need) {
+    if (need <= l->block_cap)
+        return;
+    int nbc = l->block_cap > 0 ? l->block_cap : XI_LOWER_INIT_BLOCKS;
+    while (nbc < need)
+        nbc *= 2;
+
+    XiValue **nd = (XiValue **) xr_calloc((size_t) l->var_cap * (size_t) nbc, sizeof(XiValue *));
+    XR_CHECK(nd != NULL, "xi_lower: grow blocks OOM");
+    for (int v = 0; v < l->var_cap; v++) {
+        memcpy(&nd[(size_t) v * (size_t) nbc], &l->var_defs[(size_t) v * (size_t) l->block_cap],
+               (size_t) l->block_cap * sizeof(XiValue *));
+    }
+    xr_free(l->var_defs);
+    l->var_defs = nd;
+    l->block_cap = nbc;
+}
+
 /* ========== Braun SSA: Variable Management ========== */
 
 /* Register a variable by its analyzer-assigned symbol_id.
@@ -61,7 +120,7 @@ XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id, const char *name
         }
     }
 
-    XR_CHECK(l->var_count < XI_LOWER_MAX_VARS, "xi_lower: too many variables");
+    xi_lower_grow_vars(l, l->var_count + 1);
     int id = l->var_count++;
     l->vars[id].symbol_id = symbol_id;
     l->vars[id].name = name;
@@ -252,9 +311,10 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
 
 /* Write: currentDef[var][block] = value */
 XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue *val) {
-    XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS, "braun_write: var_id out of range");
-    XR_DCHECK(blk->id < XI_LOWER_MAX_BLOCKS, "braun_write: block_id out of range");
-    l->var_defs[var_id * XI_LOWER_MAX_BLOCKS + blk->id] = val;
+    XR_DCHECK(var_id >= 0 && var_id < l->var_cap, "braun_write: var_id out of range");
+    if (blk->id >= (uint32_t) l->block_cap)
+        xi_lower_grow_blocks(l, (int) blk->id + 1);
+    l->var_defs[(size_t) var_id * (size_t) l->block_cap + blk->id] = val;
     /* Tag value with source variable for register coalescing.
      * Skip if the value already belongs to a different variable:
      * overwriting would merge two unrelated variables onto one
@@ -271,10 +331,12 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
 
 /* Read: get currentDef[var][block], may be NULL. */
 static XiValue *braun_read_local(XiLower *l, int var_id, XiBlock *blk) {
-    XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS, "braun_read_local: var_id out of range");
-    if (blk->id >= XI_LOWER_MAX_BLOCKS)
+    XR_DCHECK(var_id >= 0 && var_id < l->var_cap, "braun_read_local: var_id out of range");
+    /* A block beyond the current map has had no def written (writes grow the
+     * block dimension), so there is no local def there. */
+    if (blk->id >= (uint32_t) l->block_cap)
         return NULL;
-    return l->var_defs[var_id * XI_LOWER_MAX_BLOCKS + blk->id];
+    return l->var_defs[(size_t) var_id * (size_t) l->block_cap + blk->id];
 }
 
 /* Forward declarations */
@@ -414,13 +476,26 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayI
     l->isolate = isolate;
     l->self_var_id = -1;
 
-    /* Heap-allocate the 2D def map (256*256 pointers = 512KB) */
-    size_t def_map_size = (size_t) XI_LOWER_MAX_VARS * XI_LOWER_MAX_BLOCKS;
-    l->var_defs = (XiValue **) xr_calloc(def_map_size, sizeof(XiValue *));
-    XR_CHECK(l->var_defs != NULL, "xi_lower: failed to allocate var_defs");
+    /* Allocate the variable/block maps at their initial capacity; they grow
+     * on demand (xi_lower_grow_vars / _blocks) for large functions/modules. */
+    l->var_cap = XI_LOWER_INIT_VARS;
+    l->block_cap = XI_LOWER_INIT_BLOCKS;
+    l->vars = (XiVarEntry *) xr_calloc((size_t) l->var_cap, sizeof(XiVarEntry));
+    l->shared_map = (int16_t *) xr_malloc((size_t) l->var_cap * sizeof(int16_t));
+    l->shared_slot_funcs =
+        (struct XiFunc **) xr_calloc((size_t) l->var_cap, sizeof(struct XiFunc *));
+    l->shared_slot_classes =
+        (struct XiClassData **) xr_calloc((size_t) l->var_cap, sizeof(struct XiClassData *));
+    l->shared_slot_enums = (XiEnumData **) xr_calloc((size_t) l->var_cap, sizeof(XiEnumData *));
+    l->var_defs =
+        (XiValue **) xr_calloc((size_t) l->var_cap * (size_t) l->block_cap, sizeof(XiValue *));
+    XR_CHECK(l->vars && l->shared_map && l->shared_slot_funcs && l->shared_slot_classes &&
+                 l->shared_slot_enums && l->var_defs,
+             "xi_lower: failed to allocate variable maps");
 
     /* Initialize shared_map to -1 (no shared index) */
-    memset(l->shared_map, -1, sizeof(l->shared_map));
+    for (int i = 0; i < l->var_cap; i++)
+        l->shared_map[i] = -1;
 
     /* Cache singleton types */
     l->type_int = xr_type_new_int(isolate);
@@ -435,10 +510,18 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayI
 }
 
 XR_FUNC void xi_lower_cleanup(XiLower *l) {
-    if (l->var_defs) {
-        xr_free(l->var_defs);
-        l->var_defs = NULL;
-    }
+    xr_free(l->var_defs);
+    l->var_defs = NULL;
+    xr_free(l->vars);
+    l->vars = NULL;
+    xr_free(l->shared_map);
+    l->shared_map = NULL;
+    xr_free(l->shared_slot_funcs);
+    l->shared_slot_funcs = NULL;
+    xr_free(l->shared_slot_classes);
+    l->shared_slot_classes = NULL;
+    xr_free(l->shared_slot_enums);
+    l->shared_slot_enums = NULL;
 }
 
 /* ========== Method Symbol Resolution ========== */
@@ -811,7 +894,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
                     if (!mname)
                         continue;
                     int vid = xi_lower_var_create(l, m->symbol_id, mname, l->type_any);
-                    XR_DCHECK(vid >= 0 && vid < XI_LOWER_MAX_VARS,
+                    XR_DCHECK(vid >= 0 && vid < l->var_cap,
                               "prescan_top_level_bindings: var_id overflow (import member)");
                     l->shared_map[vid] = (int16_t) next_shared;
                     next_shared++;
@@ -823,7 +906,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
             continue;
 
         int var_id = xi_lower_var_create(l, sid, name, type);
-        XR_DCHECK(var_id >= 0 && var_id < XI_LOWER_MAX_VARS,
+        XR_DCHECK(var_id >= 0 && var_id < l->var_cap,
                   "prescan_top_level_bindings: var_id overflow");
         l->shared_map[var_id] = (int16_t) next_shared;
         if (prescan_is_user_owned_decl(s) && next_shared < 512) {
@@ -1052,7 +1135,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
             if (!s->name || !s->name->data)
                 continue;
             int vid = xi_lower_var_create(&l, 0, s->name->data, l.type_any);
-            if (vid < 0 || vid >= XI_LOWER_MAX_VARS)
+            if (vid < 0 || vid >= l.var_cap)
                 continue;
             l.shared_map[vid] = (int16_t) i;
             if (i + 1 > (int) next_shared_start)
