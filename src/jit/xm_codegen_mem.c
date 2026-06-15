@@ -332,8 +332,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             bool load_fp = (ins->rep == XR_REP_F64);
             if (load_fp)
                 a64_buf_emit(&ctx->buf, a64_ldr_fp(rd, rn, 0));
-            else
-                a64_buf_emit(&ctx->buf, a64_ldr(rd, rn, 0));
+            else if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, rn, 0))
+                ctx->had_error = true;
             break;
         }
         case XM_STORE: {
@@ -347,8 +347,8 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
             if (store_fp)
                 a64_buf_emit(&ctx->buf, a64_str_fp(rm, rn, 0));
-            else
-                a64_buf_emit(&ctx->buf, a64_str(rm, rn, 0));
+            else if (!xm_dispatch_emit_arm64_mem_store_gp(ins->op, &ctx->buf, rn, 0, rm))
+                ctx->had_error = true;
             break;
         }
 
@@ -522,9 +522,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Payload sits at byte 8 within the XrValue struct
             if (ins->rep == XR_REP_F64) {
                 a64_buf_emit(&ctx->buf, a64_ldr_fp(rd, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET));
-            } else {
-                a64_buf_emit(&ctx->buf, a64_ldr(rd, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET));
-            }
+            } else if (!xm_dispatch_emit_arm64_mem_load_gp(ins->op, &ctx->buf, rd, obj,
+                                                           offset + XM_XRVALUE_PAYLOAD_OFFSET))
+                ctx->had_error = true;
             break;
         }
 
@@ -553,9 +553,9 @@ bool xm_emit_mem_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // Store payload at XrValue byte 8 (payload union)
             if (is_fp) {
                 a64_buf_emit(&ctx->buf, a64_str_fp(val, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET));
-            } else {
-                a64_buf_emit(&ctx->buf, a64_str(val, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET));
-            }
+            } else if (!xm_dispatch_emit_arm64_mem_store_gp(
+                           ins->op, &ctx->buf, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET, val))
+                ctx->had_error = true;
 
             // Store descriptor (tag + flags + heap_type) at XrValue byte 0-3.
             // Merged into a single 32-bit store to minimize instruction count.

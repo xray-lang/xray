@@ -146,7 +146,6 @@ static X64Xmm x64_prepare_commutative_fp(X64CodegenCtx *ctx, X64Xmm fd, XmRef ar
  *      so arg1 in rd survives until consumed by OP. */
 typedef void (*X64BinopGpEmit)(X64Buf *buf, X64Reg dst, X64Reg src);
 typedef void (*X64BinopFpEmit)(X64Buf *buf, X64Xmm dst, X64Xmm src);
-typedef void (*X64StoreGpEmit)(X64Buf *buf, X64Reg base, int32_t offset, X64Reg src);
 
 static X64Reg x64_saved_temp_reg(X64Reg avoid) {
     return avoid == X64_RAX ? X64_RCX : X64_RAX;
@@ -548,8 +547,8 @@ static void x64_h_select(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
 
 /* ========== Load / Store ========== */
 
-static void x64_emit_gp_store(X64CodegenCtx *ctx, XmRef addr_ref, XmRef value_ref,
-                              X64StoreGpEmit emit_store) {
+static void x64_emit_gp_store_op(X64CodegenCtx *ctx, XmOp op, XmRef addr_ref, XmRef value_ref,
+                                 int32_t offset) {
     X64Reg addr = x64_get_operand(ctx, addr_ref, X64_SCRATCH_REG);
     if (addr == X64_SCRATCH_REG && addr_ref != value_ref &&
         x64_arg_needs_scratch_gp(ctx, value_ref)) {
@@ -557,28 +556,9 @@ static void x64_emit_gp_store(X64CodegenCtx *ctx, XmRef addr_ref, XmRef value_re
         x64_push_r(&ctx->buf, temp);
         x64_mov_rr(&ctx->buf, temp, X64_SCRATCH_REG);
         X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
-        emit_store(&ctx->buf, temp, 0, val);
-        x64_pop_r(&ctx->buf, temp);
-        return;
-    }
-    X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
-    if (val == addr) {
-        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
-        val = X64_SCRATCH_REG;
-    }
-    emit_store(&ctx->buf, addr, 0, val);
-}
-
-static void x64_emit_gp_store_op(X64CodegenCtx *ctx, XmOp op, XmRef addr_ref, XmRef value_ref) {
-    X64Reg addr = x64_get_operand(ctx, addr_ref, X64_SCRATCH_REG);
-    if (addr == X64_SCRATCH_REG && addr_ref != value_ref &&
-        x64_arg_needs_scratch_gp(ctx, value_ref)) {
-        X64Reg temp = X64_RAX;
-        x64_push_r(&ctx->buf, temp);
-        x64_mov_rr(&ctx->buf, temp, X64_SCRATCH_REG);
-        X64Reg val = x64_get_operand(ctx, value_ref, X64_SCRATCH_REG);
-        CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, temp, 0, val),
+        CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, temp, offset, val),
                       "x64 generated mem_store_gp dispatch rejected op");
+        x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, temp);
         x64_pop_r(&ctx->buf, temp);
         return;
     }
@@ -587,7 +567,7 @@ static void x64_emit_gp_store_op(X64CodegenCtx *ctx, XmOp op, XmRef addr_ref, Xm
         x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
         val = X64_SCRATCH_REG;
     }
-    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, addr, 0, val),
+    CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_store_gp(op, &ctx->buf, addr, offset, val),
                   "x64 generated mem_store_gp dispatch rejected op");
 }
 
@@ -597,7 +577,8 @@ static void x64_h_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
         x64_movsd_rm(&ctx->buf, fd, rn, 0);
     } else {
-        x64_mov_rm(&ctx->buf, rd, rn, 0);
+        CODEGEN_CHECK(ctx, xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, rn, 0),
+                      "x64 generated mem_load_gp dispatch rejected LOAD");
     }
 }
 
@@ -614,7 +595,7 @@ static void x64_h_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
         x64_movsd_mr(&ctx->buf, rn, 0, fm);
     } else {
-        x64_emit_gp_store(ctx, ins->args[0], ins->args[1], x64_mov_mr);
+        x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1], 0);
     }
 }
 
@@ -635,7 +616,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE8: {
-            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1], 0);
             break;
         }
         case XM_LOAD16Z: {
@@ -651,7 +632,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE16: {
-            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1], 0);
             break;
         }
         case XM_LOAD32Z: {
@@ -673,7 +654,7 @@ static void x64_h_subword(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             break;
         }
         case XM_STORE32: {
-            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1]);
+            x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1], 0);
             break;
         }
         default:
@@ -781,7 +762,10 @@ static void x64_h_field_load(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         X64Xmm fd = x64_get_fp_reg(ctx, ins->dst);
         x64_movsd_rm(&ctx->buf, fd, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET);
     } else {
-        x64_mov_rm(&ctx->buf, rd, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET);
+        CODEGEN_CHECK(ctx,
+                      xm_dispatch_emit_x64_mem_load_gp(ins->op, &ctx->buf, rd, obj,
+                                                       offset + XM_XRVALUE_PAYLOAD_OFFSET),
+                      "x64 generated mem_load_gp dispatch rejected LOAD_FIELD");
     }
 }
 
@@ -808,12 +792,8 @@ static void x64_h_field_store(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         X64Xmm fm = x64_get_fp_operand(ctx, ins->args[1], X64_SCRATCH_XMM);
         x64_movsd_mr(&ctx->buf, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET, fm);
     } else {
-        X64Reg val = x64_get_operand(ctx, ins->args[1], X64_SCRATCH_REG);
-        if (val == obj) {
-            x64_mov_rr(&ctx->buf, X64_SCRATCH_REG, val);
-            val = X64_SCRATCH_REG;
-        }
-        x64_mov_mr(&ctx->buf, obj, offset + XM_XRVALUE_PAYLOAD_OFFSET, val);
+        x64_emit_gp_store_op(ctx, ins->op, ins->args[0], ins->args[1],
+                             offset + XM_XRVALUE_PAYLOAD_OFFSET);
     }
 
     /* Store tag (descriptor: tag + flags + heap_type) as 32-bit */

@@ -1148,6 +1148,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_LOAD',
             'signature': '(XmOp op, X64Buf *buf, X64Reg rd, X64Reg base, int32_t offset)',
             'cases': [
+                ('LOAD', 'x64.mov.rm', 'x64_mov_rm(buf, rd, base, offset);'),
+                ('LOAD_FIELD', 'x64.mov.rm', 'x64_mov_rm(buf, rd, base, offset);'),
                 ('LOAD8Z', 'x64.movzx.rm8', 'x64_movzx_rm8(buf, rd, base, offset);'),
                 ('LOAD8S', 'x64.movsx.rm8', 'x64_movsx_rm8(buf, rd, base, offset);'),
                 ('LOAD16Z', 'x64.movzx.rm16', 'x64_movzx_rm16(buf, rd, base, offset);'),
@@ -1162,6 +1164,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_STORE',
             'signature': '(XmOp op, X64Buf *buf, X64Reg base, int32_t offset, X64Reg rs)',
             'cases': [
+                ('STORE', 'x64.mov.mr', 'x64_mov_mr(buf, base, offset, rs);'),
+                ('STORE_FIELD', 'x64.mov.mr', 'x64_mov_mr(buf, base, offset, rs);'),
                 ('STORE8', 'x64.mov.mr8', 'x64_mov_mr8(buf, base, offset, rs);'),
                 ('STORE16', 'x64.mov.mr16', 'x64_mov_mr16(buf, base, offset, rs);'),
                 ('STORE32', 'x64.mov.mr32', 'x64_mov_mr32(buf, base, offset, rs);'),
@@ -1173,6 +1177,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_LOAD',
             'signature': '(XmOp op, A64Buf *buf, A64Reg rd, A64Reg base, int32_t offset)',
             'cases': [
+                ('LOAD', 'arm64.ldr', 'a64_buf_emit(buf, a64_ldr(rd, base, offset));'),
+                ('LOAD_FIELD', 'arm64.ldr', 'a64_buf_emit(buf, a64_ldr(rd, base, offset));'),
                 ('LOAD8Z', 'arm64.ldrb', 'a64_buf_emit(buf, a64_ldrb(rd, base, offset));'),
                 ('LOAD8S', 'arm64.ldrsb', 'a64_buf_emit(buf, a64_ldrsb(rd, base, offset));'),
                 ('LOAD16Z', 'arm64.ldrh', 'a64_buf_emit(buf, a64_ldrh(rd, base, offset));'),
@@ -1187,6 +1193,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_STORE',
             'signature': '(XmOp op, A64Buf *buf, A64Reg base, int32_t offset, A64Reg rs)',
             'cases': [
+                ('STORE', 'arm64.str', 'a64_buf_emit(buf, a64_str(rs, base, offset));'),
+                ('STORE_FIELD', 'arm64.str', 'a64_buf_emit(buf, a64_str(rs, base, offset));'),
                 ('STORE8', 'arm64.strb', 'a64_buf_emit(buf, a64_strb(rs, base, offset));'),
                 ('STORE16', 'arm64.strh', 'a64_buf_emit(buf, a64_strh(rs, base, offset));'),
                 ('STORE32', 'arm64.str_w', 'a64_buf_emit(buf, a64_str_w(rs, base, offset));'),
@@ -1198,6 +1206,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_LOAD',
             'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg base, int32_t offset)',
             'cases': [
+                ('LOAD', 'riscv64.ld', 'rv64_buf_emit(buf, rv64_ld(rd, base, offset));'),
+                ('LOAD_FIELD', 'riscv64.ld', 'rv64_buf_emit(buf, rv64_ld(rd, base, offset));'),
                 ('LOAD8Z', 'riscv64.lbu', 'rv64_buf_emit(buf, rv64_lbu(rd, base, offset));'),
                 ('LOAD8S', 'riscv64.lb', 'rv64_buf_emit(buf, rv64_lb(rd, base, offset));'),
                 ('LOAD16Z', 'riscv64.lhu', 'rv64_buf_emit(buf, rv64_lhu(rd, base, offset));'),
@@ -1212,6 +1222,8 @@ def generate_dispatch_emit_header(entries: list[IselEntry]) -> str:
             'pattern': 'MEM_STORE',
             'signature': '(XmOp op, Rv64Buf *buf, Rv64Reg base, int32_t offset, Rv64Reg rs)',
             'cases': [
+                ('STORE', 'riscv64.sd', 'rv64_buf_emit(buf, rv64_sd(rs, base, offset));'),
+                ('STORE_FIELD', 'riscv64.sd', 'rv64_buf_emit(buf, rv64_sd(rs, base, offset));'),
                 ('STORE8', 'riscv64.sb', 'rv64_buf_emit(buf, rv64_sb(rs, base, offset));'),
                 ('STORE16', 'riscv64.sh', 'rv64_buf_emit(buf, rv64_sh(rs, base, offset));'),
                 ('STORE32', 'riscv64.sw', 'rv64_buf_emit(buf, rv64_sw(rs, base, offset));'),
