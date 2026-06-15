@@ -8,8 +8,8 @@
  * xrt_class.h - AOT class runtime: type table, object allocation
  *
  * KEY CONCEPT:
- *   All heap objects (class instances, promoted structs) carry XrtArcHdr
- *   from xrt_arc.h as a common header.  XrtArcHdr.type indexes into
+ *   All heap objects (class instances, promoted structs) carry XrGCHeader
+ *   from xrt_arc.h as a common header.  XrGCHeader.type indexes into
  *   xrt_type_table[] for class metadata (name, parent, vtable, destructor).
  *
  *   Field access is via C struct members (compile-time offsets).
@@ -29,7 +29,7 @@
  *     v5 = _inst; }
  *
  * RELATED MODULES:
- *   - xrt_arc.h: XrtArcHdr, bump allocator
+ *   - xrt_arc.h: XrGCHeader, bump allocator
  *   - xrt_value.h: XrValue tagged union (PTR tag carries object pointer)
  *   - xi_cgen.c: emits class type registration and constructor calls
  */
@@ -38,7 +38,7 @@
 #define XRT_CLASS_H
 
 #include "xrt_value.h"
-#include "xrt_arc.h"  // XrtArcHdr, XRT_ARC_HDR, xrt_arc_alloc, macros
+#include "xrt_arc.h"  // XrGCHeader, XRT_ARC_HDR, xrt_arc_alloc, macros
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -46,7 +46,7 @@
 
 /* =========================================================================
  * Type Info — one entry per class/struct type in the global type table.
- * XrtArcHdr.type is the index into xrt_type_table[].
+ * XrGCHeader.type is the index into xrt_type_table[].
  * ========================================================================= */
 
 typedef void (*XrtDestructor)(void *obj);
@@ -149,17 +149,17 @@ static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj) {
 }
 
 /* =========================================================================
- * Object allocation — bump alloc + set type in XrtArcHdr
+ * Object allocation — bump alloc + set type in XrGCHeader
  *
  * Uses xrt_arc_alloc (bump allocator) and stores the type_id
- * in XrtArcHdr.type for vtable dispatch and instanceof.
+ * in XrGCHeader.type for vtable dispatch and instanceof.
  * ========================================================================= */
 
 static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
     void *obj = xrt_arc_alloc((size_t) size);
-    XrtArcHdr *h = XRT_ARC_HDR(obj);
+    XrGCHeader *h = XRT_ARC_HDR(obj);
     h->type = type_id;
-    h->flags |= XRT_ARC_HAS_DEINIT;  // mark as having type metadata
+    h->extra |= XR_OBJ_HAS_DTOR;  // mark as having type metadata
     return obj;
 }
 
@@ -194,7 +194,7 @@ static inline const char *xrt_type_display_name(uint16_t type_id) {
 static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
     if (val.tag != XR_TAG_PTR || !val.ptr)
         return 0;
-    XrtArcHdr *h = XRT_ARC_HDR(val.ptr);
+    XrGCHeader *h = XRT_ARC_HDR(val.ptr);
     uint16_t cur = h->type;
     while (cur != 0 && cur < xrt_type_count) {
         if (cur == target_tid)
