@@ -140,8 +140,72 @@
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
 
+#define XVM_TEMPLATE_ARITH_DIV_CASE(op, bigint_fn, op_flag, op_symbol, op_name, error_msg)         \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        int c = GETARG_C(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        XrValue vc = R(c);                                                                         \
+        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+            R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
+            if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+            }                                                                                      \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
+            xr_Integer nb = XR_TO_INT(vb);                                                         \
+            xr_Integer nc = XR_TO_INT(vc);                                                         \
+            if (nc == 0) {                                                                         \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+            }                                                                                      \
+            R(a) = xr_int(xr_int_div_wrap(nb, nc));                                                \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {            \
+            double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);                  \
+            double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);                  \
+            if (nc == 0.0) {                                                                       \
+                VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");                          \
+            }                                                                                      \
+            R(a) = xr_float(nb / nc);                                                              \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
+    }
+
+#define XVM_TEMPLATE_ARITH_MOD_CASE(op, bigint_fn, op_flag, op_symbol, op_name, error_msg)         \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        int c = GETARG_C(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        XrValue vc = R(c);                                                                         \
+        if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
+            xr_Integer divisor = XR_TO_INT(vc);                                                    \
+            if (divisor == 0) {                                                                    \
+                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
+            }                                                                                      \
+            R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));                                \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+            R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
+            if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {                                               \
+                VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");                            \
+            }                                                                                      \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
+    }
+
 #include "xvm_template_arith_binary_gen.inc.c"
 
+#undef XVM_TEMPLATE_ARITH_MOD_CASE
+#undef XVM_TEMPLATE_ARITH_DIV_CASE
 #undef XVM_TEMPLATE_ARITH_MUL_CASE
 #undef XVM_TEMPLATE_ARITH_NUMERIC_CASE
 #undef XVM_TEMPLATE_ARITH_ADD_CASE
@@ -308,49 +372,6 @@ vmcase(OP_MULK) {
     vmbreak;
 }
 
-vmcase(OP_DIV) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrValue vb = R(b);
-    XrValue vc = R(c);
-
-    // BigInt division (auto-promote, with zero check)
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
-        R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_div);
-        if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
-        }
-        vmbreak;
-    }
-
-    // Fast path: int / int → int (type determines result)
-    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer nb = XR_TO_INT(vb);
-        xr_Integer nc = XR_TO_INT(vc);
-        if (nc == 0) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
-        }
-        R(a) = xr_int(xr_int_div_wrap(nb, nc));
-        vmbreak;
-    }
-
-    // Mixed or float: promote to float
-    if ((XR_IS_INT(vb) || XR_IS_FLOAT(vb)) && (XR_IS_INT(vc) || XR_IS_FLOAT(vc))) {
-        double nb = XR_IS_INT(vb) ? (double) XR_TO_INT(vb) : XR_TO_FLOAT(vb);
-        double nc = XR_IS_INT(vc) ? (double) XR_TO_INT(vc) : XR_TO_FLOAT(vc);
-        if (nc == 0.0) {
-            VM_RUNTIME_ERROR(XR_ERR_DIV_BY_ZERO, "division by zero");
-        }
-        R(a) = xr_float(nb / nc);
-        vmbreak;
-    }
-
-    // Operator overload (unified macro)
-    VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_DIV_FLAG, SYMBOL_OP_DIV, "/");
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "division requires numeric types");
-}
-
 vmcase(OP_DIVK) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -389,37 +410,6 @@ vmcase(OP_DIVK) {
         VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "division requires numeric types");
     }
     vmbreak;
-}
-
-vmcase(OP_MOD) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrValue vb = R(b);
-    XrValue vc = R(c);
-
-    // Fast path: integer modulo
-    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        xr_Integer divisor = XR_TO_INT(vc);
-        if (divisor == 0) {
-            VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
-        }
-        R(a) = xr_int(xr_int_mod_wrap(XR_TO_INT(vb), divisor));
-        vmbreak;
-    }
-
-    // BigInt modulo (auto-promote, with zero check)
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
-        R(a) = vm_bigint_divop(VM_CURRENT_CORO, vb, vc, xr_bigint_mod);
-        if (XR_UNLIKELY(XR_IS_NOTFOUND(R(a)))) {
-            VM_RUNTIME_ERROR(XR_ERR_MOD_BY_ZERO, "modulo by zero");
-        }
-        vmbreak;
-    }
-
-    // Operator overload (unified macro)
-    VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_MOD_FLAG, SYMBOL_OP_MOD, "%%");
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "modulo requires integer types");
 }
 
 vmcase(OP_MODK) {

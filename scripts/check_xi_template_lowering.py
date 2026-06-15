@@ -383,7 +383,7 @@ def run_check(root: Path) -> list[Violation]:
         vm_arith_binary_opcodes,
         vm_arith_binary_generated_text,
         VM_GENERATED_ARITH_BINARY_FILE,
-        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL|DIV|MOD)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "arithmetic binary"))
     violations.extend(check_vm_generated_body_coverage(
         vm_shift_opcodes,
@@ -506,12 +506,13 @@ def run_self_test() -> None:
         VM_GENERATED_UNARY_FILE)
     assert len(vm_unary_handwritten) == 1 and "OP_UNM" in vm_unary_handwritten[0].message
 
-    vm_arith_binary_opcodes = {"OP_ADD"}
+    vm_arith_binary_opcodes = {"OP_ADD", "OP_DIV"}
     vm_arith_binary_coverage = check_vm_generated_body_coverage(
         vm_arith_binary_opcodes,
-        "XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +, bigint, flag, sym, name, err)\n",
+        ("XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +, bigint, flag, sym, name, err)\n"
+         "XVM_TEMPLATE_ARITH_DIV_CASE(OP_DIV, bigint, flag, sym, name, err)\n"),
         VM_GENERATED_ARITH_BINARY_FILE,
-        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL|DIV|MOD)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "arithmetic binary")
     assert not vm_arith_binary_coverage
     vm_arith_binary_handwritten = check_vm_handwritten_body_cases(

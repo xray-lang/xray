@@ -2616,6 +2616,12 @@ XI_VM_TEMPLATE_ARITH_BINARY = {
     'xi.mul': ('XVM_TEMPLATE_ARITH_MUL_CASE', '*', '*', 'xr_bigint_mul',
                'XR_OP_MUL_FLAG', 'SYMBOL_OP_MUL', '"*"',
                '"multiplication requires numeric types"'),
+    'xi.div': ('XVM_TEMPLATE_ARITH_DIV_CASE', 'xr_bigint_div',
+               'XR_OP_DIV_FLAG', 'SYMBOL_OP_DIV', '"/"',
+               '"division requires numeric types"'),
+    'xi.mod': ('XVM_TEMPLATE_ARITH_MOD_CASE', 'xr_bigint_mod',
+               'XR_OP_MOD_FLAG', 'SYMBOL_OP_MOD', '"%%"',
+               '"modulo requires integer types"'),
 }
 
 XI_VM_TEMPLATE_SHIFT = {
@@ -3295,23 +3301,20 @@ def generate_xi_vm_template_arith_binary_dispatch(entries: list[XiLoweringDef]) 
     lines.append('/* Source: xisa/xi/lowering.def */')
     lines.append('/* Included inside xvm_dispatch_arith.inc.c with template macros defined. */')
     lines.append('')
-    lines.append('#ifndef XVM_TEMPLATE_ARITH_ADD_CASE')
-    lines.append('#error "XVM_TEMPLATE_ARITH_ADD_CASE must be defined before including this file"')
-    lines.append('#endif')
-    lines.append('#ifndef XVM_TEMPLATE_ARITH_NUMERIC_CASE')
-    lines.append('#error "XVM_TEMPLATE_ARITH_NUMERIC_CASE must be defined before including this file"')
-    lines.append('#endif')
-    lines.append('#ifndef XVM_TEMPLATE_ARITH_MUL_CASE')
-    lines.append('#error "XVM_TEMPLATE_ARITH_MUL_CASE must be defined before including this file"')
-    lines.append('#endif')
+    required_macros = []
+    for entry in arith_entries:
+        macro = XI_VM_TEMPLATE_ARITH_BINARY[entry.op_name][0]
+        if macro not in required_macros:
+            required_macros.append(macro)
+    for macro in required_macros:
+        lines.append(f'#ifndef {macro}')
+        lines.append(f'#error "{macro} must be defined before including this file"')
+        lines.append('#endif')
     lines.append('')
     for entry in arith_entries:
         opcode = XI_VM_TEMPLATE_OPCODES[entry.op_name]
-        macro, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name, error_msg = (
-            XI_VM_TEMPLATE_ARITH_BINARY[entry.op_name])
-        lines.append(
-            f'{macro}({opcode}, {int_op}, {float_op}, {bigint_fn}, {op_flag}, '
-            f'{op_symbol}, {op_name}, {error_msg})')
+        macro, *macro_args = XI_VM_TEMPLATE_ARITH_BINARY[entry.op_name]
+        lines.append(f'{macro}({opcode}, {", ".join(macro_args)})')
     lines.append('')
     return '\n'.join(lines)
 
@@ -9501,10 +9504,18 @@ def _test_xi_lowering_parser():
         XiLoweringDef('xi.mul', 'MUL', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
                       template='value-binary'),
+        XiLoweringDef('xi.div', 'DIV', ['vm-bytecode'], ['vm-bytecode'],
+                      {'vm-bytecode': 'xi_emit_arith'}, {}, {},
+                      template='value-binary'),
+        XiLoweringDef('xi.mod', 'MOD', ['vm-bytecode'], ['vm-bytecode'],
+                      {'vm-bytecode': 'xi_emit_arith'}, {}, {},
+                      template='value-binary'),
     ])
     assert 'XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +' in vm_arith_binary
     assert 'XVM_TEMPLATE_ARITH_NUMERIC_CASE(OP_SUB, -, -' in vm_arith_binary
     assert 'XVM_TEMPLATE_ARITH_MUL_CASE(OP_MUL, *, *' in vm_arith_binary
+    assert 'XVM_TEMPLATE_ARITH_DIV_CASE(OP_DIV, xr_bigint_div' in vm_arith_binary
+    assert 'XVM_TEMPLATE_ARITH_MOD_CASE(OP_MOD, xr_bigint_mod' in vm_arith_binary
     vm_shift = generate_xi_vm_template_shift_dispatch([
         XiLoweringDef('xi.shl', 'SHL', ['vm-bytecode'], ['vm-bytecode'],
                       {'vm-bytecode': 'xi_emit_arith'}, {}, {},
