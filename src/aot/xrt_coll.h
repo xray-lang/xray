@@ -680,6 +680,11 @@ static inline void xrt_map_index_put(uint8_t *ctrl, int32_t *indices, uint32_t i
 }
 
 static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
+    if (XR_UNLIKELY(m->flags & XR_MAP_FLAG_NODES_ON_STACK)) {
+        fprintf(stderr, "xrt_map_stack_new: capacity exceeded\n");
+        abort();
+    }
+
     XrMapEntry *old_entries = (m->flags & XR_MAP_FLAG_DUMMY) ? NULL : m->entries;
     uint8_t *old_ctrl = (m->flags & XR_MAP_FLAG_DUMMY) ? NULL : m->ctrl;
     int32_t *old_indices = (m->flags & XR_MAP_FLAG_DUMMY) ? NULL : m->indices;
@@ -795,6 +800,37 @@ static inline XrValue xrt_map_new_flags(int64_t cap, uint8_t flags) {
 static inline XrValue xrt_map_new(int64_t cap) {
     return xrt_map_new_flags(cap, 0);
 }
+
+#ifndef xrt_map_stack_new
+#define xrt_map_stack_new(cap_expr)                                                                \
+    ({                                                                                             \
+        int64_t _need64 = (cap_expr);                                                              \
+        if (_need64 < 1)                                                                           \
+            _need64 = 1;                                                                           \
+        uint32_t _need = (uint32_t) _need64;                                                       \
+        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_MAP_MAXHBITS);                    \
+        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
+        if (_ecap < _need)                                                                         \
+            _ecap = _need;                                                                         \
+        xrt_map_t *_m = (xrt_map_t *) __builtin_alloca(sizeof(xrt_map_t));                         \
+        uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
+        int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
+        XrMapEntry *_entries =                                                                     \
+            (XrMapEntry *) __builtin_alloca(sizeof(XrMapEntry) * (size_t) _ecap);                  \
+        xrt_map_init_header(_m);                                                                   \
+        memset(_ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) _slots + XR_SWISS_GROUP);                \
+        for (uint32_t _i = 0; _i < _slots; _i++)                                                   \
+            _indices[_i] = XR_MAP_IX_EMPTY;                                                        \
+        memset(_entries, 0, sizeof(XrMapEntry) * (size_t) _ecap);                                  \
+        _m->ctrl = _ctrl;                                                                          \
+        _m->indices = _indices;                                                                    \
+        _m->entries = _entries;                                                                    \
+        _m->indices_size = _slots;                                                                 \
+        _m->entries_cap = _ecap;                                                                   \
+        _m->flags = XR_MAP_FLAG_NODES_ON_STACK;                                                    \
+        xr_mkptr(_m, XR_TAG_MAP);                                                                  \
+    })
+#endif
 
 #include "xrt_map_typed.inc.c"
 
@@ -957,6 +993,11 @@ static inline void xrt_set_index_put(uint8_t *ctrl, int32_t *indices, uint32_t i
 }
 
 static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
+    if (XR_UNLIKELY(s->flags & XR_SET_FLAG_NODES_ON_STACK)) {
+        fprintf(stderr, "xrt_set_stack_new: capacity exceeded\n");
+        abort();
+    }
+
     XrSetEntry *old_entries = (s->flags & XR_SET_FLAG_DUMMY) ? NULL : s->entries;
     uint8_t *old_ctrl = (s->flags & XR_SET_FLAG_DUMMY) ? NULL : s->ctrl;
     int32_t *old_indices = (s->flags & XR_SET_FLAG_DUMMY) ? NULL : s->indices;
@@ -1078,6 +1119,37 @@ static inline XrValue xrt_set_new_flags(int64_t cap, uint8_t flags) {
 static inline XrValue xrt_set_new(int64_t cap) {
     return xrt_set_new_typed(cap, XR_ELEM_ANY);
 }
+
+#ifndef xrt_set_stack_new
+#define xrt_set_stack_new(cap_expr)                                                                \
+    ({                                                                                             \
+        int64_t _need64 = (cap_expr);                                                              \
+        if (_need64 < 1)                                                                           \
+            _need64 = 1;                                                                           \
+        uint32_t _need = (uint32_t) _need64;                                                       \
+        uint32_t _slots = xrt_ordered_indices_size_for(_need, XR_SET_MAXHBITS);                    \
+        uint32_t _ecap = (uint32_t) ((uint64_t) _slots * 2u / 3u);                                 \
+        if (_ecap < _need)                                                                         \
+            _ecap = _need;                                                                         \
+        xrt_set_t *_s = (xrt_set_t *) __builtin_alloca(sizeof(xrt_set_t));                         \
+        uint8_t *_ctrl = (uint8_t *) __builtin_alloca((size_t) _slots + XR_SWISS_GROUP);           \
+        int32_t *_indices = (int32_t *) __builtin_alloca(sizeof(int32_t) * (size_t) _slots);       \
+        XrSetEntry *_entries =                                                                     \
+            (XrSetEntry *) __builtin_alloca(sizeof(XrSetEntry) * (size_t) _ecap);                  \
+        xrt_set_init_header(_s, XR_ELEM_ANY);                                                      \
+        memset(_ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) _slots + XR_SWISS_GROUP);                \
+        for (uint32_t _i = 0; _i < _slots; _i++)                                                   \
+            _indices[_i] = XR_SET_IX_EMPTY;                                                        \
+        memset(_entries, 0, sizeof(XrSetEntry) * (size_t) _ecap);                                  \
+        _s->ctrl = _ctrl;                                                                          \
+        _s->indices = _indices;                                                                    \
+        _s->entries = _entries;                                                                    \
+        _s->indices_size = _slots;                                                                 \
+        _s->entries_cap = _ecap;                                                                   \
+        _s->flags = XR_SET_FLAG_NODES_ON_STACK;                                                    \
+        xr_mkptr(_s, XR_TAG_SET);                                                                  \
+    })
+#endif
 
 static inline int xrt_set_is_typed(const xrt_set_t *s) {
     return s && s->elem_type != XR_ELEM_ANY;

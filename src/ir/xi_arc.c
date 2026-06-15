@@ -43,7 +43,25 @@
 
 #include <string.h>
 
-/* ========== Stack Alloc Rewrite (unchanged) ========== */
+/* ========== Stack Alloc Rewrite ========== */
+
+static bool stack_alloc_has_const_capacity(const XiValue *v) {
+    return v && v->nargs >= 1 && v->args[0] && v->args[0]->op == XI_CONST &&
+           v->args[0]->aux_int >= 0;
+}
+
+static bool stack_alloc_can_preserve_semantics(const XiValue *v) {
+    if (!v || !stack_alloc_has_const_capacity(v))
+        return false;
+    switch (v->op) {
+        case XI_ARRAY_NEW:
+        case XI_MAP_NEW:
+        case XI_SET_NEW:
+            return v->aux_int == 0;
+        default:
+            return false;
+    }
+}
 
 static void rewrite_to_stack(XiValue *v) {
     XR_DCHECK(v != NULL, "rewrite_to_stack: NULL value");
@@ -74,6 +92,8 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
             if (!xi_own_type_is_rc(v->type))
                 continue; /* scalars: no alloc */
             if (!xi_op_is_heap_alloc(v->op))
+                continue;
+            if (!stack_alloc_can_preserve_semantics(v))
                 continue;
             rewrite_to_stack(v);
         }
