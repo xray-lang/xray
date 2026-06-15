@@ -1060,6 +1060,10 @@ return_with_defer:;  // Label for RETURN0/RETURN1 fallback when defer exists
                 vm_ctx->defer_count = frame_defer_start;
                 break;
             }
+            // Deferred closures re-enter the VM and may grow (relocate) the
+            // coroutine stack and frames; re-derive ci/base/cl/k before the
+            // frame pop below reads ci->flags and the return values via R(a + j).
+            VM_REFRESH_FRAME_CACHE();
         }
     }
 
