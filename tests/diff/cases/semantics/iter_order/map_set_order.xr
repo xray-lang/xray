@@ -1,0 +1,38 @@
+// anchor: collection-iteration-insertion-order
+// Map and Set iterate in insertion order, identically across VM / JIT / AOT:
+// update keeps a key's position, delete+reinsert moves it to the end, and the
+// (k) / (k,v) / keys() / values() projections all agree.
+let m: Map<string, int> = #{}
+m.set("first", 1)
+m.set("second", 2)
+m.set("third", 3)
+m.set("first", 10)
+print("-- map for k --")
+for (k in m) { print(k) }
+print("-- map for k,v --")
+for (k, v in m) { print(k + "=" + v.toString()) }
+print("-- map keys --")
+for (k in m.keys()) { print(k) }
+print("-- map values --")
+for (v in m.values()) { print(v.toString()) }
+print("-- map delete+reinsert --")
+m.delete("second")
+m.set("second", 20)
+for (k in m) { print(k) }
+print("-- set for e --")
+let s: Set<string> = #[]
+s.add("x")
+s.add("y")
+s.add("z")
+s.add("y")
+for (e in s) { print(e) }
+print("-- set delete+reinsert --")
+s.delete("x")
+s.add("x")
+for (e in s) { print(e) }
+print("-- int set --")
+let n: Set<int> = #[]
+n.add(30)
+n.add(10)
+n.add(20)
+for (x in n) { print(x.toString()) }
