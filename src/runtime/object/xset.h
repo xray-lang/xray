@@ -11,9 +11,9 @@
  *   - Insertion-ordered: entries[] is a dense, append-only array kept in the
  *     order values were first added; iteration scans it directly, so order
  *     matches the Map/Set iteration contract (insertion order).
- *   - indices[] is an open-addressing (linear-probing) hash table of int32
- *     slots that hold an index into entries[] (or EMPTY / DELETED sentinels).
- *   - Deletion tombstones the entry (val_tt = 0) and marks its index slot
+ *   - ctrl[] is a Swiss-style h2 control-byte table; indices[] stores the
+ *     corresponding entries[] index for FULL ctrl slots.
+ *   - Deletion tombstones the entry (val_tt = 0) and marks its ctrl slot
  *     DELETED; dead entries are reclaimed when the table is resized/compacted.
  *   - Empty set allocates nothing (entries/indices NULL, DUMMY flag set); the
  *     first add allocates both arrays.
@@ -41,10 +41,9 @@ typedef struct XrSetEntry {
 #define XR_SET_ENTRY_NIL 0
 #define XR_SET_ENTRY_EMPTY(e) ((e)->val_tt == XR_SET_ENTRY_NIL)
 
-/* Index-table sentinels (stored in indices[]). Non-negative values are a
- * direct index into entries[]. */
+/* Debug sentinel for indices[] slots whose ctrl byte is not FULL. FULL slots
+ * always store a direct entries[] index. */
 #define XR_SET_IX_EMPTY (-1)
-#define XR_SET_IX_DELETED (-2)
 
 /* ========== Set Object ========== */
 
@@ -54,7 +53,8 @@ typedef struct XrSet {
     uint32_t nentries;      // Used entry slots incl. tombstones (= next append index)
     uint32_t entries_cap;   // Allocated entries[] capacity
     uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
-    int32_t *indices;       // Open-addressing table -> entries index / sentinel
+    uint8_t *ctrl;          // Swiss control bytes, indices_size + XR_SWISS_GROUP
+    int32_t *indices;       // FULL ctrl slots -> entries index
     XrSetEntry *entries;    // Dense insertion-order array
     uint8_t flags;
     uint8_t elem_tid;  // XrTypeId: element type for reified generics (0=any)
