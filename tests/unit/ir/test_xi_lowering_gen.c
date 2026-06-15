@@ -665,6 +665,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_I8) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_I8) == OP_NARROW_I8);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_I8) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_I8) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_I8) == 56);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_I8) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I8) == false);
@@ -675,6 +678,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_U8) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_U8) == OP_NARROW_U8);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_U8) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_U8) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_U8) == 0);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_U8) == INT64_C(0xFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U8) == false);
@@ -685,6 +691,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_I16) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_I16) == OP_NARROW_I16);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_I16) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_I16) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_I16) == 48);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_I16) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I16) == false);
@@ -695,6 +704,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_U16) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_U16) == OP_NARROW_U16);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_U16) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_U16) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_U16) == 0);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_U16) == INT64_C(0xFFFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U16) == false);
@@ -705,6 +717,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_I32) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_I32) == OP_NARROW_I32);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_I32) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_I32) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_I32) == 32);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_I32) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I32) == false);
@@ -715,6 +730,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_U32) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_U32) == OP_NARROW_U32);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_U32) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_U32) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_U32) == 0);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_U32) == INT64_C(0xFFFFFFFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U32) == false);
@@ -725,6 +743,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NARROW_F32) == true);
     assert(xi_emit_vm_template_opcode(XI_NARROW_F32) == OP_NARROW_F32);
     assert(xi_emit_vm_template_swaps_args(XI_NARROW_F32) == false);
+    assert(xi_to_xm_template_width_kind(XI_NARROW_F32) == XM_WIDTH_TEMPLATE_IDENTITY);
+    assert(xi_to_xm_template_width_shift(XI_NARROW_F32) == 0);
+    assert(xi_to_xm_template_width_mask(XI_NARROW_F32) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_F32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_F32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_F32) == false);
@@ -735,6 +756,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_I8) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_I8) == OP_WIDEN_I8);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_I8) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_I8) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_I8) == 56);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_I8) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I8) == false);
@@ -745,6 +769,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_U8) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_U8) == OP_WIDEN_U8);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_U8) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_U8) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_U8) == 0);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_U8) == INT64_C(0xFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U8) == false);
@@ -755,6 +782,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_I16) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_I16) == OP_WIDEN_I16);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_I16) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_I16) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_I16) == 48);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_I16) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I16) == false);
@@ -765,6 +795,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_U16) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_U16) == OP_WIDEN_U16);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_U16) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_U16) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_U16) == 0);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_U16) == INT64_C(0xFFFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U16) == false);
@@ -775,6 +808,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_I32) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_I32) == OP_WIDEN_I32);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_I32) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_I32) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_I32) == 32);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_I32) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I32) == false);
@@ -785,6 +821,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_U32) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_U32) == OP_WIDEN_U32);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_U32) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_U32) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_U32) == 0);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_U32) == INT64_C(0xFFFFFFFF));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U32) == false);
@@ -795,6 +834,9 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_WIDEN_F32) == true);
     assert(xi_emit_vm_template_opcode(XI_WIDEN_F32) == OP_WIDEN_F32);
     assert(xi_emit_vm_template_swaps_args(XI_WIDEN_F32) == false);
+    assert(xi_to_xm_template_width_kind(XI_WIDEN_F32) == XM_WIDTH_TEMPLATE_IDENTITY);
+    assert(xi_to_xm_template_width_shift(XI_WIDEN_F32) == 0);
+    assert(xi_to_xm_template_width_mask(XI_WIDEN_F32) == INT64_C(0));
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_F32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_F32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_F32) == false);

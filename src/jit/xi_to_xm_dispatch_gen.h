@@ -156,6 +156,29 @@
     X(GE, xi2xm_ge)
 
 
+#define XI_TO_XM_TEMPLATE_WIDTH_DRIVERS(X) \
+    X(NARROW_I8, xi2xm_narrow_i8) \
+    X(NARROW_U8, xi2xm_narrow_u8) \
+    X(NARROW_I16, xi2xm_narrow_i16) \
+    X(NARROW_U16, xi2xm_narrow_u16) \
+    X(NARROW_I32, xi2xm_narrow_i32) \
+    X(NARROW_U32, xi2xm_narrow_u32) \
+    X(NARROW_F32, xi2xm_narrow_f32) \
+    X(WIDEN_I8, xi2xm_widen_i8) \
+    X(WIDEN_U8, xi2xm_widen_u8) \
+    X(WIDEN_I16, xi2xm_widen_i16) \
+    X(WIDEN_U16, xi2xm_widen_u16) \
+    X(WIDEN_I32, xi2xm_widen_i32) \
+    X(WIDEN_U32, xi2xm_widen_u32) \
+    X(WIDEN_F32, xi2xm_widen_f32)
+
+
+typedef enum {
+    XM_WIDTH_TEMPLATE_IDENTITY = 0,
+    XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT = 1,
+    XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK = 2,
+} XiToXmWidthTemplateKind;
+
 static inline XmOp xi_to_xm_template_int_op(uint16_t op) {
     switch ((XiOp) op) {
         case XI_ADD: return XM_ADD;
@@ -251,6 +274,56 @@ static inline bool xi_to_xm_template_is_logical_not(uint16_t op) {
         default: return false;
     }
     return false;
+}
+
+static inline XiToXmWidthTemplateKind xi_to_xm_template_width_kind(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_NARROW_U8: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_NARROW_I16: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_NARROW_U16: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_NARROW_I32: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_NARROW_U32: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_NARROW_F32: return XM_WIDTH_TEMPLATE_IDENTITY;
+        case XI_WIDEN_I8: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_WIDEN_U8: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_WIDEN_I16: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_WIDEN_U16: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_WIDEN_I32: return XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT;
+        case XI_WIDEN_U32: return XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK;
+        case XI_WIDEN_F32: return XM_WIDTH_TEMPLATE_IDENTITY;
+        case XI_OP_COUNT: return XM_WIDTH_TEMPLATE_IDENTITY;
+        default: return XM_WIDTH_TEMPLATE_IDENTITY;
+    }
+    return XM_WIDTH_TEMPLATE_IDENTITY;
+}
+
+static inline uint8_t xi_to_xm_template_width_shift(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return 56;
+        case XI_NARROW_I16: return 48;
+        case XI_NARROW_I32: return 32;
+        case XI_WIDEN_I8: return 56;
+        case XI_WIDEN_I16: return 48;
+        case XI_WIDEN_I32: return 32;
+        case XI_OP_COUNT: return 0;
+        default: return 0;
+    }
+    return 0;
+}
+
+static inline int64_t xi_to_xm_template_width_mask(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_U8: return INT64_C(0xFF);
+        case XI_NARROW_U16: return INT64_C(0xFFFF);
+        case XI_NARROW_U32: return INT64_C(0xFFFFFFFF);
+        case XI_WIDEN_U8: return INT64_C(0xFF);
+        case XI_WIDEN_U16: return INT64_C(0xFFFF);
+        case XI_WIDEN_U32: return INT64_C(0xFFFFFFFF);
+        case XI_OP_COUNT: return INT64_C(0);
+        default: return INT64_C(0);
+    }
+    return INT64_C(0);
 }
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */
