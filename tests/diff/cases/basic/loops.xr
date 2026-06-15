@@ -1,0 +1,19 @@
+// anchor: basic-loops
+let sum: int = 0
+for (i in 0..10) {
+    sum += i
+}
+print(sum)
+
+let prod: int = 1
+for (i in 1..6) {
+    prod *= i
+}
+print(prod)
+
+let arr: Array<int> = []
+for (i in 0..5) {
+    arr.push(i * i)
+}
+print(arr.length)
+print(arr[4])

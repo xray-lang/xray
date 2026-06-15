@@ -1,0 +1,34 @@
+// anchor: coro-channel-order
+// diff-backends: vm,jit
+// Buffered channel send/recv order + go/await visible effects.
+// AOT excluded: channel methods (trySend/tryRecv) and Recv<T> are not yet
+// lowered for AOT (unsupported AOT builtin Recv / method trySend); tracked
+// for the AOT coroutine/channel work (task 110).
+fn recvVal(r: Recv<int>) -> int {
+    return match (r) {
+        Recv.Value(v) -> v
+        _ -> -1
+    }
+}
+
+fn producer(ch: Channel<int>) -> string {
+    ch.trySend(10)
+    ch.trySend(20)
+    ch.trySend(30)
+    return "prod-done"
+}
+
+fn main() {
+    let ch = new Channel(5)
+    let pt = go producer(ch)
+    print(await pt)
+    let a = recvVal(ch.tryRecv())
+    let b = recvVal(ch.tryRecv())
+    let c = recvVal(ch.tryRecv())
+    print(a)
+    print(b)
+    print(c)
+    print(a + b + c)
+}
+
+main()

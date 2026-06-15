@@ -1,0 +1,16 @@
+// anchor: basic-arrays
+let a = [1, 2, 3, 4, 5]
+print(a.length)
+a.push(6)
+print(a[5])
+
+let doubled = a.map((x) -> x * 2)
+for (i in 0..doubled.length) {
+    print(doubled[i])
+}
+
+let evens = a.filter((x) -> x % 2 == 0)
+print(evens.length)
+
+let total = a.reduce((acc, x) -> acc + x, 0)
+print(total)

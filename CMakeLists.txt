@@ -1134,6 +1134,20 @@ if(BUILD_TESTS)
         SKIP_RETURN_CODE 77
         TIMEOUT 120
     )
+
+    # Cross-backend differential net: same .xr through VM / JIT / AOT must
+    # produce byte-identical observable output. Safety net for the backend
+    # unification work (tasks 108-118).
+    add_test(
+        NAME backend_diff
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/diff/run_backend_diff.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(backend_diff PROPERTIES
+        LABELS "diff;cross;backend"
+        TIMEOUT 180
+    )
 endif()
 
 # Fuzzing tests (optional, requires Clang with libFuzzer)

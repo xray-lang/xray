@@ -1,0 +1,27 @@
+// anchor: nested-try-defer-order
+// defer runs on a propagating throw and on return; nested scopes unwind
+// inner-first. Order must match across VM / JIT / AOT (value-return channel).
+enum AppErr {
+    Msg(s: string)
+}
+
+fn inner() {
+    defer { print("inner-defer") }
+    print("inner-body")
+    throw AppErr.Msg("boom")
+}
+
+fn outer() -> string {
+    defer { print("outer-defer") }
+    try {
+        inner()
+        return "no-throw"
+    } catch (e) {
+        match (e) {
+            AppErr.Msg(s) -> { return "caught:" + s }
+        }
+    }
+}
+
+print(outer())
+print("done")

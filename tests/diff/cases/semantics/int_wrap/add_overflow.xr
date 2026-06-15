@@ -1,0 +1,10 @@
+// anchor: int-twos-complement-wrap
+// Two's-complement wrap must match across VM / JIT / AOT (and constant fold).
+let maxv: int = 9223372036854775807
+print(maxv + 1)
+
+let minv: int = -9223372036854775807 - 1
+print(minv - 1)
+
+let big: int = 9223372036854775807
+print(big * 2)

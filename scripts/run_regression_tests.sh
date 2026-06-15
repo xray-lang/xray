@@ -261,6 +261,23 @@ for result_file in $(find "${RESULTS_DIR}" -name "*.result" | sort); do
     esac
 done
 
+# Cross-backend differential net (107): same .xr through VM / JIT / AOT must
+# produce byte-identical observable output. Folded into the regression summary
+# so a backend divergence fails the run. Opt out with XRAY_SKIP_BACKEND_DIFF=1
+# (e.g. when no AOT host toolchain is available).
+if [ "${XRAY_SKIP_BACKEND_DIFF:-0}" != "1" ] && [ -f "${PROJECT_ROOT}/tests/diff/run_backend_diff.sh" ]; then
+    echo -e "${CYAN}运行跨后端差分网 (VM/JIT/AOT)...${NC}"
+    if bash "${PROJECT_ROOT}/tests/diff/run_backend_diff.sh" "${XRAY_BIN}" \
+            > "${RESULTS_DIR}/backend_diff.out" 2>&1; then
+        passed_tests=$((passed_tests + 1))
+        rm -f "${RESULTS_DIR}/backend_diff.out"
+    else
+        failed_tests=$((failed_tests + 1))
+        failed_test_list+=("backend_diff")
+    fi
+    echo ""
+fi
+
 # 结束时间
 end_time=$(date +%s)
 elapsed_time=$((end_time - start_time))
