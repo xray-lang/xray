@@ -73,22 +73,40 @@ typedef struct {
  * Max 256 types in a single AOT binary for now.
  * ========================================================================= */
 
-#define XRT_MAX_TYPES 256
+/* Initial capacity; the table grows on demand (xrt_type_register) up to the
+ * uint16_t type-id space (65535), so an AOT binary is not capped at 256 types. */
+#define XRT_INIT_TYPES 256
 
 #ifdef XRT_IMPL
-XrtTypeInfo xrt_type_table[XRT_MAX_TYPES];
+XrtTypeInfo *xrt_type_table = NULL;
 uint16_t xrt_type_count = 1;  // 0 reserved
+uint16_t xrt_type_cap = 0;
 #else
-extern XrtTypeInfo xrt_type_table[];
+extern XrtTypeInfo *xrt_type_table;
 extern uint16_t xrt_type_count;
+extern uint16_t xrt_type_cap;
 #endif
 
 /* Register a type; returns assigned type_id */
 static inline uint16_t xrt_type_register(const char *name, uint16_t parent_id, XrtMethodFn *vtable,
                                          int vtable_size, XrtDestructor dtor, uint32_t inst_size) {
-    if (xrt_type_count >= XRT_MAX_TYPES) {
-        fprintf(stderr, "xrt_type_register: type table full\n");
-        abort();
+    if (xrt_type_count >= xrt_type_cap) {
+        uint32_t nc = xrt_type_cap ? (uint32_t) xrt_type_cap * 2u : (uint32_t) XRT_INIT_TYPES;
+        if (nc > 0xFFFFu)
+            nc = 0xFFFFu; /* type_id is uint16_t */
+        if ((uint32_t) xrt_type_count >= nc) {
+            fprintf(stderr, "xrt_type_register: type table full (max %u types)\n", (unsigned) nc);
+            abort();
+        }
+        XrtTypeInfo *nt =
+            (XrtTypeInfo *) XRT_REALLOC(xrt_type_table, (size_t) nc * sizeof(XrtTypeInfo));
+        if (!nt) {
+            fprintf(stderr, "xrt_type_register: out of memory growing type table\n");
+            abort();
+        }
+        memset(&nt[xrt_type_cap], 0, ((size_t) nc - (size_t) xrt_type_cap) * sizeof(XrtTypeInfo));
+        xrt_type_table = nt;
+        xrt_type_cap = (uint16_t) nc;
     }
     uint16_t id = xrt_type_count++;
     XrtTypeInfo *ti = &xrt_type_table[id];
