@@ -944,7 +944,7 @@ static const XiClassData *cg_class_native_ctor_call_data(XiCgenCtx *ctx, const X
 
     if (callee && callee->op == XI_GET_SHARED) {
         int slot = (int) callee->aux_int;
-        if (slot >= 0 && slot < CG_MAX_SHARED)
+        if (slot >= 0 && slot < ctx->shared_cap)
             cd = ctx->shared_class[slot];
     } else if (callee && callee->op == XI_CLASS_CREATE && callee->aux) {
         cd = (const XiClassData *) callee->aux;
@@ -1127,7 +1127,8 @@ static bool cg_class_shared_native_slot_is_exported(const XiCgenCtx *ctx, int sl
 }
 
 static bool cg_class_shared_native_slot_active(const XiCgenCtx *ctx, int slot) {
-    return ctx && slot >= 0 && slot < CG_MAX_SHARED && ctx->shared_native_instances[slot].active &&
+    return ctx && slot >= 0 && slot < ctx->shared_cap &&
+           ctx->shared_native_instances[slot].active &&
            ctx->shared_native_instances[slot].class_data &&
            ctx->shared_native_instances[slot].class_data->instance_layout;
 }
@@ -1569,7 +1570,7 @@ static bool cg_class_shared_native_method_call_accepts_class(XiCgenCtx *ctx, con
 
 static bool cg_class_shared_native_method_call_accepts_slot(XiCgenCtx *ctx, const XiFunc *current,
                                                             const XiValue *call, int slot) {
-    if (!ctx || slot < 0 || slot >= CG_MAX_SHARED)
+    if (!ctx || slot < 0 || slot >= ctx->shared_cap)
         return false;
     return cg_class_shared_native_method_call_accepts_class(
         ctx, current, call, ctx->shared_native_instances[slot].class_data);
@@ -1911,7 +1912,7 @@ static void cg_class_shared_native_scan_sets_in_func(XiCgenCtx *ctx, const XiFun
 static bool cg_class_shared_native_slot_can_activate(XiCgenCtx *ctx, int slot,
                                                      CgSharedNativeCtorCandidate *out) {
     if (!ctx || !ctx->module || !ctx->module->init || slot < 0 || slot >= ctx->nshared ||
-        slot >= CG_MAX_SHARED || !out)
+        slot >= ctx->shared_cap || !out)
         return false;
     CgSharedNativeCtorCandidate candidate;
     memset(&candidate, 0, sizeof(candidate));
@@ -1962,8 +1963,9 @@ static void cg_class_shared_native_register_export(XiCgenCtx *ctx, int slot) {
 static void cg_collect_shared_native_instances(XiCgenCtx *ctx) {
     if (!ctx || !ctx->module || !ctx->module->init)
         return;
-    memset(ctx->shared_native_instances, 0, sizeof(ctx->shared_native_instances));
-    int limit = ctx->nshared < CG_MAX_SHARED ? ctx->nshared : CG_MAX_SHARED;
+    memset(ctx->shared_native_instances, 0,
+           (size_t) ctx->shared_cap * sizeof(*ctx->shared_native_instances));
+    int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
     for (int slot = 0; slot < limit; slot++) {
         CgSharedNativeCtorCandidate candidate;
         memset(&candidate, 0, sizeof(candidate));
@@ -1981,7 +1983,7 @@ static void cg_collect_shared_native_instances(XiCgenCtx *ctx) {
 static void emit_class_shared_native_storage_decls(XiCgenCtx *ctx, FILE *out, const char *prefix) {
     if (!ctx || !out)
         return;
-    int limit = ctx->nshared < CG_MAX_SHARED ? ctx->nshared : CG_MAX_SHARED;
+    int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
     for (int slot = 0; slot < limit; slot++) {
         if (!cg_class_shared_native_slot_active(ctx, slot))
             continue;
@@ -2000,7 +2002,7 @@ static bool cg_class_shared_native_ctor_value_is_elided(const XiCgenCtx *ctx, co
     (void) f;
     if (!ctx || !v || v->op != XI_CALL)
         return false;
-    int limit = ctx->nshared < CG_MAX_SHARED ? ctx->nshared : CG_MAX_SHARED;
+    int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
     for (int slot = 0; slot < limit; slot++) {
         if (!cg_class_shared_native_slot_active(ctx, slot))
             continue;

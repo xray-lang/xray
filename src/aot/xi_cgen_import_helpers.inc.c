@@ -37,12 +37,8 @@ static char *cg_derive_import_string(const char *target_path, const char *import
 static void cg_add_import(XiCgenCtx *ctx, const char *module_path, const char *member_name,
                           const char *target_mod_name, int shared_slot, const XiFunc *target_func,
                           const XiClassData *target_class, const XiFunc *exporter_func) {
-    if (ctx->nimports >= CG_MAX_IMPORTS) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: too many AOT imports (limit %d); raise CG_MAX_IMPORTS\n",
-                CG_MAX_IMPORTS);
+    if (!cg_reserve_imports(ctx, ctx->nimports + 1))
         return;
-    }
     CgImportEntry *e = &ctx->imports[ctx->nimports++];
     e->module_path = module_path;
     e->member_name = member_name;
@@ -63,7 +59,7 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
         return;
 
     ctx->nimports = 0;
-    memset(ctx->imports, 0, sizeof(ctx->imports));
+    memset(ctx->imports, 0, (size_t) ctx->imports_cap * sizeof(*ctx->imports));
 
     for (int exporter = 0; exporter < nmodules; exporter++) {
         XiModule *emod = modules[exporter];
