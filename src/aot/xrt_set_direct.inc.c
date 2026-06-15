@@ -224,9 +224,13 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
     uint8_t *old_ctrl = s->ctrl;
     void *old_items = s->items;
 
+    // Walk order[] (insertion order) and remap each live slot in place, so the
+    // insertion order survives the rehash; alloc_slots leaves order[] untouched.
+    int64_t old_order_len = s->order_len;
     xrt_set_alloc_slots(s, new_slots);
-    for (int64_t slot = 0; slot < old_slots; slot++) {
-        if (old_ctrl[slot] & 0x80u)
+    for (int64_t oi = 0; oi < old_order_len; oi++) {
+        int64_t slot = s->order[oi];
+        if (slot < 0 || slot >= old_slots || (old_ctrl[slot] & 0x80u))
             continue;
         uint64_t hash = s->elem_type == XR_ELEM_ANY
                             ? xrt_hash_value(((const XrValue *) old_items)[slot])
@@ -235,6 +239,7 @@ static inline void xrt_set_rehash(xrt_set_t *s, int64_t new_slots) {
         xrt_swiss_ctrl_set(s->ctrl, s->cap, dst, (uint8_t) (hash & 0x7F));
         memcpy((uint8_t *) s->items + (size_t) dst * s->elem_size,
                (const uint8_t *) old_items + (size_t) slot * s->elem_size, s->elem_size);
+        s->order[oi] = dst;
         s->growth_left--;
     }
     XRT_FREE(old_ctrl);
@@ -249,12 +254,14 @@ static inline int64_t xrt_set_insert_slot(xrt_set_t *s, uint64_t hash) {
         s->growth_left--;
     xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) (hash & 0x7F));
     s->len++;
+    xrt_set_order_append(s, slot);
     return slot;
 }
 
 static inline void xrt_set_erase_slot(xrt_set_t *s, int64_t slot) {
     xrt_swiss_ctrl_set(s->ctrl, s->cap, slot, (uint8_t) XRT_CTRL_DELETED);
     s->len--;
+    xrt_set_order_remove(s, slot);
 }
 
 /* ---- direct typed helpers (codegen-emitted, signatures are an ABI) ------ */

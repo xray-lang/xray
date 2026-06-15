@@ -702,9 +702,45 @@ typedef struct {
     int64_t growth_left; /* inserts into EMPTY slots before rehash */
     uint8_t *ctrl;       /* cap + XRT_GROUP control bytes */
     void *items;         /* slot-indexed element storage */
+    int64_t *order;      /* live slot indices in insertion order */
+    int64_t order_len;
+    int64_t order_cap;
     uint8_t elem_type;
     uint8_t elem_size;
 } xrt_set_t;
+
+static inline void xrt_set_order_reserve(xrt_set_t *s, int64_t need) {
+    if (need <= s->order_cap)
+        return;
+    int64_t new_cap = s->order_cap > 0 ? s->order_cap : 4;
+    while (new_cap < need)
+        new_cap *= 2;
+    int64_t *tmp = (int64_t *) XRT_REALLOC(s->order, (size_t) new_cap * sizeof(int64_t));
+    if (XR_UNLIKELY(!tmp)) {
+        fprintf(stderr, "xrt_set_order_reserve: out of memory\n");
+        abort();
+    }
+    s->order = tmp;
+    s->order_cap = new_cap;
+}
+
+static inline void xrt_set_order_append(xrt_set_t *s, int64_t slot) {
+    xrt_set_order_reserve(s, s->order_len + 1);
+    s->order[s->order_len++] = slot;
+}
+
+static inline void xrt_set_order_remove(xrt_set_t *s, int64_t slot) {
+    for (int64_t i = 0; i < s->order_len; i++) {
+        if (s->order[i] != slot)
+            continue;
+        if (i + 1 < s->order_len) {
+            memmove(&s->order[i], &s->order[i + 1],
+                    (size_t) (s->order_len - i - 1) * sizeof(int64_t));
+        }
+        s->order_len--;
+        return;
+    }
+}
 
 static inline void xrt_set_alloc_slots(xrt_set_t *s, int64_t slots) {
     s->cap = slots;
@@ -728,6 +764,9 @@ static inline XrValue xrt_set_new_typed(int64_t cap, uint8_t elem_type) {
     s->len = 0;
     s->elem_type = elem_type;
     s->elem_size = elem_type == XR_ELEM_ANY ? (uint8_t) sizeof(XrValue) : XR_ELEM_SIZES[elem_type];
+    s->order = NULL;
+    s->order_len = 0;
+    s->order_cap = 0;
     xrt_set_alloc_slots(s, xrt_swiss_slots_for(cap));
     return xr_mkptr(s, XR_TAG_SET);
 }
@@ -789,14 +828,17 @@ static inline void xrt_set_clear(xrt_set_t *s) {
     memset(s->ctrl, (int) XRT_CTRL_EMPTY, (size_t) s->cap + XRT_GROUP);
     s->growth_left = s->cap - s->cap / 8;
     s->len = 0;
+    s->order_len = 0;
 }
 
 static inline XrValue xrt_set_values(xrt_set_t *s) {
     XrValue arr = s->elem_type == XR_ELEM_ANY ? xrt_array_new(s->len)
                                               : xrt_array_new_typed(s->len, s->elem_type);
-    for (int64_t slot = 0; slot < s->cap; slot++)
+    for (int64_t oi = 0; oi < s->order_len; oi++) {
+        int64_t slot = s->order[oi];
         if (xrt_set_slot_is_full(s, slot))
             xrt_array_push(arr, xrt_set_slot_item(s, slot));
+    }
     return arr;
 }
 
@@ -978,10 +1020,16 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 dst->growth_left = src->growth_left;
                 memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
                 memcpy(dst->items, src->items, (size_t) src->cap * (size_t) src->elem_size);
+                xrt_set_order_reserve(dst, src->order_len);
+                memcpy(dst->order, src->order, (size_t) src->order_len * sizeof(int64_t));
+                dst->order_len = src->order_len;
             } else {
-                for (int64_t slot = 0; slot < src->cap; slot++)
-                    if (xrt_set_slot_is_full(src, slot))
-                        xrt_set_add(dst, xrt_value_clone_for_coro(xrt_set_slot_item(src, slot)));
+                for (int64_t oi = 0; oi < src->order_len; oi++) {
+                    int64_t slot = src->order[oi];
+                    if (!xrt_set_slot_is_full(src, slot))
+                        continue;
+                    xrt_set_add(dst, xrt_value_clone_for_coro(xrt_set_slot_item(src, slot)));
+                }
             }
             return dstv;
         }
