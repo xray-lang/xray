@@ -163,81 +163,55 @@ VM_CMP_RI(OP_LEI, <=, <=)
 ** Comparison Instructions (Produce Boolean Value)
 ** ======================================================== */
 
-vmcase(OP_CMP_EQ) {
-    // OP_CMP_EQ: equality comparison
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    // Fast path: primitive types
-    if ((XR_IS_INT(R(left)) || XR_IS_FLOAT(R(left)) || XR_IS_BOOL(R(left)) ||
-         XR_IS_NULL(R(left))) &&
-        (XR_IS_INT(R(right)) || XR_IS_FLOAT(R(right)) || XR_IS_BOOL(R(right)) ||
-         XR_IS_NULL(R(right)))) {
-        R(dest) = xr_bool(vm_values_equal(R(left), R(right)));
-        vmbreak;
+#define XVM_COMPARE_IS_PRIMITIVE(v)                                                                \
+    (XR_IS_INT(v) || XR_IS_FLOAT(v) || XR_IS_BOOL(v) || XR_IS_NULL(v))
+
+#define XVM_TEMPLATE_COMPARE_DEEP_CASE(op, negate, op_flag, op_symbol, op_name, deep_fn)           \
+    vmcase(op) {                                                                                   \
+        int dest = GETARG_A(i);                                                                    \
+        int left = GETARG_B(i);                                                                    \
+        int right = GETARG_C(i);                                                                   \
+        XrValue vl = R(left);                                                                      \
+        XrValue vr = R(right);                                                                     \
+        if (XVM_COMPARE_IS_PRIMITIVE(vl) && XVM_COMPARE_IS_PRIMITIVE(vr)) {                        \
+            bool equal = vm_values_equal(vl, vr);                                                  \
+            R(dest) = xr_bool((negate) ? !equal : equal);                                          \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, op_flag, op_symbol, op_name);                      \
+        bool equal = deep_fn(isolate, vl, vr);                                                     \
+        R(dest) = xr_bool((negate) ? !equal : equal);                                              \
+        vmbreak;                                                                                   \
     }
-    // Operator overload
-    VM_TRY_BINARY_OP_OVERLOAD(R(left), R(right), dest, XR_OP_EQ_FLAG, SYMBOL_OP_EQ, "==");
-    // Deep comparison
-    R(dest) = xr_bool(vm_values_equal_deep(isolate, R(left), R(right)));
-    vmbreak;
-}
 
-vmcase(OP_CMP_NE) {
-    // OP_CMP_NE: inequality comparison
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    if ((XR_IS_INT(R(left)) || XR_IS_FLOAT(R(left)) || XR_IS_BOOL(R(left)) ||
-         XR_IS_NULL(R(left))) &&
-        (XR_IS_INT(R(right)) || XR_IS_FLOAT(R(right)) || XR_IS_BOOL(R(right)) ||
-         XR_IS_NULL(R(right)))) {
-        R(dest) = xr_bool(!vm_values_equal(R(left), R(right)));
-        vmbreak;
+#define XVM_TEMPLATE_COMPARE_STRICT_CASE(op, negate)                                               \
+    vmcase(op) {                                                                                   \
+        int dest = GETARG_A(i);                                                                    \
+        int left = GETARG_B(i);                                                                    \
+        int right = GETARG_C(i);                                                                   \
+        bool equal = vm_values_strict_equal(R(left), R(right));                                    \
+        R(dest) = xr_bool((negate) ? !equal : equal);                                              \
+        vmbreak;                                                                                   \
     }
-    // Operator overload for != (uses == operator, negated)
-    VM_TRY_BINARY_OP_OVERLOAD(R(left), R(right), dest, XR_OP_NE_FLAG, SYMBOL_OP_NE, "!=");
-    R(dest) = xr_bool(!vm_values_equal_deep(isolate, R(left), R(right)));
-    vmbreak;
-}
 
-vmcase(OP_CMP_EQ_STRICT) {
-    // OP_CMP_EQ_STRICT: strict equality — no cross-type numeric coercion
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    R(dest) = xr_bool(vm_values_strict_equal(R(left), R(right)));
-    vmbreak;
-}
+#define XVM_TEMPLATE_COMPARE_ORDER_CASE(op, op_flag, op_symbol, op_name, compare_fn)               \
+    vmcase(op) {                                                                                   \
+        int dest = GETARG_A(i);                                                                    \
+        int left = GETARG_B(i);                                                                    \
+        int right = GETARG_C(i);                                                                   \
+        XrValue vl = R(left);                                                                      \
+        XrValue vr = R(right);                                                                     \
+        VM_TRY_BINARY_OP_OVERLOAD(vl, vr, dest, op_flag, op_symbol, op_name);                      \
+        R(dest) = xr_bool(compare_fn(vl, vr));                                                     \
+        vmbreak;                                                                                   \
+    }
 
-vmcase(OP_CMP_NE_STRICT) {
-    // OP_CMP_NE_STRICT: strict inequality — no cross-type numeric coercion
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    R(dest) = xr_bool(!vm_values_strict_equal(R(left), R(right)));
-    vmbreak;
-}
+#include "xvm_template_compare_gen.inc.c"
 
-vmcase(OP_CMP_LT) {
-    // OP_CMP_LT: less than comparison
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    VM_TRY_BINARY_OP_OVERLOAD(R(left), R(right), dest, XR_OP_LT_FLAG, SYMBOL_OP_LT, "<");
-    R(dest) = xr_bool(vm_numeric_less(R(left), R(right)));
-    vmbreak;
-}
-
-vmcase(OP_CMP_LE) {
-    // OP_CMP_LE: less than or equal comparison
-    int dest = GETARG_A(i);
-    int left = GETARG_B(i);
-    int right = GETARG_C(i);
-    VM_TRY_BINARY_OP_OVERLOAD(R(left), R(right), dest, XR_OP_LE_FLAG, SYMBOL_OP_LE, "<=");
-    R(dest) = xr_bool(vm_numeric_less_equal(R(left), R(right)));
-    vmbreak;
-}
+#undef XVM_TEMPLATE_COMPARE_ORDER_CASE
+#undef XVM_TEMPLATE_COMPARE_STRICT_CASE
+#undef XVM_TEMPLATE_COMPARE_DEEP_CASE
+#undef XVM_COMPARE_IS_PRIMITIVE
 
 vmcase(OP_IS) {
     // OP_IS: runtime type check - R[A] = (R[B] is R[C])
