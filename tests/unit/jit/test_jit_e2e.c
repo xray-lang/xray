@@ -2425,6 +2425,67 @@ static void test_call_known_jit_reenter(void) {
     fprintf(stderr, "\n  PASS\n");
 }
 
+static void test_call_method_known_receiver_param(void) {
+    fprintf(stderr, "  test_call_method_known_receiver_param...");
+
+    XmFunc *callee = xm_func_new("known_method_callee");
+    callee->num_params = 2;
+    XmRef recv = xm_new_vreg(callee, XR_REP_I64);
+    XmRef arg = xm_new_vreg(callee, XR_REP_I64);
+
+    XmBlock *callee_entry = xm_func_add_block(callee, "callee.entry");
+    XmRef result = xm_emit(callee, callee_entry, XM_SUB, XR_REP_I64, recv, arg);
+    xm_block_set_ret(callee_entry, result);
+
+    XmCodeAlloc callee_alloc;
+    xm_code_alloc_init(&callee_alloc);
+    XmCodegenResult callee_res = safe_codegen(callee, &callee_alloc);
+    assert(callee_res.success);
+
+    XrProto callee_proto;
+    memset(&callee_proto, 0, sizeof(callee_proto));
+    callee_proto.numparams = 2;
+    callee_proto.jit_entry = callee_res.code;
+    callee_proto.jit_fast_entry = (uint8_t *) callee_res.code + callee_res.fast_entry_offset;
+    callee_proto.stack_map = callee_res.stack_map;
+
+    XrClosure closure;
+    memset(&closure, 0, sizeof(closure));
+    xr_gc_header_init_type(&closure.gc, XR_TFUNCTION);
+    closure.proto = &callee_proto;
+
+    XmFunc *caller = xm_func_new("known_method_caller");
+    caller->num_params = 2;
+    XmRef caller_recv = xm_new_vreg(caller, XR_REP_I64);
+    XmRef caller_arg = xm_new_vreg(caller, XR_REP_I64);
+
+    XmBlock *caller_entry = xm_func_add_block(caller, "caller.entry");
+    XmRef proto_ref = xm_const_ptr(caller, &callee_proto);
+    XmRef closure_ref = xm_const_ptr(caller, &closure);
+    XmRef call_res =
+        xm_emit(caller, caller_entry, XM_CALL_METHOD_KNOWN, XR_REP_I64, proto_ref, closure_ref);
+    caller_entry->ins[caller_entry->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+    XmRef call_args[2] = {caller_recv, caller_arg};
+    xm_func_bind_call_args(caller, call_res, call_args, 2);
+    xm_block_set_ret(caller_entry, call_res);
+
+    XmCodeAlloc caller_alloc;
+    xm_code_alloc_init(&caller_alloc);
+    skip_auto_pipeline = true;
+    XmCodegenResult caller_res = safe_codegen(caller, &caller_alloc);
+    assert(caller_res.success);
+
+    assert(jit_call2(caller_res.code, 1000, 7) == 993);
+    assert(jit_call2(caller_res.code, 0, 3000) == -3000);
+    assert(g_jit_ctx.jit_frame_depth == 0);
+
+    xm_code_alloc_destroy(&caller_alloc);
+    xm_func_destroy(caller);
+    xm_code_alloc_destroy(&callee_alloc);
+    xm_func_destroy(callee);
+    fprintf(stderr, "\n  PASS\n");
+}
+
 static XrJitResult jit_test_reentry_audit(void *coro_raw, int64_t unused) {
     (void) unused;
     XrCoroutine *coro = (XrCoroutine *) coro_raw;
@@ -2866,6 +2927,7 @@ int main(void) {
     test_deopt_with_spill_pressure();
     test_call_self_direct();
     test_call_known_jit_reenter();
+    test_call_method_known_receiver_param();
     test_call_direct_bridge_reenter();
     test_osr_entry_pressure();
     test_spill_only_param_init();

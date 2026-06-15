@@ -459,6 +459,10 @@ ISEL(CALL_KNOWN_REG,   x64,     CUSTOM, -, "call function pointer in register")
 ISEL(CALL_KNOWN_REG,   arm64,   CUSTOM, -, "call function pointer in register")
 ISEL(CALL_KNOWN_REG,   riscv64, CUSTOM, -, "call function pointer in register")
 
+ISEL(CALL_METHOD_KNOWN,x64,     CUSTOM, -, "call known method closure with receiver parameter")
+ISEL(CALL_METHOD_KNOWN,arm64,   CUSTOM, -, "call known method closure with receiver parameter")
+ISEL(CALL_METHOD_KNOWN,riscv64, CUSTOM, -, "call known method closure with receiver parameter")
+
 ISEL(CALL_INTRINSIC,   x64,     CUSTOM, -, "intrinsic call")
 ISEL(CALL_INTRINSIC,   arm64,   CUSTOM, -, "intrinsic call")
 ISEL(CALL_INTRINSIC,   riscv64, CUSTOM, -, "intrinsic call")

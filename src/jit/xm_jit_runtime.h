@@ -70,6 +70,7 @@ XR_FUNC void xr_jit_alloc_post(struct XrCoroutine *coro, void *obj_ptr);
 
 XR_FUNC XrJitResult xr_jit_call_self(struct XrCoroutine *coro, int64_t unused);
 XR_FUNC XrJitResult xr_jit_call_func(struct XrCoroutine *coro, int64_t nargs_encoded);
+XR_FUNC XrJitResult xr_jit_call_method_known(struct XrCoroutine *coro, int64_t nargs_encoded);
 XR_FUNC XrJitResult xr_jit_invoke_method(struct XrCoroutine *coro, int64_t encoded);
 XR_FUNC XrJitResult xr_jit_invoke_direct(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_closure_new(struct XrCoroutine *coro, int64_t proto_raw);

@@ -105,7 +105,7 @@ static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
 bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     XR_DCHECK(ctx != NULL, "emit_call_ops: NULL ctx");
     XR_DCHECK(ins != NULL, "emit_call_ops: NULL ins");
-    switch (ins->op) {
+    switch (ins->op == XM_CALL_METHOD_KNOWN ? XM_CALL_KNOWN : ins->op) {
         // CALL_C: call C runtime function via shared stub
         // args[0] = const_ptr(function_address)
         // args[1] = first extra argument (optional, passed as x1)
@@ -670,9 +670,14 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             break;
         }
 
-        // CALL_KNOWN: cross-function direct BL with known callee proto
-        // args[0] = const_ptr(callee XrProto*), args[1] = const(nargs)
+        // CALL_KNOWN: cross-function direct BL with known callee proto.
+        //   args[0] = const_ptr(callee XrProto*), args[1] = const(nargs)
+        //   call_args[0] = closure, call_args[1..n] = params
+        // CALL_METHOD_KNOWN: monomorphic method IC direct call.
+        //   args[0] = const_ptr(callee XrProto*), args[1] = const_ptr(method closure)
+        //   call_args[0..n-1] = params, including receiver at index 0
         case XM_CALL_KNOWN: {
+            bool method_call = (ins->op == XM_CALL_METHOD_KNOWN);
             emit_call_args_from_pool(ctx, ins);
             // Write live PTR regs to spill slots for GC visibility in caller frame
             emit_ptr_spill_writeback(ctx);
@@ -693,11 +698,23 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // Extract nargs
             uint64_t nargs_val = 0;
-            if (!xm_ref_is_none(ins->args[1])) {
+            if (method_call) {
+                if (xm_ref_is_vreg(ins->dst)) {
+                    uint32_t dvi = XM_REF_INDEX(ins->dst);
+                    if (dvi < ctx->func->nvreg)
+                        nargs_val = ctx->func->vregs[dvi].call_nargs;
+                }
+            } else if (!xm_ref_is_none(ins->args[1])) {
                 if (xm_ref_is_const(ins->args[1])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[1]);
                     nargs_val = (uint64_t) ctx->func->consts[ci].val.i64;
                 }
+            }
+
+            uint64_t method_closure_ptr = 0;
+            if (method_call && xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                method_closure_ptr = (uint64_t) ctx->func->consts[ci].val.raw;
             }
 
             // Save live caller-saved registers
@@ -739,23 +756,30 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             emit_active_stack_map_from_call_proto(ctx);
 
-            // Set call_closure from call_args[0] so callee can access upvalues.
-            // Without this, xr_jit_upval_get reads stale call_closure.
-            a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
+            // Set call_closure so callee can access upvalues. Closure calls keep
+            // the closure in call_args[0]; method calls pass receiver there and
+            // carry the method closure in the instruction constant.
+            if (method_call)
+                a64_load_imm64(&ctx->buf, SCRATCH_REG2, method_closure_ptr);
+            else
+                a64_buf_emit(&ctx->buf,
+                             a64_ldr(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
 
-            // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
+            // Copy call_arg_tags[base+i] → param_tags[i] for JIT→JIT param type
             // pass-through. Callee prologue reads param_tags to init
             // vreg_runtime_tags for TAGGED params. Uses x17 (SCRATCH_REG2).
+            uint64_t arg_base = method_call ? 0 : 1;
             for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
-                int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + (pi + 1));
+                int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + arg_base + pi);
                 int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + pi * 8);
                 a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src));
                 a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, dst));
             }
             // Fast path: direct BLR to callee's jit_entry
             a64_buf_emit(&ctx->buf, a64_mov(A64_X0, CORO_REG));
-            a64_buf_emit(&ctx->buf, a64_add_imm(A64_X1, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET + 8));
+            a64_buf_emit(&ctx->buf,
+                         a64_add_imm(A64_X1, JIT_CTX_REG, XM_JIT_CALL_ARGS_OFFSET + arg_base * 8));
             a64_buf_emit(&ctx->buf, a64_blr(SCRATCH_REG));
             // Callee sets x1=tag via XM_JMP_RET. Store it to call_result_tag
             // so the done-path tag read is uniform with the slow (call_c_stub) path.
@@ -781,9 +805,15 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // --- Slow path: fallback to xr_jit_call_func C bridge ---
             uint32_t slow_path = ctx->buf.count;
 
+            if (method_call) {
+                a64_load_imm64(&ctx->buf, SCRATCH_REG2, method_closure_ptr);
+                a64_buf_emit(&ctx->buf,
+                             a64_str(SCRATCH_REG2, JIT_CTX_REG, XM_JIT_CALL_CLOSURE_OFFSET));
+            }
             a64_load_imm64(&ctx->buf, SCRATCH_REG2, nargs_val);
             a64_load_imm64(&ctx->buf, SCRATCH_REG,
-                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
+                           (uint64_t) (uintptr_t) xm_helper_func(
+                               method_call ? XM_HELPER_call_method_known : XM_HELPER_call_func));
             add_patch(ctx, PATCH_CALL_C, 0, A64_XZR);
             a64_buf_emit(&ctx->buf, a64_nop());
             ctx->has_call_c = true;

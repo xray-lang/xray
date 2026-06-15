@@ -473,6 +473,7 @@ static void type_prop_scan_once(XmFunc *func) {
 
                 // ---- Calls with known return type ----
                 case XM_CALL_KNOWN:
+                case XM_CALL_METHOD_KNOWN:
                 case XM_CALL_KNOWN_REG: {
                     if (!xm_ref_is_vreg(ins->dst))
                         break;
@@ -949,6 +950,7 @@ static bool can_trigger_gc(uint16_t op) {
         case XM_SAFEPOINT:
         case XM_CALL_C:
         case XM_CALL_KNOWN:
+        case XM_CALL_METHOD_KNOWN:
         case XM_ALLOC:
             return true;
         default:

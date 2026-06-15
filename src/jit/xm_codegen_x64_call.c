@@ -24,7 +24,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     CODEGEN_CHECK(ctx, ctx != NULL, "x64_emit_call_ins: NULL ctx");
     CODEGEN_CHECK(ctx, ins != NULL, "x64_emit_call_ins: NULL ins");
 
-    switch (ins->op) {
+    switch (ins->op == XM_CALL_METHOD_KNOWN ? XM_CALL_KNOWN : ins->op) {
         case XM_CALL_C: {
             CODEGEN_CHECK(ctx, xm_helper_call_c_protocol_matches_flags(ctx->func, ins),
                           "CALL_C post-call protocol flags mismatch");
@@ -368,8 +368,11 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
         }
 
         /* CALL_KNOWN: cross-function direct CALL with known callee proto.
-         * args[0] = const_ptr(callee XrProto*), args[1] = const(nargs). */
+         * args[0] = const_ptr(callee XrProto*), args[1] = const(nargs).
+         * CALL_METHOD_KNOWN: args[0] = proto, args[1] = method closure, and
+         * call_args[0..n-1] are the real params including receiver. */
         case XM_CALL_KNOWN: {
+            bool method_call = (ins->op == XM_CALL_METHOD_KNOWN);
             x64_emit_call_args_from_pool(ctx, ins);
             x64_emit_ptr_spill_writeback(ctx);
 
@@ -386,9 +389,20 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
                 callee_proto_ptr = (uint64_t) ctx->func->consts[ci].val.raw;
             }
             uint64_t nargs_val = 0;
-            if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
+            if (method_call) {
+                if (xm_ref_is_vreg(ins->dst)) {
+                    uint32_t dvi = XM_REF_INDEX(ins->dst);
+                    if (dvi < ctx->func->nvreg)
+                        nargs_val = ctx->func->vregs[dvi].call_nargs;
+                }
+            } else if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
                 uint32_t ci = XM_REF_INDEX(ins->args[1]);
                 nargs_val = (uint64_t) ctx->func->consts[ci].val.i64;
+            }
+            uint64_t method_closure_ptr = 0;
+            if (method_call && xm_ref_is_const(ins->args[1])) {
+                uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                method_closure_ptr = (uint64_t) ctx->func->consts[ci].val.raw;
             }
 
             /* Save live caller-saved regs to stack (16-byte aligned) */
@@ -416,6 +430,11 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, callee_proto_ptr);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_PROTO_OFFSET,
                        X64_SCRATCH_REG);
+            if (method_call) {
+                x64_load_imm64(&ctx->buf, X64_RCX, method_closure_ptr);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_CLOSURE_OFFSET,
+                           X64_RCX);
+            }
             x64_mov_rm(&ctx->buf, X64_SCRATCH_REG, X64_SCRATCH_REG,
                        (int32_t) XM_PROTO_JIT_ENTRY_OFFSET);
             /* TEST r11, r11; JE slow_path */
@@ -427,14 +446,26 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_rm(&ctx->buf, X64_RCX, X64_RCX, (int32_t) XM_PROTO_STACK_MAP_OFFSET);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_ACTIVE_SMAP_OFFSET, X64_RCX);
 
-            /* Set call_closure from call_args[0] so callee can access upvalues */
-            x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARGS_OFFSET);
-            x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_CLOSURE_OFFSET, X64_RCX);
+            /* Set call_closure from call_args[0] for closure calls. Method
+             * calls put receiver in call_args[0] and already stored closure. */
+            if (!method_call) {
+                x64_mov_rm(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARGS_OFFSET);
+                x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_CLOSURE_OFFSET,
+                           X64_RCX);
+            }
 
-            /* Fast path direct CALL: ABI_ARG1=coro, ABI_ARG2=&call_args[1] */
+            int arg_base = method_call ? 0 : 1;
+            for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
+                int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + arg_base + (int) pi);
+                int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + (int) pi * 8);
+                x64_movzx_rm8(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, src);
+                x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst, X64_RCX);
+            }
+
+            /* Fast path direct CALL: ABI_ARG1=coro, ABI_ARG2=&call_args[arg_base] */
             x64_mov_rr(&ctx->buf, X64_ABI_ARG1, X64_CORO_REG);
             x64_lea(&ctx->buf, X64_ABI_ARG2, X64_JIT_CTX_REG,
-                    (int32_t) (XM_JIT_CALL_ARGS_OFFSET + 8));
+                    (int32_t) (XM_JIT_CALL_ARGS_OFFSET + arg_base * 8));
             x64_call_r(&ctx->buf, X64_SCRATCH_REG);
 
             /* Restore caller's smap + frame_sp after JIT→JIT return.
@@ -475,7 +506,8 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
             /* Load helper function pointer to R11 (call_c_stub calls R11) */
             x64_load_imm64(&ctx->buf, X64_SCRATCH_REG,
-                           (uint64_t) (uintptr_t) xm_helper_func(XM_HELPER_call_func));
+                           (uint64_t) (uintptr_t) xm_helper_func(
+                               method_call ? XM_HELPER_call_method_known : XM_HELPER_call_func));
             /* CALL rel32 → call_c_stub */
             CODEGEN_CHECK(ctx, ctx->npatch < ctx->patches_cap, "too many patches");
             X64BranchPatch *cp = &ctx->patches[ctx->npatch];

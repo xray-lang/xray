@@ -704,6 +704,7 @@ static bool xm_op_may_gc(uint16_t op) {
         case XM_CALL_DIRECT:
         case XM_CALL_KNOWN:
         case XM_CALL_KNOWN_REG:
+        case XM_CALL_METHOD_KNOWN:
         case XM_SAFEPOINT:
         case XM_RT_ARRAY_NEW:
         case XM_RT_MAP_NEW:

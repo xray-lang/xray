@@ -445,6 +445,7 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
                 case XM_CALL:
                 case XM_CALL_KNOWN:
                 case XM_CALL_KNOWN_REG:
+                case XM_CALL_METHOD_KNOWN:
                 case XM_CALL_SELF_DIRECT:
                     loc_ref[nloc] = ins->dst;
                     loc_def[nloc] = i;
@@ -715,6 +716,7 @@ XmPassChange xm_insert_arc_releases(XmFunc *func) {
                 case XM_CALL:
                 case XM_CALL_KNOWN:
                 case XM_CALL_KNOWN_REG:
+                case XM_CALL_METHOD_KNOWN:
                 case XM_CALL_SELF_DIRECT:
                     g_ref[ng] = ins->dst;
                     g_def_blk[ng] = bi;

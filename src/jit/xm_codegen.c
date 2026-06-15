@@ -717,7 +717,8 @@ static bool xm_op_clobbers_flags(uint16_t op) {
         return true;
     // Calls: callee may clobber NZCV
     if (op == XM_CALL || op == XM_CALL_C || op == XM_CALL_C_LEAF || op == XM_CALL_KNOWN ||
-        op == XM_CALL_KNOWN_REG || op == XM_CALL_SELF_DIRECT || op == XM_CALL_DIRECT)
+        op == XM_CALL_KNOWN_REG || op == XM_CALL_METHOD_KNOWN || op == XM_CALL_SELF_DIRECT ||
+        op == XM_CALL_DIRECT)
         return true;
     // ALLOC: inline bump-pointer has CMP for limit check
     if (op == XM_ALLOC)

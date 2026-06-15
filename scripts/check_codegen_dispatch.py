@@ -97,6 +97,18 @@ def extract_case_labels(path: Path) -> set[str]:
     return set(re.findall(r"^\s*case\s+XM_([A-Z0-9_]+)\s*:", text, re.MULTILINE))
 
 
+def extract_switch_aliases(path: Path) -> dict[str, str]:
+    """Extract `switch (ins->op == XM_A ? XM_B : ins->op)` dispatch aliases."""
+    text = path.read_text()
+    aliases: dict[str, str] = {}
+    for source, target in re.findall(
+        r"switch\s*\(\s*ins->op\s*==\s*XM_([A-Z0-9_]+)\s*\?\s*XM_([A-Z0-9_]+)\s*:\s*ins->op\s*\)",
+        text,
+    ):
+        aliases[source] = target
+    return aliases
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -125,6 +137,11 @@ def main() -> int:
     shared_call_cases = extract_case_labels(
         root / "src" / "jit" / "xm_codegen_call.c"
     )
+    for source, target in extract_switch_aliases(
+        root / "src" / "jit" / "xm_codegen_call.c"
+    ).items():
+        if target in shared_call_cases:
+            shared_call_cases.add(source)
     shared_mem_cases = extract_case_labels(
         root / "src" / "jit" / "xm_codegen_mem.c"
     )

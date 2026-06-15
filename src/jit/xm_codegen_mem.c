@@ -37,8 +37,8 @@ static bool isnull_uses_runtime_tag(CodegenCtx *ctx, XmRef ref, uint32_t *out_vi
         return true;
     }
     XmOp op = def->op;
-    if (op == XM_CALL_C || op == XM_CALL_KNOWN || op == XM_CALL_KNOWN_REG || op == XM_CALL_DIRECT ||
-        op == XM_CALL_SELF_DIRECT) {
+    if (op == XM_CALL_C || op == XM_CALL_KNOWN || op == XM_CALL_KNOWN_REG ||
+        op == XM_CALL_METHOD_KNOWN || op == XM_CALL_DIRECT || op == XM_CALL_SELF_DIRECT) {
         *out_vi = vi;
         return true;
     }

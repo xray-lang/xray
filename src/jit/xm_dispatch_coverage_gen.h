@@ -8,7 +8,7 @@
  * Use via:  #define VISIT(op) ... XM_DISPATCH_<BE>(VISIT) #undef VISIT
  * Consumed by CI dispatch-coverage check. */
 
-/* x64: 111 ops declared in isel.def */
+/* x64: 112 ops declared in isel.def */
 #define XM_DISPATCH_X64(X) \
     X(ADD) \
     X(SUB) \
@@ -99,6 +99,7 @@
     X(CALL_DIRECT) \
     X(CALL_KNOWN) \
     X(CALL_KNOWN_REG) \
+    X(CALL_METHOD_KNOWN) \
     X(CALL_INTRINSIC) \
     X(LOAD_FIELD) \
     X(STORE_FIELD) \
@@ -122,7 +123,7 @@
     X(RETAIN) \
     X(RELEASE)
 
-/* arm64: 111 ops declared in isel.def */
+/* arm64: 112 ops declared in isel.def */
 #define XM_DISPATCH_ARM64(X) \
     X(ADD) \
     X(SUB) \
@@ -213,6 +214,7 @@
     X(CALL_DIRECT) \
     X(CALL_KNOWN) \
     X(CALL_KNOWN_REG) \
+    X(CALL_METHOD_KNOWN) \
     X(CALL_INTRINSIC) \
     X(LOAD_FIELD) \
     X(STORE_FIELD) \
@@ -236,7 +238,7 @@
     X(RETAIN) \
     X(RELEASE)
 
-/* riscv64: 111 ops declared in isel.def */
+/* riscv64: 112 ops declared in isel.def */
 #define XM_DISPATCH_RISCV64(X) \
     X(ADD) \
     X(SUB) \
@@ -327,6 +329,7 @@
     X(CALL_DIRECT) \
     X(CALL_KNOWN) \
     X(CALL_KNOWN_REG) \
+    X(CALL_METHOD_KNOWN) \
     X(CALL_INTRINSIC) \
     X(LOAD_FIELD) \
     X(STORE_FIELD) \

@@ -290,6 +290,7 @@ static inline XrRep xr_type_base_rep(const XrType *t) {
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
+        case XR_KIND_TUPLE:
         case XR_KIND_JSON:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
@@ -378,6 +379,7 @@ static inline uint8_t xr_type_to_slot_type(XrType *type) {
         case XR_KIND_ARRAY:
         case XR_KIND_MAP:
         case XR_KIND_SET:
+        case XR_KIND_TUPLE:
         case XR_KIND_JSON:
         case XR_KIND_INSTANCE:
         case XR_KIND_CHANNEL:
