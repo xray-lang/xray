@@ -85,6 +85,9 @@ static AotTestFrame *aot_test_frame_new(AotTestMode mode, XrValue value, XrValue
     AotTestFrame *frame = (AotTestFrame *) xr_aot_frame_alloc(sizeof(AotTestFrame));
     if (!frame)
         return NULL;
+    // xr_aot_frame_alloc uses xr_malloc (uninitialized); AOT codegen zeroes the
+    // frame, so mirror that here, otherwise resume_count starts as garbage.
+    memset(frame, 0, sizeof(*frame));
     frame->mode = mode;
     frame->release_count = release_count;
     frame->trace_count = trace_count;
