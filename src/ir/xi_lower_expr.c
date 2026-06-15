@@ -85,6 +85,57 @@ static XiValue *xi_lower_narrow_for_native_field(XiLower *l, AstNode *node, XiVa
 static struct XrType *xi_lower_struct_field_type(XiLower *l, struct XrType *fallback,
                                                  XrStructLayout *layout, int field_index);
 
+#define XI_LOWER_VALUE_LIST_STACK_CAP 32
+#define XI_LOWER_MAX_VARIADIC_VALUES ((int) UINT16_MAX)
+
+typedef struct XiLowerValueList {
+    XiValue **items;
+    int count;
+    int cap;
+} XiLowerValueList;
+
+static void xi_lower_value_list_init(XiLowerValueList *list, XiValue **stack_items, int stack_cap) {
+    list->items = stack_items;
+    list->count = 0;
+    list->cap = stack_cap;
+}
+
+static bool xi_lower_value_list_grow(XiLower *l, XiLowerValueList *list, int max_items) {
+    int next_cap = list->cap > 0 ? list->cap * 2 : 1;
+    if (next_cap <= list->count)
+        next_cap = list->count + 1;
+    if (next_cap > max_items)
+        next_cap = max_items;
+    if (next_cap <= list->cap)
+        return false;
+
+    XiValue **items = (XiValue **) xi_func_arena_alloc(
+        l->func, (uint32_t) ((size_t) next_cap * sizeof(XiValue *)));
+    if (!items) {
+        l->had_error = true;
+        return false;
+    }
+    if (list->count > 0)
+        memcpy(items, list->items, (size_t) list->count * sizeof(XiValue *));
+    list->items = items;
+    list->cap = next_cap;
+    return true;
+}
+
+static bool xi_lower_value_list_push(XiLower *l, XiLowerValueList *list, XiValue *value,
+                                     int max_items, const char *what, int line) {
+    if (list->count >= max_items) {
+        fprintf(stderr, "[LOWER] %s exceeds %d at line %d\n", what ? what : "value count",
+                max_items, line);
+        l->had_error = true;
+        return false;
+    }
+    if (list->count >= list->cap && !xi_lower_value_list_grow(l, list, max_items))
+        return false;
+    list->items[list->count++] = value;
+    return true;
+}
+
 /* Propagate needs_cell along the transitive upvalue capture chain.
  * When an inner closure mutates a captured variable through SRC_UPVAL,
  * every intermediate level up to the defining SRC_REG capture needs
@@ -186,24 +237,23 @@ static XiValue *xi_lower_wrap_if_needed(XiLower *l, AstNode *node, XiValue *valu
     return n;
 }
 
-/* Collect leaf operands from a string ADD chain (left-recursive flatten). */
-static int collect_str_concat_leaves(XiLower *l, AstNode *node, AstNode **leaves, int max) {
+static bool lower_str_concat_part(XiLower *l, AstNode *node, XiLowerValueList *parts, int line) {
     if (!node)
-        return 0;
+        return true;
     if (node->type == AST_BINARY_ADD) {
         /* Check if this ADD node has string result type */
         struct XrType *t = xa_analyzer_get_node_type(l->analyzer, node);
         if (t && t->kind == XR_KIND_STRING) {
-            int n = collect_str_concat_leaves(l, node->as.binary.left, leaves, max);
-            n += collect_str_concat_leaves(l, node->as.binary.right, leaves + n, max - n);
-            return n;
+            return lower_str_concat_part(l, node->as.binary.left, parts, line) &&
+                   lower_str_concat_part(l, node->as.binary.right, parts, line);
         }
     }
-    /* Leaf node */
-    if (max <= 0)
-        return 0;
-    leaves[0] = node;
-    return 1;
+
+    XiValue *part = xi_lower_expr(l, node);
+    if (!part)
+        return false;
+    return xi_lower_value_list_push(l, parts, part, XI_LOWER_MAX_VARIADIC_VALUES,
+                                    "string concat part count", line);
 }
 
 static XiValue *lower_binary(XiLower *l, AstNode *node) {
@@ -216,24 +266,23 @@ static XiValue *lower_binary(XiLower *l, AstNode *node) {
     if (node->type == AST_BINARY_ADD) {
         struct XrType *result_type = xa_analyzer_get_node_type(l->analyzer, node);
         if (result_type && result_type->kind == XR_KIND_STRING) {
-            AstNode *leaves[64];
-            int nleaves = collect_str_concat_leaves(l, node, leaves, 64);
-            if (nleaves >= 2) {
-                XiValue *parts[64];
-                for (int i = 0; i < nleaves; i++) {
-                    parts[i] = xi_lower_expr(l, leaves[i]);
-                    if (!parts[i])
-                        return NULL;
-                }
+            XiValue *stack_parts[XI_LOWER_VALUE_LIST_STACK_CAP];
+            XiLowerValueList parts;
+            xi_lower_value_list_init(&parts, stack_parts, XI_LOWER_VALUE_LIST_STACK_CAP);
+            if (!lower_str_concat_part(l, node, &parts, node->line))
+                return NULL;
+            if (parts.count >= 2) {
                 XiValue *v = xi_value_new(l->func, l->cur_block, XI_STR_CONCAT, l->type_string,
-                                          (uint16_t) nleaves);
+                                          (uint16_t) parts.count);
                 if (!v)
                     return NULL;
-                for (int i = 0; i < nleaves; i++)
-                    v->args[i] = parts[i];
+                for (int i = 0; i < parts.count; i++)
+                    v->args[i] = parts.items[i];
                 v->line = (uint32_t) node->line;
                 return v;
             }
+            if (parts.count == 1)
+                return parts.items[0];
         }
     }
 
@@ -1095,22 +1144,29 @@ static XiValue *lower_builtin_call(XiLower *l, AstNode *node, const char *fname,
      * here.  Emit XI_PRINT instructions with the same encoding. */
     if (strcmp(fname, "print") == 0) {
         int n = (int) call->arg_count;
-        XiValue *arg_vals[16];
-        int capped = n > 16 ? 16 : n;
-        for (int i = 0; i < capped; i++)
-            arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
-        for (int i = 0; i < capped; i++) {
+        XiValue *stack_args[XI_LOWER_VALUE_LIST_STACK_CAP];
+        XiLowerValueList args;
+        xi_lower_value_list_init(&args, stack_args, XI_LOWER_VALUE_LIST_STACK_CAP);
+        for (int i = 0; i < n; i++) {
+            XiValue *arg = xi_lower_expr(l, call->arguments[i]);
+            if (!arg)
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+            if (!xi_lower_value_list_push(l, &args, arg, XI_LOWER_MAX_VARIADIC_VALUES,
+                                          "print argument count", line))
+                return xi_const_null(l->func, l->cur_block, l->type_null);
+        }
+        for (int i = 0; i < args.count; i++) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
             if (!v)
                 return xi_const_null(l->func, l->cur_block, l->type_null);
-            v->args[0] = arg_vals[i];
+            v->args[0] = args.items[i];
             int add_space = (i > 0) ? 1 : 0;
-            int newline = (i == capped - 1) ? 1 : 0;
+            int newline = (i == args.count - 1) ? 1 : 0;
             v->aux_int = add_space | (newline << 1);
             v->flags = xi_op_default_effects(XI_PRINT);
             v->line = (uint32_t) line;
         }
-        if (capped == 0) {
+        if (args.count == 0) {
             /* print() with no args → emit newline */
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
             if (!v)
@@ -1252,8 +1308,21 @@ static XiValue *lower_coro_method(XiLower *l, AstNode *node, const char *method,
     if (sub < 0)
         return NULL;
 
-    int n = call->arg_count > 16 ? 16 : call->arg_count;
-    XiValue *arg_vals[16];
+    int n = call->arg_count;
+    if (n < 0 || n > XI_LOWER_MAX_VARIADIC_VALUES) {
+        fprintf(stderr, "[LOWER] Coro.%s argument count exceeds %d at line %d\n", method,
+                XI_LOWER_MAX_VARIADIC_VALUES, (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    XiValue *stack_args[16];
+    XiValue **arg_vals = stack_args;
+    if (n > 16) {
+        arg_vals =
+            (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) n * sizeof(XiValue *)));
+        if (!arg_vals)
+            return NULL;
+    }
     for (int i = 0; i < n; i++) {
         arg_vals[i] = xi_lower_expr(l, call->arguments[i]);
         if (!arg_vals[i])
@@ -2274,12 +2343,25 @@ static XiValue *lower_channel_new(XiLower *l, AstNode *node) {
 static XiValue *lower_template_string(XiLower *l, AstNode *node) {
     TemplateStringNode *ts = &node->as.template_str;
     int count = ts->part_count;
+    if (count < 0 || count > XI_LOWER_MAX_VARIADIC_VALUES) {
+        fprintf(stderr, "[LOWER] template string part count exceeds %d at line %d\n",
+                XI_LOWER_MAX_VARIADIC_VALUES, (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
 
     /* Evaluate all parts */
-    XiValue *parts[64];
-    int n = count > 64 ? 64 : count;
+    XiValue *stack_parts[XI_LOWER_VALUE_LIST_STACK_CAP];
+    XiLowerValueList parts;
+    xi_lower_value_list_init(&parts, stack_parts, XI_LOWER_VALUE_LIST_STACK_CAP);
+    int n = count;
     for (int i = 0; i < n; i++) {
-        parts[i] = xi_lower_expr(l, ts->parts[i]);
+        XiValue *part = xi_lower_expr(l, ts->parts[i]);
+        if (!part)
+            return NULL;
+        if (!xi_lower_value_list_push(l, &parts, part, XI_LOWER_MAX_VARIADIC_VALUES,
+                                      "template string part count", node->line))
+            return NULL;
     }
 
     struct XrType *result_type = l->type_string;
@@ -2287,7 +2369,7 @@ static XiValue *lower_template_string(XiLower *l, AstNode *node) {
     if (!v)
         return NULL;
     for (int i = 0; i < n; i++) {
-        v->args[i] = parts[i];
+        v->args[i] = parts.items[i];
     }
     v->line = (uint32_t) node->line;
     return v;
@@ -2602,12 +2684,24 @@ static XiValue *lower_range_expr(XiLower *l, AstNode *node) {
 static XiValue *lower_struct_literal(XiLower *l, AstNode *node) {
     StructLiteralNode *sl = &node->as.struct_literal;
     int count = sl->field_count;
-    int n = count > 32 ? 32 : count;
+    if (count < 0 || count > XI_LOWER_MAX_VARIADIC_VALUES) {
+        fprintf(stderr, "[LOWER] struct literal field count exceeds %d at line %d\n",
+                XI_LOWER_MAX_VARIADIC_VALUES, (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    int n = count;
 
     /* Evaluate field values first */
-    XiValue *val_vals[32];
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **val_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    if (!val_vals)
+        return NULL;
     for (int i = 0; i < n; i++) {
         val_vals[i] = xi_lower_expr(l, sl->field_values[i]);
+        if (!val_vals[i])
+            return NULL;
     }
 
     /* Resolve struct class from scope: local → shared → upvalue.
