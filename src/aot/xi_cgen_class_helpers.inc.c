@@ -384,13 +384,14 @@ static void emit_class_field_cache_decls(XiCgenCtx *ctx, FILE *out) {
         if (cache->native_receiver && entry->layout_index >= 0) {
             emit_class_field_cache_native_ref(ctx, out, cache, entry->layout_index);
         } else {
-            bool wrapped = emit_conversion_prefix(out, entry->type, XR_REP_TAGGED, entry->rep);
+            const char *conv_suffix =
+                emit_conversion_prefix(out, entry->type, XR_REP_TAGGED, entry->rep);
             fprintf(out, "xrt_map_get((xrt_map_t*)");
             emit_class_field_cache_receiver_expr(out, cache);
             fprintf(out, ".ptr, ");
             cg_emit_str_value(ctx, out, entry->name);
             fprintf(out, ")");
-            emit_conversion_suffix(out, wrapped);
+            emit_conversion_suffix(out, conv_suffix);
         }
         fprintf(out, ";\n");
     }
@@ -431,9 +432,9 @@ static bool emit_class_cached_field_load_expr(XiCgenCtx *ctx, FILE *out, const X
     if (index < 0)
         return false;
     CgClassFieldCacheEntry *entry = &cache->fields[index];
-    bool wrapped = emit_conversion_prefix(out, v->type, entry->rep, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, entry->rep, cg_rep(v));
     emit_class_field_cache_var(out, (uint16_t) index);
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 

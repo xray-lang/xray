@@ -9,4 +9,15 @@ fn choose(flag: bool, value: int) -> int {
     return 0
 }
 
+fn echo_text(text: string) -> string {
+    return text
+}
+
+fn same_items(items: Array<int>) -> Array<int> {
+    return items
+}
+
 print(choose(true, add_i64(21, 21)))
+print(echo_text("ptr"))
+let items: Array<int> = [1, 2, 3]
+print(same_items(items).length())

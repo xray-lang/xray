@@ -96,51 +96,86 @@ static void cg_prepare_func_tree_for_cgen(XiFunc *f) {
         xi_backend_lower(f);
 }
 
-static bool emit_conversion_prefix(FILE *out, const XrType *type, XrRep from_rep, XrRep to_rep) {
+static const char *cg_ptr_box_suffix_for_type(const XrType *type) {
+    if (!type)
+        return ", XR_TAG_PTR)";
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+            return ", XR_TAG_ARRAY)";
+        case XR_KIND_MAP:
+            return ", XR_TAG_MAP)";
+        case XR_KIND_SET:
+            return ", XR_TAG_SET)";
+        case XR_KIND_TUPLE:
+            return ", XR_TAG_TUPLE)";
+        default:
+            return ", XR_TAG_PTR)";
+    }
+}
+
+static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep from_rep,
+                                          XrRep to_rep) {
     if (from_rep == to_rep)
-        return false;
+        return NULL;
     if (to_rep == XR_REP_TAGGED) {
+        if (from_rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
+            fprintf(out, "xr_str_value_from_ptr(");
+            return ")";
+        }
+        if (from_rep == XR_REP_PTR) {
+            fprintf(out, "xr_mkptr(");
+            return cg_ptr_box_suffix_for_type(type);
+        }
         if (from_rep == XR_REP_F64)
             fprintf(out, "XR_FROM_FLOAT(");
         else if (type && type->kind == XR_KIND_BOOL)
             fprintf(out, "XR_FROM_BOOL(");
         else
             fprintf(out, "XR_FROM_INT(");
-        return true;
+        return ")";
+    }
+    if (to_rep == XR_REP_PTR) {
+        if (from_rep == XR_REP_TAGGED) {
+            fprintf(out, "(");
+            return ").ptr";
+        }
+        fprintf(out, "(void *)(");
+        return ")";
     }
     if (to_rep == XR_REP_I64) {
         if (from_rep == XR_REP_TAGGED)
             fprintf(out, "XR_TO_INT(");
         else
             fprintf(out, "(int64_t)(");
-        return true;
+        return ")";
     }
     if (to_rep == XR_REP_F64) {
         if (from_rep == XR_REP_TAGGED)
             fprintf(out, "XR_TO_FLOAT(");
         else
             fprintf(out, "(double)(");
-        return true;
+        return ")";
     }
-    return false;
+    return NULL;
 }
 
-static void emit_conversion_suffix(FILE *out, bool wrapped) {
-    if (wrapped)
-        fprintf(out, ")");
+static void emit_conversion_suffix(FILE *out, const char *suffix) {
+    if (suffix)
+        fprintf(out, "%s", suffix);
 }
 
 static void emit_value_as_rep(FILE *out, const XiValue *v, XrRep target_rep) {
-    bool wrapped = emit_conversion_prefix(out, v ? v->type : NULL, cg_rep(v), target_rep);
+    const char *conv_suffix =
+        emit_conversion_prefix(out, v ? v->type : NULL, cg_rep(v), target_rep);
     emit_vref(out, v);
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void emit_value_as_rep_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v, XrRep target_rep) {
     XrRep from_rep = ctx ? cg_value_plan_storage_rep(ctx, v) : cg_rep(v);
-    bool wrapped = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
+    const char *conv_suffix = emit_conversion_prefix(out, v ? v->type : NULL, from_rep, target_rep);
     emit_vref(out, v);
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static const XaotBoundaryStep *cg_value_boundary_step(XiCgenCtx *ctx, const XiFunc *f,
@@ -173,56 +208,27 @@ static const XaotBoundaryStep *cg_value_boundary_step(XiCgenCtx *ctx, const XiFu
     return step;
 }
 
-static const XaotBoundaryStep *
-cg_direct_call_boundary_step(XiCgenCtx *ctx, XaotBoundaryStepKind kind, const XiFunc *f,
-                             const XiValue *call, const XiValue *input, const XiFunc *target,
-                             uint16_t arg_index) {
-    const XaotBoundaryStep *step;
-
-    if (!ctx || !f || !call || !target) {
-        if (ctx)
-            ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: incomplete AOT direct-call boundary lookup\n");
-        return NULL;
-    }
-
-    step =
-        xaot_bundle_find_boundary_step_ex(ctx->aot_bundle, kind, f, call, input, target, arg_index);
-    if (!step) {
-        fprintf(stderr, "[xi_cgen] ERROR: missing AOT direct-call boundary step at v%u\n",
-                call->id);
-        ctx->error = true;
-        return NULL;
-    }
-    if (step->reason != XAOT_BOUNDARY_DIRECT_CALL) {
-        fprintf(stderr, "[xi_cgen] ERROR: AOT direct-call boundary reason mismatch at v%u: %s\n",
-                call->id, xaot_boundary_reason_name(step->reason));
-        ctx->error = true;
-        return NULL;
-    }
-    return step;
-}
-
-static bool emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
-                                                      const XiValue *call, const XiFunc *target) {
+static const char *emit_direct_call_return_conversion_prefix(XiCgenCtx *ctx, FILE *out,
+                                                             const XiFunc *f, const XiValue *call,
+                                                             const XiFunc *target) {
     const XaotFuncPlan *target_plan = cg_func_plan(ctx, target);
     XrRep actual_rep;
     XrRep result_rep;
     const XaotBoundaryStep *step = NULL;
 
     if (!target_plan)
-        return false;
+        return NULL;
     actual_rep = cg_abi_slot_storage_rep(&target_plan->abi.ret);
     result_rep = cg_value_plan_storage_rep(ctx, call);
     if (ctx->error)
-        return false;
+        return NULL;
     if (actual_rep != result_rep) {
-        step = cg_direct_call_boundary_step(ctx, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, f, call, NULL,
-                                            target, UINT16_MAX);
-        if (!step)
-            return false;
-        actual_rep = xaot_value_storage_rep(step->from_rep);
-        result_rep = xaot_value_storage_rep(step->to_rep);
+        step = xaot_bundle_find_boundary_step_ex(
+            ctx->aot_bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_RET, f, call, NULL, target, UINT16_MAX);
+        if (step) {
+            actual_rep = xaot_value_storage_rep(step->from_rep);
+            result_rep = xaot_value_storage_rep(step->to_rep);
+        }
     }
     return emit_conversion_prefix(out, call ? call->type : NULL, actual_rep, result_rep);
 }
@@ -234,7 +240,7 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     const XaotAbiSlot *slot;
     XrRep from_rep;
     XrRep to_rep;
-    bool wrapped;
+    const char *conv_suffix;
 
     if (!target_plan || arg_index >= target_plan->abi.nparams || !target_plan->abi.params) {
         fprintf(stderr, "[xi_cgen] ERROR: AOT direct-call argument ABI mismatch at v%u\n",
@@ -253,17 +259,15 @@ static void emit_value_as_direct_call_arg(XiCgenCtx *ctx, FILE *out, const XiFun
     }
 
     if (from_rep != to_rep) {
-        const XaotBoundaryStep *step = cg_direct_call_boundary_step(
-            ctx, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, f, call, arg, target, arg_index);
-        if (!step) {
-            emit_codegen_abort_expr(out);
-            return;
+        const XaotBoundaryStep *step = xaot_bundle_find_boundary_step_ex(
+            ctx->aot_bundle, XAOT_BOUNDARY_STEP_DIRECT_CALL_ARG, f, call, arg, target, arg_index);
+        if (step) {
+            from_rep = xaot_value_storage_rep(step->from_rep);
+            to_rep = xaot_value_storage_rep(step->to_rep);
         }
-        from_rep = xaot_value_storage_rep(step->from_rep);
-        to_rep = xaot_value_storage_rep(step->to_rep);
     }
 
-    wrapped = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
+    conv_suffix = emit_conversion_prefix(out, arg ? arg->type : NULL, from_rep, to_rep);
     emit_vref(out, arg);
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
 }

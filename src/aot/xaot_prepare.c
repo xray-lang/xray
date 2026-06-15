@@ -1126,6 +1126,11 @@ static bool prepare_array_native_local_arg_use_is_safe(const XiValue *user, uint
         case XI_RETAIN:
         case XI_RELEASE:
             return arg_index == 0;
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_COPY:
+        case XI_MOVE:
+            return arg_index == 0;
         default:
             return false;
     }
@@ -1531,6 +1536,13 @@ static bool prepare_alias_array_uses_are_cache_local(const XaotBundle *bundle, c
                         if (argi != 0)
                             return false;
                         break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (argi != 0)
+                            return false;
+                        break;
                     default:
                         return false;
                 }
@@ -1667,6 +1679,13 @@ static bool prepare_array_native_local_data_cacheable(const XaotBundle *bundle, 
                     }
                     case XI_RETAIN:
                     case XI_RELEASE:
+                        if (argi != 0)
+                            return false;
+                        break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
                         if (argi != 0)
                             return false;
                         break;

@@ -269,8 +269,17 @@ static bool cg_coro_value_from_runtime_bridge(const XiValue *v) {
 }
 
 static bool cg_coro_value_needs_arc_release(const XiValue *v) {
-    return v && cg_rep(v) == XR_REP_TAGGED && xi_own_type_is_rc(v->type) &&
-           !cg_coro_value_from_runtime_bridge(v);
+    return v && (cg_rep(v) == XR_REP_TAGGED || cg_rep(v) == XR_REP_PTR) &&
+           xi_own_type_is_rc(v->type) && !cg_coro_value_from_runtime_bridge(v);
+}
+
+static bool cg_coro_value_rep_can_trace_root(const XiValue *v) {
+    if (!v)
+        return false;
+    XrRep rep = cg_rep(v);
+    if (rep == XR_REP_TAGGED)
+        return true;
+    return rep == XR_REP_PTR && xi_own_type_is_rc(v->type);
 }
 
 static bool cg_coro_type_needs_boundary_clone(const XrType *type) {
@@ -321,6 +330,14 @@ static void emit_boxed_vref(FILE *out, const XiValue *v) {
         fprintf(out, "XR_FROM_FLOAT(");
         emit_vref(out, v);
         fprintf(out, ")");
+    } else if (rep == XR_REP_PTR && v && v->type && v->type->kind == XR_KIND_STRING) {
+        fprintf(out, "xr_str_value_from_ptr(");
+        emit_vref(out, v);
+        fprintf(out, ")");
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "xr_mkptr(");
+        emit_vref(out, v);
+        fprintf(out, "%s", cg_ptr_box_suffix_for_type(v ? v->type : NULL));
     } else {
         emit_vref(out, v);
     }
@@ -422,6 +439,8 @@ static void emit_assign_from_xrvalue_temp(FILE *out, const XiValue *dst, const c
         fprintf(out, "XR_TO_INT(%s)", temp_name);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "XR_TO_FLOAT(%s)", temp_name);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "%s.ptr", temp_name);
     } else {
         fprintf(out, "%s", temp_name);
     }
@@ -441,13 +460,10 @@ static void emit_bridge_stored_tagged_value(FILE *out, const XiValue *value) {
 static void emit_assign_coro_param_from_xrvalue(FILE *out, const XiFunc *f, uint16_t index) {
     XrRep rep = cg_rep(f->params[index]);
     fprintf(out, "    f->p%u = ", index);
-    if (rep == XR_REP_I64) {
-        fprintf(out, "XR_TO_INT(p%u)", index);
-    } else if (rep == XR_REP_F64) {
-        fprintf(out, "XR_TO_FLOAT(p%u)", index);
-    } else {
-        fprintf(out, "p%u", index);
-    }
+    const char *conv_suffix =
+        emit_conversion_prefix(out, f->params[index]->type, XR_REP_TAGGED, rep);
+    fprintf(out, "p%u", index);
+    emit_conversion_suffix(out, conv_suffix);
     fprintf(out, ";\n");
 }
 
@@ -963,6 +979,10 @@ static bool cg_aot_frame_new_can_supply_cl_arg(const XiFunc *current, const XiVa
     return false;
 }
 
+static void emit_xrvalue_from_native_expr(FILE *out, const XrType *type, XrRep rep,
+                                          const char *expr);
+static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index);
+
 static void emit_aot_frame_new_call_args(FILE *out, const XiFunc *current, const XiValue *callee,
                                          const XiFunc *target, bool typed_params,
                                          XiValue *const *args, uint16_t arg_start, uint16_t nargs) {
@@ -991,6 +1011,8 @@ static void emit_aot_frame_new_call_args(FILE *out, const XiFunc *current, const
                     emit_vref(out, args[a]);
                     fprintf(out, ")");
                 }
+            } else if (param_rep == XR_REP_PTR) {
+                emit_value_as_rep(out, args[a], XR_REP_PTR);
             } else {
                 emit_coro_boundary_value(out, args[a]);
             }
@@ -1030,8 +1052,37 @@ static void emit_sync_go_frame_factory(XiCgenCtx *ctx, FILE *out, const XiFunc *
         fprintf(out, "    f->_cl = _cl;\n");
         fprintf(out, "    if (_cl)\n        xrt_retain(xr_mkptr(_cl, XR_TAG_CLOSURE));\n");
     }
-    for (uint16_t i = 0; i < f->nparams; i++)
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_sync_go_param_needs_release(f, i)) {
+            XrRep rep = cg_rep(f->params[i]);
+            fprintf(out, "    XrValue _pval%u = ", i);
+            char expr[32];
+            snprintf(expr, sizeof(expr), "p%u", i);
+            emit_xrvalue_from_native_expr(out, f->params[i]->type, rep, expr);
+            fprintf(out, ";\n");
+            fprintf(out, "    XrValue _pclone%u = %s(_pval%u);\n", i,
+                    f->params[i]->type && f->params[i]->type->kind == XR_KIND_JSON
+                        ? "xrt_json_clone_for_coro"
+                        : "xrt_value_clone_for_coro",
+                    i);
+            fprintf(out, "    f->p%u = ", i);
+            if (rep == XR_REP_I64) {
+                if (cg_value_type_is_bool(f->params[i]))
+                    fprintf(out, "XR_TO_INT(_pclone%u) != 0", i);
+                else
+                    fprintf(out, "XR_TO_INT(_pclone%u)", i);
+            } else if (rep == XR_REP_F64) {
+                fprintf(out, "XR_TO_FLOAT(_pclone%u)", i);
+            } else if (rep == XR_REP_PTR) {
+                fprintf(out, "_pclone%u.ptr", i);
+            } else {
+                fprintf(out, "_pclone%u", i);
+            }
+            fprintf(out, ";\n");
+            continue;
+        }
         fprintf(out, "    f->p%u = p%u;\n", i, i);
+    }
     fprintf(out, "    return f;\n");
     fprintf(out, "}\n\n");
 }
@@ -1042,7 +1093,8 @@ static bool cg_sync_go_param_needs_release(const XiFunc *f, uint16_t index) {
 }
 
 static bool cg_sync_go_param_needs_trace(const XiFunc *f, uint16_t index) {
-    return f && index < f->nparams && f->params[index] && cg_rep(f->params[index]) == XR_REP_TAGGED;
+    return f && index < f->nparams && f->params[index] &&
+           cg_coro_value_rep_can_trace_root(f->params[index]);
 }
 
 static uint32_t count_sync_go_frame_roots(const XiFunc *f) {
@@ -1086,6 +1138,12 @@ static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint
             fprintf(out, "XR_FROM_INT(f->p%u)", index);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "XR_FROM_FLOAT(f->p%u)", index);
+    } else if (rep == XR_REP_PTR && f->params[index]->type &&
+               f->params[index]->type->kind == XR_KIND_STRING) {
+        fprintf(out, "xr_str_value_from_ptr(f->p%u)", index);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "xr_mkptr(f->p%u%s", index,
+                cg_ptr_box_suffix_for_type(f->params[index]->type));
     } else {
         fprintf(out, "f->p%u", index);
     }
@@ -1105,6 +1163,10 @@ static void emit_xrvalue_from_native_expr(FILE *out, const XrType *type, XrRep r
                                           const char *expr) {
     if (rep == XR_REP_TAGGED) {
         fprintf(out, "%s", expr);
+    } else if (rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
+        fprintf(out, "xr_str_value_from_ptr(%s)", expr);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "xr_mkptr(%s%s", expr, cg_ptr_box_suffix_for_type(type));
     } else if (rep == XR_REP_F64) {
         fprintf(out, "XR_FROM_FLOAT(%s)", expr);
     } else if (type && type->kind == XR_KIND_BOOL) {
@@ -1150,8 +1212,11 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_sync_go_param_needs_release(f, i))
             continue;
+        fprintf(out, "    XrValue _pval%u = ", i);
+        emit_sync_go_frame_param_as_xrvalue(out, f, i);
+        fprintf(out, ";\n");
         fprintf(out,
-                "    if (_result.tag == f->p%u.tag && _result.ptr == f->p%u.ptr)\n"
+                "    if (_result.tag == _pval%u.tag && _result.ptr == _pval%u.ptr)\n"
                 "        xrt_retain(_result);\n",
                 i, i);
     }
@@ -1170,7 +1235,9 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_sync_go_param_needs_trace(f, i))
             continue;
-        fprintf(out, "    xr_aot_trace_frame_value(visitor, f->p%u);\n", i);
+        fprintf(out, "    xr_aot_trace_frame_value(visitor, ");
+        emit_sync_go_frame_param_as_xrvalue(out, f, i);
+        fprintf(out, ");\n");
     }
     fprintf(out, "}\n\n");
 
@@ -1185,8 +1252,11 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, " *)frame;\n");
     fprintf(out, "    if (!f)\n        return;\n");
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (cg_sync_go_param_needs_release(f, i))
-            fprintf(out, "    xrt_release(f->p%u);\n", i);
+        if (cg_sync_go_param_needs_release(f, i)) {
+            fprintf(out, "    xrt_release(");
+            emit_sync_go_frame_param_as_xrvalue(out, f, i);
+            fprintf(out, ");\n");
+        }
     }
     if (cg_func_frame_needs_cl(f))
         fprintf(out, "    xrt_release(xr_mkptr(f->_cl, XR_TAG_CLOSURE));\n");
@@ -2638,41 +2708,63 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     }
 }
 
+static void emit_coro_frame_slot_as_xrvalue(FILE *out, const XrType *type, XrRep rep,
+                                            const char *slot_prefix, uint32_t slot_id) {
+    if (rep == XR_REP_TAGGED) {
+        fprintf(out, "%s%u", slot_prefix, slot_id);
+    } else if (rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
+        fprintf(out, "xr_str_value_from_ptr(%s%u)", slot_prefix, slot_id);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "xr_mkptr(%s%u%s", slot_prefix, slot_id, cg_ptr_box_suffix_for_type(type));
+    } else if (rep == XR_REP_F64) {
+        fprintf(out, "XR_FROM_FLOAT(%s%u)", slot_prefix, slot_id);
+    } else if (type && type->kind == XR_KIND_BOOL) {
+        fprintf(out, "XR_FROM_BOOL(%s%u)", slot_prefix, slot_id);
+    } else {
+        fprintf(out, "XR_FROM_INT(%s%u)", slot_prefix, slot_id);
+    }
+}
+
 static void emit_coro_frame_value_visit(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                         const XiLiveness *live, const char *helper,
                                         bool with_visitor) {
     (void) ctx;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (cg_rep(f->params[i]) != XR_REP_TAGGED ||
+        if (!cg_coro_value_rep_can_trace_root(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, live, f->params[i]))
             continue;
         fprintf(out, "    %s(", helper);
         if (with_visitor)
             fprintf(out, "visitor, ");
-        fprintf(out, "f->p%u);\n", i);
+        emit_coro_frame_slot_as_xrvalue(out, f->params[i]->type, cg_rep(f->params[i]), "f->p", i);
+        fprintf(out, ");\n");
     }
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (cg_rep(&phi->value) != XR_REP_TAGGED ||
+            if (!cg_coro_value_rep_can_trace_root(&phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, live, &phi->value))
                 continue;
             fprintf(out, "    %s(", helper);
             if (with_visitor)
                 fprintf(out, "visitor, ");
-            fprintf(out, "f->phi%u);\n", phi->value.id);
+            emit_coro_frame_slot_as_xrvalue(out, phi->value.type, cg_rep(&phi->value), "f->phi",
+                                            phi->value.id);
+            fprintf(out, ");\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!cg_coro_value_needs_frame(ctx, f, live, v) || cg_rep(v) != XR_REP_TAGGED ||
+            if (!cg_coro_value_needs_frame(ctx, f, live, v) ||
+                !cg_coro_value_rep_can_trace_root(v) ||
                 !cg_coro_value_may_hold_frame_root(ctx, f, live, v))
                 continue;
             fprintf(out, "    %s(", helper);
             if (with_visitor)
                 fprintf(out, "visitor, ");
-            fprintf(out, "f->v%u);\n", v->id);
+            emit_coro_frame_slot_as_xrvalue(out, v->type, cg_rep(v), "f->v", v->id);
+            fprintf(out, ");\n");
         }
     }
 }
@@ -2720,7 +2812,7 @@ static void emit_coro_direct_call_frame_release(XiCgenCtx *ctx, FILE *out, const
 static uint32_t count_coro_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const XiLiveness *live) {
     uint32_t count = 0;
     for (uint16_t i = 0; i < f->nparams; i++) {
-        if (cg_rep(f->params[i]) == XR_REP_TAGGED &&
+        if (cg_coro_value_rep_can_trace_root(f->params[i]) &&
             cg_coro_value_live_across_suspend(ctx, f, live, f->params[i]))
             count++;
     }
@@ -2729,7 +2821,7 @@ static uint32_t count_coro_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const Xi
         if (!blk)
             continue;
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            if (cg_rep(&phi->value) == XR_REP_TAGGED &&
+            if (cg_coro_value_rep_can_trace_root(&phi->value) &&
                 cg_coro_value_live_across_suspend(ctx, f, live, &phi->value))
                 count++;
         }
@@ -2737,7 +2829,7 @@ static uint32_t count_coro_frame_roots(XiCgenCtx *ctx, const XiFunc *f, const Xi
             const XiValue *v = blk->values[vi];
             if (cg_coro_direct_suspend_call_target(ctx, f, v))
                 count++;
-            if (cg_coro_value_needs_frame(ctx, f, live, v) && cg_rep(v) == XR_REP_TAGGED &&
+            if (cg_coro_value_needs_frame(ctx, f, live, v) && cg_coro_value_rep_can_trace_root(v) &&
                 cg_coro_value_may_hold_frame_root(ctx, f, live, v))
                 count++;
         }
@@ -2752,7 +2844,9 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
         if (!cg_coro_value_needs_arc_release(f->params[i]) ||
             !cg_coro_value_live_across_suspend(ctx, f, live, f->params[i]))
             continue;
-        fprintf(out, "    xrt_release(f->p%u);\n", i);
+        fprintf(out, "    xrt_release(");
+        emit_coro_frame_slot_as_xrvalue(out, f->params[i]->type, cg_rep(f->params[i]), "f->p", i);
+        fprintf(out, ");\n");
     }
     for (uint32_t bi = 0; bi < f->nblocks; bi++) {
         const XiBlock *blk = f->blocks[bi];
@@ -2762,7 +2856,10 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
             if (!cg_coro_value_needs_arc_release(&phi->value) ||
                 !cg_coro_value_live_across_suspend(ctx, f, live, &phi->value))
                 continue;
-            fprintf(out, "    xrt_release(f->phi%u);\n", phi->value.id);
+            fprintf(out, "    xrt_release(");
+            emit_coro_frame_slot_as_xrvalue(out, phi->value.type, cg_rep(&phi->value), "f->phi",
+                                            phi->value.id);
+            fprintf(out, ");\n");
         }
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
@@ -2770,7 +2867,9 @@ static void emit_coro_frame_arc_release(XiCgenCtx *ctx, FILE *out, const XiFunc 
                 !cg_coro_value_needs_arc_release(v) ||
                 !cg_coro_value_live_across_suspend(ctx, f, live, v))
                 continue;
-            fprintf(out, "    xrt_release(f->v%u);\n", v->id);
+            fprintf(out, "    xrt_release(");
+            emit_coro_frame_slot_as_xrvalue(out, v->type, cg_rep(v), "f->v", v->id);
+            fprintf(out, ");\n");
         }
     }
 }

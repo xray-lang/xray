@@ -3256,7 +3256,7 @@ def generate_aot_abi_header(entries: list[AotAbiDef]) -> str:
     lines.append('    if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))')
     lines.append('        return false;')
     lines.append('    storage = xaot_abi_storage_rep_for_type(type);')
-    lines.append('    return storage == XR_REP_I64 || storage == XR_REP_F64;')
+    lines.append('    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR;')
     lines.append('}')
     lines.append('')
     lines.append('#endif  /* XAOT_ABI_GEN_H */')

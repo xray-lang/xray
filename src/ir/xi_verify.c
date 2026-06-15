@@ -766,9 +766,9 @@ static void verify_repped(VerifyCtx *ctx, const XiFunc *f) {
                 return;
             }
 
-            /* UNBOX must produce scalar (I64 or F64) */
+            /* UNBOX must produce a native boundary rep or remain tagged if no unbox exists. */
             if (v->op == XI_UNBOX && v->rep != XR_REP_I64 && v->rep != XR_REP_F64 &&
-                v->rep != XR_REP_TAGGED) {
+                v->rep != XR_REP_PTR && v->rep != XR_REP_TAGGED) {
                 verr(ctx, "func '%s': v%u UNBOX in b%u has invalid rep %u", f->name, v->id, blk->id,
                      v->rep);
                 return;

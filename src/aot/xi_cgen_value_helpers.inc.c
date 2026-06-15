@@ -21,6 +21,11 @@ static void emit_boxed_value_ref(FILE *out, const XiValue *v) {
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_TAGGED) {
         emit_vref(out, v);
+    } else if (rep == XR_REP_PTR) {
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v ? v->type : NULL, rep, XR_REP_TAGGED);
+        emit_vref(out, v);
+        emit_conversion_suffix(out, conv_suffix);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "XR_FROM_FLOAT(");
         emit_vref(out, v);
@@ -40,6 +45,8 @@ static void emit_cell_get_for_rep(FILE *out, const XiValue *v, const char *cell_
     XrRep rep = cg_rep(v);
     if (rep == XR_REP_TAGGED) {
         fprintf(out, "xrt_cell_get(%s)", cell_expr);
+    } else if (rep == XR_REP_PTR) {
+        fprintf(out, "xrt_cell_get(%s).ptr", cell_expr);
     } else if (rep == XR_REP_F64) {
         fprintf(out, "xrt_cell_get(%s).f", cell_expr);
     } else {

@@ -694,13 +694,13 @@ static void emit_struct_runtime_field_get(XiCgenCtx *ctx, FILE *out, const XrStr
                                           const XrType *result_type, XrRep result_rep) {
     const char *fname =
         (sl && sl->field_names && idx >= 0 && idx < sl->field_count) ? sl->field_names[idx] : NULL;
-    bool wrapped = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
+    const char *conv_suffix = emit_conversion_prefix(out, result_type, XR_REP_TAGGED, result_rep);
     fprintf(out, "xrt_map_get((xrt_map_t*)");
     emit_vref(out, object);
     fprintf(out, ".ptr, ");
     cg_emit_str_value(ctx, out, fname ? fname : "?");
     fprintf(out, ")");
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void emit_struct_runtime_field_set(XiCgenCtx *ctx, FILE *out, const XrStructLayout *sl,
@@ -980,7 +980,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
     XrRep elem_rep = cg_struct_native_rep(field->elem_native_type);
     bool unchecked = cg_fixed_array_index_bounds_proven(v, field->elem_count);
-    bool wrapped = emit_conversion_prefix(out, v->type, elem_rep, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, elem_rep, cg_rep(v));
     if (!unchecked) {
         fprintf(out, "({ int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
@@ -1000,7 +1000,7 @@ static bool emit_struct_fixed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, co
     fprintf(out, "]");
     if (!unchecked)
         fprintf(out, "; })");
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 

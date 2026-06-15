@@ -704,6 +704,26 @@ static XrRep sr_type_scalar_rep(const struct XrType *type) {
     return (r == XR_REP_I64 || r == XR_REP_F64) ? r : XR_REP_TAGGED;
 }
 
+static XrRep sr_type_native_boundary_rep(const struct XrType *type) {
+    if (!type)
+        return XR_REP_TAGGED;
+    XrRep scalar = sr_type_scalar_rep(type);
+    if (scalar != XR_REP_TAGGED)
+        return scalar;
+    if (type->is_nullable)
+        return XR_REP_TAGGED;
+    switch (type->kind) {
+        case XR_KIND_STRING:
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_TUPLE:
+            return XR_REP_PTR;
+        default:
+            return XR_REP_TAGGED;
+    }
+}
+
 static bool sr_convert_can_return_null(const XiValue *v) {
     if (!v || v->op != XI_CONVERT || v->nargs < 1 || !v->type)
         return false;
@@ -779,11 +799,25 @@ static XrRep sr_typed_array_elem_rep(const XrType *type) {
     const XrType *elem = sr_array_elem_type(type);
     if (!elem || elem->is_nullable)
         return XR_REP_TAGGED;
-    return sr_type_scalar_rep(elem);
+    switch (elem->native_width) {
+        case XR_NATIVE_I8:
+        case XR_NATIVE_U8:
+        case XR_NATIVE_I16:
+        case XR_NATIVE_U16:
+        case XR_NATIVE_I32:
+        case XR_NATIVE_U32:
+        case XR_NATIVE_U64:
+            return XR_REP_I64;
+        case XR_NATIVE_F32:
+            return XR_REP_F64;
+        default:
+            return sr_type_scalar_rep(elem);
+    }
 }
 
 static const XiValue *sr_unwrap_identity_value(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
     return v;
 }
@@ -1075,9 +1109,9 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         return XR_REP_TAGGED;
     switch (v->op) {
         case XI_PARAM: {
-            /* Typed scalar params get concrete rep.  The JIT/AOT can
+            /* Typed boundary params get concrete rep.  The JIT/AOT can
              * use this directly instead of re-inferring from type->kind. */
-            return sr_type_scalar_rep(v->type);
+            return sr_type_native_boundary_rep(v->type);
         }
         case XI_CONST: {
             if (v->type->kind == XR_KIND_NULL || v->type->kind == XR_KIND_STRING)
@@ -1122,7 +1156,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_TAGGED;
         case XI_CALL:
         case XI_CALL_METHOD_DIRECT:
-            return sr_type_scalar_rep(v->type);
+            return sr_type_native_boundary_rep(v->type);
         case XI_CALL_METHOD:
             if (sr_is_channel_recv_method(v))
                 return XR_REP_TAGGED;
@@ -1131,7 +1165,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
                 if (sr_type_native_map_value_rep(v->args[0]->type, &value_rep))
                     return value_rep;
             }
-            return sr_type_scalar_rep(v->type);
+            return sr_type_native_boundary_rep(v->type);
         case XI_LOAD_FIELD:
             if (sr_is_typed_array_length_field(v) || sr_is_static_collection_length_field(v))
                 return XR_REP_I64;
@@ -1150,16 +1184,16 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
             return XR_REP_I64;
         case XI_PHI:
             if (policy && !policy->force_phi_tagged)
-                return sr_type_scalar_rep(v->type);
+                return sr_type_native_boundary_rep(v->type);
             return XR_REP_TAGGED;
         case XI_BOX:
             return XR_REP_TAGGED;
         case XI_UNBOX: {
-            XrRep ur = sr_type_scalar_rep(v->type);
+            XrRep ur = sr_type_native_boundary_rep(v->type);
             if (ur != XR_REP_TAGGED)
                 return ur;
             if (v->nargs >= 1 && v->args[0] && v->args[0]->type) {
-                ur = sr_type_scalar_rep(v->args[0]->type);
+                ur = sr_type_native_boundary_rep(v->args[0]->type);
                 if (ur != XR_REP_TAGGED)
                     return ur;
             }
@@ -1239,7 +1273,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_CALL:
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
-                return sr_type_scalar_rep(user->args[arg_idx]->type);
+                return sr_type_native_boundary_rep(user->args[arg_idx]->type);
             }
             return XR_REP_TAGGED;
         case XI_CALL_BUILTIN: {
@@ -1254,19 +1288,24 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
         case XI_CALL_METHOD_DIRECT:
             if (arg_idx > 0 && policy && policy->prefer_call_args_native && arg_idx < user->nargs &&
                 user->args[arg_idx]) {
-                return sr_type_scalar_rep(user->args[arg_idx]->type);
+                return sr_type_native_boundary_rep(user->args[arg_idx]->type);
             }
             return XR_REP_TAGGED;
         case XI_INDEX_GET:
-            if (arg_idx == 1 && user->nargs >= 2 && user->args[0] &&
+            if (user->nargs >= 2 && user->args[0] &&
                 sr_value_has_static_index_storage(user->args[0])) {
-                return XR_REP_I64;
+                if (arg_idx == 0)
+                    return sr_type_native_boundary_rep(user->args[0]->type);
+                if (arg_idx == 1)
+                    return XR_REP_I64;
             }
             return XR_REP_TAGGED;
         case XI_INDEX_SET:
             if (user->nargs >= 3 && user->args[0] &&
                 (sr_value_has_static_index_storage(user->args[0]) ||
                  sr_value_has_static_unboxed_array_elem_type(user->args[0]))) {
+                if (arg_idx == 0)
+                    return sr_type_native_boundary_rep(user->args[0]->type);
                 if (arg_idx == 1)
                     return XR_REP_I64;
                 if (arg_idx == 2)
@@ -1285,6 +1324,12 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             if (arg_idx == 1 && user->nargs >= 2 && user->args[1])
                 return sr_type_scalar_rep(user->args[1]->type);
             return XR_REP_TAGGED;
+        case XI_LOAD_FIELD:
+            if (arg_idx == 0 && user->nargs >= 1 &&
+                (sr_is_typed_array_length_field(user) ||
+                 sr_is_static_collection_length_field(user)))
+                return sr_type_native_boundary_rep(user->args[0]->type);
+            return XR_REP_TAGGED;
         case XI_STORE_FIELD:
             if (arg_idx == 1 && policy && policy->prefer_call_args_native && user->nargs >= 2 &&
                 sr_field_receiver_uses_native_rep(user->args[0]) && user->args[1])
@@ -1296,7 +1341,7 @@ static XrRep sr_use_rep(const XiValue *user, uint16_t arg_idx, const XiRepPolicy
             return arg_idx == 0 ? XR_REP_I64 : XR_REP_TAGGED;
         case XI_BOX:
             if (user->args[0] && user->args[0]->type) {
-                return sr_type_scalar_rep(user->args[0]->type);
+                return sr_type_native_boundary_rep(user->args[0]->type);
             }
             return XR_REP_TAGGED;
         case XI_UNBOX:
@@ -1406,10 +1451,11 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
         }
 
         /* Phi args follow the selected backend policy.  VM-style consumers keep
-         * merge points tagged; AOT can keep scalar phis native. */
+         * merge points tagged; AOT can keep native boundary phis unboxed. */
         for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            XrRep phi_rep =
-                local_policy.force_phi_tagged ? XR_REP_TAGGED : sr_type_scalar_rep(phi->value.type);
+            XrRep phi_rep = local_policy.force_phi_tagged
+                                ? XR_REP_TAGGED
+                                : sr_type_native_boundary_rep(phi->value.type);
             for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
                 sr_rewrite_arg(f, &phi->value.args[ai], phi_rep, box_of, unbox_of, max_id,
                                &local_policy);
@@ -1418,8 +1464,9 @@ XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy 
 
         /* Return control follows the function ABI policy. */
         if (blk->kind == XI_BLOCK_RETURN && blk->control) {
-            XrRep ret_rep = local_policy.force_return_tagged ? XR_REP_TAGGED
-                                                             : sr_type_scalar_rep(f->return_type);
+            XrRep ret_rep = local_policy.force_return_tagged
+                                ? XR_REP_TAGGED
+                                : sr_type_native_boundary_rep(f->return_type);
             sr_rewrite_arg(f, &blk->control, ret_rep, box_of, unbox_of, max_id, &local_policy);
         }
     }
