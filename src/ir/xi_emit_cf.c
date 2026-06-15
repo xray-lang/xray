@@ -314,9 +314,9 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
         /* Dead values (never referenced as an arg by any later instruction)
          * still need a destination register for bytecode emission, but that
          * register can be freed immediately for reuse.
-         * Coalesced registers (var_id != 0xFF) are never freed. */
+         * Coalesced registers (var_id != XI_NO_VAR_ID) are never freed. */
         if (ctx->last_use && v->id < ctx->reg_map_size && ctx->last_use[v->id] == 0 &&
-            v->var_id == 0xFF) {
+            !xi_var_id_is_valid(v->var_id)) {
             XiEmitReg r = ctx->reg_map[v->id];
             if (r != NO_REG) {
                 ctx->reg_map[v->id] = NO_REG;
@@ -345,8 +345,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 /* If the return value was cell-wrapped for closure capture,
                  * dereference the cell to return the actual value. */
                 if ((blk->control->id < ctx->reg_map_size && ctx->cell_wrapped[blk->control->id]) ||
-                    (blk->control->var_id != 0xFF &&
-                     ctx->cell_side_reg[blk->control->var_id] != NO_REG)) {
+                    xi_emit_var_has_side_cell(ctx, blk->control->var_id)) {
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, r, r, 0));
                 }
                 emit_inst(ctx, CREATE_ABC(OP_RETURN1, r, 0, 0));
@@ -397,7 +396,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                  * Every cell-wrapped variable must be dereferenced here;
                  * failure to do so means comparing the cell pointer instead
                  * of the contained value. */
-                if (lhs->var_id != 0xFF && ctx->cell_side_reg[lhs->var_id] != NO_REG) {
+                if (xi_emit_var_has_side_cell(ctx, lhs->var_id)) {
                     if (ctx->next_reg >= MAX_REGS) {
                         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
                         return;
@@ -408,7 +407,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, a, 0));
                     a = tmp;
                 }
-                if (rhs->var_id != 0xFF && ctx->cell_side_reg[rhs->var_id] != NO_REG) {
+                if (xi_emit_var_has_side_cell(ctx, rhs->var_id)) {
                     if (ctx->next_reg >= MAX_REGS) {
                         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
                         return;
@@ -422,10 +421,10 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
 
                 /* Verify cell unwrap: after unwrapping, the comparison
                  * registers must NOT be the raw cell registers. */
-                XR_DCHECK(lhs->var_id == 0xFF || ctx->cell_side_reg[lhs->var_id] == NO_REG ||
+                XR_DCHECK(!xi_emit_var_has_side_cell(ctx, lhs->var_id) ||
                               a != ctx->cell_side_reg[lhs->var_id],
                           "fused cmp LHS still holds cell register");
-                XR_DCHECK(rhs->var_id == 0xFF || ctx->cell_side_reg[rhs->var_id] == NO_REG ||
+                XR_DCHECK(!xi_emit_var_has_side_cell(ctx, rhs->var_id) ||
                               b != ctx->cell_side_reg[rhs->var_id],
                           "fused cmp RHS still holds cell register");
 

@@ -106,7 +106,7 @@ XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id, const char *name
                                 struct XrType *type) {
     XR_DCHECK(name != NULL, "var_create: name is NULL");
 
-    /* If symbol_id is resolved (non-zero), look up by ID — O(n) but n < 256. */
+    /* If symbol_id is resolved (non-zero), look up by ID. */
     if (symbol_id != 0) {
         for (int i = 0; i < l->var_count; i++) {
             if (l->vars[i].symbol_id == symbol_id)
@@ -120,6 +120,7 @@ XR_FUNC int xi_lower_var_create(XiLower *l, uint32_t symbol_id, const char *name
         }
     }
 
+    XR_CHECK(l->var_count < (int) XI_NO_VAR_ID, "xi_lower: too many source variables (>65534)");
     xi_lower_grow_vars(l, l->var_count + 1);
     int id = l->var_count++;
     l->vars[id].symbol_id = symbol_id;
@@ -150,6 +151,10 @@ XR_FUNC int xi_lower_var_find(XiLower *l, uint32_t symbol_id, const char *name) 
         }
     }
     return -1;
+}
+
+static inline XiVarId xi_lower_var_id_or_none(int var_id) {
+    return (var_id >= 0 && (uint32_t) var_id <= XI_MAX_VAR_ID) ? (XiVarId) var_id : XI_NO_VAR_ID;
 }
 
 /* ========== Top-Level Binding Helpers ========== */
@@ -319,9 +324,10 @@ XR_FUNC void xi_lower_braun_write(XiLower *l, int var_id, XiBlock *blk, XiValue 
      * Skip if the value already belongs to a different variable:
      * overwriting would merge two unrelated variables onto one
      * physical register, corrupting phi operands at loop edges. */
-    if (val && var_id >= 0 && var_id < 255) {
-        if (val->var_id == 0xFF || val->var_id == (uint8_t) var_id)
-            val->var_id = (uint8_t) var_id;
+    XiVarId xid = xi_lower_var_id_or_none(var_id);
+    if (val && xi_var_id_is_valid(xid)) {
+        if (!xi_var_id_is_valid(val->var_id) || val->var_id == xid)
+            val->var_id = xid;
         /* Definitions of variables captured by hoisted children must survive
          * DCE: the emitter redirects them through CELL_SET at emit time. */
         if (var_id < l->var_count && l->vars[var_id].captured_by_child)
@@ -392,7 +398,7 @@ static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk) {
         /* Block not sealed: create an incomplete phi placeholder.
          * Operands will be filled in braun_seal_block(). */
         XiPhi *phi = xi_phi_new(l->func, blk, type, 0);
-        phi->value.var_id = (var_id < 255) ? (uint8_t) var_id : 0xFF;
+        phi->value.var_id = xi_lower_var_id_or_none(var_id);
         val = &phi->value;
 
         /* Record for later completion */
@@ -405,15 +411,15 @@ static XiValue *braun_read_recursive(XiLower *l, int var_id, XiBlock *blk) {
     } else if (blk->npreds == 0) {
         /* Entry block or unreachable — variable used before definition. */
         val = xi_const_null(l->func, blk, l->type_null);
-        if (val && var_id >= 0 && var_id < 255)
-            val->var_id = (uint8_t) var_id;
+        if (val)
+            val->var_id = xi_lower_var_id_or_none(var_id);
     } else if (blk->npreds == 1) {
         /* Single predecessor: no phi needed, recurse. */
         val = xi_lower_braun_read(l, var_id, blk->preds[0]);
     } else {
         /* Multiple predecessors: insert phi, then fill operands. */
         XiPhi *phi = xi_phi_new(l->func, blk, type, blk->npreds);
-        phi->value.var_id = (var_id < 255) ? (uint8_t) var_id : 0xFF;
+        phi->value.var_id = xi_lower_var_id_or_none(var_id);
         /* Write before filling to break recursive cycles */
         xi_lower_braun_write(l, var_id, blk, &phi->value);
         val = add_phi_operands(l, var_id, phi);
@@ -539,8 +545,8 @@ XR_FUNC int32_t xi_lower_method_symbol(XiLower *l, const char *method_name) {
 
 #if XR_DEBUG
 /* Defense-in-depth assertion (debug/CI only): on the freshly lowered RAW IR,
- * before any optimization pass runs, every value's var_id must be either the
- * 0xFF "no source variable" sentinel or a real index < var_count. Register
+ * before any optimization pass runs, every value's var_id must be either
+ * XI_NO_VAR_ID or a real index < var_count. Register
  * coalescing in xi_emit (reg_of) keys on var_id, so a stray one silently pins
  * an unrelated value onto a live local's register — the exact failure that made
  * a temporary && / || / ternary phi clobber variable #0. This lives here, NOT
@@ -558,14 +564,16 @@ static void xi_lower_assert_var_ids(const XiLower *l, const XiFunc *f) {
             const XiValue *v = blk->values[i];
             if (!v)
                 continue;
-            XR_DCHECK_FMT(v->var_id == 0xFF || v->var_id < l->var_count,
+            XR_DCHECK_FMT(!xi_var_id_is_valid(v->var_id) || v->var_id < l->var_count,
                           "xi_lower: func '%s' v%u (op=%u) has var_id=%u >= var_count=%d",
-                          f->name ? f->name : "?", v->id, v->op, v->var_id, l->var_count);
+                          f->name ? f->name : "?", v->id, v->op, (unsigned) v->var_id,
+                          l->var_count);
         }
         for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
-            XR_DCHECK_FMT(phi->value.var_id == 0xFF || phi->value.var_id < l->var_count,
-                          "xi_lower: func '%s' phi v%u has var_id=%u >= var_count=%d",
-                          f->name ? f->name : "?", phi->value.id, phi->value.var_id, l->var_count);
+            XR_DCHECK_FMT(
+                !xi_var_id_is_valid(phi->value.var_id) || phi->value.var_id < l->var_count,
+                "xi_lower: func '%s' phi v%u has var_id=%u >= var_count=%d",
+                f->name ? f->name : "?", phi->value.id, (unsigned) phi->value.var_id, l->var_count);
         }
     }
 }
@@ -696,8 +704,8 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         XiValue *resolved = xi_value_new(l.func, l.cur_block, XI_SELECT, ptype, 3);
         XR_DCHECK(resolved != NULL, "default param: SELECT alloc failed");
         resolved->args[0] = is_null;
-        resolved->args[1] = cur;
-        resolved->args[2] = def_val;
+        resolved->args[1] = def_val;
+        resolved->args[2] = cur;
         xi_lower_braun_write(&l, var_id, l.cur_block, resolved);
     }
 

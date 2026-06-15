@@ -1054,7 +1054,7 @@ static bool prepare_array_origin_is_directly_used_only_by_store(const XiFunc *fu
 }
 
 static bool prepare_value_has_cell(const XiFunc *func, const XiValue *target) {
-    if (!func || !target || target->var_id == 0xFF)
+    if (!func || !target || !xi_var_id_is_valid(target->var_id))
         return false;
     for (uint32_t bi = 0; bi < func->nblocks; bi++) {
         const XiBlock *blk = func->blocks[bi];

@@ -433,7 +433,7 @@ static XiValue *lower_assignment(XiLower *l, AstNode *node) {
          * and the shared SSA value causes two variables to coalesce to
          * the same physical register — corrupting loop-carried values
          * when the source variable is subsequently modified. */
-        bool need_copy = (val->var_id != 0xFF && val->var_id != (uint8_t) var_id);
+        bool need_copy = (xi_var_id_is_valid(val->var_id) && val->var_id != (XiVarId) var_id);
         /* Value types (structs) always need deep copy on assignment */
         if (!need_copy && val->type && val->type->is_value_type)
             need_copy = true;
@@ -1581,8 +1581,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
      * Use var_id comparison (not pointer equality) because braun_read
      * in loop bodies returns a PHI node distinct from l->self_value.
      * Mark with aux_int=1 so xi_emit produces OP_CALLSELF. */
-    bool is_self_call = (l->self_var_id >= 0 && l->self_var_id < 255 &&
-                         callee_val->var_id == (uint8_t) l->self_var_id);
+    bool is_self_call = (l->self_var_id >= 0 && (uint32_t) l->self_var_id <= XI_MAX_VAR_ID &&
+                         callee_val->var_id == (XiVarId) l->self_var_id);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
