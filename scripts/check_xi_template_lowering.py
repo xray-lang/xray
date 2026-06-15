@@ -61,6 +61,12 @@ CASE_SCAN_FILES = (
     "src/aot/xi_cgen_dispatch_helpers.inc.c",
 )
 
+VM_GENERATED_BODY_TEMPLATES = {"narrow", "widen"}
+VM_GENERATED_WIDTH_FILE = "src/vm/xvm_template_width_gen.inc.c"
+VM_BODY_SCAN_FILES = (
+    "src/vm/xvm_dispatch_data.inc.c",
+)
+
 
 @dataclass(frozen=True)
 class Violation:
@@ -91,6 +97,15 @@ def load_patterned_entries(root: Path):
     ops = xisagen.parse_xi_ops_def(ops_path.read_text(), str(ops_path))
     entries = xisagen.parse_xi_lowering_def(lowering_path.read_text(), ops, str(lowering_path))
     return [entry for entry in entries if entry.template != "custom"]
+
+
+def vm_generated_body_opcodes(root: Path, entries) -> set[str]:
+    xisagen = load_xisagen(root)
+    opcodes: set[str] = set()
+    for entry in entries:
+        if 'vm-bytecode' in entry.target_drivers and entry.template in VM_GENERATED_BODY_TEMPLATES:
+            opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
+    return opcodes
 
 
 def parse_template_drivers(text: str, macro_names: set[str]) -> set[str]:
@@ -126,6 +141,15 @@ def gather_scan_files(root: Path) -> dict[str, str]:
             if path.is_file():
                 files[path.relative_to(root).as_posix()] = path.read_text()
     return dict(sorted(files.items()))
+
+
+def read_rel_files(root: Path, rels: tuple[str, ...]) -> dict[str, str]:
+    files: dict[str, str] = {}
+    for rel in rels:
+        path = root / rel
+        if path.is_file():
+            files[rel] = path.read_text()
+    return files
 
 
 def check_generated_driver_coverage(entries, generated_by_target: dict[str, set[str]]) -> list[Violation]:
@@ -191,14 +215,67 @@ def check_patterned_cases(entries, texts: dict[str, str]) -> list[Violation]:
     return violations
 
 
+def check_vm_generated_body_coverage(opcodes: set[str], generated_text: str) -> list[Violation]:
+    emitted = set(
+        re.findall(r"\bXVM_TEMPLATE_WIDTH_(?:INT|F32)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+                   generated_text)
+    )
+    missing = sorted(opcodes - emitted)
+    extra = sorted(emitted - opcodes)
+    violations: list[Violation] = []
+    for opcode in missing:
+        violations.append(
+            Violation(
+                VM_GENERATED_WIDTH_FILE,
+                0,
+                f"VM generated width body is missing {opcode}",
+            )
+        )
+    for opcode in extra:
+        violations.append(
+            Violation(
+                VM_GENERATED_WIDTH_FILE,
+                0,
+                f"VM generated width body contains undeclared template opcode {opcode}",
+            )
+        )
+    return violations
+
+
+def check_vm_handwritten_body_cases(opcodes: set[str], texts: dict[str, str]) -> list[Violation]:
+    if not opcodes:
+        return []
+    opcode_re = "|".join(re.escape(opcode) for opcode in sorted(opcodes))
+    vmcase_re = re.compile(rf"\bvmcase\s*\(\s*({opcode_re})\s*\)")
+    violations: list[Violation] = []
+    for rel, text in texts.items():
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            match = vmcase_re.search(line)
+            if match:
+                violations.append(
+                    Violation(
+                        rel,
+                        line_no,
+                        f"{match.group(1)} has a handwritten VM handler; "
+                        "route it through xvm_template_width_gen.inc.c",
+                    )
+                )
+    return violations
+
+
 def run_check(root: Path) -> list[Violation]:
     entries = load_patterned_entries(root)
     generated = load_generated_template_drivers(root)
     texts = gather_scan_files(root)
+    vm_body_texts = read_rel_files(root, VM_BODY_SCAN_FILES)
+    vm_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
+    vm_body_opcodes = vm_generated_body_opcodes(root, entries)
     violations: list[Violation] = []
     violations.extend(check_generated_driver_coverage(entries, generated))
     violations.extend(check_direct_driver_definitions(entries, texts))
     violations.extend(check_patterned_cases(entries, texts))
+    violations.extend(check_vm_generated_body_coverage(vm_body_opcodes, vm_generated_text))
+    violations.extend(check_vm_handwritten_body_cases(vm_body_opcodes, vm_body_texts))
     return violations
 
 
@@ -233,6 +310,16 @@ def run_self_test() -> None:
     ]
     missing = check_generated_driver_coverage(missing_generated, {"jit-xm": set(), "aot-c": set()})
     assert len(missing) == 1 and "xi.sub" in missing[0].message
+
+    vm_opcodes = {"OP_NARROW_I8"}
+    vm_coverage = check_vm_generated_body_coverage(
+        vm_opcodes, "XVM_TEMPLATE_WIDTH_INT_CASE(OP_NARROW_I8, int8_t)\n")
+    assert not vm_coverage
+    vm_missing = check_vm_generated_body_coverage(vm_opcodes, "")
+    assert len(vm_missing) == 1 and "OP_NARROW_I8" in vm_missing[0].message
+    vm_handwritten = check_vm_handwritten_body_cases(
+        vm_opcodes, {"src/vm/xvm_dispatch_data.inc.c": "vmcase(OP_NARROW_I8) {\n"})
+    assert len(vm_handwritten) == 1 and "OP_NARROW_I8" in vm_handwritten[0].message
 
 
 def main() -> int:
