@@ -1267,37 +1267,54 @@ static XmRef xi2xm_move(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return xi2xm_identity(ctx, blk, v);
 }
 
-#define XI2XM_BINARY_DRIVER(name, int_op, float_op)                                                \
-    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
-        return lower_binary_arith_with_ops(ctx, blk, v, int_op, float_op);                         \
-    }
-
-XI2XM_BINARY_DRIVER(add, XM_ADD, XM_FADD)
-XI2XM_BINARY_DRIVER(sub, XM_SUB, XM_FSUB)
-XI2XM_BINARY_DRIVER(mul, XM_MUL, XM_FMUL)
-XI2XM_BINARY_DRIVER(div, XM_DIV, XM_FDIV)
-XI2XM_BINARY_DRIVER(mod, XM_MOD, XM_OP_COUNT)
-XI2XM_BINARY_DRIVER(band, XM_AND, XM_OP_COUNT)
-XI2XM_BINARY_DRIVER(bor, XM_OR, XM_OP_COUNT)
-XI2XM_BINARY_DRIVER(bxor, XM_XOR, XM_OP_COUNT)
-XI2XM_BINARY_DRIVER(shl, XM_SHL, XM_OP_COUNT)
-XI2XM_BINARY_DRIVER(shr, XM_SHR, XM_OP_COUNT)
-
-#undef XI2XM_BINARY_DRIVER
-
-#define XI2XM_UNARY_DRIVER(name, int_op, float_op)                                                 \
-    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
-        return lower_unary_with_ops(ctx, blk, v, int_op, float_op);                                \
-    }
-
-XI2XM_UNARY_DRIVER(neg, XM_NEG, XM_FNEG)
-XI2XM_UNARY_DRIVER(bnot, XM_NOT, XM_OP_COUNT)
-
-#undef XI2XM_UNARY_DRIVER
-
-static XmRef xi2xm_not(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
-    return lower_logical_not(ctx, blk, v);
+static XmRef xi2xm_template_missing(LowerCtx *ctx, XiValue *v) {
+    ctx->error = true;
+    ctx->error_op = v ? v->op : 0;
+    return xm_const_i64(ctx->xm_func, 0);
 }
+
+static XmRef xi2xm_template_binary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmOp int_op = xi_to_xm_template_int_op(v->op);
+    if (int_op == XM_OP_COUNT)
+        return xi2xm_template_missing(ctx, v);
+    return lower_binary_arith_with_ops(ctx, blk, v, int_op, xi_to_xm_template_float_op(v->op));
+}
+
+static XmRef xi2xm_template_unary(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    if (xi_to_xm_template_is_logical_not(v->op))
+        return lower_logical_not(ctx, blk, v);
+    XmOp int_op = xi_to_xm_template_int_op(v->op);
+    if (int_op == XM_OP_COUNT)
+        return xi2xm_template_missing(ctx, v);
+    return lower_unary_with_ops(ctx, blk, v, int_op, xi_to_xm_template_float_op(v->op));
+}
+
+static XmRef xi2xm_template_compare(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
+    XmOp int_op = xi_to_xm_template_int_op(v->op);
+    if (int_op == XM_OP_COUNT)
+        return xi2xm_template_missing(ctx, v);
+    return lower_comparison_with_ops(
+        ctx, blk, v, int_op, xi_to_xm_template_float_op(v->op), xi_to_xm_template_swaps_args(v->op),
+        xi_to_xm_template_eq_like(v->op), xi_to_xm_template_ne_like(v->op));
+}
+
+#define XI2XM_DEFINE_TEMPLATE_BINARY_DRIVER(ident, driver)                                         \
+    static XmRef driver(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                                 \
+        return xi2xm_template_binary(ctx, blk, v);                                                 \
+    }
+
+XI_TO_XM_TEMPLATE_BINARY_DRIVERS(XI2XM_DEFINE_TEMPLATE_BINARY_DRIVER)
+
+#undef XI2XM_DEFINE_TEMPLATE_BINARY_DRIVER
+
+#define XI2XM_DEFINE_TEMPLATE_UNARY_DRIVER(ident, driver)                                          \
+    static XmRef driver(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                                 \
+        return xi2xm_template_unary(ctx, blk, v);                                                  \
+    }
+
+XI_TO_XM_TEMPLATE_UNARY_DRIVERS(XI2XM_DEFINE_TEMPLATE_UNARY_DRIVER)
+
+#undef XI2XM_DEFINE_TEMPLATE_UNARY_DRIVER
 
 static XmRef xi2xm_select(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_select_value(ctx, blk, v);
@@ -1398,22 +1415,14 @@ static XmRef xi2xm_release(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     return lower_ownership_helper(ctx, blk, v, XM_HELPER_rc_drop, "release");
 }
 
-#define XI2XM_CMP_DRIVER(name, int_op, float_op, reverse, eq_like, ne_like)                        \
-    static XmRef xi2xm_##name(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                           \
-        return lower_comparison_with_ops(ctx, blk, v, int_op, float_op, reverse, eq_like,          \
-                                         ne_like);                                                 \
+#define XI2XM_DEFINE_TEMPLATE_COMPARE_DRIVER(ident, driver)                                        \
+    static XmRef driver(LowerCtx *ctx, XmBlock *blk, XiValue *v) {                                 \
+        return xi2xm_template_compare(ctx, blk, v);                                                \
     }
 
-XI2XM_CMP_DRIVER(eq, XM_EQ, XM_FEQ, false, true, false)
-XI2XM_CMP_DRIVER(ne, XM_NE, XM_FNE, false, false, true)
-XI2XM_CMP_DRIVER(eq_strict, XM_EQ, XM_EQ, false, true, false)
-XI2XM_CMP_DRIVER(ne_strict, XM_NE, XM_NE, false, false, true)
-XI2XM_CMP_DRIVER(lt, XM_LT, XM_FLT, false, false, false)
-XI2XM_CMP_DRIVER(le, XM_LE, XM_FLE, false, false, false)
-XI2XM_CMP_DRIVER(gt, XM_LT, XM_FLT, true, false, false)
-XI2XM_CMP_DRIVER(ge, XM_LE, XM_FLE, true, false, false)
+XI_TO_XM_TEMPLATE_COMPARE_DRIVERS(XI2XM_DEFINE_TEMPLATE_COMPARE_DRIVER)
 
-#undef XI2XM_CMP_DRIVER
+#undef XI2XM_DEFINE_TEMPLATE_COMPARE_DRIVER
 
 static XmRef xi2xm_zero_extend(LowerCtx *ctx, XmBlock *blk, XiValue *v, int64_t mask) {
     XmRef a = get_ref(ctx, v->args[0]);

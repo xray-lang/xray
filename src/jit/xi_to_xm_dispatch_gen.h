@@ -4,6 +4,11 @@
 #ifndef XI_TO_XM_DISPATCH_GEN_H
 #define XI_TO_XM_DISPATCH_GEN_H
 
+#include <stdbool.h>
+#include <stdint.h>
+#include "../ir/xi.h"
+#include "xm_ops.h"
+
 #define XI_TO_XM_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xi2xm_const) \
     X(PARAM, "xi.param", xi2xm_param) \
@@ -120,5 +125,132 @@
     X(BYTES_COPY_FROM, "xi.bytes.copy.from", xi2xm_reject_unsupported) \
     X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xi2xm_reject_unsupported)
 
+
+#define XI_TO_XM_TEMPLATE_BINARY_DRIVERS(X) \
+    X(ADD, xi2xm_add) \
+    X(SUB, xi2xm_sub) \
+    X(MUL, xi2xm_mul) \
+    X(DIV, xi2xm_div) \
+    X(MOD, xi2xm_mod) \
+    X(BAND, xi2xm_band) \
+    X(BOR, xi2xm_bor) \
+    X(BXOR, xi2xm_bxor) \
+    X(SHL, xi2xm_shl) \
+    X(SHR, xi2xm_shr)
+
+
+#define XI_TO_XM_TEMPLATE_UNARY_DRIVERS(X) \
+    X(NEG, xi2xm_neg) \
+    X(BNOT, xi2xm_bnot) \
+    X(NOT, xi2xm_not)
+
+
+#define XI_TO_XM_TEMPLATE_COMPARE_DRIVERS(X) \
+    X(EQ, xi2xm_eq) \
+    X(NE, xi2xm_ne) \
+    X(EQ_STRICT, xi2xm_eq_strict) \
+    X(NE_STRICT, xi2xm_ne_strict) \
+    X(LT, xi2xm_lt) \
+    X(LE, xi2xm_le) \
+    X(GT, xi2xm_gt) \
+    X(GE, xi2xm_ge)
+
+
+static inline XmOp xi_to_xm_template_int_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return XM_ADD;
+        case XI_SUB: return XM_SUB;
+        case XI_MUL: return XM_MUL;
+        case XI_DIV: return XM_DIV;
+        case XI_MOD: return XM_MOD;
+        case XI_NEG: return XM_NEG;
+        case XI_BAND: return XM_AND;
+        case XI_BOR: return XM_OR;
+        case XI_BXOR: return XM_XOR;
+        case XI_BNOT: return XM_NOT;
+        case XI_NOT: return XM_EQ;
+        case XI_SHL: return XM_SHL;
+        case XI_SHR: return XM_SHR;
+        case XI_EQ: return XM_EQ;
+        case XI_NE: return XM_NE;
+        case XI_EQ_STRICT: return XM_EQ;
+        case XI_NE_STRICT: return XM_NE;
+        case XI_LT: return XM_LT;
+        case XI_LE: return XM_LE;
+        case XI_GT: return XM_LT;
+        case XI_GE: return XM_LE;
+        case XI_OP_COUNT: return XM_OP_COUNT;
+        default: return XM_OP_COUNT;
+    }
+    return XM_OP_COUNT;
+}
+
+static inline XmOp xi_to_xm_template_float_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return XM_FADD;
+        case XI_SUB: return XM_FSUB;
+        case XI_MUL: return XM_FMUL;
+        case XI_DIV: return XM_FDIV;
+        case XI_MOD: return XM_OP_COUNT;
+        case XI_NEG: return XM_FNEG;
+        case XI_BAND: return XM_OP_COUNT;
+        case XI_BOR: return XM_OP_COUNT;
+        case XI_BXOR: return XM_OP_COUNT;
+        case XI_BNOT: return XM_OP_COUNT;
+        case XI_NOT: return XM_OP_COUNT;
+        case XI_SHL: return XM_OP_COUNT;
+        case XI_SHR: return XM_OP_COUNT;
+        case XI_EQ: return XM_FEQ;
+        case XI_NE: return XM_FNE;
+        case XI_EQ_STRICT: return XM_EQ;
+        case XI_NE_STRICT: return XM_NE;
+        case XI_LT: return XM_FLT;
+        case XI_LE: return XM_FLE;
+        case XI_GT: return XM_FLT;
+        case XI_GE: return XM_FLE;
+        case XI_OP_COUNT: return XM_OP_COUNT;
+        default: return XM_OP_COUNT;
+    }
+    return XM_OP_COUNT;
+}
+
+static inline bool xi_to_xm_template_swaps_args(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_GT: return true;
+        case XI_GE: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
+static inline bool xi_to_xm_template_eq_like(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_EQ: return true;
+        case XI_EQ_STRICT: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
+static inline bool xi_to_xm_template_ne_like(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NE: return true;
+        case XI_NE_STRICT: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
+static inline bool xi_to_xm_template_is_logical_not(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NOT: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
 
 #endif  /* XI_TO_XM_DISPATCH_GEN_H */
