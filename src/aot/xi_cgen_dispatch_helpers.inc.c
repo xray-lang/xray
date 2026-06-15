@@ -1522,122 +1522,38 @@ static void xicgen_cast_i64_arg(FILE *out, const XiValue *v, const char *ctype) 
     emit_vref(out, v->args[0]);
 }
 
-static void xicgen_narrow_i8(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int8_t");
-}
-
-static void xicgen_narrow_u8(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint8_t");
-}
-
-static void xicgen_narrow_i16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int16_t");
-}
-
-static void xicgen_narrow_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint16_t");
-}
-
-static void xicgen_narrow_i32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int32_t");
-}
-
-static void xicgen_narrow_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint32_t");
-}
-
 static void xicgen_f32_roundtrip(FILE *out, const XiValue *v, bool preserve_loaded_float32) {
     fputs(preserve_loaded_float32 ? "" : "(double)(float)", out);
     emit_vref(out, v->args[0]);
 }
 
-static void xicgen_narrow_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                              const char *prefix) {
-    (void) ctx;
-    (void) f;
+static void xicgen_template_width(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
     (void) prefix;
-    xicgen_f32_roundtrip(out, v, false);
+    switch (xi_to_c_template_width_kind(v->op)) {
+        case AOT_WIDTH_TEMPLATE_CAST_I64:
+            xicgen_cast_i64_arg(out, v, xi_to_c_template_width_cast_type(v->op));
+            return;
+        case AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP:
+            xicgen_f32_roundtrip(out, v,
+                                 xi_to_c_template_width_preserves_loaded_f32(v->op) &&
+                                     cg_array_index_get_reads_f32_storage(ctx, f, v->args[0]));
+            return;
+        case AOT_WIDTH_TEMPLATE_INVALID:
+            break;
+    }
+    emit_codegen_abort_expr(out);
 }
 
-static void xicgen_widen_i8(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                            const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int8_t");
-}
+#define XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER(ident, driver)                                         \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_template_width(ctx, out, f, v, prefix);                                             \
+    }
 
-static void xicgen_widen_u8(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                            const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint8_t");
-}
+XI_TO_C_TEMPLATE_WIDTH_DRIVERS(XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER)
 
-static void xicgen_widen_i16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int16_t");
-}
-
-static void xicgen_widen_u16(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint16_t");
-}
-
-static void xicgen_widen_i32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "int32_t");
-}
-
-static void xicgen_widen_u32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_cast_i64_arg(out, v, "uint32_t");
-}
-
-static void xicgen_widen_f32(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    (void) ctx;
-    (void) f;
-    (void) prefix;
-    xicgen_f32_roundtrip(out, v, cg_array_index_get_reads_f32_storage(ctx, f, v->args[0]));
-}
+#undef XICGEN_DEFINE_TEMPLATE_WIDTH_DRIVER
 
 static void xicgen_isnull(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                           const char *prefix) {

@@ -4,6 +4,10 @@
 #ifndef XI_TO_C_DISPATCH_GEN_H
 #define XI_TO_C_DISPATCH_GEN_H
 
+#include <stdbool.h>
+#include <stdint.h>
+#include "../ir/xi.h"
+
 #define XI_TO_C_LOWERING_DRIVERS(X) \
     X(CONST, "xi.const", xicgen_const) \
     X(PARAM, "xi.param", xicgen_param) \
@@ -99,5 +103,79 @@
     X(BYTES_COPY_FROM, "xi.bytes.copy.from", xicgen_bytes_copy_from) \
     X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from)
 
+
+#define XI_TO_C_TEMPLATE_WIDTH_DRIVERS(X) \
+    X(NARROW_I8, xicgen_narrow_i8) \
+    X(NARROW_U8, xicgen_narrow_u8) \
+    X(NARROW_I16, xicgen_narrow_i16) \
+    X(NARROW_U16, xicgen_narrow_u16) \
+    X(NARROW_I32, xicgen_narrow_i32) \
+    X(NARROW_U32, xicgen_narrow_u32) \
+    X(NARROW_F32, xicgen_narrow_f32) \
+    X(WIDEN_I8, xicgen_widen_i8) \
+    X(WIDEN_U8, xicgen_widen_u8) \
+    X(WIDEN_I16, xicgen_widen_i16) \
+    X(WIDEN_U16, xicgen_widen_u16) \
+    X(WIDEN_I32, xicgen_widen_i32) \
+    X(WIDEN_U32, xicgen_widen_u32) \
+    X(WIDEN_F32, xicgen_widen_f32)
+
+
+typedef enum {
+    AOT_WIDTH_TEMPLATE_INVALID = 0,
+    AOT_WIDTH_TEMPLATE_CAST_I64 = 1,
+    AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP = 2,
+} XiToCWidthTemplateKind;
+
+static inline XiToCWidthTemplateKind xi_to_c_template_width_kind(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_U8: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_I16: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_U16: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_I32: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_U32: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_NARROW_F32: return AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP;
+        case XI_WIDEN_I8: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_U8: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_I16: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_U16: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_I32: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_U32: return AOT_WIDTH_TEMPLATE_CAST_I64;
+        case XI_WIDEN_F32: return AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP;
+        case XI_OP_COUNT: return AOT_WIDTH_TEMPLATE_INVALID;
+        default: return AOT_WIDTH_TEMPLATE_INVALID;
+    }
+    return AOT_WIDTH_TEMPLATE_INVALID;
+}
+
+static inline const char *xi_to_c_template_width_cast_type(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_NARROW_I8: return "int8_t";
+        case XI_NARROW_U8: return "uint8_t";
+        case XI_NARROW_I16: return "int16_t";
+        case XI_NARROW_U16: return "uint16_t";
+        case XI_NARROW_I32: return "int32_t";
+        case XI_NARROW_U32: return "uint32_t";
+        case XI_WIDEN_I8: return "int8_t";
+        case XI_WIDEN_U8: return "uint8_t";
+        case XI_WIDEN_I16: return "int16_t";
+        case XI_WIDEN_U16: return "uint16_t";
+        case XI_WIDEN_I32: return "int32_t";
+        case XI_WIDEN_U32: return "uint32_t";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline bool xi_to_c_template_width_preserves_loaded_f32(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_WIDEN_F32: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
 
 #endif  /* XI_TO_C_DISPATCH_GEN_H */

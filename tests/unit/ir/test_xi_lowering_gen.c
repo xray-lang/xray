@@ -4,9 +4,11 @@
 #include "../../../src/ir/xi_lowering_coverage_gen.h"
 #include "../../../src/ir/xi_emit_vm_gen.h"
 #include "../../../src/jit/xi_to_xm_dispatch_gen.h"
+#include "../../../src/aot/xi_to_c_dispatch_gen.h"
 
 #include <assert.h>
 #include <stdio.h>
+#include <string.h>
 
 int main(void) {
     assert(XI_LOWERING_ENTRY_COUNT == 124);
@@ -668,6 +670,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_I8) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_NARROW_I8) == 56);
     assert(xi_to_xm_template_width_mask(XI_NARROW_I8) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_NARROW_I8) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_I8), "int8_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_I8) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I8) == false);
@@ -681,6 +686,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_U8) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_NARROW_U8) == 0);
     assert(xi_to_xm_template_width_mask(XI_NARROW_U8) == INT64_C(0xFF));
+    assert(xi_to_c_template_width_kind(XI_NARROW_U8) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_U8), "uint8_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_U8) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U8) == false);
@@ -694,6 +702,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_I16) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_NARROW_I16) == 48);
     assert(xi_to_xm_template_width_mask(XI_NARROW_I16) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_NARROW_I16) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_I16), "int16_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_I16) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I16) == false);
@@ -707,6 +718,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_U16) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_NARROW_U16) == 0);
     assert(xi_to_xm_template_width_mask(XI_NARROW_U16) == INT64_C(0xFFFF));
+    assert(xi_to_c_template_width_kind(XI_NARROW_U16) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_U16), "uint16_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_U16) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U16) == false);
@@ -720,6 +734,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_I32) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_NARROW_I32) == 32);
     assert(xi_to_xm_template_width_mask(XI_NARROW_I32) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_NARROW_I32) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_I32), "int32_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_I32) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_I32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_I32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_I32) == false);
@@ -733,6 +750,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_U32) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_NARROW_U32) == 0);
     assert(xi_to_xm_template_width_mask(XI_NARROW_U32) == INT64_C(0xFFFFFFFF));
+    assert(xi_to_c_template_width_kind(XI_NARROW_U32) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_U32), "uint32_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_U32) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_U32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_U32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_U32) == false);
@@ -746,6 +766,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_NARROW_F32) == XM_WIDTH_TEMPLATE_IDENTITY);
     assert(xi_to_xm_template_width_shift(XI_NARROW_F32) == 0);
     assert(xi_to_xm_template_width_mask(XI_NARROW_F32) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_NARROW_F32) == AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_NARROW_F32), "") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_NARROW_F32) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NARROW_F32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NARROW_F32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NARROW_F32) == false);
@@ -759,6 +782,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_I8) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_I8) == 56);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_I8) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_I8) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_I8), "int8_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_I8) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I8) == false);
@@ -772,6 +798,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_U8) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_U8) == 0);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_U8) == INT64_C(0xFF));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_U8) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_U8), "uint8_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_U8) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U8) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U8) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U8) == false);
@@ -785,6 +814,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_I16) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_I16) == 48);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_I16) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_I16) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_I16), "int16_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_I16) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I16) == false);
@@ -798,6 +830,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_U16) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_U16) == 0);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_U16) == INT64_C(0xFFFF));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_U16) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_U16), "uint16_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_U16) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U16) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U16) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U16) == false);
@@ -811,6 +846,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_I32) == XM_WIDTH_TEMPLATE_SIGN_EXTEND_SHIFT);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_I32) == 32);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_I32) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_I32) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_I32), "int32_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_I32) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_I32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_I32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_I32) == false);
@@ -824,6 +862,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_U32) == XM_WIDTH_TEMPLATE_ZERO_EXTEND_MASK);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_U32) == 0);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_U32) == INT64_C(0xFFFFFFFF));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_U32) == AOT_WIDTH_TEMPLATE_CAST_I64);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_U32), "uint32_t") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_U32) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_U32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_U32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_U32) == false);
@@ -837,6 +878,9 @@ int main(void) {
     assert(xi_to_xm_template_width_kind(XI_WIDEN_F32) == XM_WIDTH_TEMPLATE_IDENTITY);
     assert(xi_to_xm_template_width_shift(XI_WIDEN_F32) == 0);
     assert(xi_to_xm_template_width_mask(XI_WIDEN_F32) == INT64_C(0));
+    assert(xi_to_c_template_width_kind(XI_WIDEN_F32) == AOT_WIDTH_TEMPLATE_F32_ROUNDTRIP);
+    assert(strcmp(xi_to_c_template_width_cast_type(XI_WIDEN_F32), "") == 0);
+    assert(xi_to_c_template_width_preserves_loaded_f32(XI_WIDEN_F32) == true);
     assert(xi_emit_vm_requires_fresh_dst(XI_WIDEN_F32) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_WIDEN_F32) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_WIDEN_F32) == false);
