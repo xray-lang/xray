@@ -16,6 +16,8 @@
 #include "../test_helper.h"
 #include "runtime/object/xmap.h"
 #include "runtime/object/xarray.h"
+#include <stdio.h>
+#include <string.h>
 
 static XrayIsolate *X = NULL;
 static XrCoroutine *main_coro = NULL;
@@ -202,6 +204,87 @@ TEST(map_many_entries) {
     teardown();
 }
 
+TEST(map_tombstone_probe_and_compaction_order) {
+    setup();
+    XrMap *map = xr_map_with_capacity(main_coro, 8);
+
+    for (int i = 0; i < 24; i++)
+        xr_map_set(map, xr_int(i), xr_int(i * 10));
+    for (int i = 1; i < 16; i += 2)
+        ASSERT_TRUE(xr_map_delete(map, xr_int(i)));
+    for (int i = 100; i < 116; i++)
+        xr_map_set(map, xr_int(i), xr_int(i * 10));
+
+    for (int i = 1; i < 16; i += 2)
+        ASSERT_FALSE(xr_map_has(map, xr_int(i)));
+    for (int i = 0; i < 24; i += 2)
+        ASSERT_TRUE(xr_map_has(map, xr_int(i)));
+    for (int i = 17; i < 24; i += 2)
+        ASSERT_TRUE(xr_map_has(map, xr_int(i)));
+    for (int i = 100; i < 116; i++)
+        ASSERT_TRUE(xr_map_has(map, xr_int(i)));
+
+    XrArray *keys = xr_map_keys(main_coro, map);
+    XrArray *values = xr_map_values(main_coro, map);
+    ASSERT_NOT_NULL(keys);
+    ASSERT_NOT_NULL(values);
+    ASSERT_EQ_INT(xr_array_size(keys), 32);
+    ASSERT_EQ_INT(xr_array_size(values), 32);
+
+    int out = 0;
+    for (int i = 0; i < 24; i++) {
+        if (i < 16 && (i & 1))
+            continue;
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(keys, out)), i);
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(values, out)), i * 10);
+        out++;
+    }
+    for (int i = 100; i < 116; i++) {
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(keys, out)), i);
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(values, out)), i * 10);
+        out++;
+    }
+    ASSERT_EQ_INT(out, 32);
+
+    teardown();
+}
+
+TEST(map_string_fast_path_swiss_ctrl) {
+    setup();
+    XrMap *map = xr_map_with_capacity(main_coro, 8);
+    XrString *keys[32];
+    char name[16];
+
+    for (int i = 0; i < 32; i++) {
+        snprintf(name, sizeof(name), "key_%02d", i);
+        keys[i] = xr_string_intern(X, name, strlen(name), 0);
+        ASSERT_NOT_NULL(keys[i]);
+        xr_map_set(map, xr_string_value(keys[i]), xr_int(i * 11));
+    }
+    for (int i = 1; i < 20; i += 2)
+        ASSERT_TRUE(xr_map_delete(map, xr_string_value(keys[i])));
+    for (int i = 0; i < 16; i++) {
+        snprintf(name, sizeof(name), "late_%02d", i);
+        XrString *late = xr_string_intern(X, name, strlen(name), 0);
+        ASSERT_NOT_NULL(late);
+        xr_map_set(map, xr_string_value(late), xr_int(1000 + i));
+    }
+
+    for (int i = 0; i < 32; i++) {
+        XrMapEntry *entry = xr_map_find_string_fast(map, keys[i]);
+        if (i < 20 && (i & 1)) {
+            ASSERT_NULL(entry);
+        } else {
+            ASSERT_NOT_NULL(entry);
+            ASSERT_EQ_INT(XR_TO_INT(entry->value), i * 11);
+        }
+    }
+
+    XrString *missing = xr_string_intern(X, "missing_key", 11, 0);
+    ASSERT_NULL(xr_map_find_string_fast(map, missing));
+    teardown();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -220,6 +303,8 @@ int main(void) {
     RUN_TEST(map_values);
     RUN_TEST(map_has_value);
     RUN_TEST(map_many_entries);
+    RUN_TEST(map_tombstone_probe_and_compaction_order);
+    RUN_TEST(map_string_fast_path_swiss_ctrl);
 
     TEST_REPORT();
     return TEST_EXIT();
