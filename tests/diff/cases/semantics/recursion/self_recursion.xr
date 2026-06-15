@@ -1,0 +1,46 @@
+// anchor: self-recursion
+// Top-level self-recursion (fib/fact/gcd/float-pow) plus mutual recursion.
+// Guards the JIT self-call lowering: Xi encodes "call the current function"
+// as CALL <CONST null>, which must lower to XM_CALL_SELF_DIRECT (BL to own
+// entry, call_closure preserved).  Regression for the historic JIT recursion
+// miscompile where the null callee dispatched through xr_jit_call_func and
+// returned garbage from fib(2) on.
+fn fib(n: int) -> int {
+    if (n < 2) { return n }
+    return fib(n - 1) + fib(n - 2)
+}
+
+fn fact(n: int) -> int {
+    if (n <= 1) { return 1 }
+    return n * fact(n - 1)
+}
+
+fn gcd(a: int, b: int) -> int {
+    if (b == 0) { return a }
+    return gcd(b, a % b)
+}
+
+fn fpow(base: float, n: int) -> float {
+    if (n <= 0) { return 1.0 }
+    return base * fpow(base, n - 1)
+}
+
+fn isEven(n: int) -> bool {
+    if (n == 0) { return true }
+    return isOdd(n - 1)
+}
+
+fn isOdd(n: int) -> bool {
+    if (n == 0) { return false }
+    return isEven(n - 1)
+}
+
+for (i in 0..11) {
+    print(fib(i))
+}
+print(fact(10))
+print(gcd(48, 18))
+print(gcd(1071, 462))
+print(fpow(2.0, 10))
+print(isEven(10))
+print(isOdd(7))
