@@ -398,23 +398,33 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
  * compile-time type tags to jit_ctx->call_arg_tags[]. */
 XR_FUNC void rv64_emit_call_args_from_pool(Rv64CodegenCtx *ctx, XmIns *ins) {
     RV64_CODEGEN_CHECK(ctx, ctx != NULL && ins != NULL, "call_args: NULL");
-    uint32_t vi = XM_REF_INDEX(ins->dst);
-    if (vi >= ctx->func->nvreg)
-        return;
-    XmVReg *vreg = &ctx->func->vregs[vi];
-    if (vreg->call_nargs == 0)
-        return;
-    XmRef *pool = ctx->func->call_arg_pool;
-    uint32_t start = vreg->call_arg_start;
+    uint16_t call_nargs = 0;
+    XmRef *pool = NULL;
+    uint32_t start = 0;
 
-    uint64_t tag_pack[2] = {0, 0};
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t vi = XM_REF_INDEX(ins->dst);
+        if (vi < ctx->func->nvreg) {
+            XmVReg *vreg = &ctx->func->vregs[vi];
+            call_nargs = vreg->call_nargs;
+            pool = ctx->func->call_arg_pool;
+            start = vreg->call_arg_start;
+        }
+    }
 
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, call_nargs);
+    rv64_buf_emit(&ctx->buf,
+                  rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_NARGS_OFFSET));
+    if (call_nargs == 0 || !pool)
+        return;
+
+    for (uint16_t i = 0; i < call_nargs; i++) {
         XmRef arg = pool[start + i];
         int32_t off = (int32_t) (XM_JIT_CALL_ARGS_OFFSET + i * 8);
+        int32_t tag_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         uint8_t tag = XR_RTAG_UNKNOWN;
         if (xm_ref_is_none(arg))
-            goto store_tag;
+            goto write_static_tag;
         if (xm_ref_is_const(arg)) {
             uint32_t ci = XM_REF_INDEX(arg);
             uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
@@ -427,39 +437,18 @@ XR_FUNC void rv64_emit_call_args_from_pool(Rv64CodegenCtx *ctx, XmIns *ins) {
             XmType ct = xm_ref_ctype(ctx->func, arg);
             tag = vtag_to_value_tag(type_kind_to_vtag(ct.kind));
         }
-    store_tag:
-        if (i < 8)
-            tag_pack[0] |= ((uint64_t) tag << (i * 8));
-        else
-            tag_pack[1] |= ((uint64_t) tag << ((i - 8) * 8));
-    }
-
-    /* Store packed tags */
-    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, tag_pack[0]);
-    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
-                                     (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET));
-    if (vreg->call_nargs > 8) {
-        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, tag_pack[1]);
-        rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
-                                         (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + 8)));
-    }
-
-    /* Dynamic tag patch: overwrite unknown tags from vreg_runtime_tags */
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
-        uint8_t ct = (i < 8) ? (uint8_t) ((tag_pack[0] >> (i * 8)) & 0xFF)
-                             : (uint8_t) ((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
-        if (ct != XR_RTAG_UNKNOWN)
-            continue;
-        XmRef arg = pool[start + i];
-        if (!xm_ref_is_vreg(arg))
-            continue;
-        uint32_t ai = XM_REF_INDEX(arg);
-        if (ai >= ctx->func->nvreg || ai >= XR_JIT_MAX_VREG_TAGS)
-            continue;
-        int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
-        int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
-        rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, src_off));
-        rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, dst_off));
+        if (tag == XR_RTAG_UNKNOWN && xm_ref_is_vreg(arg)) {
+            uint32_t ai = XM_REF_INDEX(arg);
+            if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+                int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+                rv64_buf_emit(&ctx->buf, rv64_lbu(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, src_off));
+                rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, tag_off));
+                continue;
+            }
+        }
+    write_static_tag:
+        rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, tag);
+        rv64_buf_emit(&ctx->buf, rv64_sb(RV64_SCRATCH_REG, RV64_JIT_CTX_REG, tag_off));
     }
 }
 

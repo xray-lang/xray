@@ -455,7 +455,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             }
 
             int arg_base = method_call ? 0 : 1;
-            for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
+            for (uint64_t pi = 0; pi < nargs_val && pi < XR_JIT_MAX_CALL_ARGS; pi++) {
                 int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + arg_base + (int) pi);
                 int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + (int) pi * 8);
                 x64_movzx_rm8(&ctx->buf, X64_RCX, X64_JIT_CTX_REG, src);
@@ -501,7 +501,7 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
             /* Patch je_cascade → cascade_pos */
             x64_patch_rel32(&ctx->buf, je_cascade_pos, cascade_pos);
 
-            /* Store extra_arg (nargs) via RCX; call_c_stub expects fn ptr in R11 */
+            /* Store extra_arg via RCX; call_c_stub expects fn ptr in R11 */
             x64_load_imm64(&ctx->buf, X64_RCX, nargs_val);
             x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) X64_EXTRA_ARG_OFFSET, X64_RCX);
             /* Load helper function pointer to R11 (call_c_stub calls R11) */
@@ -810,23 +810,32 @@ bool x64_emit_call_ins(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
  * compile-time type tags to jit_ctx->call_arg_tags[]. */
 void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XmIns *ins) {
     CODEGEN_CHECK(ctx, ctx != NULL && ins != NULL, "call_args: NULL");
-    uint32_t vi = XM_REF_INDEX(ins->dst);
-    if (vi >= ctx->func->nvreg)
-        return;
-    XmVReg *vreg = &ctx->func->vregs[vi];
-    if (vreg->call_nargs == 0)
-        return;
-    XmRef *pool = ctx->func->call_arg_pool;
-    uint32_t start = vreg->call_arg_start;
+    uint16_t call_nargs = 0;
+    XmRef *pool = NULL;
+    uint32_t start = 0;
 
-    uint64_t tag_pack[2] = {0, 0};
+    if (xm_ref_is_vreg(ins->dst)) {
+        uint32_t vi = XM_REF_INDEX(ins->dst);
+        if (vi < ctx->func->nvreg) {
+            XmVReg *vreg = &ctx->func->vregs[vi];
+            call_nargs = vreg->call_nargs;
+            pool = ctx->func->call_arg_pool;
+            start = vreg->call_arg_start;
+        }
+    }
 
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, call_nargs);
+    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_NARGS_OFFSET, X64_SCRATCH_REG);
+    if (call_nargs == 0 || !pool)
+        return;
+
+    for (uint16_t i = 0; i < call_nargs; i++) {
         XmRef arg = pool[start + i];
         int32_t off = (int32_t) (XM_JIT_CALL_ARGS_OFFSET + i * 8);
+        int32_t tag_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         uint8_t tag = XR_RTAG_UNKNOWN;
         if (xm_ref_is_none(arg))
-            goto store_tag;
+            goto write_static_tag;
         if (xm_ref_is_const(arg)) {
             uint32_t ci = XM_REF_INDEX(arg);
             uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
@@ -839,38 +848,18 @@ void x64_emit_call_args_from_pool(X64CodegenCtx *ctx, XmIns *ins) {
             XmType ct = xm_ref_ctype(ctx->func, arg);
             tag = vtag_to_value_tag(type_kind_to_vtag(ct.kind));
         }
-    store_tag:
-        if (i < 8)
-            tag_pack[0] |= ((uint64_t) tag << (i * 8));
-        else
-            tag_pack[1] |= ((uint64_t) tag << ((i - 8) * 8));
-    }
-
-    /* Store packed tags as compile-time constants */
-    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[0]);
-    x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET, X64_SCRATCH_REG);
-    if (vreg->call_nargs > 8) {
-        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag_pack[1]);
-        x64_mov_mr(&ctx->buf, X64_JIT_CTX_REG, (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + 8),
-                   X64_SCRATCH_REG);
-    }
-
-    /* Dynamic tag patch: overwrite unknown tags from vreg_runtime_tags */
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
-        uint8_t ct = (i < 8) ? (uint8_t) ((tag_pack[0] >> (i * 8)) & 0xFF)
-                             : (uint8_t) ((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
-        if (ct != XR_RTAG_UNKNOWN)
-            continue;
-        XmRef arg = pool[start + i];
-        if (!xm_ref_is_vreg(arg))
-            continue;
-        uint32_t ai = XM_REF_INDEX(arg);
-        if (ai >= ctx->func->nvreg || ai >= XR_JIT_MAX_VREG_TAGS)
-            continue;
-        int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
-        int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
-        x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
-        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, dst_off, X64_SCRATCH_REG);
+        if (tag == XR_RTAG_UNKNOWN && xm_ref_is_vreg(arg)) {
+            uint32_t ai = XM_REF_INDEX(arg);
+            if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+                int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+                x64_movzx_rm8(&ctx->buf, X64_SCRATCH_REG, X64_JIT_CTX_REG, src_off);
+                x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_SCRATCH_REG);
+                continue;
+            }
+        }
+    write_static_tag:
+        x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, tag);
+        x64_mov_mr8(&ctx->buf, X64_JIT_CTX_REG, tag_off, X64_SCRATCH_REG);
     }
 }
 #endif /* __x86_64__ || _M_X64 */

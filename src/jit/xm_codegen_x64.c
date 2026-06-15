@@ -434,7 +434,7 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
 
     /* Init vreg_runtime_tags for TAGGED params from param_tags[].
      * Params are vregs 0..n-1 by construction, so vreg index == param index. */
-    for (uint32_t i = 0; i < nparams && i < 8; i++) {
+    for (uint32_t i = 0; i < nparams && i < XR_JIT_MAX_CALL_ARGS; i++) {
         if (i >= ctx->func->nvreg || i >= XR_JIT_MAX_VREG_TAGS)
             continue;
         if (ctx->func->vregs[i].rep != XR_REP_TAGGED)

@@ -30,28 +30,39 @@ static inline uint8_t const_rep_to_value_tag(uint8_t rep) {
 
 // Write call arguments from the pool to jit_ctx->call_args[] and
 // compile-time type tags to jit_ctx->call_arg_tags[].
-// Tags are derived from vreg ctype (precise) or const rep, packed into
-// 1-2 uint64_t constants for efficient storage (no per-arg STRB needed).
+// Tags are derived from vreg ctype (precise) or const rep.  call_nargs is
+// written for every call so helpers never decode argument counts from extra_arg.
 static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
+    uint16_t call_nargs = 0;
+    XmVReg *vreg = NULL;
+    XmRef *pool = NULL;
+    uint32_t start = 0;
+
     if (!xm_ref_is_vreg(ins->dst))
-        return;
+        goto store_count;
     uint32_t vi = XM_REF_INDEX(ins->dst);
     if (vi >= ctx->func->nvreg)
-        return;
-    XmVReg *vreg = &ctx->func->vregs[vi];
-    if (vreg->call_nargs == 0)
-        return;
-    XmRef *pool = ctx->func->call_arg_pool;
-    uint32_t start = vreg->call_arg_start;
+        goto store_count;
+    vreg = &ctx->func->vregs[vi];
+    call_nargs = vreg->call_nargs;
+    if (call_nargs == 0)
+        goto store_count;
+    pool = ctx->func->call_arg_pool;
+    start = vreg->call_arg_start;
 
-    uint64_t tag_pack[2] = {0, 0};
+store_count:
+    a64_load_imm64(&ctx->buf, SCRATCH_REG2, call_nargs);
+    a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG, (int32_t) XM_JIT_CALL_NARGS_OFFSET));
+    if (call_nargs == 0 || !pool)
+        return;
 
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
+    for (uint16_t i = 0; i < call_nargs; i++) {
         XmRef arg = pool[start + i];
         int32_t off = (int32_t) (XM_JIT_CALL_ARGS_OFFSET + i * 8);
+        int32_t tag_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
         uint8_t tag = XR_RTAG_UNKNOWN;
         if (xm_ref_is_none(arg))
-            goto store_tag;
+            goto write_static_tag;
         if (xm_ref_is_const(arg)) {
             uint32_t ci = XM_REF_INDEX(arg);
             uint64_t val = (uint64_t) ctx->func->consts[ci].val.raw;
@@ -64,41 +75,18 @@ static void emit_call_args_from_pool(CodegenCtx *ctx, XmIns *ins) {
             XmType ct = xm_ref_ctype(ctx->func, arg);
             tag = vtag_to_value_tag(type_kind_to_vtag(ct.kind));
         }
-    store_tag:
-        if (i < 8)
-            tag_pack[0] |= ((uint64_t) tag << (i * 8));
-        else
-            tag_pack[1] |= ((uint64_t) tag << ((i - 8) * 8));
-    }
-
-    // Store packed tags as compile-time constants (1-2 immediate loads)
-    a64_load_imm64(&ctx->buf, SCRATCH_REG2, tag_pack[0]);
-    a64_buf_emit(&ctx->buf,
-                 a64_str(SCRATCH_REG2, JIT_CTX_REG, (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET));
-    if (vreg->call_nargs > 8) {
-        a64_load_imm64(&ctx->buf, SCRATCH_REG2, tag_pack[1]);
-        a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, JIT_CTX_REG,
-                                        (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + 8)));
-    }
-
-    // Dynamic patch: for args with UNKNOWN compile-time tag, load the
-    // precise runtime tag from vreg_runtime_tags[vreg_idx] and overwrite
-    // the 0xFF byte in call_arg_tags[i]. Indexed by vreg, no bc_slot.
-    for (uint16_t i = 0; i < vreg->call_nargs; i++) {
-        uint8_t ct = (i < 8) ? (uint8_t) ((tag_pack[0] >> (i * 8)) & 0xFF)
-                             : (uint8_t) ((tag_pack[1] >> ((i - 8) * 8)) & 0xFF);
-        if (ct != XR_RTAG_UNKNOWN)
-            continue;
-        XmRef arg = pool[start + i];
-        if (!xm_ref_is_vreg(arg))
-            continue;
-        uint32_t ai = XM_REF_INDEX(arg);
-        if (ai >= ctx->func->nvreg || ai >= XR_JIT_MAX_VREG_TAGS)
-            continue;
-        int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
-        int32_t dst_off = (int32_t) XM_JIT_CALL_ARG_TAGS_OFFSET + (int32_t) i;
-        a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
-        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, dst_off));
+        if (tag == XR_RTAG_UNKNOWN && xm_ref_is_vreg(arg)) {
+            uint32_t ai = XM_REF_INDEX(arg);
+            if (ai < ctx->func->nvreg && ai < XR_JIT_MAX_VREG_TAGS) {
+                int32_t src_off = (int32_t) XM_JIT_VREG_RUNTIME_TAGS_OFFSET + (int32_t) ai;
+                a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src_off));
+                a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
+                continue;
+            }
+        }
+    write_static_tag:
+        a64_buf_emit(&ctx->buf, a64_movz(SCRATCH_REG2, tag, 0));
+        a64_buf_emit(&ctx->buf, a64_strb(SCRATCH_REG2, JIT_CTX_REG, tag_off));
     }
 }
 
@@ -542,8 +530,9 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
 
             // Copy call_arg_tags[i+1] → param_tags[i] for JIT→JIT param type
             // pass-through. Uses x17 (SCRATCH_REG2), safe here since x16 holds
-            // jit_entry. nargs unknown at compile time, copy all 8 slots.
-            for (int pi = 0; pi < 8; pi++) {
+            // jit_entry. nargs unknown at compile time, copy the full scratch
+            // call capacity.
+            for (int pi = 0; pi < XR_JIT_MAX_CALL_ARGS; pi++) {
                 int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + (pi + 1));
                 int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + pi * 8);
                 a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src));
@@ -770,7 +759,7 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             // pass-through. Callee prologue reads param_tags to init
             // vreg_runtime_tags for TAGGED params. Uses x17 (SCRATCH_REG2).
             uint64_t arg_base = method_call ? 0 : 1;
-            for (uint64_t pi = 0; pi < nargs_val && pi < 8; pi++) {
+            for (uint64_t pi = 0; pi < nargs_val && pi < XR_JIT_MAX_CALL_ARGS; pi++) {
                 int32_t src = (int32_t) (XM_JIT_CALL_ARG_TAGS_OFFSET + arg_base + pi);
                 int32_t dst = (int32_t) (XM_JIT_PARAM_TAGS_OFFSET + pi * 8);
                 a64_buf_emit(&ctx->buf, a64_ldrb(SCRATCH_REG2, JIT_CTX_REG, src));

@@ -1051,7 +1051,7 @@ static void emit_prologue(CodegenCtx *ctx) {
         // Params are vregs 0..n-1 by construction, so vreg index == param index.
         // param_tags[] is set by xm_jit_call (interp→JIT) or
         // xr_jit_call_func / CALL_KNOWN codegen (JIT→JIT).
-        for (uint32_t i = 0; i < nparams && i < 8; i++) {
+        for (uint32_t i = 0; i < nparams && i < XR_JIT_MAX_CALL_ARGS; i++) {
             if (i >= ctx->func->nvreg || i >= XR_JIT_MAX_VREG_TAGS)
                 continue;
             if (ctx->func->vregs[i].rep != XR_REP_TAGGED)

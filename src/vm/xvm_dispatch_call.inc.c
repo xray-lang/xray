@@ -231,8 +231,8 @@ op_call_cfunc:
         if (cfunc->is_yieldable) {
             // Yieldable C function (GC safe zone)
             // Set to current frame before call
-            ci->u.c.result_slot = (int16_t) (GETARG_A(i));
-            ci->u.c.has_cfunc_result = false;
+            ci->cfunc_result_slot = (int16_t) (GETARG_A(i));
+            ci->has_cfunc_result = false;
             savepc();
 
             XrValue result;

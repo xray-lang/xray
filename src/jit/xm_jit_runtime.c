@@ -138,24 +138,27 @@ static int jit_classify_receiver(XrValue receiver) {
 static inline void jit_build_this_args(XrValue *call_args, XrValue receiver, XrValue *args,
                                        int nargs) {
     call_args[0] = receiver;
-    for (int i = 0; i < nargs && i < 8; i++)
+    for (int i = 0; i < nargs && (i + 1) < XR_JIT_MAX_CALL_ARGS; i++)
         call_args[1 + i] = args[i];
 }
 
 // call_args[0] = receiver payload, call_args[1..n] = arg payloads.
 // call_arg_tags[0..n] = per-slot XR_TAG_* bytes (set by codegen's emit_call_args_from_pool).
-// encoded = (method_symbol << 32) | (deopt_id << 16) | (type_hint << 8) | nargs.
+// encoded = (method_symbol << 32) | (deopt_id << 16) | (type_hint << 8).
 // deopt_id: builder-provided deopt snapshot index for yieldable recovery.
 // type_hint: IC-derived receiver type (0=none, classify at runtime).
 XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)
         return XR_JIT_NULL();
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs <= 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
     int method_symbol = (int) (encoded >> 32);
     int deopt_id = (int) ((encoded >> 16) & 0xFFFF);
     int type_hint = (int) ((encoded >> 8) & 0xFF);
-    int nargs = (int) (encoded & 0xFF);
+    int nargs = (int) scratch->call_nargs - 1;
     XR_DCHECK(method_symbol > 0, "xr_jit_invoke_method: method_symbol=0 — "
                                  "xi_to_xm failed to resolve method name from bytecode");
 
@@ -163,17 +166,17 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
     // call_arg_tags[] type bytes. The codegen stores per-byte tags in
     // call_arg_tags[] (compile-time known or dynamically patched from
     // vreg_runtime_tags[] at each call site).
-    uint8_t recv_tag = xr_coro_jit_state(coro)->scratch->call_arg_tags[0];
+    uint8_t recv_tag = scratch->call_arg_tags[0];
     // Invoke receivers are always heap objects (module, instance, class, etc.).
     // When the compile-time tag is unknown, reconstruct as PTR to avoid
     // misclassifying a pointer payload as integer.
     if (recv_tag == XR_RTAG_UNKNOWN || recv_tag == XR_RTAG_NUMERIC)
         recv_tag = XR_TAG_PTR;
-    XrValue receiver = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], recv_tag);
-    XrValue args[16];
-    for (int i = 0; i < nargs && i < 15; i++) {
-        int64_t raw = xr_coro_jit_state(coro)->scratch->call_args[1 + i];
-        uint8_t tag = xr_coro_jit_state(coro)->scratch->call_arg_tags[1 + i];
+    XrValue receiver = jit_value_from_tag(scratch->call_args[0], recv_tag);
+    XrValue args[XR_JIT_MAX_CALL_ARGS];
+    for (int i = 0; i < nargs; i++) {
+        int64_t raw = scratch->call_args[1 + i];
+        uint8_t tag = scratch->call_arg_tags[1 + i];
         args[i] = jit_value_from_tag(raw, tag);
     }
 
@@ -246,7 +249,7 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                 if (method && method->type == XMETHOD_PRIMITIVE && method->as.primitive) {
                     result = method->as.primitive(isolate, receiver, args, nargs);
                 } else if (method && method->type == XMETHOD_CLOSURE && method->as.closure) {
-                    XrValue call_args[9];
+                    XrValue call_args[XR_JIT_MAX_CALL_ARGS];
                     jit_build_this_args(call_args, receiver, args, nargs);
                     bool saved = xr_isolate_get_suppress_exception_print(isolate);
                     xr_isolate_set_suppress_exception_print(isolate, true);
@@ -272,9 +275,9 @@ XrJitResult xr_jit_invoke_method(XrCoroutine *coro, int64_t encoded) {
                     XrMethod *ctor = xr_class_lookup_method(cls, method_symbol);
                     if (ctor && ctor->type == XMETHOD_CLOSURE && ctor->as.closure) {
                         // Call constructor with instance as this
-                        XrValue call_args[9];
+                        XrValue call_args[XR_JIT_MAX_CALL_ARGS];
                         call_args[0] = inst_val;
-                        for (int i = 0; i < nargs && i < 8; i++)
+                        for (int i = 0; i < nargs && (i + 1) < XR_JIT_MAX_CALL_ARGS; i++)
                             call_args[1 + i] = args[i];
                         bool saved = xr_isolate_get_suppress_exception_print(isolate);
                         xr_isolate_set_suppress_exception_print(isolate, true);
@@ -1308,15 +1311,18 @@ XrJitResult xr_jit_enum_convert(XrCoroutine *coro, int64_t extra_arg) {
 
 // Called from JIT via CALL_C for OP_BYTES_NEW.
 // jit_call_args[0..nargs-1] = byte values
-// extra_arg = nargs
+// call_nargs = byte count
 XrJitResult xr_jit_bytes_new(XrCoroutine *coro, int64_t extra_arg) {
-    int nargs = (int) (extra_arg & 0xFF);
+    (void) extra_arg;
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs < 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
+        return XR_JIT_NULL();
+    int nargs = (int) scratch->call_nargs;
     XrArray *arr = xr_array_new(coro);
     if (!arr)
         return XR_JIT_NULL();
-    for (int i = 0; i < nargs && i < 8; i++) {
-        xr_array_push(arr, XR_FROM_INT(xr_coro_jit_state(coro)->scratch->call_args[i]));
-    }
+    for (int i = 0; i < nargs; i++)
+        xr_array_push(arr, XR_FROM_INT(scratch->call_args[i]));
     return XR_JIT_PTR(arr);
 }
 

@@ -47,6 +47,9 @@ typedef struct XrBcCallFrame {
     int result_offset;   // return value destination = stack + result_offset
     uint8_t flags;
     uint32_t call_status;  // XR_CALL_* flags
+    XrValue cfunc_result;
+    int16_t cfunc_result_slot;
+    bool has_cfunc_result;
     union {
         struct {  // xray function state
             bool pending_operator_check;
@@ -55,9 +58,6 @@ typedef struct XrBcCallFrame {
         struct {  // C function state
             void *continuation;
             void *continuation_ctx;
-            XrValue cfunc_result;
-            int16_t result_slot;
-            bool has_cfunc_result;
         } c;
     } u;
 } XrBcCallFrame;

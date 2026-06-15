@@ -12,6 +12,7 @@
 #include "../../../src/jit/xm_ops.h"
 #include "../../../src/jit/xm_jit_runtime.h"
 #include "../../../src/jit/xm_helper_table.h"
+#include "../../../src/jit/xjit_scratch.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
 #include "../../../src/base/xglobal_indices.h"
@@ -1384,14 +1385,49 @@ TEST(reject_tuple_new_above_jit_call_arg_limit) {
     XiFunc *f = make_func("tuple_limit", &stub_tuple);
     XiBlock *entry = f->entry;
 
-    XiValue *tuple = xi_value_new(f, entry, XI_TUPLE_NEW, &stub_tuple, 16);
-    for (uint16_t i = 0; i < 16; i++)
+    XiValue *tuple = xi_value_new(f, entry, XI_TUPLE_NEW, &stub_tuple, XR_JIT_MAX_CALL_ARGS + 1);
+    for (uint16_t i = 0; i < XR_JIT_MAX_CALL_ARGS + 1; i++)
         tuple->args[i] = xi_const_int(f, entry, (int64_t) i, &stub_int);
     xi_block_set_return(entry, tuple);
 
     XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
     assert(xm == NULL && "tuple.new beyond JIT helper call args must reject");
 
+    xi_func_free(f);
+}
+
+TEST(lower_tuple_new_at_jit_call_arg_capacity) {
+    XiFunc *f = make_func("tuple_capacity", &stub_tuple);
+    XiBlock *entry = f->entry;
+
+    XiValue *tuple = xi_value_new(f, entry, XI_TUPLE_NEW, &stub_tuple, XR_JIT_MAX_CALL_ARGS);
+    for (uint16_t i = 0; i < XR_JIT_MAX_CALL_ARGS; i++)
+        tuple->args[i] = xi_const_int(f, entry, (int64_t) i, &stub_int);
+    xi_block_set_return(entry, tuple);
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, NULL, NULL, NULL);
+    assert(xm != NULL && "tuple.new at JIT helper capacity should lower");
+
+    XmBlock *blk0 = xm->blocks[0];
+    bool found = false;
+    for (uint32_t i = 0; i < blk0->nins; i++) {
+        if (blk0->ins[i].op != XM_CALL_C || blk0->ins[i].args[0] == XM_NONE)
+            continue;
+        uint32_t fn_ci = XM_REF_INDEX(blk0->ins[i].args[0]);
+        uint32_t extra_ci = XM_REF_INDEX(blk0->ins[i].args[1]);
+        assert(fn_ci < xm->nconst);
+        assert(extra_ci < xm->nconst);
+        if (xm->consts[fn_ci].val.ptr != (void *) xr_jit_tuple_new)
+            continue;
+        assert(xm->consts[extra_ci].val.i64 == XR_JIT_MAX_CALL_ARGS);
+        uint32_t vi = XM_REF_INDEX(blk0->ins[i].dst);
+        assert(vi < xm->nvreg);
+        assert(xm->vregs[vi].call_nargs == XR_JIT_MAX_CALL_ARGS);
+        found = true;
+    }
+    assert(found && "capacity tuple.new should lower through xr_jit_tuple_new");
+
+    xm_func_destroy(xm);
     xi_func_free(f);
 }
 
@@ -1507,6 +1543,7 @@ int main(void) {
     run_lower_set_new();
     run_lower_tuple_new();
     run_lower_tuple_get();
+    run_lower_tuple_new_at_jit_call_arg_capacity();
     run_reject_tuple_new_above_jit_call_arg_limit();
     run_lower_str_concat();
     run_reject_bytes_memory_ops_until_jit_driver_exists();

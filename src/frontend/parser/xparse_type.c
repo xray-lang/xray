@@ -228,23 +228,45 @@ static XrTypeRef *parse_type_annotation_base(Parser *parser) {
             }
             return xr_tref_unit(parser->X);
         }
-        XrTypeRef *elems[16];
+        int cap = 8;
+        XrTypeRef **elems = (XrTypeRef **) xr_malloc((size_t) cap * sizeof(XrTypeRef *));
+        if (!elems) {
+            xr_parser_error(parser, "out of memory while parsing type list");
+            return xr_tref_unknown(parser->X);
+        }
         int count = 0;
         while (!xr_parser_check(parser, TK_RPAREN) && !xr_parser_check(parser, TK_EOF)) {
             if (count > 0)
                 xr_parser_match(parser, TK_COMMA);
-            if (count < 16)
-                elems[count++] = xr_parse_type_annotation(parser);
+            if (count == cap) {
+                int new_cap = cap * 2;
+                XrTypeRef **resized =
+                    (XrTypeRef **) xr_realloc(elems, (size_t) new_cap * sizeof(XrTypeRef *));
+                if (!resized) {
+                    xr_free(elems);
+                    xr_parser_error(parser, "out of memory while growing type list");
+                    return xr_tref_unknown(parser->X);
+                }
+                elems = resized;
+                cap = new_cap;
+            }
+            elems[count++] = xr_parse_type_annotation(parser);
         }
         xr_parser_consume(parser, TK_RPAREN, "expected ')'");
         if (xr_parser_match(parser, TK_ARROW)) {
             XrTypeRef *ret = xr_parse_type_annotation(parser);
-            return xr_tref_function(parser->X, elems, count, ret);
+            XrTypeRef *result = xr_tref_function(parser->X, elems, count, ret);
+            xr_free(elems);
+            return result;
         }
         // `()` with no trailing `->` is the unit type, not an empty tuple.
-        if (count == 0)
+        if (count == 0) {
+            xr_free(elems);
             return xr_tref_unit(parser->X);
-        return xr_tref_tuple(parser->X, elems, count);
+        }
+        XrTypeRef *result = xr_tref_tuple(parser->X, elems, count);
+        xr_free(elems);
+        return result;
     }
 
     /* Identifier: class / enum / prelude / alias / generic params */

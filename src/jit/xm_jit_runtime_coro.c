@@ -809,14 +809,17 @@ XrJitResult xr_jit_chan_recv_is_value(XrCoroutine *coro, int64_t extra_arg) {
 // Called from JIT via CALL_C for OP_INVOKE_DIRECT.
 // jit_call_args[0] = receiver (raw value, tagged or ptr depending on slot type)
 // jit_call_args[1..nargs] = method arguments
-// extra_arg = (recv_xr_tag << 24) | (method_idx << 8) | nargs
+// extra_arg = (recv_xr_tag << 24) | (method_idx << 8)
 // Resolves method closure from instance's class, then calls via VM interpreter.
 XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs <= 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
     uint8_t recv_tag = (uint8_t) ((extra_arg >> 24) & 0xFF);
     int method_idx = (int) ((extra_arg >> 8) & 0xFFFF);
-    int nargs = (int) (extra_arg & 0xFF);
+    int nargs = (int) scratch->call_nargs - 1;
 
-    XrValue recv_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], recv_tag);
+    XrValue recv_val = jit_value_from_tag(scratch->call_args[0], recv_tag);
     if (!XR_IS_PTR(recv_val) || !recv_val.ptr)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
     XrInstance *inst = xr_value_to_instance(recv_val);
@@ -837,11 +840,10 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
         XrayIsolate *isolate = coro->isolate;
         if (!isolate)
             return (XrJitResult) {XM_DEOPT_MARKER, 0};
-        XrValue prim_args[16];
+        XrValue prim_args[XR_JIT_MAX_CALL_ARGS];
         XrValue receiver = xr_value_from_instance(inst);
-        for (int i = 0; i < nargs && i < 15; i++)
-            prim_args[i] =
-                jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[1 + i], XR_TAG_I64);
+        for (int i = 0; i < nargs; i++)
+            prim_args[i] = jit_value_from_tag(scratch->call_args[1 + i], XR_TAG_I64);
         XrValue result = method->as.primitive(isolate, receiver, prim_args, nargs);
         if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
             xr_coro_jit_state(coro)->scratch->exception =
@@ -861,10 +863,10 @@ XrJitResult xr_jit_invoke_direct(XrCoroutine *coro, int64_t extra_arg) {
     // Build args array: [0]=this(receiver), [1..nargs]=method args
     // Must use xr_value_from_instance so heap_type is set correctly;
     // the VM interpreter's xr_value_to_instance checks heap_type.
-    XrValue args[16];
+    XrValue args[XR_JIT_MAX_CALL_ARGS];
     args[0] = xr_value_from_instance(inst);
-    for (int i = 0; i < nargs && i < 15; i++) {
-        int64_t raw = xr_coro_jit_state(coro)->scratch->call_args[1 + i];
+    for (int i = 0; i < nargs; i++) {
+        int64_t raw = scratch->call_args[1 + i];
         uint8_t tag = XR_TAG_I64;
         if (proto->param_types && (i + 1) < proto->param_types_count && proto->param_types[i + 1])
             tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i + 1]));
@@ -977,7 +979,7 @@ static XrJitResult jit_call_closure_raw_args(XrCoroutine *coro, XrClosure *closu
         scratch->active_stack_map = proto->stack_map;
         scratch->active_safepoint_id = UINT32_MAX;
         // Callee prologue copies param_tags[i] to vreg_runtime_tags[i].
-        for (int i = 0; i < nargs && i < 8; i++)
+        for (int i = 0; i < nargs && i < XR_JIT_MAX_CALL_ARGS; i++)
             scratch->param_tags[i] = (int64_t) jit_call_arg_tag(scratch, proto, i, arg_base + i);
 #ifdef _WIN32
         int64_t payload =
@@ -1011,9 +1013,10 @@ static XrJitResult jit_call_closure_raw_args(XrCoroutine *coro, XrClosure *closu
     if (!isolate)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
-    XrValue args[16];
-    int boxed_nargs = nargs < 15 ? nargs : 15;
-    for (int i = 0; i < boxed_nargs; i++) {
+    if (nargs < 0 || nargs > XR_JIT_MAX_CALL_ARGS)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    XrValue args[XR_JIT_MAX_CALL_ARGS];
+    for (int i = 0; i < nargs; i++) {
         int64_t raw = scratch->call_args[arg_base + i];
         uint8_t tag = jit_call_arg_tag(scratch, proto, i, arg_base + i);
         args[i] = jit_value_from_tag(raw, tag);
@@ -1021,7 +1024,7 @@ static XrJitResult jit_call_closure_raw_args(XrCoroutine *coro, XrClosure *closu
 
     bool saved_suppress = xr_isolate_get_suppress_exception_print(isolate);
     xr_isolate_set_suppress_exception_print(isolate, true);
-    XrValue result = xr_vm_call_closure(isolate, closure, args, boxed_nargs);
+    XrValue result = xr_vm_call_closure(isolate, closure, args, nargs);
     xr_isolate_set_suppress_exception_print(isolate, saved_suppress);
 
     if (!XR_IS_NULL(xr_coro_vm_ctx(coro)->current_exception)) {
@@ -1042,10 +1045,14 @@ static XrJitResult jit_call_closure_raw_args(XrCoroutine *coro, XrClosure *closu
 
 // Called from JIT code via CALL_C for general function calls.
 // jit_call_args[0] = raw closure pointer, jit_call_args[1..n] = raw arg values.
-// extra_arg = nargs (low 8 bits).
+// call_nargs in scratch includes the closure slot; params start at call_args[1].
 XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
-    int nargs = (int) (nargs_encoded & 0xFF);
-    int64_t raw_closure = xr_coro_jit_state(coro)->scratch->call_args[0];
+    (void) nargs_encoded;
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs <= 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    int nargs = (int) scratch->call_nargs - 1;
+    int64_t raw_closure = scratch->call_args[0];
     // Detect poison values from uninitialized JIT registers (OSR edge case).
     if (raw_closure == 0 || ((uint64_t) raw_closure >> 48) != 0)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
@@ -1071,19 +1078,21 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
         XrMethod *ctor = (ctor_sym > 0) ? xr_class_lookup_method(klass, ctor_sym) : NULL;
 
         XrValue inst_val = xr_value_from_instance(instance);
-        XrValue args[16];
-        for (int i = 0; i < nargs && i < 15; i++) {
-            int64_t raw = xr_coro_jit_state(coro)->scratch->call_args[1 + i];
-            uint8_t tag = xr_coro_jit_state(coro)->scratch->call_arg_tags[1 + i];
+        XrValue args[XR_JIT_MAX_CALL_ARGS];
+        for (int i = 0; i < nargs; i++) {
+            int64_t raw = scratch->call_args[1 + i];
+            uint8_t tag = scratch->call_arg_tags[1 + i];
             if (tag == XR_RTAG_UNKNOWN)
                 tag = XR_TAG_I64;
             args[i] = jit_value_from_tag(raw, tag);
         }
 
         if (ctor && ctor->type == XMETHOD_CLOSURE) {
-            XrValue ctor_args[16];
+            XrValue ctor_args[XR_JIT_MAX_CALL_ARGS];
             ctor_args[0] = inst_val;
-            for (int i = 0; i < nargs && i < 15; i++)
+            if (nargs + 1 > XR_JIT_MAX_CALL_ARGS)
+                return (XrJitResult) {XM_DEOPT_MARKER, 0};
+            for (int i = 0; i < nargs; i++)
                 ctor_args[1 + i] = args[i];
             bool saved_suppress = xr_isolate_get_suppress_exception_print(isolate);
             xr_isolate_set_suppress_exception_print(isolate, true);
@@ -1120,10 +1129,11 @@ XrJitResult xr_jit_call_func(XrCoroutine *coro, int64_t nargs_encoded) {
 // vector, including the receiver at index 0. The method closure/proto are
 // installed by codegen in scratch->call_closure/call_proto before this helper.
 XrJitResult xr_jit_call_method_known(XrCoroutine *coro, int64_t nargs_encoded) {
-    int nargs = (int) (nargs_encoded & 0xFF);
+    (void) nargs_encoded;
     XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
-    if (!scratch)
+    if (!scratch || scratch->call_nargs < 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    int nargs = (int) scratch->call_nargs;
     XrClosure *closure = (XrClosure *) scratch->call_closure;
     if (!closure || !closure->proto)
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
@@ -1348,11 +1358,13 @@ XrJitResult xr_jit_rt_map_new(XrCoroutine *coro, int64_t capacity) {
 // Called from JIT via CALL_C for xi.tuple.new.
 // call_args[0..arity-1] = element payloads.
 XrJitResult xr_jit_tuple_new(XrCoroutine *coro, int64_t arity) {
-    if (!coro || arity < 0 || arity > 15)
+    if (!coro || arity < 0 || arity > XR_JIT_MAX_CALL_ARGS)
         return XR_JIT_NULL();
 
-    XrValue values[15];
     XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs != arity)
+        return XR_JIT_NULL();
+    XrValue values[XR_JIT_MAX_CALL_ARGS];
     for (int64_t i = 0; i < arity; i++) {
         values[i] = jit_value_from_tag(scratch->call_args[i], scratch->call_arg_tags[i]);
     }
@@ -1611,16 +1623,18 @@ XrJitResult xr_jit_scope_exit(XrCoroutine *coro, int64_t extra_arg) {
 // Called from JIT via CALL_C for OP_GO.
 // jit_call_args[0] = closure raw (XrValue tagged as PTR)
 // jit_call_args[1..nargs] = argument values (raw payloads)
-// extra_arg = nargs | (fire_and_forget << 7)
+// extra_arg bit 0 = fire_and_forget; call_nargs includes the closure slot.
 // Creates the coroutine, sets up scope, schedules via xr_runtime_spawn.
 // Returns the coroutine XrValue raw payload (for R[A]).
 // Note: skips continuation stealing for simplicity — coro scheduled normally.
 XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
-    int c_raw = (int) (extra_arg & 0xFF);
-    bool fire_and_forget = (c_raw & 0x80) != 0;
-    int nargs = c_raw & 0x7F;
+    XrJitScratch *scratch = xr_coro_jit_state(coro)->scratch;
+    if (!scratch || scratch->call_nargs <= 0 || scratch->call_nargs > XR_JIT_MAX_CALL_ARGS)
+        return (XrJitResult) {XM_DEOPT_MARKER, 0};
+    bool fire_and_forget = (extra_arg & 1) != 0;
+    int nargs = (int) scratch->call_nargs - 1;
 
-    XrValue fn_val = jit_value_from_tag(xr_coro_jit_state(coro)->scratch->call_args[0], XR_TAG_PTR);
+    XrValue fn_val = jit_value_from_tag(scratch->call_args[0], XR_TAG_PTR);
     if (!xr_value_is_closure(fn_val))
         return (XrJitResult) {XM_DEOPT_MARKER, 0};
 
@@ -1635,10 +1649,10 @@ XrJitResult xr_jit_go(XrCoroutine *coro, int64_t extra_arg) {
     // Build args from call_args[1..nargs].
     // Primary tag source: call_arg_tags[] (precise compile-time tags from codegen).
     // Fallback: proto->param_types for truly unknown (any) types.
-    XrValue args[16];
-    for (int i = 0; i < nargs && i < 16; i++) {
-        int64_t raw = xr_coro_jit_state(coro)->scratch->call_args[1 + i];
-        uint8_t tag = xr_coro_jit_state(coro)->scratch->call_arg_tags[1 + i];
+    XrValue args[XR_JIT_MAX_CALL_ARGS];
+    for (int i = 0; i < nargs; i++) {
+        int64_t raw = scratch->call_args[1 + i];
+        uint8_t tag = scratch->call_arg_tags[1 + i];
         if (tag == XR_RTAG_UNKNOWN && proto->param_types && i < proto->param_types_count &&
             proto->param_types[i])
             tag = slot_type_to_xr_tag(xr_type_to_slot_type(proto->param_types[i]));

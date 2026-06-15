@@ -21,6 +21,7 @@
 #include "frontend/parser/xast_api.h"
 #include "frontend/parser/xast_types.h"
 #include "frontend/parser/xast_nodes.h"
+#include "frontend/parser/xtype_ref.h"
 #include "xray.h"
 #include "runtime/xisolate_internal.h"
 
@@ -461,6 +462,24 @@ TEST(parser_tuple_with_trailing_comma) {
     teardown();
 }
 
+TEST(parser_tuple_type_over_16_elements) {
+    setup();
+    AstNode *stmt =
+        parse_first("let t: (int, int, int, int, int, int, int, int, int, int, "
+                    "int, int, int, int, int, int, int, int, int, int) = "
+                    "(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19)");
+    ASSERT_EQ_INT(stmt->type, AST_VAR_DECL);
+    XrTypeRef *ann = stmt->as.var_decl.type_annotation;
+    ASSERT_NOT_NULL(ann);
+    ASSERT_EQ_INT(ann->kind, XR_TREF_TUPLE);
+    ASSERT_EQ_INT(ann->nchildren, 20);
+    AstNode *init = stmt->as.var_decl.initializer;
+    ASSERT_NOT_NULL(init);
+    ASSERT_EQ_INT(init->type, AST_TUPLE_LITERAL);
+    ASSERT_EQ_INT(init->as.tuple_literal.count, 20);
+    teardown();
+}
+
 TEST(parser_grouping_still_works) {
     setup();
     /* `(x)` without a trailing comma must remain a grouping, otherwise
@@ -643,6 +662,7 @@ int main(void) {
     RUN_TEST(parser_tuple_multi_literal);
     RUN_TEST(parser_tuple_nested_literal);
     RUN_TEST(parser_tuple_with_trailing_comma);
+    RUN_TEST(parser_tuple_type_over_16_elements);
     RUN_TEST(parser_grouping_still_works);
     RUN_TEST(parser_arrow_fn_not_tuple);
     RUN_TEST(parser_tuple_field_access);

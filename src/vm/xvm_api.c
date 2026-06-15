@@ -166,6 +166,7 @@ XrValue xr_vm_call_closure(XrayIsolate *isolate, XrClosure *closure, XrValue *ar
     XR_DCHECK(ctx->frame_count >= 0 && ctx->frame_count < ctx->frame_capacity,
               "vm_call_closure: prepare_entry post-condition violated");
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
+    memset(frame, 0, sizeof(XrBcCallFrame));
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = (int) (func_base - ctx->stack);
@@ -352,6 +353,7 @@ XrVMResult xr_vm_execute_module(XrayIsolate *isolate, XrProto *proto) {
     XR_DCHECK(saved_frame_count + 1 <= ctx->frame_capacity,
               "vm_execute_module: prepare_entry post-condition violated");
     XrBcCallFrame *frame = &ctx->frames[saved_frame_count];
+    memset(frame, 0, sizeof(XrBcCallFrame));
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = base_offset;

@@ -78,7 +78,7 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int 
                     // Continuation complete, use VM's startfunc mechanism to store return value
                     // This ensures return value is stored in correct frame context
                     XR_DBG_CORO("unroll DONE: result_slot=%d, base_offset=%d, frame_idx=%d",
-                                frame->u.c.result_slot, frame->base_offset,
+                                frame->cfunc_result_slot, frame->base_offset,
                                 coro_ctx->frame_count - 1);
 
                     // If this is the coroutine's last frame (frame_count=1),
@@ -91,8 +91,8 @@ XrVMResult xr_vm_coro_resume_with_unroll(XrayIsolate *X, XrCoroutine *coro, int 
 
                     // Mark return value, let VM store at startfunc
                     // This avoids storing return value in wrong context
-                    frame->u.c.cfunc_result = cfunc_result;
-                    frame->u.c.has_cfunc_result = true;
+                    frame->cfunc_result = cfunc_result;
+                    frame->has_cfunc_result = true;
 
                     // Cleanup frame state (C function reuses caller's bytecode frame, don't pop)
                     frame->call_status &= ~(XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED);
