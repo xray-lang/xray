@@ -347,6 +347,18 @@ else
     EXIT=1
 fi
 
+section "5C. Xi patterned lowering guard"
+
+XI_TEMPLATE_LOWERING_LOG="${TMPDIR_PATH}/xi_template_lowering.log"
+if python3 scripts/check_xi_template_lowering.py >"${XI_TEMPLATE_LOWERING_LOG}" 2>&1; then
+    green "OK: patterned Xi lowering stays routed through generated templates."
+    sed 's/^/  /' "${XI_TEMPLATE_LOWERING_LOG}" || true
+else
+    red "FAIL: patterned Xi lowering regressed to handwritten dispatch:"
+    sed 's/^/  /' "${XI_TEMPLATE_LOWERING_LOG}"
+    EXIT=1
+fi
+
 section "6. helper CALL_C metadata path"
 
 manual_callc=$(awk '
