@@ -66,6 +66,7 @@ VM_GENERATED_WIDTH_FILE = "src/vm/xvm_template_width_gen.inc.c"
 VM_GENERATED_BITWISE_BINARY_FILE = "src/vm/xvm_template_bitwise_binary_gen.inc.c"
 VM_GENERATED_BITWISE_UNARY_FILE = "src/vm/xvm_template_bitwise_unary_gen.inc.c"
 VM_GENERATED_UNARY_FILE = "src/vm/xvm_template_unary_gen.inc.c"
+VM_GENERATED_ARITH_BINARY_FILE = "src/vm/xvm_template_arith_binary_gen.inc.c"
 VM_GENERATED_SHIFT_FILE = "src/vm/xvm_template_shift_gen.inc.c"
 VM_GENERATED_COMPARE_FILE = "src/vm/xvm_template_compare_gen.inc.c"
 VM_BODY_SCAN_FILES = (
@@ -142,6 +143,16 @@ def vm_generated_unary_opcodes(root: Path, entries) -> set[str]:
     for entry in entries:
         if ('vm-bytecode' in entry.target_drivers and
                 entry.op_name in xisagen.XI_VM_TEMPLATE_UNARY):
+            opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
+    return opcodes
+
+
+def vm_generated_arith_binary_opcodes(root: Path, entries) -> set[str]:
+    xisagen = load_xisagen(root)
+    opcodes: set[str] = set()
+    for entry in entries:
+        if ('vm-bytecode' in entry.target_drivers and
+                entry.op_name in xisagen.XI_VM_TEMPLATE_ARITH_BINARY):
             opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
     return opcodes
 
@@ -330,12 +341,14 @@ def run_check(root: Path) -> list[Violation]:
     vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text()
     vm_bitwise_unary_generated_text = (root / VM_GENERATED_BITWISE_UNARY_FILE).read_text()
     vm_unary_generated_text = (root / VM_GENERATED_UNARY_FILE).read_text()
+    vm_arith_binary_generated_text = (root / VM_GENERATED_ARITH_BINARY_FILE).read_text()
     vm_shift_generated_text = (root / VM_GENERATED_SHIFT_FILE).read_text()
     vm_compare_generated_text = (root / VM_GENERATED_COMPARE_FILE).read_text()
     vm_width_opcodes = vm_generated_body_opcodes(root, entries)
     vm_bitwise_opcodes = vm_generated_bitwise_binary_opcodes(root, entries)
     vm_bitwise_unary_opcodes = vm_generated_bitwise_unary_opcodes(root, entries)
     vm_unary_opcodes = vm_generated_unary_opcodes(root, entries)
+    vm_arith_binary_opcodes = vm_generated_arith_binary_opcodes(root, entries)
     vm_shift_opcodes = vm_generated_shift_opcodes(root, entries)
     vm_compare_opcodes = vm_generated_compare_opcodes(root, entries)
     violations: list[Violation] = []
@@ -367,6 +380,12 @@ def run_check(root: Path) -> list[Violation]:
         r"\bXVM_TEMPLATE_UNARY_(?:NEG|NOT)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "unary"))
     violations.extend(check_vm_generated_body_coverage(
+        vm_arith_binary_opcodes,
+        vm_arith_binary_generated_text,
+        VM_GENERATED_ARITH_BINARY_FILE,
+        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "arithmetic binary"))
+    violations.extend(check_vm_generated_body_coverage(
         vm_shift_opcodes,
         vm_shift_generated_text,
         VM_GENERATED_SHIFT_FILE,
@@ -386,6 +405,8 @@ def run_check(root: Path) -> list[Violation]:
         vm_bitwise_unary_opcodes, vm_body_texts, VM_GENERATED_BITWISE_UNARY_FILE))
     violations.extend(check_vm_handwritten_body_cases(
         vm_unary_opcodes, vm_body_texts, VM_GENERATED_UNARY_FILE))
+    violations.extend(check_vm_handwritten_body_cases(
+        vm_arith_binary_opcodes, vm_body_texts, VM_GENERATED_ARITH_BINARY_FILE))
     violations.extend(check_vm_handwritten_body_cases(
         vm_shift_opcodes, vm_body_texts, VM_GENERATED_SHIFT_FILE))
     violations.extend(check_vm_handwritten_body_cases(
@@ -484,6 +505,20 @@ def run_self_test() -> None:
         vm_unary_opcodes, {"src/vm/xvm_dispatch_arith.inc.c": "vmcase(OP_UNM) {\n"},
         VM_GENERATED_UNARY_FILE)
     assert len(vm_unary_handwritten) == 1 and "OP_UNM" in vm_unary_handwritten[0].message
+
+    vm_arith_binary_opcodes = {"OP_ADD"}
+    vm_arith_binary_coverage = check_vm_generated_body_coverage(
+        vm_arith_binary_opcodes,
+        "XVM_TEMPLATE_ARITH_ADD_CASE(OP_ADD, +, +, bigint, flag, sym, name, err)\n",
+        VM_GENERATED_ARITH_BINARY_FILE,
+        r"\bXVM_TEMPLATE_ARITH_(?:ADD|NUMERIC|MUL)_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "arithmetic binary")
+    assert not vm_arith_binary_coverage
+    vm_arith_binary_handwritten = check_vm_handwritten_body_cases(
+        vm_arith_binary_opcodes, {"src/vm/xvm_dispatch_arith.inc.c": "vmcase(OP_ADD) {\n"},
+        VM_GENERATED_ARITH_BINARY_FILE)
+    assert (len(vm_arith_binary_handwritten) == 1 and
+            "OP_ADD" in vm_arith_binary_handwritten[0].message)
 
     vm_shift_opcodes = {"OP_SHL"}
     vm_shift_coverage = check_vm_generated_body_coverage(

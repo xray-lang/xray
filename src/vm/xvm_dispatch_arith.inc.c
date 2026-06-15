@@ -28,86 +28,124 @@
 ** Arithmetic Instructions (Hot Path Inlined)
 ** ======================================================== */
 
-vmcase(OP_ADD) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrValue vb = R(b);
-    XrValue vc = R(c);
+#define XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn)                             \
+    do {                                                                                           \
+        if (XR_IS_INT(vb) && XR_IS_INT(vc)) {                                                      \
+            XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) int_op(uint64_t) XR_TO_INT(vc))); \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {                                                  \
+            XR_SET_FLOAT(R(a), (vb).f float_op(vc).f);                                             \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        double _nb = 0, _nc = 0;                                                                   \
+        if (XR_TONUMBER(vb, _nb) && XR_TONUMBER(vc, _nc)) {                                        \
+            XR_SET_FLOAT(R(a), _nb float_op _nc);                                                  \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {                                                \
+            R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, bigint_fn);                            \
+            vmbreak;                                                                               \
+        }                                                                                          \
+    } while (0)
 
-    // Fast path: integer addition (wrap on overflow)
-    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) + (uint64_t) XR_TO_INT(vc)));
-        vmbreak;
+#define XVM_TEMPLATE_ARITH_ADD_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
+                                    error_msg)                                                     \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        int c = GETARG_C(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        XrValue vc = R(c);                                                                         \
+        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
+        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
+        if (XR_IS_STRING(vb) || XR_IS_STRING(vc)) {                                                \
+            if (XR_IS_STRING(vb) && XR_IS_STRING(vc)) {                                            \
+                const char *db = xr_value_str_data(&vb);                                           \
+                uint32_t lb = xr_value_str_len(&vb);                                               \
+                const char *dc = xr_value_str_data(&vc);                                           \
+                uint32_t lc = xr_value_str_len(&vc);                                               \
+                size_t total_len = lb + lc;                                                        \
+                if (total_len < XR_SHORT_STRING_THRESHOLD) {                                       \
+                    char stack_buf[XR_SHORT_STRING_THRESHOLD];                                     \
+                    memcpy(stack_buf, db, lb);                                                     \
+                    memcpy(stack_buf + lb, dc, lc);                                                \
+                    R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));    \
+                    vmbreak;                                                                       \
+                }                                                                                  \
+                XrStrBuf *sb = xr_strbuf_tmp(isolate);                                             \
+                xr_strbuf_append_cstr(sb, db, lb);                                                 \
+                xr_strbuf_append_cstr(sb, dc, lc);                                                 \
+                R(a) = xr_string_value(xr_strbuf_to_string(sb));                                   \
+                vmbreak;                                                                           \
+            }                                                                                      \
+            XrString *str_b = xr_value_to_string(isolate, vb);                                     \
+            XrString *str_c = xr_value_to_string(isolate, vc);                                     \
+            size_t total_len = str_b->length + str_c->length;                                      \
+            if (total_len < XR_SHORT_STRING_THRESHOLD) {                                           \
+                char stack_buf[XR_SHORT_STRING_THRESHOLD];                                         \
+                memcpy(stack_buf, str_b->data, str_b->length);                                     \
+                memcpy(stack_buf + str_b->length, str_c->data, str_c->length);                     \
+                R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));        \
+                vmbreak;                                                                           \
+            }                                                                                      \
+            XrStrBuf *sb = xr_strbuf_tmp(isolate);                                                 \
+            xr_strbuf_append_str(sb, str_b);                                                       \
+            xr_strbuf_append_str(sb, str_c);                                                       \
+            R(a) = xr_string_value(xr_strbuf_to_string(sb));                                       \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg, xr_typeid_name(xr_value_typeid(vb)),     \
+                         xr_typeid_name(xr_value_typeid(vc)));                                     \
+        vmbreak;                                                                                   \
     }
-    // Fast path: float + float (skip XR_TONUMBER overhead)
-    if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {
-        XR_SET_FLOAT(R(a), vb.f + vc.f);
-        vmbreak;
-    }
-    // Mixed/extended numeric addition
-    {
-        double nb = 0, nc = 0;
-        if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
-            XR_SET_FLOAT(R(a), nb + nc);
-            vmbreak;
-        }
-    }
-    // BigInt addition (auto-promote int operands)
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
-        R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, xr_bigint_add);
-        vmbreak;
-    }
-    // Operator overload (unified macro)
-    VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_ADD_FLAG, SYMBOL_OP_ADD, "+");
-    // String concatenation: only reachable via any+any runtime path
-    // (compiler guarantees typed string+string uses STRBUF sequence)
-    if (XR_IS_STRING(vb) || XR_IS_STRING(vc)) {
-        // Fast path: both are strings — use str_data/len directly, no promote
-        if (XR_IS_STRING(vb) && XR_IS_STRING(vc)) {
-            const char *db = xr_value_str_data(&vb);
-            uint32_t lb = xr_value_str_len(&vb);
-            const char *dc = xr_value_str_data(&vc);
-            uint32_t lc = xr_value_str_len(&vc);
-            size_t total_len = lb + lc;
-            if (total_len < XR_SHORT_STRING_THRESHOLD) {
-                char stack_buf[XR_SHORT_STRING_THRESHOLD];
-                memcpy(stack_buf, db, lb);
-                memcpy(stack_buf + lb, dc, lc);
-                R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));
-                vmbreak;
-            }
-            XrStrBuf *sb = xr_strbuf_tmp(isolate);
-            xr_strbuf_append_cstr(sb, db, lb);
-            xr_strbuf_append_cstr(sb, dc, lc);
-            R(a) = xr_string_value(xr_strbuf_to_string(sb));
-            vmbreak;
-        }
-        // Slow path: one operand needs toString conversion
-        XrString *str_b = xr_value_to_string(isolate, vb);
-        XrString *str_c = xr_value_to_string(isolate, vc);
-        size_t total_len = str_b->length + str_c->length;
 
-        if (total_len < XR_SHORT_STRING_THRESHOLD) {
-            char stack_buf[XR_SHORT_STRING_THRESHOLD];
-            memcpy(stack_buf, str_b->data, str_b->length);
-            memcpy(stack_buf + str_b->length, str_c->data, str_c->length);
-            R(a) = xr_string_value(xr_string_intern(isolate, stack_buf, total_len, 0));
-            vmbreak;
-        }
-        XrStrBuf *sb = xr_strbuf_tmp(isolate);
-        xr_strbuf_append_str(sb, str_b);
-        xr_strbuf_append_str(sb, str_c);
-        R(a) = xr_string_value(xr_strbuf_to_string(sb));
-        vmbreak;
+#define XVM_TEMPLATE_ARITH_NUMERIC_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol,       \
+                                        op_name, error_msg)                                        \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        int c = GETARG_C(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        XrValue vc = R(c);                                                                         \
+        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
+        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
-    // TypeError: incompatible operand types for '+'
-    VM_RUNTIME_ERROR(
-        XR_ERR_TYPE_MISMATCH,
-        "operator '+' requires both operands to be numeric or both string, got '%s' and '%s'",
-        xr_typeid_name(xr_value_typeid(vb)), xr_typeid_name(xr_value_typeid(vc)));
-    vmbreak;
-}
+
+#define XVM_TEMPLATE_ARITH_MUL_CASE(op, int_op, float_op, bigint_fn, op_flag, op_symbol, op_name,  \
+                                    error_msg)                                                     \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        int c = GETARG_C(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        XrValue vc = R(c);                                                                         \
+        XVM_ARITH_NUMERIC_FAST(a, vb, vc, int_op, float_op, bigint_fn);                            \
+        if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {                                                   \
+            XrString *str = xr_value_to_string(isolate, vb);                                       \
+            xr_Integer count = XR_TO_INT(vc);                                                      \
+            XrString *result = xr_string_repeat(isolate, str, count);                              \
+            R(a) = result ? xr_string_value(result) : xr_null();                                   \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {                                                   \
+            xr_Integer count = XR_TO_INT(vb);                                                      \
+            XrString *str = xr_value_to_string(isolate, vc);                                       \
+            XrString *result = xr_string_repeat(isolate, str, count);                              \
+            R(a) = result ? xr_string_value(result) : xr_null();                                   \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, op_flag, op_symbol, op_name);                         \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
+    }
+
+#include "xvm_template_arith_binary_gen.inc.c"
+
+#undef XVM_TEMPLATE_ARITH_MUL_CASE
+#undef XVM_TEMPLATE_ARITH_NUMERIC_CASE
+#undef XVM_TEMPLATE_ARITH_ADD_CASE
+#undef XVM_ARITH_NUMERIC_FAST
 
 vmcase(OP_ADDI) {
     int a = GETARG_A(i);
@@ -150,41 +188,6 @@ vmcase(OP_ADDK) {
     vmbreak;
 }
 
-vmcase(OP_SUB) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrValue vb = R(b);
-    XrValue vc = R(c);
-
-    // Fast path: integer subtraction (wrap on overflow)
-    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) - (uint64_t) XR_TO_INT(vc)));
-        vmbreak;
-    }
-    // Fast path: float - float
-    if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {
-        XR_SET_FLOAT(R(a), vb.f - vc.f);
-        vmbreak;
-    }
-    // Mixed/extended numeric subtraction
-    {
-        double nb = 0, nc = 0;
-        if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
-            XR_SET_FLOAT(R(a), nb - nc);
-            vmbreak;
-        }
-    }
-    // BigInt subtraction (auto-promote int operands)
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
-        R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, xr_bigint_sub);
-        vmbreak;
-    }
-    // Operator overload (unified macro)
-    VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_SUB_FLAG, SYMBOL_OP_SUB, "-");
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "subtraction requires numeric types");
-}
-
 vmcase(OP_SUBI) {
     int a = GETARG_A(i);
     int b = GETARG_B(i);
@@ -224,56 +227,6 @@ vmcase(OP_SUBK) {
         XR_SET_FLOAT(R(a), nb - nc);
     }
     vmbreak;
-}
-
-vmcase(OP_MUL) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    int c = GETARG_C(i);
-    XrValue vb = R(b);
-    XrValue vc = R(c);
-
-    // Fast path: integer multiplication (wrap on overflow)
-    if (XR_IS_INT(vb) && XR_IS_INT(vc)) {
-        XR_SET_INT(R(a), (int64_t) ((uint64_t) XR_TO_INT(vb) * (uint64_t) XR_TO_INT(vc)));
-        vmbreak;
-    }
-    // Fast path: float * float
-    if (XR_IS_FLOAT(vb) && XR_IS_FLOAT(vc)) {
-        XR_SET_FLOAT(R(a), vb.f * vc.f);
-        vmbreak;
-    }
-    // Mixed/extended numeric multiplication
-    {
-        double nb = 0, nc = 0;
-        if (XR_TONUMBER(vb, nb) && XR_TONUMBER(vc, nc)) {
-            XR_SET_FLOAT(R(a), nb * nc);
-            vmbreak;
-        }
-    }
-    // BigInt multiplication (auto-promote int operands)
-    if (XR_IS_BIGINT(vb) || XR_IS_BIGINT(vc)) {
-        R(a) = vm_bigint_binop(VM_CURRENT_CORO, vb, vc, xr_bigint_mul);
-        vmbreak;
-    }
-    // String repeat: string * int or int * string
-    if (XR_IS_STRING(vb) && XR_IS_INT(vc)) {
-        XrString *str = xr_value_to_string(isolate, vb);
-        xr_Integer count = XR_TO_INT(vc);
-        XrString *result = xr_string_repeat(isolate, str, count);
-        R(a) = result ? xr_string_value(result) : xr_null();
-        vmbreak;
-    }
-    if (XR_IS_INT(vb) && XR_IS_STRING(vc)) {
-        xr_Integer count = XR_TO_INT(vb);
-        XrString *str = xr_value_to_string(isolate, vc);
-        XrString *result = xr_string_repeat(isolate, str, count);
-        R(a) = result ? xr_string_value(result) : xr_null();
-        vmbreak;
-    }
-    // Operator overload (unified macro)
-    VM_TRY_BINARY_OP_OVERLOAD(vb, vc, a, XR_OP_MUL_FLAG, SYMBOL_OP_MUL, "*");
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "multiplication requires numeric types");
 }
 
 vmcase(OP_MULI) {

@@ -79,6 +79,7 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_binary_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_unary_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_unary_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_arith_binary_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_shift_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_compare_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/jit/xi_to_xm_dispatch_gen.h
