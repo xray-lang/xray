@@ -110,10 +110,10 @@ static XrHttpHeader *extract_headers_from_options(XrayIsolate *X, XrJson *opts, 
         if (!out)
             return NULL;
         int idx = 0;
-        uint32_t map_size = xr_map_sizenode(m);
+        uint32_t map_size = m->nentries;
         for (uint32_t i = 0; i < map_size && idx < m->count; i++) {
-            XrMapNode *node = &m->node[i];
-            if (!XR_MAP_NODE_EMPTY(node) && XR_IS_STRING(node->key) && XR_IS_STRING(node->value)) {
+            XrMapEntry *node = &m->entries[i];
+            if (!XR_MAP_ENTRY_EMPTY(node) && XR_IS_STRING(node->key) && XR_IS_STRING(node->value)) {
                 XrString *k = XR_TO_STRING(node->key);
                 XrString *v = XR_TO_STRING(node->value);
                 out[idx].name = k->data;

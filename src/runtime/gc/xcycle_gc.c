@@ -123,12 +123,12 @@ static void visit_children(XrGCHeader *obj, ChildVisitor visitor, void *ctx) {
         }
         case XR_TMAP: {
             XrMap *map = (XrMap *) obj;
-            if (xr_map_isdummy(map) || !map->node)
+            if (xr_map_isdummy(map) || !map->entries)
                 break;
-            uint32_t count = xr_map_sizenode(map);
+            uint32_t count = map->nentries;
             for (uint32_t i = 0; i < count; i++) {
-                XrMapNode *node = &map->node[i];
-                if (XR_MAP_NODE_EMPTY(node))
+                XrMapEntry *node = &map->entries[i];
+                if (XR_MAP_ENTRY_EMPTY(node))
                     continue;
                 if (XR_IS_PTR(node->key)) {
                     XrGCHeader *child = XR_VALUE_GCPTR(node->key);

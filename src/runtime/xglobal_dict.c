@@ -65,10 +65,10 @@ void xr_global_dict_iter(XrGlobalDict *gd, XrGlobalDictVisitor visit, void *ud) 
     XR_DCHECK(visit != NULL, "xr_global_dict_iter: NULL visitor");
     if (!gd->map || (gd->map->flags & XR_MAP_FLAG_DUMMY))
         return;
-    uint32_t n = xr_map_sizenode(gd->map);
+    uint32_t n = gd->map->nentries;
     for (uint32_t i = 0; i < n; i++) {
-        XrMapNode *node = xr_map_node(gd->map, i);
-        if (XR_MAP_NODE_EMPTY(node))
+        XrMapEntry *node = xr_map_entry(gd->map, i);
+        if (XR_MAP_ENTRY_EMPTY(node))
             continue;
         if (!XR_IS_STRING(node->key))
             continue; /* defensive: dict only ever holds string keys */

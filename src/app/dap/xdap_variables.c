@@ -179,11 +179,11 @@ static int get_map_children(XrayIsolate *isolate, XrMap *map, XdapVarInfo **out_
 
     XdapVarInfo *vars = (XdapVarInfo *) xr_calloc(count, sizeof(XdapVarInfo));
     int idx = 0;
-    uint32_t size = xr_map_sizenode(map);
+    uint32_t size = map->nentries;
 
     for (uint32_t i = 0; i < size && idx < (int) count; i++) {
-        XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node))
+        XrMapEntry *node = xr_map_entry(map, i);
+        if (XR_MAP_ENTRY_EMPTY(node))
             continue;
 
         char *key_str = xr_value_to_debug_string(isolate, node->key);
@@ -541,10 +541,10 @@ char *xr_debug_set_variable(XrayIsolate *isolate, int var_ref, const char *name,
     if (ref->type == XDAP_REF_MAP && XR_IS_PTR(ref->value)) {
         XrMap *map = (XrMap *) XR_TO_PTR(ref->value);
         // Try to find the entry by iterating and matching display name
-        uint32_t size = xr_map_sizenode(map);
+        uint32_t size = map->nentries;
         for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(map, i);
-            if (XR_MAP_NODE_EMPTY(node))
+            XrMapEntry *node = xr_map_entry(map, i);
+            if (XR_MAP_ENTRY_EMPTY(node))
                 continue;
             char *key_str = xr_value_to_debug_string(isolate, node->key);
             bool match = key_str && strcmp(key_str, name) == 0;

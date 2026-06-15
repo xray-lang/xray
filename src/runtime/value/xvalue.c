@@ -482,10 +482,10 @@ static bool xr_map_equals_deep(XrValue a, XrValue b) {
         return false;
 
     // Iterate all nodes in ma, check if same key-value exists in mb
-    uint32_t size = xr_map_sizenode(ma);
+    uint32_t size = ma->nentries;
     for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(ma, i);
-        if (XR_MAP_NODE_EMPTY(node))
+        XrMapEntry *node = xr_map_entry(ma, i);
+        if (XR_MAP_ENTRY_EMPTY(node))
             continue;
 
         // Find same key in mb

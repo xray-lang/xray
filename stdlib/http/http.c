@@ -375,10 +375,10 @@ static XrValue http_request(XrayIsolate *X, XrValue *args, int argc) {
                 }
 
                 int idx = 0;
-                uint32_t map_size = xr_map_sizenode(headers_map);
+                uint32_t map_size = headers_map->nentries;
                 for (uint32_t i = 0; i < map_size && idx < custom_header_count; i++) {
-                    XrMapNode *node = &headers_map->node[i];
-                    if (!XR_MAP_NODE_EMPTY(node) && XR_IS_STRING(node->key) &&
+                    XrMapEntry *node = &headers_map->entries[i];
+                    if (!XR_MAP_ENTRY_EMPTY(node) && XR_IS_STRING(node->key) &&
                         XR_IS_STRING(node->value)) {
                         XrString *k = XR_TO_STRING(node->key);
                         XrString *v = XR_TO_STRING(node->value);

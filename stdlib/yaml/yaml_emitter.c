@@ -372,13 +372,13 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
         use_flow = true;
     }
 
-    uint32_t size = xr_map_sizenode(map);
+    uint32_t size = map->nentries;
 
     if (use_flow) {
         emit_char(e, '{');
         bool first = true;
         for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(map, i);
+            XrMapEntry *node = xr_map_entry(map, i);
             if (node->key_tt > 0) {
                 if (!first)
                     emit_str(e, ", ");
@@ -401,7 +401,7 @@ static void emit_map(YamlEmitter *e, XrMap *map, int level, bool flow_mode) {
     } else {
         bool first = true;
         for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(map, i);
+            XrMapEntry *node = xr_map_entry(map, i);
             if (node->key_tt > 0) {
                 if (!first) {
                     emit_char(e, '\n');

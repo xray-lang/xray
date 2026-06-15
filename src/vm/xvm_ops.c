@@ -358,10 +358,10 @@ static bool map_deep_equal(CompareContext *ctx, XrMap *a, XrMap *b) {
 
     bool result = true;
     if (!xr_map_isdummy(a)) {
-        uint32_t size = xr_map_sizenode(a);
+        uint32_t size = a->nentries;
         for (size_t i = 0; i < size; i++) {
-            XrMapNode *node = xr_map_node(a, i);
-            if (!XR_MAP_NODE_EMPTY(node)) {
+            XrMapEntry *node = xr_map_entry(a, i);
+            if (!XR_MAP_ENTRY_EMPTY(node)) {
                 bool found = false;
                 XrValue b_value = xr_map_get(b, node->key, &found);
                 if (!found) {

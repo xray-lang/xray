@@ -5,16 +5,21 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmap.c - Chained hash map implementation
+ * xmap.c - Compact ordered hash map implementation (CPython-style compact dict)
  *
  * KEY CONCEPT:
- *   - Chained scatter table with Brent's variation
- *   - No tombstone mechanism needed
- *   - Can reach 100% load factor
- *   - Empty map uses static dummynode
- *   - Short strings use pointer comparison
- *   - Coroutine-heap maps use GC blob for node[] (no malloc/free)
- *   - System-heap maps use malloc for node[] (freed by destructor)
+ *   - entries[] is a dense, append-only array in insertion order; iteration
+ *     scans it directly so observable order is insertion order.
+ *   - indices[] is an open-addressing (linear-probing) table mapping a key's
+ *     hash bucket to an entries[] index (or EMPTY / DELETED sentinel).
+ *   - Deletion tombstones the entry (key_tt=0) and marks its index DELETED;
+ *     dead slots are reclaimed when the table is resized/compacted.
+ *   - Resizing is triggered when nentries reaches entries_cap. Because
+ *     entries_cap = indices_size*2/3 and every append consumes one index slot,
+ *     the index table always keeps an EMPTY slot, so probing always terminates.
+ *   - Empty map allocates nothing (DUMMY); the first insert allocates both
+ *     arrays. Coroutine-heap maps allocate on the Region GC heap on first
+ *     allocation; resizes use malloc (region recycling may overlap old blobs).
  */
 
 #include "xmap.h"
@@ -38,51 +43,18 @@
 
 #include "../xvm_call.h"
 
-/* ========== Static Dummynode ========== */
-
-// Shared dummynode for empty maps (key_tt=0 means empty)
-XrMapNode xr_map_dummynode = {
-    .value = {0}, .key = {0}, .next = 0, .key_tt = XR_MAP_NODE_NIL_KEY, ._pad = {0}};
-
-static void xr_map_release_entry_values(XrMapNode *node, XrCoroGC *gc) {
-    XR_DCHECK(node != NULL, "map_release_entry: NULL node");
-    xr_rc_release_value(gc, node->key);
-    xr_rc_release_value(gc, node->value);
-    node->key = xr_null();
-    node->value = xr_null();
-}
-
-static void xr_map_retain_entry_values(XrMapNode *node) {
-    XR_DCHECK(node != NULL, "map_retain_entry: NULL node");
-    xr_rc_retain_value(node->key);
-    xr_rc_retain_value(node->value);
-}
-
 /* ========== Memory Profiling (optional) ========== */
 #include "../../base/xmem_profiler.h"
+#include "../gc/xgc.h"
 
 #ifdef XR_PROFILE_MAP_MEMORY
 XrProfileStats g_map_header_stats;
 XrProfileStats g_map_node_stats;
 size_t g_map_new_count;
 size_t g_map_rehash_count;
-#endif  // ========== GC Allocation Adapter ==========
-#include "../gc/xgc.h"
+#endif
 
 /* ========== Helper Functions ========== */
-
-// Calculate ceil(log2(x))
-static uint8_t ceillog2(uint32_t x) {
-    if (x <= 1)
-        return 0;
-    uint8_t r = 0;
-    x--;
-    while (x > 0) {
-        x >>= 1;
-        r++;
-    }
-    return r;
-}
 
 // Get key type tag (for fast comparison, +1 reserves 0 for empty)
 static inline uint8_t get_key_tt(XrValue key) {
@@ -98,57 +70,31 @@ static inline uint32_t string_hash_fast(XrString *str) {
     return str->hash;
 }
 
-/* ========== Main Position Calculation ========== */
-
-/**
- * Calculate key's main position (ideal slot in hash table)
- *
- * This is the key's "ideal" position in the hash table
- * Using bitwise AND for index (capacity is power of 2)
- */
-static XrMapNode *mainposition(XrMap *map, XrValue key) {
-    uint32_t hash;
-
-    // Compute hash based on key type
+// Compute a key's hash (mirrors the original mainposition hashing).
+static uint32_t hash_value(XrValue key) {
     if (XR_LIKELY(XR_IS_STRING(key))) {
-        hash = string_hash_fast((XrString *) key.ptr);
+        return string_hash_fast((XrString *) key.ptr);
     } else if (XR_IS_INT(key)) {
-        hash = xr_hash_int(XR_TO_INT(key));
+        return xr_hash_int(XR_TO_INT(key));
     } else if (XR_IS_FLOAT(key)) {
-        hash = xr_hash_float(XR_TO_FLOAT(key));
+        return xr_hash_float(XR_TO_FLOAT(key));
     } else if (XR_IS_BOOL(key)) {
-        hash = XR_TO_BOOL(key) ? 1 : 0;
-    } else {
-        // Other types: use pointer hash
-        hash = (uint32_t) (uintptr_t) XR_TO_PTR(key);
+        return XR_TO_BOOL(key) ? 1u : 0u;
     }
-
-    // Use bitwise AND for index (capacity is power of 2)
-    uint32_t size = xr_map_sizenode(map);
-    return &map->node[hash & (size - 1)];
+    return (uint32_t) (uintptr_t) XR_TO_PTR(key);
 }
 
-// Calculate main position from node
-static XrMapNode *mainpositionfromnode(XrMap *map, XrMapNode *n) {
-    return mainposition(map, n->key);
-}
-
-/* ========== Key Comparison ========== */
-
-// Compare if node's key matches (short strings use pointer comparison)
-static inline bool keyequal(XrMapNode *n, XrValue key, uint8_t key_tt) {
-    // Different type, return false
-    if (n->key_tt != key_tt)
+// Compare an entry's key against (key, key_tt). Short strings compare by data.
+static inline bool entry_key_equal(const XrMapEntry *e, XrValue key, uint8_t key_tt) {
+    if (e->key_tt != key_tt)
         return false;
 
-    // Compare by type (subtract 1 to restore XrTypeId)
     XrTypeId tid = (XrTypeId) (key_tt - 1);
     if (tid == XR_TID_STRING) {
-        // Direct data comparison — works for SSO, heap, or mixed
-        if (xr_value_same(n->key, key))
+        if (xr_value_same(e->key, key))
             return true;
-        const char *d1 = xr_value_str_data(&n->key);
-        uint32_t l1 = xr_value_str_len(&n->key);
+        const char *d1 = xr_value_str_data(&e->key);
+        uint32_t l1 = xr_value_str_len(&e->key);
         const char *d2 = xr_value_str_data(&key);
         uint32_t l2 = xr_value_str_len(&key);
         if (l1 != l2)
@@ -156,112 +102,208 @@ static inline bool keyequal(XrMapNode *n, XrValue key, uint8_t key_tt) {
         return memcmp(d1, d2, l1) == 0;
     }
     if (XR_TID_IS_INT(tid))
-        return XR_TO_INT(n->key) == XR_TO_INT(key);
+        return XR_TO_INT(e->key) == XR_TO_INT(key);
     if (XR_TID_IS_FLOAT(tid))
-        return XR_TO_FLOAT(n->key) == XR_TO_FLOAT(key);
+        return XR_TO_FLOAT(e->key) == XR_TO_FLOAT(key);
     if (tid == XR_TID_BOOL)
-        return XR_TO_BOOL(n->key) == XR_TO_BOOL(key);
+        return XR_TO_BOOL(e->key) == XR_TO_BOOL(key);
     if (tid == XR_TID_NULL)
         return true;
-    // Object types: pointer comparison
-    return XR_TO_PTR(n->key) == XR_TO_PTR(key);
+    return XR_TO_PTR(e->key) == XR_TO_PTR(key);
 }
 
-/* ========== Node Lookup ========== */
+// Smallest power-of-two index size whose usable capacity (2/3) covers `needed`.
+static uint32_t calc_indices_size(uint32_t needed) {
+    uint32_t size = 8;
+    while ((uint64_t) size * 2 / 3 < needed) {
+        if (size >= (1u << XR_MAP_MAXHBITS)) {
+            size = 1u << XR_MAP_MAXHBITS;
+            break;
+        }
+        size <<= 1;
+    }
+    return size;
+}
 
-// Find node for key, returns NULL if not found
-static XrMapNode *findnode(XrMap *map, XrValue key) {
-    if (xr_map_isdummy(map))
-        return NULL;
+static void xr_map_release_entry_values(XrMapEntry *e, XrCoroGC *gc) {
+    xr_rc_release_value(gc, e->key);
+    xr_rc_release_value(gc, e->value);
+    e->key = xr_null();
+    e->value = xr_null();
+}
 
-    uint8_t key_tt = get_key_tt(key);
-    XrMapNode *n = mainposition(map, key);
+/* ========== Index Table Lookup ========== */
 
-    // Traverse chain
+// Returns entries[] index for `key`, or -1 if absent.
+static int32_t map_lookup(XrMap *map, XrValue key, uint32_t hash, uint8_t key_tt) {
+    if (map->flags & XR_MAP_FLAG_DUMMY)
+        return -1;
+
+    uint32_t mask = map->indices_size - 1;
+    uint32_t slot = hash & mask;
+
     for (;;) {
-        if (keyequal(n, key, key_tt)) {
-            return n;  // Found
+        int32_t ix = map->indices[slot];
+        if (ix == XR_MAP_IX_EMPTY)
+            return -1;
+        if (ix >= 0) {
+            XrMapEntry *e = &map->entries[ix];
+            if (e->hash == hash && entry_key_equal(e, key, key_tt))
+                return ix;
         }
-        int next = n->next;
-        if (next == 0)
-            return NULL;  // End of chain, not found
-        n += next;
+        slot = (slot + 1) & mask;  // Linear probing; passes over DELETED slots
     }
 }
 
-/* ========== Free Node Lookup ========== */
-
-// Find free node from back to front
-static XrMapNode *getfreepos(XrMap *map) {
-    if (xr_map_isdummy(map))
-        return NULL;
-
-    while (map->lastfree > map->node) {
-        map->lastfree--;
-        if (XR_MAP_NODE_EMPTY(map->lastfree)) {
-            return map->lastfree;
-        }
-    }
-    return NULL;  // No free node
-}
-
-/* ========== Node Array Allocation ========== */
-
-// Allocate node array
-static void setnodevector(XrMap *map, uint32_t size) {
-    XR_DCHECK(map != NULL, "setnodevector: NULL map");
-    if (size == 0) {
-        // Use dummynode
-        map->node = &xr_map_dummynode;
-        map->lastfree = NULL;
-        map->lsizenode = 0;
-        map->flags |= XR_MAP_FLAG_DUMMY;
-    } else {
-        uint8_t lsize = ceillog2(size);
-        if (lsize > XR_MAP_MAXHBITS) {
-            lsize = XR_MAP_MAXHBITS;
-        }
-        size = 1u << lsize;
-        size_t alloc_bytes = sizeof(XrMapNode) * size;
-
-        XrMapNode *nodes = NULL;
-        bool malloc_path = false;
-        if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
-            // GC blob path: no free needed, GC reclaims old blob
-            XrCoroGC *gc = xr_current_coro_gc();
-            if (gc) {
-                nodes = (XrMapNode *) xr_coro_alloc_blob(gc, alloc_bytes);
-            }
-            if (!nodes) {
-                // Fallback to malloc if no coro_gc
-                nodes = (XrMapNode *) xr_malloc(alloc_bytes);
-                map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
-                malloc_path = true;
-            }
-        } else {
-            nodes = (XrMapNode *) xr_malloc(alloc_bytes);
-            malloc_path = true;
-        }
-        if (!nodes)
+// Insert entry index into a fresh/EMPTY-or-DELETED slot (key known absent).
+static void indices_put(int32_t *indices, uint32_t indices_size, uint32_t hash, int32_t eidx) {
+    uint32_t mask = indices_size - 1;
+    uint32_t slot = hash & mask;
+    for (;;) {
+        int32_t cur = indices[slot];
+        if (cur == XR_MAP_IX_EMPTY || cur == XR_MAP_IX_DELETED) {
+            indices[slot] = eidx;
             return;
-        XR_MAP_PROFILE_ALLOC_NODES(alloc_bytes);
-        // Tell the per-coro GC about external memory. Only the malloc
-        // branch counts: the GC blob branch is already part of region
-        // accounting via xr_coro_alloc_blob.
-        if (malloc_path) {
-            xr_gc_add_external(xr_current_coro_gc(), (int64_t) alloc_bytes);
         }
-
-        for (uint32_t i = 0; i < size; i++) {
-            nodes[i].key_tt = XR_MAP_NODE_NIL_KEY;
-            nodes[i].next = 0;
-        }
-
-        map->node = nodes;
-        map->lastfree = &nodes[size];
-        map->lsizenode = lsize;
-        map->flags &= ~XR_MAP_FLAG_DUMMY;
+        slot = (slot + 1) & mask;
     }
+}
+
+/* ========== Grow / Compact ========== */
+
+// Grow (and compact away tombstones) to hold at least `min_needed` live entries.
+// Handles the dummy -> first-allocation case too. Returns false on OOM.
+static bool map_resize(XrMap *map, uint32_t min_needed) {
+    XrCoroGC *gc = xr_current_coro_gc();
+    bool was_dummy = xr_map_isdummy(map);
+    XrMapEntry *old_entries = was_dummy ? NULL : map->entries;
+    int32_t *old_indices = was_dummy ? NULL : map->indices;
+    uint32_t old_nentries = was_dummy ? 0 : map->nentries;
+    uint32_t old_isize = was_dummy ? 0 : map->indices_size;
+    uint32_t old_ecap = was_dummy ? 0 : map->entries_cap;
+    bool old_on_gc = (map->flags & XR_MAP_FLAG_NODES_ON_GC) != 0;
+
+    uint32_t needed = map->count > min_needed ? map->count : min_needed;
+    if (needed < 1)
+        needed = 1;
+    uint32_t new_isize = calc_indices_size(needed);
+    uint32_t new_ecap = (uint32_t) ((uint64_t) new_isize * 2 / 3);
+    if (new_ecap < needed)
+        new_ecap = needed;
+
+    // First allocation from dummy may use the Region GC blob heap; subsequent
+    // resizes force malloc (region recycling could overlap the old blob while
+    // we copy live entries out of it).
+    bool new_on_gc = was_dummy && old_on_gc;
+
+    size_t ibytes = sizeof(int32_t) * (size_t) new_isize;
+    size_t ebytes = sizeof(XrMapEntry) * (size_t) new_ecap;
+    int32_t *new_indices = NULL;
+    XrMapEntry *new_entries = NULL;
+
+    if (new_on_gc && gc) {
+        new_indices = (int32_t *) xr_coro_alloc_blob(gc, ibytes);
+        new_entries = (XrMapEntry *) xr_coro_alloc_blob(gc, ebytes);
+        if (!new_indices || !new_entries) {
+            new_on_gc = false;
+            new_indices = (int32_t *) xr_malloc(ibytes);
+            new_entries = (XrMapEntry *) xr_malloc(ebytes);
+        }
+    } else {
+        new_on_gc = false;
+        new_indices = (int32_t *) xr_malloc(ibytes);
+        new_entries = (XrMapEntry *) xr_malloc(ebytes);
+    }
+    if (!new_indices || !new_entries) {
+        if (!new_on_gc) {
+            xr_free(new_indices);
+            xr_free(new_entries);
+        }
+        return false;
+    }
+    if (!new_on_gc)
+        xr_gc_add_external(gc, (int64_t) (ibytes + ebytes));
+
+    for (uint32_t i = 0; i < new_isize; i++)
+        new_indices[i] = XR_MAP_IX_EMPTY;
+    memset(new_entries, 0, ebytes);
+
+    // Compactly copy live entries (preserving insertion order), rebuild indices.
+    uint32_t w = 0;
+    for (uint32_t i = 0; i < old_nentries; i++) {
+        XrMapEntry *oe = &old_entries[i];
+        if (oe->key_tt == XR_MAP_ENTRY_NIL_KEY)
+            continue;
+        new_entries[w] = *oe;
+        indices_put(new_indices, new_isize, oe->hash, (int32_t) w);
+        w++;
+    }
+
+    map->indices = new_indices;
+    map->entries = new_entries;
+    map->indices_size = new_isize;
+    map->entries_cap = new_ecap;
+    map->nentries = w;
+    map->flags &= ~XR_MAP_FLAG_DUMMY;
+    if (new_on_gc)
+        map->flags |= XR_MAP_FLAG_NODES_ON_GC;
+    else
+        map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
+
+    if (old_entries) {
+        if (old_on_gc) {
+            xr_coro_free_blob(gc, old_indices);
+            xr_coro_free_blob(gc, old_entries);
+        } else {
+            xr_free(old_indices);
+            xr_free(old_entries);
+            xr_gc_sub_external(gc, (int64_t) (sizeof(int32_t) * (size_t) old_isize +
+                                              sizeof(XrMapEntry) * (size_t) old_ecap));
+        }
+    }
+    return true;
+}
+
+// Pre-allocate (malloc-backed) entries[]/indices[] sized for `count` live
+// entries, charging the external-byte accounting to `gc` rather than the
+// current coroutine. Deep-copy runs off the destination coroutine and must
+// charge the destination's gc (which later frees the map), so this avoids the
+// byte-counter underflow that a current-coro accounting would cause. The map
+// must be freshly dummy. After this, inserting up to `count` entries via
+// xr_map_set will not trigger a resize.
+bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc) {
+    if (count == 0)
+        return true;  // Stays dummy; first insert will allocate.
+
+    uint32_t isize = calc_indices_size(count);
+    uint32_t ecap = (uint32_t) ((uint64_t) isize * 2 / 3);
+    if (ecap < count)
+        ecap = count;
+
+    size_t ibytes = sizeof(int32_t) * (size_t) isize;
+    size_t ebytes = sizeof(XrMapEntry) * (size_t) ecap;
+    int32_t *idx = (int32_t *) xr_malloc(ibytes);
+    XrMapEntry *ent = (XrMapEntry *) xr_malloc(ebytes);
+    if (!idx || !ent) {
+        xr_free(idx);
+        xr_free(ent);
+        return false;
+    }
+    if (gc)
+        xr_gc_add_external(gc, (int64_t) (ibytes + ebytes));
+
+    for (uint32_t i = 0; i < isize; i++)
+        idx[i] = XR_MAP_IX_EMPTY;
+    memset(ent, 0, ebytes);
+
+    map->indices = idx;
+    map->entries = ent;
+    map->indices_size = isize;
+    map->entries_cap = ecap;
+    map->nentries = 0;
+    map->flags &= ~XR_MAP_FLAG_DUMMY;
+    map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;  // malloc-backed
+    return true;
 }
 
 /* ========== Create and Destroy ========== */
@@ -275,12 +317,14 @@ XrMap *xr_map_new(struct XrCoroutine *coro) {
     xr_gc_header_init_type(&map->gc, XR_TMAP);
 
     map->count = 0;
-    map->lsizenode = 0;
+    map->nentries = 0;
+    map->entries_cap = 0;
+    map->indices_size = 0;
+    map->indices = NULL;
+    map->entries = NULL;
     map->flags = XR_MAP_FLAG_DUMMY | XR_MAP_FLAG_NODES_ON_GC;
     map->key_tid = 0;
     map->value_tid = 0;
-    map->node = &xr_map_dummynode;
-    map->lastfree = NULL;
 
     XR_MAP_PROFILE_COUNT_NEW();
     XR_MAP_PROFILE_ALLOC_HEADER(sizeof(XrMap));
@@ -292,12 +336,8 @@ XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint) {
     XrMap *map = xr_map_new(coro);
     if (!map)
         return NULL;
-
-    // Pre-allocate node array
-    if (capacity_hint > 0) {
-        setnodevector(map, capacity_hint);
-    }
-
+    if (capacity_hint > 0)
+        map_resize(map, capacity_hint);
     return map;
 }
 
@@ -307,124 +347,18 @@ void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint) {
         return;
     XR_MAP_PROFILE_COUNT_NEW();
 
-    // Initialize as empty map (using dummynode)
     map->count = 0;
-    map->lsizenode = 0;
-    map->flags = XR_MAP_FLAG_DUMMY;
+    map->nentries = 0;
+    map->entries_cap = 0;
+    map->indices_size = 0;
+    map->indices = NULL;
+    map->entries = NULL;
+    map->flags = XR_MAP_FLAG_DUMMY;  // system-heap: arrays via malloc
     map->key_tid = 0;
     map->value_tid = 0;
-    map->node = &xr_map_dummynode;
-    map->lastfree = NULL;
 
-    // Pre-allocate node array
-    if (capacity_hint > 0) {
-        setnodevector(map, capacity_hint);
-    }
-}
-
-/* ========== Key Insertion (Brent's Variation) ========== */
-
-// Insert new key using Brent's variation:
-// 1. If main position is free, insert directly
-// 2. If occupied, check if occupier is at its main position
-//    - If not, move occupier, new key takes main position
-//    - If yes, new key goes to free position and chains
-static bool insertkey(XrMap *map, XrValue key, XrValue value) {
-    XrMapNode *mp = mainposition(map, key);
-
-    if (!XR_MAP_NODE_EMPTY(mp) || xr_map_isdummy(map)) {
-        // Main position occupied
-        XrMapNode *f = getfreepos(map);
-        if (f == NULL)
-            return false;  // No free position
-
-        XrMapNode *othern = mainpositionfromnode(map, mp);
-        if (othern != mp) {
-            // Occupier not at its main position, move it
-            while (othern + othern->next != mp) {
-                othern += othern->next;
-            }
-            othern->next = (int32_t) (f - othern);  // Relink to f
-            *f = *mp;                               // Copy occupier node to f
-            if (mp->next != 0) {
-                f->next += (int32_t) (mp - f);  // Fix next offset
-                mp->next = 0;
-            }
-            mp->key_tt = XR_MAP_NODE_NIL_KEY;  // Clear mp
-        } else {
-            // Occupier at its main position, new key goes to free slot
-            if (mp->next != 0) {
-                f->next = (int32_t) ((mp + mp->next) - f);
-            }
-            mp->next = (int32_t) (f - mp);
-            mp = f;
-        }
-    }
-
-    // Write key-value
-    mp->key = key;
-    mp->key_tt = get_key_tt(key);
-    mp->value = value;
-    map->count++;
-
-    return true;
-}
-
-/* ========== Rehash ========== */
-
-static void rehash(XrMap *map) {
-    XR_MAP_PROFILE_COUNT_REHASH();
-    bool was_dummy = xr_map_isdummy(map);
-    uint32_t oldsize = was_dummy ? 0 : xr_map_sizenode(map);
-    XrMapNode *oldnodes = map->node;
-
-    // Save old allocation mode before setnodevector may change it
-    // (setnodevector clears XR_MAP_FLAG_NODES_ON_GC on malloc fallback)
-    bool old_nodes_on_gc = (map->flags & XR_MAP_FLAG_NODES_ON_GC) != 0;
-
-    // New size: at least 2 nodes, or double current
-    uint32_t newsize = (oldsize == 0) ? 2 : oldsize * 2;
-    XR_DCHECK((newsize & (newsize - 1)) == 0, "rehash: new size not power-of-2");
-
-    // Allocate new array
-    uint32_t saved_count = map->count;
-
-    /* Force malloc for new nodes during rehash (the flag stays cleared:
-     * the node vector is malloc-backed from here on).
-     * Region bump allocator may return memory overlapping the old GC blob
-     * (line recycling within the same block), and setnodevector's init
-     * loop would zero out old entries before we can re-insert them. */
-    map->flags &= ~XR_MAP_FLAG_NODES_ON_GC;
-
-    setnodevector(map, newsize);
-    map->count = 0;
-
-    // Re-insert all keys
-    for (uint32_t i = 0; i < oldsize; i++) {
-        XrMapNode *old = &oldnodes[i];
-        if (!XR_MAP_NODE_EMPTY(old)) {
-            bool ok = insertkey(map, old->key, old->value);
-            XR_DCHECK(ok, "rehash insert failed");
-            (void) ok;
-        }
-    }
-
-    XR_DCHECK(map->count == saved_count, "rehash: count mismatch after re-insert");
-
-    // Free old array (dummynode cannot be freed)
-    if (!was_dummy && oldnodes) {
-        size_t old_bytes = sizeof(XrMapNode) * oldsize;
-        if (!old_nodes_on_gc) {
-            xr_free(oldnodes);
-            // Balance the add_external from the previous setnodevector
-            // call so totalbytes tracks what is actually live.
-            xr_gc_sub_external(xr_current_coro_gc(), (int64_t) old_bytes);
-        } else {
-            // GC blob: RC owns reclamation (no sweep), release it explicitly
-            xr_coro_free_blob(xr_current_coro_gc(), oldnodes);
-        }
-        XR_MAP_PROFILE_FREE_NODES(old_bytes);
-    }
+    if (capacity_hint > 0)
+        map_resize(map, capacity_hint);
 }
 
 /* ========== Basic Operations ========== */
@@ -433,49 +367,64 @@ void xr_map_set(XrMap *map, XrValue key, XrValue value) {
     XR_DCHECK(map != NULL, "map_set: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_set: object is not a map");
     XR_DCHECK(!XR_IS_NULL(key), "map_set: NULL key");
-    // Check if key exists
-    XrMapNode *n = findnode(map, key);
 
-    if (n != NULL) {
-        // Update existing value
-        xr_rc_release_value(xr_current_coro_gc(), key);
-        xr_rc_release_value(xr_current_coro_gc(), n->value);
-        n->value = value;
-        XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), map);
+    uint8_t key_tt = get_key_tt(key);
+    uint32_t hash = hash_value(key);
+    XrCoroGC *gc = xr_current_coro_gc();
+
+    int32_t ix = map_lookup(map, key, hash, key_tt);
+    if (ix >= 0) {
+        // Update existing: keep the stored key, drop the incoming key + old value.
+        XrMapEntry *e = &map->entries[ix];
+        xr_rc_release_value(gc, key);
+        xr_rc_release_value(gc, e->value);
+        e->value = value;
+        XR_GC_BARRIER_BACK_SAFE(gc, map);
         return;
     }
 
-    // New key: try insert
-    if (!insertkey(map, key, value)) {
-        // Insert failed, need rehash
-        rehash(map);
-        bool ok = insertkey(map, key, value);
-        XR_DCHECK(ok, "insert after rehash failed");
-        (void) ok;
+    // New key: ensure entries[] has room (also compacts away tombstones).
+    if (map->nentries >= map->entries_cap) {
+        if (!map_resize(map, map->count + 1))
+            return;  // OOM: drop silently as before (no partial state)
     }
-    XR_GC_BARRIER_BACK_SAFE(xr_current_coro_gc(), map);
+
+    uint32_t eidx = map->nentries;
+    XrMapEntry *e = &map->entries[eidx];
+    e->key = key;
+    e->value = value;
+    e->hash = hash;
+    e->key_tt = key_tt;
+    map->nentries++;
+    map->count++;
+
+    indices_put(map->indices, map->indices_size, hash, (int32_t) eidx);
+    XR_GC_BARRIER_BACK_SAFE(gc, map);
 }
 
 XrValue xr_map_get(XrMap *map, XrValue key, bool *found) {
     XR_DCHECK(map != NULL, "map_get: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_get: object is not a map");
-    XrMapNode *n = findnode(map, key);
 
-    if (n != NULL) {
+    uint8_t key_tt = get_key_tt(key);
+    uint32_t hash = hash_value(key);
+    int32_t ix = map_lookup(map, key, hash, key_tt);
+    if (ix >= 0) {
         if (found)
             *found = true;
-        return n->value;
-    } else {
-        if (found)
-            *found = false;
-        return xr_null();
+        return map->entries[ix].value;
     }
+    if (found)
+        *found = false;
+    return xr_null();
 }
 
 bool xr_map_has(XrMap *map, XrValue key) {
     XR_DCHECK(map != NULL, "map_has: NULL map");
     XR_DCHECK(XR_GC_GET_TYPE(&map->gc) == XR_TMAP, "map_has: object is not a map");
-    return findnode(map, key) != NULL;
+    uint8_t key_tt = get_key_tt(key);
+    uint32_t hash = hash_value(key);
+    return map_lookup(map, key, hash, key_tt) >= 0;
 }
 
 bool xr_map_delete(XrMap *map, XrValue key) {
@@ -485,57 +434,27 @@ bool xr_map_delete(XrMap *map, XrValue key) {
         return false;
 
     uint8_t key_tt = get_key_tt(key);
-    XrMapNode *mp = mainposition(map, key);
-    XrMapNode *prev = NULL;
-    XrMapNode *n = mp;
+    uint32_t hash = hash_value(key);
+    uint32_t mask = map->indices_size - 1;
+    uint32_t slot = hash & mask;
 
-    // Traverse chain
     for (;;) {
-        if (keyequal(n, key, key_tt)) {
-            XrValue old_key = n->key;
-            XrValue old_value = n->value;
-            // Found, delete
-            if (prev == NULL) {
-                // Is chain head
-                if (n->next != 0) {
-                    // Has successor, copy to current position
-                    XrMapNode *next_node = n + n->next;
-                    int32_t next_offset = n->next;
-                    *n = *next_node;
-                    if (n->next != 0) {
-                        n->next += next_offset;  // Fix offset
-                    }
-                    next_node->key_tt = XR_MAP_NODE_NIL_KEY;
-                    next_node->key = xr_null();
-                    next_node->value = xr_null();
-                } else {
-                    // No successor, clear directly
-                    n->key_tt = XR_MAP_NODE_NIL_KEY;
-                    n->key = xr_null();
-                    n->value = xr_null();
-                }
-            } else {
-                // Not chain head, modify prev's next
-                if (n->next != 0) {
-                    prev->next += n->next;
-                } else {
-                    prev->next = 0;
-                }
-                n->key_tt = XR_MAP_NODE_NIL_KEY;
-                n->key = xr_null();
-                n->value = xr_null();
-            }
-            xr_rc_release_value(xr_current_coro_gc(), old_key);
-            xr_rc_release_value(xr_current_coro_gc(), old_value);
-            map->count--;
-            XR_DCHECK(map->count <= xr_map_sizenode(map), "map_delete: count > capacity");
-            return true;
-        }
-
-        if (n->next == 0)
+        int32_t ix = map->indices[slot];
+        if (ix == XR_MAP_IX_EMPTY)
             return false;  // Not found
-        prev = n;
-        n += n->next;
+        if (ix >= 0) {
+            XrMapEntry *e = &map->entries[ix];
+            if (e->hash == hash && entry_key_equal(e, key, key_tt)) {
+                // Tombstone the entry (keeps its slot so order is preserved)
+                // and mark the index slot DELETED so probing skips past it.
+                xr_map_release_entry_values(e, xr_current_coro_gc());
+                e->key_tt = XR_MAP_ENTRY_NIL_KEY;
+                map->indices[slot] = XR_MAP_IX_DELETED;
+                map->count--;
+                return true;
+            }
+        }
+        slot = (slot + 1) & mask;
     }
 }
 
@@ -544,15 +463,17 @@ void xr_map_clear(XrMap *map) {
     if (xr_map_isdummy(map))
         return;
 
-    // Clear all nodes
-    uint32_t size = xr_map_sizenode(map);
-    for (uint32_t i = 0; i < size; i++) {
-        if (!XR_MAP_NODE_EMPTY(&map->node[i]))
-            xr_map_release_entry_values(&map->node[i], xr_current_coro_gc());
-        map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
-        map->node[i].next = 0;
+    XrCoroGC *gc = xr_current_coro_gc();
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *e = &map->entries[i];
+        if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+            xr_map_release_entry_values(e, gc);
+            e->key_tt = XR_MAP_ENTRY_NIL_KEY;
+        }
     }
-    map->lastfree = &map->node[size];
+    for (uint32_t i = 0; i < map->indices_size; i++)
+        map->indices[i] = XR_MAP_IX_EMPTY;
+    map->nentries = 0;
     map->count = 0;
 }
 
@@ -566,7 +487,7 @@ bool xr_map_is_empty(XrMap *map) {
     return map->count == 0;
 }
 
-/* ========== Iteration ========== */
+/* ========== Iteration (insertion order) ========== */
 
 XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
     XR_DCHECK(coro != NULL, "map_keys: NULL coro");
@@ -574,12 +495,11 @@ XrArray *xr_map_keys(struct XrCoroutine *coro, XrMap *map) {
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
     if (!xr_map_isdummy(map)) {
-        uint32_t size = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *n = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(n)) {
-                xr_rc_retain_value(n->key);
-                xr_array_push(arr, n->key);
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *e = &map->entries[i];
+            if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+                xr_rc_retain_value(e->key);
+                xr_array_push(arr, e->key);
             }
         }
     }
@@ -592,12 +512,11 @@ XrArray *xr_map_values(struct XrCoroutine *coro, XrMap *map) {
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
     if (!xr_map_isdummy(map)) {
-        uint32_t size = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *n = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(n)) {
-                xr_rc_retain_value(n->value);
-                xr_array_push(arr, n->value);
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *e = &map->entries[i];
+            if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+                xr_rc_retain_value(e->value);
+                xr_array_push(arr, e->value);
             }
         }
     }
@@ -610,23 +529,21 @@ XrArray *xr_map_entries(struct XrCoroutine *coro, XrMap *map) {
     XrArray *arr = xr_array_with_capacity(coro, map->count);
 
     if (!xr_map_isdummy(map)) {
-        uint32_t size = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *n = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(n)) {
-                /* Each entry is a (key, value) tuple — heterogeneous
-                 * arity-2 product, exactly what destructuring `for
-                 * ((k, v) in m.entries())` expects. Tuples are the
-                 * structurally correct shape; the older array-of-two
-                 * placeholder leaked the wrong type signature. */
-                XrTuple *pair = xr_tuple_new(coro, 2);
-                if (pair) {
-                    xr_map_retain_entry_values(n);
-                    xr_tuple_set(pair, 0, n->key);
-                    xr_tuple_set(pair, 1, n->value);
-                }
-                xr_array_push(arr, xr_value_from_tuple(pair));
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *e = &map->entries[i];
+            if (e->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            /* Each entry is a (key, value) tuple — heterogeneous arity-2
+             * product, exactly what destructuring `for ((k, v) in m.entries())`
+             * expects. */
+            XrTuple *pair = xr_tuple_new(coro, 2);
+            if (pair) {
+                xr_rc_retain_value(e->key);
+                xr_rc_retain_value(e->value);
+                xr_tuple_set(pair, 0, e->key);
+                xr_tuple_set(pair, 1, e->value);
             }
+            xr_array_push(arr, xr_value_from_tuple(pair));
         }
     }
     return arr;
@@ -638,11 +555,10 @@ bool xr_map_has_value(XrMap *map, XrValue value) {
     if (xr_map_isdummy(map))
         return false;
 
-    uint32_t size = xr_map_sizenode(map);
-    for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *n = &map->node[i];
-        if (!XR_MAP_NODE_EMPTY(n)) {
-            if (xr_value_eq(n->value, value))
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *e = &map->entries[i];
+        if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+            if (xr_value_eq(e->value, value))
                 return true;
         }
     }
@@ -655,36 +571,32 @@ void xr_map_foreach(XrayIsolate *isolate, XrMap *map, struct XrClosure *callback
     if (xr_map_isdummy(map))
         return;
 
-    uint32_t size = xr_map_sizenode(map);
     XrValue args[2];
-
-    for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *n = &map->node[i];
-        if (!XR_MAP_NODE_EMPTY(n)) {
-            args[0] = n->key;
-            args[1] = n->value;
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *e = &map->entries[i];
+        if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+            args[0] = e->key;
+            args[1] = e->value;
             xr_vm_call_closure(isolate, callback, args, 2);
         }
     }
 }
 
 XrIterator *xr_map_entries_iterator(XrayIsolate *iso, XrMap *map) {
-    // Use lazy iterator, traverse Map directly
     return xr_iterator_new_from_map(xr_current_coro(iso), map);
 }
 
 /* ========== Debug ========== */
 
 void xr_map_debug_print(XrMap *map) {
-    printf("Map[count=%u, lsizenode=%u, isdummy=%d]\n", map->count, map->lsizenode,
-           xr_map_isdummy(map));
+    printf("Map[count=%u, nentries=%u, indices_size=%u, isdummy=%d]\n", map->count, map->nentries,
+           map->indices_size, xr_map_isdummy(map));
 
     if (!xr_map_isdummy(map)) {
-        uint32_t size = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < size; i++) {
-            XrMapNode *n = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(n)) {
-                printf("  [%u] key_tt=%u next=%d\n", i, n->key_tt, n->next);
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *e = &map->entries[i];
+            if (e->key_tt != XR_MAP_ENTRY_NIL_KEY) {
+                printf("  [%u] key_tt=%u hash=%u\n", i, e->key_tt, e->hash);
             }
         }
     }
@@ -694,26 +606,24 @@ void xr_map_debug_print(XrMap *map) {
 
 void xr_gc_destroy_map(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrMap *map = (XrMap *) obj;
-    if (!xr_map_isdummy(map) && map->node) {
-        uint32_t count = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < count; i++) {
-            XrMapNode *node = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(node))
-                xr_map_release_entry_values(node, owning_gc);
+    if (!xr_map_isdummy(map) && map->entries) {
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *e = &map->entries[i];
+            if (e->key_tt != XR_MAP_ENTRY_NIL_KEY)
+                xr_map_release_entry_values(e, owning_gc);
         }
-        size_t bytes = sizeof(XrMapNode) * xr_map_sizenode(map);
-        XR_MAP_PROFILE_FREE_NODES(bytes);
+        size_t bytes = sizeof(int32_t) * (size_t) map->indices_size +
+                       sizeof(XrMapEntry) * (size_t) map->entries_cap;
         if (map->flags & XR_MAP_FLAG_NODES_ON_GC) {
-            // GC blob: RC owns reclamation (no sweep), release it explicitly
-            xr_coro_free_blob(owning_gc, map->node);
-            map->node = NULL;
+            xr_coro_free_blob(owning_gc, map->indices);
+            xr_coro_free_blob(owning_gc, map->entries);
         } else {
-            xr_free(map->node);
-            map->node = NULL;
-            // Balance the add_external from setnodevector so totalbytes
-            // returns to the correct value when the map is reclaimed.
+            xr_free(map->indices);
+            xr_free(map->entries);
             xr_gc_sub_external(owning_gc, (int64_t) bytes);
         }
+        map->indices = NULL;
+        map->entries = NULL;
     }
     XR_MAP_PROFILE_FREE_HEADER(sizeof(XrMap));
 }

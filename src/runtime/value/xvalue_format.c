@@ -92,11 +92,11 @@ static void format_tuple(XrayIsolate *isolate, XrStrBuf *sb, XrTuple *tup, int d
 static void format_map(XrayIsolate *isolate, XrStrBuf *sb, XrMap *map, int depth) {
     xr_strbuf_append_cstr(sb, "#{", 2);
     if (!xr_map_isdummy(map)) {
-        uint32_t size = xr_map_sizenode(map);
+        uint32_t size = map->nentries;
         int count = 0;
         for (uint32_t i = 0; i < size && count < XR_FORMAT_MAX_ELEMENTS; i++) {
-            XrMapNode *node = xr_map_node(map, i);
-            if (!XR_MAP_NODE_EMPTY(node)) {
+            XrMapEntry *node = xr_map_entry(map, i);
+            if (!XR_MAP_ENTRY_EMPTY(node)) {
                 if (count > 0)
                     xr_strbuf_append_cstr(sb, ", ", 2);
                 xr_value_to_strbuf(isolate, sb, node->key, depth + 1);
