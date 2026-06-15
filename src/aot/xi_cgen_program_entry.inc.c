@@ -160,7 +160,9 @@ XR_FUNC void xi_cgen_program(XiCgenCtx *ctx, FILE *out, XiModule *module) {
     ctx->all_modules = single_module;
     ctx->all_nmodules = 1;
     ctx->nshared_native_exports = 0;
-    memset(ctx->shared_native_exports, 0, sizeof(ctx->shared_native_exports));
+    if (ctx->shared_native_exports)
+        memset(ctx->shared_native_exports, 0,
+               (size_t) ctx->shared_native_exports_cap * sizeof(CgSharedNativeExport));
     cg_prepare_sync_go_targets_for_modules(ctx, single_module, 1);
 
     /* Initialize from module metadata */

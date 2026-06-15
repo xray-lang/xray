@@ -54,7 +54,9 @@ XR_FUNC void xi_cgen_resolve_module_imports(XiCgenCtx *ctx, XiModule **modules, 
     ctx->all_modules = modules;
     ctx->all_nmodules = modules && nmodules > 0 ? nmodules : 0;
     ctx->nshared_native_exports = 0;
-    memset(ctx->shared_native_exports, 0, sizeof(ctx->shared_native_exports));
+    if (ctx->shared_native_exports)
+        memset(ctx->shared_native_exports, 0,
+               (size_t) ctx->shared_native_exports_cap * sizeof(CgSharedNativeExport));
     if (!modules || nmodules <= 1)
         return;
 

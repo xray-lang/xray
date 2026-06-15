@@ -22,12 +22,16 @@ XR_FUNC XiCgenCtx *xi_cgen_ctx_new(void) {
     ctx->shared_native_instances =
         (CgSharedNativeInstance *) xr_calloc(CG_INIT_SHARED, sizeof(CgSharedNativeInstance));
     ctx->shared_cap = CG_INIT_SHARED;
+    ctx->shared_native_exports =
+        (CgSharedNativeExport *) xr_calloc(CG_INIT_SHARED, sizeof(CgSharedNativeExport));
+    ctx->shared_native_exports_cap = CG_INIT_SHARED;
     ctx->methods = (CgMethodEntry *) xr_calloc(CG_INIT_METHODS, sizeof(CgMethodEntry));
     ctx->methods_cap = CG_INIT_METHODS;
     ctx->imports = (CgImportEntry *) xr_calloc(CG_INIT_IMPORTS, sizeof(CgImportEntry));
     ctx->imports_cap = CG_INIT_IMPORTS;
     if (!ctx->shared_funcs || !ctx->shared_class || !ctx->shared_enum ||
-        !ctx->shared_native_instances || !ctx->methods || !ctx->imports) {
+        !ctx->shared_native_instances || !ctx->shared_native_exports || !ctx->methods ||
+        !ctx->imports) {
         xi_cgen_ctx_free(ctx);
         return NULL;
     }
@@ -46,6 +50,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->shared_class);
     xr_free(ctx->shared_enum);
     xr_free(ctx->shared_native_instances);
+    xr_free(ctx->shared_native_exports);
     xr_free(ctx->methods);
     xr_free(ctx->imports);
     xr_free(ctx);

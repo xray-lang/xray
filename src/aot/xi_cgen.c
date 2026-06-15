@@ -271,7 +271,6 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 #define CG_MAX_SYNC_GO_TARGETS 512
 #define CG_MAX_CLASS_FIELD_CACHE 16
 #define CG_MAX_CLASS_FIELD_CACHE_ALIASES 32
-#define CG_MAX_SHARED_NATIVE_EXPORTS 512
 typedef struct {
     const char *class_name; /* owning class (e.g. "Rect") */
     const char *name;       /* method name (e.g. "area") */
@@ -350,8 +349,9 @@ struct XiCgenCtx {
     const XiEnumData **shared_enum;
     CgSharedNativeInstance *shared_native_instances;
     int shared_cap;
-    CgSharedNativeExport shared_native_exports[CG_MAX_SHARED_NATIVE_EXPORTS];
+    CgSharedNativeExport *shared_native_exports;
     int nshared_native_exports;
+    int shared_native_exports_cap;
     int nshared;
     CgMethodEntry *methods;
     int methods_cap;
@@ -414,6 +414,29 @@ static bool cg_reserve_shared(XiCgenCtx *ctx, int need) {
     ctx->shared_enum = ne;
     ctx->shared_native_instances = ni;
     ctx->shared_cap = nc;
+    return true;
+}
+
+/* Grow the shared-native-export table to at least `need` entries (zeroed).
+ * Separate from cg_reserve_shared: exports are keyed by (module, slot) and grow
+ * independently of the func/class/enum slot tables. Returns false (and sets
+ * ctx->error) on allocation failure. */
+static bool cg_reserve_shared_native_exports(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->shared_native_exports_cap)
+        return true;
+    int nc = ctx->shared_native_exports_cap > 0 ? ctx->shared_native_exports_cap : CG_INIT_SHARED;
+    while (nc < need)
+        nc *= 2;
+    CgSharedNativeExport *ne =
+        (CgSharedNativeExport *) xr_realloc(ctx->shared_native_exports, (size_t) nc * sizeof(*ne));
+    if (!ne) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&ne[ctx->shared_native_exports_cap], 0,
+           (size_t) (nc - ctx->shared_native_exports_cap) * sizeof(*ne));
+    ctx->shared_native_exports = ne;
+    ctx->shared_native_exports_cap = nc;
     return true;
 }
 

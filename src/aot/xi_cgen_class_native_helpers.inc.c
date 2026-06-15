@@ -1945,11 +1945,8 @@ static void cg_class_shared_native_register_export(XiCgenCtx *ctx, int slot) {
         if (exp->active && exp->module_index == module_index && exp->slot == slot)
             return;
     }
-    if (ctx->nshared_native_exports >= CG_MAX_SHARED_NATIVE_EXPORTS) {
-        ctx->error = true;
-        fprintf(stderr, "[xi_cgen] ERROR: too many shared native exports\n");
+    if (!cg_reserve_shared_native_exports(ctx, ctx->nshared_native_exports + 1))
         return;
-    }
     CgSharedNativeExport *exp = &ctx->shared_native_exports[ctx->nshared_native_exports++];
     memset(exp, 0, sizeof(*exp));
     exp->active = true;
