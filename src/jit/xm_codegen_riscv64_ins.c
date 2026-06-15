@@ -91,14 +91,16 @@ static void rv64_h_mul(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
 static void rv64_h_div(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_div(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected DIV");
 }
 
 /* RISC-V REM: same no-trap semantics as DIV. */
 static void rv64_h_mod(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     Rv64Reg rs1 = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
     Rv64Reg rs2 = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-    rv64_buf_emit(&ctx->buf, rv64_rem(rd, rs1, rs2));
+    RV64_CODEGEN_CHECK(ctx, xm_dispatch_emit_riscv64_gp_rrr(ins->op, &ctx->buf, rd, rs1, rs2),
+                       "riscv64 generated gp_rrr dispatch rejected MOD");
 }
 
 static void rv64_h_neg(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {

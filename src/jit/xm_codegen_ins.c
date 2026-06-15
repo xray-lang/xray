@@ -126,7 +126,7 @@ static void a64_h_div(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
     add_patch(ctx, PATCH_DEOPT_CBZ, 0, rm);
     a64_buf_emit(&ctx->buf, a64_nop()); /* patched to CBZ rm, deopt */
     ctx->has_deopt = true;
-    a64_buf_emit(&ctx->buf, a64_sdiv(rd, rn, rm));
+    (void) a64_emit_generated_gp_rrr(ctx, ins, rd, rn, rm);
 }
 
 static void a64_h_mod(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
