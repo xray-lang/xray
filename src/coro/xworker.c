@@ -279,6 +279,7 @@ XrRuntime *xr_runtime_create(XrayIsolate *isolate, int num_workers) {
     runtime->worker_count = num_workers;
     atomic_store(&runtime->running, false);
     atomic_store(&runtime->threads_started, false);
+    atomic_store(&runtime->sysmon_started, false);
     atomic_store(&runtime->started_workers, 0);
     atomic_store(&runtime->exited_workers, 0);
     atomic_store(&runtime->active_workers, 0);
@@ -550,7 +551,7 @@ void xr_runtime_start(XrRuntime *runtime) {
     atomic_store(&runtime->running, true);
 }
 
-// Lazy start: create sysmon + Worker 1~N + async pool threads.
+// Lazy start: create Worker 1~N and, for multi-worker runtimes, sysmon.
 // Called on first spawn. Thread-safe via atomic CAS.
 void xr_runtime_ensure_workers(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "runtime_ensure_workers: NULL runtime");
@@ -576,8 +577,13 @@ void xr_runtime_ensure_workers(XrRuntime *runtime) {
         return;
     }
 
-    // Start sysmon thread (heartbeat monitoring + stuck detection)
-    xr_thread_create(&runtime->sysmon_thread, sysmon_thread_func, runtime);
+    // Single-worker runtimes run on the main thread only. Timers/select are
+    // bumped by Worker 0 itself, so avoid the extra sysmon thread in this
+    // compact profile; multi-worker runs still need sysmon assist/preemption.
+    if (runtime->worker_count > 1) {
+        xr_thread_create(&runtime->sysmon_thread, sysmon_thread_func, runtime);
+        atomic_store_explicit(&runtime->sysmon_started, true, memory_order_release);
+    }
 
     // Worker threads need larger stack for nested run() calls (e.g. module import)
     // and ASan instrumentation which greatly inflates stack frame sizes.
@@ -604,7 +610,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "runtime_stop: NULL runtime");
     atomic_store(&runtime->running, false);
 
-    // Fast path: no threads were ever created
+    // Fast path: worker/sysmon startup was never requested
     if (!atomic_load(&runtime->threads_started)) {
         return;
     }
@@ -613,7 +619,10 @@ void xr_runtime_stop(XrRuntime *runtime) {
     if (atomic_load(&runtime->netpoll.inited)) {
         xr_netpoll_break(&runtime->netpoll);
     }
-    xr_thread_join(runtime->sysmon_thread, NULL);
+    if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
+        xr_thread_join(runtime->sysmon_thread, NULL);
+        atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
+    }
 
     // Wake all Workers to check running flag and exit
     for (int i = 0; i < runtime->worker_count; i++) {

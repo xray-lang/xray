@@ -264,7 +264,8 @@ typedef struct XrRuntime {
 
     /* === State (atomic) === */
     _Atomic bool running;
-    _Atomic bool threads_started;  // Worker/sysmon threads created (lazy start)
+    _Atomic bool threads_started;  // Lazy worker startup completed for this run
+    _Atomic bool sysmon_started;   // Sysmon thread was created and must be joined
     _Atomic int started_workers;
     _Atomic int exited_workers;  // Number of workers that have fully exited
     _Atomic int active_workers;
