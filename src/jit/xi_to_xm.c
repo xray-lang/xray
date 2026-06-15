@@ -44,7 +44,11 @@
 
 /* ========== Lowering Context ========== */
 
-#define XI2XM_MAX_TRY_DEPTH 8
+#define XI2XM_TRY_STACK_INIT_CAP 8
+/* Helper-call arg buffer is bounded by the per-worker XrJitScratch.call_args[16]
+ * ABI array (15 params + closure), so this is a real ABI limit, not a soft cap:
+ * lowering a wider helper call cleanly rejects (caller falls back to the
+ * interpreter) rather than overrunning the fixed scratch layout. */
 #define XI2XM_MAX_HELPER_CALL_ARGS 15
 #define XI2XM_NO_BC_SLOT 255
 #define XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG (1ULL << 40)
@@ -65,11 +69,11 @@ typedef struct {
     XmRef *ref_map;
     uint32_t ref_map_size;
 
-    /* EH: try nesting stack — tracks active exception handlers */
-    struct {
-        XmBlock *handler; /* catch (or finally) Xm block */
-    } try_stack[XI2XM_MAX_TRY_DEPTH];
+    /* EH: try nesting stack — active exception handler blocks, grown on
+     * demand so deeply nested try/catch never silently drops a handler. */
+    XmBlock **try_stack;
     int try_depth;
+    int try_cap;
 
     /* Deopt snapshot counter (monotonically increasing) */
     uint16_t next_deopt_id;
@@ -1333,10 +1337,19 @@ static XmRef xi2xm_try(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XiBlock *catch_xi = (XiBlock *) v->aux;
     XR_DCHECK(catch_xi != NULL, "XI_TRY: missing catch block");
     XmBlock *catch_xm = get_block(ctx, catch_xi);
-    if (ctx->try_depth < XI2XM_MAX_TRY_DEPTH) {
-        ctx->try_stack[ctx->try_depth].handler = catch_xm;
-        ctx->try_depth++;
+    if (ctx->try_depth >= ctx->try_cap) {
+        int new_cap = ctx->try_cap ? ctx->try_cap * 2 : XI2XM_TRY_STACK_INIT_CAP;
+        XmBlock **grown =
+            (XmBlock **) xr_realloc(ctx->try_stack, (size_t) new_cap * sizeof(XmBlock *));
+        if (!grown) {
+            ctx->error = true;
+            ctx->error_op = v->op;
+            return xm_const_i64(ctx->xm_func, 0);
+        }
+        ctx->try_stack = grown;
+        ctx->try_cap = new_cap;
     }
+    ctx->try_stack[ctx->try_depth++] = catch_xm;
     return xm_const_i64(ctx->xm_func, 0);
 }
 
@@ -1695,7 +1708,11 @@ static XmRef xi2xm_set_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_tuple_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs > XI2XM_MAX_HELPER_CALL_ARGS) {
+        /* Exceeds the call_args[16] ABI array; reject this function for JIT
+         * (caller runs it interpreted) and name the op so the bail is
+         * diagnosable rather than silent. */
         ctx->error = true;
+        ctx->error_op = v->op;
         return xm_const_i64(ctx->xm_func, 0);
     }
 
@@ -2122,7 +2139,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
          * top of the catch and spin forever). */
         XmBlock *handler_before = NULL;
         for (int td = ctx.try_depth - 1; td >= 0; td--) {
-            XmBlock *cand = ctx.try_stack[td].handler;
+            XmBlock *cand = ctx.try_stack[td];
             if (cand != xm_blk) {
                 handler_before = cand;
                 break;
@@ -2155,6 +2172,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
     xr_free(ctx.slot_idx);
     xr_free(ctx.block_map);
     xr_free(ctx.ref_map);
+    xr_free(ctx.try_stack);
 
     if (ctx.error) {
         if (ctx.error_op != XI_OP_COUNT) {
