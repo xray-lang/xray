@@ -77,52 +77,22 @@
 #undef XVM_TEMPLATE_BITWISE_BINARY_BOOL_CASE
 #undef XVM_TEMPLATE_BITWISE_BINARY_CASE
 
-vmcase(OP_BNOT) {
-    int a = GETARG_A(i);
-    int b = GETARG_B(i);
-    XrValue vb = R(b);
-
-    // Fast path: integer bitwise NOT
-    if (XR_IS_INT(vb)) {
-        R(a) = xr_int(~XR_TO_INT(vb));
-        vmbreak;
+#define XVM_TEMPLATE_BITWISE_UNARY_CASE(op, int_op, op_symbol, op_name, error_msg)                 \
+    vmcase(op) {                                                                                   \
+        int a = GETARG_A(i);                                                                       \
+        int b = GETARG_B(i);                                                                       \
+        XrValue vb = R(b);                                                                         \
+        if (XR_IS_INT(vb)) {                                                                       \
+            R(a) = xr_int(int_op XR_TO_INT(vb));                                                   \
+            vmbreak;                                                                               \
+        }                                                                                          \
+        VM_TRY_UNARY_OP_OVERLOAD(vb, a, op_symbol, op_name);                                       \
+        VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, error_msg);                                         \
     }
 
-    // Operator overload: bitwise NOT uses "~" symbol
-    if (xr_value_is_instance(vb)) {
-        XrInstance *inst_obj = xr_value_to_instance(vb);
-        XrClass *cls = xr_instance_get_class(inst_obj);
-        XrSymbolTable *sym_table = (XrSymbolTable *) isolate->symbol_table;
-        int op_sym = xr_symbol_register_in_table(sym_table, "~");
-        XrMethod *op_method = xr_class_lookup_method(cls, op_sym);
+#include "xvm_template_bitwise_unary_gen.inc.c"
 
-        if (op_method != NULL && op_method->type == XMETHOD_OPERATOR &&
-            op_method->as.closure != NULL) {
-            XrClosure *closure = op_method->as.closure;
-            XrProto *proto = closure->proto;
-
-            if (1 != proto->numparams) {
-                VM_RUNTIME_ERROR(XR_ERR_WRONG_ARG_COUNT, "unary operator ~ takes no arguments");
-            }
-            if (VM_FRAME_COUNT >= XR_FRAMES_MAX) {
-                VM_RUNTIME_ERROR(XR_ERR_STACK_OVERFLOW, "stack overflow");
-            }
-            VM_STACK_CHECK(a + 1 + proto->maxstacksize);
-
-            R(a + 1) = vb;
-            savepc();
-            int _fidx = VM_FRAME_COUNT;
-            VM_INC_FRAME_COUNT;
-            XrBcCallFrame *new_frame = &VM_FRAMES[_fidx];
-            new_frame->closure = closure;
-            new_frame->pc = PROTO_CODE_BASE(proto);
-            new_frame->base_offset = (int) ((base + a + 1) - VM_STACK);
-            goto startfunc;
-        }
-    }
-
-    VM_RUNTIME_ERROR(XR_ERR_TYPE_MISMATCH, "bitwise NOT requires integer type");
-}
+#undef XVM_TEMPLATE_BITWISE_UNARY_CASE
 
 vmcase(OP_SHL) {
     int a = GETARG_A(i);
