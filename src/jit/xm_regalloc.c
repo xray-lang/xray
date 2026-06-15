@@ -235,7 +235,8 @@ static bool covers(const LsRange *r, int32_t pos) {
 // Is this a CALL-family opcode that clobbers caller-saved registers?
 static bool is_call_op(uint16_t op) {
     return op == XM_CALL || op == XM_CALL_C || op == XM_CALL_C_LEAF || op == XM_CALL_SELF_DIRECT ||
-           op == XM_CALL_DIRECT || op == XM_CALL_KNOWN || op == XM_CALL_KNOWN_REG;
+           op == XM_CALL_DIRECT || op == XM_CALL_KNOWN || op == XM_CALL_KNOWN_REG ||
+           op == XM_CALL_METHOD_KNOWN;
 }
 
 /*

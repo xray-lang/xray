@@ -1296,6 +1296,10 @@ static bool x64_isnull_uses_runtime_tag(X64CodegenCtx *ctx, XmRef ref, uint32_t 
         *out_vi = vi;
         return true;
     }
+    if (def->op == XM_CALL_METHOD_KNOWN) {
+        *out_vi = vi;
+        return true;
+    }
     switch (def->op) {
         case XM_CALL_C:
         case XM_CALL_KNOWN:
@@ -1786,6 +1790,7 @@ static const X64InsHandler x64_ins_handlers[XM_OP_COUNT] = {
     [XM_CALL_SELF_DIRECT] = x64_h_call,
     [XM_CALL_KNOWN] = x64_h_call,
     [XM_CALL_KNOWN_REG] = x64_h_call,
+    [XM_CALL_METHOD_KNOWN] = x64_h_call,
     [XM_CALL_DIRECT] = x64_h_call,
     [XM_CALL] = x64_h_call,
     [XM_RET] = x64_h_ret,

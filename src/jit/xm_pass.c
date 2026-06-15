@@ -767,8 +767,9 @@ XmPassChange xm_pass_store_to_load(XmFunc *func) {
              * and anything with SIDE_EFFECT flag. */
             if (ins->op == XM_CALL || ins->op == XM_CALL_C || ins->op == XM_CALL_C_LEAF ||
                 ins->op == XM_CALL_SELF_DIRECT || ins->op == XM_CALL_KNOWN_REG ||
-                ins->op == XM_CALL_INTRINSIC || ins->op == XM_STORE || ins->op == XM_ALLOC ||
-                ins->op == XM_STORE_CORO || (ins->flags & XM_FLAG_SIDE_EFFECT)) {
+                ins->op == XM_CALL_METHOD_KNOWN || ins->op == XM_CALL_INTRINSIC ||
+                ins->op == XM_STORE || ins->op == XM_ALLOC || ins->op == XM_STORE_CORO ||
+                (ins->flags & XM_FLAG_SIDE_EFFECT)) {
                 s2l_kill_all(&t);
             }
         }
@@ -1546,9 +1547,9 @@ XmPassChange xm_pass_dse(XmFunc *func) {
             /* GC trigger or call invalidates all tracked stores
              * (may observe stored values through aliases) */
             if (ins->op == XM_CALL_C || ins->op == XM_CALL_KNOWN || ins->op == XM_CALL_KNOWN_REG ||
-                ins->op == XM_CALL_DIRECT || ins->op == XM_CALL_SELF_DIRECT ||
-                ins->op == XM_CALL_INTRINSIC || ins->op == XM_ALLOC || ins->op == XM_SAFEPOINT ||
-                ins->op == XM_CALL_C_LEAF) {
+                ins->op == XM_CALL_METHOD_KNOWN || ins->op == XM_CALL_DIRECT ||
+                ins->op == XM_CALL_SELF_DIRECT || ins->op == XM_CALL_INTRINSIC ||
+                ins->op == XM_ALLOC || ins->op == XM_SAFEPOINT || ins->op == XM_CALL_C_LEAF) {
                 ntracked = 0;
                 continue;
             }

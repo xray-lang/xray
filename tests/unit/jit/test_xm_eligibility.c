@@ -20,12 +20,33 @@
 
 static XrType stub_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType stub_bool = {.kind = XR_KIND_BOOL, .id = 2, .frozen = true};
+static XrType stub_string = {.kind = XR_KIND_STRING, .id = 3, .frozen = true};
 static XrType stub_channel_int = {
     .kind = XR_KIND_CHANNEL,
-    .id = 3,
+    .id = 4,
     .frozen = true,
     .container = {.element_type = &stub_int},
 };
+static XrType stub_array_int = {
+    .kind = XR_KIND_ARRAY,
+    .id = 5,
+    .frozen = true,
+    .container = {.element_type = &stub_int},
+};
+static XrType stub_map_string_int = {
+    .kind = XR_KIND_MAP,
+    .id = 6,
+    .frozen = true,
+    .map = {.key_type = &stub_string, .value_type = &stub_int},
+};
+static XrType stub_set_string = {
+    .kind = XR_KIND_SET,
+    .id = 7,
+    .frozen = true,
+    .container = {.element_type = &stub_string},
+};
+static XrType stub_tuple = {.kind = XR_KIND_TUPLE, .id = 8, .frozen = true};
+static XrType stub_class = {.kind = XR_KIND_CLASS, .id = 9, .frozen = true};
 
 static int tests_passed = 0;
 
@@ -76,6 +97,34 @@ TEST(seeds_typed_xi_signature) {
     assert(proto.param_types[0] == &stub_int);
     assert(proto.param_types[1] == &stub_bool);
     assert(proto.return_type_info == &stub_int);
+    assert(is_jit_eligible(&proto, false));
+
+    xr_free(proto.param_types);
+    xi_func_free(f);
+}
+
+TEST(seeds_pointer_xi_signature) {
+    XrType *param_types[] = {&stub_string,     &stub_array_int, &stub_map_string_int,
+                             &stub_set_string, &stub_tuple,     &stub_class};
+    XiFunc *f = make_func("ptr_helper", &stub_tuple);
+    add_params(f, param_types, 6);
+    xi_block_set_return(f->entry, f->params[4]);
+
+    XrProto proto = {0};
+    proto.numparams = 6;
+    proto.xi_func = f;
+
+    xm_eligibility_prepare(&proto);
+
+    assert(proto.param_types != NULL);
+    assert(proto.param_types_count == 6);
+    assert(proto.param_types[0] == &stub_string);
+    assert(proto.param_types[1] == &stub_array_int);
+    assert(proto.param_types[2] == &stub_map_string_int);
+    assert(proto.param_types[3] == &stub_set_string);
+    assert(proto.param_types[4] == &stub_tuple);
+    assert(proto.param_types[5] == &stub_class);
+    assert(proto.return_type_info == &stub_tuple);
     assert(is_jit_eligible(&proto, false));
 
     xr_free(proto.param_types);
@@ -213,6 +262,7 @@ int main(void) {
     printf("=== test_xm_eligibility ===\n");
 
     run_seeds_typed_xi_signature();
+    run_seeds_pointer_xi_signature();
     run_does_not_seed_params_past_jit_limit();
     run_keeps_suspend_channel_helpers_on_vm();
     run_allows_direct_channel_ops_to_reach_jit();

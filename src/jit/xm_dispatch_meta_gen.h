@@ -48,7 +48,7 @@ typedef struct {
     const char *notes;
 } XmDispatchMeta;
 
-#define XM_DISPATCH_META_COUNT 333
+#define XM_DISPATCH_META_COUNT 336
 
 #ifdef XM_DISPATCH_META_IMPL
 static const XmDispatchMeta xm_dispatch_meta[XM_DISPATCH_META_COUNT] = {
@@ -259,6 +259,9 @@ static const XmDispatchMeta xm_dispatch_meta[XM_DISPATCH_META_COUNT] = {
     {XM_CALL_KNOWN_REG, XM_DISPATCH_BACKEND_X64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call function pointer in register"},
     {XM_CALL_KNOWN_REG, XM_DISPATCH_BACKEND_ARM64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call function pointer in register"},
     {XM_CALL_KNOWN_REG, XM_DISPATCH_BACKEND_RISCV64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call function pointer in register"},
+    {XM_CALL_METHOD_KNOWN, XM_DISPATCH_BACKEND_X64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call known method closure with receiver parameter"},
+    {XM_CALL_METHOD_KNOWN, XM_DISPATCH_BACKEND_ARM64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call known method closure with receiver parameter"},
+    {XM_CALL_METHOD_KNOWN, XM_DISPATCH_BACKEND_RISCV64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "call known method closure with receiver parameter"},
     {XM_CALL_INTRINSIC, XM_DISPATCH_BACKEND_X64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "intrinsic call"},
     {XM_CALL_INTRINSIC, XM_DISPATCH_BACKEND_ARM64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "intrinsic call"},
     {XM_CALL_INTRINSIC, XM_DISPATCH_BACKEND_RISCV64, XM_ISEL_PATTERN_CUSTOM, 0, true, "-", "intrinsic call"},

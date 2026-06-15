@@ -49,6 +49,8 @@ int main(void) {
     assert(xm_ins_is_call_site(&probe));
     probe.op = XM_CALL_KNOWN;
     assert(xm_ins_is_call_site(&probe));
+    probe.op = XM_CALL_METHOD_KNOWN;
+    assert(xm_ins_is_call_site(&probe));
     probe.op = XM_CALL_C_LEAF;
     assert(xm_ins_is_call_site(&probe));
 

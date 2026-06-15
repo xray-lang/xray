@@ -43,7 +43,7 @@ static bool type_is_jit_seed_type(const XrType *type) {
     if (type->kind == XR_KIND_CHANNEL)
         return true;
     uint8_t st = xr_type_to_slot_type((XrType *) type);
-    return st == XR_SLOT_I64 || st == XR_SLOT_F64 || st == XR_SLOT_BOOL;
+    return check_slot_type_eligible(st);
 }
 
 static void seed_proto_signature_from_xi(struct XrProto *proto) {

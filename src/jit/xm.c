@@ -742,6 +742,7 @@ bool xm_op_has_side_effect(uint16_t op) {
         case XM_CALL_DIRECT:
         case XM_CALL_KNOWN:
         case XM_CALL_KNOWN_REG:
+        case XM_CALL_METHOD_KNOWN:
         case XM_CALL_INTRINSIC:
         // Mixed-type runtime helpers (may allocate, throw, or have observable effects)
         case XM_RT_ADD:

@@ -929,7 +929,9 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
 
     /* Method IC speculation: if call site is monomorphic, emit
-     * GUARD_KLASS(receiver, expected_klass) + CALL_KNOWN(proto). */
+     * GUARD_KLASS(receiver, expected_klass) + CALL_METHOD_KNOWN(proto, closure).
+     * Method calls pass the receiver as parameter 0, so this uses the direct
+     * parameter ABI instead of the closure-call ABI used by CALL_KNOWN. */
     if (v->op == XI_CALL_METHOD && v->nargs >= 1) {
         int bc_pc = slot_map_bc_pc(ctx, v->id);
         const XrICMethod *mic = ic_method_lookup(ctx, bc_pc);
@@ -956,14 +958,14 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 blk->ins[blk->nins - 1].dst = deopt_ref;
                 blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
 
-                /* Emit CALL_KNOWN with the IC-resolved proto */
+                /* Emit CALL_METHOD_KNOWN with the IC-resolved proto/closure. */
                 uint8_t ret_rep = callee_proto->return_type_info
                                       ? xr_type_rep(callee_proto->return_type_info)
                                       : XR_REP_TAGGED;
                 XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) callee_proto);
-                XmRef nargs_c = xm_const_i64(ctx->xm_func, (int64_t) nargs);
-                XmRef result =
-                    xm_emit(ctx->xm_func, blk, XM_CALL_KNOWN, ret_rep, proto_ref, nargs_c);
+                XmRef closure_ref = xm_const_ptr(ctx->xm_func, (void *) method->as.closure);
+                XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_METHOD_KNOWN, ret_rep, proto_ref,
+                                       closure_ref);
                 blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
                 xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
                 return result;

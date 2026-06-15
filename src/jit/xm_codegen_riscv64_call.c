@@ -27,7 +27,7 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     RV64_CODEGEN_CHECK(ctx, ctx != NULL, "rv64_emit_call_ins: NULL ctx");
     RV64_CODEGEN_CHECK(ctx, ins != NULL, "rv64_emit_call_ins: NULL ins");
 
-    switch (ins->op) {
+    switch (ins->op == XM_CALL_METHOD_KNOWN ? XM_CALL_KNOWN : ins->op) {
         case XM_CALL_C: {
             RV64_CODEGEN_CHECK(ctx, xm_helper_call_c_protocol_matches_flags(ctx->func, ins),
                                "CALL_C post-call protocol flags mismatch");
@@ -273,7 +273,7 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             break;
         }
 
-        /* CALL_KNOWN, CALL_KNOWN_REG, CALL_DIRECT, CALL:
+        /* CALL_KNOWN, CALL_KNOWN_REG, CALL_METHOD_KNOWN, CALL_DIRECT, CALL:
          * All of these route through C bridge helpers.
          * Bridge stores/restores state via jit_ctx, handles JIT→interp
          * fallback, type feedback, and deopt. For now we implement them
@@ -294,8 +294,11 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
             /* Select the correct C bridge helper */
             void *helper_fn = NULL;
             uint64_t extra_val = 0;
-            if (ins->op == XM_CALL_KNOWN || ins->op == XM_CALL_KNOWN_REG) {
-                helper_fn = xm_helper_func(XM_HELPER_call_func);
+            if (ins->op == XM_CALL_KNOWN || ins->op == XM_CALL_KNOWN_REG ||
+                ins->op == XM_CALL_METHOD_KNOWN) {
+                helper_fn =
+                    xm_helper_func(ins->op == XM_CALL_METHOD_KNOWN ? XM_HELPER_call_method_known
+                                                                   : XM_HELPER_call_func);
                 /* Store callee proto to jit_ctx */
                 if (xm_ref_is_const(ins->args[0])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[0]);
@@ -304,8 +307,21 @@ XR_FUNC bool rv64_emit_call_ins(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                     rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
                                                      (int32_t) XM_JIT_CALL_PROTO_OFFSET));
                 }
+                if (ins->op == XM_CALL_METHOD_KNOWN && xm_ref_is_const(ins->args[1])) {
+                    uint32_t ci = XM_REF_INDEX(ins->args[1]);
+                    uint64_t closure_ptr = (uint64_t) ctx->func->consts[ci].val.raw;
+                    rv64_load_imm64(&ctx->buf, RV64_SCRATCH_REG, closure_ptr);
+                    rv64_buf_emit(&ctx->buf, rv64_sd(RV64_SCRATCH_REG, RV64_JIT_CTX_REG,
+                                                     (int32_t) XM_JIT_CALL_CLOSURE_OFFSET));
+                }
                 /* Extra arg: nargs encoded */
-                if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
+                if (ins->op == XM_CALL_METHOD_KNOWN) {
+                    if (xm_ref_is_vreg(ins->dst)) {
+                        uint32_t dvi = XM_REF_INDEX(ins->dst);
+                        if (dvi < ctx->func->nvreg)
+                            extra_val = ctx->func->vregs[dvi].call_nargs;
+                    }
+                } else if (!xm_ref_is_none(ins->args[1]) && xm_ref_is_const(ins->args[1])) {
                     uint32_t ci = XM_REF_INDEX(ins->args[1]);
                     extra_val = (uint64_t) ctx->func->consts[ci].val.raw;
                 }

@@ -27,6 +27,7 @@
 # ===== Call / Invoke =====
 XM_HELPER(call_self,           0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC,   DEOPT)
 XM_HELPER(call_func,           0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC,   DEOPT)
+XM_HELPER(call_method_known,   0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC,   DEOPT)
 XM_HELPER(invoke_method,       0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC,   DEOPT)
 XM_HELPER(invoke_direct,       0, TAGGED, GC|DEOPT|ENTER_VM|USER_CODE|STACKMAP, GC,   DEOPT)
 XM_HELPER(closure_new,         0, PTR,    GC|STACKMAP,                              GC,   NONE)

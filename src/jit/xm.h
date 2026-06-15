@@ -281,6 +281,7 @@ static inline bool xm_ins_is_call_site(const XmIns *ins) {
         case XM_CALL_DIRECT:
         case XM_CALL_KNOWN:
         case XM_CALL_KNOWN_REG:
+        case XM_CALL_METHOD_KNOWN:
             return true;
         default:
             return false;
