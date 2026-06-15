@@ -18,7 +18,7 @@
 #define XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT 336
 #define XM_DISPATCH_EMIT_CUSTOM_ENTRY_COUNT 160
 #define XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT 176
-#define XM_DISPATCH_EMIT_GENERATED_CASE_COUNT 122
+#define XM_DISPATCH_EMIT_GENERATED_CASE_COUNT 125
 #define XM_DISPATCH_EMIT_DECLARED_X64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_X64_COUNT 56
 #define XM_DISPATCH_EMIT_PATTERNED_X64_COUNT 56
@@ -26,11 +26,11 @@
 #define XM_DISPATCH_EMIT_DECLARED_ARM64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_ARM64_COUNT 52
 #define XM_DISPATCH_EMIT_PATTERNED_ARM64_COUNT 60
-#define XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT 42
+#define XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT 43
 #define XM_DISPATCH_EMIT_DECLARED_RISCV64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_RISCV64_COUNT 52
 #define XM_DISPATCH_EMIT_PATTERNED_RISCV64_COUNT 60
-#define XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT 41
+#define XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT 43
 
 static inline bool xm_dispatch_emit_x64_gp_rr_comm(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs) {
     switch (op) {
@@ -279,6 +279,13 @@ static inline bool xm_dispatch_emit_arm64_gp_rrr(XmOp op, A64Buf *buf, A64Reg rd
                      "emit self-check: XM_MUL emitted too few");
             return true;
         }
+        case XM_DIV: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_sdiv(rd, rn, rm));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_DIV emitted too few");
+            return true;
+        }
         case XM_AND: {
             uint32_t _es = buf->count;
             a64_buf_emit(buf, a64_and(rd, rn, rm));
@@ -340,6 +347,20 @@ static inline bool xm_dispatch_emit_riscv64_gp_rrr(XmOp op, Rv64Buf *buf, Rv64Re
             rv64_buf_emit(buf, rv64_mul(rd, rs1, rs2));
             XR_CHECK(buf->count - _es >= 1u,
                      "emit self-check: XM_MUL emitted too few");
+            return true;
+        }
+        case XM_DIV: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_div(rd, rs1, rs2));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_DIV emitted too few");
+            return true;
+        }
+        case XM_MOD: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_rem(rd, rs1, rs2));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_MOD emitted too few");
             return true;
         }
         case XM_AND: {
