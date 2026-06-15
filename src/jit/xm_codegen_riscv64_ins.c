@@ -368,39 +368,53 @@ static void rv64_h_subword(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     switch (ins->op) {
         case XM_LOAD8Z: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-            rv64_buf_emit(&ctx->buf, rv64_lbu(rd, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD8S: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-            rv64_buf_emit(&ctx->buf, rv64_lb(rd, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE8: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
             Rv64Reg val = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-            rv64_buf_emit(&ctx->buf, rv64_sb(val, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_store_gp(ins->op, &ctx->buf, base, 0, val),
+                "riscv64 generated mem_store_gp dispatch rejected op");
             break;
         }
         case XM_LOAD16Z: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-            rv64_buf_emit(&ctx->buf, rv64_lhu(rd, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD16S: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-            rv64_buf_emit(&ctx->buf, rv64_lh(rd, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE16: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
             Rv64Reg val = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-            rv64_buf_emit(&ctx->buf, rv64_sh(val, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_store_gp(ins->op, &ctx->buf, base, 0, val),
+                "riscv64 generated mem_store_gp dispatch rejected op");
             break;
         }
         case XM_LOAD32Z: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
-            rv64_buf_emit(&ctx->buf, rv64_lwu(rd, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_LOAD32S: {
@@ -410,13 +424,17 @@ static void rv64_h_subword(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
                 uint32_t ci = XM_REF_INDEX(ins->args[1]);
                 offset = (int32_t) ctx->func->consts[ci].val.i64;
             }
-            rv64_buf_emit(&ctx->buf, rv64_lw(rd, base, offset));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, offset),
+                "riscv64 generated mem_load_gp dispatch rejected op");
             break;
         }
         case XM_STORE32: {
             Rv64Reg base = rv64_get_operand(ctx, ins->args[0], RV64_SCRATCH_REG);
             Rv64Reg val = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-            rv64_buf_emit(&ctx->buf, rv64_sw(val, base, 0));
+            RV64_CODEGEN_CHECK(
+                ctx, xm_dispatch_emit_riscv64_mem_store_gp(ins->op, &ctx->buf, base, 0, val),
+                "riscv64 generated mem_store_gp dispatch rejected op");
             break;
         }
         default:
