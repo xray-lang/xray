@@ -447,7 +447,16 @@ bool xm_emit_call_ops(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
             }
 
             if (rd != A64_XZR) {
-                a64_buf_emit(&ctx->buf, a64_mov(rd, SCRATCH_REG));
+                bool dst_fp = false;
+                if (xm_ref_is_vreg(ins->dst)) {
+                    uint32_t vi = XM_REF_INDEX(ins->dst);
+                    if (vi < ctx->func->nvreg)
+                        dst_fp = (ctx->func->vregs[vi].rep == XR_REP_F64);
+                }
+                if (dst_fp)
+                    a64_buf_emit(&ctx->buf, a64_fmov_gp_to_fp(rd, SCRATCH_REG));
+                else
+                    a64_buf_emit(&ctx->buf, a64_mov(rd, SCRATCH_REG));
             }
             // Reload tag from vreg_runtime_tags to x1: live-reg restore above
             // clobbered x1. x1 must hold callee's tag for the CALLEE_SETS chain

@@ -863,6 +863,44 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     for (uint16_t i = 0; i < v->nargs; i++)
         call_args[i] = get_ref(ctx, v->args[i]);
 
+    /* Self-recursive call: Xi encodes "invoke the current function" as
+     * CALL <CONST null> args (AOT lowers the null callee to the function's
+     * own closure `_cl`; see xi_cgen_value_helpers emit_call_hidden_closure).
+     * Route it through XM_CALL_SELF_DIRECT, which BLs straight to our own
+     * entry and leaves jit_ctx->call_closure untouched, so the recursive
+     * invocation reuses our closure — correct for captured upvalues.  Routing
+     * a self-call through CALL_KNOWN/CALL_DIRECT instead would overwrite
+     * call_closure from call_args[0] (here the null callee), losing upvalues
+     * and dispatching on a null closure (the historic recursion miscompile). */
+    if (v->op == XI_CALL && v->nargs >= 1) {
+        XiValue *callee_val = v->args[0];
+        while (callee_val && callee_val->op == XI_COPY && callee_val->nargs >= 1)
+            callee_val = callee_val->args[0];
+        if (callee_val && callee_val->op == XI_CONST && callee_val->type &&
+            callee_val->type->kind == XR_KIND_NULL) {
+            uint8_t ret_rep = (ctx->proto && ctx->proto->return_type_info)
+                                  ? xr_type_rep(ctx->proto->return_type_info)
+                                  : XR_REP_TAGGED;
+            /* Memory-passing self-call (args[0] == NONE): the params occupy
+             * call_args[0..nargs-1] with no closure slot, because the codegen
+             * passes x1 = &call_args[0] to the normal entry, which loads
+             * param i from x1[i]. */
+            XmRef self_args[16];
+            for (uint16_t i = 0; i < nargs; i++)
+                self_args[i] = call_args[i + 1];
+            XmRef result =
+                xm_emit(ctx->xm_func, blk, XM_CALL_SELF_DIRECT, ret_rep, XM_NONE, XM_NONE);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            if (xm_ref_is_vreg(result)) {
+                uint32_t ri = XM_REF_INDEX(result);
+                if (ri < ctx->xm_func->nvreg)
+                    ctx->xm_func->vregs[ri].callee_proto = ctx->proto;
+            }
+            xm_func_bind_call_args(ctx->xm_func, result, self_args, nargs);
+            return result;
+        }
+    }
+
     /* CALL_KNOWN optimization: if callee is a local closure or a top-level
      * function loaded from a shared slot, emit a direct call.  Codegen loads
      * proto->jit_entry for JIT-to-JIT fast path, falling back to
