@@ -10,9 +10,9 @@
  * KEY CONCEPT:
  *   - entries[] is a dense, append-only array in insertion order; iteration
  *     scans it directly so observable order is insertion order.
- *   - indices[] is an open-addressing (linear-probing) table mapping a value's
- *     hash bucket to an entries[] index (or EMPTY / DELETED sentinel).
- *   - Deletion tombstones the entry (val_tt=0) and marks its index DELETED;
+ *   - ctrl[] is a Swiss-style h2 control-byte table; indices[] maps FULL ctrl
+ *     slots to entries[] indices.
+ *   - Deletion tombstones the entry (val_tt=0) and marks its ctrl byte DELETED;
  *     dead slots are reclaimed when the table is resized/compacted.
  *   - Resizing is triggered when nentries reaches entries_cap. Because
  *     entries_cap = indices_size*2/3 and every append consumes one index slot,
@@ -32,6 +32,7 @@
 #include "../class/xclass_system.h"
 #include "../class/xclass.h"
 #include "../gc/xgc.h"
+#include "../../shared/xr_swiss_index.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -68,41 +69,54 @@ static inline void xr_set_release_entry(XrSetEntry *e, XrCoroGC *gc) {
     e->value = xr_null();
 }
 
-/* ========== Index Table Lookup ========== */
+/* ========== Swiss Index Lookup ========== */
 
-// Returns entries[] index for `value`, or -1 if absent.
-static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
+// Returns the ctrl/indices slot for `value`, or UINT32_MAX if absent.
+static uint32_t set_lookup_slot(XrSet *set, XrValue value, uint32_t hash, int32_t *out_eidx) {
     if (set->flags & XR_SET_FLAG_DUMMY)
-        return -1;
+        return UINT32_MAX;
 
     uint32_t mask = set->indices_size - 1;
-    uint32_t slot = hash & mask;
+    uint8_t h2 = xr_swiss_h2(hash);
+    uint32_t pos = (hash >> 7u) & mask;
+    uint32_t stride = 0;
 
     for (;;) {
-        int32_t ix = set->indices[slot];
-        if (ix == XR_SET_IX_EMPTY)
-            return -1;
-        if (ix >= 0) {
-            XrSetEntry *e = &set->entries[ix];
-            if (e->hash == hash && xr_value_eq(e->value, value))
-                return ix;
+        uint64_t group = xr_swiss_group_load(set->ctrl + pos);
+        uint64_t matches = xr_swiss_group_match(group, h2);
+        while (matches) {
+            int off = xr_swiss_swar_first(matches);
+            uint32_t slot = (pos + (uint32_t) off) & mask;
+            int32_t ix = set->indices[slot];
+            if (ix >= 0) {
+                XrSetEntry *e = &set->entries[ix];
+                if (e->hash == hash && xr_value_eq(e->value, value)) {
+                    if (out_eidx)
+                        *out_eidx = ix;
+                    return slot;
+                }
+            }
+            matches &= ~(0xFFull << ((unsigned) off * 8u));
         }
-        slot = (slot + 1) & mask;  // Linear probing; passes over DELETED slots
+        if (xr_swiss_group_match_empty(group))
+            return UINT32_MAX;
+        stride += XR_SWISS_GROUP;
+        pos = (pos + stride) & mask;
     }
 }
 
-// Insert entry index into a fresh/EMPTY-or-DELETED slot (value known absent).
-static void indices_put(int32_t *indices, uint32_t indices_size, uint32_t hash, int32_t eidx) {
-    uint32_t mask = indices_size - 1;
-    uint32_t slot = hash & mask;
-    for (;;) {
-        int32_t cur = indices[slot];
-        if (cur == XR_SET_IX_EMPTY || cur == XR_SET_IX_DELETED) {
-            indices[slot] = eidx;
-            return;
-        }
-        slot = (slot + 1) & mask;
-    }
+// Returns entries[] index for `value`, or -1 if absent.
+static int32_t set_lookup(XrSet *set, XrValue value, uint32_t hash) {
+    int32_t eidx = -1;
+    return set_lookup_slot(set, value, hash, &eidx) == UINT32_MAX ? -1 : eidx;
+}
+
+// Insert entry index into a fresh EMPTY-or-DELETED ctrl slot (value known absent).
+static void indices_put(uint8_t *ctrl, int32_t *indices, uint32_t indices_size, uint32_t hash,
+                        int32_t eidx) {
+    uint32_t slot = xr_swiss_find_free(ctrl, indices_size, hash);
+    indices[slot] = eidx;
+    xr_swiss_ctrl_set(ctrl, indices_size, slot, xr_swiss_h2(hash));
 }
 
 /* ========== Grow / Compact ========== */
@@ -113,6 +127,7 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     XrCoroGC *gc = xr_current_coro_gc();
     bool was_dummy = xr_set_isdummy(set);
     XrSetEntry *old_entries = was_dummy ? NULL : set->entries;
+    uint8_t *old_ctrl = was_dummy ? NULL : set->ctrl;
     int32_t *old_indices = was_dummy ? NULL : set->indices;
     uint32_t old_nentries = was_dummy ? 0 : set->nentries;
     uint32_t old_isize = was_dummy ? 0 : set->indices_size;
@@ -132,34 +147,44 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
     // we copy live entries out of it).
     bool new_on_gc = was_dummy && old_on_gc;
 
+    size_t cbytes = (size_t) new_isize + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) new_isize;
     size_t ebytes = sizeof(XrSetEntry) * (size_t) new_ecap;
+    uint8_t *new_ctrl = NULL;
     int32_t *new_indices = NULL;
     XrSetEntry *new_entries = NULL;
 
     if (new_on_gc && gc) {
+        new_ctrl = (uint8_t *) xr_coro_alloc_blob(gc, cbytes);
         new_indices = (int32_t *) xr_coro_alloc_blob(gc, ibytes);
         new_entries = (XrSetEntry *) xr_coro_alloc_blob(gc, ebytes);
-        if (!new_indices || !new_entries) {
+        if (!new_ctrl || !new_indices || !new_entries) {
+            xr_coro_free_blob(gc, new_ctrl);
+            xr_coro_free_blob(gc, new_indices);
+            xr_coro_free_blob(gc, new_entries);
             new_on_gc = false;
+            new_ctrl = (uint8_t *) xr_malloc(cbytes);
             new_indices = (int32_t *) xr_malloc(ibytes);
             new_entries = (XrSetEntry *) xr_malloc(ebytes);
         }
     } else {
         new_on_gc = false;
+        new_ctrl = (uint8_t *) xr_malloc(cbytes);
         new_indices = (int32_t *) xr_malloc(ibytes);
         new_entries = (XrSetEntry *) xr_malloc(ebytes);
     }
-    if (!new_indices || !new_entries) {
+    if (!new_ctrl || !new_indices || !new_entries) {
         if (!new_on_gc) {
+            xr_free(new_ctrl);
             xr_free(new_indices);
             xr_free(new_entries);
         }
         return false;
     }
     if (!new_on_gc)
-        xr_gc_add_external(gc, (int64_t) (ibytes + ebytes));
+        xr_gc_add_external(gc, (int64_t) (cbytes + ibytes + ebytes));
 
+    memset(new_ctrl, (int) XR_SWISS_CTRL_EMPTY, cbytes);
     for (uint32_t i = 0; i < new_isize; i++)
         new_indices[i] = XR_SET_IX_EMPTY;
     memset(new_entries, 0, ebytes);
@@ -171,10 +196,11 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
         if (oe->val_tt == XR_SET_ENTRY_NIL)
             continue;
         new_entries[w] = *oe;
-        indices_put(new_indices, new_isize, oe->hash, (int32_t) w);
+        indices_put(new_ctrl, new_indices, new_isize, oe->hash, (int32_t) w);
         w++;
     }
 
+    set->ctrl = new_ctrl;
     set->indices = new_indices;
     set->entries = new_entries;
     set->indices_size = new_isize;
@@ -188,12 +214,15 @@ static bool set_resize(XrSet *set, uint32_t min_needed) {
 
     if (old_entries) {
         if (old_on_gc) {
+            xr_coro_free_blob(gc, old_ctrl);
             xr_coro_free_blob(gc, old_indices);
             xr_coro_free_blob(gc, old_entries);
         } else {
+            xr_free(old_ctrl);
             xr_free(old_indices);
             xr_free(old_entries);
-            xr_gc_sub_external(gc, (int64_t) (sizeof(int32_t) * (size_t) old_isize +
+            xr_gc_sub_external(gc, (int64_t) ((size_t) old_isize + XR_SWISS_GROUP +
+                                              sizeof(int32_t) * (size_t) old_isize +
                                               sizeof(XrSetEntry) * (size_t) old_ecap));
         }
     }
@@ -214,6 +243,7 @@ XrSet *xr_set_new(struct XrCoroutine *coro) {
     set->nentries = 0;
     set->entries_cap = 0;
     set->indices_size = 0;
+    set->ctrl = NULL;
     set->indices = NULL;
     set->entries = NULL;
     set->flags = XR_SET_FLAG_DUMMY | XR_SET_FLAG_NODES_ON_GC;
@@ -241,6 +271,7 @@ void xr_set_init_inplace(XrSet *set) {
     set->nentries = 0;
     set->entries_cap = 0;
     set->indices_size = 0;
+    set->ctrl = NULL;
     set->indices = NULL;
     set->entries = NULL;
     set->flags = XR_SET_FLAG_DUMMY;  // system-heap: arrays via malloc
@@ -280,7 +311,7 @@ bool xr_set_add(XrSet *set, XrValue value) {
     set->nentries++;
     set->count++;
 
-    indices_put(set->indices, set->indices_size, hash, (int32_t) eidx);
+    indices_put(set->ctrl, set->indices, set->indices_size, hash, (int32_t) eidx);
     XR_GC_BARRIER_BACK_SAFE(gc, set);
     return true;
 }
@@ -300,27 +331,20 @@ bool xr_set_delete(XrSet *set, XrValue value) {
         return false;
 
     uint32_t hash = hash_value(value);
-    uint32_t mask = set->indices_size - 1;
-    uint32_t slot = hash & mask;
+    int32_t ix = -1;
+    uint32_t slot = set_lookup_slot(set, value, hash, &ix);
+    if (slot == UINT32_MAX)
+        return false;
 
-    for (;;) {
-        int32_t ix = set->indices[slot];
-        if (ix == XR_SET_IX_EMPTY)
-            return false;  // Not found
-        if (ix >= 0) {
-            XrSetEntry *e = &set->entries[ix];
-            if (e->hash == hash && xr_value_eq(e->value, value)) {
-                // Tombstone the entry (keeps its slot so order is preserved)
-                // and mark the index slot DELETED so probing skips past it.
-                xr_set_release_entry(e, xr_current_coro_gc());
-                e->val_tt = XR_SET_ENTRY_NIL;
-                set->indices[slot] = XR_SET_IX_DELETED;
-                set->count--;
-                return true;
-            }
-        }
-        slot = (slot + 1) & mask;
-    }
+    // Tombstone the entry (keeps its slot so order is preserved) and mark the
+    // ctrl slot DELETED so probing skips past it.
+    XrSetEntry *e = &set->entries[ix];
+    xr_set_release_entry(e, xr_current_coro_gc());
+    e->val_tt = XR_SET_ENTRY_NIL;
+    set->indices[slot] = XR_SET_IX_EMPTY;
+    xr_swiss_ctrl_set(set->ctrl, set->indices_size, slot, XR_SWISS_CTRL_DELETED);
+    set->count--;
+    return true;
 }
 
 void xr_set_clear(XrSet *set) {
@@ -336,6 +360,7 @@ void xr_set_clear(XrSet *set) {
             e->val_tt = XR_SET_ENTRY_NIL;
         }
     }
+    memset(set->ctrl, (int) XR_SWISS_CTRL_EMPTY, (size_t) set->indices_size + XR_SWISS_GROUP);
     for (uint32_t i = 0; i < set->indices_size; i++)
         set->indices[i] = XR_SET_IX_EMPTY;
     set->nentries = 0;
@@ -511,16 +536,20 @@ void xr_gc_destroy_set(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
             if (e->val_tt != XR_SET_ENTRY_NIL)
                 xr_set_release_entry(e, owning_gc);
         }
-        size_t bytes = sizeof(int32_t) * (size_t) set->indices_size +
+        size_t bytes = (size_t) set->indices_size + XR_SWISS_GROUP +
+                       sizeof(int32_t) * (size_t) set->indices_size +
                        sizeof(XrSetEntry) * (size_t) set->entries_cap;
         if (set->flags & XR_SET_FLAG_NODES_ON_GC) {
+            xr_coro_free_blob(owning_gc, set->ctrl);
             xr_coro_free_blob(owning_gc, set->indices);
             xr_coro_free_blob(owning_gc, set->entries);
         } else {
+            xr_free(set->ctrl);
             xr_free(set->indices);
             xr_free(set->entries);
             xr_gc_sub_external(owning_gc, (int64_t) bytes);
         }
+        set->ctrl = NULL;
         set->indices = NULL;
         set->entries = NULL;
     }

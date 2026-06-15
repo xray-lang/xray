@@ -244,6 +244,43 @@ TEST(set_many_entries) {
     teardown();
 }
 
+TEST(set_tombstone_probe_and_compaction_order) {
+    setup();
+    XrSet *set = xr_set_new_with_capacity(main_coro, 8);
+
+    for (int i = 0; i < 24; i++)
+        ASSERT_TRUE(xr_set_add(set, xr_int(i)));
+    for (int i = 1; i < 16; i += 2)
+        ASSERT_TRUE(xr_set_delete(set, xr_int(i)));
+    for (int i = 100; i < 116; i++)
+        ASSERT_TRUE(xr_set_add(set, xr_int(i)));
+
+    for (int i = 1; i < 16; i += 2)
+        ASSERT_FALSE(xr_set_has(set, xr_int(i)));
+    for (int i = 0; i < 24; i += 2)
+        ASSERT_TRUE(xr_set_has(set, xr_int(i)));
+    for (int i = 17; i < 24; i += 2)
+        ASSERT_TRUE(xr_set_has(set, xr_int(i)));
+    for (int i = 100; i < 116; i++)
+        ASSERT_TRUE(xr_set_has(set, xr_int(i)));
+
+    XrArray *vals = xr_set_values(main_coro, set);
+    ASSERT_NOT_NULL(vals);
+    ASSERT_EQ_INT(xr_array_size(vals), 32);
+
+    int out = 0;
+    for (int i = 0; i < 24; i++) {
+        if (i < 16 && (i & 1))
+            continue;
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(vals, out++)), i);
+    }
+    for (int i = 100; i < 116; i++)
+        ASSERT_EQ_INT(XR_TO_INT(xr_array_get(vals, out++)), i);
+    ASSERT_EQ_INT(out, 32);
+
+    teardown();
+}
+
 /* ========== Main ========== */
 
 int main(void) {
@@ -263,6 +300,7 @@ int main(void) {
     RUN_TEST(set_values);
     RUN_TEST(set_from_array);
     RUN_TEST(set_many_entries);
+    RUN_TEST(set_tombstone_probe_and_compaction_order);
 
     TEST_REPORT();
     return TEST_EXIT();
