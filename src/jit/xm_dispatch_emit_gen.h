@@ -14,23 +14,23 @@
 
 /* ========== Generated Emit Coverage ========== */
 
-#define XM_DISPATCH_EMIT_WRAPPER_COUNT 31
+#define XM_DISPATCH_EMIT_WRAPPER_COUNT 33
 #define XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT 336
 #define XM_DISPATCH_EMIT_CUSTOM_ENTRY_COUNT 160
 #define XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT 176
-#define XM_DISPATCH_EMIT_GENERATED_CASE_COUNT 116
+#define XM_DISPATCH_EMIT_GENERATED_CASE_COUNT 122
 #define XM_DISPATCH_EMIT_DECLARED_X64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_X64_COUNT 56
 #define XM_DISPATCH_EMIT_PATTERNED_X64_COUNT 56
-#define XM_DISPATCH_EMIT_GENERATED_X64_COUNT 37
+#define XM_DISPATCH_EMIT_GENERATED_X64_COUNT 39
 #define XM_DISPATCH_EMIT_DECLARED_ARM64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_ARM64_COUNT 52
 #define XM_DISPATCH_EMIT_PATTERNED_ARM64_COUNT 60
-#define XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT 40
+#define XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT 42
 #define XM_DISPATCH_EMIT_DECLARED_RISCV64_COUNT 112
 #define XM_DISPATCH_EMIT_CUSTOM_RISCV64_COUNT 52
 #define XM_DISPATCH_EMIT_PATTERNED_RISCV64_COUNT 60
-#define XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT 39
+#define XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT 41
 
 static inline bool xm_dispatch_emit_x64_gp_rr_comm(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs) {
     switch (op) {
@@ -536,6 +536,27 @@ static inline bool xm_dispatch_emit_x64_gp_r(XmOp op, X64Buf *buf, X64Reg rd) {
     }
 }
 
+static inline bool xm_dispatch_emit_x64_gp_mov_r(XmOp op, X64Buf *buf, X64Reg rd, X64Reg rs) {
+    switch (op) {
+        case XM_MOV: {
+            uint32_t _es = buf->pos;
+            x64_mov_rr(buf, rd, rs);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_MOV emitted 0 bytes");
+            return true;
+        }
+        case XM_REDEFINE: {
+            uint32_t _es = buf->pos;
+            x64_mov_rr(buf, rd, rs);
+            XR_CHECK(buf->pos > _es,
+                     "emit self-check: XM_REDEFINE emitted 0 bytes");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
 static inline bool xm_dispatch_emit_arm64_gp_r(XmOp op, A64Buf *buf, A64Reg rd, A64Reg rm) {
     switch (op) {
         case XM_NEG: {
@@ -550,6 +571,41 @@ static inline bool xm_dispatch_emit_arm64_gp_r(XmOp op, A64Buf *buf, A64Reg rd, 
             a64_buf_emit(buf, a64_mvn(rd, rm));
             XR_CHECK(buf->count - _es >= 1u,
                      "emit self-check: XM_NOT emitted too few");
+            return true;
+        }
+        case XM_MOV: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_mov(rd, rm));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_MOV emitted too few");
+            return true;
+        }
+        case XM_REDEFINE: {
+            uint32_t _es = buf->count;
+            a64_buf_emit(buf, a64_mov(rd, rm));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_REDEFINE emitted too few");
+            return true;
+        }
+        default:
+            return false;
+    }
+}
+
+static inline bool xm_dispatch_emit_riscv64_gp_r(XmOp op, Rv64Buf *buf, Rv64Reg rd, Rv64Reg rs) {
+    switch (op) {
+        case XM_MOV: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_mv(rd, rs));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_MOV emitted too few");
+            return true;
+        }
+        case XM_REDEFINE: {
+            uint32_t _es = buf->count;
+            rv64_buf_emit(buf, rv64_mv(rd, rs));
+            XR_CHECK(buf->count - _es >= 1u,
+                     "emit self-check: XM_REDEFINE emitted too few");
             return true;
         }
         default:
