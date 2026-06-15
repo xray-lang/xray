@@ -211,7 +211,7 @@ static const XiEnumData *cg_enum_for_shared_value(const XiCgenCtx *ctx, const Xi
     if (!ctx || !v || v->op != XI_GET_SHARED)
         return NULL;
     int slot = (int) v->aux_int;
-    if (slot < 0 || slot >= CG_MAX_SHARED)
+    if (slot < 0 || slot >= ctx->shared_cap)
         return NULL;
     return ctx->shared_enum[slot];
 }
@@ -219,7 +219,7 @@ static const XiEnumData *cg_enum_for_shared_value(const XiCgenCtx *ctx, const Xi
 static const XiEnumData *cg_enum_for_runtime_type(const XiCgenCtx *ctx, const void *runtime_type) {
     if (!ctx || !runtime_type)
         return NULL;
-    for (int i = 0; i < CG_MAX_SHARED; i++) {
+    for (int i = 0; i < ctx->nshared; i++) {
         const XiEnumData *ed = ctx->shared_enum[i];
         if (ed && ed->runtime_type == runtime_type)
             return ed;

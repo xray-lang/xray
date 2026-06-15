@@ -529,7 +529,7 @@ static bool xicgen_call_is_shared_class(const XiCgenCtx *ctx, const XiValue *cal
         return false;
     if (callee->op == XI_GET_SHARED) {
         int slot = (int) callee->aux_int;
-        return slot >= 0 && slot < CG_MAX_SHARED && ctx->shared_class[slot];
+        return slot >= 0 && slot < ctx->shared_cap && ctx->shared_class[slot];
     }
     if ((callee->op == XI_BOX || callee->op == XI_UNBOX) && callee->nargs >= 1)
         return xicgen_call_is_shared_class(ctx, callee->args[0]);

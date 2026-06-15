@@ -261,9 +261,13 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 }
 
 /* ========== Codegen Context ========== */
-#define CG_MAX_SHARED 512
-#define CG_MAX_METHODS 256
-#define CG_MAX_IMPORTS 256
+/* Initial capacities for the per-module shared-slot / method / import tables.
+ * These grow on demand (cg_reserve_shared / _methods / _imports), so AOT can
+ * compile modules with more than the starting counts — the real ceiling for
+ * large programs, since AOT (Xi->C) has no bytecode 255-register limit. */
+#define CG_INIT_SHARED 512
+#define CG_INIT_METHODS 256
+#define CG_INIT_IMPORTS 256
 #define CG_MAX_SYNC_GO_TARGETS 512
 #define CG_MAX_CLASS_FIELD_CACHE 16
 #define CG_MAX_CLASS_FIELD_CACHE_ALIASES 32
@@ -340,21 +344,25 @@ typedef struct CgStrLit {
  * Heap-allocated via xi_cgen_ctx_new; no file-scope globals. */
 struct XiCgenCtx {
     int fname_counter;
-    const XiFunc *shared_funcs[CG_MAX_SHARED];
-    const XiClassData *shared_class[CG_MAX_SHARED];
-    const XiEnumData *shared_enum[CG_MAX_SHARED];
-    CgSharedNativeInstance shared_native_instances[CG_MAX_SHARED];
+    /* Parallel shared-slot tables (length shared_cap), grown together. */
+    const XiFunc **shared_funcs;
+    const XiClassData **shared_class;
+    const XiEnumData **shared_enum;
+    CgSharedNativeInstance *shared_native_instances;
+    int shared_cap;
     CgSharedNativeExport shared_native_exports[CG_MAX_SHARED_NATIVE_EXPORTS];
     int nshared_native_exports;
     int nshared;
-    CgMethodEntry methods[CG_MAX_METHODS];
+    CgMethodEntry *methods;
+    int methods_cap;
     int nmethod;
     XiModule *module; /* current module being emitted */
     bool pre_decl_all;
     bool cell_vars[256];
     const XiValue *cell_origins[256];
     const char *shared_name;
-    CgImportEntry imports[CG_MAX_IMPORTS];
+    CgImportEntry *imports;
+    int imports_cap;
     int nimports;
     XiModule **all_modules; /* full modules array for resolved-index lookups */
     int all_nmodules;
@@ -370,6 +378,80 @@ struct XiCgenCtx {
     int nstrlit;
     int strlit_cap;
 };
+
+/* Grow the parallel shared-slot tables to at least `need` entries.  All four
+ * arrays share one capacity (a slot holds a func / class / enum / native
+ * instance at the same index).  New entries are zeroed.  Returns false (and
+ * sets ctx->error) on allocation failure. */
+static bool cg_reserve_shared(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->shared_cap)
+        return true;
+    int nc = ctx->shared_cap > 0 ? ctx->shared_cap : CG_INIT_SHARED;
+    while (nc < need)
+        nc *= 2;
+    const XiFunc **nf = (const XiFunc **) xr_realloc(ctx->shared_funcs, (size_t) nc * sizeof(*nf));
+    const XiClassData **ncl =
+        (const XiClassData **) xr_realloc(ctx->shared_class, (size_t) nc * sizeof(*ncl));
+    const XiEnumData **ne =
+        (const XiEnumData **) xr_realloc(ctx->shared_enum, (size_t) nc * sizeof(*ne));
+    CgSharedNativeInstance *ni = (CgSharedNativeInstance *) xr_realloc(ctx->shared_native_instances,
+                                                                       (size_t) nc * sizeof(*ni));
+    if (!nf || !ncl || !ne || !ni) {
+        ctx->shared_funcs = nf ? nf : ctx->shared_funcs;
+        ctx->shared_class = ncl ? ncl : ctx->shared_class;
+        ctx->shared_enum = ne ? ne : ctx->shared_enum;
+        ctx->shared_native_instances = ni ? ni : ctx->shared_native_instances;
+        ctx->error = true;
+        return false;
+    }
+    int added = nc - ctx->shared_cap;
+    memset(&nf[ctx->shared_cap], 0, (size_t) added * sizeof(*nf));
+    memset(&ncl[ctx->shared_cap], 0, (size_t) added * sizeof(*ncl));
+    memset(&ne[ctx->shared_cap], 0, (size_t) added * sizeof(*ne));
+    memset(&ni[ctx->shared_cap], 0, (size_t) added * sizeof(*ni));
+    ctx->shared_funcs = nf;
+    ctx->shared_class = ncl;
+    ctx->shared_enum = ne;
+    ctx->shared_native_instances = ni;
+    ctx->shared_cap = nc;
+    return true;
+}
+
+/* Grow the method table to at least `need` entries (zeroed). */
+static bool cg_reserve_methods(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->methods_cap)
+        return true;
+    int nc = ctx->methods_cap > 0 ? ctx->methods_cap : CG_INIT_METHODS;
+    while (nc < need)
+        nc *= 2;
+    CgMethodEntry *nm = (CgMethodEntry *) xr_realloc(ctx->methods, (size_t) nc * sizeof(*nm));
+    if (!nm) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&nm[ctx->methods_cap], 0, (size_t) (nc - ctx->methods_cap) * sizeof(*nm));
+    ctx->methods = nm;
+    ctx->methods_cap = nc;
+    return true;
+}
+
+/* Grow the import table to at least `need` entries (zeroed). */
+static bool cg_reserve_imports(XiCgenCtx *ctx, int need) {
+    if (need <= ctx->imports_cap)
+        return true;
+    int nc = ctx->imports_cap > 0 ? ctx->imports_cap : CG_INIT_IMPORTS;
+    while (nc < need)
+        nc *= 2;
+    CgImportEntry *ni = (CgImportEntry *) xr_realloc(ctx->imports, (size_t) nc * sizeof(*ni));
+    if (!ni) {
+        ctx->error = true;
+        return false;
+    }
+    memset(&ni[ctx->imports_cap], 0, (size_t) (nc - ctx->imports_cap) * sizeof(*ni));
+    ctx->imports = ni;
+    ctx->imports_cap = nc;
+    return true;
+}
 
 /* Intern a literal; returns its stable id. */
 static int cg_intern_str_lit(XiCgenCtx *ctx, const char *s) {
@@ -442,14 +524,8 @@ static void cg_register_class_methods(XiCgenCtx *ctx, const XiFunc *parent, cons
             if (cd->child_idx && ci < cd->ninst + cd->nstat) {
                 uint16_t idx = cd->child_idx[ci];
                 if (idx < parent->nchildren) {
-                    if (ctx->nmethod >= CG_MAX_METHODS) {
-                        ctx->error = true;
-                        fprintf(stderr,
-                                "[xi_cgen] ERROR: too many AOT class methods "
-                                "(limit %d); raise CG_MAX_METHODS\n",
-                                CG_MAX_METHODS);
+                    if (!cg_reserve_methods(ctx, ctx->nmethod + 1))
                         return;
-                    }
                     ctx->methods[ctx->nmethod].class_name = cd->class_name;
                     ctx->methods[ctx->nmethod].name = m->name;
                     ctx->methods[ctx->nmethod].func = parent->children[idx];
@@ -471,7 +547,7 @@ static int cg_find_class_slot(const XiCgenCtx *ctx, const char *class_name) {
     if (!class_name)
         return -1;
     int display_match = -1;
-    for (int s = 0; s < ctx->nshared && s < CG_MAX_SHARED; s++) {
+    for (int s = 0; s < ctx->nshared && s < ctx->shared_cap; s++) {
         const XiClassData *cd = ctx->shared_class[s];
         if (!cd || !cd->class_name)
             continue;
@@ -551,24 +627,17 @@ static void cg_init_from_module(XiCgenCtx *ctx, XiModule *mod) {
     XR_DCHECK(mod != NULL, "cg_init_from_module: NULL module");
     XR_DCHECK(mod->init != NULL, "cg_init_from_module: NULL init func");
 
-    /* Fixed-capacity shared-slot tables: refuse an oversized module with a
-     * hard error instead of silently dropping high slots — a dropped slot
-     * would miscompile every reference at or above the cap. */
-    if (mod->init->nshared > CG_MAX_SHARED || mod->nslots > CG_MAX_SHARED) {
-        ctx->error = true;
-        fprintf(stderr,
-                "[xi_cgen] ERROR: module '%s' shared slots (%u) exceed AOT limit %d; "
-                "raise CG_MAX_SHARED\n",
-                mod->name ? mod->name : "?",
-                (unsigned) (mod->init->nshared > mod->nslots ? mod->init->nshared : mod->nslots),
-                CG_MAX_SHARED);
+    /* Grow the shared-slot tables to fit this module (they grow on demand and
+     * are reused across modules, keeping the largest allocation). */
+    uint16_t need_slots = mod->init->nshared > mod->nslots ? mod->init->nshared : mod->nslots;
+    if (!cg_reserve_shared(ctx, (int) need_slots))
         return;
-    }
 
-    memset(ctx->shared_funcs, 0, sizeof(ctx->shared_funcs));
-    memset(ctx->shared_class, 0, sizeof(ctx->shared_class));
-    memset(ctx->shared_enum, 0, sizeof(ctx->shared_enum));
-    memset(ctx->shared_native_instances, 0, sizeof(ctx->shared_native_instances));
+    memset(ctx->shared_funcs, 0, (size_t) ctx->shared_cap * sizeof(*ctx->shared_funcs));
+    memset(ctx->shared_class, 0, (size_t) ctx->shared_cap * sizeof(*ctx->shared_class));
+    memset(ctx->shared_enum, 0, (size_t) ctx->shared_cap * sizeof(*ctx->shared_enum));
+    memset(ctx->shared_native_instances, 0,
+           (size_t) ctx->shared_cap * sizeof(*ctx->shared_native_instances));
     ctx->nshared = mod->init->nshared;
     ctx->nmethod = 0;
     ctx->module = mod;
