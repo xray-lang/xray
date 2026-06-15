@@ -108,6 +108,36 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
         }
     }
 
+    uint16_t max_call_nargs = 0;
+    if (callee->call_arg_pool) {
+        for (uint32_t bi = 0; bi < callee->nblk; bi++) {
+            XmBlock *blk = callee->blocks[bi];
+            for (uint32_t ii = 0; ii < blk->nins; ii++) {
+                XmRef dst = blk->ins[ii].dst;
+                if (!xm_ref_is_vreg(dst))
+                    continue;
+                uint32_t dvi = XM_REF_INDEX(dst);
+                if (dvi >= callee_nvreg)
+                    continue;
+                XmVReg *vr = &callee->vregs[dvi];
+                if (vr->call_nargs > 0 &&
+                    vr->call_arg_start + vr->call_nargs <= callee->call_arg_pool_used &&
+                    vr->call_nargs > max_call_nargs) {
+                    max_call_nargs = vr->call_nargs;
+                }
+            }
+        }
+    }
+    XmRef *remapped_call_args = NULL;
+    if (max_call_nargs > 0) {
+        remapped_call_args = (XmRef *) xr_malloc((size_t) max_call_nargs * sizeof(XmRef));
+        if (!remapped_call_args) {
+            xr_free(vreg_map);
+            xr_free(const_map);
+            return XM_NONE;
+        }
+    }
+
 // Helper: remap a single XmRef from callee space to caller space
 #define REMAP_REF(r)                                                                               \
     do {                                                                                           \
@@ -149,6 +179,7 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
     if (!cloned_blocks) {
         xr_free(vreg_map);
         xr_free(const_map);
+        xr_free(remapped_call_args);
         return XM_NONE;
     }
 
@@ -186,14 +217,12 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
             if (src_dst_idx < callee_nvreg && xm_ref_is_vreg(ins.dst)) {
                 XmVReg *src_vr = &callee->vregs[src_dst_idx];
                 if (src_vr->call_nargs > 0 && callee->call_arg_pool &&
-                    src_vr->call_arg_start + src_vr->call_nargs <= callee->call_arg_pool_used &&
-                    src_vr->call_nargs <= 16) {
-                    XmRef remapped_args[16];
+                    src_vr->call_arg_start + src_vr->call_nargs <= callee->call_arg_pool_used) {
                     for (uint16_t ai = 0; ai < src_vr->call_nargs; ai++) {
-                        remapped_args[ai] = callee->call_arg_pool[src_vr->call_arg_start + ai];
-                        REMAP_REF(remapped_args[ai]);
+                        remapped_call_args[ai] = callee->call_arg_pool[src_vr->call_arg_start + ai];
+                        REMAP_REF(remapped_call_args[ai]);
                     }
-                    xm_func_bind_call_args(caller, ins.dst, remapped_args, src_vr->call_nargs);
+                    xm_func_bind_call_args(caller, ins.dst, remapped_call_args, src_vr->call_nargs);
                 }
             }
         }
@@ -285,6 +314,7 @@ XmRef xm_inline_function(XmFunc *caller, XmBlock *call_block, uint32_t call_ins_
 
     xr_free(vreg_map);
     xr_free(const_map);
+    xr_free(remapped_call_args);
     xr_free(cloned_blocks);
     return result_ref;
 }

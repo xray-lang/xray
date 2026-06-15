@@ -102,10 +102,9 @@ _Static_assert(RV64_NGPR_CALLEE_SAVE_ALLOC <=
 XR_DATA const Rv64Reg rv64_alloc_regs[RV64_MAX_PHYS_REGS];
 XR_DATA const Rv64Freg rv64_alloc_fp_regs[RV64_MAX_FP_REGS];
 
-/* Extra-arg scratch: reuse the call_args[15] slot to pass extra_arg to
- * call_c_stub. Safe because call_args are written before the call and
- * the extra_arg is consumed before any call_args are read by the callee. */
-#define RV64_EXTRA_ARG_OFFSET XM_JIT_TAG_SCRATCH_OFFSET
+/* Extra argument passed to call_c_stub. Kept outside call_args[] so helper
+ * argument vectors can use the full scratch capacity. */
+#define RV64_EXTRA_ARG_OFFSET XM_JIT_EXTRA_ARG_OFFSET
 
 /* ========== Branch Patch ========== */
 

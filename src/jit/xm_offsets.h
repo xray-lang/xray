@@ -54,6 +54,8 @@
 
 #define XM_JIT_CALL_ARGS_OFFSET offsetof(XrJitScratch, call_args)
 #define XM_JIT_CALL_ARG_TAGS_OFFSET offsetof(XrJitScratch, call_arg_tags)
+#define XM_JIT_CALL_NARGS_OFFSET offsetof(XrJitScratch, call_nargs)
+#define XM_JIT_EXTRA_ARG_OFFSET offsetof(XrJitScratch, extra_arg)
 #define XM_JIT_CALL_PROTO_OFFSET offsetof(XrJitScratch, call_proto)
 #define XM_JIT_CALL_CLOSURE_OFFSET offsetof(XrJitScratch, call_closure)
 #define XM_JIT_EXCEPTION_OFFSET offsetof(XrJitScratch, exception)
@@ -79,9 +81,9 @@
 #define XM_JIT_VREG_RUNTIME_TAGS_OFFSET offsetof(XrJitScratch, vreg_runtime_tags)
 // Tag from last call_c_stub: stored here instead of x1 to avoid clobbering alloc_regs[0]
 #define XM_JIT_CALL_RESULT_TAG_OFFSET offsetof(XrJitScratch, call_result_tag)
-// Scratch slot reusing call_args[15] for temporary tag save/restore
-// during field load/store codegen. Not a tag bitmap channel.
-#define XM_JIT_TAG_SCRATCH_OFFSET (XM_JIT_CALL_ARGS_OFFSET + 15 * 8)
+// Scratch slot for temporary tag save/restore during field load/store codegen.
+// This is intentionally separate from call_args[] and extra_arg.
+#define XM_JIT_TAG_SCRATCH_OFFSET offsetof(XrJitScratch, tag_scratch)
 // Guard page safepoint fields
 #define XM_JIT_SAFEPOINT_PAGE_OFFSET offsetof(XrJitScratch, safepoint_page)
 #define XM_JIT_SAFEPOINT_RETURN_PC_OFFSET offsetof(XrJitScratch, safepoint_return_pc)
@@ -172,12 +174,14 @@ _Static_assert(sizeof(XrGCHeader) == XM_GC_HEADER_SIZE, "GCHeader size mismatch"
 _Static_assert(offsetof(XrGCHeader, type) == XM_GC_TYPE_OFFSET, "GCHeader.type offset mismatch");
 
 /* call_arg_tags[] must immediately follow call_args[] in XrJitScratch.
- * Codegen writes per-byte XR_TAG_* here; runtime reads from the same offset.
- * Tag scratch slot reuses call_args[15] and must not alias call_arg_tags. */
-_Static_assert(XM_JIT_CALL_ARGS_OFFSET + 16 * 8 == XM_JIT_CALL_ARG_TAGS_OFFSET,
-               "call_arg_tags must immediately follow call_args[16]");
-_Static_assert(sizeof(((XrJitScratch *) 0)->call_arg_tags) == 16,
-               "call_arg_tags must be 16 bytes (one tag per call_arg slot)");
+ * Codegen writes per-byte XR_TAG_* here; runtime reads from the same offset. */
+_Static_assert(XM_JIT_CALL_ARGS_OFFSET + XR_JIT_MAX_CALL_ARGS * 8 == XM_JIT_CALL_ARG_TAGS_OFFSET,
+               "call_arg_tags must immediately follow call_args[]");
+_Static_assert(sizeof(((XrJitScratch *) 0)->call_arg_tags) == XR_JIT_MAX_CALL_ARGS,
+               "call_arg_tags must have one tag per call_arg slot");
+_Static_assert(XM_JIT_CALL_NARGS_OFFSET % 8 == 0,
+               "call_nargs must be 8-byte aligned for JIT stores");
+_Static_assert(XM_JIT_EXTRA_ARG_OFFSET % 8 == 0, "extra_arg must be 8-byte aligned for JIT stores");
 
 /* JIT multi-return scratch: ret_vals[] and ret_tags[] must be 8-byte aligned
  * for ARM64 STR/LDR instructions. Using int64_t elements guarantees this. */

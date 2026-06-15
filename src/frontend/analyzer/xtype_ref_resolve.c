@@ -87,39 +87,38 @@ static XrType *resolve_generic(XrayIsolate *X, const XrTypeRef *t) {
     int nargs = t->nchildren;
 
     /* Resolve all type arguments first */
-    XrType *args[16];
-    for (int i = 0; i < nargs && i < 16; i++)
+    XrType *stack_args[16];
+    XrType **args =
+        (nargs <= 16) ? stack_args : (XrType **) xr_malloc((size_t) nargs * sizeof(XrType *));
+    if (nargs > 0 && !args)
+        return xr_type_new_unknown(NULL);
+    for (int i = 0; i < nargs; i++)
         args[i] = resolve_impl(X, t->children[i]);
 
     /* Dispatch to known container constructors */
-    if (strcmp(name, "Array") == 0 && nargs >= 1)
-        return xr_type_new_array(X, args[0]);
-    if (strcmp(name, "Set") == 0 && nargs >= 1)
-        return xr_type_new_set(X, args[0]);
-    if (strcmp(name, "Channel") == 0 && nargs >= 1)
-        return xr_type_new_channel(X, args[0]);
-    if (strcmp(name, "Map") == 0 && nargs >= 2)
-        return xr_type_new_map(X, args[0], args[1]);
-    if (strcmp(name, "Task") == 0 && nargs >= 1)
-        return xr_type_new_task(X, args[0]);
-
-    XrType **args_copy = NULL;
-    if (nargs > 0) {
-        args_copy = (XrType **) xr_malloc(sizeof(XrType *) * (size_t) nargs);
-        if (args_copy) {
-            for (int i = 0; i < nargs; i++)
-                args_copy[i] = args[i];
-        }
+    XrType *result = NULL;
+    if (strcmp(name, "Array") == 0 && nargs >= 1) {
+        result = xr_type_new_array(X, args[0]);
+    } else if (strcmp(name, "Set") == 0 && nargs >= 1) {
+        result = xr_type_new_set(X, args[0]);
+    } else if (strcmp(name, "Channel") == 0 && nargs >= 1) {
+        result = xr_type_new_channel(X, args[0]);
+    } else if (strcmp(name, "Map") == 0 && nargs >= 2) {
+        result = xr_type_new_map(X, args[0], args[1]);
+    } else if (strcmp(name, "Task") == 0 && nargs >= 1) {
+        result = xr_type_new_task(X, args[0]);
+    } else if (xa_is_builtin_interface_name(name)) {
+        /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
+         * generic interface type via the current isolate. */
+        result = xr_type_new_generic_interface(X, name, args, nargs);
+    } else {
+        /* Generic class instance — fallback for user types */
+        result = xr_type_new_generic_instance(X, name, NULL, args, nargs);
     }
 
-    /* Built-in interface with type args: e.g. Iterable<int>. Create a fresh
-     * generic interface type via the current isolate. */
-    if (xa_is_builtin_interface_name(name)) {
-        return xr_type_new_generic_interface(X, name, args_copy, nargs);
-    }
-
-    /* Generic class instance — fallback for user types */
-    return xr_type_new_generic_instance(X, name, NULL, args_copy, nargs);
+    if (args != stack_args)
+        xr_free(args);
+    return result;
 }
 
 static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
@@ -167,37 +166,58 @@ static XrType *resolve_impl(XrayIsolate *X, const XrTypeRef *t) {
 
         case XR_TREF_FUNCTION: {
             int nparam = t->nchildren > 0 ? t->nchildren - 1 : 0;
-            XrType *params[16];
-            for (int i = 0; i < nparam && i < 16; i++)
+            XrType *stack_params[16];
+            XrType **params = (nparam <= 16)
+                                  ? stack_params
+                                  : (XrType **) xr_malloc((size_t) nparam * sizeof(XrType *));
+            if (nparam > 0 && !params)
+                return xr_type_new_unknown(NULL);
+            for (int i = 0; i < nparam; i++)
                 params[i] = resolve_impl(X, t->children[i]);
             XrType *ret = t->nchildren > 0 ? resolve_impl(X, t->children[t->nchildren - 1])
                                            : xr_type_new_unit(NULL);
-            return xr_type_new_function(X, params, nparam, ret, false);
+            XrType *result =
+                xr_type_new_function(X, nparam > 0 ? params : NULL, nparam, ret, false);
+            if (params != stack_params)
+                xr_free(params);
+            return result;
         }
 
         case XR_TREF_TUPLE: {
-            XrType *elems[16];
-            int count = t->nchildren < 16 ? t->nchildren : 16;
+            int count = t->nchildren;
+            XrType *stack_elems[16];
+            XrType **elems = (count <= 16)
+                                 ? stack_elems
+                                 : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+            if (count > 0 && !elems)
+                return xr_type_new_unknown(NULL);
             for (int i = 0; i < count; i++)
                 elems[i] = resolve_impl(X, t->children[i]);
-            return xr_type_new_tuple(X, elems, count);
+            XrType *result = xr_type_new_tuple(X, elems, count);
+            if (elems != stack_elems)
+                xr_free(elems);
+            return result;
         }
 
         case XR_TREF_OBJECT: {
             const char **names = (const char **) t->field_names;
             int count = t->nchildren;
-            XrType *types[64];
-            if (count > 64)
-                count = 64;
+            XrType *stack_types[16];
+            XrType **types = (count <= 16)
+                                 ? stack_types
+                                 : (XrType **) xr_malloc((size_t) count * sizeof(XrType *));
+            if (count > 0 && !types)
+                return xr_type_new_unknown(NULL);
             for (int i = 0; i < count; i++)
                 types[i] = resolve_impl(X, t->children[i]);
-            XrType **type_ptrs = types;
             bool is_sealed = !t->extensible;
-            XrType *result = xr_type_new_json_with_fields(X, names, type_ptrs, count, is_sealed);
+            XrType *result = xr_type_new_json_with_fields(X, names, types, count, is_sealed);
             if (result && t->field_readonly)
                 xr_type_set_json_field_readonly(X, result, t->field_readonly, count);
             if (result && t->name)
                 xr_type_set_json_type_name(X, result, t->name);
+            if (types != stack_types)
+                xr_free(types);
             return result;
         }
 

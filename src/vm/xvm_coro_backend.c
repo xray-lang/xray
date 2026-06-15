@@ -839,13 +839,13 @@ static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *cor
     }
 
     XrBcCallFrame *frame = &frames[frame_count - 1];
-    int16_t saved_result_slot = frame->u.c.result_slot;
+    int16_t saved_result_slot = frame->cfunc_result_slot;
     frame->u.c.continuation = continuation;
     frame->u.c.continuation_ctx = user_data;
-    frame->u.c.has_cfunc_result = false;
-    frame->u.c.cfunc_result = xr_null();
+    frame->has_cfunc_result = false;
+    frame->cfunc_result = xr_null();
     frame->call_status |= XR_CALL_C | XR_CALL_HAS_CONT | XR_CALL_YIELDED;
-    frame->u.c.result_slot = saved_result_slot >= 0 ? saved_result_slot : -1;
+    frame->cfunc_result_slot = saved_result_slot >= 0 ? saved_result_slot : -1;
     return true;
 }
 
@@ -895,8 +895,8 @@ static XrCFuncResult vm_backend_call_closure(XrayIsolate *X, XrCoroutine *coro, 
     caller->call_status |= XR_CALL_CLOSURE_PENDING | XR_CALL_HAS_CONT | XR_CALL_C;
     caller->u.c.continuation = continuation;
     caller->u.c.continuation_ctx = user_ctx;
-    caller->u.c.has_cfunc_result = false;
-    caller->u.c.result_slot = (int16_t) (return_slot_offset - caller->base_offset);
+    caller->has_cfunc_result = false;
+    caller->cfunc_result_slot = (int16_t) (return_slot_offset - caller->base_offset);
 
     XrBcCallFrame *frame = &ctx->frames[ctx->frame_count++];
     memset(frame, 0, sizeof(XrBcCallFrame));
@@ -1069,6 +1069,7 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
     // Initialize first frame (for Yieldable support).
     coro_ctx->frame_count = 1;
     XrBcCallFrame *frame = &coro_ctx->frames[0];
+    memset(frame, 0, sizeof(XrBcCallFrame));
     frame->closure = NULL;
     frame->pc = NULL;
     frame->base_offset = 1;  // Reserve stack[0] for return value.
@@ -1077,8 +1078,8 @@ static XrVMResult run_cfunc_first_exec(XrayIsolate *isolate, XrCoroutine *coro,
     frame->call_status = XR_CALL_C;
     frame->u.c.continuation = NULL;
     frame->u.c.continuation_ctx = NULL;
-    frame->u.c.result_slot = 0;
-    frame->u.c.has_cfunc_result = false;
+    frame->cfunc_result_slot = 0;
+    frame->has_cfunc_result = false;
 
     XrValue *base = coro_ctx->stack + frame->base_offset;
     for (int i = 0; i < vm_state->arg_count && i < 4; i++) {
@@ -1162,8 +1163,8 @@ static XrVMResult run_cfunc_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVM
     // Single-frame result short-circuit after successful unroll.
     if (coro_ctx->frame_count == 1) {
         XrBcCallFrame *top = &coro_ctx->frames[0];
-        if (top->u.c.has_cfunc_result) {
-            coro_ctx->stack[0] = top->u.c.cfunc_result;
+        if (top->has_cfunc_result) {
+            coro_ctx->stack[0] = top->cfunc_result;
             coro_ctx->frame_count = 0;
             return XR_VM_OK;
         }
@@ -1631,6 +1632,7 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 
     coro_ctx->frame_count = 1;
     XrBcCallFrame *frame = &coro_ctx->frames[0];
+    memset(frame, 0, sizeof(XrBcCallFrame));
     frame->closure = closure;
     frame->pc = PROTO_CODE_BASE(proto);
     frame->base_offset = (int) (func_base - coro_ctx->stack);
@@ -1639,8 +1641,8 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
     frame->call_status = 0;
     frame->u.c.continuation = NULL;
     frame->u.c.continuation_ctx = NULL;
-    frame->u.c.result_slot = -1;
-    frame->u.c.has_cfunc_result = false;
+    frame->cfunc_result_slot = -1;
+    frame->has_cfunc_result = false;
 
     coro_ctx->stack_top = coro_ctx->stack + frame->base_offset + proto->maxstacksize;
     coro_ctx->module_base_frame = 0;

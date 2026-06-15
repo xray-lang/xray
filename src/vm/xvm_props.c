@@ -1086,8 +1086,8 @@ XR_FUNC XrDispatchAction vm_invoke_module(XrayIsolate *isolate, XrVMContext *vm_
         }
 
         if (cfunc->is_yieldable) {
-            frame->u.c.result_slot = (int16_t) a;
-            frame->u.c.has_cfunc_result = false;
+            frame->cfunc_result_slot = (int16_t) a;
+            frame->has_cfunc_result = false;
             frame->pc = pc;
 
             XrValue result;

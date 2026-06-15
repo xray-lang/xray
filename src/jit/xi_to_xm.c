@@ -25,6 +25,7 @@
 #include "xm_codegen.h"
 #include "xm_liveness2.h"
 #include "xm_offsets.h"
+#include "xjit_scratch.h"
 #include "../ir/xi_opt.h"
 #include "../ir/xi_op_name.h"
 #include "../base/xdefs.h"
@@ -45,11 +46,7 @@
 /* ========== Lowering Context ========== */
 
 #define XI2XM_TRY_STACK_INIT_CAP 8
-/* Helper-call arg buffer is bounded by the per-worker XrJitScratch.call_args[16]
- * ABI array (15 params + closure), so this is a real ABI limit, not a soft cap:
- * lowering a wider helper call cleanly rejects (caller falls back to the
- * interpreter) rather than overrunning the fixed scratch layout. */
-#define XI2XM_MAX_HELPER_CALL_ARGS 15
+#define XI2XM_MAX_HELPER_CALL_ARGS XR_JIT_MAX_CALL_ARGS
 #define XI2XM_NO_BC_SLOT UINT16_MAX
 #define XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG (1ULL << 40)
 
@@ -214,6 +211,10 @@ static XmRef emit_helper_call(LowerCtx *ctx, XmBlock *blk, XmHelperId id, XmRef 
     XR_DCHECK(ctx != NULL && ctx->xm_func != NULL, "emit_helper_call: invalid ctx");
     XR_DCHECK(blk != NULL, "emit_helper_call: NULL block");
     XR_DCHECK(id < XM_HELPER__COUNT, "emit_helper_call: invalid helper id");
+    if (nargs > XI2XM_MAX_HELPER_CALL_ARGS) {
+        ctx->error = true;
+        return xm_const_i64(ctx->xm_func, 0);
+    }
     XmRef fn_ref = xm_const_ptr(ctx->xm_func, xm_helper_info[id].func);
     XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_C, helper_call_rep(id), fn_ref, extra);
     XmIns *ins = &blk->ins[blk->nins - 1];
@@ -959,12 +960,12 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     uint16_t nargs = (v->nargs > 0) ? (v->nargs - 1) : 0;
 
     /* Collect call args */
-    XmRef call_args[17];
     uint16_t total = v->nargs;
-    if (total > 16) {
+    if (total > XI2XM_MAX_HELPER_CALL_ARGS) {
         ctx->error = true;
         return xm_const_i64(ctx->xm_func, 0);
     }
+    XmRef call_args[XI2XM_MAX_HELPER_CALL_ARGS];
     for (uint16_t i = 0; i < v->nargs; i++)
         call_args[i] = get_ref(ctx, v->args[i]);
 
@@ -990,9 +991,6 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
              * call_args[0..nargs-1] with no closure slot, because the codegen
              * passes x1 = &call_args[0] to the normal entry, which loads
              * param i from x1[i]. */
-            XmRef self_args[16];
-            for (uint16_t i = 0; i < nargs; i++)
-                self_args[i] = call_args[i + 1];
             XmRef result =
                 xm_emit(ctx->xm_func, blk, XM_CALL_SELF_DIRECT, ret_rep, XM_NONE, XM_NONE);
             blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
@@ -1001,7 +999,7 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
                 if (ri < ctx->xm_func->nvreg)
                     ctx->xm_func->vregs[ri].callee_proto = ctx->proto;
             }
-            xm_func_bind_call_args(ctx->xm_func, result, self_args, nargs);
+            xm_func_bind_call_args(ctx->xm_func, result, call_args + 1, nargs);
             return result;
         }
     }
@@ -1102,8 +1100,7 @@ generic_call:
         }
 
         uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
-        int64_t encoded = ((int64_t) method_sym << 32) | ((int64_t) (did & 0xFFFF) << 16) |
-                          ((int64_t) nargs & 0xFF);
+        int64_t encoded = ((int64_t) method_sym << 32) | ((int64_t) (did & 0xFFFF) << 16);
         XmRef encoded_ref = xm_const_i64(ctx->xm_func, encoded);
         /* Method returns are polymorphic (int, bool, string, null, ptr).
          * Use I64 rep (raw payload in GP register) + TAGGED ctype so
@@ -1126,12 +1123,11 @@ generic_call:
 
     if (v->op == XI_CALL_METHOD_DIRECT) {
         int method_idx = (int) v->aux_int;
-        if (method_idx < 0 || method_idx > 0xFFFF || nargs > 0xFF) {
+        if (method_idx < 0 || method_idx > 0xFFFF) {
             ctx->error = true;
             return xm_const_i64(ctx->xm_func, 0);
         }
-        int64_t encoded =
-            ((int64_t) XR_TAG_PTR << 24) | ((int64_t) method_idx << 8) | ((int64_t) nargs & 0xFF);
+        int64_t encoded = ((int64_t) XR_TAG_PTR << 24) | ((int64_t) method_idx << 8);
         return emit_helper_call(ctx, blk, XM_HELPER_invoke_direct,
                                 xm_const_i64(ctx->xm_func, encoded), call_args, total);
     }
@@ -1787,8 +1783,8 @@ static XmRef xi2xm_set_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 
 static XmRef xi2xm_tuple_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs > XI2XM_MAX_HELPER_CALL_ARGS) {
-        /* Exceeds the call_args[16] ABI array; reject this function for JIT
-         * (caller runs it interpreted) and name the op so the bail is
+        /* Exceeds the XrJitScratch.call_args capacity; reject this function
+         * for JIT (caller runs it interpreted) and name the op so the bail is
          * diagnosable rather than silent. */
         ctx->error = true;
         ctx->error_op = v->op;

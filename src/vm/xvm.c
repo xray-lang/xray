@@ -673,9 +673,9 @@ startfunc:
     frame = ci;
 
     // Deliver yieldable C function result (XR_CALL_C may already be cleared by unroll)
-    if (ci->u.c.has_cfunc_result && ci->u.c.result_slot >= 0) {
-        base[ci->u.c.result_slot] = ci->u.c.cfunc_result;
-        ci->u.c.has_cfunc_result = false;
+    if (ci->has_cfunc_result && ci->cfunc_result_slot >= 0) {
+        base[ci->cfunc_result_slot] = ci->cfunc_result;
+        ci->has_cfunc_result = false;
         ci->call_status &= ~XR_CALL_C;
     }
 
@@ -944,10 +944,10 @@ handle_closure_pending: {
             ci->call_status &= ~(XR_CALL_HAS_CONT | XR_CALL_C);
             if (ci->closure && ci->closure->proto) {
                 XrValue *_base = VM_STACK + ci->base_offset;
-                if (ci->u.c.result_slot >= 0) {
-                    _base[ci->u.c.result_slot] = _cresult;
+                if (ci->cfunc_result_slot >= 0) {
+                    _base[ci->cfunc_result_slot] = _cresult;
                 }
-                ci->u.c.has_cfunc_result = false;
+                ci->has_cfunc_result = false;
                 VM_SET_STACK_TOP(VM_STACK + ci->base_offset + ci->closure->proto->maxstacksize);
                 goto startfunc;
             }

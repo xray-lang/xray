@@ -19,12 +19,19 @@
 #include <stdatomic.h>
 #include <stdint.h>
 
+/* Fixed fast-path scratch capacity for one JIT call/helper argument vector.
+ * The count is explicit in call_nargs; helpers must reject above this capacity
+ * during lowering instead of truncating in the runtime bridge. */
+#define XR_JIT_MAX_CALL_ARGS 64
+
 typedef struct XrJitScratch {
-    int64_t call_args[16];      // Raw unboxed arguments (max 15 params + closure)
-    uint8_t call_arg_tags[16];  // Compile-time XR_TAG_* for each call_arg (set by codegen)
-    void *call_proto;           // Current proto for CALLSELF (XrProto*)
-    void *call_closure;         // Current closure for upvalue access (XrClosure*)
-    void *exception;            // Non-NULL when exception pending in JIT code
+    int64_t call_args[XR_JIT_MAX_CALL_ARGS];      // Raw unboxed arguments
+    uint8_t call_arg_tags[XR_JIT_MAX_CALL_ARGS];  // Compile-time XR_TAG_* for each call_arg
+    int64_t call_nargs;                           // Number of valid call_args entries
+    int64_t extra_arg;                            // CALL_C extra metadata argument
+    void *call_proto;                             // Current proto for CALLSELF (XrProto*)
+    void *call_closure;                           // Current closure for upvalue access (XrClosure*)
+    void *exception;                              // Non-NULL when exception pending in JIT code
     int64_t ret_count;  // Number of return values (0 = single via x0); int64_t for 8-byte alignment
     uint32_t deopt_id;  // Deopt point ID (set by deopt stub)
     uint32_t invoke_deopt_id;  // Valid deopt_id for CALL_C invoke recovery (deopt_id=0 safe)
@@ -32,7 +39,7 @@ typedef struct XrJitScratch {
     /* Param tags: runtime XrValue.tag for each argument, set by xm_jit_call.
      * Used by JIT null-check codegen to distinguish int(0) from null
      * for nullable primitive params (int?/float?/bool?). */
-    int64_t param_tags[8];
+    int64_t param_tags[XR_JIT_MAX_CALL_ARGS];
 
     /* Multi-return values: ret_vals[0] = 2nd return value, ret_vals[1] = 3rd, etc.
      * First return value goes through x0 as usual.
@@ -82,6 +89,7 @@ typedef struct XrJitScratch {
      * call_c_stub stores the C helper's x1 here instead of returning it in
      * x1, so x1 is not clobbered by the stub return sequence. */
     int64_t call_result_tag;
+    int64_t tag_scratch;
 
     /* JIT invoke recovery:
      * yieldable C functions run in try-mode from JIT. If they would suspend,
