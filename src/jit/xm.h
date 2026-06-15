@@ -379,7 +379,9 @@ typedef struct {
     XmDeoptSlot *slots;  // array of slot mappings (arena-allocated)
 } XmDeoptInfo;
 
-#define XM_MAX_DEOPT_POINTS 128
+// Initial capacity for XmFunc.deopt_infos; the table grows on demand
+// (record_deopt doubles deopt_cap), so this is a starting size, not a cap.
+#define XM_DEOPT_INFOS_INIT_CAP 128
 
 /* ========== Virtual Register ========== */
 

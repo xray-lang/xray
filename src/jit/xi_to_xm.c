@@ -234,8 +234,6 @@ static bool xi_value_is_static_channel(const LowerCtx *ctx, const XiValue *v) {
  * ensures each bc_slot has exactly one unambiguous value at deopt. */
 static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     XmFunc *func = ctx->xm_func;
-    if (func->ndeopt >= XM_MAX_DEOPT_POINTS)
-        return 0xFFFF;
 
     /* Refuse deopt without a valid bytecode anchor.  slot_map_bc_pc
      * returns -1 (UINT32_MAX once cast to uint32_t) when the Xi value
@@ -246,14 +244,19 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
 
     uint16_t did = ctx->next_deopt_id++;
 
-    /* Grow deopt_infos if needed */
-    if (!func->deopt_infos) {
-        func->deopt_infos = (XmDeoptInfo *) xr_calloc(XM_MAX_DEOPT_POINTS, sizeof(XmDeoptInfo));
-        if (!func->deopt_infos)
+    /* Grow deopt_infos on demand — no fixed ceiling. deopt_id stays in lockstep
+     * with the entry index because this is the only path that appends, and it
+     * never appends without also bumping next_deopt_id. */
+    if (func->ndeopt >= func->deopt_cap) {
+        uint32_t new_cap = func->deopt_cap ? func->deopt_cap * 2 : XM_DEOPT_INFOS_INIT_CAP;
+        XmDeoptInfo *nt =
+            (XmDeoptInfo *) xr_realloc(func->deopt_infos, new_cap * sizeof(XmDeoptInfo));
+        if (!nt)
             return 0xFFFF;
+        func->deopt_infos = nt;
+        func->deopt_cap = new_cap;
     }
 
-    XR_DCHECK(func->ndeopt < XM_MAX_DEOPT_POINTS, "record_deopt: deopt table overflow");
     XmDeoptInfo *info = &func->deopt_infos[func->ndeopt++];
     info->bc_pc = bc_pc;
     info->deopt_id = did;
@@ -286,15 +289,9 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
                 live_count++;
         }
 
-        if (live_count > XM_MAX_DEOPT_SLOTS) {
-            /* Too many live slots — refuse this deopt point so the
-             * caller falls back to the generic (unspecialized) path
-             * rather than restoring a truncated snapshot. */
-            func->ndeopt--;
-            return 0xFFFF;
-        }
-
-        /* Pass 2: populate slots from deduplicated entries */
+        /* Pass 2: populate slots from deduplicated entries (no slot ceiling —
+         * the runtime deopt table allocates slots per entry, see
+         * a64_build_runtime_deopt_table). */
         XmDeoptSlot *slots =
             (XmDeoptSlot *) xr_calloc(live_count ? live_count : 1, sizeof(XmDeoptSlot));
         if (slots) {

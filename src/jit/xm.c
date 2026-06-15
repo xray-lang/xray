@@ -133,7 +133,13 @@ void xm_func_destroy(XmFunc *func) {
         xm_arena_destroy(func->arena);
         xr_free(func->arena);
     }
-    xr_free(func->deopt_infos);
+    if (func->deopt_infos) {
+        // Each populated entry owns a heap-allocated slots array (record_deopt
+        // xr_calloc's it); free those before the entry array itself.
+        for (uint32_t d = 0; d < func->ndeopt; d++)
+            xr_free(func->deopt_infos[d].slots);
+        xr_free(func->deopt_infos);
+    }
     xm_func_invalidate_loops(func);  // also invalidates the dom-tree
     xm_func_invalidate_defuse(func);
     xm_func_invalidate_alias(func);

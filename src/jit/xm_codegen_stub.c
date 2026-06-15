@@ -549,18 +549,38 @@ XR_FUNC void a64_patch_branches(CodegenCtx *ctx) {
 // Must be called after codegen (regalloc is finalized) but before ctx is freed.
 XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *result) {
     XmFunc *func = ctx->func;
+    result->deopt_entries = NULL;
     result->ndeopt = 0;
     if (!func->deopt_infos || func->ndeopt == 0)
         return;
 
-    for (uint32_t d = 0; d < func->ndeopt && result->ndeopt < XM_MAX_RT_DEOPT_ENTRIES; d++) {
+    /* One contiguous block: the XmRtDeoptEntry array immediately followed by
+     * every entry's slots. total_slots is an upper bound (the loop below skips
+     * unmapped slots); any tail is simply unused. A single xr_free of the entry
+     * array releases the whole table (see XrProto.deopt_table teardown). */
+    uint32_t nentries = func->ndeopt;
+    size_t total_slots = 0;
+    for (uint32_t d = 0; d < nentries; d++)
+        total_slots += func->deopt_infos[d].nslots;
+
+    size_t entries_bytes = (size_t) nentries * sizeof(XmRtDeoptEntry);
+    char *block = (char *) xr_malloc(entries_bytes + total_slots * sizeof(XmRtDeoptSlot));
+    if (!block)
+        return;
+    XmRtDeoptEntry *entries = (XmRtDeoptEntry *) block;
+    XmRtDeoptSlot *slots_base = (XmRtDeoptSlot *) (block + entries_bytes);
+    result->deopt_entries = entries;
+
+    size_t slot_cursor = 0;
+    for (uint32_t d = 0; d < nentries; d++) {
         XmDeoptInfo *src = &func->deopt_infos[d];
-        XmRtDeoptEntry *dst = &result->deopt_entries[result->ndeopt];
+        XmRtDeoptEntry *dst = &entries[d];
         dst->bc_pc = src->bc_pc;
         dst->deopt_id = src->deopt_id;
         dst->nslots = 0;
+        dst->slots = slots_base + slot_cursor;
 
-        for (uint16_t s = 0; s < src->nslots && dst->nslots < XM_MAX_DEOPT_SLOTS; s++) {
+        for (uint16_t s = 0; s < src->nslots; s++) {
             XmDeoptSlot *slot = &src->slots[s];
             XmRtDeoptSlot *rs = &dst->slots[dst->nslots];
             rs->bc_slot = slot->bc_slot;
@@ -657,8 +677,9 @@ XR_FUNC void a64_build_runtime_deopt_table(CodegenCtx *ctx, XmCodegenResult *res
             }
             dst->nslots++;
         }
-        result->ndeopt++;
+        slot_cursor += dst->nslots;
     }
+    result->ndeopt = nentries;
 }
 
 /* ========== Resume Entry Stub (JIT Suspend/Resume) ========== */
