@@ -780,8 +780,7 @@ static bool match_channel_recv_subject(XiLower *l, AstNode *expr, AstNode **chan
 
 static bool match_channel_recv_fast_supported(MatchExprNode *m) {
     bool saw_value = false;
-    int max_arms = m->arm_count > 32 ? 32 : m->arm_count;
-    for (int i = 0; i < max_arms; i++) {
+    for (int i = 0; i < m->arm_count; i++) {
         AstNode *arm_node = m->arms[i];
         if (!arm_node || arm_node->type != AST_MATCH_ARM)
             return false;
@@ -799,26 +798,80 @@ static bool match_channel_recv_fast_supported(MatchExprNode *m) {
     return saw_value;
 }
 
+#define XI_LOWER_MATCH_EXIT_STACK_CAP 32
+#define XI_LOWER_MAX_MATCH_ARMS ((int) UINT16_MAX - 1)
+
+typedef struct LowerMatchExitList {
+    XiBlock **blocks;
+    XiValue **values;
+    int count;
+    int cap;
+} LowerMatchExitList;
+
+static bool lower_match_validate_arm_count(XiLower *l, int arm_count, int line) {
+    if (arm_count < 0 || arm_count > XI_LOWER_MAX_MATCH_ARMS) {
+        fprintf(stderr, "[LOWER] match arm count exceeds %d at line %d\n", XI_LOWER_MAX_MATCH_ARMS,
+                line);
+        l->had_error = true;
+        return false;
+    }
+    return true;
+}
+
+static bool lower_match_exit_list_init(XiLower *l, LowerMatchExitList *list, int arm_count,
+                                       XiBlock **stack_blocks, XiValue **stack_values) {
+    int cap = arm_count > 0 ? arm_count : 1;
+    list->count = 0;
+    list->cap = cap;
+    if (cap <= XI_LOWER_MATCH_EXIT_STACK_CAP) {
+        list->blocks = stack_blocks;
+        list->values = stack_values;
+        return true;
+    }
+
+    list->blocks =
+        (XiBlock **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiBlock *)));
+    list->values =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) ((size_t) cap * sizeof(XiValue *)));
+    if (!list->blocks || !list->values) {
+        l->had_error = true;
+        return false;
+    }
+    return true;
+}
+
+static bool lower_match_exit_list_add(XiLower *l, LowerMatchExitList *list, XiBlock *block,
+                                      XiValue *value, int line) {
+    if (list->count >= list->cap) {
+        fprintf(stderr, "[LOWER] match exit count exceeds %d at line %d\n", list->cap, line);
+        l->had_error = true;
+        return false;
+    }
+    list->blocks[list->count] = block;
+    list->values[list->count] = value;
+    list->count++;
+    return true;
+}
+
 static XiValue *lower_channel_recv_match_phi(XiLower *l, XiBlock *merge, struct XrType *result_type,
-                                             XiBlock **body_exits, XiValue **body_vals,
-                                             int exit_count) {
+                                             const LowerMatchExitList *exits) {
     xi_lower_braun_seal(l, merge);
     l->cur_block = (merge->npreds > 0) ? merge : NULL;
     if (!l->cur_block)
         return NULL;
 
     if (merge->npreds == 1)
-        return (exit_count > 0) ? body_vals[0] : NULL;
+        return (exits->count > 0) ? exits->values[0] : NULL;
 
     XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
     if (!phi)
         return NULL;
     for (uint16_t p = 0; p < merge->npreds; p++) {
         phi->value.args[p] = xi_const_null(l->func, merge, l->type_null);
-        for (int j = 0; j < exit_count; j++) {
-            if (merge->preds[p] == body_exits[j]) {
-                phi->value.args[p] =
-                    body_vals[j] ? body_vals[j] : xi_const_null(l->func, merge, l->type_null);
+        for (int j = 0; j < exits->count; j++) {
+            if (merge->preds[p] == exits->blocks[j]) {
+                phi->value.args[p] = exits->values[j] ? exits->values[j]
+                                                      : xi_const_null(l->func, merge, l->type_null);
                 break;
             }
         }
@@ -836,6 +889,8 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
         return false;
     if (!match_channel_recv_fast_supported(m))
         return false;
+    if (!lower_match_validate_arm_count(l, m->arm_count, node->line))
+        return true;
 
     XiValue *chan = xi_lower_expr(l, chan_expr);
     if (!chan || !l->cur_block)
@@ -861,12 +916,13 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiBlock *merge = xi_block_new(l->func);
-    XiBlock *body_exits[32];
-    XiValue *body_vals[32];
-    int exit_count = 0;
-    int max_arms = m->arm_count > 32 ? 32 : m->arm_count;
+    XiBlock *stack_body_exits[XI_LOWER_MATCH_EXIT_STACK_CAP];
+    XiValue *stack_body_vals[XI_LOWER_MATCH_EXIT_STACK_CAP];
+    LowerMatchExitList exits;
+    if (!lower_match_exit_list_init(l, &exits, m->arm_count, stack_body_exits, stack_body_vals))
+        return true;
 
-    for (int i = 0; i < max_arms; i++) {
+    for (int i = 0; i < m->arm_count; i++) {
         AstNode *arm_node = m->arms[i];
         MatchArmNode *arm = &arm_node->as.match_arm;
         AstNode *payload = NULL;
@@ -895,11 +951,8 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
                 val = xi_lower_expr(l, arm->body);
             }
             if (l->cur_block) {
-                if (exit_count < 32) {
-                    body_exits[exit_count] = l->cur_block;
-                    body_vals[exit_count] = val;
-                    exit_count++;
-                }
+                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
+                    return true;
                 xi_block_set_jump(l->cur_block, merge);
             }
             l->cur_block = NULL;
@@ -922,11 +975,8 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
             val = xi_lower_expr(l, arm->body);
         }
         if (l->cur_block) {
-            if (exit_count < 32) {
-                body_exits[exit_count] = l->cur_block;
-                body_vals[exit_count] = val;
-                exit_count++;
-            }
+            if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
+                return true;
             xi_block_set_jump(l->cur_block, merge);
         }
 
@@ -937,8 +987,7 @@ static bool lower_channel_recv_match(XiLower *l, AstNode *node, XiValue **out_va
         lower_match_no_match_throw(l, node->line);
 
     if (out_value)
-        *out_value =
-            lower_channel_recv_match_phi(l, merge, result_type, body_exits, body_vals, exit_count);
+        *out_value = lower_channel_recv_match_phi(l, merge, result_type, &exits);
     return true;
 }
 
@@ -955,13 +1004,15 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
     struct XrType *result_type = xi_lower_node_type(l, node);
     XiBlock *merge = xi_block_new(l->func);
     int arm_count = m->arm_count;
+    if (!lower_match_validate_arm_count(l, arm_count, node->line))
+        return NULL;
+    XiBlock *stack_body_exits[XI_LOWER_MATCH_EXIT_STACK_CAP];
+    XiValue *stack_body_vals[XI_LOWER_MATCH_EXIT_STACK_CAP];
+    LowerMatchExitList exits;
+    if (!lower_match_exit_list_init(l, &exits, arm_count, stack_body_exits, stack_body_vals))
+        return NULL;
 
-    XiBlock *body_exits[32];
-    XiValue *body_vals[32];
-    int exit_count = 0;
-    int max_arms = arm_count > 32 ? 32 : arm_count;
-
-    for (int i = 0; i < max_arms; i++) {
+    for (int i = 0; i < arm_count; i++) {
         AstNode *arm_node = m->arms[i];
         MatchArmNode *arm = &arm_node->as.match_arm;
 
@@ -1010,11 +1061,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
                 val = xi_lower_expr(l, arm->body);
             }
             if (l->cur_block) {
-                if (exit_count < 32) {
-                    body_exits[exit_count] = l->cur_block;
-                    body_vals[exit_count] = val;
-                    exit_count++;
-                }
+                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
+                    return NULL;
                 xi_block_set_jump(l->cur_block, merge);
             }
             l->cur_block = NULL;
@@ -1036,11 +1084,8 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
                 val = xi_lower_expr(l, arm->body);
             }
             if (l->cur_block) {
-                if (exit_count < 32) {
-                    body_exits[exit_count] = l->cur_block;
-                    body_vals[exit_count] = val;
-                    exit_count++;
-                }
+                if (!lower_match_exit_list_add(l, &exits, l->cur_block, val, node->line))
+                    return NULL;
                 xi_block_set_jump(l->cur_block, merge);
             }
 
@@ -1058,7 +1103,7 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         return NULL;
 
     if (merge->npreds == 1) {
-        return (exit_count > 0) ? body_vals[0] : NULL;
+        return (exits.count > 0) ? exits.values[0] : NULL;
     }
 
     XiPhi *phi = xi_phi_new(l->func, merge, result_type, merge->npreds);
@@ -1066,10 +1111,10 @@ XR_FUNC XiValue *xi_lower_match(XiLower *l, AstNode *node) {
         return NULL;
     for (uint16_t p = 0; p < merge->npreds; p++) {
         phi->value.args[p] = xi_const_null(l->func, merge, l->type_null);
-        for (int j = 0; j < exit_count; j++) {
-            if (merge->preds[p] == body_exits[j]) {
+        for (int j = 0; j < exits.count; j++) {
+            if (merge->preds[p] == exits.blocks[j]) {
                 phi->value.args[p] =
-                    body_vals[j] ? body_vals[j] : xi_const_null(l->func, merge, l->type_null);
+                    exits.values[j] ? exits.values[j] : xi_const_null(l->func, merge, l->type_null);
                 break;
             }
         }
