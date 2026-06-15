@@ -15,8 +15,8 @@
 #include "../runtime/value/xtype_names.h"
 
 /* Binary arithmetic / bitwise with instruction fusion for constant operands.
- * ADDI/SUBI/MULI use signed 8-bit immediate (int8_t, -128..127).
- * ADDK/SUBK/MULK/DIVK use constant pool index. */
+ * ADDI/SUBI/MULI use signed 16-bit immediate (int16_t, -32768..32767).
+ * ADDK/SUBK/MULK/DIVK/MODK use a 16-bit constant pool index. */
 XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XR_DCHECK(v->nargs >= 2, "xi_emit_arith: need 2 args");
     if (v->nargs < 2) {
@@ -27,19 +27,19 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiValue *lhs = v->args[0];
     XiValue *rhs = v->args[1];
 
-    /* Try fused immediate form: OP_ADDI/SUBI/MULI with signed 8-bit C */
+    /* Try fused immediate form: OP_ADDI/SUBI/MULI with signed 16-bit C */
     bool rhs_is_small_int = (rhs->op == XI_CONST && rhs->type && rhs->type->kind == XR_KIND_INT &&
-                             rhs->aux_int >= -128 && rhs->aux_int <= 127);
+                             rhs->aux_int >= -32768 && rhs->aux_int <= 32767);
     bool lhs_is_small_int = (lhs->op == XI_CONST && lhs->type && lhs->type->kind == XR_KIND_INT &&
-                             lhs->aux_int >= -128 && lhs->aux_int <= 127);
+                             lhs->aux_int >= -32768 && lhs->aux_int <= 32767);
 
     if (rhs_is_small_int && (v->op == XI_ADD || v->op == XI_SUB || v->op == XI_MUL)) {
         uint8_t b = reg_of(ctx, lhs);
         if (ctx->status != XI_EMIT_OK)
             return;
-        int8_t imm = (int8_t) rhs->aux_int;
+        int16_t imm = (int16_t) rhs->aux_int;
         OpCode fused = v->op == XI_ADD ? OP_ADDI : v->op == XI_SUB ? OP_SUBI : OP_MULI;
-        emit_inst(ctx, CREATE_ABC(fused, dst, b, (uint8_t) imm));
+        emit_inst(ctx, CREATE_ABC(fused, dst, b, (uint16_t) imm));
         return;
     }
 
@@ -48,14 +48,14 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         uint8_t b = reg_of(ctx, rhs);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_ADDI, dst, b, (uint8_t) (int8_t) lhs->aux_int));
+        emit_inst(ctx, CREATE_ABC(OP_ADDI, dst, b, (uint16_t) (int16_t) lhs->aux_int));
         return;
     }
     if (lhs_is_small_int && v->op == XI_MUL) {
         uint8_t b = reg_of(ctx, rhs);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_MULI, dst, b, (uint8_t) (int8_t) lhs->aux_int));
+        emit_inst(ctx, CREATE_ABC(OP_MULI, dst, b, (uint16_t) (int16_t) lhs->aux_int));
         return;
     }
 
@@ -80,12 +80,15 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         }
         if (ctx->status != XI_EMIT_OK)
             return;
+        uint16_t karg;
+        if (!xi_emit_const_index_to_c(ctx, ki, &karg))
+            return;
         OpCode kop = v->op == XI_ADD   ? OP_ADDK
                      : v->op == XI_SUB ? OP_SUBK
                      : v->op == XI_MUL ? OP_MULK
                      : v->op == XI_DIV ? OP_DIVK
                                        : OP_MODK;
-        emit_inst(ctx, CREATE_ABC(kop, dst, b, (uint8_t) ki));
+        emit_inst(ctx, CREATE_ABC(kop, dst, b, karg));
         return;
     }
     /* Commutative constant-pool: swap lhs constant for ADD/MUL */
@@ -103,8 +106,11 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         }
         if (ctx->status != XI_EMIT_OK)
             return;
+        uint16_t karg;
+        if (!xi_emit_const_index_to_c(ctx, ki, &karg))
+            return;
         OpCode kop = v->op == XI_ADD ? OP_ADDK : OP_MULK;
-        emit_inst(ctx, CREATE_ABC(kop, dst, b, (uint8_t) ki));
+        emit_inst(ctx, CREATE_ABC(kop, dst, b, karg));
         return;
     }
 

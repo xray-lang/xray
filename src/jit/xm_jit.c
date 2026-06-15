@@ -312,7 +312,7 @@ static XrProto **jit_build_shared_protos(XrProto *proto, int *out_nshared) {
         return NULL;
 
     XrProto *parent = proto->enclosing;
-    const uint32_t *bc = PROTO_CODE_BASE(parent);
+    const XrInstruction *bc = PROTO_CODE_BASE(parent);
     int nbc = PROTO_CODE_COUNT(parent);
     if (nbc < 2)
         return NULL;
@@ -516,12 +516,12 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     // set when the parent's builder emits CALL_KNOWN, enabling direct
     // JIT-to-JIT calls instead of expensive VM re-entry via xr_vm_call_closure.
     if (!is_recompile) {
-        const uint32_t *bc = PROTO_CODE_BASE(proto);
+        const XrInstruction *bc = PROTO_CODE_BASE(proto);
         int nbc = PROTO_CODE_COUNT(proto);
         for (int i = 0; i < nbc; i++) {
-            if ((bc[i] & 0xFF) == OP_CLOSURE) {
-                uint16_t bx = GETARG_Bx(bc[i]);
-                if (bx < PROTO_PROTO_COUNT(proto)) {
+            if (GET_OPCODE(bc[i]) == OP_CLOSURE) {
+                uint32_t bx = GETARG_Bx(bc[i]);
+                if (bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
                     XrProto *child = PROTO_PROTO(proto, bx);
                     if (child && !child->jit_entry) {
                         xm_jit_try_compile(jit, child);

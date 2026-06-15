@@ -242,11 +242,9 @@ XrJitResult xr_jit_chan_new(XrCoroutine *coro, int64_t extra_arg) {
         buffer_size = 0;
         if (XR_IS_INT(cap_val)) {
             int64_t cap = XR_TO_INT(cap_val);
-            if (cap > 0 && cap <= MAXARG_Bx)
+            if (cap > 0 && (uint64_t) cap <= MAXARG_Bx)
                 buffer_size = (uint32_t) cap;
         }
-    } else if (buffer_size > MAXARG_Bx) {
-        buffer_size = 0;
     }
     XrayIsolate *isolate = coro->isolate;
     if (!isolate)

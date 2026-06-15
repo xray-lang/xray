@@ -8,32 +8,32 @@
  * xchunk.h - Bytecode chunk for register-based VM
  *
  * KEY CONCEPT:
- *   32-bit instruction encoding with multiple formats.
- *   Supports up to 256 opcodes, 256 registers.
+ *   64-bit instruction encoding with multiple formats.
+ *   Supports up to 65536 opcodes/register operands and 32-bit Bx payloads.
  *
  * INSTRUCTION FORMATS:
- *    31           23           15            7    0
- *    +------------+------------+------------+----+
- *    |      C     |      B     |      A     | OP | iABC
- *    +------------+------------+------------+----+
- *    |            Bx           |      A     | OP | iABx
- *    +------------+------------+------------+----+
- *    |            sBx          |      A     | OP | iAsBx
- *    +------------+------------+------------+----+
- *    |            Ax                        | OP | iAx
- *    +------------+------------+------------+----+
- *    |            sJ                        | OP | isJ
- *    +------------+------------+------------+----+
+ *    63           47           31           15            0
+ *    +------------+------------+------------+-------------+
+ *    |      C     |      B     |      A     |     OP      | iABC
+ *    +------------+------------+------------+-------------+
+ *    |            Bx           |      A     |     OP      | iABx
+ *    +------------+------------+------------+-------------+
+ *    |            sBx          |      A     |     OP      | iAsBx
+ *    +------------+------------+------------+-------------+
+ *    |                  Ax                  |     OP      | iAx
+ *    +------------+------------+------------+-------------+
+ *    |                  sJ                  |     OP      | isJ
+ *    +------------+------------+------------+-------------+
  *
  * FIELD SIZES:
- *   OP:  8-bit  (256 opcodes)
- *   A:   8-bit  (256 registers)
- *   B:   8-bit
- *   C:   8-bit
- *   Bx:  16-bit (65536 constants)
- *   sBx: 16-bit signed (-32768 to 32767)
- *   Ax:  24-bit
- *   sJ:  24-bit signed (jump offset)
+ *   OP:  16-bit (65536 opcodes)
+ *   A:   16-bit
+ *   B:   16-bit
+ *   C:   16-bit
+ *   Bx:  32-bit
+ *   sBx: 32-bit biased signed (-2147483647 to 2147483647)
+ *   Ax:  48-bit
+ *   sJ:  48-bit biased signed jump offset
  */
 
 #ifndef XCHUNK_H
@@ -49,26 +49,31 @@ typedef struct XrString XrString;
 struct XrICMethodTable;
 struct XrICFieldTable;
 
-/* ========== 32-bit Instruction Type ========== */
+/* ========== 64-bit Instruction Type ========== */
 
-typedef uint32_t XrInstruction;
+typedef uint64_t XrInstruction;
 
 /* ========== Instruction Format ========== */
 
-#define SIZE_OP 8
-#define SIZE_A 8
-#define SIZE_B 8
-#define SIZE_C 8
-#define SIZE_Bx 16
-#define SIZE_Ax 24
+#define SIZE_OP 16
+#define SIZE_A 16
+#define SIZE_B 16
+#define SIZE_C 16
+#define SIZE_Bx 32
+#define SIZE_Ax 48
 
-#define MAXARG_A ((1 << SIZE_A) - 1)
-#define MAXARG_B ((1 << SIZE_B) - 1)
-#define MAXARG_C ((1 << SIZE_C) - 1)
-#define MAXARG_Bx ((1 << SIZE_Bx) - 1)
-#define MAXARG_sBx (MAXARG_Bx >> 1)
-#define MAXARG_Ax ((1 << SIZE_Ax) - 1)
-#define MAXARG_sJ ((1 << (SIZE_Ax - 1)) - 1)
+#define XR_BC_OP_MASK 0xFFFFull
+#define XR_BC_ARG_MASK 0xFFFFull
+#define XR_BC_BX_MASK 0xFFFFFFFFull
+#define XR_BC_AX_MASK 0xFFFFFFFFFFFFull
+
+#define MAXARG_A ((uint32_t) XR_BC_ARG_MASK)
+#define MAXARG_B ((uint32_t) XR_BC_ARG_MASK)
+#define MAXARG_C ((uint32_t) XR_BC_ARG_MASK)
+#define MAXARG_Bx ((uint64_t) XR_BC_BX_MASK)
+#define MAXARG_sBx ((int32_t) (MAXARG_Bx >> 1))
+#define MAXARG_Ax ((uint64_t) XR_BC_AX_MASK)
+#define MAXARG_sJ ((int64_t) ((1ull << (SIZE_Ax - 1)) - 1ull))
 
 // OP_LOADI immediate range (sBx format, bias=MAXARG_sBx)
 // Representable signed range: [-MAXARG_sBx, MAXARG_sBx]
@@ -92,9 +97,9 @@ typedef enum {
 #undef _XR_OPCODE_ENUM
 } OpCode;
 
-// Opcode count (instruction encoding uses 8-bit opcode field, max 256)
+// Opcode count (instruction encoding uses 16-bit opcode field, max 65536)
 #define NUM_OPCODES (OP_NOP + 1)
-_Static_assert(NUM_OPCODES <= 256, "Opcode count exceeds 8-bit encoding limit (max 256)");
+_Static_assert(NUM_OPCODES <= 65536, "Opcode count exceeds 16-bit encoding limit (max 65536)");
 
 /* ========== Sub-opcode Constants ========== */
 
@@ -120,42 +125,55 @@ _Static_assert(NUM_OPCODES <= 256, "Opcode count exceeds 8-bit encoding limit (m
 #define JSON_INIT_NULL 2  // C ignored, value = null
 
 /* ========== Instruction Encode/Decode Macros ========== */
-#define GET_OPCODE(i) ((OpCode) ((i) & 0xFFu))
+#define GET_OPCODE(i) ((OpCode) ((i) & XR_BC_OP_MASK))
 
 // Create instruction
-// Note: Use unsigned constants (0xFFu, 0xFFFFu) to avoid signed integer overflow
+// Note: Use 64-bit unsigned constants to avoid signed integer overflow
 // when left-shifting. This is important for UBSan compliance.
 #define CREATE_ABC(op, a, b, c)                                                                    \
-    ((XrInstruction) (((op) & 0xFFu) | (((unsigned) (a) & 0xFFu) << 8) |                           \
-                      (((unsigned) (b) & 0xFFu) << 16) | (((unsigned) (c) & 0xFFu) << 24)))
+    ((XrInstruction) (((uint64_t) (op) & XR_BC_OP_MASK) |                                          \
+                      (((uint64_t) (a) & XR_BC_ARG_MASK) << 16) |                                  \
+                      (((uint64_t) (b) & XR_BC_ARG_MASK) << 32) |                                  \
+                      (((uint64_t) (c) & XR_BC_ARG_MASK) << 48)))
 
 #define CREATE_ABx(op, a, bx)                                                                      \
-    ((XrInstruction) (((op) & 0xFFu) | (((unsigned) (a) & 0xFFu) << 8) |                           \
-                      (((unsigned) (bx) & 0xFFFFu) << 16)))
+    ((XrInstruction) (((uint64_t) (op) & XR_BC_OP_MASK) |                                          \
+                      (((uint64_t) (a) & XR_BC_ARG_MASK) << 16) |                                  \
+                      (((uint64_t) (bx) & XR_BC_BX_MASK) << 32)))
 
-#define CREATE_AsBx(op, a, sbx) CREATE_ABx(op, a, (sbx) + MAXARG_sBx)
+#define CREATE_AsBx(op, a, sbx) CREATE_ABx(op, a, (uint64_t) ((int64_t) (sbx) + MAXARG_sBx))
 
-#define CREATE_Ax(op, ax) ((XrInstruction) (((op) & 0xFFu) | (((unsigned) (ax) & 0xFFFFFFu) << 8)))
+#define CREATE_Ax(op, ax)                                                                          \
+    ((XrInstruction) (((uint64_t) (op) & XR_BC_OP_MASK) |                                          \
+                      (((uint64_t) (ax) & XR_BC_AX_MASK) << 16)))
 
-#define CREATE_sJ(op, sj) CREATE_Ax(op, (sj) + MAXARG_sJ)
+#define CREATE_sJ(op, sj) CREATE_Ax(op, (uint64_t) ((int64_t) (sj) + MAXARG_sJ))
 
 // Extract arguments
-#define GETARG_A(i) (((i) >> 8) & 0xFF)
-#define GETARG_B(i) (((i) >> 16) & 0xFF)
-#define GETARG_C(i) (((i) >> 24) & 0xFF)
-#define GETARG_sB(i) ((int8_t) (GETARG_B(i)))  // signed B
-#define GETARG_sC(i) ((int8_t) (GETARG_C(i)))  // signed C
-#define GETARG_Bx(i) (((i) >> 16) & 0xFFFF)
-#define GETARG_sBx(i) ((int) (GETARG_Bx(i)) - MAXARG_sBx)
-#define GETARG_Ax(i) (((i) >> 8) & 0xFFFFFF)
-#define GETARG_sJ(i) ((int) (GETARG_Ax(i)) - MAXARG_sJ)
+#define GETARG_A(i) ((uint32_t) (((i) >> 16) & XR_BC_ARG_MASK))
+#define GETARG_B(i) ((uint32_t) (((i) >> 32) & XR_BC_ARG_MASK))
+#define GETARG_C(i) ((uint32_t) (((i) >> 48) & XR_BC_ARG_MASK))
+#define GETARG_sB(i) ((int16_t) (GETARG_B(i)))  // signed B
+#define GETARG_sC(i) ((int16_t) (GETARG_C(i)))  // signed C
+#define GETARG_Bx(i) ((uint32_t) (((i) >> 32) & XR_BC_BX_MASK))
+#define GETARG_sBx(i) ((int64_t) GETARG_Bx(i) - (int64_t) MAXARG_sBx)
+#define GETARG_Ax(i) (((uint64_t) ((i) >> 16)) & XR_BC_AX_MASK)
+#define GETARG_sJ(i) ((int64_t) GETARG_Ax(i) - (int64_t) MAXARG_sJ)
 
 // Set arguments (modify instruction)
-// Note: Use unsigned constants to avoid signed integer overflow
-#define SETARG_A(i, v) ((i) = ((i) & ~(0xFFu << 8)) | (((unsigned) (v) & 0xFFu) << 8))
-#define SETARG_B(i, v) ((i) = ((i) & ~(0xFFu << 16)) | (((unsigned) (v) & 0xFFu) << 16))
-#define SETARG_C(i, v) ((i) = ((i) & ~(0xFFu << 24)) | (((unsigned) (v) & 0xFFu) << 24))
-#define SETARG_Bx(i, v) ((i) = ((i) & ~(0xFFFFu << 16)) | (((unsigned) (v) & 0xFFFFu) << 16))
+// Note: Use unsigned constants to avoid signed integer overflow.
+#define SETARG_A(i, v)                                                                             \
+    ((i) = ((i) & ~(XrInstruction) (XR_BC_ARG_MASK << 16)) |                                       \
+           (XrInstruction) (((uint64_t) (v) & XR_BC_ARG_MASK) << 16))
+#define SETARG_B(i, v)                                                                             \
+    ((i) = ((i) & ~(XrInstruction) (XR_BC_ARG_MASK << 32)) |                                       \
+           (XrInstruction) (((uint64_t) (v) & XR_BC_ARG_MASK) << 32))
+#define SETARG_C(i, v)                                                                             \
+    ((i) = ((i) & ~(XrInstruction) (XR_BC_ARG_MASK << 48)) |                                       \
+           (XrInstruction) (((uint64_t) (v) & XR_BC_ARG_MASK) << 48))
+#define SETARG_Bx(i, v)                                                                            \
+    ((i) = ((i) & ~(XrInstruction) (XR_BC_BX_MASK << 32)) |                                        \
+           (XrInstruction) (((uint64_t) (v) & XR_BC_BX_MASK) << 32))
 
 /* ========== Constant Table ========== */
 
@@ -212,8 +230,8 @@ typedef struct XrProto {
     const char *source_file;  // source file path
 
     /*
-     * Per-function symbol table: maps local index (0-254) to global SymbolId.
-     * Instructions encode local indices in 8-bit B/C fields.
+     * Per-function symbol table: maps local index to global SymbolId.
+     * Instructions encode local indices in 16-bit B/C fields.
      * VM dereferences: global_sym = proto->symbols[local_idx]
      *
      * WHY THIS DESIGN:

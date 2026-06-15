@@ -269,7 +269,7 @@ XR_FUNC void xi_emit_chan_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t elem_tid = (uint8_t) v->aux_int;
     if (elem_tid == 0 && v->nargs >= 1 && v->args[0]->op == XI_CONST) {
         int64_t cap = v->args[0]->aux_int;
-        if (cap >= 0 && cap <= MAXARG_Bx) {
+        if (cap >= 0 && (uint64_t) cap <= MAXARG_Bx) {
             emit_inst(ctx, CREATE_ABx(OP_CHAN_NEW, dst, (int) cap));
             return;
         }
@@ -666,5 +666,11 @@ XR_FUNC void xi_emit_regex_compile(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, (uint8_t) ki_pat, (uint8_t) ki_flg));
+    uint16_t pat_arg;
+    uint16_t flg_arg;
+    if (!xi_emit_const_index_to_c(ctx, ki_pat, &pat_arg) ||
+        !xi_emit_const_index_to_c(ctx, ki_flg, &flg_arg))
+        return;
+
+    emit_inst(ctx, CREATE_ABC(OP_REGEX_COMPILE, dst, pat_arg, flg_arg));
 }

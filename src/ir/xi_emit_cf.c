@@ -445,20 +445,20 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                     b = t;
                 }
 
-                /* Try immediate form (OP_LTI/LEI/EQI) when RHS is small int */
+                /* Try immediate form (OP_LTI/LEI/EQI) when RHS fits signed 16-bit. */
                 bool is_imm = false;
                 XiValue *imm_arg = swap ? lhs : rhs; /* the "B" operand */
                 if (imm_arg->op == XI_CONST && imm_arg->type &&
-                    imm_arg->type->kind == XR_KIND_INT && imm_arg->aux_int >= -128 &&
-                    imm_arg->aux_int <= 127 &&
+                    imm_arg->type->kind == XR_KIND_INT && imm_arg->aux_int >= -32768 &&
+                    imm_arg->aux_int <= 32767 &&
                     (branch_op == OP_LT || branch_op == OP_LE || branch_op == OP_EQ)) {
                     OpCode imm_op = branch_op == OP_LT   ? OP_LTI
                                     : branch_op == OP_LE ? OP_LEI
                                                          : OP_EQI;
                     /* Use already cell-unwrapped 'a' register (post-swap). */
                     uint8_t ra = a;
-                    int8_t imm = (int8_t) imm_arg->aux_int;
-                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint8_t) imm, (uint8_t) k));
+                    int16_t imm = (int16_t) imm_arg->aux_int;
+                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint16_t) imm, (uint8_t) k));
                     is_imm = true;
                 }
 

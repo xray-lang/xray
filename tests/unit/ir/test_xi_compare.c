@@ -2163,7 +2163,7 @@ TEST(fusion_muli_commutative) {
 
 TEST(fusion_addk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x + 1000 }\nprint(f(10))",
+        .source = "fn f(x: int) -> int { return x + 40000 }\nprint(f(10))",
         .label = "ADDK: x + large_const",
         .expect_op = OP_ADDK,
         .check_exec = true,
@@ -2172,7 +2172,7 @@ TEST(fusion_addk) {
 
 TEST(fusion_addk_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 1000 + x }\nprint(f(10))",
+        .source = "fn f(x: int) -> int { return 40000 + x }\nprint(f(10))",
         .label = "ADDK commutative: large_const + x",
         .expect_op = OP_ADDK,
         .check_exec = true,
@@ -2181,7 +2181,7 @@ TEST(fusion_addk_commutative) {
 
 TEST(fusion_subk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x - 500 }\nprint(f(2000))",
+        .source = "fn f(x: int) -> int { return x - 40000 }\nprint(f(50000))",
         .label = "SUBK: x - large_const",
         .expect_op = OP_SUBK,
         .check_exec = true,
@@ -2190,7 +2190,7 @@ TEST(fusion_subk) {
 
 TEST(fusion_mulk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x * 1000 }\nprint(f(3))",
+        .source = "fn f(x: int) -> int { return x * 40000 }\nprint(f(3))",
         .label = "MULK: x * large_const",
         .expect_op = OP_MULK,
         .check_exec = true,
@@ -2199,7 +2199,7 @@ TEST(fusion_mulk) {
 
 TEST(fusion_mulk_commutative) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return 1000 * x }\nprint(f(3))",
+        .source = "fn f(x: int) -> int { return 40000 * x }\nprint(f(3))",
         .label = "MULK commutative: large_const * x",
         .expect_op = OP_MULK,
         .check_exec = true,
@@ -2208,7 +2208,7 @@ TEST(fusion_mulk_commutative) {
 
 TEST(fusion_divk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x / 500 }\nprint(f(5000))",
+        .source = "fn f(x: int) -> int { return x / 40000 }\nprint(f(80000))",
         .label = "DIVK: x / large_const",
         .expect_op = OP_DIVK,
         .check_exec = true,
@@ -2217,7 +2217,7 @@ TEST(fusion_divk) {
 
 TEST(fusion_modk) {
     run_fusion((FusionSpec) {
-        .source = "fn f(x: int) -> int { return x % 1000 }\nprint(f(12345))",
+        .source = "fn f(x: int) -> int { return x % 40000 }\nprint(f(123456))",
         .label = "MODK: x % large_const",
         .expect_op = OP_MODK,
         .check_exec = true,

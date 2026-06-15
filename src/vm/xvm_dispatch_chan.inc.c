@@ -46,7 +46,7 @@ vmcase(OP_CHAN_NEW_CAP) {
     uint32_t buffer_size = 0;
     if (XR_IS_INT(R(b))) {
         int64_t v = XR_TO_INT(R(b));
-        if (v > 0 && v <= MAXARG_Bx)
+        if (v > 0 && (uint64_t) v <= MAXARG_Bx)
             buffer_size = (uint32_t) v;
     }
 
@@ -74,7 +74,7 @@ vmcase(OP_CHAN_NEW_NAMED) {
     uint32_t buf_size = 0;
     if (XR_IS_INT(R(b))) {
         int64_t v = XR_TO_INT(R(b));
-        if (v > 0 && v <= MAXARG_Bx)
+        if (v > 0 && (uint64_t) v <= MAXARG_Bx)
             buf_size = (uint32_t) v;
     }
 

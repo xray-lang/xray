@@ -94,7 +94,7 @@ static bool bc_put_u32(BcWriter *w, uint32_t v) {
     return true;
 }
 
-static bool bc_put_i64(BcWriter *w, int64_t v) {
+static bool bc_put_u64(BcWriter *w, uint64_t v) {
     if (!bc_writer_ensure(w, 8))
         return false;
     for (int i = 0; i < 8; i++) {
@@ -103,13 +103,17 @@ static bool bc_put_i64(BcWriter *w, int64_t v) {
     return true;
 }
 
+static bool bc_put_i64(BcWriter *w, int64_t v) {
+    return bc_put_u64(w, (uint64_t) v);
+}
+
 static bool bc_put_f64(BcWriter *w, double v) {
     union {
         double d;
         uint64_t u;
     } u;
     u.d = v;
-    return bc_put_i64(w, (int64_t) u.u);
+    return bc_put_u64(w, u.u);
 }
 
 static bool bc_put_bytes(BcWriter *w, const void *data, size_t len) {
@@ -183,24 +187,28 @@ static uint32_t bc_get_u32(BcReader *r) {
     return v;
 }
 
-static int64_t bc_get_i64(BcReader *r) {
+static uint64_t bc_get_u64(BcReader *r) {
     if (!bc_has_bytes(r, 8)) {
         r->error = XR_BC_ERR_TRUNCATED;
         return 0;
     }
-    int64_t v = 0;
+    uint64_t v = 0;
     for (int i = 0; i < 8; i++) {
-        v |= ((int64_t) r->buf[r->pos++]) << (i * 8);
+        v |= ((uint64_t) r->buf[r->pos++]) << (i * 8);
     }
     return v;
+}
+
+static int64_t bc_get_i64(BcReader *r) {
+    return (int64_t) bc_get_u64(r);
 }
 
 static double bc_get_f64(BcReader *r) {
     union {
         double d;
-        int64_t i;
+        uint64_t u;
     } u;
-    u.i = bc_get_i64(r);
+    u.u = bc_get_u64(r);
     return u.d;
 }
 
@@ -426,7 +434,7 @@ static bool bc_write_proto(BcWriter *w, XrProto *proto) {
         return false;
     for (uint32_t i = 0; i < code_count; i++) {
         XrInstruction inst = PROTO_CODE(proto, i);
-        if (!bc_put_u32(w, inst))
+        if (!bc_put_u64(w, inst))
             return false;
     }
 
@@ -541,7 +549,7 @@ static XrProto *bc_read_proto_depth(BcReader *r, int depth) {
         goto fail;
     xr_dynarray_init(&proto->code, sizeof(XrInstruction));
     for (uint32_t i = 0; i < code_count; i++) {
-        XrInstruction inst = bc_get_u32(r);
+        XrInstruction inst = bc_get_u64(r);
         if (r->error != XR_BC_OK)
             goto fail;
         DYNARRAY_ADD(&proto->code, inst, XrInstruction);
