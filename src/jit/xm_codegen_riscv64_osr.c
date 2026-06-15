@@ -95,19 +95,13 @@ static void rv64_osr_materialize_const(Rv64CodegenCtx *ctx, XmIns *def, int8_t p
 XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
     if (ctx->nosr_snap == 0)
         return;
-    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
-    if (!result->osr_entries)
-        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
-        XmOsrEntry *entry = &result->osr_entries[result->nosr];
 
-        entry->block_id = snap_block_id;
+        uint32_t bc_offset = 0;
         if (snap_block_id < ctx->func->nblk)
-            entry->bc_offset = ctx->func->blocks[snap_block_id]->bc_offset;
-        else
-            entry->bc_offset = 0;
-        entry->entry_offset = rv64_buf_offset(&ctx->buf);
+            bc_offset = ctx->func->blocks[snap_block_id]->bc_offset;
+        uint32_t entry_offset = rv64_buf_offset(&ctx->buf);
 
         /* === Standard prologue (mirrors rv64_emit_prologue) === */
 
@@ -236,7 +230,10 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
         int32_t byte_offset = (int32_t) (target_idx - jmp_idx) * 4;
         rv64_buf_emit(&ctx->buf, rv64_j(byte_offset));
 
-        result->nosr++;
+        RV64_CODEGEN_CHECK(
+            ctx,
+            xm_codegen_result_add_osr_safepoint(result, snap_block_id, bc_offset, entry_offset),
+            "failed to allocate OSR safepoint");
     }
 }
 

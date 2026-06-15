@@ -290,8 +290,8 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
         }
 
         /* Pass 2: populate slots from deduplicated entries (no slot ceiling —
-         * the runtime deopt table allocates slots per entry, see
-         * a64_build_runtime_deopt_table). */
+         * runtime deopt safepoints allocate slots per entry, see
+         * a64_build_deopt_safepoints). */
         XmDeoptSlot *slots =
             (XmDeoptSlot *) xr_calloc(live_count ? live_count : 1, sizeof(XmDeoptSlot));
         if (slots) {

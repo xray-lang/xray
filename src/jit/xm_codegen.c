@@ -1424,7 +1424,17 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     XR_DCHECK(func != NULL, "xm_codegen_arm64: func is NULL");
     XR_DCHECK(alloc != NULL, "xm_codegen_arm64: alloc is NULL");
     XmCodegenResult result = {
-        .code = NULL, .code_size = 0, .success = false, .error = NULL, .nosr = 0};
+        .code = NULL,
+        .code_size = 0,
+        .success = false,
+        .error = NULL,
+        .safepoints = NULL,
+        .nsafepoints = 0,
+        .safepoint_cap = 0,
+        .stack_map = NULL,
+        .fast_entry_offset = 0,
+        .resume_entry_offset = 0,
+    };
 
     // Validate consistency between hardcoded constants and XmTarget
     XR_DCHECK(xm_current_target != NULL, "assertion failed");
@@ -1599,8 +1609,8 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     // Patch all branches
     a64_patch_branches(&ctx);
 
-    // Build runtime deopt table from Xm deopt infos + regalloc state
-    a64_build_runtime_deopt_table(&ctx, &result);
+    // Build runtime deopt safepoints from Xm deopt infos + regalloc state
+    a64_build_deopt_safepoints(&ctx, &result);
 
     // Patch frame size: JIT_FRAME_BASE + spill area, 16-byte aligned
     uint32_t frame_size = (JIT_FRAME_BASE + ctx.xra->nspill * 8 + 15) & ~(uint32_t) 15;
@@ -1658,12 +1668,14 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     // Convert instruction index to byte offset (ARM64: 4 bytes/insn)
     result.fast_entry_offset = ctx.fast_entry_offset * 4;
     result.stack_map = build_stack_map_table(&ctx, frame_size);
-    result.nsuspend = ctx.nsuspend;
-    for (uint32_t i = 0; i < result.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
-        result.suspend_entries[i].cont_offset = ctx.suspend_cont_offsets[i] * 4;
-        result.suspend_entries[i].smap_id = ctx.suspend_smap_ids[i];
-        result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
-        result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
+    for (uint32_t i = 0; i < ctx.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        if (!xm_codegen_result_add_suspend_safepoint(
+                &result, (uint16_t) i, ctx.suspend_cont_offsets[i] * 4, ctx.suspend_smap_ids[i],
+                ctx.suspend_result_bc_slots[i], ctx.suspend_result_tag_offs[i])) {
+            ctx.had_error = true;
+            result.error = "failed to allocate suspend safepoint";
+            break;
+        }
     }
     if (!xm_verify_metadata_or_fail(&result, 4, "cg-arm64") ||
         !xm_verify_post_call_records(&ctx.post_call_tracker, "cg-arm64")) {

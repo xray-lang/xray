@@ -99,19 +99,13 @@ static void x64_osr_materialize_const(X64CodegenCtx *ctx, XmIns *def, int8_t phy
 XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
     if (ctx->nosr_snap == 0)
         return;
-    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
-    if (!result->osr_entries)
-        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
-        XmOsrEntry *entry = &result->osr_entries[result->nosr];
 
-        entry->block_id = snap_block_id;
+        uint32_t bc_offset = 0;
         if (snap_block_id < ctx->func->nblk)
-            entry->bc_offset = ctx->func->blocks[snap_block_id]->bc_offset;
-        else
-            entry->bc_offset = 0;
-        entry->entry_offset = ctx->buf.pos;
+            bc_offset = ctx->func->blocks[snap_block_id]->bc_offset;
+        uint32_t entry_offset = ctx->buf.pos;
 
         /* === Standard prologue (mirrors x64_emit_fast_prologue) === */
         x64_push_r(&ctx->buf, X64_RBP);
@@ -235,7 +229,10 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
         uint32_t emit_pos = ctx->buf.pos - 4;
         x64_patch_rel32(&ctx->buf, emit_pos, target);
 
-        result->nosr++;
+        CODEGEN_CHECK(
+            ctx,
+            xm_codegen_result_add_osr_safepoint(result, snap_block_id, bc_offset, entry_offset),
+            "failed to allocate OSR safepoint");
     }
 }
 

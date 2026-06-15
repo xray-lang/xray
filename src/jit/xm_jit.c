@@ -101,29 +101,31 @@ XR_FUNC void xm_jit_install_to_proto(XrProto *proto, const XmInstallData *data) 
     /* Step 1: free old metadata (safe even on first compile — fields are NULL) */
     if (proto->stack_map)
         xr_free(proto->stack_map);
-    if (proto->deopt_table)
-        xr_free(proto->deopt_table);
-    if (proto->osr_entries)
-        xr_free(proto->osr_entries);
+    xm_safepoints_free((XmSafepoint *) proto->jit_safepoints, proto->nsafepoints);
 
     /* Step 2: write all metadata BEFORE jit_entry */
     proto->stack_map = data->stack_map;
-    proto->deopt_table = data->deopt_table;
-    proto->ndeopt = data->ndeopt;
-    proto->osr_entries = data->osr_entries;
-    proto->nosr = data->nosr;
+    proto->jit_safepoints = data->safepoints;
+    proto->nsafepoints = data->nsafepoints;
     proto->jit_opt_level = data->opt_level;
     proto->jit_fast_entry = data->fast_entry;
     proto->jit_resume_entry = data->resume_entry;
 
     /* Step 3: release fence — all stores above become visible before jit_entry.
      * Without this, ARM64 weak memory order allows reordering such that
-     * another core sees jit_entry != NULL but stale metadata (NULL deopt_table,
+     * another core sees jit_entry != NULL but stale metadata (NULL safepoints,
      * wrong fast_entry, etc.), causing SIGSEGV on deopt or wrong entry jump. */
     atomic_thread_fence(memory_order_release);
 
     /* Step 4: publish — readers check jit_entry to decide whether JIT is ready */
     proto->jit_entry = data->code;
+}
+
+XR_FUNC bool xm_jit_proto_has_osr(const XrProto *proto) {
+    if (!proto || !proto->jit_safepoints || proto->nsafepoints == 0)
+        return false;
+    return xm_safepoint_count_kind((const XmSafepoint *) proto->jit_safepoints, proto->nsafepoints,
+                                   XM_SAFEPOINT_OSR) > 0;
 }
 
 /* ========== JIT State Management ========== */
@@ -573,7 +575,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         func = xi_to_xm_lower((XiFunc *) proto->xi_func, proto, (XiSlotMap *) proto->xi_slot_map,
                               ic_ptr, jit->isolate);
     }
-    /* Release IC snapshots (they were copied into deopt tables) */
+    /* Release IC snapshots (they were copied into deopt safepoints) */
     if (ic_snap.ic_fields)
         xr_ic_field_table_free(ic_snap.ic_fields);
     if (ic_snap.ic_methods)
@@ -634,8 +636,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         xr_log_warning("jit", "codegen failed for %s: %s",
                        proto->name ? XR_STRING_CHARS(proto->name) : "?",
                        res.error ? res.error : "unknown");
-        xr_free(res.deopt_entries);  // built before success flag; NULL on early fail
-        xr_free(res.osr_entries);
+        xm_safepoints_free(res.safepoints, res.nsafepoints);
         xm_func_destroy(func);
         xr_free(shared_protos);
         return false;
@@ -646,16 +647,12 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         xm_code_alloc_retire(&jit->code_alloc, proto->jit_entry, res.code_size);
     }
 
-    // Transfer ownership of the deopt-table block to the proto. The builder
-    // packs the entry array + every entry's slots into one allocation (each
-    // entry->slots points inside it), so it must be moved, not shallow-copied.
-    XmRtDeoptEntry *deopt_copy = res.deopt_entries;
-    res.deopt_entries = NULL;
-
-    // Transfer ownership of the OSR entry array (heap-allocated by codegen,
-    // sized to the loop-header count). POD entries, single allocation.
-    XmOsrEntry *osr_copy = res.osr_entries;
-    res.osr_entries = NULL;
+    // Transfer ownership of the unified safepoint table to the proto.
+    XmSafepoint *safepoints = res.safepoints;
+    uint32_t nsafepoints = res.nsafepoints;
+    res.safepoints = NULL;
+    res.nsafepoints = 0;
+    res.safepoint_cap = 0;
 
     // Install all metadata + jit_entry via unified helper (correct write order
     // with release fence — see xm_jit_install_to_proto for the contract).
@@ -666,10 +663,8 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
             res.resume_entry_offset ? (char *) res.code + res.resume_entry_offset : NULL,
         .opt_level = (uint8_t) opt,
         .stack_map = res.stack_map,
-        .deopt_table = deopt_copy,
-        .ndeopt = deopt_copy ? res.ndeopt : 0,
-        .osr_entries = osr_copy,
-        .nosr = osr_copy ? res.nosr : 0,
+        .safepoints = safepoints,
+        .nsafepoints = nsafepoints,
     };
     xm_jit_install_to_proto(proto, &idata);
     if (!is_recompile)
@@ -726,7 +721,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
                        func->nvreg, func->nblk);
     }
 
-    // NOTE: deopt_table and osr_entries are now installed by
+    // NOTE: safepoints are now installed by
     // xm_jit_install_to_proto() above, with correct memory ordering.
 
     // Do NOT call xr_type_new_int/float/bool here — the type pool may be freed.
@@ -1001,8 +996,12 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
             if (did == UINT32_MAX)
                 did = xr_coro_jit_state(coro)->scratch->invoke_deopt_id;
             uint32_t bpc = UINT32_MAX;
-            if (dp && dp->deopt_table && did < dp->ndeopt)
-                bpc = ((XmRtDeoptEntry *) dp->deopt_table)[did].bc_pc;
+            const XmSafepoint *dsp =
+                dp ? xm_safepoint_find_deopt((const XmSafepoint *) dp->jit_safepoints,
+                                             dp->nsafepoints, did)
+                   : NULL;
+            if (dsp)
+                bpc = dsp->land_pc;
             const char *dname = (dp && dp->name) ? XR_STRING_CHARS(dp->name) : NULL;
             int src_line = 0;
             if (dp && bpc < (uint32_t) PROTO_LINE_COUNT(dp))
@@ -1130,8 +1129,12 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
             if (did == UINT32_MAX)
                 did = xr_coro_jit_state(coro)->scratch->invoke_deopt_id;
             uint32_t bpc = UINT32_MAX;
-            if (proto && proto->deopt_table && did < proto->ndeopt)
-                bpc = ((XmRtDeoptEntry *) proto->deopt_table)[did].bc_pc;
+            const XmSafepoint *dsp =
+                proto ? xm_safepoint_find_deopt((const XmSafepoint *) proto->jit_safepoints,
+                                                proto->nsafepoints, did)
+                      : NULL;
+            if (dsp)
+                bpc = dsp->land_pc;
             const char *dname = (proto && proto->name) ? XR_STRING_CHARS(proto->name) : NULL;
             int src_line = 0;
             if (proto && bpc < (uint32_t) PROTO_LINE_COUNT(proto))
@@ -1221,7 +1224,7 @@ void xm_jit_read_multi_ret(XrCoroutine *coro, XrValue *results, int nresults) {
 
 int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
     XrProto *proto = (XrProto *) xr_coro_jit_state(coro)->scratch->call_proto;
-    if (!proto || !proto->deopt_table)
+    if (!proto || !proto->jit_safepoints)
         return -1;
 
     uint32_t did = xr_coro_jit_state(coro)->scratch->deopt_id;
@@ -1230,13 +1233,13 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
     if (did == UINT32_MAX) {
         did = xr_coro_jit_state(coro)->scratch->invoke_deopt_id;
     }
-    if (did >= proto->ndeopt)
+    const XmSafepoint *entry = xm_safepoint_find_deopt((const XmSafepoint *) proto->jit_safepoints,
+                                                       proto->nsafepoints, did);
+    if (!entry)
         return -1;
 
-    XmRtDeoptEntry *entry = &((XmRtDeoptEntry *) proto->deopt_table)[did];
-
     for (uint16_t i = 0; i < entry->nslots; i++) {
-        XmRtDeoptSlot *s = &entry->slots[i];
+        const XmLiveSlot *s = &entry->slots[i];
         int bc = s->bc_slot;
         if (bc < 0 || bc >= maxstack)
             continue;
@@ -1283,7 +1286,7 @@ int32_t xm_jit_deopt_recover(XrCoroutine *coro, XrValue *frame, int maxstack) {
         frame[bc] = deopt_reconstruct(raw, s->type, tag);
     }
 
-    return (int32_t) entry->bc_pc;
+    return (int32_t) entry->land_pc;
 }
 
 /* ========== JIT→JIT Self-Call (CALLSELF) ========== */

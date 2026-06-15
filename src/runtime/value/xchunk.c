@@ -13,6 +13,7 @@
  */
 
 #include "xchunk.h"
+#include "../../jit/xm_codegen.h"
 #include "../object/xstring.h"
 #include "../../base/xmalloc.h"
 #include "xtype_feedback.h"
@@ -181,14 +182,9 @@ void xr_vm_proto_free(XrProto *proto) {
     }
 
     // Free JIT runtime allocations (allocated via xr_malloc in jit pipeline)
-    if (proto->osr_entries != NULL) {
-        xr_free(proto->osr_entries);
-        proto->osr_entries = NULL;
-    }
-    if (proto->deopt_table != NULL) {
-        xr_free(proto->deopt_table);
-        proto->deopt_table = NULL;
-    }
+    xm_safepoints_free((XmSafepoint *) proto->jit_safepoints, proto->nsafepoints);
+    proto->jit_safepoints = NULL;
+    proto->nsafepoints = 0;
 
     // Free XrProto itself
     xr_free(proto);

@@ -816,8 +816,9 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
         .code_size = 0,
         .success = false,
         .error = NULL,
-        .nosr = 0,
-        .ndeopt = 0,
+        .safepoints = NULL,
+        .nsafepoints = 0,
+        .safepoint_cap = 0,
         .stack_map = NULL,
         .fast_entry_offset = 0,
         .resume_entry_offset = 0,
@@ -993,12 +994,13 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
 
     result.code_size = code_size;
     result.fast_entry_offset = ctx.fast_entry_offset;
-    result.nsuspend = ctx.nsuspend;
-    for (uint32_t i = 0; i < result.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
-        result.suspend_entries[i].cont_offset = ctx.suspend_cont_offsets[i];
-        result.suspend_entries[i].smap_id = ctx.suspend_smap_ids[i];
-        result.suspend_entries[i].result_bc_slot = ctx.suspend_result_bc_slots[i];
-        result.suspend_entries[i].result_tag_offset = ctx.suspend_result_tag_offs[i];
+    for (uint32_t i = 0; i < ctx.nsuspend && i < XM_MAX_SUSPEND_ENTRIES; i++) {
+        if (!xm_codegen_result_add_suspend_safepoint(
+                &result, (uint16_t) i, ctx.suspend_cont_offsets[i], ctx.suspend_smap_ids[i],
+                ctx.suspend_result_bc_slots[i], ctx.suspend_result_tag_offs[i])) {
+            result.error = "failed to allocate suspend safepoint";
+            goto cleanup;
+        }
     }
     if (!xm_verify_metadata_or_fail(&result, 1, "cg-x64") ||
         !xm_verify_post_call_records(&ctx.post_call_tracker, "cg-x64"))

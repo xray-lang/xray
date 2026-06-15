@@ -463,7 +463,7 @@ op_call_closure:
                     vmbreak;
                 }
                 if (_jrc1 == XM_JIT_SUSPEND) {
-                    if (proto->nosr > 0)
+                    if (xm_jit_proto_has_osr(proto))
                         proto->osr_pending = true;
                     savepc();
                     return XR_VM_BLOCKED;
@@ -496,7 +496,7 @@ op_call_closure:
                         _nf->closure = closure;
                         _nf->pc = PROTO_CODE_BASE(proto) + recover_pc;
                         _nf->base_offset = (int) ((base + a + 1) - VM_STACK);
-                        if (proto->nosr > 0)
+                        if (xm_jit_proto_has_osr(proto))
                             proto->osr_pending = true;
                         goto startfunc;
                     }
@@ -539,7 +539,7 @@ op_call_closure:
                         vmbreak;
                     }
                     if (_jrc2 == XM_JIT_SUSPEND) {
-                        if (proto->nosr > 0)
+                        if (xm_jit_proto_has_osr(proto))
                             proto->osr_pending = true;
                         savepc();
                         return XR_VM_BLOCKED;
@@ -570,7 +570,7 @@ op_call_closure:
                             _nf2->closure = closure;
                             _nf2->pc = PROTO_CODE_BASE(proto) + rpc2;
                             _nf2->base_offset = (int) ((base + a + 1) - VM_STACK);
-                            if (proto->nosr > 0)
+                            if (xm_jit_proto_has_osr(proto))
                                 proto->osr_pending = true;
                             goto startfunc;
                         }
@@ -785,7 +785,7 @@ vmcase(OP_CALLSELF) {
                 vmbreak;
             }
             if (_jrc3 == XM_JIT_SUSPEND) {
-                if (proto->nosr > 0)
+                if (xm_jit_proto_has_osr(proto))
                     proto->osr_pending = true;
                 savepc();
                 return XR_VM_BLOCKED;
@@ -816,7 +816,7 @@ vmcase(OP_CALLSELF) {
                     _nf->closure = closure;
                     _nf->pc = PROTO_CODE_BASE(proto) + recover_pc;
                     _nf->base_offset = (int) ((base + a + 1) - VM_STACK);
-                    if (proto->nosr > 0)
+                    if (xm_jit_proto_has_osr(proto))
                         proto->osr_pending = true;
                     goto startfunc;
                 }
@@ -855,7 +855,7 @@ vmcase(OP_CALLSELF) {
                     vmbreak;
                 }
                 if (_jrc4 == XM_JIT_SUSPEND) {
-                    if (proto->nosr > 0)
+                    if (xm_jit_proto_has_osr(proto))
                         proto->osr_pending = true;
                     savepc();
                     return XR_VM_BLOCKED;

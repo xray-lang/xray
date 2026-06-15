@@ -49,10 +49,8 @@ typedef struct XmBgResult {
     void *fast_entry;  // fast entry (skip param setup)
     uint32_t code_size;
     uint32_t fast_entry_offset;
-    void *deopt_table;  // XmRtDeoptEntry array
-    uint32_t ndeopt;
-    void *osr_entries;  // XmOsrEntry array
-    uint32_t nosr;
+    void *safepoints;  // XmSafepoint array
+    uint32_t nsafepoints;
     void *stack_map;     // XrStackMapTable*
     void *resume_entry;  // resume entry for suspend/resume (NULL = none)
     uint8_t opt_level;   // XM_OPT_BASIC or XM_OPT_FULL
