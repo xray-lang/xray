@@ -38,7 +38,9 @@ static int g_failed = 0;
 
 static XrType t_int = {.kind = XR_KIND_INT, .id = 1, .frozen = true};
 static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
+static XrType t_map = {.kind = XR_KIND_MAP, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
+static XrType t_set = {.kind = XR_KIND_SET, .id = 5, .frozen = true};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -69,7 +71,9 @@ static void test_local_no_escape(void) {
     XiFunc *f = make_func("local_array", &t_int);
     XiBlock *b0 = f->entry;
 
-    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 1);
+    arr->args[0] = cap;
     XiValue *idx = xi_const_int(f, b0, 0, &t_int);
     XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
     get->args[0] = arr;
@@ -98,7 +102,9 @@ static void test_return_escape(void) {
     XiFunc *f = make_func("make_array", &t_array);
     XiBlock *b0 = f->entry;
 
-    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 1);
+    arr->args[0] = cap;
     xi_block_set_return(b0, arr);
 
     xi_escape_analyze(f);
@@ -418,7 +424,9 @@ static void test_stack_alloc_local_array(void) {
     XiFunc *f = make_func("stack_local", &t_int);
     XiBlock *b0 = f->entry;
 
-    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 0);
+    XiValue *cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 1);
+    arr->args[0] = cap;
     XiValue *idx = xi_const_int(f, b0, 0, &t_int);
     XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
     get->args[0] = arr;
@@ -432,6 +440,71 @@ static void test_stack_alloc_local_array(void) {
     ASSERT_EQ(arr->aux_int, XI_ARRAY_NEW, "STACK_ALLOC should preserve original op in aux_int");
     ASSERT_EQ((arr->flags & XI_FLAG_SIDE_EFFECT) != 0, 1,
               "STACK_ALLOC must carry side-effect flag");
+    xi_func_free(f);
+}
+
+static void test_stack_alloc_local_plain_map_set(void) {
+    XiFunc *f = make_func("stack_map_set", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *map_cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *map = xi_value_new(f, b0, XI_MAP_NEW, &t_map, 1);
+    map->args[0] = map_cap;
+
+    XiValue *set_cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *set = xi_value_new(f, b0, XI_SET_NEW, &t_set, 1);
+    set->args[0] = set_cap;
+
+    XiValue *idx = xi_const_int(f, b0, 0, &t_int);
+    XiValue *map_get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
+    map_get->args[0] = map;
+    map_get->args[1] = idx;
+    xi_block_set_return(b0, map_get);
+
+    xi_escape_analyze(f);
+    xi_stack_alloc_rewrite(f);
+
+    ASSERT_EQ(map->op, XI_STACK_ALLOC, "plain local map should become STACK_ALLOC");
+    ASSERT_EQ(map->aux_int, XI_MAP_NEW, "map STACK_ALLOC should preserve original op");
+    ASSERT_EQ(set->op, XI_STACK_ALLOC, "plain local set should become STACK_ALLOC");
+    ASSERT_EQ(set->aux_int, XI_SET_NEW, "set STACK_ALLOC should preserve original op");
+    xi_func_free(f);
+}
+
+static void test_stack_alloc_skips_metadata_or_dynamic_capacity(void) {
+    XiFunc *f = make_func("stack_guard", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiValue *cap = xi_const_int(f, b0, 4, &t_int);
+    XiValue *typed_arr = xi_value_new(f, b0, XI_ARRAY_NEW, &t_array, 1);
+    typed_arr->args[0] = cap;
+    typed_arr->aux_int = 4;
+
+    XiValue *typed_map = xi_value_new(f, b0, XI_MAP_NEW, &t_map, 1);
+    typed_map->args[0] = cap;
+    typed_map->aux_int = 4;
+
+    XiValue *weak_set = xi_value_new(f, b0, XI_SET_NEW, &t_set, 1);
+    weak_set->args[0] = cap;
+    weak_set->aux_int = 0x02;
+
+    XiValue *dyn_cap = xi_param(f, b0, 0, &t_int);
+    XiValue *dyn_map = xi_value_new(f, b0, XI_MAP_NEW, &t_map, 1);
+    dyn_map->args[0] = dyn_cap;
+
+    XiValue *idx = xi_const_int(f, b0, 0, &t_int);
+    XiValue *get = xi_value_new(f, b0, XI_INDEX_GET, &t_int, 2);
+    get->args[0] = dyn_map;
+    get->args[1] = idx;
+    xi_block_set_return(b0, get);
+
+    xi_escape_analyze(f);
+    xi_stack_alloc_rewrite(f);
+
+    ASSERT_EQ(typed_arr->op, XI_ARRAY_NEW, "typed array should keep metadata and stay heap");
+    ASSERT_EQ(typed_map->op, XI_MAP_NEW, "typed map should keep metadata and stay heap");
+    ASSERT_EQ(weak_set->op, XI_SET_NEW, "weak set should keep weak flag and stay heap");
+    ASSERT_EQ(dyn_map->op, XI_MAP_NEW, "dynamic-capacity map should stay heap");
     xi_func_free(f);
 }
 
@@ -468,6 +541,8 @@ int main(void) {
     test_arc_elim_keeps_borrowed_single_consumer_retain();
     test_arc_many_consume_sites();
     test_stack_alloc_local_array();
+    test_stack_alloc_local_plain_map_set();
+    test_stack_alloc_skips_metadata_or_dynamic_capacity();
     test_stack_alloc_escaping_stays();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);

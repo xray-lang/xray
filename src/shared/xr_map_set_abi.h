@@ -56,6 +56,7 @@ typedef struct XrMapCore {
 #define XR_MAP_FLAG_DUMMY 0x02           /* Empty map: no ctrl/indices/entries allocation */
 #define XR_MAP_FLAG_NODES_ON_GC 0x04     /* ctrl/indices/entries live on Region GC heap */
 #define XR_MAP_FLAG_WEAK_REGISTERED 0x08 /* Registered in the runtime weak registry */
+#define XR_MAP_FLAG_NODES_ON_STACK 0x10  /* AOT stack Map nodes; never free or resize */
 
 #define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
 
@@ -97,6 +98,7 @@ typedef struct XrSetCore {
 #define XR_SET_FLAG_DUMMY 0x02           /* Empty set: no ctrl/indices/entries allocation */
 #define XR_SET_FLAG_NODES_ON_GC 0x04     /* ctrl/indices/entries live on Region GC heap */
 #define XR_SET_FLAG_WEAK_REGISTERED 0x08 /* Registered in the runtime weak registry */
+#define XR_SET_FLAG_NODES_ON_STACK 0x10  /* AOT stack Set nodes; never free or resize */
 
 #define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
 
