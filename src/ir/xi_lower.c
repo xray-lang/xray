@@ -291,7 +291,7 @@ XR_FUNC int xi_lower_resolve_upvalue(XiLower *l, uint32_t symbol_id, const char 
             return -1;
         int idx = l->func->ncaptures;
         l->func->captures[idx].source = XI_CAPTURE_SRC_UPVAL;
-        l->func->captures[idx].index = (uint8_t) parent_upval;
+        l->func->captures[idx].index = (uint16_t) parent_upval;
         l->func->captures[idx].name = name;
         l->func->captures[idx].type = out_type ? *out_type : l->type_any;
         l->func->captures[idx].cell_index = -1;

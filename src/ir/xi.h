@@ -552,7 +552,7 @@ typedef enum XiCaptureKind {
 
 typedef struct XiCapture {
     uint8_t source;        /* XI_CAPTURE_SRC_REG or XI_CAPTURE_SRC_UPVAL */
-    uint8_t index;         /* SRC_UPVAL: parent upvalue index */
+    uint16_t index;        /* SRC_UPVAL: parent upvalue index */
     uint8_t capture_kind;  /* XiCaptureKind */
     bool needs_cell;       /* true if the captured variable is mutated in the child */
     bool is_mutable;       /* true if the variable is ever reassigned after capture */

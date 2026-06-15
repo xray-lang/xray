@@ -258,7 +258,7 @@ int xr_vm_proto_add_proto(XrProto *proto, XrProto *child) {
 
 // Add upvalue info
 // Returns upvalue index
-int xr_vm_proto_add_upvalue(XrProto *proto, uint8_t index, uint8_t storage_mode, uint8_t is_const,
+int xr_vm_proto_add_upvalue(XrProto *proto, uint16_t index, uint8_t storage_mode, uint8_t is_const,
                             uint8_t slot_type, uint8_t source, struct XrType *type_info) {
     XR_DCHECK(proto != NULL, "proto_add_upvalue: NULL proto");
     // No dedup here: dedup is done at compiler level in scope_add_upvalue.
