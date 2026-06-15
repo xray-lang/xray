@@ -340,7 +340,9 @@ static void rv64_h_load(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
         Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
         rv64_buf_emit(&ctx->buf, rv64_fld(fd, base, 0));
     } else {
-        rv64_buf_emit(&ctx->buf, rv64_ld(rd, base, 0));
+        RV64_CODEGEN_CHECK(ctx,
+                           xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, 0),
+                           "riscv64 generated mem_load_gp dispatch rejected LOAD");
     }
 }
 
@@ -358,7 +360,9 @@ static void rv64_h_store(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
         rv64_buf_emit(&ctx->buf, rv64_fsd(fs, base, 0));
     } else {
         Rv64Reg val = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-        rv64_buf_emit(&ctx->buf, rv64_sd(val, base, 0));
+        RV64_CODEGEN_CHECK(ctx,
+                           xm_dispatch_emit_riscv64_mem_store_gp(ins->op, &ctx->buf, base, 0, val),
+                           "riscv64 generated mem_store_gp dispatch rejected STORE");
     }
 }
 
@@ -457,7 +461,9 @@ static void rv64_h_field_load(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
         Rv64Freg fd = rv64_get_fp_reg(ctx, ins->dst);
         rv64_buf_emit(&ctx->buf, rv64_fld(fd, base, offset));
     } else {
-        rv64_buf_emit(&ctx->buf, rv64_ld(rd, base, offset));
+        RV64_CODEGEN_CHECK(
+            ctx, xm_dispatch_emit_riscv64_mem_load_gp(ins->op, &ctx->buf, rd, base, offset),
+            "riscv64 generated mem_load_gp dispatch rejected LOAD_FIELD");
     }
 }
 
@@ -481,7 +487,9 @@ static void rv64_h_field_store(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
         rv64_buf_emit(&ctx->buf, rv64_fsd(fs, base, offset));
     } else {
         Rv64Reg val = rv64_get_operand(ctx, ins->args[1], RV64_SCRATCH_REG2);
-        rv64_buf_emit(&ctx->buf, rv64_sd(val, base, offset));
+        RV64_CODEGEN_CHECK(
+            ctx, xm_dispatch_emit_riscv64_mem_store_gp(ins->op, &ctx->buf, base, offset, val),
+            "riscv64 generated mem_store_gp dispatch rejected STORE_FIELD");
     }
 }
 
