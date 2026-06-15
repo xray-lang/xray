@@ -91,9 +91,10 @@ XI_METHOD_SYM(COPYFROM,   181,  COPYFROM,     "copyFrom")
 XI_METHOD_SYM(REPEATFROM, 182,  REPEATFROM,   "repeatFrom")
 
 /* --- Iterator protocol --- */
-XI_METHOD_SYM(ITERATOR,    54,  ITERATOR,     "iterator")
-XI_METHOD_SYM(HAS_NEXT,    56,  HASNEXT,      "hasNext")
-XI_METHOD_SYM(NEXT,        57,  NEXT,         "next")
+XI_METHOD_SYM(ITERATOR,         54,  ITERATOR,         "iterator")
+XI_METHOD_SYM(ENTRIES_ITERATOR, 55,  ENTRIES_ITERATOR, "entriesIterator")
+XI_METHOD_SYM(HAS_NEXT,         56,  HASNEXT,          "hasNext")
+XI_METHOD_SYM(NEXT,             57,  NEXT,             "next")
 
 /* --- Numeric methods --- */
 XI_METHOD_SYM(FLOOR,       58,  FLOOR,        "floor")

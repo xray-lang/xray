@@ -842,6 +842,79 @@ static inline XrValue xrt_set_values(xrt_set_t *s) {
     return arr;
 }
 
+/* =========================================================================
+ * Iterator runtime — backs the for-in iterator protocol over Map / Set.
+ * The iterator borrows its source by value (no extra RC: AOT collections are
+ * not individually reclaimed) and walks the source's insertion-order order[].
+ * ========================================================================= */
+
+#define XRT_ITER_KEYS 0   /* map: yield key */
+#define XRT_ITER_VALUES 1 /* set: yield value; map: yield value */
+#define XRT_ITER_PAIRS 2  /* map: yield (key, value) tuple */
+
+typedef struct {
+    XrValue coll;   /* XR_TAG_MAP or XR_TAG_SET being iterated */
+    int64_t cursor; /* next index into the source's order[] */
+    uint8_t kind;   /* XRT_ITER_* projection */
+} xrt_iterator_t;
+
+static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
+    xrt_iterator_t *it = (xrt_iterator_t *) XRT_MALLOC(sizeof(xrt_iterator_t));
+    if (XR_UNLIKELY(!it)) {
+        fprintf(stderr, "xrt_iterator_new: out of memory\n");
+        abort();
+    }
+    it->coll = coll;
+    it->cursor = 0;
+    it->kind = kind;
+    return xr_mkptr(it, XR_TAG_ITERATOR);
+}
+
+// Park cursor at the next live order[] slot; return 1 if one exists.
+static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
+    if (it->coll.tag == XR_TAG_MAP) {
+        xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
+        while (it->cursor < m->order_len) {
+            if (xrt_map_slot_is_full(m, m->order[it->cursor]))
+                return 1;
+            it->cursor++;
+        }
+        return 0;
+    }
+    if (it->coll.tag == XR_TAG_SET) {
+        xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
+        while (it->cursor < s->order_len) {
+            if (xrt_set_slot_is_full(s, s->order[it->cursor]))
+                return 1;
+            it->cursor++;
+        }
+        return 0;
+    }
+    return 0;
+}
+
+static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
+    if (!xrt_iterator_has_next(it))
+        return XR_NULL_VAL;
+    if (it->coll.tag == XR_TAG_MAP) {
+        xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
+        int64_t slot = m->order[it->cursor++];
+        if (it->kind == XRT_ITER_PAIRS) {
+            XrValue kv[2] = {xrt_map_slot_key(m, slot), xrt_map_slot_value(m, slot)};
+            return xrt_tuple_make(2, kv);
+        }
+        if (it->kind == XRT_ITER_VALUES)
+            return xrt_map_slot_value(m, slot);
+        return xrt_map_slot_key(m, slot);
+    }
+    if (it->coll.tag == XR_TAG_SET) {
+        xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
+        int64_t slot = s->order[it->cursor++];
+        return xrt_set_slot_item(s, slot);
+    }
+    return XR_NULL_VAL;
+}
+
 static inline XrValue xrt_process_new(const char *file, int argc, char **argv, const char *dir) {
     if (argc < 0)
         argc = 0;
