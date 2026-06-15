@@ -1,0 +1,18 @@
+// anchor: defer-stack-growth-refresh
+// A deferred closure recurses deep enough to grow (relocate) the coroutine
+// stack while the returning frame's cached ci/base pointers are still live.
+// The frame pop must re-derive ci/base after running defers, otherwise it reads
+// freed memory (heap-use-after-free, caught under ASan). Output must match
+// across VM / JIT / AOT.
+fn deep(n: int) -> int {
+    if (n <= 0) { return 0 }
+    return 1 + deep(n - 1)
+}
+
+fn run() -> int {
+    defer { print(deep(200)) }
+    return 42
+}
+
+print(run())
+print("ok")

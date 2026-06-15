@@ -990,6 +990,20 @@ bool xr_coro_grow_stack(XrCoroutine *coro, int extra_slots) {
         if (!new_frames)
             return false;
         ctx->frames = new_frames;
+
+        // defer_frame_marks is indexed by frame index and lazily allocated to
+        // frame_capacity; grow it in lockstep, otherwise deep recursion under an
+        // active defer overruns it (startfunc records a mark per frame entry).
+        if (ctx->defer_frame_marks) {
+            int *new_marks =
+                (int *) xr_realloc(ctx->defer_frame_marks, sizeof(int) * new_frame_cap);
+            if (!new_marks)
+                return false;
+            for (int j = ctx->frame_capacity; j < new_frame_cap; j++)
+                new_marks[j] = 0;
+            ctx->defer_frame_marks = new_marks;
+        }
+
         ctx->frame_capacity = new_frame_cap;
     }
 
