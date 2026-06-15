@@ -206,7 +206,7 @@ typedef struct {
     uint32_t suspend_cont_offsets[XM_MAX_SUSPEND_ENTRIES];
     uint32_t suspend_smap_ids[XM_MAX_SUSPEND_ENTRIES];
     uint8_t suspend_result_regs[XM_MAX_SUSPEND_ENTRIES];
-    int16_t suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];
+    int32_t suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];
     int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];
     uint32_t nsuspend;
     uint32_t resume_entry_offset;

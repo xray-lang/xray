@@ -1504,7 +1504,7 @@ static void rv64_h_suspend(Rv64CodegenCtx *ctx, XmIns *ins, Rv64Reg rd) {
     /* Load result_tag -> runtime_tags[vreg] */
     {
         int32_t res_vreg_off = -1;
-        int16_t res_bc_slot = -1;
+        int32_t res_bc_slot = -1;
         if (xm_ref_is_vreg(ins->dst)) {
             uint32_t vi = XM_REF_INDEX(ins->dst);
             if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)

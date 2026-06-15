@@ -574,6 +574,29 @@ TEST(emit_reg_pressure) {
     xi_func_free(f);
 }
 
+TEST(emit_param_register_above_255) {
+    XiFunc *f = make_func("wide_params", &stub_int);
+    XiBlock *entry = f->entry;
+
+    XiValue *last = NULL;
+    for (uint16_t i = 0; i <= 300; i++)
+        last = xi_param(f, entry, i, &stub_int);
+    xi_block_set_return(entry, last);
+
+    XrProto *proto = NULL;
+    XiEmitStatus s = xi_emit(f, NULL, &proto);
+    assert(s == XI_EMIT_OK && proto != NULL);
+    assert(proto->numparams == 301);
+    assert(proto->maxstacksize >= 301);
+
+    XrInstruction ret = PROTO_CODE(proto, PROTO_CODE_COUNT(proto) - 1);
+    assert(GET_OPCODE(ret) == OP_RETURN1);
+    assert(GETARG_A(ret) == 300);
+
+    xr_vm_proto_free(proto);
+    xi_func_free(f);
+}
+
 /* ========== Instruction Fusion ========== */
 
 TEST(emit_addi_rhs_const) {
@@ -900,7 +923,8 @@ TEST(emit_cancelled_builtin) {
 
 TEST(emit_status_str) {
     assert(strcmp(xi_emit_status_str(XI_EMIT_OK), "OK") == 0);
-    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS), "too many registers (>255)") == 0);
+    assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_TOO_MANY_REGS),
+                  "too many registers (>65535 encoded slots, with one sentinel reserved)") == 0);
     assert(strcmp(xi_emit_status_str(XI_EMIT_ERR_UNSUPPORTED_OP), "unsupported Xi IR operation") ==
            0);
 }
@@ -949,6 +973,7 @@ int main(void) {
     /* Register recycling */
     run_emit_reg_recycling();
     run_emit_reg_pressure();
+    run_emit_param_register_above_255();
 
     /* Instruction fusion */
     run_emit_addi_rhs_const();

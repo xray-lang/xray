@@ -137,9 +137,9 @@ XR_FUNC void alloc_registers(EmitCtx *ctx) {
             if (v->op == XI_PARAM) {
                 uint16_t pidx = (uint16_t) v->aux_int;
                 if (v->id < ctx->reg_map_size && pidx < MAX_REGS) {
-                    ctx->reg_map[v->id] = (uint8_t) pidx;
+                    ctx->reg_map[v->id] = (XiEmitReg) pidx;
                     if (pidx + 1 > ctx->next_reg) {
-                        ctx->next_reg = (uint8_t) (pidx + 1);
+                        ctx->next_reg = pidx + 1;
                         ctx->max_reg = ctx->next_reg;
                     }
                 }

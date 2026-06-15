@@ -42,15 +42,15 @@ static void propagate_shared_offset(XrProto *proto, int offset) {
 }
 
 /* Forward declaration for class helpers (defined later in this file) */
-static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, uint8_t dst);
+static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, XiEmitReg dst);
 
 /* Field load: GETPROP or GETFIELD */
-XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t obj = reg_of(ctx, v->args[0]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     const char *prop = (const char *) v->aux;
@@ -68,14 +68,14 @@ XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Field store: SETPROP or SETFIELD */
-XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t obj = reg_of(ctx, v->args[0]);
-    uint8_t val = reg_of(ctx, v->args[1]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
     const char *prop = (const char *) v->aux;
@@ -168,7 +168,7 @@ static bool struct_can_stack_alloc(EmitCtx *ctx, XiValue *target) {
 /* Struct new: decide stack vs heap at emit time.
  * Stack path: OP_NEW_STRUCT (frame struct_area, zero heap allocation).
  * Heap path:  OP_INVOKE(constructor) (normal object allocation). */
-XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -179,11 +179,11 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
     if (struct_can_stack_alloc(ctx, v)) {
         /* Stack path: OP_NEW_STRUCT */
-        uint8_t cls_reg = reg_of(ctx, v->args[0]);
+        XiEmitReg cls_reg = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
 
-        uint8_t slot = 0;
+        uint16_t slot = 0;
         if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
             return;
 
@@ -193,19 +193,23 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         /* Heap path: emit OP_INVOKE(constructor, 0 args).
          * OP_INVOKE needs R[dst+1] for receiver. Allocate a fresh
          * scratch register beyond all live values to avoid clobbering. */
-        uint8_t recv = reg_of(ctx, v->args[0]);
+        XiEmitReg recv = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
 
         /* Use a high scratch register for the call window to avoid
          * interfering with live values in low registers. */
-        uint8_t base = ctx->max_reg;
-        uint8_t call_top = (uint8_t) (base + 2);
+        if (ctx->max_reg + 2 > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        XiEmitReg base = (XiEmitReg) ctx->max_reg;
+        uint32_t call_top = (uint32_t) base + 2;
         if (call_top > ctx->max_reg)
             ctx->max_reg = call_top;
 
         /* R[base+1] = receiver (class), invoke stores result in R[base] */
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1, recv, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1), recv, 0));
 
         int sym = add_symbol(ctx, "constructor");
         if (ctx->status != XI_EMIT_OK)
@@ -221,7 +225,7 @@ XR_FUNC void xi_emit_struct_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* Struct get: read field.
  * Stack-promoted → OP_STRUCT_GET (direct native field read).
  * Heap fallback  → OP_GETPROP   (property lookup by name). */
-XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -230,7 +234,7 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
     bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
-    uint8_t obj = reg_of(ctx, v->args[0]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -257,7 +261,7 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* Struct set: write field.
  * Stack-promoted → OP_STRUCT_SET (direct native field write).
  * Heap fallback  → OP_SETPROP   (property store by name). */
-XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -267,8 +271,8 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
     bool promoted = (origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin));
 
-    uint8_t obj = reg_of(ctx, v->args[0]);
-    uint8_t val = reg_of(ctx, v->args[1]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -293,35 +297,35 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Index get */
-XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_index_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t obj = reg_of(ctx, v->args[0]);
-    uint8_t key = reg_of(ctx, v->args[1]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
+    XiEmitReg key = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_INDEX_GET, dst, obj, key));
 }
 
 /* Index set */
-XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_index_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t obj = reg_of(ctx, v->args[0]);
-    uint8_t key = reg_of(ctx, v->args[1]);
-    uint8_t val = reg_of(ctx, v->args[2]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
+    XiEmitReg key = reg_of(ctx, v->args[1]);
+    XiEmitReg val = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_INDEX_SET, obj, key, val));
 }
 
 /* Array creation */
-XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* C = (elem_tid << 2) | storage_mode.
      * elem_tid is only set when the lowerer explicitly encodes it in
      * aux_int (e.g. new Array<T>()).  Array literals like [1,2,3] always
@@ -337,7 +341,7 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_inst(ctx, CREATE_ABC(OP_NEWARRAY, dst, 0, c_field));
         return;
     }
-    uint8_t cap = reg_of(ctx, v->args[0]);
+    XiEmitReg cap = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, c_field));
@@ -352,21 +356,21 @@ XR_FUNC void xi_emit_array_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * arg1 at R[k] would have one move clobbering the other's source.
  * Tuples are immutable, so this single construction is the only
  * writer of element slots. */
-XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     uint16_t n = v->nargs;
     if (n + 1 > MAX_REGS - ctx->next_reg) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
-    uint8_t base = ctx->next_reg;
-    ctx->next_reg = (uint8_t) (base + 1 + n);
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (base + 1 + n);
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     for (uint16_t a = 0; a < n; a++) {
-        uint8_t src = reg_of(ctx, v->args[a]);
+        XiEmitReg src = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        uint8_t target = (uint8_t) (base + 1 + a);
+        XiEmitReg target = (XiEmitReg) (base + 1 + a);
         if (src != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
     }
@@ -376,12 +380,12 @@ XR_FUNC void xi_emit_tuple_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Tuple field load: args[0] = tuple, aux_int = zero-based index. */
-XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t tup = reg_of(ctx, v->args[0]);
+    XiEmitReg tup = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     uint8_t idx = (uint8_t) (v->aux_int & 0xFF);
@@ -389,8 +393,8 @@ XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Map creation */
-XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    uint8_t cap = 0;
+XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    XiEmitReg cap = 0;
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
         cap = (uint8_t) v->args[0]->aux_int;
     }
@@ -400,14 +404,14 @@ XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Set creation */
-XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* B field pre-encoded by lowerer: (elem_tid<<2)|flags */
     uint8_t b_field = (uint8_t) (v->aux_int & 0xFF);
     emit_inst(ctx, CREATE_ABC(OP_NEWSET, dst, b_field, 0));
 }
 
 /* Json object creation: build Shape, store in constant pool, emit OP_NEWJSON */
-XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_count = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
 
@@ -439,14 +443,14 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Json field init by index: OP_JSON_INIT A B C (A=json, B=field_idx, C=val) */
-XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t json_reg = reg_of(ctx, v->args[0]);
-    uint8_t val_reg = reg_of(ctx, v->args[1]);
+    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg val_reg = reg_of(ctx, v->args[1]);
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -454,12 +458,12 @@ XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Json field read by index: OP_JSON_GET A B C (A=dst, B=json, C=field_idx) */
-XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t json_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -467,14 +471,14 @@ XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Json field write by index: OP_JSON_SET A B C (A=json, B=field_idx, C=val) */
-XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst; /* dst unused; this is a store op */
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t json_reg = reg_of(ctx, v->args[0]);
-    uint8_t val_reg = reg_of(ctx, v->args[1]);
+    XiEmitReg json_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg val_reg = reg_of(ctx, v->args[1]);
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
@@ -487,7 +491,7 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * C=Shape constant index (built from field names)
  *
  * Reuses the same Shape-building logic as xi_emit_json_new. */
-XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
@@ -497,7 +501,7 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     const char **field_names = (const char **) v->aux;
     XR_DCHECK(n > 0 && field_names != NULL, "json_decode: no field info");
 
-    uint8_t data_reg = reg_of(ctx, v->args[0]);
+    XiEmitReg data_reg = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -522,44 +526,44 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Range creation */
-XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_range(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t start = reg_of(ctx, v->args[0]);
-    uint8_t end = reg_of(ctx, v->args[1]);
+    XiEmitReg start = reg_of(ctx, v->args[0]);
+    XiEmitReg end = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(OP_NEWRANGE, dst, start, end));
 }
 
 /* Slice: OP_SLICE expects start at R[C], end at R[C+1] (consecutive) */
-XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_slice(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t src = reg_of(ctx, v->args[0]);
-    uint8_t lo_src = reg_of(ctx, v->args[1]);
-    uint8_t hi_src = reg_of(ctx, v->args[2]);
+    XiEmitReg src = reg_of(ctx, v->args[0]);
+    XiEmitReg lo_src = reg_of(ctx, v->args[1]);
+    XiEmitReg hi_src = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    if (ctx->next_reg + 2 >= MAX_REGS) {
+    if (ctx->next_reg + 2 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
-    uint8_t lo_slot = ctx->next_reg;
+    XiEmitReg lo_slot = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += 2;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_ABC(OP_MOVE, lo_slot, lo_src, 0));
-    emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t) (lo_slot + 1), hi_src, 0));
+    emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (lo_slot + 1), hi_src, 0));
     emit_inst(ctx, CREATE_ABC(OP_SLICE, dst, src, lo_slot));
 }
 
 /* Closure creation */
-XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiFunc *child_func = (XiFunc *) v->aux;
     XR_DCHECK(child_func != NULL, "closure child func must not be NULL");
 
@@ -597,7 +601,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         XiCapture *cap = &child_func->captures[ci];
         if (cap->needs_cell && cap->source == XI_CAPTURE_SRC_REG) {
             XiValue *cap_val = (ci < v->nargs && v->args[ci]) ? v->args[ci] : cap->value;
-            uint8_t reg = reg_of(ctx, cap_val);
+            XiEmitReg reg = reg_of(ctx, cap_val);
             if (ctx->status != XI_EMIT_OK)
                 return;
             bool already = ctx->cell_wrapped[cap_val->id];
@@ -625,7 +629,11 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
         /* The destination register is cell-wrapped (hoisted function).
          * Emit closure to a temp register, then store into the cell. */
-        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
+        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
         emit_inst(ctx, CREATE_ABx(OP_CLOSURE, tmp, proto_idx));
@@ -636,42 +644,42 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Upvalue load */
-XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_load_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int upval_idx = (int) v->aux_int;
-    emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, dst, (uint8_t) upval_idx, 0));
+    emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, dst, (uint16_t) upval_idx, 0));
     if (upval_idx < (int) ctx->func->ncaptures && ctx->func->captures[upval_idx].needs_cell) {
         emit_inst(ctx, CREATE_ABC(OP_CELL_GET, dst, dst, 0));
     }
 }
 
 /* Upvalue store */
-XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_store_upval(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t val = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     int upval_idx = (int) v->aux_int;
-    uint8_t cell_reg = dst;
-    emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, cell_reg, (uint8_t) upval_idx, 0));
+    XiEmitReg cell_reg = dst;
+    emit_inst(ctx, CREATE_ABC(OP_UPVAL_GET, cell_reg, (uint16_t) upval_idx, 0));
     emit_inst(ctx, CREATE_ABC(OP_CELL_SET, cell_reg, val, 0));
 }
 
 /* Shared (module-level) variable access */
-XR_FUNC void xi_emit_get_shared(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_get_shared(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int shared_idx = (int) v->aux_int;
     emit_inst(ctx, CREATE_ABx(OP_GETSHARED, dst, shared_idx));
 }
 
-XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t val = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     int shared_idx = (int) v->aux_int;
@@ -683,7 +691,7 @@ XR_FUNC void xi_emit_set_shared(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * constant pool and emits OP_GETGLOBAL / OP_SETGLOBAL.  Used in REPL
  * mode where every cross-input top-level binding goes through the
  * runtime globals dict instead of an integer-indexed shared array. */
-XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     const char *name = (const char *) v->aux;
     if (!name) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -695,7 +703,7 @@ XR_FUNC void xi_emit_get_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     emit_inst(ctx, CREATE_ABx(OP_GETGLOBAL, dst, kx));
 }
 
-XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -706,7 +714,7 @@ XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t val = reg_of(ctx, v->args[0]);
+    XiEmitReg val = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     int kx = add_const_string(ctx, name);
@@ -716,17 +724,17 @@ XR_FUNC void xi_emit_set_global(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Runtime global variable lookup */
-XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_get_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_inst(ctx, CREATE_ABx(OP_GETBUILTIN, dst, (int) v->aux_int));
 }
 
 /* Iteration protocol */
-XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t obj = reg_of(ctx, v->args[0]);
+    XiEmitReg obj = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -737,14 +745,14 @@ XR_FUNC void xi_emit_iter(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    uint8_t base = dst;
+    XiEmitReg base = dst;
     if (obj != base + 1)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, base + 1, obj, 0));
     emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) sym, 1));
 }
 
 /* Class creation wrapper */
-XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_class_create(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiClassData *cdata = (XiClassData *) v->aux;
     XR_DCHECK(cdata != NULL && cdata->ast != NULL, "XI_CLASS_CREATE: missing class data");
     emit_class_create_impl(ctx, v, cdata, dst);
@@ -826,7 +834,7 @@ static bool try_emit_time_resolve(EmitCtx *ctx, XiImportRef *ref) {
  * Selective imports → OP_LOAD_MODULE_SLOT (single indexed load).
  * Whole-module imports → OP_LOAD_MODULE (module object by topo index).
  * Unresolved imports → LOADNULL (should not happen with graph). */
-XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_import_ref(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiImportRef *ref = (XiImportRef *) v->aux;
     if (!ref || !ref->module_path || !ctx->isolate) {
         emit_inst(ctx, CREATE_ABx(OP_LOADNULL, dst, 0));
@@ -987,7 +995,7 @@ static int emit_method_proto_impl(EmitCtx *ctx, uint16_t child_func_idx) {
 
 /* Build XrClassDescriptor from AST, emit child method protos,
  * and generate OP_CLASS_CREATE_FROM_DESCRIPTOR. */
-static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, uint8_t dst) {
+static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata, XiEmitReg dst) {
     (void) v;
     ClassDeclNode *cd = &cdata->ast->as.class_decl;
 
@@ -1141,7 +1149,7 @@ static void emit_class_create_impl(EmitCtx *ctx, XiValue *v, XiClassData *cdata,
      * VM uses the scope-resolved class instead of a name-based registry
      * lookup that may find a same-named builtin. */
     if (v->nargs >= 1 && v->args[0]) {
-        uint8_t super_reg = reg_of(ctx, v->args[0]);
+        XiEmitReg super_reg = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         if (super_reg != dst)

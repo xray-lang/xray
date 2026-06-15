@@ -171,7 +171,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
             int16_t spill = xra_vreg_spill(ctx->xra, v);
             if (spill < 0)
                 continue;
-            int16_t bc_slot = ctx->func->vregs[v].bc_slot;
+            int32_t bc_slot = ctx->func->vregs[v].bc_slot;
             if (bc_slot < 0)
                 continue;
             /* ri=-1 disables phi-coalesce check; only "defined in osr_blk". */
@@ -190,7 +190,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
             int8_t ri = xra_vreg_reg_at(ctx->xra, snap_block_id, v);
             if (ri < 0)
                 continue;
-            int16_t slot = ctx->func->vregs[v].bc_slot;
+            int32_t slot = ctx->func->vregs[v].bc_slot;
             if (slot < 0)
                 continue;
             if (x64_osr_should_skip_vreg(ctx, osr_blk, v, ri))
@@ -213,7 +213,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
             int8_t ri = xra_vreg_reg_at(ctx->xra, snap_block_id, v);
             if (ri < 0)
                 continue;
-            int16_t slot = ctx->func->vregs[v].bc_slot;
+            int32_t slot = ctx->func->vregs[v].bc_slot;
             if (slot >= 0)
                 continue;
             bool is_fp = (ctx->func->vregs[v].rep == XR_REP_F64);

@@ -345,7 +345,7 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         // cap — every live vreg must be reloaded or the loop body runs on stale
         // registers after OSR entry.
         for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
-            int16_t slot = ctx->func->vregs[v].bc_slot;
+            int32_t slot = ctx->func->vregs[v].bc_slot;
             if (slot < 0)
                 continue;
             int8_t ri = xra_vreg_reg_at(ctx->xra, snap->block_id, v);
@@ -390,7 +390,7 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
             int16_t spill = xra_vreg_spill(ctx->xra, v);
             if (spill < 0)
                 continue;
-            int16_t bc_slot = ctx->func->vregs[v].bc_slot;
+            int32_t bc_slot = ctx->func->vregs[v].bc_slot;
             if (bc_slot < 0)
                 continue;
             // ri=-1 disables phi-coalesce check; we only want "defined in osr_blk".

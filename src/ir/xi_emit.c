@@ -44,7 +44,7 @@ XR_FUNC void emit_inst(EmitCtx *ctx, XrInstruction inst) {
 }
 
 XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *layout,
-                                            uint8_t *slot_out) {
+                                            uint16_t *slot_out) {
     if (!ctx || !layout || !slot_out) {
         if (ctx)
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -55,18 +55,18 @@ XR_FUNC bool xi_emit_alloc_struct_area_slot(EmitCtx *ctx, const XrStructLayout *
     uint32_t bytes_needed = 8u + (uint32_t) layout->total_size;
     uint32_t slots_needed = (bytes_needed + 15u) / 16u;
     uint32_t next = slot + slots_needed;
-    if (slot > 255u || next > UINT16_MAX) {
+    if (slot > MAXARG_C || next > UINT16_MAX) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return false;
     }
 
     ctx->struct_area_offset = (uint16_t) next;
-    *slot_out = (uint8_t) slot;
+    *slot_out = (uint16_t) slot;
     return true;
 }
 
 /* Return a register to the free pool for reuse. */
-XR_FUNC void free_reg(EmitCtx *ctx, uint8_t reg) {
+XR_FUNC void free_reg(EmitCtx *ctx, XiEmitReg reg) {
     if (reg == NO_REG)
         return;
     if (ctx->nfree < MAX_REGS) {
@@ -79,7 +79,7 @@ XR_FUNC void free_reg(EmitCtx *ctx, uint8_t reg) {
  * Values annotated with a source var_id are coalesced to share
  * the same register, which is necessary for correct exception
  * handling where OP_THROW bypasses SSA phi resolution. */
-XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
+XR_FUNC XiEmitReg reg_of(EmitCtx *ctx, const XiValue *v) {
     XR_DCHECK(v != NULL, "reg_of: NULL value");
 
     if (v->id >= ctx->reg_map_size) {
@@ -97,11 +97,11 @@ XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
         if (ctx->nfree > 0) {
             ctx->reg_map[v->id] = ctx->free_regs[--ctx->nfree];
         } else {
-            if (ctx->next_reg >= MAX_REGS - 1) {
+            if (ctx->next_reg >= MAX_REGS) {
                 emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
                 return 0;
             }
-            ctx->reg_map[v->id] = ctx->next_reg++;
+            ctx->reg_map[v->id] = (XiEmitReg) ctx->next_reg++;
             if (ctx->next_reg > ctx->max_reg)
                 ctx->max_reg = ctx->next_reg;
         }
@@ -116,12 +116,16 @@ XR_FUNC uint8_t reg_of(EmitCtx *ctx, const XiValue *v) {
  * emit OP_CELL_GET to a temporary and return that.  Use this for reads
  * where the raw register might hold a cell instead of the actual value
  * (e.g. calling a hoisted function, reading a mutable captured variable). */
-XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
-    uint8_t r = reg_of(ctx, v);
+XR_FUNC XiEmitReg reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
+    XiEmitReg r = reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return r;
     if (v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
-        uint8_t tmp = ctx->next_reg++;
+        if (ctx->next_reg >= MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return r;
+        }
+        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
         emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, r, 0));
@@ -137,18 +141,18 @@ XR_FUNC uint8_t reg_of_cell_deref(EmitCtx *ctx, const XiValue *v) {
  * When var_id is set and var_reg is unset (first definition of the variable
  * comes from a call-like op), record var_reg so that subsequent definitions
  * and exception-path reads find a consistent register. */
-XR_FUNC uint8_t alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
+XR_FUNC XiEmitReg alloc_reg_fresh(EmitCtx *ctx, const XiValue *v) {
     XR_DCHECK(v != NULL, "alloc_reg_fresh: NULL value");
     if (v->id >= ctx->reg_map_size) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return 0;
     }
     if (ctx->reg_map[v->id] == NO_REG) {
-        if (ctx->next_reg >= MAX_REGS - 1) {
+        if (ctx->next_reg >= MAX_REGS) {
             emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
             return 0;
         }
-        ctx->reg_map[v->id] = ctx->next_reg++;
+        ctx->reg_map[v->id] = (XiEmitReg) ctx->next_reg++;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
         /* First definition via call-like op: pin var_reg so later defs
@@ -172,7 +176,7 @@ XR_FUNC void try_free_args(EmitCtx *ctx, const XiValue *v) {
             continue; /* pinned by coalescing */
         /* Free register if this is the last use of arg */
         if (ctx->last_use[arg->id] == ctx->current_ordinal) {
-            uint8_t r = ctx->reg_map[arg->id];
+            XiEmitReg r = ctx->reg_map[arg->id];
             ctx->reg_map[arg->id] = NO_REG;
             free_reg(ctx, r);
         }
@@ -284,7 +288,7 @@ XR_FUNC int add_symbol(EmitCtx *ctx, const char *name) {
 
 /* ========== Local Handlers (CONST, PARAM, COPY, SELECT) ========== */
 
-static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+static void emit_const(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     struct XrType *ty = v->type;
     if (!ty) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -385,7 +389,7 @@ static void emit_const(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 }
 
-static void emit_param(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+static void emit_param(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) ctx;
     (void) v;
     (void) dst;
@@ -402,12 +406,12 @@ static XrStructLayout *emit_value_struct_layout(const XrType *type) {
     return type->instance.class_ref->struct_layout;
 }
 
-static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+static void emit_copy(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t src = reg_of(ctx, v->args[0]);
+    XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     /* Value types need independent storage to maintain copy-on-assign semantics. */
@@ -416,7 +420,7 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         XrStructLayout *layout = emit_value_struct_layout(src_type);
         XiValue *origin = xi_emit_trace_struct_origin(v->args[0]);
         if (layout && origin && origin->op == XI_STRUCT_NEW && XI_EMIT_STRUCT_IS_PROMOTED(origin)) {
-            uint8_t slot = 0;
+            uint16_t slot = 0;
             if (!xi_emit_alloc_struct_area_slot(ctx, layout, &slot))
                 return;
             emit_inst(ctx, CREATE_ABC(OP_STRUCT_COPY, dst, src, slot));
@@ -431,14 +435,14 @@ static void emit_copy(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 /* Conditional select: dst = cond ? true_val : false_val.
  * Emitted as: MOVE dst, false_val; TEST cond, 0; MOVE dst, true_val.
  * TEST skips the next instruction when cond is falsy. */
-static void emit_select(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+static void emit_select(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 3) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t cond_r = reg_of(ctx, v->args[0]);
-    uint8_t true_r = reg_of(ctx, v->args[1]);
-    uint8_t false_r = reg_of(ctx, v->args[2]);
+    XiEmitReg cond_r = reg_of(ctx, v->args[0]);
+    XiEmitReg true_r = reg_of(ctx, v->args[1]);
+    XiEmitReg false_r = reg_of(ctx, v->args[2]);
     if (ctx->status != XI_EMIT_OK)
         return;
     if (dst != false_r)
@@ -470,7 +474,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
     bool fresh_dst = xi_emit_vm_requires_fresh_dst(v->op);
     bool raw_cell_args = xi_emit_vm_uses_raw_cell_args(v->op);
     bool handles_cell_dst = xi_emit_vm_handles_cell_dst(v->op);
-    uint8_t dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
+    XiEmitReg dst = fresh_dst ? alloc_reg_fresh(ctx, v) : reg_of(ctx, v);
     if (ctx->status != XI_EMIT_OK)
         return;
 
@@ -482,8 +486,8 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
  * generated VM lowering metadata. */
 #define CELL_UNWRAP_MAX 8
     uint32_t saved_ids[CELL_UNWRAP_MAX];
-    uint8_t saved_regs[CELL_UNWRAP_MAX];
-    uint8_t temp_regs[CELL_UNWRAP_MAX];
+    XiEmitReg saved_regs[CELL_UNWRAP_MAX];
+    XiEmitReg temp_regs[CELL_UNWRAP_MAX];
     int nsaved = 0;
 
     for (uint16_t ai = 0; ai < v->nargs && nsaved < CELL_UNWRAP_MAX; ai++) {
@@ -495,14 +499,14 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
         if (!ctx->cell_wrapped[arg->id] &&
             !(arg->var_id != 0xFF && ctx->cell_side_reg[arg->var_id] != NO_REG))
             continue;
-        uint8_t cell_reg = reg_of(ctx, arg);
+        XiEmitReg cell_reg = reg_of(ctx, arg);
         if (ctx->status != XI_EMIT_OK)
             return;
-        if (ctx->next_reg >= MAX_REGS - 1) {
+        if (ctx->next_reg >= MAX_REGS) {
             emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
             return;
         }
-        uint8_t tmp = ctx->next_reg++;
+        XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
         emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, cell_reg, 0));
@@ -522,7 +526,7 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
      *
      * Special case: if the cell hasn't been created yet (first definition),
      * emit the value normally then wrap with OP_CELL_NEW instead of CELL_SET. */
-    uint8_t real_dst = dst;
+    XiEmitReg real_dst = dst;
     bool need_cell_set = false;
     bool need_cell_new = false;
     if (!handles_cell_dst && v->var_id != 0xFF && ctx->cell_side_reg[v->var_id] != NO_REG) {
@@ -530,11 +534,11 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
             /* First definition: emit value to dst, then wrap with CELL_NEW */
             need_cell_new = true;
         } else {
-            if (ctx->next_reg >= MAX_REGS - 1) {
+            if (ctx->next_reg >= MAX_REGS) {
                 emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
                 return;
             }
-            uint8_t tmp = ctx->next_reg++;
+            XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
             if (ctx->next_reg > ctx->max_reg)
                 ctx->max_reg = ctx->next_reg;
             ctx->reg_map[v->id] = tmp;
@@ -568,8 +572,8 @@ XR_FUNC void emit_value(EmitCtx *ctx, XiValue *v) {
      * edges and merge-point phi moves see the expected register. */
     if (fresh_dst && ctx->status == XI_EMIT_OK && v->var_id != 0xFF && !need_cell_set &&
         !need_cell_new) {
-        uint8_t vr = ctx->var_reg[v->var_id];
-        uint8_t fresh_reg = ctx->reg_map[v->id];
+        XiEmitReg vr = ctx->var_reg[v->var_id];
+        XiEmitReg fresh_reg = ctx->reg_map[v->id];
         if (vr != NO_REG && vr != fresh_reg) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, vr, fresh_reg, 0));
         }
@@ -677,13 +681,13 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
 
     /* Allocate register map */
     ctx.reg_map_size = f->next_value_id;
-    ctx.reg_map = (uint8_t *) xr_malloc(ctx.reg_map_size);
+    ctx.reg_map = (XiEmitReg *) xr_malloc(ctx.reg_map_size * sizeof(*ctx.reg_map));
     if (!ctx.reg_map) {
         xr_vm_proto_free(ctx.proto);
         xr_free(rpo_order);
         return XI_EMIT_ERR_INTERNAL;
     }
-    memset(ctx.reg_map, NO_REG, ctx.reg_map_size);
+    memset(ctx.reg_map, 0xFF, ctx.reg_map_size * sizeof(*ctx.reg_map));
 
     /* Allocate block PC map */
     ctx.block_pc_size = f->next_block_id;
@@ -764,7 +768,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
                     continue;
                 if (cap->value->var_id == 0xFF)
                     continue;
-                uint8_t reg = ctx.reg_map[cap->value->id];
+                XiEmitReg reg = ctx.reg_map[cap->value->id];
                 if (reg == NO_REG)
                     continue;
                 ctx.cell_side_reg[cap->value->var_id] = reg;
@@ -868,7 +872,7 @@ XR_FUNC const char *xi_emit_status_str(XiEmitStatus s) {
         case XI_EMIT_OK:
             return "OK";
         case XI_EMIT_ERR_TOO_MANY_REGS:
-            return "too many registers (>255)";
+            return "too many registers (>65535 encoded slots, with one sentinel reserved)";
         case XI_EMIT_ERR_TOO_MANY_CONSTS:
             return "constant pool overflow";
         case XI_EMIT_ERR_UNSUPPORTED_OP:

@@ -138,7 +138,7 @@ XmPassChange xm_pass_copy_prop(XmFunc *func) {
             uint32_t ri = XM_REF_INDEX(root);
             if (ri >= nv || ri == i)
                 continue;
-            int16_t src_slot = func->vregs[i].bc_slot;
+            int32_t src_slot = func->vregs[i].bc_slot;
             if (src_slot < 0)
                 continue;
             if (func->vregs[ri].bc_slot < 0) {

@@ -50,7 +50,7 @@
  * lowering a wider helper call cleanly rejects (caller falls back to the
  * interpreter) rather than overrunning the fixed scratch layout. */
 #define XI2XM_MAX_HELPER_CALL_ARGS 15
-#define XI2XM_NO_BC_SLOT 255
+#define XI2XM_NO_BC_SLOT UINT16_MAX
 #define XI2XM_CHAN_NEW_DYNAMIC_CAP_FLAG (1ULL << 40)
 
 typedef struct {
@@ -201,7 +201,7 @@ static void set_result_slot_metadata(LowerCtx *ctx, uint32_t value_id, XmRef ref
     uint32_t vi = XM_REF_INDEX(ref);
     if (vi >= ctx->xm_func->nvreg)
         return;
-    ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
+    ctx->xm_func->vregs[vi].bc_slot = (int32_t) ctx->slot_map->entries[si].bc_slot;
 }
 
 static uint8_t xi_value_rep_or_tagged(const XiValue *v) {
@@ -264,11 +264,38 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
     info->slots = NULL;
 
     if (ctx->slot_map && ctx->slot_map->count > 0) {
+        uint16_t max_slot = 0;
+        bool has_slot = false;
+        for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
+            XiSlotMapEntry *e = &ctx->slot_map->entries[i];
+            if (e->value_id >= ctx->ref_map_size)
+                continue;
+            XmRef ref = ctx->ref_map[e->value_id];
+            if (xm_ref_is_none(ref))
+                continue;
+            if (e->bc_slot == XI2XM_NO_BC_SLOT)
+                continue;
+            if (!has_slot || e->bc_slot > max_slot)
+                max_slot = e->bc_slot;
+            has_slot = true;
+        }
+
+        if (!has_slot)
+            return did;
+
         /* Pass 1: deduplicate by bc_slot — keep latest entry per slot.
          * Entries later in the array are from later RPO blocks, so they
          * represent the most recent definition of that bytecode register. */
-        int32_t latest_for_slot[256];
-        memset(latest_for_slot, -1, sizeof(latest_for_slot));
+        uint32_t latest_count = (uint32_t) max_slot + 1u;
+        int32_t *latest_for_slot =
+            (int32_t *) xr_malloc((size_t) latest_count * sizeof(*latest_for_slot));
+        if (!latest_for_slot) {
+            func->ndeopt--;
+            ctx->next_deopt_id--;
+            return 0xFFFF;
+        }
+        for (uint32_t s = 0; s < latest_count; s++)
+            latest_for_slot[s] = -1;
 
         for (uint32_t i = 0; i < ctx->slot_map->count; i++) {
             XiSlotMapEntry *e = &ctx->slot_map->entries[i];
@@ -284,7 +311,7 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
 
         /* Count unique live bc_slots */
         uint32_t live_count = 0;
-        for (int s = 0; s < XI2XM_NO_BC_SLOT; s++) {
+        for (uint32_t s = 0; s < latest_count; s++) {
             if (latest_for_slot[s] >= 0)
                 live_count++;
         }
@@ -294,29 +321,35 @@ static uint16_t record_deopt(LowerCtx *ctx, uint32_t bc_pc) {
          * a64_build_deopt_safepoints). */
         XmDeoptSlot *slots =
             (XmDeoptSlot *) xr_calloc(live_count ? live_count : 1, sizeof(XmDeoptSlot));
-        if (slots) {
-            uint16_t ns = 0;
-            for (int s = 0; s < XI2XM_NO_BC_SLOT; s++) {
-                if (latest_for_slot[s] < 0)
-                    continue;
-                XiSlotMapEntry *e = &ctx->slot_map->entries[latest_for_slot[s]];
-                XmRef ref = ctx->ref_map[e->value_id];
-                XR_DCHECK(ns < live_count, "record_deopt: slot count mismatch");
-                slots[ns].bc_slot = (int16_t) e->bc_slot;
-                if (xm_ref_is_vreg(ref)) {
-                    uint32_t vi = XM_REF_INDEX(ref);
-                    slots[ns].rep =
-                        (vi < ctx->xm_func->nvreg) ? ctx->xm_func->vregs[vi].rep : XR_REP_I64;
-                } else {
-                    slots[ns].rep = XR_REP_I64;
-                }
-                slots[ns].xr_tag = e->xr_tag;
-                slots[ns].value = ref;
-                ns++;
-            }
-            info->slots = slots;
-            info->nslots = ns;
+        if (!slots) {
+            xr_free(latest_for_slot);
+            func->ndeopt--;
+            ctx->next_deopt_id--;
+            return 0xFFFF;
         }
+
+        uint16_t ns = 0;
+        for (uint32_t s = 0; s < latest_count; s++) {
+            if (latest_for_slot[s] < 0)
+                continue;
+            XiSlotMapEntry *e = &ctx->slot_map->entries[latest_for_slot[s]];
+            XmRef ref = ctx->ref_map[e->value_id];
+            XR_DCHECK(ns < live_count, "record_deopt: slot count mismatch");
+            slots[ns].bc_slot = (int32_t) e->bc_slot;
+            if (xm_ref_is_vreg(ref)) {
+                uint32_t vi = XM_REF_INDEX(ref);
+                slots[ns].rep =
+                    (vi < ctx->xm_func->nvreg) ? ctx->xm_func->vregs[vi].rep : XR_REP_I64;
+            } else {
+                slots[ns].rep = XR_REP_I64;
+            }
+            slots[ns].xr_tag = e->xr_tag;
+            slots[ns].value = ref;
+            ns++;
+        }
+        info->slots = slots;
+        info->nslots = ns;
+        xr_free(latest_for_slot);
     }
     return did;
 }
@@ -1014,7 +1047,7 @@ generic_call:
             if (si >= 0 && ctx->slot_map->entries[si].bc_slot != XI2XM_NO_BC_SLOT) {
                 uint32_t vi = XM_REF_INDEX(result);
                 if (vi < ctx->xm_func->nvreg)
-                    ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
+                    ctx->xm_func->vregs[vi].bc_slot = (int32_t) ctx->slot_map->entries[si].bc_slot;
             }
         }
         return result;
@@ -1168,7 +1201,7 @@ static XmRef lower_get_shared(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
         if (si >= 0 && ctx->slot_map->entries[si].bc_slot != XI2XM_NO_BC_SLOT) {
             uint32_t vi = XM_REF_INDEX(result);
             if (vi < ctx->xm_func->nvreg)
-                ctx->xm_func->vregs[vi].bc_slot = (int16_t) ctx->slot_map->entries[si].bc_slot;
+                ctx->xm_func->vregs[vi].bc_slot = (int32_t) ctx->slot_map->entries[si].bc_slot;
         }
     }
     return result;
@@ -2039,7 +2072,7 @@ XR_FUNC struct XmFunc *xi_to_xm_lower(XiFunc *xi_func, struct XrProto *proto, Xi
          * deopt snapshots to reconstruct the correct bytecode registers. */
         uint32_t vi = XM_REF_INDEX(vreg);
         if (vi < func->nvreg)
-            func->vregs[vi].bc_slot = (int16_t) i;
+            func->vregs[vi].bc_slot = (int32_t) i;
     }
 
     /* Create all XmBlocks upfront (so forward jumps resolve) */
