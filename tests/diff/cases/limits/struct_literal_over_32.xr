@@ -1,0 +1,40 @@
+// anchor: lowerer-struct-literal-over-32
+// Struct literals used to silently initialize only the first 32 fields.
+struct Wide {
+    f00: int
+    f01: int
+    f02: int
+    f03: int
+    f04: int
+    f05: int
+    f06: int
+    f07: int
+    f08: int
+    f09: int
+    f10: int
+    f11: int
+    f12: int
+    f13: int
+    f14: int
+    f15: int
+    f16: int
+    f17: int
+    f18: int
+    f19: int
+    f20: int
+    f21: int
+    f22: int
+    f23: int
+    f24: int
+    f25: int
+    f26: int
+    f27: int
+    f28: int
+    f29: int
+    f30: int
+    f31: int
+    f32: int
+}
+
+let w = Wide{f00: 0, f01: 1, f02: 2, f03: 3, f04: 4, f05: 5, f06: 6, f07: 7, f08: 8, f09: 9, f10: 10, f11: 11, f12: 12, f13: 13, f14: 14, f15: 15, f16: 16, f17: 17, f18: 18, f19: 19, f20: 20, f21: 21, f22: 22, f23: 23, f24: 24, f25: 25, f26: 26, f27: 27, f28: 28, f29: 29, f30: 30, f31: 31, f32: 32}
+print(w.f31 + w.f32)

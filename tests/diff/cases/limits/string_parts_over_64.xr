@@ -1,0 +1,6 @@
+// anchor: lowerer-string-parts-over-64
+// Binary string concat and template strings used to silently truncate at 64 parts.
+let x = "x"
+let s = "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x" + "x"
+let t = "${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}${x}"
+print(s.length + t.length)

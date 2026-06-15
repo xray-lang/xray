@@ -521,15 +521,25 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
  * the operands (e.g. `result = result + "a"`), we must read that
  * operand into a temp register BEFORE STRBUF_NEW clobbers it. */
 XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    XR_DCHECK(v->nargs <= 64, "xi_emit_str_concat: too many parts");
-    uint16_t n = v->nargs > 64 ? 64 : v->nargs;
+    uint16_t n = v->nargs;
 
     /* Pre-resolve all arg registers before STRBUF_NEW */
-    XiEmitReg parts[64];
+    XiEmitReg stack_parts[64];
+    XiEmitReg *parts = stack_parts;
+    if (n > 64) {
+        parts = (XiEmitReg *) xr_malloc((size_t) n * sizeof(XiEmitReg));
+        if (!parts) {
+            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+            return;
+        }
+    }
     for (uint16_t a = 0; a < n; a++) {
         parts[a] = reg_of(ctx, v->args[a]);
-        if (ctx->status != XI_EMIT_OK)
+        if (ctx->status != XI_EMIT_OK) {
+            if (parts != stack_parts)
+                xr_free(parts);
             return;
+        }
     }
 
     /* Save args that alias dst to fresh temp registers */
@@ -537,6 +547,8 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (parts[a] == dst) {
             if (ctx->next_reg >= MAX_REGS) {
                 emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                if (parts != stack_parts)
+                    xr_free(parts);
                 return;
             }
             XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
@@ -552,6 +564,8 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         emit_inst(ctx, CREATE_ABC(OP_STRBUF_APPEND, dst, parts[a], 0));
     }
     emit_inst(ctx, CREATE_ABC(OP_STRBUF_FINISH, dst, 0, 0));
+    if (parts != stack_parts)
+        xr_free(parts);
 }
 
 /* Print */

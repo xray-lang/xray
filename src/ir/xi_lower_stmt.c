@@ -2118,12 +2118,25 @@ static void lower_var_decl(XiLower *l, AstNode *node) {
 static void lower_print(XiLower *l, AstNode *node) {
     PrintNode *p = &node->as.print_stmt;
     int nargs = (int) p->expr_count;
+    if (nargs < 0 || nargs > (int) UINT16_MAX) {
+        fprintf(stderr, "[LOWER] print argument count exceeds %u at line %d\n",
+                (unsigned) UINT16_MAX, (int) node->line);
+        l->had_error = true;
+        return;
+    }
 
-    /* Evaluate all arguments first so they appear before PRINT in the block */
-    XiValue *arg_vals[16];
-    int n = nargs > 16 ? 16 : nargs;
-    for (int i = 0; i < n; i++) {
+    XiValue *stack_args[32];
+    XiValue **arg_vals = stack_args;
+    if (nargs > 32) {
+        arg_vals = (XiValue **) xi_func_arena_alloc(
+            l->func, (uint32_t) ((size_t) nargs * sizeof(XiValue *)));
+        if (!arg_vals)
+            return;
+    }
+    for (int i = 0; i < nargs; i++) {
         arg_vals[i] = xi_lower_expr(l, p->exprs[i]);
+        if (!arg_vals[i])
+            return;
     }
 
     /* Emit one XI_PRINT per argument with correct spacing/newline flags.
@@ -2133,14 +2146,14 @@ static void lower_print(XiLower *l, AstNode *node) {
      *   bits 2..3 = slot type hint → OP_PRINT C bits 1..2 (unused here)
      *   bit4 = skip_null   → OP_PRINT C bit3 (REPL auto-echo only) */
     int skip_null = p->skip_null ? 1 : 0;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < nargs; i++) {
         XiValue *v = xi_value_new(l->func, l->cur_block, XI_PRINT, l->type_unit, 1);
         if (!v)
             return;
         v->args[0] = arg_vals[i];
 
         int add_space = (i > 0) ? 1 : 0;
-        int newline = (i == n - 1) ? 1 : 0;
+        int newline = (i == nargs - 1) ? 1 : 0;
         v->aux_int = add_space | (newline << 1) | (skip_null << 4);
 
         v->flags = xi_op_default_effects(XI_PRINT);
