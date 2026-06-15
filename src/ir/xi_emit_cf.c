@@ -42,8 +42,8 @@ XR_FUNC void emit_phi_moves(EmitCtx *ctx, XiBlock *pred, XiBlock *succ) {
         if (!src)
             continue;
 
-        uint8_t dst_reg = reg_of(ctx, &phi->value);
-        uint8_t src_reg = reg_of(ctx, src);
+        XiEmitReg dst_reg = reg_of(ctx, &phi->value);
+        XiEmitReg src_reg = reg_of(ctx, src);
         if (ctx->status != XI_EMIT_OK)
             return;
 
@@ -114,9 +114,13 @@ static void emit_module_exports(EmitCtx *ctx) {
     if (!mod || !mod->exports || mod->nexports == 0)
         return;
 
-    uint8_t tmp = ctx->next_reg;
-    if ((int) (tmp + 1) > ctx->max_reg)
-        ctx->max_reg = (uint8_t) (tmp + 1);
+    if (ctx->next_reg >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg tmp = (XiEmitReg) ctx->next_reg;
+    if (ctx->next_reg + 1 > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg + 1;
 
     for (uint16_t ei = 0; ei < mod->nexports; ei++) {
         const XiModuleExport *exp = &mod->exports[ei];
@@ -139,9 +143,13 @@ static void emit_reexports(EmitCtx *ctx) {
     if (!f->reexports || f->reexport_count == 0 || !ctx->isolate)
         return;
 
-    uint8_t val_reg = ctx->next_reg;
-    if ((int) (val_reg + 1) > ctx->max_reg)
-        ctx->max_reg = (uint8_t) (val_reg + 1);
+    if (ctx->next_reg >= MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    XiEmitReg val_reg = (XiEmitReg) ctx->next_reg;
+    if (ctx->next_reg + 1 > ctx->max_reg)
+        ctx->max_reg = ctx->next_reg + 1;
 
     /* Re-exports are appended after direct exports, so the export
      * slot starts at f->module->nexports (the module's own exports). */
@@ -176,9 +184,9 @@ static void emit_reexports(EmitCtx *ctx) {
             }
         }
 
-        uint8_t member_reg = val_reg;
-        if ((int) (member_reg + 1) > ctx->max_reg)
-            ctx->max_reg = (uint8_t) (member_reg + 1);
+        XiEmitReg member_reg = val_reg;
+        if ((uint32_t) member_reg + 1 > ctx->max_reg)
+            ctx->max_reg = (uint32_t) member_reg + 1;
 
         if (!re->name) {
             /* Star re-export: expand all exports from source module.
@@ -186,9 +194,13 @@ static void emit_reexports(EmitCtx *ctx) {
             XrSymbolTable *sym_table = (XrSymbolTable *) xr_isolate_get_symbol_table(ctx->isolate);
 
             /* Need a second scratch reg for IMPORT + GETPROP fallback */
-            uint8_t mod_scratch = (uint8_t) (member_reg + 1);
-            if ((int) (mod_scratch + 1) > ctx->max_reg)
-                ctx->max_reg = (uint8_t) (mod_scratch + 1);
+            if ((uint32_t) member_reg + 2 > MAX_REGS) {
+                emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                return;
+            }
+            XiEmitReg mod_scratch = (XiEmitReg) (member_reg + 1);
+            if ((uint32_t) member_reg + 2 > ctx->max_reg)
+                ctx->max_reg = (uint32_t) member_reg + 2;
 
             for (uint16_t ei = 0; ei < src->export_count; ei++) {
                 if (ctx->status != XI_EMIT_OK)
@@ -305,7 +317,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
          * Coalesced registers (var_id != 0xFF) are never freed. */
         if (ctx->last_use && v->id < ctx->reg_map_size && ctx->last_use[v->id] == 0 &&
             v->var_id == 0xFF) {
-            uint8_t r = ctx->reg_map[v->id];
+            XiEmitReg r = ctx->reg_map[v->id];
             if (r != NO_REG) {
                 ctx->reg_map[v->id] = NO_REG;
                 free_reg(ctx, r);
@@ -327,7 +339,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 return;
 
             if (blk->control) {
-                uint8_t r = reg_of(ctx, blk->control);
+                XiEmitReg r = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK)
                     return;
                 /* If the return value was cell-wrapped for closure capture,
@@ -376,8 +388,8 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                 XiValue *cmp = ctx->fused_cmp;
                 XiValue *lhs = cmp->args[0];
                 XiValue *rhs = cmp->args[1];
-                uint8_t a = reg_of(ctx, lhs);
-                uint8_t b = reg_of(ctx, rhs);
+                XiEmitReg a = reg_of(ctx, lhs);
+                XiEmitReg b = reg_of(ctx, rhs);
                 if (ctx->status != XI_EMIT_OK)
                     return;
 
@@ -386,14 +398,22 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                  * failure to do so means comparing the cell pointer instead
                  * of the contained value. */
                 if (lhs->var_id != 0xFF && ctx->cell_side_reg[lhs->var_id] != NO_REG) {
-                    uint8_t tmp = ctx->next_reg++;
+                    if (ctx->next_reg >= MAX_REGS) {
+                        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                        return;
+                    }
+                    XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
                     if (ctx->next_reg > ctx->max_reg)
                         ctx->max_reg = ctx->next_reg;
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, a, 0));
                     a = tmp;
                 }
                 if (rhs->var_id != 0xFF && ctx->cell_side_reg[rhs->var_id] != NO_REG) {
-                    uint8_t tmp = ctx->next_reg++;
+                    if (ctx->next_reg >= MAX_REGS) {
+                        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+                        return;
+                    }
+                    XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
                     if (ctx->next_reg > ctx->max_reg)
                         ctx->max_reg = ctx->next_reg;
                     emit_inst(ctx, CREATE_ABC(OP_CELL_GET, tmp, b, 0));
@@ -440,7 +460,7 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                         break;
                 }
                 if (swap) {
-                    uint8_t t = a;
+                    XiEmitReg t = a;
                     a = b;
                     b = t;
                 }
@@ -456,18 +476,18 @@ XR_FUNC void emit_block(EmitCtx *ctx, XiBlock *blk, XiBlock *next_blk) {
                                     : branch_op == OP_LE ? OP_LEI
                                                          : OP_EQI;
                     /* Use already cell-unwrapped 'a' register (post-swap). */
-                    uint8_t ra = a;
+                    XiEmitReg ra = a;
                     int16_t imm = (int16_t) imm_arg->aux_int;
-                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint16_t) imm, (uint8_t) k));
+                    emit_inst(ctx, CREATE_ABC(imm_op, ra, (uint16_t) imm, (uint16_t) k));
                     is_imm = true;
                 }
 
                 if (!is_imm) {
-                    emit_inst(ctx, CREATE_ABC(branch_op, a, b, (uint8_t) k));
+                    emit_inst(ctx, CREATE_ABC(branch_op, a, b, (uint16_t) k));
                 }
             } else {
                 /* Non-fused path: TEST cond, skip next if cond is false */
-                uint8_t cond = reg_of(ctx, blk->control);
+                XiEmitReg cond = reg_of(ctx, blk->control);
                 if (ctx->status != XI_EMIT_OK)
                     return;
                 emit_inst(ctx, CREATE_ABC(OP_TEST, cond, 0, 0));

@@ -1621,7 +1621,7 @@ static void test_osr_entry(void) {
     // Set bc_slot for each vreg so OSR stub can load from values[] array.
     // Without this, OSR stub sees bc_slot=-1 and skips loading live vregs.
     for (uint32_t v = 0; v < func->nvreg; v++) {
-        func->vregs[v].bc_slot = (int16_t) v;
+        func->vregs[v].bc_slot = (int32_t) v;
     }
 
     // Compile. We call xm_codegen_arm64 directly because preds+phis are

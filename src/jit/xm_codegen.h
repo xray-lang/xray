@@ -47,7 +47,7 @@ typedef enum {
 
 // Per-slot live value entry in runtime safepoint metadata.
 typedef struct {
-    int16_t bc_slot;   // bytecode register index R[bc_slot]
+    int32_t bc_slot;   // bytecode register index R[bc_slot]
     uint8_t type;      // XrRep (I64/F64/PTR/TAGGED)
     uint8_t loc_kind;  // XmDeoptLocKind
     uint8_t xr_tag;    // XrValue tag (0-15), or 0xFF=unknown
@@ -71,7 +71,7 @@ typedef struct {
     uint32_t code_offset;       // machine-code byte offset (OSR entry or suspend continuation)
     uint32_t block_id;          // OSR loop block id; UINT32_MAX otherwise
     uint32_t smap_id;           // suspend stack map id; UINT32_MAX otherwise
-    int16_t result_bc_slot;     // suspend await result bytecode slot; -1 otherwise
+    int32_t result_bc_slot;     // suspend await result bytecode slot; -1 otherwise
     int32_t result_tag_offset;  // suspend result tag offset; -1 otherwise
     uint16_t nslots;            // number of live slot entries
     XmLiveSlot *slots;          // owned by this safepoint; NULL when nslots == 0
@@ -157,7 +157,7 @@ static inline bool xm_codegen_result_add_osr_safepoint(XmCodegenResult *result, 
 static inline bool xm_codegen_result_add_suspend_safepoint(XmCodegenResult *result,
                                                            uint16_t suspend_id,
                                                            uint32_t cont_offset, uint32_t smap_id,
-                                                           int16_t result_bc_slot,
+                                                           int32_t result_bc_slot,
                                                            int32_t result_tag_offset) {
     XmSafepoint sp = {
         .kind = XM_SAFEPOINT_SUSPEND,

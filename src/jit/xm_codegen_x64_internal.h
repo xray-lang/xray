@@ -245,7 +245,7 @@ typedef struct {
     uint32_t suspend_smap_ids[XM_MAX_SUSPEND_ENTRIES];  // smap id at each suspend point
     uint8_t
         suspend_result_regs[XM_MAX_SUSPEND_ENTRIES];  // physical register for result per suspend_id
-    int16_t
+    int32_t
         suspend_result_bc_slots[XM_MAX_SUSPEND_ENTRIES];  // bc_slot of result vreg per suspend_id
     int32_t suspend_result_tag_offs[XM_MAX_SUSPEND_ENTRIES];  // vreg_runtime_tags offset per
                                                               // suspend_id (-1=none)

@@ -178,7 +178,7 @@ bool xm_emit_suspend_op(CodegenCtx *ctx, XmIns *ins, A64Reg rd) {
         a64_buf_emit(&ctx->buf, a64_ldr(rd, SCRATCH_REG, XM_SUSPEND_RESULT_OFF));
 
     int32_t res_vreg_off = -1;
-    int16_t res_bc_slot = -1;
+    int32_t res_bc_slot = -1;
     if (xm_ref_is_vreg(ins->dst)) {
         uint32_t vi = XM_REF_INDEX(ins->dst);
         if (vi < ctx->func->nvreg && vi < XR_JIT_MAX_VREG_TAGS)

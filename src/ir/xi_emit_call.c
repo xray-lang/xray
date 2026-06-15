@@ -39,12 +39,12 @@ static bool emit_callee_is_plain_closure(EmitCtx *ctx, XiValue *callee) {
 /* Function call: args[0]=callee, args[1..n]=params
  * aux_int bits 0-7: flags (1=self_call)
  * aux_int bits 8-15: nresults (0 means 1) */
-XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t nargs = (uint8_t) (v->nargs - 1);
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
     bool self_call = ((v->aux_int & 0xFF) == 1);
     int nresults = (int) ((v->aux_int >> 8) & 0xFF);
     if (nresults == 0)
@@ -52,17 +52,27 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
     /* Account for arg and result registers in maxstacksize */
     {
-        int span = nargs + 1;
-        if (nresults > span)
-            span = nresults;
-        uint8_t call_top = (uint8_t) (dst + span);
+        uint32_t span = (uint32_t) nargs + 1;
+        uint32_t result_count = (uint32_t) nresults;
+        if (result_count > span)
+            span = result_count;
+        uint32_t call_top = (uint32_t) dst + span;
+        if (call_top > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
         if (call_top > ctx->max_reg)
             ctx->max_reg = call_top;
     }
 
     /* Reserve result registers so the allocator won't reuse them */
-    if (nresults > 1 && ctx->next_reg < (uint8_t) (dst + nresults)) {
-        ctx->next_reg = (uint8_t) (dst + nresults);
+    uint32_t result_top = (uint32_t) dst + (uint32_t) nresults;
+    if (result_top > MAX_REGS) {
+        emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+        return;
+    }
+    if (nresults > 1 && ctx->next_reg < result_top) {
+        ctx->next_reg = result_top;
         if (ctx->next_reg > ctx->max_reg)
             ctx->max_reg = ctx->next_reg;
     }
@@ -72,27 +82,27 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
          * nresults == 0 signals tail call (reuse current frame). */
         int self_nresults = (v->flags & XI_FLAG_TAIL) ? 0 : nresults;
         for (uint16_t a = 1; a < v->nargs; a++) {
-            uint8_t arg_reg = reg_of(ctx, v->args[a]);
+            XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            uint8_t target = (uint8_t) (dst + a);
+            XiEmitReg target = (XiEmitReg) (dst + a);
             if (arg_reg != target) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
         }
         emit_inst(ctx, CREATE_ABC(OP_CALLSELF, dst, nargs, (uint8_t) self_nresults));
     } else {
-        uint8_t callee = reg_of(ctx, v->args[0]);
+        XiEmitReg callee = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         if (callee != dst) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
         }
         for (uint16_t a = 1; a < v->nargs; a++) {
-            uint8_t arg_reg = reg_of(ctx, v->args[a]);
+            XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
             if (ctx->status != XI_EMIT_OK)
                 return;
-            uint8_t target = (uint8_t) (dst + a);
+            XiEmitReg target = (XiEmitReg) (dst + a);
             if (arg_reg != target) {
                 emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
             }
@@ -107,31 +117,35 @@ XR_FUNC void xi_emit_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 
 /* XI_TAIL_CALL: always emits OP_TAILCALL. Same layout as XI_CALL
  * but the op absorbs the tail semantics. */
-XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t nargs = (uint8_t) (v->nargs - 1);
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
 
     {
-        int span = nargs + 1;
-        uint8_t call_top = (uint8_t) (dst + span);
+        uint32_t span = (uint32_t) nargs + 1;
+        uint32_t call_top = (uint32_t) dst + span;
+        if (call_top > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
         if (call_top > ctx->max_reg)
             ctx->max_reg = call_top;
     }
 
-    uint8_t callee = reg_of(ctx, v->args[0]);
+    XiEmitReg callee = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     if (callee != dst) {
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, callee, 0));
     }
     for (uint16_t a = 1; a < v->nargs; a++) {
-        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        uint8_t target = (uint8_t) (dst + a);
+        XiEmitReg target = (XiEmitReg) (dst + a);
         if (arg_reg != target) {
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
         }
@@ -146,33 +160,37 @@ XR_FUNC void xi_emit_tail_call(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  *   R[A+1] = receiver (this)
  *   R[A+2..A+1+C] = user arguments
  *   B = method symbol, C = user arg count (excluding this) */
-XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t recv = reg_of(ctx, v->args[0]);
+    XiEmitReg recv = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint8_t nargs = (uint8_t) (v->nargs - 1);
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
 
     /* Account for: dst, dst+1 (recv), dst+2..dst+1+nargs */
     {
-        uint8_t call_top = (uint8_t) (dst + nargs + 2);
+        uint32_t call_top = (uint32_t) dst + nargs + 2;
+        if (call_top > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
         if (call_top > ctx->max_reg)
             ctx->max_reg = call_top;
     }
 
     /* R[dst+1] = receiver */
-    if (recv != (uint8_t) (dst + 1))
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst + 1, recv, 0));
+    if (recv != (XiEmitReg) (dst + 1))
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (dst + 1), recv, 0));
 
     /* R[dst+2...] = user arguments */
     for (uint16_t a = 1; a < v->nargs; a++) {
-        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        uint8_t target = (uint8_t) (dst + 1 + a);
+        XiEmitReg target = (XiEmitReg) (dst + 1 + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
@@ -197,71 +215,75 @@ XR_FUNC void xi_emit_call_method(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     }
 }
 
-XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_call_method_direct(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs < 1 || v->aux_int < 0 || v->aux_int > 255 || v->nargs - 1 > 127) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t recv = reg_of(ctx, v->args[0]);
+    XiEmitReg recv = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint8_t nargs = (uint8_t) (v->nargs - 1);
+    uint16_t nargs = (uint16_t) (v->nargs - 1);
 
     {
-        uint8_t call_top = (uint8_t) (dst + nargs + 2);
+        uint32_t call_top = (uint32_t) dst + nargs + 2;
+        if (call_top > MAX_REGS) {
+            emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
+            return;
+        }
         if (call_top > ctx->max_reg)
             ctx->max_reg = call_top;
     }
 
-    if (recv != (uint8_t) (dst + 1))
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, dst + 1, recv, 0));
+    if (recv != (XiEmitReg) (dst + 1))
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (dst + 1), recv, 0));
 
     for (uint16_t a = 1; a < v->nargs; a++) {
-        uint8_t arg_reg = reg_of(ctx, v->args[a]);
+        XiEmitReg arg_reg = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        uint8_t target = (uint8_t) (dst + 1 + a);
+        XiEmitReg target = (XiEmitReg) (dst + 1 + a);
         if (arg_reg != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, arg_reg, 0));
     }
 
-    uint8_t c = nargs;
+    XiEmitReg c = nargs;
     if (v->flags & XI_FLAG_TAIL)
         c |= 0x80;
     emit_inst(ctx, CREATE_ABC(OP_INVOKE_DIRECT, dst, (uint8_t) v->aux_int, c));
 }
 
-static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, uint8_t dst, OpCode op) {
+static void emit_builtin_bytes_load_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op) {
     if (v->nargs != 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t bytes = reg_of(ctx, v->args[0]);
-    uint8_t offset = reg_of(ctx, v->args[1]);
+    XiEmitReg bytes = reg_of(ctx, v->args[0]);
+    XiEmitReg offset = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
     emit_inst(ctx, CREATE_ABC(op, dst, bytes, offset));
 }
 
-static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, uint8_t dst, OpCode op,
+static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, XiEmitReg dst, OpCode op,
                                          uint16_t expected_args) {
     if (v->nargs != expected_args) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    if (ctx->next_reg + expected_args >= MAX_REGS) {
+    if (ctx->next_reg + expected_args > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
-    uint8_t base = ctx->next_reg;
-    ctx->next_reg = (uint8_t) (base + expected_args);
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
+    ctx->next_reg = (base + expected_args);
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     for (uint16_t a = 0; a < expected_args; a++) {
-        uint8_t src = reg_of(ctx, v->args[a]);
+        XiEmitReg src = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        uint8_t target = (uint8_t) (base + a);
+        XiEmitReg target = (XiEmitReg) (base + a);
         if (src != target)
             emit_inst(ctx, CREATE_ABC(OP_MOVE, target, src, 0));
     }
@@ -270,62 +292,62 @@ static void emit_builtin_bytes_window_op(EmitCtx *ctx, XiValue *v, uint8_t dst, 
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
-static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
-    uint8_t nargs = (uint8_t) v->nargs;
-    if (ctx->next_reg + 1 + nargs >= MAX_REGS) {
+static void emit_builtin_bytes_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
+    uint16_t nargs = (uint16_t) v->nargs;
+    if (ctx->next_reg + 1 + nargs > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
-    uint8_t base = ctx->next_reg;
+    XiEmitReg base = (XiEmitReg) ctx->next_reg;
     ctx->next_reg += 1 + nargs;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     for (uint16_t a = 0; a < nargs; a++) {
-        uint8_t arg_r = reg_of(ctx, v->args[a]);
+        XiEmitReg arg_r = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
             return;
-        emit_inst(ctx, CREATE_ABC(OP_MOVE, (uint8_t) (base + 1 + a), arg_r, 0));
+        emit_inst(ctx, CREATE_ABC(OP_MOVE, (XiEmitReg) (base + 1 + a), arg_r, 0));
     }
     emit_inst(ctx, CREATE_ABC(OP_BYTES_NEW, base, nargs, 0));
     if (dst != base)
         emit_inst(ctx, CREATE_ABC(OP_MOVE, dst, base, 0));
 }
 
-XR_FUNC void xi_emit_bytes_load_u32_le(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_bytes_load_u32_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U32_LE);
 }
 
-XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_bytes_load_u64_le(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_load_op(ctx, v, dst, OP_BYTES_LOAD_U64_LE);
 }
 
-XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_bytes_copy_within(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_WITHIN, 4);
 }
 
-XR_FUNC void xi_emit_bytes_copy_from(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_bytes_copy_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_COPY_FROM, 5);
 }
 
-XR_FUNC void xi_emit_bytes_repeat_from(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_bytes_repeat_from(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     emit_builtin_bytes_window_op(ctx, v, dst, OP_BYTES_REPEAT_FROM, 4);
 }
 
-static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     if (v->nargs != 2) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t len = reg_of(ctx, v->args[0]);
-    uint8_t fill = reg_of(ctx, v->args[1]);
+    XiEmitReg len = reg_of(ctx, v->args[0]);
+    XiEmitReg fill = reg_of(ctx, v->args[1]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    if (ctx->next_reg + 2 >= MAX_REGS) {
+    if (ctx->next_reg + 2 > MAX_REGS) {
         emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
         return;
     }
-    uint8_t len_tmp = ctx->next_reg++;
-    uint8_t fill_tmp = ctx->next_reg++;
+    XiEmitReg len_tmp = (XiEmitReg) ctx->next_reg++;
+    XiEmitReg fill_tmp = (XiEmitReg) ctx->next_reg++;
     if (ctx->next_reg > ctx->max_reg)
         ctx->max_reg = ctx->next_reg;
     emit_inst(ctx, CREATE_ABC(OP_MOVE, len_tmp, len, 0));
@@ -335,7 +357,7 @@ static void emit_builtin_array_filled_new(EmitCtx *ctx, XiValue *v, uint8_t dst)
 }
 
 /* Builtin call: aux_int=builtin_id or aux=name string */
-XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Name-based dispatch (aux is a string identifier) */
     const char *bname = (const char *) v->aux;
     if (bname && strcmp(bname, "dump") == 0) {
@@ -343,7 +365,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t src = reg_of(ctx, v->args[0]);
+        XiEmitReg src = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         uint8_t indent = 0;
@@ -360,7 +382,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t src = reg_of(ctx, v->args[0]);
+        XiEmitReg src = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_COPY, dst, src, 0));
@@ -371,7 +393,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t src = reg_of(ctx, v->args[0]);
+        XiEmitReg src = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_CHR, dst, src, 0));
@@ -391,7 +413,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t cap = reg_of(ctx, v->args[0]);
+        XiEmitReg cap = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_ARRAY_NEW_CAP, dst, cap, (uint8_t) (v->aux_int & 0xFF)));
@@ -406,8 +428,8 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t arr = reg_of(ctx, v->args[0]);
-        uint8_t cap = reg_of(ctx, v->args[1]);
+        XiEmitReg arr = reg_of(ctx, v->args[0]);
+        XiEmitReg cap = reg_of(ctx, v->args[1]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESERVE, arr, cap, 0));
@@ -420,9 +442,9 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
             emit_error(ctx, XI_EMIT_ERR_INTERNAL);
             return;
         }
-        uint8_t arr = reg_of(ctx, v->args[0]);
-        uint8_t len = reg_of(ctx, v->args[1]);
-        uint8_t fill = reg_of(ctx, v->args[2]);
+        XiEmitReg arr = reg_of(ctx, v->args[0]);
+        XiEmitReg len = reg_of(ctx, v->args[1]);
+        XiEmitReg fill = reg_of(ctx, v->args[2]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_ARRAY_RESIZE, arr, len, fill));
@@ -470,7 +492,7 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
          * unified OP_INVOKE path. The runtime dispatch resolves the
          * receiver class via native_type_classes[] and calls the
          * XMETHOD_PRIMITIVE method through the XrICMethod inline cache. */
-        uint8_t base = reg_of(ctx, v->args[0]);
+        XiEmitReg base = reg_of(ctx, v->args[0]);
         if (ctx->status != XI_EMIT_OK)
             return;
         emit_inst(ctx, CREATE_ABC(OP_INVOKE, base, (uint8_t) builtin_id, (uint8_t) v->nargs));
@@ -489,12 +511,12 @@ XR_FUNC void xi_emit_call_builtin(EmitCtx *ctx, XiValue *v, uint8_t dst) {
  * there.  When the result is coalesced to the same register as one of
  * the operands (e.g. `result = result + "a"`), we must read that
  * operand into a temp register BEFORE STRBUF_NEW clobbers it. */
-XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XR_DCHECK(v->nargs <= 64, "xi_emit_str_concat: too many parts");
     uint16_t n = v->nargs > 64 ? 64 : v->nargs;
 
     /* Pre-resolve all arg registers before STRBUF_NEW */
-    uint8_t parts[64];
+    XiEmitReg parts[64];
     for (uint16_t a = 0; a < n; a++) {
         parts[a] = reg_of(ctx, v->args[a]);
         if (ctx->status != XI_EMIT_OK)
@@ -504,11 +526,11 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     /* Save args that alias dst to fresh temp registers */
     for (uint16_t a = 0; a < n; a++) {
         if (parts[a] == dst) {
-            if (ctx->next_reg >= MAX_REGS - 1) {
+            if (ctx->next_reg >= MAX_REGS) {
                 emit_error(ctx, XI_EMIT_ERR_TOO_MANY_REGS);
                 return;
             }
-            uint8_t tmp = ctx->next_reg++;
+            XiEmitReg tmp = (XiEmitReg) ctx->next_reg++;
             if (ctx->next_reg > ctx->max_reg)
                 ctx->max_reg = ctx->next_reg;
             emit_inst(ctx, CREATE_ABC(OP_MOVE, tmp, dst, 0));
@@ -524,13 +546,13 @@ XR_FUNC void xi_emit_str_concat(EmitCtx *ctx, XiValue *v, uint8_t dst) {
 }
 
 /* Print */
-XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, uint8_t dst) {
+XR_FUNC void xi_emit_print(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     (void) dst;
     if (v->nargs < 1) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    uint8_t src = reg_of(ctx, v->args[0]);
+    XiEmitReg src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
     int flags = (int) v->aux_int;

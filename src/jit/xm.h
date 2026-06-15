@@ -366,7 +366,7 @@ typedef struct XmBlock {
 
 // Per-slot entry in a deopt snapshot: maps a bytecode register to an Xm value
 typedef struct {
-    int16_t bc_slot;  // bytecode register index (R[bc_slot])
+    int32_t bc_slot;  // bytecode register index (R[bc_slot]), -1 = not mapped
     uint8_t rep;      // XrRep of the value (I64/F64/PTR/TAGGED)
     uint8_t xr_tag;   // XrValue tag (0-15), or XRVREG_TAG_UNKNOWN (0xFF)
     XmRef value;      // Xm ref (vreg or const) holding the slot value
@@ -521,7 +521,7 @@ typedef struct {
     uint8_t rep;          // XrRep (machine rep: I64/F64/PTR/TAGGED)
     uint16_t heap_type;   // GC heap type (XR_T*), valid when ctype.kind is PTR; 0=unknown
     int8_t reg;           // physical register (-1 = unallocated)
-    int16_t bc_slot;      // bytecode register slot (-1 = not mapped)
+    int32_t bc_slot;      // bytecode register slot (-1 = not mapped)
     int16_t struct_idx;   // proto->struct_layouts[] index (-1 = unknown)
     uint16_t cost;        // spill cost (heuristic)
     uint32_t start, end;  // live range [start, end)

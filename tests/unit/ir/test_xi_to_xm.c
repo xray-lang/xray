@@ -17,6 +17,7 @@
 
 #include <stdio.h>
 #include <assert.h>
+#include <stdint.h>
 #include <string.h>
 
 /* Minimal XrType stubs */
@@ -90,7 +91,7 @@ static void assert_op_deopts_to_vm(uint16_t op, const char *name, uint16_t nargs
     slot_map.entries[value_index] = (XiSlotMapEntry) {
         .value_id = v->id,
         .bc_pc = value_index,
-        .bc_slot = (uint8_t) value_index,
+        .bc_slot = (uint16_t) value_index,
         .xr_tag = 3,
     };
 
@@ -844,6 +845,49 @@ TEST(lower_assert_deopts_to_vm) {
     xi_func_free(f);
 }
 
+TEST(lower_deopt_preserves_bc_slot_above_255) {
+    XiFunc *f = make_func("wide_deopt_slot", &stub_void);
+    XiBlock *entry = f->entry;
+
+    XiValue *cond = xi_param(f, entry, 0, &stub_bool);
+    XiValue *params[1] = {cond};
+    register_func_params(f, params, 1);
+
+    XiValue *assert_v = xi_value_new(f, entry, XI_ASSERT, &stub_void, 1);
+    assert_v->args[0] = cond;
+    assert_v->aux = "wide_deopt_slot";
+    assert_v->aux_int = 0;
+    xi_block_set_return(entry, NULL);
+
+    XiSlotMap slot_map = {0};
+    slot_map.entries = xr_calloc(2, sizeof(XiSlotMapEntry));
+    assert(slot_map.entries != NULL);
+    slot_map.count = 2;
+    slot_map.capacity = 2;
+    slot_map.entries[0] = (XiSlotMapEntry) {
+        .value_id = cond->id,
+        .bc_pc = 0,
+        .bc_slot = 300,
+        .xr_tag = 1,
+    };
+    slot_map.entries[1] = (XiSlotMapEntry) {
+        .value_id = assert_v->id,
+        .bc_pc = 1,
+        .bc_slot = UINT16_MAX,
+        .xr_tag = 0,
+    };
+
+    XmFunc *xm = xi_to_xm_lower(f, NULL, &slot_map, NULL, NULL);
+    assert(xm != NULL);
+    assert(xm->ndeopt == 1);
+    assert(xm->deopt_infos[0].nslots == 1);
+    assert(xm->deopt_infos[0].slots[0].bc_slot == 300);
+
+    xm_func_destroy(xm);
+    xr_free(slot_map.entries);
+    xi_func_free(f);
+}
+
 TEST(lower_builtin_metadata_ops_deopt_to_vm) {
     assert_op_deopts_to_vm(XI_TYPEOF, "typeof_deopt", 1, 0);
     assert_op_deopts_to_vm(XI_CLASS_CREATE, "class_create_deopt", 0, 0);
@@ -1345,6 +1389,7 @@ int main(void) {
     run_lower_print();
     run_lower_throw();
     run_lower_assert_deopts_to_vm();
+    run_lower_deopt_preserves_bc_slot_above_255();
     run_lower_builtin_metadata_ops_deopt_to_vm();
     run_lower_get_builtin_via_helper();
     run_lower_is_deopts_to_vm();

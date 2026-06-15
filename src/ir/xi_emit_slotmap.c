@@ -55,7 +55,7 @@ XR_FUNC XiSlotMap *build_slot_map(EmitCtx *ctx) {
             XiValue *v = blk->values[vi];
             if (!v || v->id >= ctx->reg_map_size)
                 continue;
-            uint8_t reg = ctx->reg_map[v->id];
+            XiEmitReg reg = ctx->reg_map[v->id];
             bool pc_only = ctx->value_pc && ctx->value_pc[v->id] >= 0;
             if (reg == NO_REG && !pc_only)
                 continue;
