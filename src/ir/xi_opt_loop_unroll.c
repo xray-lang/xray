@@ -137,6 +137,32 @@ static bool has_unrollable_side_effects(const XiLoop *loop) {
  * and cached on XiLoop.trip_count / has_trip_count during loop
  * analysis.  The unroll pass reads the cached value directly. */
 
+/* Replace every use of old_val (across all blocks' instructions, phis, and
+ * block control values) with new_val. Used after unrolling to retarget
+ * out-of-loop uses of a header phi to its exit value. */
+static void lu_replace_all_uses(XiFunc *f, XiValue *old_val, XiValue *new_val) {
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            XiValue *v = blk->values[i];
+            for (uint16_t a = 0; a < v->nargs; a++) {
+                if (v->args[a] == old_val)
+                    v->args[a] = new_val;
+            }
+        }
+        for (XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == old_val)
+                    phi->value.args[a] = new_val;
+            }
+        }
+        if (blk->control == old_val)
+            blk->control = new_val;
+    }
+}
+
 /* ========== Full Unroll ========== */
 
 static void clone_value_metadata(XiValue *dst, const XiValue *src) {
@@ -227,6 +253,28 @@ static bool exit_uses_header_directly(const XiLoop *loop, const XiBlock *exit_bl
     return false;
 }
 
+/* Retire a fully-unrolled loop's original blocks: mark them unreachable and
+ * drop their now-dead values and phis. Marking a block isolates its
+ * successors, so iterate to a fixpoint regardless of loop->body order.
+ * Clearing the values matters because the post-pass verifier still scans
+ * UNREACHABLE blocks, and the originals hold stale references (e.g. to
+ * preheader constants) that no longer dominate them after the loop is
+ * bypassed. */
+static void retire_unrolled_loop_blocks(XiFunc *f, XiLoop *loop) {
+    bool marked_any = true;
+    while (marked_any) {
+        marked_any = false;
+        for (uint32_t bi = 0; bi < loop->nbody; bi++) {
+            XiBlock *blk = loop->body[bi];
+            if (blk && xi_cfg_mark_unreachable_if_isolated(f, blk)) {
+                blk->nvalues = 0;
+                blk->phis = NULL;
+                marked_any = true;
+            }
+        }
+    }
+}
+
 static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
     if (loop->nbasic_ivs == 0)
         return false;
@@ -262,10 +310,40 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
     if (!umap_init(f, &last_map, body_values + 8))
         return false;
 
+    /* Header pred slots, for threading loop-carried (non-IV) phis. */
+    uint16_t pre_idx = xi_cfg_pred_index(header, preheader);
+    uint16_t latch_idx = xi_cfg_pred_index(header, loop->latch);
+
+    /* Previous iteration's value map: iteration K resolves each accumulator
+     * (non-IV) header phi to the value produced for its latch input in
+     * iteration K-1. Starts empty; only read for iter > 0. */
+    UnrollMap prev_map;
+    if (!umap_init(f, &prev_map, 1))
+        return false;
+
     for (uint32_t iter = 0; iter < trip_count; iter++) {
         UnrollMap iter_map;
         if (!umap_init(f, &iter_map, body_values + 8))
             return false;
+
+        /* Thread non-IV loop-carried header phis (e.g. accumulators) into this
+         * iteration's map so cloned body values reference the correct
+         * per-iteration definition rather than the soon-to-be-removed header
+         * phi. The IV phi is mapped to a constant inside emit_unrolled_body. */
+        for (XiPhi *phi = header->phis; phi; phi = phi->next) {
+            if (&phi->value == biv->phi)
+                continue;
+            XiValue *incoming;
+            if (iter == 0) {
+                incoming = (pre_idx < phi->value.nargs) ? phi->value.args[pre_idx] : NULL;
+            } else {
+                XiValue *latch_val =
+                    (latch_idx < phi->value.nargs) ? phi->value.args[latch_idx] : NULL;
+                incoming = resolve_arg(&prev_map, latch_val);
+            }
+            if (incoming && !umap_add(&iter_map, &phi->value, incoming))
+                return false;
+        }
 
         if (!emit_unrolled_body(f, loop, iter_blocks[iter], biv, iv_val, &iter_map))
             return false;
@@ -303,8 +381,24 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
         }
         iter_blocks[iter]->sealed = true;
 
+        /* Carry this iteration's map forward so the next iteration can thread
+         * accumulator phis from the values it produced. */
+        prev_map = iter_map;
+
         /* Advance IV. */
         iv_val = (biv->step_op == XI_ADD) ? iv_val + biv->step_const : iv_val - biv->step_const;
+    }
+
+    /* Retarget any out-of-loop use of a header phi to its exit value (the last
+     * iteration's latch input). Covers loop-carried values consumed after the
+     * loop without an exit phi (non-LCSSA), e.g. an accumulator read by a later
+     * loop's header phi. The original loop blocks become unreachable below, so
+     * their internal uses do not matter. */
+    for (XiPhi *phi = header->phis; phi; phi = phi->next) {
+        XiValue *latch_val = (latch_idx < phi->value.nargs) ? phi->value.args[latch_idx] : NULL;
+        XiValue *exit_val = resolve_arg(&last_map, latch_val);
+        if (exit_val && exit_val != &phi->value)
+            lu_replace_all_uses(f, &phi->value, exit_val);
     }
 
     /* Redirect preheader → first iteration block, bypassing the loop. */
@@ -314,12 +408,8 @@ static bool full_unroll(XiFunc *f, XiLoop *loop, uint32_t trip_count) {
     /* Remove header's back-edge predecessor. */
     xi_cfg_remove_pred(header, loop->latch);
 
-    /* Mark original loop blocks unreachable. */
-    for (uint32_t bi = 0; bi < loop->nbody; bi++) {
-        XiBlock *blk = loop->body[bi];
-        if (blk)
-            xi_cfg_mark_unreachable_if_isolated(f, blk);
-    }
+    /* Retire the original loop blocks now that the preheader bypasses them. */
+    retire_unrolled_loop_blocks(f, loop);
 
     return true;
 }
