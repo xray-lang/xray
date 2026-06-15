@@ -1,6 +1,7 @@
 contains=xaot-plan v0
-contains=function 2 name=mark module=0 depth=1 abi=tagged boundary=tagged-type params=2 ret=XrValue/tagged/tagged
+contains=function 2 name=mark module=0 depth=1 abi=native boundary=none params=2 ret=void */ptr/ptr
 contains=op=CALL_METHOD_DIRECT
-regex=boundary [0-9]+ kind=direct-call-arg func=<main> value=v[0-9]+ input=v[0-9]+ reason=direct-call target=mark arg=1 from=scalar/i64 to=tagged/tagged
-c_regex=XrValue v[0-9]+ = direct_method_arg_conversion_mark_[0-9]+\(NULL, v[0-9]+, XR_FROM_INT\(v[0-9]+\)\);
-contains=stats functions=3 native=0 tagged=3 coro=0
+regex=boundary [0-9]+ kind=value-rep func=<main> value=v[0-9]+ input=v[0-9]+ reason=box target=\? arg=- from=ptr/ptr to=tagged/tagged
+c_regex=void \* v[0-9]+ = direct_method_arg_conversion_mark_[0-9]+\(NULL, v[0-9]+, v[0-9]+\);
+c_contains=xr_str_value_from_ptr(v
+contains=stats functions=3 native=1 tagged=2 coro=0

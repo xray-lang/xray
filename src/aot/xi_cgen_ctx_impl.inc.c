@@ -53,6 +53,7 @@ XR_FUNC void xi_cgen_ctx_free(XiCgenCtx *ctx) {
     xr_free(ctx->shared_native_exports);
     xr_free(ctx->methods);
     xr_free(ctx->imports);
+    xr_free(ctx->array_data_cache_decls);
     xr_free(ctx);
 }
 

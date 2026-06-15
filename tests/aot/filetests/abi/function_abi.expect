@@ -4,4 +4,10 @@ contains=  param 0 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=  param 1 class=scalar kind=scalar rep=i64 c_type=int64_t
 contains=function 2 name=choose module=0 depth=1 abi=native boundary=none params=2 ret=int64_t/scalar/i64
 contains=  param 0 class=scalar kind=scalar rep=bool c_type=uint8_t
-contains=stats functions=3 native=2 tagged=1 coro=0
+contains=function 3 name=echo_text module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
+contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
+contains=function 4 name=same_items module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
+contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
+c_contains=xr_str_value_from_ptr(function_abi_echo_text_
+c_regex=xr_mkptr\(function_abi_same_items_[0-9]+\(_cl, \(p[0-9]+\)\.ptr\), XR_TAG_ARRAY\)
+contains=stats functions=5 native=4 tagged=1 coro=0

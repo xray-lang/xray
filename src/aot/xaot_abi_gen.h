@@ -13,7 +13,7 @@
 typedef enum {
     XAOT_ABI_CLASS_SCALAR = 0,
     XAOT_ABI_CLASS_VOID = 1,
-    XAOT_ABI_CLASS_TAGGED = 2,
+    XAOT_ABI_CLASS_POINTER = 2,
     XAOT_ABI_CLASS_COUNT
 } XaotAbiClass;
 
@@ -32,11 +32,11 @@ typedef struct {
     X(FLOAT, "float", XR_KIND_FLOAT, XAOT_ABI_CLASS_SCALAR, XAOT_REP_F64, false, true, true) \
     X(BOOL, "bool", XR_KIND_BOOL, XAOT_ABI_CLASS_SCALAR, XAOT_REP_BOOL, false, false, true) \
     X(UNIT, "unit", XR_KIND_UNIT, XAOT_ABI_CLASS_VOID, XAOT_REP_VOID, false, false, false) \
-    X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, false) \
-    X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, false) \
-    X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, false) \
-    X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, false) \
-    X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_TAGGED, XAOT_REP_TAGGED, false, false, false)
+    X(STRING, "string", XR_KIND_STRING, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(ARRAY, "array", XR_KIND_ARRAY, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(MAP, "map", XR_KIND_MAP, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(SET, "set", XR_KIND_SET, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true) \
+    X(TUPLE, "tuple", XR_KIND_TUPLE, XAOT_ABI_CLASS_POINTER, XAOT_REP_PTR, false, false, true)
 
 
 static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
@@ -58,25 +58,25 @@ static inline const XaotAbiInfo *xaot_abi_for_type_kind(XrTypeKind kind) {
          XAOT_REP_VOID, false,
          false, false},
         {"string", XR_KIND_STRING,
-         XAOT_ABI_CLASS_TAGGED,
-         XAOT_REP_TAGGED, false,
-         false, false},
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
         {"array", XR_KIND_ARRAY,
-         XAOT_ABI_CLASS_TAGGED,
-         XAOT_REP_TAGGED, false,
-         false, false},
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
         {"map", XR_KIND_MAP,
-         XAOT_ABI_CLASS_TAGGED,
-         XAOT_REP_TAGGED, false,
-         false, false},
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
         {"set", XR_KIND_SET,
-         XAOT_ABI_CLASS_TAGGED,
-         XAOT_REP_TAGGED, false,
-         false, false},
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
         {"tuple", XR_KIND_TUPLE,
-         XAOT_ABI_CLASS_TAGGED,
-         XAOT_REP_TAGGED, false,
-         false, false},
+         XAOT_ABI_CLASS_POINTER,
+         XAOT_REP_PTR, false,
+         false, true},
     };
     for (unsigned i = 0; i < sizeof(table) / sizeof(table[0]); i++) {
         if (table[i].type_kind == kind)
@@ -113,7 +113,7 @@ static inline bool xaot_abi_type_can_use_typed_boundary(const XrType *type) {
     if (!abi || !abi->typed_boundary || (type->is_nullable && !abi->allows_nullable))
         return false;
     storage = xaot_abi_storage_rep_for_type(type);
-    return storage == XR_REP_I64 || storage == XR_REP_F64;
+    return storage == XR_REP_I64 || storage == XR_REP_F64 || storage == XR_REP_PTR;
 }
 
 #endif  /* XAOT_ABI_GEN_H */

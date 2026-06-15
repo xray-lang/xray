@@ -57,6 +57,8 @@ static const char *ctype_str(XrRep rep) {
             return "int64_t";
         case XR_REP_F64:
             return "double";
+        case XR_REP_PTR:
+            return "void *";
         default:
             return "XrValue";
     }
@@ -373,6 +375,9 @@ struct XiCgenCtx {
     const XiFunc *sync_go_targets[CG_MAX_SYNC_GO_TARGETS];
     int nsync_go_targets;
     CgClassFieldCache class_field_cache;
+    const XiValue **array_data_cache_decls;
+    int narray_data_cache_decls;
+    int array_data_cache_decl_cap;
     CgStrLit *strlit_buckets[CG_STRLIT_BUCKETS];
     CgStrLit **strlit_list; /* ordered by id for definition emission */
     int nstrlit;
@@ -509,6 +514,33 @@ static void cg_emit_str_value(XiCgenCtx *ctx, FILE *out, const char *s) {
 
 static const XaotBundle *cg_ctx_aot_bundle(const XiCgenCtx *ctx) {
     return ctx ? ctx->aot_bundle : NULL;
+}
+
+static void cg_array_data_cache_decls_reset(XiCgenCtx *ctx) {
+    if (ctx)
+        ctx->narray_data_cache_decls = 0;
+}
+
+static bool cg_array_data_cache_decl_mark(XiCgenCtx *ctx, const XiValue *origin) {
+    if (!ctx || !origin)
+        return false;
+    for (int i = 0; i < ctx->narray_data_cache_decls; i++) {
+        if (ctx->array_data_cache_decls[i] == origin)
+            return false;
+    }
+    if (ctx->narray_data_cache_decls >= ctx->array_data_cache_decl_cap) {
+        int new_cap = ctx->array_data_cache_decl_cap ? ctx->array_data_cache_decl_cap * 2 : 16;
+        const XiValue **new_decls = (const XiValue **) xr_realloc(
+            ctx->array_data_cache_decls, sizeof(const XiValue *) * (size_t) new_cap);
+        if (!new_decls) {
+            ctx->error = true;
+            return false;
+        }
+        ctx->array_data_cache_decls = new_decls;
+        ctx->array_data_cache_decl_cap = new_cap;
+    }
+    ctx->array_data_cache_decls[ctx->narray_data_cache_decls++] = origin;
+    return true;
 }
 
 #include "xi_cgen_ctx_impl.inc.c"
@@ -1462,6 +1494,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     }
 
     cg_class_field_cache_reset(&ctx->class_field_cache);
+    cg_array_data_cache_decls_reset(ctx);
 
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     bool typed_abi = cg_func_uses_typed_abi(ctx, f);
@@ -1525,22 +1558,21 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
             fprintf(out, ", XrValue p%u", i);
         fprintf(out, ") {\n");
         fprintf(out, "    return ");
-        bool wrapped = emit_conversion_prefix(out, f->return_type, cg_func_return_abi_rep(ctx, f),
-                                              XR_REP_TAGGED);
+        const char *conv_suffix = emit_conversion_prefix(
+            out, f->return_type, cg_func_return_abi_rep(ctx, f), XR_REP_TAGGED);
         emit_fname(ctx, out, prefix, f);
         fprintf(out, "(_cl");
         for (uint16_t i = 0; i < f->nparams; i++) {
             fprintf(out, ", ");
             XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
-            if (param_rep == XR_REP_F64)
-                fprintf(out, "XR_TO_FLOAT(p%u)", i);
-            else if (param_rep == XR_REP_I64)
-                fprintf(out, "XR_TO_INT(p%u)", i);
-            else
-                fprintf(out, "p%u", i);
+            const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
+            const char *param_suffix =
+                emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
+            fprintf(out, "p%u", i);
+            emit_conversion_suffix(out, param_suffix);
         }
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         fprintf(out, ";\n");
         fprintf(out, "}\n\n");
     }

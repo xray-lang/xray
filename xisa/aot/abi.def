@@ -36,39 +36,39 @@
 (define-aot-abi string
   :type-kind XR_KIND_STRING
   :nullable no
-  :abi-class tagged
-  :default-rep tagged
+  :abi-class pointer
+  :default-rep ptr
   :native-width no
-  :typed-boundary no)
+  :typed-boundary yes)
 
 (define-aot-abi array
   :type-kind XR_KIND_ARRAY
   :nullable no
-  :abi-class tagged
-  :default-rep tagged
+  :abi-class pointer
+  :default-rep ptr
   :native-width no
-  :typed-boundary no)
+  :typed-boundary yes)
 
 (define-aot-abi map
   :type-kind XR_KIND_MAP
   :nullable no
-  :abi-class tagged
-  :default-rep tagged
+  :abi-class pointer
+  :default-rep ptr
   :native-width no
-  :typed-boundary no)
+  :typed-boundary yes)
 
 (define-aot-abi set
   :type-kind XR_KIND_SET
   :nullable no
-  :abi-class tagged
-  :default-rep tagged
+  :abi-class pointer
+  :default-rep ptr
   :native-width no
-  :typed-boundary no)
+  :typed-boundary yes)
 
 (define-aot-abi tuple
   :type-kind XR_KIND_TUPLE
   :nullable no
-  :abi-class tagged
-  :default-rep tagged
+  :abi-class pointer
+  :default-rep ptr
   :native-width no
-  :typed-boundary no)
+  :typed-boundary yes)

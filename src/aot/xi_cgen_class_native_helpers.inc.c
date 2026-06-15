@@ -44,6 +44,7 @@ static bool cg_class_native_receiver_ref_field(XiCgenCtx *ctx, const XiFunc *f, 
         memset(out_info, 0, sizeof(*out_info));
     if (out_idx)
         *out_idx = 0;
+    v = cg_unwrap_identity_value(v);
     if (!info.layout || !v || v->op != XI_LOAD_FIELD || v->nargs < 1 ||
         !cg_class_native_receiver_value(ctx, f, v->args[0]))
         return false;
@@ -80,10 +81,10 @@ static bool emit_class_native_map_length_expr(XiCgenCtx *ctx, FILE *out, const X
     uint16_t idx = 0;
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_MAP_REF, &info, &idx))
         return false;
-    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
     emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
     fprintf(out, "->len");
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -149,10 +150,10 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, "->len");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "get") == 0) {
@@ -167,27 +168,28 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             cg_rep(v) == map_info.value.rep) {
             const char *helper = cg_map_direct_get_helper(&map_info);
             if (helper) {
-                bool wrapped = emit_conversion_prefix(out, v->type, map_info.value.rep, cg_rep(v));
+                const char *conv_suffix =
+                    emit_conversion_prefix(out, v->type, map_info.value.rep, cg_rep(v));
                 fprintf(out, "%s(", helper);
                 emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], map_info.key.rep);
                 fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
         }
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_map_get(");
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "has") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         CgMapElemInfo map_info;
         const char *helper = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
                                  ? cg_map_direct_has_helper(&map_info)
@@ -198,7 +200,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             fprintf(out, ", ");
             emit_value_as_rep(out, v->args[1], map_info.key.rep);
             fprintf(out, ", %s, %s)", map_info.key.elem_name, map_info.value.elem_name);
-            emit_conversion_suffix(out, wrapped);
+            emit_conversion_suffix(out, conv_suffix);
             return true;
         }
         fprintf(out, "(int64_t)xrt_map_has(");
@@ -206,11 +208,11 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "delete") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         CgMapElemInfo map_info;
         const char *helper = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
                                  ? cg_map_direct_delete_helper(&map_info)
@@ -225,11 +227,11 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         }
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 2 && strcmp(method, "set") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         CgMapElemInfo map_info;
         const char *helper = cg_map_type_direct_info_ctx(ctx, v->args[0]->type, &map_info)
                                  ? cg_map_direct_set_helper(&map_info)
@@ -243,7 +245,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
             emit_value_as_rep(out, v->args[2], map_info.value.rep);
             fprintf(out, ", %s, %s), XR_NULL_VAL)", map_info.key.elem_name,
                     map_info.value.elem_name);
-            emit_conversion_suffix(out, wrapped);
+            emit_conversion_suffix(out, conv_suffix);
             return true;
         }
         fprintf(out, "(xrt_map_set(");
@@ -253,7 +255,7 @@ static bool emit_class_native_map_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     return false;
@@ -368,10 +370,10 @@ static bool emit_class_native_set_length_expr(XiCgenCtx *ctx, FILE *out, const X
     uint16_t idx = 0;
     if (!cg_class_native_receiver_ref_field(ctx, f, v->args[0], XR_NATIVE_SET_REF, &info, &idx))
         return false;
-    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
     emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
     fprintf(out, "->len");
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -387,30 +389,30 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         return false;
 
     if (nargs == 0 && (strcmp(method, "length") == 0 || strcmp(method, "size") == 0)) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, "->len");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 0 && strcmp(method, "clear") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "(xrt_set_clear(");
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, "), XR_NULL_VAL)");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 0 && strcmp(method, "values") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         fprintf(out, "xrt_set_values(");
         emit_class_native_field_ref(ctx, out, info.class_data, "p0", idx);
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "add") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         CgSetElemInfo set_info;
         if (cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -423,7 +425,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, "), XR_NULL_VAL)");
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
             if (set_info.rep == XR_REP_F64) {
@@ -432,7 +434,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s), XR_NULL_VAL)", set_info.elem_name);
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
         }
@@ -441,11 +443,11 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, "), XR_NULL_VAL)");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "has") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         CgSetElemInfo set_info;
         if (cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -458,7 +460,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, ")");
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
             if (set_info.rep == XR_REP_F64) {
@@ -467,7 +469,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
         }
@@ -476,11 +478,11 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     if (nargs == 1 && strcmp(method, "delete") == 0) {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
         CgSetElemInfo set_info;
         if (cg_set_type_direct_info_ctx(ctx, v->args[0]->type, &set_info)) {
             if (set_info.rep == XR_REP_I64) {
@@ -494,7 +496,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 if (strcmp(set_info.elem_name, "XR_ELEM_I64") != 0)
                     fprintf(out, ", %s", set_info.elem_name);
                 fprintf(out, ")");
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
             if (set_info.rep == XR_REP_F64) {
@@ -503,7 +505,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
                 fprintf(out, ", ");
                 emit_value_as_rep(out, v->args[1], XR_REP_F64);
                 fprintf(out, ", %s)", set_info.elem_name);
-                emit_conversion_suffix(out, wrapped);
+                emit_conversion_suffix(out, conv_suffix);
                 return true;
             }
         }
@@ -512,7 +514,7 @@ static bool emit_class_native_set_method_call_expr(XiCgenCtx *ctx, FILE *out, co
         fprintf(out, ", ");
         emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         return true;
     }
     return false;
@@ -637,7 +639,8 @@ static bool cg_class_native_set_field_value_is_elided(XiCgenCtx *ctx, const XiFu
 }
 
 static const XiValue *cg_class_native_unwrap_receiver_alias(const XiValue *v) {
-    while (v && (v->op == XI_COPY || v->op == XI_MOVE) && v->nargs >= 1)
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY || v->op == XI_MOVE) &&
+           v->nargs >= 1)
         v = v->args[0];
     return v;
 }
@@ -811,10 +814,10 @@ static bool emit_class_native_receiver_field_load_expr(XiCgenCtx *ctx, FILE *out
         fprintf(out, ", %s)", tag_name);
         return true;
     }
-    bool wrapped =
+    const char *conv_suffix =
         emit_conversion_prefix(out, v->type, cg_struct_field_rep(info.layout, idx), cg_rep(v));
     emit_class_native_field_ref(ctx, out, info.class_data, "p0", (uint16_t) idx);
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -884,12 +887,10 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
     for (uint16_t i = 1; i < f->nparams; i++) {
         fprintf(out, ", ");
         XrRep rep = cg_func_param_abi_rep(ctx, f, i);
-        if (rep == XR_REP_F64)
-            fprintf(out, "XR_TO_FLOAT(p%u)", (unsigned) i);
-        else if (rep == XR_REP_I64)
-            fprintf(out, "XR_TO_INT(p%u)", (unsigned) i);
-        else
-            fprintf(out, "p%u", (unsigned) i);
+        const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
+        const char *param_suffix = emit_conversion_prefix(out, param_type, XR_REP_TAGGED, rep);
+        fprintf(out, "p%u", (unsigned) i);
+        emit_conversion_suffix(out, param_suffix);
     }
     fprintf(out, ");\n");
     for (uint16_t i = 0; i < info.layout->field_count; i++)
@@ -899,9 +900,10 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         fprintf(out, "    return p0;\n");
     } else {
         fprintf(out, "    return ");
-        bool wrapped = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
+        const char *conv_suffix =
+            emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
         fprintf(out, "_result");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
         fprintf(out, ";\n");
     }
     fprintf(out, "}\n\n");
@@ -1429,9 +1431,9 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
     if (cg_class_native_instance_origin(ctx, f, v->args[0]) &&
         cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data)) {
         bool emit_ctor_stmt_expr = target_info.is_constructor;
-        bool wrapped = emit_ctor_stmt_expr
-                           ? false
-                           : emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
+        const char *conv_suffix = emit_ctor_stmt_expr
+                                      ? NULL
+                                      : emit_conversion_prefix(out, v->type, actual_rep, cg_rep(v));
         if (emit_ctor_stmt_expr)
             fprintf(out, "({ (void)");
         emit_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
@@ -1446,9 +1448,9 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
         if (emit_ctor_stmt_expr)
             fprintf(out, "; XR_NULL_VAL; })");
         else
-            emit_conversion_suffix(out, wrapped);
+            emit_conversion_suffix(out, conv_suffix);
     } else {
-        bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
         emit_typed_abi_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
         fprintf(out, "(NULL");
         for (uint16_t a = 0; a < v->nargs; a++) {
@@ -1456,7 +1458,7 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
         }
         fprintf(out, ")");
-        emit_conversion_suffix(out, wrapped);
+        emit_conversion_suffix(out, conv_suffix);
     }
     return true;
 }

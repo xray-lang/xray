@@ -211,7 +211,17 @@ def main() -> int:
             "  :boxed yes\n"
             "  :dynamic-kind tagged\n"
             "  :native-type none\n"
-            "  :storage-rep XR_REP_TAGGED)\n",
+            "  :storage-rep XR_REP_TAGGED)\n"
+            "(define-aot-rep ptr\n"
+            "  :c-type \"void *\"\n"
+            "  :size 8\n"
+            "  :align 8\n"
+            "  :signed no\n"
+            "  :integer no\n"
+            "  :boxed no\n"
+            "  :dynamic-kind pointer\n"
+            "  :native-type none\n"
+            "  :storage-rep XR_REP_PTR)\n",
         )
         bad_aot_abi = write(
             tmp / "bad_aot_abi.def",
@@ -235,10 +245,10 @@ def main() -> int:
             "(define-aot-abi array\n"
             "  :type-kind XR_KIND_ARRAY\n"
             "  :nullable no\n"
-            "  :abi-class tagged\n"
-            "  :default-rep tagged\n"
+            "  :abi-class pointer\n"
+            "  :default-rep ptr\n"
             "  :native-width no\n"
-            "  :typed-boundary no)\n",
+            "  :typed-boundary yes)\n",
         )
         bad_aot_layout = write(
             tmp / "bad_aot_layout.def",
@@ -423,6 +433,10 @@ def main() -> int:
             raise AssertionError(f"missing AOT ABI typed-boundary query: {aot_abi_header}")
         if "XAOT_ABI_CLASS_SCALAR" not in aot_abi_header:
             raise AssertionError(f"missing AOT ABI class enum: {aot_abi_header}")
+        if "XAOT_ABI_CLASS_POINTER" not in aot_abi_header:
+            raise AssertionError(f"missing AOT ABI pointer class enum: {aot_abi_header}")
+        if "storage == XR_REP_PTR" not in aot_abi_header:
+            raise AssertionError(f"missing AOT ABI pointer typed-boundary query: {aot_abi_header}")
         expect_fail(
             ns.xisagen,
             [

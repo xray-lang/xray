@@ -2454,8 +2454,10 @@ TEST(cgen_coro_frame_release_uses_aot_arc) {
     assert(!had_error && "AOT coroutine with ARC values should generate");
     assert(contains(code, "_aot_release(void *frame, struct XrCoroGC *gc)") &&
            "frame release must receive coroutine GC context");
-    assert(contains(code, "xrt_release(f->v3)") &&
-           "AOT ARC string value should be released from the frame");
+    assert(contains(code, "xrt_release(xr_str_value_from_ptr(f->v") &&
+           "AOT ARC string ptr slot should be released after restoring XrValue tag");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, xr_str_value_from_ptr(f->v") &&
+           "AOT ARC string ptr slot should be traced after restoring XrValue tag");
     assert(contains(code, ".root_count = 1,") &&
            "AOT ARC string frame should report one traced root slot");
     assert(contains(code, ".release_count = 1,") &&
@@ -2528,20 +2530,22 @@ TEST(cgen_coro_go_sync_function_uses_wrapper_desc) {
            "sync go wrapper must call typed normal function bodies");
     assert(contains(code, "int64_t _raw_result = test_mutate_copy_") &&
            "sync go wrapper must pass tagged params to typed normal functions");
-    assert(contains(code, "XrValue _raw_result = test_identity_copy_") &&
-           "sync go wrapper must support tagged results that alias frame params");
+    assert(contains(code, "void * _raw_result = test_identity_copy_") &&
+           "sync go wrapper must support pointer results that alias frame params");
     assert(contains(code, "XrValue _result = XR_FROM_INT(_raw_result)") &&
            "sync go wrapper must box native scalar results for the coroutine ABI");
+    assert(contains(code, "XrValue _result = xr_mkptr(_raw_result, XR_TAG_ARRAY)") &&
+           "sync go wrapper must box native pointer results for the coroutine ABI");
     assert(contains(code, "xrt_retain(_result)") &&
            "sync go wrapper must retain a result that aliases an owned frame param");
-    assert(contains(code, "xrt_release(f->p0)") &&
-           "sync go wrapper must release cloned tagged frame params");
+    assert(contains(code, "xrt_release(xr_mkptr(f->p0, XR_TAG_ARRAY))") &&
+           "sync go wrapper must release cloned pointer frame params after restoring the tag");
     assert(contains(code, ".release_count = 1,") &&
            "sync go wrapper descriptor must report cloned tagged param releases");
     assert(contains(code, "xr_aot_done(_result)") &&
            "sync go wrapper must complete through the AOT coroutine result ABI");
-    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->p0)") &&
-           "sync go wrapper params must remain traceable while queued");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, xr_mkptr(f->p0, XR_TAG_ARRAY))") &&
+           "sync go wrapper pointer params must remain traceable while queued");
     assert(contains(code, "xrt_value_clone_for_coro(") &&
            "sync go tagged arguments must still cross the coroutine clone boundary");
     assert(contains(code, "_aot_desc, _child_frame_") &&

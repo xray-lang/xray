@@ -208,6 +208,16 @@ static inline XrValue xr_str_lit(const xrt_str_t *hdr) {
     return r;
 }
 
+static inline XrValue xr_str_value_from_ptr(void *ptr) {
+    if (!ptr)
+        return (XrValue) {.tag = XR_TAG_NULL};
+    const xrt_str_t *hdr = (const xrt_str_t *) ptr;
+    XrValue r = {0};
+    r.tag = (hdr->flags & XRT_STR_LITERAL) ? XR_TAG_STR : XR_TAG_STR_ARC;
+    r.ptr = ptr;
+    return r;
+}
+
 /* Define a static literal header for a C string literal.  hash stays 0
  * (hand-written headers cannot precompute it); xrt_str_hash recomputes on
  * demand without caching into const storage. */

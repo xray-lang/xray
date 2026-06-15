@@ -764,6 +764,11 @@ static bool cg_array_native_local_arg_use_is_safe(const XiValue *user, uint16_t 
         case XI_RETAIN:
         case XI_RELEASE:
             return arg_index == 0;
+        case XI_BOX:
+        case XI_UNBOX:
+        case XI_COPY:
+        case XI_MOVE:
+            return arg_index == 0;
         default:
             return false;
     }
@@ -842,6 +847,8 @@ static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const Xi
     if (plan) {
         if (!cg_array_elem_info_from_cache_plan(plan, &info))
             return false;
+        if (!cg_array_data_cache_decl_mark(ctx, plan->value))
+            return false;
         /* Slice views alias foreign storage at an arbitrary element offset,
          * so the alignment promise only holds for non-view caches. */
         bool aligned = (plan->flags & XAOT_ARRAY_CACHE_VIEW) == 0;
@@ -861,6 +868,8 @@ static bool emit_typed_array_data_cache_decl(XiCgenCtx *ctx, FILE *out, const Xi
         return true;
     }
     if (!cg_array_can_cache_data_for_value(ctx, v, &info))
+        return false;
+    if (!cg_array_data_cache_decl_mark(ctx, v))
         return false;
     const XiFunc *f = v && v->block ? v->block->func : NULL;
     fprintf(out, "    %s *%s", info.ctype, cg_array_cache_restrict_str(ctx, v));
@@ -1159,7 +1168,9 @@ static void emit_typed_array_ptr_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f
     fprintf(out, "(");
     fprintf(out, "(xrt_array_t*)");
     emit_vref(out, value);
-    fprintf(out, ".ptr)");
+    if (cg_value_plan_storage_rep(ctx, value) != XR_REP_PTR)
+        fprintf(out, ".ptr");
+    fprintf(out, ")");
 }
 
 static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
@@ -1172,7 +1183,7 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
     bool unchecked = cg_array_index_access_bounds_proven(ctx, f, v);
     const XiValue *cached_origin = NULL;
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
-    bool wrapped = emit_conversion_prefix(out, v->type, info.rep, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, info.rep, cg_rep(v));
     if (unchecked) {
         if (use_cache)
             emit_aot_hot_region_begin(out, "typed_array_raw_access");
@@ -1222,7 +1233,7 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         }
         fprintf(out, " : 0; })");
     }
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -1487,10 +1498,10 @@ static bool emit_typed_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
         !cg_array_value_storage_info(ctx, f, v->args[0], &info, CG_ARRAY_STORAGE_READ))
         return false;
 
-    bool wrapped = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "->len");
-    emit_conversion_suffix(out, wrapped);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -1869,11 +1880,13 @@ static bool emit_typed_array_map_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *c
     if (emit_typed_array_map_inline_expr(ctx, out, current, prefix, v))
         return true;
 
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     fprintf(out, "xrt_array_map_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ", %s)", info.elem_name);
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -1885,11 +1898,13 @@ static bool emit_typed_array_filter_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
     if (emit_typed_array_filter_inline_expr(ctx, out, current, prefix, v))
         return true;
 
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     fprintf(out, "xrt_array_filter_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[1], XR_REP_TAGGED);
     fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
 
@@ -1902,6 +1917,7 @@ static bool emit_typed_array_reduce_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
     if (emit_typed_array_reduce_inline_expr(ctx, out, current, prefix, v))
         return true;
 
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
     fprintf(out, "xrt_array_reduce_typed(");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ", ");
@@ -1909,5 +1925,6 @@ static bool emit_typed_array_reduce_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
     fprintf(out, ", ");
     emit_value_as_rep(out, v->args[2], XR_REP_TAGGED);
     fprintf(out, ")");
+    emit_conversion_suffix(out, conv_suffix);
     return true;
 }
