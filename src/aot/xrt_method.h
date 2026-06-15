@@ -269,6 +269,10 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             }
             return arr;
         }
+        if (sym == XRT_SYM_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_KEYS);
+        if (sym == XRT_SYM_ENTRIES_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_PAIRS);
     }
     if (recv.tag == XR_TAG_SET) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
@@ -282,6 +286,15 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         }
         if (sym == XRT_SYM_VALUES)
             return xrt_set_values(s);
+        if (sym == XRT_SYM_ITERATOR)
+            return xrt_iterator_new(recv, XRT_ITER_VALUES);
+    }
+    if (recv.tag == XR_TAG_ITERATOR) {
+        xrt_iterator_t *it = (xrt_iterator_t *) recv.ptr;
+        if (sym == XRT_SYM_HAS_NEXT)
+            return XR_FROM_BOOL(xrt_iterator_has_next(it));
+        if (sym == XRT_SYM_NEXT)
+            return xrt_iterator_next(it);
     }
     if (recv.tag == XR_TAG_STRBUF) {
         xrt_strbuf_t *sb = (xrt_strbuf_t *) recv.ptr;
