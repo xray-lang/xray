@@ -74,19 +74,19 @@ static void test_stackmap_verify(void) {
 
 static void test_deopt_verify(void) {
     uint32_t err_idx = 777;
+    // slots is a pointer into the deopt-table block; supply real storage here.
+    XmRtDeoptSlot slots0[1] = {0};
     XmRtDeoptEntry entries[2] = {0};
     entries[0].bc_pc = 8;
     entries[0].deopt_id = 0;
     entries[0].nslots = 1;
+    entries[0].slots = slots0;
     entries[0].slots[0].loc_kind = (uint8_t) DEOPT_LOC_SPILL;
     entries[0].slots[0].loc.spill_offset = 16;
     entries[1].bc_pc = 12;
     entries[1].deopt_id = 1;
 
     check_error("deopt valid", xm_verify_deopt(entries, 2, &err_idx), XM_META_VERIFY_OK);
-    check_error("deopt count overflow",
-                xm_verify_deopt(NULL, XM_MAX_RT_DEOPT_ENTRIES + 1, &err_idx),
-                XM_META_VERIFY_DEOPT_COUNT_OVERFLOW);
 
     entries[1].deopt_id = 0;
     check_error("deopt id mismatch", xm_verify_deopt(entries, 2, &err_idx),
@@ -97,11 +97,6 @@ static void test_deopt_verify(void) {
     check_error("deopt invalid bc pc", xm_verify_deopt(entries, 2, &err_idx),
                 XM_META_VERIFY_DEOPT_BC_PC_INVALID);
     entries[0].bc_pc = 8;
-
-    entries[0].nslots = XM_MAX_DEOPT_SLOTS + 1;
-    check_error("deopt nslots overflow", xm_verify_deopt(entries, 2, &err_idx),
-                XM_META_VERIFY_DEOPT_NSLOTS_OVERFLOW);
-    entries[0].nslots = 1;
 
     entries[0].slots[0].loc_kind = (uint8_t) DEOPT_LOC_CONST_PTR + 1;
     check_error("deopt loc kind", xm_verify_deopt(entries, 2, &err_idx),

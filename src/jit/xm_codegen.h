@@ -79,17 +79,16 @@ typedef struct {
     } loc;
 } XmRtDeoptSlot;
 
-#define XM_MAX_DEOPT_SLOTS 32
-
 // One deopt point in the runtime table
 typedef struct {
     uint32_t bc_pc;     // bytecode PC to resume interpreter at
     uint16_t nslots;    // number of live slot entries
     uint16_t deopt_id;  // index (matches codegen deopt stub id)
-    XmRtDeoptSlot slots[XM_MAX_DEOPT_SLOTS];
+    // Points into the single deopt-table block (the XmRtDeoptEntry array is
+    // immediately followed by every entry's slots). The whole table frees with
+    // one xr_free of the entry array; never free this pointer on its own.
+    XmRtDeoptSlot *slots;
 } XmRtDeoptEntry;
-
-#define XM_MAX_RT_DEOPT_ENTRIES 64
 
 /* ========== GC Stack Map (compile-time bitmap for precise GC root scanning) ========== */
 
@@ -112,8 +111,11 @@ typedef struct {
     // OSR entry points for loop headers
     XmOsrEntry osr_entries[XM_MAX_OSR_ENTRIES];
     uint32_t nosr;
-    // Runtime deopt table (copied to XrProto after compilation)
-    XmRtDeoptEntry deopt_entries[XM_MAX_RT_DEOPT_ENTRIES];
+    // Runtime deopt table: one heap block holding the XmRtDeoptEntry array
+    // immediately followed by every entry's slots (each entry->slots points
+    // into this block). Ownership transfers to XrProto.deopt_table; a single
+    // xr_free releases the whole table. NULL when ndeopt == 0.
+    XmRtDeoptEntry *deopt_entries;
     uint32_t ndeopt;
     // GC stack map table (heap-allocated, transferred to XrProto)
     XrStackMapTable *stack_map;

@@ -634,6 +634,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         xr_log_warning("jit", "codegen failed for %s: %s",
                        proto->name ? XR_STRING_CHARS(proto->name) : "?",
                        res.error ? res.error : "unknown");
+        xr_free(res.deopt_entries);  // built before success flag; NULL on early fail
         xm_func_destroy(func);
         xr_free(shared_protos);
         return false;
@@ -644,14 +645,11 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
         xm_code_alloc_retire(&jit->code_alloc, proto->jit_entry, res.code_size);
     }
 
-    // Heap-copy deopt table from codegen result (res has stack-allocated array)
-    XmRtDeoptEntry *deopt_copy = NULL;
-    if (res.ndeopt > 0) {
-        size_t deopt_size = res.ndeopt * sizeof(XmRtDeoptEntry);
-        deopt_copy = (XmRtDeoptEntry *) xr_malloc(deopt_size);
-        if (deopt_copy)
-            memcpy(deopt_copy, res.deopt_entries, deopt_size);
-    }
+    // Transfer ownership of the deopt-table block to the proto. The builder
+    // packs the entry array + every entry's slots into one allocation (each
+    // entry->slots points inside it), so it must be moved, not shallow-copied.
+    XmRtDeoptEntry *deopt_copy = res.deopt_entries;
+    res.deopt_entries = NULL;
 
     // Heap-copy OSR entries from codegen result
     XmOsrEntry *osr_copy = NULL;

@@ -148,21 +148,15 @@ static inline XmMetaVerifyError xm_verify_stackmap(const XrStackMapTable *table,
 }
 
 /* Verify runtime deopt table invariants.
- *  - ndeopt <= XM_MAX_RT_DEOPT_ENTRIES
  *  - entry.deopt_id == index (xm_jit_deopt_recover indexes by deopt_id)
  *  - entry.bc_pc != UINT32_MAX (record_deopt rejects this anchor)
- *  - entry.nslots <= XM_MAX_DEOPT_SLOTS
  *  - per slot:
  *      loc_kind in [DEOPT_LOC_REG .. DEOPT_LOC_CONST_PTR]
  *      LOC_SPILL: spill_offset in [0, XM_DEOPT_SPILL_SAVE_BYTES) and 8-aligned
+ * Table size and per-entry slot count are unbounded (dynamically allocated).
  * No bounds on bc_slot (negative is the "unmapped" sentinel and runtime skips). */
 static inline XmMetaVerifyError xm_verify_deopt(const XmRtDeoptEntry *entries, uint32_t ndeopt,
                                                 uint32_t *err_idx) {
-    if (ndeopt > XM_MAX_RT_DEOPT_ENTRIES) {
-        if (err_idx)
-            *err_idx = 0;
-        return XM_META_VERIFY_DEOPT_COUNT_OVERFLOW;
-    }
     for (uint32_t i = 0; i < ndeopt; i++) {
         const XmRtDeoptEntry *e = &entries[i];
         if (e->deopt_id != (uint16_t) i) {
@@ -174,11 +168,6 @@ static inline XmMetaVerifyError xm_verify_deopt(const XmRtDeoptEntry *entries, u
             if (err_idx)
                 *err_idx = i;
             return XM_META_VERIFY_DEOPT_BC_PC_INVALID;
-        }
-        if (e->nslots > XM_MAX_DEOPT_SLOTS) {
-            if (err_idx)
-                *err_idx = i;
-            return XM_META_VERIFY_DEOPT_NSLOTS_OVERFLOW;
         }
         for (uint16_t s = 0; s < e->nslots; s++) {
             const XmRtDeoptSlot *sl = &e->slots[s];
