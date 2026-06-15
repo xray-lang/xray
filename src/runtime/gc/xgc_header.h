@@ -220,15 +220,9 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
 
 #include <stdatomic.h>
 
-/* Immortal sentinel and its saturation band. INT32_MIN is the canonical
- * immortal value; any rc <= XR_RC_STICKY_BAND is treated as immortal so the
- * atomic count (which grows downward from -1) can never wrap through the band
- * into the thread-local (rc >= 0) range. */
-#define XR_RC_STICKY ((int32_t) INT32_MIN)
-#define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))
-
-/* Fresh thread-local object: exactly one owner. 0-based, so unique == 0. */
-#define XR_RC_INIT ((int32_t) 0)
+/* XR_RC_STICKY / XR_RC_STICKY_BAND / XR_RC_INIT live in
+ * src/shared/xr_obj_header.h so standalone AOT bump objects can use the same
+ * sentinel as the VM/JIT RC fast paths. */
 
 static inline bool xr_rc_is_sticky(int32_t rc) {
     return rc <= XR_RC_STICKY_BAND;
@@ -236,6 +230,8 @@ static inline bool xr_rc_is_sticky(int32_t rc) {
 
 /* Cold path for dup on a non-thread-local object (rc < 0). */
 static inline void xr_obj_dup_slow(XrObjHeader *o) {
+    if (o->extra & XR_OBJ_STORAGE_BUMP)
+        return; /* bump arena: freed in bulk, never counted */
     _Atomic(int32_t) *rcp = &o->refcount;
     int32_t rc = atomic_load_explicit(rcp, memory_order_relaxed);
     if (xr_rc_is_sticky(rc))
@@ -252,6 +248,8 @@ static inline void xr_obj_dup_slow(XrObjHeader *o) {
 /* Cold path for drop on a non-thread-local object (rc < 0). Returns true
  * when the last shared reference is released and the caller must destroy. */
 static inline bool xr_obj_drop_slow_is_last(XrObjHeader *o) {
+    if (o->extra & XR_OBJ_STORAGE_BUMP)
+        return false; /* bump arena: freed in bulk, never RC-freed */
     _Atomic(int32_t) *rcp = &o->refcount;
     int32_t rc = atomic_load_explicit(rcp, memory_order_relaxed);
     if (xr_rc_is_sticky(rc))
@@ -269,6 +267,8 @@ static inline bool xr_obj_drop_slow_is_last(XrObjHeader *o) {
 static inline void xr_obj_dup(XrObjHeader *o) {
     if (!o)
         return;
+    if (o->extra & XR_OBJ_STORAGE_BUMP)
+        return; /* bump arena: freed in bulk, never counted */
     int32_t rc = atomic_load_explicit(&o->refcount, memory_order_relaxed);
     if (rc >= 0) {
         atomic_store_explicit(&o->refcount, rc + 1, memory_order_relaxed);
@@ -283,6 +283,8 @@ static inline void xr_obj_dup(XrObjHeader *o) {
 static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
     if (!o)
         return false;
+    if (o->extra & XR_OBJ_STORAGE_BUMP)
+        return false; /* bump arena: freed in bulk, never RC-freed */
     int32_t rc = atomic_load_explicit(&o->refcount, memory_order_relaxed);
     if (rc > 0) {
         atomic_store_explicit(&o->refcount, rc - 1, memory_order_relaxed);
@@ -296,7 +298,8 @@ static inline bool xr_obj_drop_is_last(XrObjHeader *o) {
 /* Whether a thread-local object is uniquely owned (drop-reuse eligibility).
  * Shared/immortal objects (rc < 0) are never unique to a single coroutine. */
 static inline bool xr_obj_is_unique(const XrObjHeader *o) {
-    return o && atomic_load_explicit(&o->refcount, memory_order_relaxed) == 0;
+    return o && !(o->extra & XR_OBJ_STORAGE_BUMP) &&
+           atomic_load_explicit(&o->refcount, memory_order_relaxed) == 0;
 }
 
 /* ========== Initialization Functions ========== */

@@ -64,4 +64,10 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_HAS_DTOR 0x0008
 #define XR_OBJ_STORAGE_BUMP 0x0800
 
+/* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so VM,
+ * JIT, and AOT fast paths never mistake them for unique thread-local objects. */
+#define XR_RC_STICKY ((int32_t) INT32_MIN)
+#define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))
+#define XR_RC_INIT ((int32_t) 0)
+
 #endif  // XR_OBJ_HEADER_H
