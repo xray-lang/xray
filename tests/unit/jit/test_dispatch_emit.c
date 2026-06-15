@@ -4,6 +4,56 @@
 #include <stdio.h>
 #include <string.h>
 
+static int test_dispatch_emit_coverage_metadata(void) {
+    if (XM_DISPATCH_EMIT_WRAPPER_COUNT != 31)
+        return 1;
+    if (XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT != 336)
+        return 1;
+    if (XM_DISPATCH_EMIT_CUSTOM_ENTRY_COUNT != 160)
+        return 1;
+    if (XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT != 176)
+        return 1;
+    if (XM_DISPATCH_EMIT_GENERATED_CASE_COUNT != 104)
+        return 1;
+
+    if (XM_DISPATCH_EMIT_DECLARED_X64_COUNT != 112 ||
+        XM_DISPATCH_EMIT_DECLARED_ARM64_COUNT != 112 ||
+        XM_DISPATCH_EMIT_DECLARED_RISCV64_COUNT != 112)
+        return 1;
+    if (XM_DISPATCH_EMIT_CUSTOM_X64_COUNT != 56 || XM_DISPATCH_EMIT_CUSTOM_ARM64_COUNT != 52 ||
+        XM_DISPATCH_EMIT_CUSTOM_RISCV64_COUNT != 52)
+        return 1;
+    if (XM_DISPATCH_EMIT_PATTERNED_X64_COUNT != 56 ||
+        XM_DISPATCH_EMIT_PATTERNED_ARM64_COUNT != 60 ||
+        XM_DISPATCH_EMIT_PATTERNED_RISCV64_COUNT != 60)
+        return 1;
+    if (XM_DISPATCH_EMIT_GENERATED_X64_COUNT != 33 ||
+        XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT != 36 ||
+        XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT != 35)
+        return 1;
+
+    if (XM_DISPATCH_EMIT_DECLARED_ENTRY_COUNT !=
+        (XM_DISPATCH_EMIT_DECLARED_X64_COUNT + XM_DISPATCH_EMIT_DECLARED_ARM64_COUNT +
+         XM_DISPATCH_EMIT_DECLARED_RISCV64_COUNT))
+        return 1;
+    if (XM_DISPATCH_EMIT_CUSTOM_ENTRY_COUNT !=
+        (XM_DISPATCH_EMIT_CUSTOM_X64_COUNT + XM_DISPATCH_EMIT_CUSTOM_ARM64_COUNT +
+         XM_DISPATCH_EMIT_CUSTOM_RISCV64_COUNT))
+        return 1;
+    if (XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT !=
+        (XM_DISPATCH_EMIT_PATTERNED_X64_COUNT + XM_DISPATCH_EMIT_PATTERNED_ARM64_COUNT +
+         XM_DISPATCH_EMIT_PATTERNED_RISCV64_COUNT))
+        return 1;
+    if (XM_DISPATCH_EMIT_GENERATED_CASE_COUNT !=
+        (XM_DISPATCH_EMIT_GENERATED_X64_COUNT + XM_DISPATCH_EMIT_GENERATED_ARM64_COUNT +
+         XM_DISPATCH_EMIT_GENERATED_RISCV64_COUNT))
+        return 1;
+    if (XM_DISPATCH_EMIT_GENERATED_CASE_COUNT > XM_DISPATCH_EMIT_PATTERNED_ENTRY_COUNT)
+        return 1;
+
+    return 0;
+}
+
 static int test_riscv64_gp_rrr(void) {
     uint32_t code[11] = {0};
     Rv64Buf buf;
@@ -910,6 +960,10 @@ static int test_arm64_mem_subword(void) {
 #endif
 
 int main(void) {
+    if (test_dispatch_emit_coverage_metadata() != 0) {
+        fprintf(stderr, "test_dispatch_emit_coverage_metadata failed\n");
+        return 1;
+    }
     if (test_riscv64_gp_rrr() != 0) {
         fprintf(stderr, "test_riscv64_gp_rrr failed\n");
         return 1;
