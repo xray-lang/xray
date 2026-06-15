@@ -60,6 +60,26 @@ static bool cg_value_type_is_bool(const XiValue *v) {
     return v && v->type && v->type->kind == XR_KIND_BOOL;
 }
 
+static bool cg_type_is_json(const XrType *type) {
+    if (!type)
+        return false;
+    if (type->kind == XR_KIND_JSON)
+        return true;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (cg_type_is_json(type->union_type.members[i]))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_value_type_is_json(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+        v = v->args[0];
+    return v && cg_type_is_json(v->type);
+}
+
 static bool cg_type_is_task(const XrType *type) {
     if (!type)
         return false;

@@ -421,9 +421,10 @@ XR_FUNC void xi_emit_tuple_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 
 /* Map creation */
 XR_FUNC void xi_emit_map_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    XiEmitReg cap = 0;
+    uint16_t cap = 0;
     if (v->nargs >= 1 && v->args[0]->op == XI_CONST) {
-        cap = (uint8_t) v->args[0]->aux_int;
+        if (!xi_emit_index_to_arg(ctx, v->args[0]->aux_int, XI_EMIT_ERR_INTERNAL, &cap))
+            return;
     }
     /* C field pre-encoded by lowerer: (key_kind<<7)|(value_tid<<2)|flags */
     uint8_t c_field = (uint8_t) (v->aux_int & 0xFF);
@@ -441,6 +442,10 @@ XR_FUNC void xi_emit_set_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
 XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_count = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
+    if (field_count < 0 || field_count > UINT16_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
 
     if (!ctx->isolate) {
         /* No isolate: cannot build Shape, fall back to Map */
@@ -450,7 +455,7 @@ XR_FUNC void xi_emit_json_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Build dynamic-layout class chain (jsonRoot -> field1 -> ... -> fieldN).
      * Empty {} just uses the root. The leaf class becomes the constant the
      * VM uses to allocate the Json instance. */
-    int n = field_count > 32 ? 32 : (field_count > 0 ? field_count : 0);
+    int n = field_count > 0 ? field_count : 0;
     XrClass *cls = xr_class_build_json_chain(ctx->isolate, field_names, n, false);
     if (!cls) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
@@ -481,7 +486,10 @@ XR_FUNC void xi_emit_json_init_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_INIT, json_reg, (uint8_t) field_idx, val_reg));
+    uint16_t field_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_INIT, json_reg, field_arg, val_reg));
 }
 
 /* Json field read by index: OP_JSON_GET A B C (A=dst, B=json, C=field_idx) */
@@ -494,7 +502,10 @@ XR_FUNC void xi_emit_json_get_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_GET, dst, json_reg, (uint8_t) field_idx));
+    uint16_t field_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_GET, dst, json_reg, field_arg));
 }
 
 /* Json field write by index: OP_JSON_SET A B C (A=json, B=field_idx, C=val) */
@@ -509,7 +520,10 @@ XR_FUNC void xi_emit_json_set_f(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int field_idx = (int) v->aux_int;
     if (ctx->status != XI_EMIT_OK)
         return;
-    emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, (uint8_t) field_idx, val_reg));
+    uint16_t field_arg = 0;
+    if (!xi_emit_index_to_arg(ctx, field_idx, XI_EMIT_ERR_INTERNAL, &field_arg))
+        return;
+    emit_inst(ctx, CREATE_ABC(OP_JSON_SET, json_reg, field_arg, val_reg));
 }
 
 /* Typed JSON decode: OP_JSON_DECODE A B C
@@ -527,6 +541,10 @@ XR_FUNC void xi_emit_json_decode(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     int n = (int) v->aux_int;
     const char **field_names = (const char **) v->aux;
     XR_DCHECK(n > 0 && field_names != NULL, "json_decode: no field info");
+    if (n < 0 || n > UINT16_MAX) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
+    }
 
     XiEmitReg data_reg = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)

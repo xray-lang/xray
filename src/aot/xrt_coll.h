@@ -17,6 +17,7 @@
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_typed_ops.h"
+#include <string.h>
 
 /* =========================================================================
  * Array runtime
@@ -1368,6 +1369,8 @@ static inline XrValue xrt_process_new(const char *file, int argc, char **argv, c
 
 typedef struct {
     int64_t field_count;
+    const char **field_names;
+    xrt_map_t *dynamic_fields;
     XrValue fields[]; /* flexible array of field values */
 } xrt_json_t;
 
@@ -1381,9 +1384,36 @@ static inline XrValue xrt_json_new(int64_t field_count) {
         abort();
     }
     j->field_count = field_count;
+    j->field_names = NULL;
+    j->dynamic_fields = NULL;
     for (int64_t i = 0; i < field_count; i++)
         j->fields[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
     return xr_mkptr(j, XR_TAG_PTR);
+}
+
+static inline XrValue xrt_json_new_named(int64_t field_count, const char *const *field_names) {
+    XrValue obj = xrt_json_new(field_count);
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    if (field_count <= 0 || !field_names)
+        return obj;
+    j->field_names = (const char **) XRT_MALLOC((size_t) field_count * sizeof(const char *));
+    if (XR_UNLIKELY(!j->field_names)) {
+        fprintf(stderr, "xrt_json_new_named: out of memory\n");
+        abort();
+    }
+    for (int64_t i = 0; i < field_count; i++)
+        j->field_names[i] = field_names[i] ? field_names[i] : "?";
+    return obj;
+}
+
+static inline int64_t xrt_json_find_field(xrt_json_t *j, const char *name) {
+    if (!j || !name || !j->field_names)
+        return -1;
+    for (int64_t i = 0; i < j->field_count; i++) {
+        if (j->field_names[i] && strcmp(j->field_names[i], name) == 0)
+            return i;
+    }
+    return -1;
 }
 
 static inline XrValue xrt_json_get_field(XrValue obj, int field_idx) {
@@ -1399,14 +1429,67 @@ static inline void xrt_json_set_field(XrValue obj, int field_idx, XrValue val) {
         j->fields[field_idx] = val;
 }
 
+static inline XrValue xrt_json_get_name(XrValue obj, const char *name) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
+        return XR_NULL_VAL;
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    int64_t idx = xrt_json_find_field(j, name);
+    if (idx >= 0)
+        return j->fields[idx];
+    return j->dynamic_fields ? xrt_map_get(j->dynamic_fields, xr_box_str(name)) : XR_NULL_VAL;
+}
+
+static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue val) {
+    if (obj.tag != XR_TAG_PTR || !obj.ptr || !name)
+        return val;
+    xrt_json_t *j = (xrt_json_t *) obj.ptr;
+    int64_t idx = xrt_json_find_field(j, name);
+    if (idx >= 0) {
+        j->fields[idx] = val;
+        return val;
+    }
+    if (!j->dynamic_fields) {
+        XrValue dyn = xrt_map_new(8);
+        j->dynamic_fields = (xrt_map_t *) dyn.ptr;
+    }
+    xrt_map_set(j->dynamic_fields, xr_box_str(name), val);
+    return val;
+}
+
+static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
+    if (obj.tag == XR_TAG_MAP)
+        return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
+    return XR_NULL_VAL;
+}
+
+static inline XrValue xrt_setprop_name(XrValue obj, const char *name, XrValue val) {
+    if (obj.tag == XR_TAG_MAP) {
+        xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str(name), val);
+        return val;
+    }
+    return val;
+}
+
 static inline XrValue xrt_json_clone_for_coro(XrValue val) {
     if (val.tag != XR_TAG_PTR || !val.ptr)
         return val;
     xrt_json_t *src = (xrt_json_t *) val.ptr;
-    XrValue dstv = xrt_json_new(src->field_count);
+    XrValue dstv = xrt_json_new_named(src->field_count, src->field_names);
     xrt_json_t *dst = (xrt_json_t *) dstv.ptr;
     for (int64_t i = 0; i < src->field_count; i++)
         dst->fields[i] = xrt_value_clone_for_coro(src->fields[i]);
+    if (src->dynamic_fields) {
+        XrValue dyn = xrt_map_new(xrt_map_len(src->dynamic_fields));
+        xrt_map_t *dst_map = (xrt_map_t *) dyn.ptr;
+        for (uint32_t i = 0; i < src->dynamic_fields->nentries; i++) {
+            XrMapEntry *entry = &src->dynamic_fields->entries[i];
+            if (entry->key_tt == XR_MAP_ENTRY_NIL_KEY)
+                continue;
+            xrt_map_set(dst_map, xrt_value_clone_for_coro(entry->key),
+                        xrt_value_clone_for_coro(entry->value));
+        }
+        dst->dynamic_fields = dst_map;
+    }
     return dstv;
 }
 

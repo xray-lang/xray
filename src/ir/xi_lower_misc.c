@@ -337,15 +337,32 @@ XR_FUNC XiValue *xi_lower_move_expr(XiLower *l, AstNode *node) {
 XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     ObjectLiteralNode *obj = &node->as.object_literal;
     int count = obj->count;
-    int n = count > 32 ? 32 : count;
+    if (count < 0 || count > (int) UINT16_MAX) {
+        fprintf(stderr, "[LOWER] object literal field count exceeds %u at line %d\n",
+                (unsigned) UINT16_MAX, (int) node->line);
+        l->had_error = true;
+        return NULL;
+    }
+    int n = count;
 
     /* Evaluate all values and computed key expressions first */
-    XiValue *val_vals[32];
-    XiValue *key_vals[32];
+    int alloc_n = n > 0 ? n : 1;
+    XiValue **val_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    XiValue **key_vals =
+        (XiValue **) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(XiValue *)));
+    int *static_idx_map =
+        (int *) xi_func_arena_alloc(l->func, (uint32_t) (alloc_n * (int) sizeof(int)));
+    if (!val_vals || !key_vals || !static_idx_map)
+        return NULL;
     for (int i = 0; i < n; i++) {
         val_vals[i] = xi_lower_expr(l, obj->values[i]);
+        if (!val_vals[i])
+            return NULL;
         bool is_computed = obj->computed && obj->computed[i];
         key_vals[i] = is_computed ? xi_lower_expr(l, obj->keys[i]) : NULL;
+        if (is_computed && !key_vals[i])
+            return NULL;
     }
 
     /* Count static (non-computed) keys for Shape construction */
@@ -361,7 +378,6 @@ XR_FUNC XiValue *xi_lower_object_literal(XiLower *l, AstNode *node) {
     if (!key_names)
         return NULL;
     int si = 0;
-    int static_idx_map[32]; /* maps static slot → Shape field index */
     for (int i = 0; i < n; i++) {
         if (!key_vals[i]) {
             if (obj->keys[i] && obj->keys[i]->type == AST_LITERAL_STRING)
