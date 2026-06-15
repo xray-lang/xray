@@ -77,6 +77,7 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_emit_vm_gen.h
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_width_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_binary_gen.inc.c
+    ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_bitwise_unary_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/jit/xi_to_xm_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_stmt_dispatch_gen.h

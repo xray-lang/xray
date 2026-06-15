@@ -64,6 +64,7 @@ CASE_SCAN_FILES = (
 VM_GENERATED_BODY_TEMPLATES = {"narrow", "widen"}
 VM_GENERATED_WIDTH_FILE = "src/vm/xvm_template_width_gen.inc.c"
 VM_GENERATED_BITWISE_BINARY_FILE = "src/vm/xvm_template_bitwise_binary_gen.inc.c"
+VM_GENERATED_BITWISE_UNARY_FILE = "src/vm/xvm_template_bitwise_unary_gen.inc.c"
 VM_BODY_SCAN_FILES = (
     "src/vm/xvm_dispatch_data.inc.c",
     "src/vm/xvm_dispatch_bitwise.inc.c",
@@ -116,6 +117,16 @@ def vm_generated_bitwise_binary_opcodes(root: Path, entries) -> set[str]:
     for entry in entries:
         if ('vm-bytecode' in entry.target_drivers and
                 entry.op_name in xisagen.XI_VM_TEMPLATE_BITWISE_BINARY):
+            opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
+    return opcodes
+
+
+def vm_generated_bitwise_unary_opcodes(root: Path, entries) -> set[str]:
+    xisagen = load_xisagen(root)
+    opcodes: set[str] = set()
+    for entry in entries:
+        if ('vm-bytecode' in entry.target_drivers and
+                entry.op_name in xisagen.XI_VM_TEMPLATE_BITWISE_UNARY):
             opcodes.add(xisagen.XI_VM_TEMPLATE_OPCODES[entry.op_name])
     return opcodes
 
@@ -283,8 +294,10 @@ def run_check(root: Path) -> list[Violation]:
     vm_body_texts = read_rel_files(root, VM_BODY_SCAN_FILES)
     vm_width_generated_text = (root / VM_GENERATED_WIDTH_FILE).read_text()
     vm_bitwise_generated_text = (root / VM_GENERATED_BITWISE_BINARY_FILE).read_text()
+    vm_bitwise_unary_generated_text = (root / VM_GENERATED_BITWISE_UNARY_FILE).read_text()
     vm_width_opcodes = vm_generated_body_opcodes(root, entries)
     vm_bitwise_opcodes = vm_generated_bitwise_binary_opcodes(root, entries)
+    vm_bitwise_unary_opcodes = vm_generated_bitwise_unary_opcodes(root, entries)
     violations: list[Violation] = []
     violations.extend(check_generated_driver_coverage(entries, generated))
     violations.extend(check_direct_driver_definitions(entries, texts))
@@ -301,10 +314,18 @@ def run_check(root: Path) -> list[Violation]:
         VM_GENERATED_BITWISE_BINARY_FILE,
         r"\bXVM_TEMPLATE_BITWISE_BINARY(?:_BOOL)?_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
         "bitwise binary"))
+    violations.extend(check_vm_generated_body_coverage(
+        vm_bitwise_unary_opcodes,
+        vm_bitwise_unary_generated_text,
+        VM_GENERATED_BITWISE_UNARY_FILE,
+        r"\bXVM_TEMPLATE_BITWISE_UNARY_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "bitwise unary"))
     violations.extend(check_vm_handwritten_body_cases(
         vm_width_opcodes, vm_body_texts, VM_GENERATED_WIDTH_FILE))
     violations.extend(check_vm_handwritten_body_cases(
         vm_bitwise_opcodes, vm_body_texts, VM_GENERATED_BITWISE_BINARY_FILE))
+    violations.extend(check_vm_handwritten_body_cases(
+        vm_bitwise_unary_opcodes, vm_body_texts, VM_GENERATED_BITWISE_UNARY_FILE))
     return violations
 
 
@@ -372,6 +393,20 @@ def run_self_test() -> None:
         vm_bitwise_opcodes, {"src/vm/xvm_dispatch_bitwise.inc.c": "vmcase(OP_BAND) {\n"},
         VM_GENERATED_BITWISE_BINARY_FILE)
     assert len(vm_bitwise_handwritten) == 1 and "OP_BAND" in vm_bitwise_handwritten[0].message
+
+    vm_bitwise_unary_opcodes = {"OP_BNOT"}
+    vm_bitwise_unary_coverage = check_vm_generated_body_coverage(
+        vm_bitwise_unary_opcodes,
+        "XVM_TEMPLATE_BITWISE_UNARY_CASE(OP_BNOT, ~, SYMBOL_OP_BNOT, name, err)\n",
+        VM_GENERATED_BITWISE_UNARY_FILE,
+        r"\bXVM_TEMPLATE_BITWISE_UNARY_CASE\s*\(\s*(OP_[A-Z0-9_]+)",
+        "bitwise unary")
+    assert not vm_bitwise_unary_coverage
+    vm_bitwise_unary_handwritten = check_vm_handwritten_body_cases(
+        vm_bitwise_unary_opcodes, {"src/vm/xvm_dispatch_bitwise.inc.c": "vmcase(OP_BNOT) {\n"},
+        VM_GENERATED_BITWISE_UNARY_FILE)
+    assert (len(vm_bitwise_unary_handwritten) == 1 and
+            "OP_BNOT" in vm_bitwise_unary_handwritten[0].message)
 
 
 def main() -> int:
