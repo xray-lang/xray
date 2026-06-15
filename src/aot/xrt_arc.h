@@ -45,8 +45,8 @@
 
 /* Alignment of array element storage (xrt_array_t.data). 32 bytes lets the
  * C compiler use full-width AVX loads/stores in vectorized loops; generated
- * _adN caches assert it via XR_ASSUME_ALIGNED(..., XRT_DATA_ALIGN).
- * Buffers with this contract MUST be allocated with XRT_ALLOC_ALIGNED and
+ * _adN caches assert it via XR_ASSUME_ALIGNED(..., XRT_DATA_ALIGN). Growth
+ * spill buffers with this contract MUST be allocated with XRT_ALLOC_ALIGNED and
  * released with XRT_FREE_ALIGNED — on Windows _aligned_malloc storage is not
  * addressable through plain free(), and realloc would silently drop the
  * alignment, so growth re-allocates + copies (see xrt_array_data_grow). */

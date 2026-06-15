@@ -3,23 +3,7 @@
 static inline XrValue xrt_array_new_typed_exact(int64_t cap, uint8_t etype) {
     if (cap < 0)
         cap = 0;
-    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (XR_UNLIKELY(!a)) {
-        fprintf(stderr, "xrt_array_new_typed_exact: out of memory\n");
-        abort();
-    }
-    a->len = 0;
-    a->cap = cap;
-    a->elem_type = etype;
-    a->elem_size = XR_ELEM_SIZES[etype];
-    a->is_slice = 0;
-    a->adt_enum_name = NULL;
-    a->adt_member_name = NULL;
-    a->data = cap > 0 ? xrt_array_data_alloc_zeroed((size_t) cap * (size_t) a->elem_size) : NULL;
-    if (XR_UNLIKELY(cap > 0 && !a->data)) {
-        fprintf(stderr, "xrt_array_new_typed_exact: out of memory\n");
-        abort();
-    }
+    xrt_array_t *a = xrt_array_alloc_inline(cap, etype, 1, "xrt_array_new_typed_exact");
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
