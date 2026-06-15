@@ -264,6 +264,53 @@ static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
     return true;
 }
 
+static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest, char *err,
+                                               size_t err_size) {
+    if (!manifest)
+        return true;
+#if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=address") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=address")) {
+        snprintf(err, err_size, "failed to add ASan flags to AOT link manifest");
+        return false;
+    }
+#endif
+#if defined(XR_BUILD_UBSAN) && XR_BUILD_UBSAN
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=undefined") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-sanitize=function") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=undefined") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fno-sanitize=function")) {
+        snprintf(err, err_size, "failed to add UBSan flags to AOT link manifest");
+        return false;
+    }
+#endif
+#if defined(XR_BUILD_TSAN) && XR_BUILD_TSAN
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=thread") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=thread")) {
+        snprintf(err, err_size, "failed to add TSan flags to AOT link manifest");
+        return false;
+    }
+#endif
+#if defined(XR_BUILD_MSAN) && XR_BUILD_MSAN
+    if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=memory") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG,
+                                       "-fsanitize-memory-track-origins=2") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fno-omit-frame-pointer") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG,
+                                       "-fno-optimize-sibling-calls") ||
+        !xaot_link_manifest_add_unique(manifest, XAOT_LINK_LD_FLAG, "-fsanitize=memory")) {
+        snprintf(err, err_size, "failed to add MSan flags to AOT link manifest");
+        return false;
+    }
+#endif
+    (void) err;
+    (void) err_size;
+    return true;
+}
+
 static void xaot_cli_link_print_command(const XaotCliLinkCommand *cmd) {
     int i;
 
@@ -728,6 +775,12 @@ static int cmd_build_native(const char *input, const char *output, const char *c
         char normalize_err[512];
         if (!xaot_cli_normalize_manifest_for_target(&aot_result.link_manifest, target,
                                                     normalize_err, sizeof(normalize_err))) {
+            fprintf(stderr, "Error: %s\n", normalize_err);
+            xaot_build_result_free(&aot_result);
+            return 1;
+        }
+        if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, normalize_err,
+                                                sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
             return 1;

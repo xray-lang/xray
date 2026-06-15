@@ -434,7 +434,8 @@ XR_FUNC void xi_emit_chan_timer_dispose(EmitCtx *ctx, XiValue *v, XiEmitReg dst)
 /* Blocking select wait. Channel operands are copied into a contiguous
  * register window because OP_SELECT_BLOCK uses base/count encoding. */
 XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
-    if (v->nargs == 0 || v->nargs > 255) {
+    if (v->nargs == 0 || v->nargs > MAXARG_B || v->aux_int < 0 ||
+        (uint64_t) v->aux_int > MAXARG_C) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
@@ -459,7 +460,7 @@ XR_FUNC void xi_emit_select_block(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         }
     }
 
-    emit_inst(ctx, CREATE_ABC(OP_SELECT_BLOCK, dst, (uint8_t) count, (uint8_t) v->aux_int));
+    emit_inst(ctx, CREATE_ABC(OP_SELECT_BLOCK, dst, count, (uint16_t) v->aux_int));
 }
 
 /* ========== Coro Built-in Module ========== */

@@ -42,6 +42,8 @@
 #include "../coro/xdeep_copy.h"
 #include <string.h>
 
+#define VM_SELECT_RESULT_SLOT_STACK_CAP 256
+
 static inline XrDispatchAction vm_chan_ready_next_or_yield(XrayIsolate *isolate,
                                                            XrCoroutine *current,
                                                            XrBcCallFrame *frame,
@@ -142,8 +144,15 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
         return XR_DISP_NEXT;
     }
 
-    XrSlotRef result_slots[256];
     int slot_count = ch_count < case_count ? ch_count : case_count;
+    XrSlotRef stack_result_slots[VM_SELECT_RESULT_SLOT_STACK_CAP];
+    XrSlotRef *result_slots = stack_result_slots;
+    if (slot_count > VM_SELECT_RESULT_SLOT_STACK_CAP) {
+        result_slots = (XrSlotRef *) xr_malloc((size_t) slot_count * sizeof(XrSlotRef));
+        if (!result_slots) {
+            VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
+        }
+    }
     for (int i = 0; i < slot_count; i++) {
         result_slots[i] = xr_slot_xvalue_ptr(&base[base_reg + i]);
     }
@@ -151,6 +160,9 @@ XR_FUNC XrDispatchAction vm_select_block(XrayIsolate *isolate, XrVMContext *vm_c
     vm_suspend_continue_from_next(frame, pc);
     XrCoroBlockResult result =
         xr_coro_select_block(isolate, coro, &base[base_reg], ch_count, result_slots, case_count);
+    if (result_slots != stack_result_slots) {
+        xr_free(result_slots);
+    }
     if (result.kind == XR_CORO_BLOCK_ERROR) {
         VM_THROW(frame, pc, XR_ERR_OUT_OF_MEMORY, "select: out of memory");
     }
