@@ -1,0 +1,70 @@
+// anchor: frontend-var-count-limit
+// Lifted frontend cap XI_LOWER_MAX_VARS (was a fixed 256): a function may
+// now declare more than 256 distinct source variables.  Register pressure
+// stays low here (each temp dies before the next), so this clears the old
+// var cap without hitting the bytecode 255-register ABI limit.
+fn many() -> int {
+    let total = 0
+    let a0 = 0; total = total + a0; let a1 = 1; total = total + a1; let a2 = 2; total = total + a2; let a3 = 3; total = total + a3; let a4 = 4; total = total + a4;
+    let a5 = 5; total = total + a5; let a6 = 6; total = total + a6; let a7 = 7; total = total + a7; let a8 = 8; total = total + a8; let a9 = 9; total = total + a9;
+    let a10 = 10; total = total + a10; let a11 = 11; total = total + a11; let a12 = 12; total = total + a12; let a13 = 13; total = total + a13; let a14 = 14; total = total + a14;
+    let a15 = 15; total = total + a15; let a16 = 16; total = total + a16; let a17 = 17; total = total + a17; let a18 = 18; total = total + a18; let a19 = 19; total = total + a19;
+    let a20 = 20; total = total + a20; let a21 = 21; total = total + a21; let a22 = 22; total = total + a22; let a23 = 23; total = total + a23; let a24 = 24; total = total + a24;
+    let a25 = 25; total = total + a25; let a26 = 26; total = total + a26; let a27 = 27; total = total + a27; let a28 = 28; total = total + a28; let a29 = 29; total = total + a29;
+    let a30 = 30; total = total + a30; let a31 = 31; total = total + a31; let a32 = 32; total = total + a32; let a33 = 33; total = total + a33; let a34 = 34; total = total + a34;
+    let a35 = 35; total = total + a35; let a36 = 36; total = total + a36; let a37 = 37; total = total + a37; let a38 = 38; total = total + a38; let a39 = 39; total = total + a39;
+    let a40 = 40; total = total + a40; let a41 = 41; total = total + a41; let a42 = 42; total = total + a42; let a43 = 43; total = total + a43; let a44 = 44; total = total + a44;
+    let a45 = 45; total = total + a45; let a46 = 46; total = total + a46; let a47 = 47; total = total + a47; let a48 = 48; total = total + a48; let a49 = 49; total = total + a49;
+    let a50 = 50; total = total + a50; let a51 = 51; total = total + a51; let a52 = 52; total = total + a52; let a53 = 53; total = total + a53; let a54 = 54; total = total + a54;
+    let a55 = 55; total = total + a55; let a56 = 56; total = total + a56; let a57 = 57; total = total + a57; let a58 = 58; total = total + a58; let a59 = 59; total = total + a59;
+    let a60 = 60; total = total + a60; let a61 = 61; total = total + a61; let a62 = 62; total = total + a62; let a63 = 63; total = total + a63; let a64 = 64; total = total + a64;
+    let a65 = 65; total = total + a65; let a66 = 66; total = total + a66; let a67 = 67; total = total + a67; let a68 = 68; total = total + a68; let a69 = 69; total = total + a69;
+    let a70 = 70; total = total + a70; let a71 = 71; total = total + a71; let a72 = 72; total = total + a72; let a73 = 73; total = total + a73; let a74 = 74; total = total + a74;
+    let a75 = 75; total = total + a75; let a76 = 76; total = total + a76; let a77 = 77; total = total + a77; let a78 = 78; total = total + a78; let a79 = 79; total = total + a79;
+    let a80 = 80; total = total + a80; let a81 = 81; total = total + a81; let a82 = 82; total = total + a82; let a83 = 83; total = total + a83; let a84 = 84; total = total + a84;
+    let a85 = 85; total = total + a85; let a86 = 86; total = total + a86; let a87 = 87; total = total + a87; let a88 = 88; total = total + a88; let a89 = 89; total = total + a89;
+    let a90 = 90; total = total + a90; let a91 = 91; total = total + a91; let a92 = 92; total = total + a92; let a93 = 93; total = total + a93; let a94 = 94; total = total + a94;
+    let a95 = 95; total = total + a95; let a96 = 96; total = total + a96; let a97 = 97; total = total + a97; let a98 = 98; total = total + a98; let a99 = 99; total = total + a99;
+    let a100 = 100; total = total + a100; let a101 = 101; total = total + a101; let a102 = 102; total = total + a102; let a103 = 103; total = total + a103; let a104 = 104; total = total + a104;
+    let a105 = 105; total = total + a105; let a106 = 106; total = total + a106; let a107 = 107; total = total + a107; let a108 = 108; total = total + a108; let a109 = 109; total = total + a109;
+    let a110 = 110; total = total + a110; let a111 = 111; total = total + a111; let a112 = 112; total = total + a112; let a113 = 113; total = total + a113; let a114 = 114; total = total + a114;
+    let a115 = 115; total = total + a115; let a116 = 116; total = total + a116; let a117 = 117; total = total + a117; let a118 = 118; total = total + a118; let a119 = 119; total = total + a119;
+    let a120 = 120; total = total + a120; let a121 = 121; total = total + a121; let a122 = 122; total = total + a122; let a123 = 123; total = total + a123; let a124 = 124; total = total + a124;
+    let a125 = 125; total = total + a125; let a126 = 126; total = total + a126; let a127 = 127; total = total + a127; let a128 = 128; total = total + a128; let a129 = 129; total = total + a129;
+    let a130 = 130; total = total + a130; let a131 = 131; total = total + a131; let a132 = 132; total = total + a132; let a133 = 133; total = total + a133; let a134 = 134; total = total + a134;
+    let a135 = 135; total = total + a135; let a136 = 136; total = total + a136; let a137 = 137; total = total + a137; let a138 = 138; total = total + a138; let a139 = 139; total = total + a139;
+    let a140 = 140; total = total + a140; let a141 = 141; total = total + a141; let a142 = 142; total = total + a142; let a143 = 143; total = total + a143; let a144 = 144; total = total + a144;
+    let a145 = 145; total = total + a145; let a146 = 146; total = total + a146; let a147 = 147; total = total + a147; let a148 = 148; total = total + a148; let a149 = 149; total = total + a149;
+    let a150 = 150; total = total + a150; let a151 = 151; total = total + a151; let a152 = 152; total = total + a152; let a153 = 153; total = total + a153; let a154 = 154; total = total + a154;
+    let a155 = 155; total = total + a155; let a156 = 156; total = total + a156; let a157 = 157; total = total + a157; let a158 = 158; total = total + a158; let a159 = 159; total = total + a159;
+    let a160 = 160; total = total + a160; let a161 = 161; total = total + a161; let a162 = 162; total = total + a162; let a163 = 163; total = total + a163; let a164 = 164; total = total + a164;
+    let a165 = 165; total = total + a165; let a166 = 166; total = total + a166; let a167 = 167; total = total + a167; let a168 = 168; total = total + a168; let a169 = 169; total = total + a169;
+    let a170 = 170; total = total + a170; let a171 = 171; total = total + a171; let a172 = 172; total = total + a172; let a173 = 173; total = total + a173; let a174 = 174; total = total + a174;
+    let a175 = 175; total = total + a175; let a176 = 176; total = total + a176; let a177 = 177; total = total + a177; let a178 = 178; total = total + a178; let a179 = 179; total = total + a179;
+    let a180 = 180; total = total + a180; let a181 = 181; total = total + a181; let a182 = 182; total = total + a182; let a183 = 183; total = total + a183; let a184 = 184; total = total + a184;
+    let a185 = 185; total = total + a185; let a186 = 186; total = total + a186; let a187 = 187; total = total + a187; let a188 = 188; total = total + a188; let a189 = 189; total = total + a189;
+    let a190 = 190; total = total + a190; let a191 = 191; total = total + a191; let a192 = 192; total = total + a192; let a193 = 193; total = total + a193; let a194 = 194; total = total + a194;
+    let a195 = 195; total = total + a195; let a196 = 196; total = total + a196; let a197 = 197; total = total + a197; let a198 = 198; total = total + a198; let a199 = 199; total = total + a199;
+    let a200 = 200; total = total + a200; let a201 = 201; total = total + a201; let a202 = 202; total = total + a202; let a203 = 203; total = total + a203; let a204 = 204; total = total + a204;
+    let a205 = 205; total = total + a205; let a206 = 206; total = total + a206; let a207 = 207; total = total + a207; let a208 = 208; total = total + a208; let a209 = 209; total = total + a209;
+    let a210 = 210; total = total + a210; let a211 = 211; total = total + a211; let a212 = 212; total = total + a212; let a213 = 213; total = total + a213; let a214 = 214; total = total + a214;
+    let a215 = 215; total = total + a215; let a216 = 216; total = total + a216; let a217 = 217; total = total + a217; let a218 = 218; total = total + a218; let a219 = 219; total = total + a219;
+    let a220 = 220; total = total + a220; let a221 = 221; total = total + a221; let a222 = 222; total = total + a222; let a223 = 223; total = total + a223; let a224 = 224; total = total + a224;
+    let a225 = 225; total = total + a225; let a226 = 226; total = total + a226; let a227 = 227; total = total + a227; let a228 = 228; total = total + a228; let a229 = 229; total = total + a229;
+    let a230 = 230; total = total + a230; let a231 = 231; total = total + a231; let a232 = 232; total = total + a232; let a233 = 233; total = total + a233; let a234 = 234; total = total + a234;
+    let a235 = 235; total = total + a235; let a236 = 236; total = total + a236; let a237 = 237; total = total + a237; let a238 = 238; total = total + a238; let a239 = 239; total = total + a239;
+    let a240 = 240; total = total + a240; let a241 = 241; total = total + a241; let a242 = 242; total = total + a242; let a243 = 243; total = total + a243; let a244 = 244; total = total + a244;
+    let a245 = 245; total = total + a245; let a246 = 246; total = total + a246; let a247 = 247; total = total + a247; let a248 = 248; total = total + a248; let a249 = 249; total = total + a249;
+    let a250 = 250; total = total + a250; let a251 = 251; total = total + a251; let a252 = 252; total = total + a252; let a253 = 253; total = total + a253; let a254 = 254; total = total + a254;
+    let a255 = 255; total = total + a255; let a256 = 256; total = total + a256; let a257 = 257; total = total + a257; let a258 = 258; total = total + a258; let a259 = 259; total = total + a259;
+    let a260 = 260; total = total + a260; let a261 = 261; total = total + a261; let a262 = 262; total = total + a262; let a263 = 263; total = total + a263; let a264 = 264; total = total + a264;
+    let a265 = 265; total = total + a265; let a266 = 266; total = total + a266; let a267 = 267; total = total + a267; let a268 = 268; total = total + a268; let a269 = 269; total = total + a269;
+    let a270 = 270; total = total + a270; let a271 = 271; total = total + a271; let a272 = 272; total = total + a272; let a273 = 273; total = total + a273; let a274 = 274; total = total + a274;
+    let a275 = 275; total = total + a275; let a276 = 276; total = total + a276; let a277 = 277; total = total + a277; let a278 = 278; total = total + a278; let a279 = 279; total = total + a279;
+    let a280 = 280; total = total + a280; let a281 = 281; total = total + a281; let a282 = 282; total = total + a282; let a283 = 283; total = total + a283; let a284 = 284; total = total + a284;
+    let a285 = 285; total = total + a285; let a286 = 286; total = total + a286; let a287 = 287; total = total + a287; let a288 = 288; total = total + a288; let a289 = 289; total = total + a289;
+    let a290 = 290; total = total + a290; let a291 = 291; total = total + a291; let a292 = 292; total = total + a292; let a293 = 293; total = total + a293; let a294 = 294; total = total + a294;
+    let a295 = 295; total = total + a295; let a296 = 296; total = total + a296; let a297 = 297; total = total + a297; let a298 = 298; total = total + a298; let a299 = 299; total = total + a299;
+    return total
+}
+print(many())
