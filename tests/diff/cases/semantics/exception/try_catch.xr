@@ -1,0 +1,26 @@
+// anchor: exception-propagation
+enum AppErr {
+    Msg(s: string)
+}
+
+fn deep() {
+    throw AppErr.Msg("boom")
+}
+
+let order: Array<string> = []
+try {
+    order.push("try")
+    deep()
+    order.push("unreachable")
+} catch (e) {
+    match (e) {
+        AppErr.Msg(s) -> {
+            order.push("caught:" + s)
+        }
+    }
+}
+order.push("after")
+
+for (i in 0..order.length) {
+    print(order[i])
+}

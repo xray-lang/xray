@@ -1,0 +1,24 @@
+// anchor: basic-closures-recursion
+fn makeCounter() -> () -> int {
+    let n = 0
+    return () -> {
+        n = n + 1
+        return n
+    }
+}
+
+let c = makeCounter()
+print(c())
+print(c())
+print(c())
+
+fn fib(n: int) -> int {
+    if (n < 2) {
+        return n
+    }
+    return fib(n - 1) + fib(n - 2)
+}
+
+for (i in 0..10) {
+    print(fib(i))
+}

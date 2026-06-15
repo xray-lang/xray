@@ -1,0 +1,12 @@
+// anchor: float-formatting-special
+// diff-backends: vm,jit
+// inf/nan/-0 formatting. AOT excluded: AOT cannot resolve `import math`
+// symbols yet (unresolved AOT import 'math.?'); tracked for stdlib AOT linking.
+import math
+
+print(math.INF)
+print(-math.INF)
+print(math.NAN)
+print(-0.0)
+print(math.INF + 1.0)
+print(math.INF - math.INF)

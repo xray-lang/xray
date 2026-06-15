@@ -531,18 +531,24 @@ XrString *xr_string_concat(XrayIsolate *iso, XrString *a, XrString *b) {
 static inline int fast_int_to_str(xr_Integer i, char *buffer) {
     char *p = buffer;
     int neg = 0;
+    uint64_t uval;
 
+    // Extract digits in the unsigned domain to avoid UB on -INT64_MIN
+    // (negating INT64_MIN as a signed value overflows and previously
+    // produced garbage like "-(" for the most-negative integer).
     if (i < 0) {
         neg = 1;
-        i = -i;
+        uval = (uint64_t) (-(i + 1)) + 1;
+    } else {
+        uval = (uint64_t) i;
     }
 
     // Write digits in reverse
     char *start = p;
     do {
-        *p++ = '0' + (i % 10);
-        i /= 10;
-    } while (i > 0);
+        *p++ = '0' + (char) (uval % 10);
+        uval /= 10;
+    } while (uval > 0);
 
     if (neg) {
         *p++ = '-';

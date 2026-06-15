@@ -1,0 +1,17 @@
+// anchor: side-effect-order
+fn p(tag: string, ret: bool) -> bool {
+    print(tag)
+    return ret
+}
+
+if (p("A", false) && p("B", true)) {
+    print("then1")
+} else {
+    print("else1")
+}
+
+if (p("C", true) || p("D", false)) {
+    print("then2")
+} else {
+    print("else2")
+}

@@ -1,0 +1,26 @@
+// anchor: integer-divzero-panic
+// diff-backends: vm,jit
+// int / 0 -> panic E0420, int % 0 -> panic E0421, caught via `catch panic`.
+// AOT excluded: `catch panic` lowering drops the catch block, leaving a
+// dangling goto to an undeclared label in the generated C.
+fn divOf(a: int, b: int) -> string {
+    try {
+        return "q=" + string(a / b)
+    } catch panic (p) {
+        return "div0"
+    }
+}
+
+fn modOf(a: int, b: int) -> string {
+    try {
+        return "r=" + string(a % b)
+    } catch panic (p) {
+        return "mod0"
+    }
+}
+
+print(divOf(10, 2))
+print(divOf(-7, 2))
+print(divOf(10, 0))
+print(modOf(10, 3))
+print(modOf(10, 0))
