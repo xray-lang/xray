@@ -452,7 +452,16 @@ void tfa_apply_results(TfaState *tfa) {
  *   - If arg register was loaded from OP_LOADI/OP_LOADF → use I64/F64
  *   - Otherwise → ANY
  */
-#define TFA_REG_TRACK_MAX 256
+static uint32_t tfa_reg_track_count(const XrProto *proto) {
+    uint32_t count = 1;
+    if (proto->maxstacksize > 0)
+        count = (uint32_t) proto->maxstacksize;
+    if (proto->numparams > 0 && (uint32_t) proto->numparams > count)
+        count = (uint32_t) proto->numparams;
+
+    uint32_t field_limit = (uint32_t) MAXARG_A + 1u;
+    return count > field_limit ? field_limit : count;
+}
 
 static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
     if (!proto)
@@ -464,17 +473,23 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
 
     const XrInstruction *code = PROTO_CODE_BASE(proto);
 
+    uint32_t reg_count = tfa_reg_track_count(proto);
+
     // Track which register holds which child proto (from OP_CLOSURE)
-    XrProto *reg_proto[TFA_REG_TRACK_MAX];
+    XrProto **reg_proto = (XrProto **) xr_calloc(reg_count, sizeof(XrProto *));
     // Track inferred XrType* per register (NULL = unknown/any)
-    XrType *reg_type[TFA_REG_TRACK_MAX];
-    memset(reg_proto, 0, sizeof(reg_proto));
-    for (int r = 0; r < TFA_REG_TRACK_MAX; r++)
+    XrType **reg_type = (XrType **) xr_malloc(reg_count * sizeof(XrType *));
+    if (!reg_proto || !reg_type) {
+        xr_free(reg_proto);
+        xr_free(reg_type);
+        return;
+    }
+    for (uint32_t r = 0; r < reg_count; r++)
         reg_type[r] = xr_type_new_unknown(NULL);
 
     // Seed param register types from caller summary
     if (caller) {
-        for (uint32_t i = 0; i < caller->nparam && i < TFA_REG_TRACK_MAX; i++) {
+        for (uint32_t i = 0; i < caller->nparam && i < reg_count; i++) {
             if (caller->param_types[i])
                 reg_type[i] = caller->param_types[i];
         }
@@ -494,31 +509,31 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
         switch (op) {
             case OP_CLOSURE: {
                 uint32_t bx = GETARG_Bx(ins);
-                if (a < TFA_REG_TRACK_MAX && bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
+                if (a < reg_count && bx < (uint32_t) PROTO_PROTO_COUNT(proto)) {
                     reg_proto[a] = PROTO_PROTO(proto, bx);
                 }
                 break;
             }
 
             case OP_LOADI:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_int;
                 break;
             case OP_LOADF:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_float;
                 break;
             case OP_LOADTRUE:
             case OP_LOADFALSE:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_bool;
                 break;
             case OP_LOADNULL:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_top;
                 break;
             case OP_LOADK: {
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t bx = GETARG_Bx(ins);
                     if (bx < (uint32_t) PROTO_CONST_COUNT(proto)) {
                         XrValue kv = PROTO_CONST_FAST(proto, bx);
@@ -546,11 +561,11 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
             case OP_BXOR:
             case OP_SHL:
             case OP_SHR:
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
                     uint32_t c = GETARG_C(ins);
-                    XrType *bt = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
-                    XrType *ct = (c < TFA_REG_TRACK_MAX) ? reg_type[c] : t_top;
+                    XrType *bt = (b < reg_count) ? reg_type[b] : t_top;
+                    XrType *ct = (c < reg_count) ? reg_type[c] : t_top;
                     if (bt->kind == XR_KIND_INT && ct->kind == XR_KIND_INT) {
                         reg_type[a] = t_int;
                     } else if (bt->kind == XR_KIND_FLOAT || ct->kind == XR_KIND_FLOAT) {
@@ -563,18 +578,18 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
 
             case OP_ADDI:
             case OP_SUBI:
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
-                    XrType *bt = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
+                    XrType *bt = (b < reg_count) ? reg_type[b] : t_top;
                     reg_type[a] = (bt->kind == XR_KIND_FLOAT) ? t_float : t_int;
                 }
                 break;
 
             case OP_MOVE:
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
-                    reg_type[a] = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
-                    reg_proto[a] = (b < TFA_REG_TRACK_MAX) ? reg_proto[b] : NULL;
+                    reg_type[a] = (b < reg_count) ? reg_type[b] : t_top;
+                    reg_proto[a] = (b < reg_count) ? reg_proto[b] : NULL;
                 }
                 break;
 
@@ -583,7 +598,7 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                 uint32_t b = GETARG_B(ins);
                 int nargs = (b > 0) ? (b - 1) : 0;
 
-                XrProto *callee_proto = (a < TFA_REG_TRACK_MAX) ? reg_proto[a] : NULL;
+                XrProto *callee_proto = (a < reg_count) ? reg_proto[a] : NULL;
                 if (callee_proto) {
                     TfaSummary *callee = tfa_lookup(tfa, callee_proto);
                     if (!callee)
@@ -593,7 +608,7 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                         int n = (nargs < TFA_MAX_PARAMS) ? nargs : TFA_MAX_PARAMS;
                         for (int i = 0; i < n; i++) {
                             uint32_t ri = a + 1 + i;
-                            arg_types[i] = (ri < TFA_REG_TRACK_MAX) ? reg_type[ri] : t_top;
+                            arg_types[i] = (ri < reg_count) ? reg_type[ri] : t_top;
                         }
                         tfa_add_call(tfa, caller, callee, arg_types, n);
                     }
@@ -613,12 +628,12 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                     int n = (nargs < TFA_MAX_PARAMS) ? nargs : TFA_MAX_PARAMS;
                     for (int i = 0; i < n; i++) {
                         uint32_t ri = a + 1 + i;
-                        arg_types[i] = (ri < TFA_REG_TRACK_MAX) ? reg_type[ri] : t_top;
+                        arg_types[i] = (ri < reg_count) ? reg_type[ri] : t_top;
                     }
                     tfa_add_call(tfa, caller, caller, arg_types, n);
                 }
 
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     XrType *ret = caller ? caller->return_type : NULL;
                     reg_type[a] = ret ? ret : t_top;
                 }
@@ -633,20 +648,20 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
             case OP_CMP_LE:
             case OP_IS:
             case OP_ISNULL_SET:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_bool;
                 break;
 
             case OP_NOT:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_bool;
                 break;
 
             case OP_UNM:
             case OP_BNOT: {
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
-                    XrType *bt = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
+                    XrType *bt = (b < reg_count) ? reg_type[b] : t_top;
                     reg_type[a] = (bt->kind == XR_KIND_FLOAT) ? t_float : t_int;
                 }
                 break;
@@ -657,23 +672,23 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
             case OP_MULK:
             case OP_DIVK:
             case OP_MODK:
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
-                    XrType *bt = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
+                    XrType *bt = (b < reg_count) ? reg_type[b] : t_top;
                     reg_type[a] = (bt->kind == XR_KIND_FLOAT) ? t_float : t_int;
                 }
                 break;
 
             case OP_MULI:
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     uint32_t b = GETARG_B(ins);
-                    XrType *bt = (b < TFA_REG_TRACK_MAX) ? reg_type[b] : t_top;
+                    XrType *bt = (b < reg_count) ? reg_type[b] : t_top;
                     reg_type[a] = (bt->kind == XR_KIND_FLOAT) ? t_float : t_int;
                 }
                 break;
 
             case OP_STRBUF_FINISH:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_str;
                 break;
 
@@ -681,20 +696,20 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
             case OP_NEWARRAY:
             case OP_NEWMAP:
             case OP_NEWSET:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_top;
                 break;
 
             case OP_GETSHARED:
             case OP_GETBUILTIN:
-                if (a < TFA_REG_TRACK_MAX)
+                if (a < reg_count)
                     reg_type[a] = t_top;
                 break;
 
             case OP_CALL_STATIC: {
                 uint32_t b = GETARG_B(ins);
                 int nargs = (b > 0) ? (b - 1) : 0;
-                XrProto *callee_proto = (a < TFA_REG_TRACK_MAX) ? reg_proto[a] : NULL;
+                XrProto *callee_proto = (a < reg_count) ? reg_proto[a] : NULL;
                 if (callee_proto && caller) {
                     TfaSummary *callee = tfa_lookup(tfa, callee_proto);
                     if (!callee)
@@ -704,12 +719,12 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
                         int n = (nargs < TFA_MAX_PARAMS) ? nargs : TFA_MAX_PARAMS;
                         for (int i = 0; i < n; i++) {
                             uint32_t ri = a + 1 + i;
-                            arg_types[i] = (ri < TFA_REG_TRACK_MAX) ? reg_type[ri] : t_top;
+                            arg_types[i] = (ri < reg_count) ? reg_type[ri] : t_top;
                         }
                         tfa_add_call(tfa, caller, callee, arg_types, n);
                     }
                 }
-                if (a < TFA_REG_TRACK_MAX) {
+                if (a < reg_count) {
                     TfaSummary *callee = callee_proto ? tfa_lookup(tfa, callee_proto) : NULL;
                     XrType *ret = callee ? callee->return_type : NULL;
                     reg_type[a] = ret ? ret : t_top;
@@ -719,6 +734,9 @@ static void tfa_scan_proto(TfaState *tfa, TfaSummary *caller, XrProto *proto) {
             }
         }
     }
+
+    xr_free(reg_type);
+    xr_free(reg_proto);
 }
 
 /* ========== Module-Level Analysis Entry Point ========== */
