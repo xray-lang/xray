@@ -390,10 +390,10 @@ static HttpRawResponse process_handler_result_raw(XrayIsolate *X, XrValue result
         if (arr_len >= 4 && data && xr_value_is_map(data[3])) {
             XrMap *m = xr_value_to_map(data[3]);
             if (m && m->count > 0) {
-                uint32_t map_size = xr_map_sizenode(m);
+                uint32_t map_size = m->nentries;
                 for (uint32_t i = 0; i < map_size && extra_count < 16; i++) {
-                    XrMapNode *node = &m->node[i];
-                    if (!XR_MAP_NODE_EMPTY(node) && XR_IS_STRING(node->key) &&
+                    XrMapEntry *node = &m->entries[i];
+                    if (!XR_MAP_ENTRY_EMPTY(node) && XR_IS_STRING(node->key) &&
                         XR_IS_STRING(node->value)) {
                         XrString *k = XR_TO_STRING(node->key);
                         XrString *v = XR_TO_STRING(node->value);

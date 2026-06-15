@@ -176,11 +176,11 @@ bool xr_iterator_has_next(XrIterator *iter) {
         if (xr_map_isdummy(map))
             return false;
 
-        uint32_t size = xr_map_sizenode(map);
-        // Skip empty nodes, park scan_index at next valid node
+        uint32_t size = map->nentries;
+        // Skip tombstoned entries, park scan_index at next live entry
         while (iter->scan_index < size) {
-            XrMapNode *node = xr_map_node(map, iter->scan_index);
-            if (!XR_MAP_NODE_EMPTY(node)) {
+            XrMapEntry *node = xr_map_entry(map, iter->scan_index);
+            if (!XR_MAP_ENTRY_EMPTY(node)) {
                 return true;
             }
             iter->scan_index++;
@@ -235,13 +235,13 @@ XrValue xr_iterator_next(XrIterator *iter) {
         if (xr_map_isdummy(map))
             return xr_null();
 
-        uint32_t size = xr_map_sizenode(map);
+        uint32_t size = map->nentries;
         while (iter->scan_index < size) {
-            XrMapNode *node = xr_map_node(map, iter->scan_index);
+            XrMapEntry *node = xr_map_entry(map, iter->scan_index);
             iter->scan_index++;  // Move to next position
 
-            // Skip empty nodes
-            if (!XR_MAP_NODE_EMPTY(node)) {
+            // Skip tombstoned entries
+            if (!XR_MAP_ENTRY_EMPTY(node)) {
                 if (iter->mode == XR_ITER_MODE_KEYS) {
                     return node->key;
                 }

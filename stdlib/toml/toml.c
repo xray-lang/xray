@@ -331,12 +331,12 @@ static void write_value(TomlWriter *w, XrValue val) {
         XrMap *map = XR_TO_MAP(val);
         tw_char(w, '{');
         if (!xr_map_isdummy(map)) {
-            uint32_t size = xr_map_sizenode(map);
+            uint32_t size = map->nentries;
             bool first = true;
             w->depth++;
             for (uint32_t i = 0; i < size; i++) {
-                XrMapNode *node = xr_map_node(map, i);
-                if (XR_MAP_NODE_EMPTY(node))
+                XrMapEntry *node = xr_map_entry(map, i);
+                if (XR_MAP_ENTRY_EMPTY(node))
                     continue;
                 if (!first)
                     tw_str(w, ", ");
@@ -385,12 +385,12 @@ static bool is_array_of_tables(XrValue val) {
 static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
     if (xr_map_isdummy(map))
         return;
-    uint32_t size = xr_map_sizenode(map);
+    uint32_t size = map->nentries;
 
     // Pass 1: simple key-value pairs
     for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node))
+        XrMapEntry *node = xr_map_entry(map, i);
+        if (XR_MAP_ENTRY_EMPTY(node))
             continue;
         if (XR_IS_MAP(node->value) || is_array_of_tables(node->value))
             continue;
@@ -404,8 +404,8 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
 
     // Pass 2: sub-tables [key]
     for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node) || !XR_IS_MAP(node->value))
+        XrMapEntry *node = xr_map_entry(map, i);
+        if (XR_MAP_ENTRY_EMPTY(node) || !XR_IS_MAP(node->value))
             continue;
         XrString *key = XR_IS_STRING(node->key) ? XR_TO_STRING(node->key) : NULL;
         if (!key)
@@ -422,8 +422,8 @@ static void write_table(TomlWriter *w, XrMap *map, const char *prefix) {
 
     // Pass 3: array-of-tables [[key]]
     for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(map, i);
-        if (XR_MAP_NODE_EMPTY(node) || !is_array_of_tables(node->value))
+        XrMapEntry *node = xr_map_entry(map, i);
+        if (XR_MAP_ENTRY_EMPTY(node) || !is_array_of_tables(node->value))
             continue;
         XrString *key = XR_IS_STRING(node->key) ? XR_TO_STRING(node->key) : NULL;
         if (!key)

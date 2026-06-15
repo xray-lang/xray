@@ -265,10 +265,10 @@ static void stringify_map(JsonWriter *w, XrMap *map) {
     w->depth++;
 
     // Get node count
-    uint32_t size = (map->flags & XR_MAP_FLAG_DUMMY) ? 0 : xr_map_sizenode(map);
+    uint32_t size = (map->flags & XR_MAP_FLAG_DUMMY) ? 0 : map->nentries;
 
     for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(map, i);
+        XrMapEntry *node = xr_map_entry(map, i);
         if (node->key_tt == 0)
             continue;
 

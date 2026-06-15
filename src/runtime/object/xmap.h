@@ -5,14 +5,19 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xmap.h - Chained hash map
+ * xmap.h - Compact ordered hash map (CPython-style compact dict)
  *
  * KEY CONCEPT:
- *   - Chained scatter table with Brent's variation
- *   - Short strings forced intern, pointer comparison
- *   - Empty map uses static dummynode (zero allocation)
- *   - Can reach 100% load factor
- *   - No tombstone mechanism needed
+ *   - Insertion-ordered: entries[] is a dense, append-only array kept in the
+ *     order keys were first inserted; iteration scans it directly, so order
+ *     matches the language spec (Map preserves insertion order).
+ *   - indices[] is an open-addressing (linear-probing) hash table of int32
+ *     slots that hold an index into entries[] (or EMPTY / DELETED sentinels).
+ *   - Deletion tombstones the entry (key_tt = 0) and marks its index slot
+ *     DELETED; dead entries are reclaimed when the table is resized/compacted.
+ *   - Empty map allocates nothing (entries/indices NULL, DUMMY flag set); the
+ *     first insertion allocates both arrays.
+ *   - Short strings are force-interned, so string keys compare by pointer.
  */
 
 #ifndef XMAP_H
@@ -27,79 +32,89 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ========== Map Node (Chained Hash) ========== */
+/* ========== Map Entry (insertion-order dense slot) ========== */
 
-typedef struct XrMapNode {
+typedef struct XrMapEntry {
     XrValue value;
     XrValue key;
-    int32_t next;    // Chain offset (0 = end)
-    uint8_t key_tt;  // Key type tag (0 = empty)
+    uint32_t hash;   // Cached key hash (avoids recompute on resize/lookup)
+    uint8_t key_tt;  // Key type tag (+1); 0 = empty/tombstone slot
     uint8_t _pad[3];
-} XrMapNode;
+} XrMapEntry;
 
-// Node state
-#define XR_MAP_NODE_NIL_KEY 0
-#define XR_MAP_NODE_EMPTY(n) ((n)->key_tt == XR_MAP_NODE_NIL_KEY)
+// Entry state
+#define XR_MAP_ENTRY_NIL_KEY 0
+#define XR_MAP_ENTRY_EMPTY(e) ((e)->key_tt == XR_MAP_ENTRY_NIL_KEY)
+
+/* Index-table sentinels (stored in indices[]). Non-negative values are a
+ * direct index into entries[]. */
+#define XR_MAP_IX_EMPTY (-1)
+#define XR_MAP_IX_DELETED (-2)
 
 /* ========== Map Object ========== */
 
 typedef struct XrMap {
     XrGCHeader gc;
-    uint32_t count;
-    uint8_t lsizenode;  // log2(node count), 0 = dummynode
+    uint32_t count;         // Live entries (excludes tombstones)
+    uint32_t nentries;      // Used entries slots incl. tombstones (= next append index)
+    uint32_t entries_cap;   // Allocated entries[] capacity
+    uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
+    int32_t *indices;       // Open-addressing table -> entries index / sentinel
+    XrMapEntry *entries;    // Dense insertion-order array
     uint8_t flags;
     uint8_t key_tid;    // XrTypeId: key type for reified generics (0=any)
     uint8_t value_tid;  // XrTypeId: value type for reified generics (0=any)
-    XrMapNode *node;
-    XrMapNode *lastfree;
+    uint8_t _pad;
 } XrMap;
 
 // Macros
-#define xr_map_sizenode(m) (1u << (m)->lsizenode)
-#define xr_map_node(m, i) (&(m)->node[i])
+#define xr_map_entry(m, i) (&(m)->entries[i])
 
 // Flags
 #define XR_MAP_FLAG_WEAK 0x01
-#define XR_MAP_FLAG_DUMMY 0x02
-#define XR_MAP_FLAG_NODES_ON_GC 0x04  // node[] allocated as GC blob on Region heap
+#define XR_MAP_FLAG_DUMMY 0x02        // Empty map: no entries/indices allocation
+#define XR_MAP_FLAG_NODES_ON_GC 0x04  // entries[]/indices[] live on Region GC heap
 
 #define xr_map_isdummy(m) ((m)->flags & XR_MAP_FLAG_DUMMY)
-
-// Static dummynode
-XR_DATA XrMapNode xr_map_dummynode;
 
 // Initialize map in-place
 XR_FUNC void xr_map_init_inplace(XrMap *map, uint32_t capacity_hint);
 
-// Max hash size
+// Max index-table bits
 #define XR_MAP_MAXHBITS 30
 
 /* ========== Inline Fast Path (VM optimization) ========== */
 
-// Inline string key lookup (zero function calls)
-static inline XrMapNode *xr_map_find_string_fast(XrMap *map, XrString *key_str) {
+// Inline string-key lookup over the compact-dict index table.
+// Assumes the probed key string is interned (pointer comparison), matching
+// how constant string keys are emitted by the front end.
+static inline XrMapEntry *xr_map_find_string_fast(XrMap *map, XrString *key_str) {
     if (map->flags & XR_MAP_FLAG_DUMMY)
         return NULL;
 
-    XrMapNode *n = &map->node[key_str->hash & ((1u << map->lsizenode) - 1)];
+    uint32_t mask = map->indices_size - 1;
+    uint32_t slot = key_str->hash & mask;
 
     for (;;) {
-        if (n->key_tt == (XR_TID_STRING + 1) && XR_TO_STRING(n->key) == key_str) {
-            return n;
-        }
-        int next = n->next;
-        if (next == 0)
+        int32_t ix = map->indices[slot];
+        if (ix == XR_MAP_IX_EMPTY)
             return NULL;
-        n += next;
+        if (ix >= 0) {
+            XrMapEntry *e = &map->entries[ix];
+            if (e->key_tt == (XR_TID_STRING + 1) && XR_TO_STRING(e->key) == key_str) {
+                return e;
+            }
+        }
+        slot = (slot + 1) & mask;  // Linear probing; skips DELETED slots
     }
 }
 
 // Inline Map read (string constant key, zero function calls)
 #define XR_MAP_GET_STRING_FAST(map, key_str, result, found)                                        \
     do {                                                                                           \
-        XrMapNode *_n = xr_map_find_string_fast(map, key_str);                                     \
-        if (_n) {                                                                                  \
-            (result) = _n->value;                                                                  \
+        XrMapEntry *_e = xr_map_find_string_fast(map, key_str);                                    \
+        if (_e) {                                                                                  \
+            (result) = _e->value;                                                                  \
             (found) = true;                                                                        \
         } else {                                                                                   \
             (result) = xr_null();                                                                  \
@@ -110,10 +125,10 @@ static inline XrMapNode *xr_map_find_string_fast(XrMap *map, XrString *key_str) 
 // Inline Map set (string constant key)
 #define XR_MAP_SET_STRING_FAST(map, key_str, key_val, _val)                                        \
     do {                                                                                           \
-        XrMapNode *_n = xr_map_find_string_fast(map, key_str);                                     \
-        if (_n) {                                                                                  \
-            xr_rc_release_value(xr_current_coro_gc(), _n->value);                                  \
-            _n->value = (_val);                                                                    \
+        XrMapEntry *_e = xr_map_find_string_fast(map, key_str);                                    \
+        if (_e) {                                                                                  \
+            xr_rc_release_value(xr_current_coro_gc(), _e->value);                                  \
+            _e->value = (_val);                                                                    \
         } else {                                                                                   \
             xr_map_set(map, key_val, _val);                                                        \
         }                                                                                          \
@@ -123,6 +138,11 @@ static inline XrMapNode *xr_map_find_string_fast(XrMap *map, XrString *key_str) 
 
 XR_FUNC XrMap *xr_map_new(struct XrCoroutine *coro);
 XR_FUNC XrMap *xr_map_with_capacity(struct XrCoroutine *coro, uint32_t capacity_hint);
+
+struct XrCoroGC;
+// Pre-size entries[]/indices[] for `count` entries, charging external-byte
+// accounting to `gc` (used by deep-copy, which runs off the destination coro).
+XR_FUNC bool xr_map_reserve_external(XrMap *map, uint32_t count, struct XrCoroGC *gc);
 
 XR_FUNC void xr_map_set(XrMap *map, XrValue key, XrValue value);
 XR_FUNC XrValue xr_map_get(XrMap *map, XrValue key, bool *found);

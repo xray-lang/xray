@@ -208,11 +208,11 @@ static int encode_value(XrayIsolate *X, XrValue value, XrSerialBuf *buf, int dep
                     buf_put_varint(buf, (uint64_t) count);
 
                     // Iterate all non-empty nodes
-                    uint32_t total_nodes = xr_map_sizenode(map);
+                    uint32_t total_nodes = map->nentries;
                     uint32_t written = 0;
                     for (uint32_t i = 0; i < total_nodes && written < count; i++) {
-                        XrMapNode *node = xr_map_node(map, i);
-                        if (XR_MAP_NODE_EMPTY(node))
+                        XrMapEntry *node = xr_map_entry(map, i);
+                        if (XR_MAP_ENTRY_EMPTY(node))
                             continue;
                         if (encode_value(X, node->key, buf, depth + 1) != 0)
                             return -1;

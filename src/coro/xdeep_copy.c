@@ -283,47 +283,36 @@ XrValue xr_deep_copy_map_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
         return XR_NULL_VAL;
 
     new_map->count = 0;
-    new_map->flags = 0;
+    new_map->nentries = 0;
+    new_map->entries_cap = 0;
+    new_map->indices_size = 0;
+    new_map->indices = NULL;
+    new_map->entries = NULL;
+    new_map->flags = XR_MAP_FLAG_DUMMY;
     new_map->key_tid = map->key_tid;
     new_map->value_tid = map->value_tid;
 
     XrValue result = XR_FROM_PTR(new_map);
-    if (xr_map_isdummy(map)) {
-        new_map->lsizenode = 0;
-        new_map->node = &xr_map_dummynode;
-        new_map->lastfree = NULL;
-        new_map->flags |= XR_MAP_FLAG_DUMMY;
+    if (xr_map_isdummy(map) || map->count == 0) {
         xr_copy_context_record(ctx, map, result);
         ctx->objects_copied++;
         return result;
     }
 
-    uint32_t size = xr_map_sizenode(map);
-    new_map->lsizenode = map->lsizenode;
-    size_t node_bytes = sizeof(XrMapNode) * size;
-    new_map->node = (XrMapNode *) xr_malloc(node_bytes);
-    if (!new_map->node)
+    /* Pre-size the copy for the source's live count, charging the byte
+     * accounting to the destination per-coro gc (which later frees the map);
+     * without this the awaiting coroutine underflows when it frees a
+     * deep-copied map (e.g. a Json result handed back from `await all`).
+     * Pre-sizing also means the xr_map_set fill loop never resizes. */
+    if (!xr_map_reserve_external(new_map, map->count, ctx->dst_coro_gc))
         return XR_NULL_VAL;
-    /* The node buffer is a system-heap allocation that xr_gc_destroy_map will
-     * sub_external on teardown (NODES_ON_GC stays clear here). Mirror the
-     * setnodevector accounting so the destination per-coro gc's byte counter
-     * balances; without this the awaiting coroutine underflows when it frees
-     * a deep-copied map (e.g. a Json result handed back from `await all`). */
-    if (ctx->dst_coro_gc)
-        xr_gc_add_external(ctx->dst_coro_gc, (int64_t) node_bytes);
-
-    for (uint32_t i = 0; i < size; i++) {
-        new_map->node[i].key_tt = XR_MAP_NODE_NIL_KEY;
-        new_map->node[i].next = 0;
-    }
-    new_map->lastfree = &new_map->node[size];
 
     xr_copy_context_record(ctx, map, result);
     ctx->objects_copied++;
 
-    for (uint32_t i = 0; i < size; i++) {
-        XrMapNode *node = &map->node[i];
-        if (!XR_MAP_NODE_EMPTY(node)) {
+    for (uint32_t i = 0; i < map->nentries; i++) {
+        XrMapEntry *node = &map->entries[i];
+        if (!XR_MAP_ENTRY_EMPTY(node)) {
             xr_map_set(new_map, xr_deep_copy_with_ctx(ctx, node->key),
                        xr_deep_copy_with_ctx(ctx, node->value));
         }
@@ -816,10 +805,9 @@ XrValue xr_to_shared_map(struct XrayIsolate *X, XrGCHeader *obj) {
     XR_GC_SET_STORAGE(&new_map->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_map->gc, 1);
     if (!xr_map_isdummy(map)) {
-        uint32_t map_size = xr_map_sizenode(map);
-        for (uint32_t i = 0; i < map_size; i++) {
-            XrMapNode *node = &map->node[i];
-            if (!XR_MAP_NODE_EMPTY(node))
+        for (uint32_t i = 0; i < map->nentries; i++) {
+            XrMapEntry *node = &map->entries[i];
+            if (!XR_MAP_ENTRY_EMPTY(node))
                 xr_map_set(new_map, xr_to_shared(X, node->key), xr_to_shared(X, node->value));
         }
     }

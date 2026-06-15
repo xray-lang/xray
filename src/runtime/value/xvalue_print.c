@@ -171,10 +171,10 @@ static void dump_map(XrMap *map, DumpContext *ctx) {
     printf("#{");
     ctx->depth++;
     size_t output = 0;
-    size_t size = xr_map_sizenode(map);
+    size_t size = map->nentries;
     for (size_t i = 0; i < size; i++) {
-        XrMapNode *node = xr_map_node(map, i);
-        if (!XR_MAP_NODE_EMPTY(node)) {
+        XrMapEntry *node = xr_map_entry(map, i);
+        if (!XR_MAP_ENTRY_EMPTY(node)) {
             if (output > 0)
                 printf(",");
             dump_newline(ctx);
