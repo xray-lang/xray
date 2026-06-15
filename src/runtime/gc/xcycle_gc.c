@@ -75,7 +75,7 @@ static inline uint8_t get_color(const XrGCHeader *obj) {
  * can be a member of a coro-local cycle, so skip the edge altogether
  * (consistently in EVERY phase, or the trial bookkeeping breaks). */
 static inline bool cycle_child_eligible(const XrGCHeader *obj) {
-    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC))
+    if (obj->extra & (XR_OBJ_REGION | XR_OBJ_MANAGED | XR_OBJ_ATOMIC | XR_OBJ_STORAGE_BUMP))
         return false;
     if (XR_GC_IS_SHARED(obj))
         return false;

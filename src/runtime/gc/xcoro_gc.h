@@ -296,13 +296,13 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
  */
 
 static inline void xr_rc_retain(XrObjHeader *o) {
-    if (!o || (o->extra & XR_OBJ_DEAD))
+    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_STORAGE_BUMP)))
         return;
     xr_obj_dup(o);
 }
 
 static inline void xr_rc_release(XrCoroGC *gc, XrObjHeader *o) {
-    if (!o || (o->extra & XR_OBJ_DEAD))
+    if (!o || (o->extra & (XR_OBJ_DEAD | XR_OBJ_STORAGE_BUMP)))
         return;
     if (xr_obj_drop_is_last(o)) {
         xr_coro_gc_rc_destroy(gc, o);

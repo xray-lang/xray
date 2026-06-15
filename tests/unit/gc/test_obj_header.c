@@ -74,6 +74,20 @@ static void test_sticky_noop(void) {
     ASSERT_TRUE(!xr_obj_is_unique(&o), "sticky object is not unique");
 }
 
+/* AOT bump objects are bulk-freed by their arena. They must remain invisible to
+ * VM/JIT RC, even if a stale or external producer gives them rc==0. */
+static void test_bump_storage_noop(void) {
+    XrObjHeader o = {0};
+    o.refcount = XR_RC_INIT;
+    XR_OBJ_SET_FLAG(&o, XR_OBJ_STORAGE_BUMP);
+
+    xr_obj_dup(&o);
+    ASSERT_EQ(o.refcount, XR_RC_INIT, "bump dup is no-op");
+    ASSERT_TRUE(!xr_obj_drop_is_last(&o), "bump drop never last");
+    ASSERT_EQ(o.refcount, XR_RC_INIT, "bump drop is no-op");
+    ASSERT_TRUE(!xr_obj_is_unique(&o), "bump object is not unique");
+}
+
 /* Atomic (thread-shared) objects: negative encoding, references = -rc.
  * Last-ref detection still works through the cold path. */
 static void test_atomic_dup_drop(void) {
@@ -135,6 +149,7 @@ int main(void) {
     test_header_size();
     test_plain_dup_drop();
     test_sticky_noop();
+    test_bump_storage_noop();
     test_atomic_dup_drop();
     test_managed_noop();
     test_null_safe();

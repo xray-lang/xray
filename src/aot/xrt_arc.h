@@ -189,6 +189,7 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
         hdr = (XrGCHeader *) xrt_bump_alloc(total);
         memset(hdr, 0, total);
         hdr->extra = XR_OBJ_STORAGE_BUMP;  // mark as bump-allocated
+        atomic_store_explicit(&hdr->refcount, XR_RC_STICKY, memory_order_relaxed);
     } else {
         hdr = (XrGCHeader *) XRT_CALLOC(1, total);
         if (XR_UNLIKELY(!hdr)) {
