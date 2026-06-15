@@ -29,18 +29,14 @@
 /* ========== OSR Entry Point ========== */
 
 #define XM_MAX_OSR_ENTRIES 8
-#define XM_MAX_OSR_SLOTS 32
 
+// OSR entry metadata consumed at runtime: the loop-header match key (bc_offset)
+// and the stub address (entry_offset). The bc_slot -> phys_reg restore is baked
+// into the stub machine code, so no per-slot table is kept here.
 typedef struct {
     uint32_t block_id;      // loop header block index
     uint32_t bc_offset;     // bytecode PC of loop header (for VM matching)
     uint32_t entry_offset;  // byte offset of OSR entry stub from code start
-    uint16_t nslots;        // number of live register slots
-    struct {
-        int16_t bc_slot;   // bytecode register slot (-1 = unmapped)
-        uint8_t phys_reg;  // A64Reg physical register to load into
-        uint8_t type;      // Xm type (I64 or F64)
-    } slots[XM_MAX_OSR_SLOTS];
 } XmOsrEntry;
 
 typedef struct {

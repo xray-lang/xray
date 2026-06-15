@@ -113,7 +113,6 @@ static void test_osr_verify(void) {
     XmOsrEntry entries[2] = {0};
     entries[0].bc_offset = 10;
     entries[0].entry_offset = 4;
-    entries[0].nslots = 1;
     entries[1].bc_offset = 20;
     entries[1].entry_offset = 8;
 
@@ -128,11 +127,6 @@ static void test_osr_verify(void) {
     check_error("osr entry misaligned", xm_verify_osr(entries, 2, 16, 4, &err_idx),
                 XM_META_VERIFY_OSR_ENTRY_MISALIGNED);
     entries[1].entry_offset = 8;
-
-    entries[0].nslots = XM_MAX_OSR_SLOTS + 1;
-    check_error("osr nslots overflow", xm_verify_osr(entries, 2, 16, 4, &err_idx),
-                XM_META_VERIFY_OSR_NSLOTS_OVERFLOW);
-    entries[0].nslots = 1;
 
     entries[1].bc_offset = 10;
     check_error("osr duplicate bc", xm_verify_osr(entries, 2, 16, 4, &err_idx),

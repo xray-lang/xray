@@ -193,7 +193,6 @@ static inline XmMetaVerifyError xm_verify_deopt(const XmRtDeoptEntry *entries, u
  *  - nosr <= XM_MAX_OSR_ENTRIES
  *  - entry.entry_offset < code_size
  *  - entry.entry_offset is a multiple of arch_align (1 for x64, 4 for fixed-32)
- *  - entry.nslots <= XM_MAX_OSR_SLOTS
  *  - bc_offset is unique across all entries (xm_jit_runtime_coro.c does linear
  *    match; duplicates would silently shadow later entries) */
 static inline XmMetaVerifyError xm_verify_osr(const XmOsrEntry *entries, uint32_t nosr,
@@ -215,11 +214,6 @@ static inline XmMetaVerifyError xm_verify_osr(const XmOsrEntry *entries, uint32_
             if (err_idx)
                 *err_idx = i;
             return XM_META_VERIFY_OSR_ENTRY_MISALIGNED;
-        }
-        if (e->nslots > XM_MAX_OSR_SLOTS) {
-            if (err_idx)
-                *err_idx = i;
-            return XM_META_VERIFY_OSR_NSLOTS_OVERFLOW;
         }
         for (uint32_t j = 0; j < i; j++) {
             if (entries[j].bc_offset == e->bc_offset) {

@@ -187,9 +187,7 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
 
         /* === Pass 1: load vregs with bc_slot from values[] ===
          * R11 (SCRATCH_REG) holds values_ptr throughout this loop. */
-        uint16_t nslots = 0;
-
-        for (uint32_t v = 0; v < ctx->func->nvreg && nslots < XM_MAX_OSR_SLOTS; v++) {
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
             int8_t ri = xra_vreg_reg_at(ctx->xra, snap_block_id, v);
             if (ri < 0)
                 continue;
@@ -203,17 +201,9 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
             if (!is_fp) {
                 X64Reg dst = x64_alloc_regs[ri];
                 x64_mov_rm(&ctx->buf, dst, X64_SCRATCH_REG, off);
-                entry->slots[nslots].bc_slot = slot;
-                entry->slots[nslots].phys_reg = (uint8_t) dst;
-                entry->slots[nslots].type = XR_REP_I64;
-                nslots++;
             } else {
                 X64Xmm dst = x64_alloc_fp_regs[ri];
                 x64_movsd_rm(&ctx->buf, dst, X64_SCRATCH_REG, off);
-                entry->slots[nslots].bc_slot = slot;
-                entry->slots[nslots].phys_reg = (uint8_t) dst;
-                entry->slots[nslots].type = XR_REP_F64;
-                nslots++;
             }
         }
 
@@ -231,8 +221,6 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
             x64_osr_materialize_const(ctx, ctx->func->vregs[v].def, is_fp ? -1 : ri,
                                       is_fp ? ri : -1);
         }
-
-        entry->nslots = nslots;
 
         /* JMP rel32 to loop header block. block_offsets is populated by
          * x64_emit_block earlier, so the displacement is known here. */

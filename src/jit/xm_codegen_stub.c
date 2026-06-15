@@ -338,11 +338,11 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         // block that map back to a bytecode slot.
         XmBlock *osr_blk =
             (snap->block_id < ctx->func->nblk) ? ctx->func->blocks[snap->block_id] : NULL;
-        uint16_t nslots = 0;
-
         // Walk all vregs: if live at the OSR block (has phys reg) and has a
-        // valid bc_slot, load it from the interpreter's values array.
-        for (uint32_t v = 0; v < ctx->func->nvreg && nslots < XM_MAX_OSR_SLOTS; v++) {
+        // valid bc_slot, load it from the interpreter's values array. No slot
+        // cap — every live vreg must be reloaded or the loop body runs on stale
+        // registers after OSR entry.
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
             int16_t slot = ctx->func->vregs[v].bc_slot;
             if (slot < 0)
                 continue;
@@ -356,22 +356,14 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
             if (!is_fp) {
                 A64Reg dst = alloc_regs[ri];
                 a64_buf_emit(&ctx->buf, a64_ldr(dst, SCRATCH_REG, (int32_t) (slot * 8)));
-                entry->slots[nslots].bc_slot = slot;
-                entry->slots[nslots].phys_reg = (uint8_t) dst;
-                entry->slots[nslots].type = XR_REP_I64;
-                nslots++;
             } else {
                 A64Reg dst = alloc_fp_regs[ri];
                 a64_buf_emit(&ctx->buf, a64_ldr_fp(dst, SCRATCH_REG, (int32_t) (slot * 8)));
-                entry->slots[nslots].bc_slot = slot;
-                entry->slots[nslots].phys_reg = (uint8_t) dst;
-                entry->slots[nslots].type = XR_REP_F64;
-                nslots++;
             }
         }
 
         // Materialize constants (vregs without bc_slot) into physical regs.
-        for (uint32_t v = 0; v < ctx->func->nvreg && nslots < XM_MAX_OSR_SLOTS; v++) {
+        for (uint32_t v = 0; v < ctx->func->nvreg; v++) {
             int8_t ri = xra_vreg_reg_at(ctx->xra, snap->block_id, v);
             if (ri < 0)
                 continue;
@@ -407,8 +399,6 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
             a64_buf_emit(&ctx->buf, a64_ldr(SCRATCH_REG2, SCRATCH_REG, bc_off));
             a64_buf_emit(&ctx->buf, a64_str(SCRATCH_REG2, A64_SP, spill_off));
         }
-
-        entry->nslots = nslots;
 
         // Branch to loop header block
         int32_t target_offset = (int32_t) snap->block_offset - (int32_t) ctx->buf.count;
