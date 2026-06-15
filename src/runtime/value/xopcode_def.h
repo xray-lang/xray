@@ -231,8 +231,6 @@
     _(ERR_CHECK, FMT_A, KOP_A_LOAD, "check pending_error; if set, propagate (return)")             \
     _(ERR_HAS, FMT_A, KOP_A_LOAD, "R[A] = !IS_NULL(pending_error)")                                \
     _(ERR_CATCH, FMT_A, KOP_A_LOAD, "R[A] = pending_error; clear")                                 \
-    _(SPILL, FMT_AB, KOP_AB_UNARY, "S[A] = R[B] (spill register to slot)")                         \
-    _(RELOAD, FMT_AB, KOP_AB_UNARY, "R[A] = S[B] (reload from slot)")                              \
     _(BOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as i64)")                                    \
     _(BOX_F64, FMT_AB, KOP_AB_UNARY, "R[A] = box(R[B] as f64)")                                    \
     _(UNBOX_I64, FMT_AB, KOP_AB_UNARY, "R[A] = unbox(R[B]) as i64")                                \

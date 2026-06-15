@@ -108,18 +108,16 @@ static inline bool vm_is_truthy(XrValue value) {
     return !vm_is_falsey(value);
 }
 
-/* ========== Register Limits ========== */
-#ifndef MAXREGS
-#define MAXREGS 250
-#endif  // ========== Debug Macros ==========
-
+/* ========== Debug Macros ========== */
 // #define XR_DEBUG_VM
 
 #ifdef XR_DEBUG_VM
 #define VM_DEBUG_PRINT(...) printf("[VM DEBUG] " __VA_ARGS__)
 #else
 #define VM_DEBUG_PRINT(...) ((void) 0)
-#endif  // ========== Register Bounds Checking (Debug Mode) ==========
+#endif
+
+/* ========== Register Bounds Checking (Debug Mode) ========== */
 
 /*
 ** XR_DEBUG_REGS - Enable register bounds checking
