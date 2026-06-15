@@ -3,6 +3,7 @@
 
 #include "../../../src/ir/xi_lowering_coverage_gen.h"
 #include "../../../src/ir/xi_emit_vm_gen.h"
+#include "../../../src/jit/xi_to_xm_dispatch_gen.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -64,6 +65,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_ADD) == true);
     assert(xi_emit_vm_template_opcode(XI_ADD) == OP_ADD);
     assert(xi_emit_vm_template_swaps_args(XI_ADD) == false);
+    assert(xi_to_xm_template_int_op(XI_ADD) == XM_ADD);
+    assert(xi_to_xm_template_float_op(XI_ADD) == XM_FADD);
+    assert(xi_to_xm_template_swaps_args(XI_ADD) == false);
+    assert(xi_to_xm_template_eq_like(XI_ADD) == false);
+    assert(xi_to_xm_template_ne_like(XI_ADD) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_ADD) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_ADD) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_ADD) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_ADD) == false);
@@ -74,6 +81,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_SUB) == true);
     assert(xi_emit_vm_template_opcode(XI_SUB) == OP_SUB);
     assert(xi_emit_vm_template_swaps_args(XI_SUB) == false);
+    assert(xi_to_xm_template_int_op(XI_SUB) == XM_SUB);
+    assert(xi_to_xm_template_float_op(XI_SUB) == XM_FSUB);
+    assert(xi_to_xm_template_swaps_args(XI_SUB) == false);
+    assert(xi_to_xm_template_eq_like(XI_SUB) == false);
+    assert(xi_to_xm_template_ne_like(XI_SUB) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_SUB) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_SUB) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_SUB) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_SUB) == false);
@@ -84,6 +97,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_MUL) == true);
     assert(xi_emit_vm_template_opcode(XI_MUL) == OP_MUL);
     assert(xi_emit_vm_template_swaps_args(XI_MUL) == false);
+    assert(xi_to_xm_template_int_op(XI_MUL) == XM_MUL);
+    assert(xi_to_xm_template_float_op(XI_MUL) == XM_FMUL);
+    assert(xi_to_xm_template_swaps_args(XI_MUL) == false);
+    assert(xi_to_xm_template_eq_like(XI_MUL) == false);
+    assert(xi_to_xm_template_ne_like(XI_MUL) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_MUL) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_MUL) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_MUL) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_MUL) == false);
@@ -94,6 +113,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_DIV) == true);
     assert(xi_emit_vm_template_opcode(XI_DIV) == OP_DIV);
     assert(xi_emit_vm_template_swaps_args(XI_DIV) == false);
+    assert(xi_to_xm_template_int_op(XI_DIV) == XM_DIV);
+    assert(xi_to_xm_template_float_op(XI_DIV) == XM_FDIV);
+    assert(xi_to_xm_template_swaps_args(XI_DIV) == false);
+    assert(xi_to_xm_template_eq_like(XI_DIV) == false);
+    assert(xi_to_xm_template_ne_like(XI_DIV) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_DIV) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_DIV) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_DIV) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_DIV) == false);
@@ -104,6 +129,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_MOD) == true);
     assert(xi_emit_vm_template_opcode(XI_MOD) == OP_MOD);
     assert(xi_emit_vm_template_swaps_args(XI_MOD) == false);
+    assert(xi_to_xm_template_int_op(XI_MOD) == XM_MOD);
+    assert(xi_to_xm_template_float_op(XI_MOD) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_MOD) == false);
+    assert(xi_to_xm_template_eq_like(XI_MOD) == false);
+    assert(xi_to_xm_template_ne_like(XI_MOD) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_MOD) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_MOD) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_MOD) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_MOD) == false);
@@ -114,6 +145,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NEG) == true);
     assert(xi_emit_vm_template_opcode(XI_NEG) == OP_UNM);
     assert(xi_emit_vm_template_swaps_args(XI_NEG) == false);
+    assert(xi_to_xm_template_int_op(XI_NEG) == XM_NEG);
+    assert(xi_to_xm_template_float_op(XI_NEG) == XM_FNEG);
+    assert(xi_to_xm_template_swaps_args(XI_NEG) == false);
+    assert(xi_to_xm_template_eq_like(XI_NEG) == false);
+    assert(xi_to_xm_template_ne_like(XI_NEG) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_NEG) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NEG) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NEG) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NEG) == false);
@@ -124,6 +161,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BAND) == true);
     assert(xi_emit_vm_template_opcode(XI_BAND) == OP_BAND);
     assert(xi_emit_vm_template_swaps_args(XI_BAND) == false);
+    assert(xi_to_xm_template_int_op(XI_BAND) == XM_AND);
+    assert(xi_to_xm_template_float_op(XI_BAND) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_BAND) == false);
+    assert(xi_to_xm_template_eq_like(XI_BAND) == false);
+    assert(xi_to_xm_template_ne_like(XI_BAND) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_BAND) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_BAND) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_BAND) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_BAND) == false);
@@ -134,6 +177,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BOR) == true);
     assert(xi_emit_vm_template_opcode(XI_BOR) == OP_BOR);
     assert(xi_emit_vm_template_swaps_args(XI_BOR) == false);
+    assert(xi_to_xm_template_int_op(XI_BOR) == XM_OR);
+    assert(xi_to_xm_template_float_op(XI_BOR) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_BOR) == false);
+    assert(xi_to_xm_template_eq_like(XI_BOR) == false);
+    assert(xi_to_xm_template_ne_like(XI_BOR) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_BOR) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_BOR) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_BOR) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_BOR) == false);
@@ -144,6 +193,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BXOR) == true);
     assert(xi_emit_vm_template_opcode(XI_BXOR) == OP_BXOR);
     assert(xi_emit_vm_template_swaps_args(XI_BXOR) == false);
+    assert(xi_to_xm_template_int_op(XI_BXOR) == XM_XOR);
+    assert(xi_to_xm_template_float_op(XI_BXOR) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_BXOR) == false);
+    assert(xi_to_xm_template_eq_like(XI_BXOR) == false);
+    assert(xi_to_xm_template_ne_like(XI_BXOR) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_BXOR) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_BXOR) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_BXOR) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_BXOR) == false);
@@ -154,6 +209,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_BNOT) == true);
     assert(xi_emit_vm_template_opcode(XI_BNOT) == OP_BNOT);
     assert(xi_emit_vm_template_swaps_args(XI_BNOT) == false);
+    assert(xi_to_xm_template_int_op(XI_BNOT) == XM_NOT);
+    assert(xi_to_xm_template_float_op(XI_BNOT) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_BNOT) == false);
+    assert(xi_to_xm_template_eq_like(XI_BNOT) == false);
+    assert(xi_to_xm_template_ne_like(XI_BNOT) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_BNOT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_BNOT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_BNOT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_BNOT) == false);
@@ -164,6 +225,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NOT) == true);
     assert(xi_emit_vm_template_opcode(XI_NOT) == OP_NOT);
     assert(xi_emit_vm_template_swaps_args(XI_NOT) == false);
+    assert(xi_to_xm_template_int_op(XI_NOT) == XM_EQ);
+    assert(xi_to_xm_template_float_op(XI_NOT) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_NOT) == false);
+    assert(xi_to_xm_template_eq_like(XI_NOT) == false);
+    assert(xi_to_xm_template_ne_like(XI_NOT) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_NOT) == true);
     assert(xi_emit_vm_requires_fresh_dst(XI_NOT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NOT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NOT) == false);
@@ -438,6 +505,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_SHL) == true);
     assert(xi_emit_vm_template_opcode(XI_SHL) == OP_SHL);
     assert(xi_emit_vm_template_swaps_args(XI_SHL) == false);
+    assert(xi_to_xm_template_int_op(XI_SHL) == XM_SHL);
+    assert(xi_to_xm_template_float_op(XI_SHL) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_SHL) == false);
+    assert(xi_to_xm_template_eq_like(XI_SHL) == false);
+    assert(xi_to_xm_template_ne_like(XI_SHL) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_SHL) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_SHL) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_SHL) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_SHL) == false);
@@ -448,6 +521,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_SHR) == true);
     assert(xi_emit_vm_template_opcode(XI_SHR) == OP_SHR);
     assert(xi_emit_vm_template_swaps_args(XI_SHR) == false);
+    assert(xi_to_xm_template_int_op(XI_SHR) == XM_SHR);
+    assert(xi_to_xm_template_float_op(XI_SHR) == XM_OP_COUNT);
+    assert(xi_to_xm_template_swaps_args(XI_SHR) == false);
+    assert(xi_to_xm_template_eq_like(XI_SHR) == false);
+    assert(xi_to_xm_template_ne_like(XI_SHR) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_SHR) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_SHR) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_SHR) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_SHR) == false);
@@ -458,6 +537,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_EQ) == true);
     assert(xi_emit_vm_template_opcode(XI_EQ) == OP_CMP_EQ);
     assert(xi_emit_vm_template_swaps_args(XI_EQ) == false);
+    assert(xi_to_xm_template_int_op(XI_EQ) == XM_EQ);
+    assert(xi_to_xm_template_float_op(XI_EQ) == XM_FEQ);
+    assert(xi_to_xm_template_swaps_args(XI_EQ) == false);
+    assert(xi_to_xm_template_eq_like(XI_EQ) == true);
+    assert(xi_to_xm_template_ne_like(XI_EQ) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_EQ) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_EQ) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_EQ) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_EQ) == false);
@@ -468,6 +553,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NE) == true);
     assert(xi_emit_vm_template_opcode(XI_NE) == OP_CMP_NE);
     assert(xi_emit_vm_template_swaps_args(XI_NE) == false);
+    assert(xi_to_xm_template_int_op(XI_NE) == XM_NE);
+    assert(xi_to_xm_template_float_op(XI_NE) == XM_FNE);
+    assert(xi_to_xm_template_swaps_args(XI_NE) == false);
+    assert(xi_to_xm_template_eq_like(XI_NE) == false);
+    assert(xi_to_xm_template_ne_like(XI_NE) == true);
+    assert(xi_to_xm_template_is_logical_not(XI_NE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NE) == false);
@@ -478,6 +569,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_EQ_STRICT) == true);
     assert(xi_emit_vm_template_opcode(XI_EQ_STRICT) == OP_CMP_EQ_STRICT);
     assert(xi_emit_vm_template_swaps_args(XI_EQ_STRICT) == false);
+    assert(xi_to_xm_template_int_op(XI_EQ_STRICT) == XM_EQ);
+    assert(xi_to_xm_template_float_op(XI_EQ_STRICT) == XM_EQ);
+    assert(xi_to_xm_template_swaps_args(XI_EQ_STRICT) == false);
+    assert(xi_to_xm_template_eq_like(XI_EQ_STRICT) == true);
+    assert(xi_to_xm_template_ne_like(XI_EQ_STRICT) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_EQ_STRICT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_EQ_STRICT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_EQ_STRICT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_EQ_STRICT) == false);
@@ -488,6 +585,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_NE_STRICT) == true);
     assert(xi_emit_vm_template_opcode(XI_NE_STRICT) == OP_CMP_NE_STRICT);
     assert(xi_emit_vm_template_swaps_args(XI_NE_STRICT) == false);
+    assert(xi_to_xm_template_int_op(XI_NE_STRICT) == XM_NE);
+    assert(xi_to_xm_template_float_op(XI_NE_STRICT) == XM_NE);
+    assert(xi_to_xm_template_swaps_args(XI_NE_STRICT) == false);
+    assert(xi_to_xm_template_eq_like(XI_NE_STRICT) == false);
+    assert(xi_to_xm_template_ne_like(XI_NE_STRICT) == true);
+    assert(xi_to_xm_template_is_logical_not(XI_NE_STRICT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_NE_STRICT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_NE_STRICT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_NE_STRICT) == false);
@@ -498,6 +601,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_LT) == true);
     assert(xi_emit_vm_template_opcode(XI_LT) == OP_CMP_LT);
     assert(xi_emit_vm_template_swaps_args(XI_LT) == false);
+    assert(xi_to_xm_template_int_op(XI_LT) == XM_LT);
+    assert(xi_to_xm_template_float_op(XI_LT) == XM_FLT);
+    assert(xi_to_xm_template_swaps_args(XI_LT) == false);
+    assert(xi_to_xm_template_eq_like(XI_LT) == false);
+    assert(xi_to_xm_template_ne_like(XI_LT) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_LT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_LT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_LT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_LT) == false);
@@ -508,6 +617,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_LE) == true);
     assert(xi_emit_vm_template_opcode(XI_LE) == OP_CMP_LE);
     assert(xi_emit_vm_template_swaps_args(XI_LE) == false);
+    assert(xi_to_xm_template_int_op(XI_LE) == XM_LE);
+    assert(xi_to_xm_template_float_op(XI_LE) == XM_FLE);
+    assert(xi_to_xm_template_swaps_args(XI_LE) == false);
+    assert(xi_to_xm_template_eq_like(XI_LE) == false);
+    assert(xi_to_xm_template_ne_like(XI_LE) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_LE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_LE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_LE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_LE) == false);
@@ -518,6 +633,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_GT) == true);
     assert(xi_emit_vm_template_opcode(XI_GT) == OP_CMP_LT);
     assert(xi_emit_vm_template_swaps_args(XI_GT) == true);
+    assert(xi_to_xm_template_int_op(XI_GT) == XM_LT);
+    assert(xi_to_xm_template_float_op(XI_GT) == XM_FLT);
+    assert(xi_to_xm_template_swaps_args(XI_GT) == true);
+    assert(xi_to_xm_template_eq_like(XI_GT) == false);
+    assert(xi_to_xm_template_ne_like(XI_GT) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_GT) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_GT) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_GT) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_GT) == false);
@@ -528,6 +649,12 @@ int main(void) {
     assert(xi_lowering_is_patterned(XI_GE) == true);
     assert(xi_emit_vm_template_opcode(XI_GE) == OP_CMP_LE);
     assert(xi_emit_vm_template_swaps_args(XI_GE) == true);
+    assert(xi_to_xm_template_int_op(XI_GE) == XM_LE);
+    assert(xi_to_xm_template_float_op(XI_GE) == XM_FLE);
+    assert(xi_to_xm_template_swaps_args(XI_GE) == true);
+    assert(xi_to_xm_template_eq_like(XI_GE) == false);
+    assert(xi_to_xm_template_ne_like(XI_GE) == false);
+    assert(xi_to_xm_template_is_logical_not(XI_GE) == false);
     assert(xi_emit_vm_requires_fresh_dst(XI_GE) == false);
     assert(xi_emit_vm_uses_raw_cell_args(XI_GE) == false);
     assert(xi_emit_vm_handles_cell_dst(XI_GE) == false);
