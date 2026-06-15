@@ -26,94 +26,137 @@
 typedef struct {
     int64_t len;
     int64_t cap;
-    /* Element storage. Alignment contract: for non-slice arrays this is
-     * XRT_DATA_ALIGN-aligned (32 bytes, AVX-width) — heap buffers come from
-     * XRT_ALLOC_ALIGNED, stack buffers round the alloca pointer up; growth
-     * goes through xrt_array_data_grow which preserves the contract.
-     * Generated _adN caches assert it via XR_ASSUME_ALIGNED. Slice views
-     * alias a sub-range of another array's storage at an arbitrary element
-     * offset — no alignment promise. */
+    /* Element storage. Alignment contract: non-slice arrays are
+     * XRT_DATA_ALIGN-aligned (32 bytes, AVX-width). Initial storage lives in
+     * the header block or stack frame at a rounded-up address; growth spills
+     * through xrt_array_data_grow into aligned heap storage. Generated _adN
+     * caches assert it via XR_ASSUME_ALIGNED. Slice views alias a sub-range of
+     * another array's storage at an arbitrary element offset — no alignment
+     * promise. */
     void *data;        /* uint8_t[] / int64_t[] / XrValue[] — depends on elem_type */
     uint8_t elem_type; /* XR_ELEM_ANY / XR_ELEM_U8 / ... */
     uint8_t elem_size; /* cached bytes per element */
     uint8_t is_slice;  /* view over another array; cannot grow */
+    uint8_t data_storage;
     const char *adt_enum_name;
     const char *adt_member_name;
 } xrt_array_t;
 
-/* Grow the element buffer to hold new_cap elements. realloc cannot preserve
- * the XRT_DATA_ALIGN contract, so growth is aligned alloc + copy + aligned
- * free. The whole old buffer (cap elements, not just len) is copied so the
- * zero-filled spare capacity from the zeroing constructors stays zeroed.
- * Callers must reject slices first; stack-allocated arrays must never grow
- * (their data is not heap storage — same contract as before). */
+#define XRT_ARRAY_DATA_HEAP 0
+#define XRT_ARRAY_DATA_INLINE 1
+#define XRT_ARRAY_DATA_STACK 2
+#define XRT_ARRAY_DATA_BORROWED 3
+
+static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_size,
+                                                   const char *where) {
+    if (cap < 0)
+        cap = 0;
+    if (elem_size == 0)
+        elem_size = 1;
+    if ((uint64_t) cap > (uint64_t) SIZE_MAX / (uint64_t) elem_size) {
+        fprintf(stderr, "%s: capacity overflow\n", where);
+        abort();
+    }
+    return (size_t) cap * (size_t) elem_size;
+}
+
+static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
+                                         uint8_t elem_size) {
+    a->len = 0;
+    a->cap = cap;
+    a->elem_type = etype;
+    a->elem_size = elem_size;
+    a->is_slice = 0;
+    a->data_storage = XRT_ARRAY_DATA_INLINE;
+    a->adt_enum_name = NULL;
+    a->adt_member_name = NULL;
+}
+
+static inline xrt_array_t *xrt_array_alloc_inline(int64_t cap, uint8_t etype, int zeroed,
+                                                  const char *where) {
+    if (etype >= XR_ELEM_COUNT)
+        etype = XR_ELEM_ANY;
+    uint8_t elem_size = XR_ELEM_SIZES[etype];
+    size_t data_bytes = xrt_array_data_bytes_or_abort(cap, elem_size, where);
+    size_t pad = data_bytes ? (XRT_DATA_ALIGN - 1) : 0;
+    if (data_bytes > SIZE_MAX - sizeof(xrt_array_t) - pad) {
+        fprintf(stderr, "%s: allocation size overflow\n", where);
+        abort();
+    }
+    size_t total = sizeof(xrt_array_t) + data_bytes + pad;
+    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(total);
+    if (XR_UNLIKELY(!a)) {
+        fprintf(stderr, "%s: out of memory\n", where);
+        abort();
+    }
+    xrt_array_init_header(a, cap, etype, elem_size);
+    if (data_bytes) {
+        a->data =
+            (void *) (((uintptr_t) ((char *) a + sizeof(xrt_array_t)) + (XRT_DATA_ALIGN - 1)) &
+                      ~(uintptr_t) (XRT_DATA_ALIGN - 1));
+        if (zeroed)
+            memset(a->data, 0, data_bytes);
+    } else {
+        a->data = NULL;
+    }
+    return a;
+}
+
+/* Grow the element buffer to hold new_cap elements. Initial array storage lives
+ * inline in the header allocation; the first growth spills to an aligned heap
+ * buffer, and later growth frees the previous heap buffer. Stack arrays abort
+ * instead of spilling so alloca-backed values cannot outlive their frame. */
 static inline void xrt_array_data_grow(xrt_array_t *a, int64_t new_cap) {
-    void *tmp = XRT_ALLOC_ALIGNED((size_t) new_cap * (size_t) a->elem_size);
+    if (XR_UNLIKELY(a->data_storage == XRT_ARRAY_DATA_STACK)) {
+        fprintf(stderr, "xrt_array_data_grow: stack array capacity exceeded\n");
+        abort();
+    }
+    size_t old_bytes = xrt_array_data_bytes_or_abort(a->cap, a->elem_size, "xrt_array_data_grow");
+    size_t new_bytes = xrt_array_data_bytes_or_abort(new_cap, a->elem_size, "xrt_array_data_grow");
+    void *tmp = XRT_ALLOC_ALIGNED(new_bytes);
     if (XR_UNLIKELY(!tmp)) {
         fprintf(stderr, "xrt_array_data_grow: out of memory\n");
         abort();
     }
-    if (a->data) {
-        memcpy(tmp, a->data, (size_t) a->cap * (size_t) a->elem_size);
-        XRT_FREE_ALIGNED(a->data);
+    if (a->data && old_bytes > 0) {
+        memcpy(tmp, a->data, old_bytes);
+        if (a->data_storage == XRT_ARRAY_DATA_HEAP)
+            XRT_FREE_ALIGNED(a->data);
     }
+    if (new_bytes > old_bytes)
+        memset((uint8_t *) tmp + old_bytes, 0, new_bytes - old_bytes);
     a->data = tmp;
+    a->data_storage = XRT_ARRAY_DATA_HEAP;
     a->cap = new_cap;
 }
 
-/* Zero-initialized aligned element buffer (calloc replacement that keeps the
- * XRT_DATA_ALIGN contract). */
-static inline void *xrt_array_data_alloc_zeroed(size_t bytes) {
-    void *p = XRT_ALLOC_ALIGNED(bytes);
-    if (p)
-        memset(p, 0, bytes);
-    return p;
+static inline int xrt_array_data_is_inline(const xrt_array_t *a) {
+    return a && a->data_storage == XRT_ARRAY_DATA_INLINE;
+}
+
+static inline int xrt_array_data_is_heap(const xrt_array_t *a) {
+    return a && a->data_storage == XRT_ARRAY_DATA_HEAP;
+}
+
+static inline int xrt_array_data_is_stack(const xrt_array_t *a) {
+    return a && a->data_storage == XRT_ARRAY_DATA_STACK;
+}
+
+static inline int xrt_array_data_is_borrowed(const xrt_array_t *a) {
+    return a && a->data_storage == XRT_ARRAY_DATA_BORROWED;
 }
 
 static inline XrValue xrt_array_new(int64_t cap) {
     if (cap < 4)
         cap = 4;
-    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (XR_UNLIKELY(!a)) {
-        fprintf(stderr, "xrt_array_new: out of memory\n");
-        abort();
-    }
-    a->len = 0;
-    a->cap = cap;
-    a->elem_type = XR_ELEM_ANY;
-    a->elem_size = (uint8_t) sizeof(XrValue);
-    a->is_slice = 0;
-    a->adt_enum_name = NULL;
-    a->adt_member_name = NULL;
-    a->data = xrt_array_data_alloc_zeroed((size_t) cap * sizeof(XrValue));
-    if (XR_UNLIKELY(!a->data)) {
-        fprintf(stderr, "xrt_array_new: out of memory\n");
-        abort();
-    }
+    xrt_array_t *a = xrt_array_alloc_inline(cap, XR_ELEM_ANY, 1, "xrt_array_new");
     return xr_mkptr(a, XR_TAG_ARRAY);
 }
 
 static inline xrt_array_t *xrt_array_new_typed_ptr(int64_t cap, uint8_t etype) {
     if (cap < 4)
         cap = 4;
-    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (XR_UNLIKELY(!a)) {
-        fprintf(stderr, "xrt_array_new_typed: out of memory\n");
-        abort();
-    }
-    a->len = 0;
-    a->cap = cap;
-    a->elem_type = etype;
-    a->elem_size = XR_ELEM_SIZES[etype];
-    a->is_slice = 0;
-    a->adt_enum_name = NULL;
-    a->adt_member_name = NULL;
-    a->data = xrt_array_data_alloc_zeroed((size_t) cap * (size_t) a->elem_size);
-    if (XR_UNLIKELY(!a->data)) {
-        fprintf(stderr, "xrt_array_new_typed: out of memory\n");
-        abort();
-    }
-    return a;
+    return xrt_array_alloc_inline(cap, etype, 1, "xrt_array_new_typed");
 }
 
 static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
@@ -123,24 +166,7 @@ static inline XrValue xrt_array_new_typed(int64_t cap, uint8_t etype) {
 static inline xrt_array_t *xrt_array_new_typed_uninit_ptr(int64_t cap, uint8_t etype) {
     if (cap < 4)
         cap = 4;
-    xrt_array_t *a = (xrt_array_t *) XRT_MALLOC(sizeof(xrt_array_t));
-    if (XR_UNLIKELY(!a)) {
-        fprintf(stderr, "xrt_array_new_typed_uninit: out of memory\n");
-        abort();
-    }
-    a->len = 0;
-    a->cap = cap;
-    a->elem_type = etype;
-    a->elem_size = XR_ELEM_SIZES[etype];
-    a->is_slice = 0;
-    a->adt_enum_name = NULL;
-    a->adt_member_name = NULL;
-    a->data = XRT_ALLOC_ALIGNED((size_t) cap * (size_t) a->elem_size);
-    if (XR_UNLIKELY(!a->data)) {
-        fprintf(stderr, "xrt_array_new_typed_uninit: out of memory\n");
-        abort();
-    }
-    return a;
+    return xrt_array_alloc_inline(cap, etype, 0, "xrt_array_new_typed_uninit");
 }
 
 static inline XrValue xrt_array_new_typed_uninit(int64_t cap, uint8_t etype) {
@@ -226,6 +252,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
     slice->elem_type = src->elem_type;
     slice->elem_size = src->elem_size;
     slice->is_slice = 1;
+    slice->data_storage = XRT_ARRAY_DATA_BORROWED;
     slice->adt_enum_name = NULL;
     slice->adt_member_name = NULL;
     slice->data = (uint8_t *) src->data + (size_t) start * (size_t) src->elem_size;
@@ -321,6 +348,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
         _a->elem_type = XR_ELEM_ANY;                                                               \
         _a->elem_size = (uint8_t) sizeof(XrValue);                                                 \
         _a->is_slice = 0;                                                                          \
+        _a->data_storage = XRT_ARRAY_DATA_STACK;                                                   \
         _a->adt_enum_name = NULL;                                                                  \
         _a->adt_member_name = NULL;                                                                \
         _a->data =                                                                                 \
@@ -700,7 +728,6 @@ static inline void xrt_map_resize_tagged(xrt_map_t *m, uint32_t min_needed) {
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
-    size_t ebytes = sizeof(XrMapEntry) * (size_t) entries_cap;
     uint8_t *ctrl = (uint8_t *) XRT_MALLOC(cbytes);
     int32_t *indices = (int32_t *) XRT_MALLOC(ibytes);
     XrMapEntry *entries = (XrMapEntry *) XRT_CALLOC((size_t) entries_cap, sizeof(XrMapEntry));
@@ -1013,7 +1040,6 @@ static inline void xrt_set_resize_tagged(xrt_set_t *s, uint32_t min_needed) {
 
     size_t cbytes = (size_t) indices_size + XR_SWISS_GROUP;
     size_t ibytes = sizeof(int32_t) * (size_t) indices_size;
-    size_t ebytes = sizeof(XrSetEntry) * (size_t) entries_cap;
     uint8_t *ctrl = (uint8_t *) XRT_MALLOC(cbytes);
     int32_t *indices = (int32_t *) XRT_MALLOC(ibytes);
     XrSetEntry *entries = (XrSetEntry *) XRT_CALLOC((size_t) entries_cap, sizeof(XrSetEntry));

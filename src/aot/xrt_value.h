@@ -41,8 +41,8 @@
 #define XRT_COLD __attribute__((cold))
 /* Alignment promise for the optimizer. Only assert alignments that the
  * allocation contract actually guarantees: array element buffers are
- * XRT_DATA_ALIGN (32B) aligned via XRT_ALLOC_ALIGNED / xrt_array_data_grow
- * (see xrt_arc.h / xrt_coll.h), and xrt_arc_alloc keeps object user data
+ * XRT_DATA_ALIGN (32B) aligned by xrt_coll.h's inline/stack rounding and by
+ * XRT_ALLOC_ALIGNED after growth, and xrt_arc_alloc keeps object user data
  * 16-byte aligned (see xrt_arc.h). */
 #define XR_ASSUME_ALIGNED(p, n) __builtin_assume_aligned((p), (n))
 /* Function purity attributes, emitted only when the AOT prepare pass proved
