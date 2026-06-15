@@ -1202,9 +1202,16 @@ void xr_coro_ready(XrayIsolate *X, XrCoroutine *gp, bool next) {
  *   - scope->cancel_requested                       (linked-mode latch)
  *   - child parent-scope clearing during sibling cancel
  *
- * Hold time is bounded (a single list mutation or a small sibling
- * walk); callers must not perform GC-triggering allocations or call
- * back into the scheduler while holding it. */
+ * Hold time is bounded (a single list mutation or a small sibling walk).
+ * While holding it, callers must not perform GC-triggering allocations or
+ * any blocking call. Non-blocking, lock-free scheduler wakes ARE allowed:
+ * the linked-cancel path (wake_waiter_cancel_linked_siblings_locked) calls
+ * xr_coro_ready on each blocked sibling under this lock. That wake chain —
+ * a claim_wake CAS, a lock-free MPSC inbox push, and a single-directional
+ * futex wake — never re-acquires child_lock and never blocks, so it cannot
+ * deadlock. Waking under the lock is in fact safer than after release: the
+ * lock pins the sibling list, so no sibling can complete and be recycled in
+ * the window between reading the list and waking it. */
 static inline void scope_lock_acquire(XrScopeContext *scope) {
     while (atomic_exchange_explicit(&scope->child_lock, true, memory_order_acquire)) {
     }
@@ -1300,12 +1307,23 @@ static void wake_waiter_unlink_from_scope_locked(XrCoroutine *coro, XrScopeConte
 /* Linked-mode failure propagation. Caller must hold scope->child_lock and
  * must have already unlinked the failing child, so the walk only visits
  * still-live siblings. Each sibling receives a cooperative cancel request. */
-static void wake_waiter_cancel_linked_siblings_locked(XrScopeContext *scope) {
+static void wake_waiter_cancel_linked_siblings_locked(XrayIsolate *X, XrScopeContext *scope) {
     for (XrCoroutine *sib = scope->first_child; sib; sib = xr_coro_scope_sibling(sib)) {
         if (xr_coro_flags_has(sib, XR_CORO_FLG_DONE))
             continue;
         xr_coro_flags_set(sib, XR_CORO_FLG_CANCEL_REQUESTED);
         xr_coro_request_yield(sib);
+        /* A sibling parked in select / channel / await never reaches a safepoint
+         * on its own to observe CANCEL_REQUESTED (request_yield only forces the
+         * reduction counter, which a blocked coroutine never consumes). Wake it
+         * so it is rescheduled on its owner worker, where the resume entry
+         * (vm_backend_resume_on_worker) converts CANCEL_REQUESTED into
+         * XR_CORO_RUN_CANCELLED and the coroutine unwinds through the unified
+         * completion path — running deferred cleanup and decrementing
+         * scope->count so the scope owner is released. xr_coro_ready is a no-op
+         * for a sibling that is not BLOCKED (claim_wake fails), so a running
+         * sibling still stops cooperatively via the reduction poke above. */
+        xr_coro_ready(X, sib, false);
     }
 }
 
@@ -1341,7 +1359,7 @@ static void wake_waiter_handle_scope_completion(XrayIsolate *X, XrCoroutine *cor
     wake_waiter_unlink_from_scope_locked(coro, scope);
     if (child_failed && scope->mode == XR_SCOPE_LINKED &&
         !atomic_exchange(&scope->cancel_requested, true)) {
-        wake_waiter_cancel_linked_siblings_locked(scope);
+        wake_waiter_cancel_linked_siblings_locked(X, scope);
     }
     scope_lock_release(scope);
 

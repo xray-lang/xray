@@ -1439,6 +1439,16 @@ static void x64_h_suspend(X64CodegenCtx *ctx, XmIns *ins, X64Reg rd) {
     x64_add_ri(&ctx->buf, X64_RSP, X64_ABI_SHADOW_BYTES);
 #endif
 
+    /* Check result: DEOPT_MARKER returns to VM recovery, 0 blocks, any
+     * other non-zero value continues inline. */
+    x64_load_imm64(&ctx->buf, X64_SCRATCH_REG, (uint64_t) XM_DEOPT_MARKER);
+    x64_cmp_rr(&ctx->buf, X64_RAX, X64_SCRATCH_REG);
+    x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);
+    uint32_t jne_not_deopt = ctx->buf.pos - 4;
+    x64_load_imm64(&ctx->buf, X64_RAX, (uint64_t) XM_DEOPT_MARKER);
+    x64_emit_epilogue(ctx);
+    x64_patch_rel32(&ctx->buf, jne_not_deopt, ctx->buf.pos);
+
     /* Check result: RAX == 0 -> blocked, RAX != 0 -> inline resume */
     x64_test_rr(&ctx->buf, X64_RAX, X64_RAX);
     x64_jcc_rel32(&ctx->buf, X64_CC_NE, 0);

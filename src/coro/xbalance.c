@@ -68,9 +68,10 @@ void xr_balance_init(struct XrRuntime *runtime) {
     for (int i = 0; i < runtime->worker_count && i < XR_MAX_WORKERS; i++) {
         XrMigrationPath *mp = &runtime->migration_paths[i];
         mp->flags = 0;
-        mp->runq.limit_here = XR_MIGRATION_LIMIT_DEFAULT;
-        mp->runq.limit_other = 0;
-        mp->runq.target_worker = -1;
+        atomic_store_explicit(&mp->runq.limit_here, XR_MIGRATION_LIMIT_DEFAULT,
+                              memory_order_relaxed);
+        atomic_store_explicit(&mp->runq.limit_other, 0, memory_order_relaxed);
+        atomic_store_explicit(&mp->runq.target_worker, -1, memory_order_relaxed);
     }
 }
 
@@ -102,8 +103,11 @@ void xr_check_balance(struct XrRuntime *runtime, struct XrWorker *worker) {
         struct XrWorker *w = &runtime->workers[i];
         len[i] = xr_runq_len(&w->p.runq);
         total_len += len[i];
-        if (len[i] > w->p.runq_max_len)
-            w->p.runq_max_len = len[i];
+        int prev_max = atomic_load_explicit(&w->p.runq_max_len, memory_order_relaxed);
+        while (len[i] > prev_max &&
+               !atomic_compare_exchange_weak_explicit(&w->p.runq_max_len, &prev_max, len[i],
+                                                      memory_order_relaxed, memory_order_relaxed)) {
+        }
         if (len[i] > max_l) {
             max_l = len[i];
             max_w = i;
@@ -118,21 +122,22 @@ void xr_check_balance(struct XrRuntime *runtime, struct XrWorker *worker) {
     int limit = avg > 0 ? avg : 1;
     for (int i = 0; i < wc && i < XR_MAX_WORKERS; i++) {
         XrMigrationPath *mp = &runtime->migration_paths[i];
-        mp->runq.limit_here = limit * XR_MIGRATION_THRESHOLD_MULTIPLIER;
-        mp->runq.limit_other = 0;
+        int limit_here = limit * XR_MIGRATION_THRESHOLD_MULTIPLIER;
+        atomic_store_explicit(&mp->runq.limit_here, limit_here, memory_order_relaxed);
+        atomic_store_explicit(&mp->runq.limit_other, 0, memory_order_relaxed);
 
-        if (len[i] > mp->runq.limit_here && min_w >= 0 && min_w != i) {
-            mp->runq.target_worker = min_w;
+        if (len[i] > limit_here && min_w >= 0 && min_w != i) {
+            atomic_store_explicit(&mp->runq.target_worker, min_w, memory_order_relaxed);
         } else if (len[i] == 0 && max_w >= 0 && max_w != i && max_l > limit) {
-            mp->runq.target_worker = max_w;
+            atomic_store_explicit(&mp->runq.target_worker, max_w, memory_order_relaxed);
         } else {
-            mp->runq.target_worker = -1;
+            atomic_store_explicit(&mp->runq.target_worker, -1, memory_order_relaxed);
         }
     }
 
     for (int i = 0; i < wc; i++) {
-        runtime->workers[i].p.runq_reds = 0;
-        runtime->workers[i].p.runq_max_len = 0;
+        atomic_store_explicit(&runtime->workers[i].p.runq_reds, 0, memory_order_relaxed);
+        atomic_store_explicit(&runtime->workers[i].p.runq_max_len, 0, memory_order_relaxed);
     }
     worker->p.check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
 
@@ -144,18 +149,19 @@ int xr_try_emigrate(struct XrWorker *worker) {
         return 0;
     struct XrRuntime *runtime = worker->p.runtime;
     XrMigrationPath *mp = &runtime->migration_paths[worker->p.id];
-    int target_id = mp->runq.target_worker;
+    int target_id = atomic_load_explicit(&mp->runq.target_worker, memory_order_relaxed);
     if (target_id < 0 || target_id >= runtime->worker_count)
         return 0;
 
     int len = xr_runq_len(&worker->p.runq);
-    if (len <= mp->runq.limit_here)
+    int limit_here = atomic_load_explicit(&mp->runq.limit_here, memory_order_relaxed);
+    if (len <= limit_here)
         return 0;
 
     struct XrWorker *target = &runtime->workers[target_id];
     int stolen = xr_runq_steal(&worker->p.runq, &target->p.runq, XR_MIGRATION_MAX_STEAL);
     if (stolen > 0) {
-        mp->runq.target_worker = -1;
+        atomic_store_explicit(&mp->runq.target_worker, -1, memory_order_relaxed);
         xr_proc_local_runq_inc(&target->p, stolen);
     }
     return stolen;
@@ -164,7 +170,7 @@ int xr_try_emigrate(struct XrWorker *worker) {
 void xr_worker_reductions_executed(struct XrWorker *worker, int reds) {
     if (!worker)
         return;
-    worker->p.runq_reds += reds;
+    atomic_fetch_add_explicit(&worker->p.runq_reds, reds, memory_order_relaxed);
     worker->p.check_balance_reds -= reds;
 }
 
@@ -179,5 +185,5 @@ void xr_runq_get_info(struct XrWorker *worker, int *len, int *reds) {
     if (len)
         *len = xr_runq_len(&worker->p.runq);
     if (reds)
-        *reds = worker->p.runq_reds;
+        *reds = atomic_load_explicit(&worker->p.runq_reds, memory_order_relaxed);
 }

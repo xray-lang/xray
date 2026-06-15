@@ -36,21 +36,40 @@
 #define XM_SUSPEND_SPILL_MAX 15
 
 /*
- * JIT suspend state: saved registers across suspend/resume.
- * Heap-allocated on demand (lazy) to save 320 bytes per non-JIT coroutine.
+ * Channel recv status protocol across JIT suspend/resume.
  *
- * MEMORY LAYOUT (320 bytes = 40 * int64_t):
+ * Direct fused recv projects a boolean from call_args[1]. Source-level
+ * Channel.recv() wraps the payload into Recv<T> and keeps its enum state in
+ * call_args[4]. Both scratch slots are worker-local, so blocking recv paths
+ * must persist the status in XrJitSuspendState and restore it on resume.
+ */
+#define XR_JIT_CHAN_RECV_STATUS_SLOT 1
+#define XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT 4
+#define XR_JIT_CHAN_RECV_VALUE 1
+#define XR_JIT_CHAN_RECV_CLOSED 0
+#define XR_JIT_CHAN_METHOD_RECV_VALUE 1
+#define XR_JIT_CHAN_METHOD_RECV_CLOSED 2
+
+/*
+ * JIT suspend state: saved registers across suspend/resume.
+ * Heap-allocated on demand (lazy) to save per-coroutine memory when JIT is unused.
+ *
+ * MEMORY LAYOUT (336 bytes = 42 * int64_t):
  *   +0    caller_saved[15]  x1-x15  (scratch regs, saved by XM_SUSPEND)
  *   +120  callee_saved[8]   x20-x27 (callee-saved, for cross-worker resume)
  *   +184  result            await/channel return value slot
  *   +192  result_tag        XR_TAG_* for result (written alongside result by waker)
- *   +200  spill[XM_SUSPEND_SPILL_MAX] spill slots bridging old->new stack frame
+ *   +200  result_status     paired status for recv-like operations
+ *   +208  result_closed_status status to publish when a blocked recv wakes on close
+ *   +216  spill[XM_SUSPEND_SPILL_MAX] spill slots bridging old->new stack frame
  */
 typedef struct XrJitSuspendState {
     int64_t caller_saved[15];             // x1-x15
     int64_t callee_saved[8];              // x20-x27
     int64_t result;                       // await/channel result (written by block helper or waker)
     int64_t result_tag;                   // XR_TAG_* for result (resume writes to runtime_tags)
+    int64_t result_status;                // recv status paired with result across suspend
+    int64_t result_closed_status;         // recv status when a blocked recv resumes from close
     int64_t spill[XM_SUSPEND_SPILL_MAX];  // spill slots (old frame -> suspend -> new frame)
 } XrJitSuspendState;
 
@@ -60,6 +79,7 @@ struct XrJitCoroState {
     XrJitScratch *scratch;
     void *resume_entry;
     void *resume_proto;
+    int32_t vm_call_base_offset;
     uint32_t suspend_id;
     uint32_t suspend_smap_id;
     XrJitSuspendState *suspend;

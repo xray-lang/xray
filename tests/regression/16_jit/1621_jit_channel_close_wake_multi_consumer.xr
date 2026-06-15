@@ -1,0 +1,35 @@
+// 1621_jit_channel_close_wake_multi_consumer.xr
+// Multiple VM callers blocked inside a JIT-compiled recv helper must all resume
+// when channel close wakes the pending receive.
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
+fn consumer(id: int, queue: Channel<int>, ready: Channel<int>, done: Channel<int>) {
+    ready.send(id)
+    let value = recv_int(queue, -100 - id)
+    done.send(value)
+}
+
+@test
+fn test_jit_recv_close_wakes_multiple_vm_callers() {
+    shared const queue = Channel(0)
+    shared const ready = Channel(2)
+    shared const done = Channel(2)
+    let t1 = go consumer(1, queue, ready, done)
+    let t2 = go consumer(2, queue, ready, done)
+    assert_true(recv_int(ready, 0) > 0)
+    assert_true(recv_int(ready, 0) > 0)
+    queue.close()
+    await t1
+    await t2
+    let a = recv_int(done, 0)
+    let b = recv_int(done, 0)
+    ready.close()
+    done.close()
+    assert_eq(a + b, -203)
+}

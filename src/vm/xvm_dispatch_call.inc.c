@@ -400,7 +400,9 @@ op_call_closure:
 
 #ifdef XRAY_HAS_JIT
             // Install pending background JIT compilation
-            if (!proto->jit_entry) {
+            bool _jit_static_blocked =
+                atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0;
+            if (!_jit_static_blocked && !proto->jit_entry) {
                 void *pending =
                     atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire);
                 if (pending && (uintptr_t) pending > 1) {
@@ -437,13 +439,16 @@ op_call_closure:
             // JIT fast path: call compiled code directly. The (cached)
             // exception-control probe is consulted only when a JIT entry or an
             // active JIT exists, so a --no-jit interpreter run never pays for it.
-            if (proto->jit_entry && !xm_proto_has_exception_control(proto)) {
+            if (!_jit_static_blocked && proto->jit_entry &&
+                !xm_proto_has_exception_control(proto)) {
                 XrValue jit_result;
                 XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
                 xr_coro_jit_state(_jit_coro)->scratch->call_proto = proto;
                 xr_coro_jit_state(_jit_coro)->scratch->call_closure = closure;
                 xr_coro_jit_state(_jit_coro)->scratch->call_base_offset =
                     (int32_t) ((base + a + 1) - VM_STACK);
+                xr_coro_jit_state(_jit_coro)->vm_call_base_offset =
+                    xr_coro_jit_state(_jit_coro)->scratch->call_base_offset;
                 savepc();
                 int _jrc1 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                         proto->return_type_info, &jit_result);
@@ -454,6 +459,7 @@ op_call_closure:
                     if (xr_coro_jit_state(_jit_coro)->scratch->ret_count > 1)
                         xm_jit_read_multi_ret(_jit_coro, &R(a),
                                               xr_coro_jit_state(_jit_coro)->scratch->ret_count);
+                    xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                     vmbreak;
                 }
                 if (_jrc1 == XM_JIT_SUSPEND) {
@@ -462,6 +468,7 @@ op_call_closure:
                     savepc();
                     return XR_VM_BLOCKED;
                 }
+                xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                 // JIT exception: skip deopt recovery, let VM handle
                 if (!XR_IS_NULL(VM_EXCEPTION)) {
                     if (!xr_vm_is_catch_reachable(isolate))
@@ -501,9 +508,14 @@ op_call_closure:
             }
 
             // Hot function detection: try JIT compilation
-            if (isolate->vm.jit && !proto->jit_entry && !xm_proto_has_exception_control(proto) &&
-                atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1 ==
-                    (uint32_t) isolate->vm.jit_threshold) {
+            uint32_t _jit_call_threshold = (uint32_t) isolate->vm.jit_threshold;
+            if (_jit_call_threshold == 0)
+                _jit_call_threshold = 1;
+            if (isolate->vm.jit && !_jit_static_blocked && !proto->jit_entry &&
+                atomic_load_explicit(&proto->call_count, memory_order_relaxed) <
+                    _jit_call_threshold &&
+                !xm_proto_has_exception_control(proto) &&
+                vm_jit_counter_reaches_threshold(&proto->call_count, _jit_call_threshold)) {
                 xm_jit_try_compile(isolate->vm.jit, proto);
                 if (proto->jit_entry) {
                     XrValue jit_result;
@@ -512,6 +524,8 @@ op_call_closure:
                     xr_coro_jit_state(_jit_coro)->scratch->call_closure = closure;
                     xr_coro_jit_state(_jit_coro)->scratch->call_base_offset =
                         (int32_t) ((base + a + 1) - VM_STACK);
+                    xr_coro_jit_state(_jit_coro)->vm_call_base_offset =
+                        xr_coro_jit_state(_jit_coro)->scratch->call_base_offset;
                     savepc();
                     int _jrc2 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                             proto->return_type_info, &jit_result);
@@ -521,6 +535,7 @@ op_call_closure:
                         if (xr_coro_jit_state(_jit_coro)->scratch->ret_count > 1)
                             xm_jit_read_multi_ret(_jit_coro, &R(a),
                                                   xr_coro_jit_state(_jit_coro)->scratch->ret_count);
+                        xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                         vmbreak;
                     }
                     if (_jrc2 == XM_JIT_SUSPEND) {
@@ -529,6 +544,7 @@ op_call_closure:
                         savepc();
                         return XR_VM_BLOCKED;
                     }
+                    xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                     // JIT exception: skip deopt recovery, let VM handle
                     if (!XR_IS_NULL(VM_EXCEPTION)) {
                         if (!xr_vm_is_catch_reachable(isolate))
@@ -744,16 +760,20 @@ vmcase(OP_CALLSELF) {
 #ifdef XRAY_HAS_JIT
     {
         XrProto *proto = closure->proto;
+        bool _jit_static_blocked =
+            atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0;
         // JIT fast path: call compiled code directly. The (cached)
         // exception-control probe is consulted only when a JIT entry or an
         // active JIT exists, so a --no-jit interpreter run never pays for it.
-        if (proto->jit_entry && !xm_proto_has_exception_control(proto)) {
+        if (!_jit_static_blocked && proto->jit_entry && !xm_proto_has_exception_control(proto)) {
             XrValue jit_result;
             XrCoroutine *_jit_coro = (XrCoroutine *) vm_ctx->current_coro;
             xr_coro_jit_state(_jit_coro)->scratch->call_proto = proto;
             xr_coro_jit_state(_jit_coro)->scratch->call_closure = closure;
             xr_coro_jit_state(_jit_coro)->scratch->call_base_offset =
                 (int32_t) ((base + a + 1) - VM_STACK);
+            xr_coro_jit_state(_jit_coro)->vm_call_base_offset =
+                xr_coro_jit_state(_jit_coro)->scratch->call_base_offset;
             int _jrc3 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                     proto->return_type_info, &jit_result);
             if (_jrc3 == XM_JIT_OK) {
@@ -761,6 +781,7 @@ vmcase(OP_CALLSELF) {
                 if (xr_coro_jit_state(_jit_coro)->scratch->ret_count > 1)
                     xm_jit_read_multi_ret(_jit_coro, &R(a),
                                           xr_coro_jit_state(_jit_coro)->scratch->ret_count);
+                xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                 vmbreak;
             }
             if (_jrc3 == XM_JIT_SUSPEND) {
@@ -769,6 +790,7 @@ vmcase(OP_CALLSELF) {
                 savepc();
                 return XR_VM_BLOCKED;
             }
+            xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
             // JIT exception: skip deopt recovery, let VM handle
             if (!XR_IS_NULL(VM_EXCEPTION)) {
                 if (!xr_vm_is_catch_reachable(isolate))
@@ -805,9 +827,13 @@ vmcase(OP_CALLSELF) {
         }
 
         // Hot function detection: try JIT compilation
-        if (isolate->vm.jit && !proto->jit_entry && !xm_proto_has_exception_control(proto) &&
-            atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1 ==
-                (uint32_t) isolate->vm.jit_threshold) {
+        uint32_t _jit_self_threshold = (uint32_t) isolate->vm.jit_threshold;
+        if (_jit_self_threshold == 0)
+            _jit_self_threshold = 1;
+        if (isolate->vm.jit && !_jit_static_blocked && !proto->jit_entry &&
+            atomic_load_explicit(&proto->call_count, memory_order_relaxed) < _jit_self_threshold &&
+            !xm_proto_has_exception_control(proto) &&
+            vm_jit_counter_reaches_threshold(&proto->call_count, _jit_self_threshold)) {
             xm_jit_try_compile(isolate->vm.jit, proto);
             if (proto->jit_entry) {
                 XrValue jit_result;
@@ -816,6 +842,8 @@ vmcase(OP_CALLSELF) {
                 xr_coro_jit_state(_jit_coro)->scratch->call_closure = closure;
                 xr_coro_jit_state(_jit_coro)->scratch->call_base_offset =
                     (int32_t) ((base + a + 1) - VM_STACK);
+                xr_coro_jit_state(_jit_coro)->vm_call_base_offset =
+                    xr_coro_jit_state(_jit_coro)->scratch->call_base_offset;
                 int _jrc4 = xm_jit_call(proto->jit_entry, _jit_coro, &R(a + 1), nargs,
                                         proto->return_type_info, &jit_result);
                 if (_jrc4 == XM_JIT_OK) {
@@ -823,6 +851,7 @@ vmcase(OP_CALLSELF) {
                     if (xr_coro_jit_state(_jit_coro)->scratch->ret_count > 1)
                         xm_jit_read_multi_ret(_jit_coro, &R(a),
                                               xr_coro_jit_state(_jit_coro)->scratch->ret_count);
+                    xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
                     vmbreak;
                 }
                 if (_jrc4 == XM_JIT_SUSPEND) {
@@ -831,6 +860,7 @@ vmcase(OP_CALLSELF) {
                     savepc();
                     return XR_VM_BLOCKED;
                 }
+                xr_coro_jit_state(_jit_coro)->vm_call_base_offset = 0;
             }
         }
     }

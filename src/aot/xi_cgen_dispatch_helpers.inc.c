@@ -398,8 +398,7 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
 
 static void xicgen_closure_new(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
-    (void) f;
-    emit_closure_new_expr(ctx, out, prefix, v);
+    emit_closure_new_expr(ctx, out, f, prefix, v);
 }
 
 static bool xicgen_upval_needs_cell(const XiFunc *f, const XiValue *v) {
@@ -553,6 +552,11 @@ static bool xicgen_resolve_direct_class_ctor(const XiFunc *f, const XiValue *cal
     return false;
 }
 
+static bool xicgen_call_is_work_queue_constructor(const XiValue *callee) {
+    const XiValue *origin = cg_unwrap_identity_value(callee);
+    return origin && origin->op == XI_GET_BUILTIN && origin->aux_int == XR_GLOBAL_VAR_WORKQUEUE;
+}
+
 static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                         const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call: need callee");
@@ -563,6 +567,21 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     bool is_class_call = static_call.is_class_constructor ||
                          xicgen_call_is_shared_class(ctx, callee) ||
                          xicgen_resolve_direct_class_ctor(f, callee, &target);
+
+    if (xicgen_call_is_work_queue_constructor(callee)) {
+        fprintf(out, "xr_aot_work_queue_new(ctx, ");
+        if (v->nargs >= 2)
+            emit_value_as_rep(out, v->args[1], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, ", ");
+        if (v->nargs >= 3)
+            emit_value_as_rep(out, v->args[2], XR_REP_I64);
+        else
+            fprintf(out, "0");
+        fprintf(out, ")");
+        return;
+    }
 
     if (target && cg_func_needs_aot_coro(target)) {
         ctx->error = true;
@@ -635,7 +654,11 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     }
 
     ctx->error = true;
-    fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT indirect call\n");
+    fprintf(stderr,
+            "[xi_cgen] ERROR: unsupported AOT indirect call in %s at v%u: callee_op=%s "
+            "slot=%" PRId64 "\n",
+            f && f->name ? f->name : "?", v ? v->id : 0, callee ? xi_op_name(callee->op) : "?",
+            callee ? callee->aux_int : -1);
     emit_codegen_abort_expr(out);
 }
 
@@ -1280,7 +1303,7 @@ static void xicgen_stack_alloc(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     } else if (orig_op == XI_STR_CONCAT) {
         emit_str_concat_expr(ctx, out, v);
     } else if (orig_op == XI_CLOSURE_NEW) {
-        emit_closure_new_expr(ctx, out, prefix, v);
+        emit_closure_new_expr(ctx, out, f, prefix, v);
     } else {
         emit_codegen_abort_expr(out);
     }

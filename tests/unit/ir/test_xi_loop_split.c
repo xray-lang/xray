@@ -221,6 +221,51 @@ TEST(skips_loop_without_early_exit) {
     xi_func_free(f);
 }
 
+TEST(skips_body_defined_exit_check) {
+    XiFunc *f = xi_func_new("body_defined_exit_check", &stub_int);
+    XiBlock *entry = xi_block_new(f);
+    XiBlock *header = xi_block_new(f);
+    XiBlock *check_blk = xi_block_new(f);
+    XiBlock *body = xi_block_new(f);
+    XiBlock *early_exit = xi_block_new(f);
+    XiBlock *exit_blk = xi_block_new(f);
+    entry->sealed = header->sealed = check_blk->sealed = true;
+    body->sealed = early_exit->sealed = exit_blk->sealed = true;
+
+    XiValue *start = xi_const_int(f, entry, 0, &stub_int);
+    XiValue *limit = xi_const_int(f, entry, 10, &stub_int);
+    XiValue *array_len = xi_const_int(f, entry, 5, &stub_int);
+    XiValue *step = xi_const_int(f, entry, 1, &stub_int);
+
+    xi_block_set_jump(entry, header);
+    xi_block_set_jump(body, header);
+
+    XiPhi *iv = xi_phi_new(f, header, &stub_int, header->npreds);
+    XiValue *cond = xi_binary(f, header, XI_LT, &stub_bool, &iv->value, limit);
+    xi_block_set_if(header, cond, check_blk, exit_blk);
+
+    XiValue *body_value = xi_binary(f, check_blk, XI_ADD, &stub_int, &iv->value, step);
+    XiValue *check_cond = xi_binary(f, check_blk, XI_LT, &stub_bool, body_value, array_len);
+    xi_block_set_if(check_blk, check_cond, body, early_exit);
+
+    XiValue *next = xi_binary(f, body, XI_ADD, &stub_int, &iv->value, step);
+
+    int pre_idx = pred_index(header, entry);
+    int latch_idx = pred_index(header, body);
+    iv->value.args[pre_idx] = start;
+    iv->value.args[latch_idx] = next;
+
+    xi_block_set_return(exit_blk, xi_const_int(f, exit_blk, 0, &stub_int));
+    xi_block_set_return(early_exit, xi_const_int(f, early_exit, -1, &stub_int));
+    ASSERT(verify_func(f));
+
+    XiPassChange chg = xi_opt_loop_split(f);
+    ASSERT(!chg.cfg_changed);
+    ASSERT(!chg.values_changed);
+    ASSERT(verify_func(f));
+    xi_func_free(f);
+}
+
 int main(void) {
     printf("=== Xi Loop Split Tests ===\n\n");
 
@@ -228,6 +273,7 @@ int main(void) {
     run_splits_loop_with_true_early_exit();
     run_no_loop_no_change();
     run_skips_loop_without_early_exit();
+    run_skips_body_defined_exit_check();
 
     printf("\n=== Results: %d passed, %d failed ===\n", tests_passed, tests_failed);
     return tests_failed > 0 ? 1 : 0;

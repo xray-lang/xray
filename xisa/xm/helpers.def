@@ -148,6 +148,7 @@ XM_HELPER(chan_send,            0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,        
 XM_HELPER(chan_send_block,      0, VOID,   SUSPEND|ENTER_VM|STACKMAP,                NONE, SUSPEND)
 XM_HELPER(chan_recv,            0, TAGGED, GC|SUSPEND|ENTER_VM|STACKMAP,             GC,   SUSPEND)
 XM_HELPER(chan_recv_block,      0, VOID,   SUSPEND|ENTER_VM|STACKMAP,                NONE, SUSPEND)
+XM_HELPER(chan_recv_is_value,   1, I64,    NONE,                                     NONE, NONE)
 XM_HELPER(scope_enter,         0, VOID,   NONE,                                     NONE, NONE)
 XM_HELPER(scope_exit,          0, VOID,   NONE,                                     NONE, NONE)
 XM_HELPER(go,                  0, TAGGED, GC|SUSPEND|ENTER_VM|USER_CODE|STACKMAP,   GC,   SUSPEND)

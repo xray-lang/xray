@@ -150,6 +150,9 @@ XR_FUNC XrAotResult xr_aot_scope_enter(const XrAotContext *ctx, uint8_t scope_mo
 XR_FUNC XrAotResult xr_aot_scope_exit(const XrAotContext *ctx, uint8_t scope_mode,
                                       XrValue *out_value);
 XR_FUNC XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds);
+// Release a select-owned `after` timer channel emitted at the select merge.
+// Mirrors the VM OP_CHAN_TIMER_DISPOSE handler.
+XR_FUNC void xr_aot_chan_timer_dispose(const XrAotContext *ctx, XrValue ch_value);
 XR_FUNC XrAotResult xr_aot_select_block(const XrAotContext *ctx, const XrValue *channel_values,
                                         int channel_count, int case_count);
 XR_FUNC XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value,
@@ -190,19 +193,22 @@ XR_FUNC XrValue xr_aot_chan_close(const XrAotContext *ctx, XrValue channel_value
 XR_FUNC XrValue xr_aot_chan_length(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_capacity(const XrAotContext *ctx, XrValue channel_value);
 XR_FUNC XrValue xr_aot_chan_is_closed(const XrAotContext *ctx, XrValue channel_value);
+XR_FUNC XrValue xr_aot_work_queue_new(const XrAotContext *ctx, int64_t shard_count,
+                                      int64_t shard_capacity);
+XR_FUNC XrValue xr_aot_work_queue_push(const XrAotContext *ctx, XrValue queue_value, XrValue value,
+                                       int64_t shard_hint);
+XR_FUNC XrAotResult xr_aot_work_queue_pop(const XrAotContext *ctx, XrValue queue_value,
+                                          int64_t worker_hint, XrSlotRef out_slot);
+XR_FUNC XrAotResult xr_aot_work_queue_pop_resume(const XrAotContext *ctx, XrSlotRef out_slot);
+XR_FUNC XrValue xr_aot_work_queue_close(const XrAotContext *ctx, XrValue queue_value);
+XR_FUNC XrValue xr_aot_work_queue_is_closed(const XrAotContext *ctx, XrValue queue_value);
 XR_FUNC XrValue xr_aot_tuple_get(const XrAotContext *ctx, XrValue tuple_value, uint16_t index);
 XR_FUNC XrAotResult xr_aot_chan_send(const XrAotContext *ctx, XrValue channel_value,
                                      XrValue send_value, XrSlotRef result_slot, int64_t timeout_ms);
-
-static inline XrAotResult xr_aot_chan_send_i64(const XrAotContext *ctx, XrValue channel_value,
-                                               int64_t send_value) {
-    return xr_aot_chan_send(ctx, channel_value, XR_FROM_INT(send_value), xr_slot_none(), -1);
-}
-
-static inline XrAotResult xr_aot_chan_send_f64(const XrAotContext *ctx, XrValue channel_value,
-                                               double send_value) {
-    return xr_aot_chan_send(ctx, channel_value, XR_FROM_FLOAT(send_value), xr_slot_none(), -1);
-}
+XR_FUNC XrAotResult xr_aot_chan_send_i64(const XrAotContext *ctx, XrValue channel_value,
+                                         int64_t send_value);
+XR_FUNC XrAotResult xr_aot_chan_send_f64(const XrAotContext *ctx, XrValue channel_value,
+                                         double send_value);
 
 static inline XrAotResult xr_aot_chan_send_timeout(const XrAotContext *ctx, XrValue channel_value,
                                                    XrValue send_value, int64_t timeout_ms,
@@ -228,5 +234,14 @@ XR_FUNC XrAotResult xr_aot_chan_recv_slot(const XrAotContext *ctx, XrValue chann
                                           XrSlotRef out_slot, int64_t timeout_ms);
 XR_FUNC XrAotResult xr_aot_chan_recv_slot_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                                  bool result_value);
+XR_FUNC XrAotResult xr_aot_chan_recv_pair(const XrAotContext *ctx, XrValue channel_value,
+                                          XrSlotRef value_slot, XrSlotRef ok_slot,
+                                          int64_t timeout_ms);
+XR_FUNC XrAotResult xr_aot_chan_recv_pair_i64(const XrAotContext *ctx, XrValue channel_value,
+                                              XrSlotRef value_slot, XrSlotRef ok_slot);
+XR_FUNC XrAotResult xr_aot_chan_recv_pair_f64(const XrAotContext *ctx, XrValue channel_value,
+                                              XrSlotRef value_slot, XrSlotRef ok_slot);
+XR_FUNC XrAotResult xr_aot_chan_recv_pair_resume(const XrAotContext *ctx, XrSlotRef value_slot,
+                                                 XrSlotRef ok_slot);
 
 #endif  // XAOT_CORO_H

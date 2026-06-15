@@ -67,6 +67,10 @@ static XrValue xrt_tostring(XrValue val, int slot_hint) {
         return xr_box_str("null");
     if (val.tag == XR_TAG_BOOL)
         return xr_box_str(val.i ? "true" : "false");
+    if (val.tag == XR_TAG_ENUM) {
+        char tmp[256];
+        return xrt_str_from_cstr(xr_to_cstr(val, tmp, sizeof(tmp)));
+    }
     return xr_box_str("[object]");
 }
 
@@ -249,16 +253,20 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
             return XR_FROM_BOOL(m->len == 0);
         if (sym == XRT_SYM_KEYS) {
             XrValue arr = xrt_array_new(m->len);
-            for (int64_t slot = 0; slot < m->cap; slot++)
+            for (int64_t oi = 0; oi < m->order_len; oi++) {
+                int64_t slot = m->order[oi];
                 if (xrt_map_slot_is_full(m, slot))
                     xrt_array_push(arr, xrt_map_slot_key(m, slot));
+            }
             return arr;
         }
         if (sym == XRT_SYM_VALUES) {
             XrValue arr = xrt_array_new(m->len);
-            for (int64_t slot = 0; slot < m->cap; slot++)
+            for (int64_t oi = 0; oi < m->order_len; oi++) {
+                int64_t slot = m->order[oi];
                 if (xrt_map_slot_is_full(m, slot))
                     xrt_array_push(arr, xrt_map_slot_value(m, slot));
+            }
             return arr;
         }
     }

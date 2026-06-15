@@ -148,6 +148,14 @@ static void xm_jit_worker_state_destroy(void *worker_state) {
     xr_free(scratch);
 }
 
+static void xm_jit_clear_resume_state(XrCoroutine *coro) {
+    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
+    if (!jit_state)
+        return;
+    jit_state->resume_entry = NULL;
+    jit_state->resume_proto = NULL;
+}
+
 static void *xm_jit_worker_scratch(void *worker_state) {
     return worker_state;
 }
@@ -197,6 +205,7 @@ XmJitState *xm_jit_init(XrayIsolate *isolate, int threshold) {
     static XrJitHooks hooks = {
         .call = xm_jit_call,
         .resume = xm_jit_resume,
+        .read_multi_ret = xm_jit_read_multi_ret,
         .install_bg_result = xm_jit_install_bg_result,
         .try_compile = xm_jit_try_compile_for_isolate,
         .proto_has_exception_control = xm_proto_has_exception_control,
@@ -375,6 +384,8 @@ static void xm_jit_evict_coldest(XmJitState *jit) {
 
 bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     if (!jit || !jit->enabled || !proto)
+        return false;
+    if (atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0)
         return false;
 
     // Code cache pressure: evict cold protos before attempting new compilation
@@ -962,6 +973,8 @@ int xm_jit_call(void *jit_entry, XrCoroutine *coro, XrValue *args, int nargs,
         return XM_JIT_SUSPEND;
     }
 
+    xm_jit_clear_resume_state(coro);
+
     // Invalidate JIT frame state: after return, frame is deallocated.
     // Without this, GC between JIT calls would scan stale frame memory
     // using the still-valid active_safepoint_id + jit_frame_sp.
@@ -1104,9 +1117,7 @@ int xm_jit_resume(XrCoroutine *coro, XrValue *result) {
     xr_coro_jit_state(coro)->scratch->active_safepoint_id = UINT32_MAX;
     xr_coro_jit_state(coro)->scratch->jit_frame_sp = NULL;
 
-    // Clear resume state (one-shot)
-    xr_coro_jit_state(coro)->resume_entry = NULL;
-    xr_coro_jit_state(coro)->resume_proto = NULL;
+    xm_jit_clear_resume_state(coro);
 
     if (ret == XM_DEOPT_MARKER) {
         if (xr_coro_jit_state(coro)->scratch->exception) {

@@ -67,6 +67,36 @@ static bool loop_shape_eligible(const XiLoop *loop) {
     return has_pre && has_latch;
 }
 
+static XiValue *header_phi_preheader_value(const XiLoop *loop, const XiValue *arg) {
+    if (!loop || !arg || !loop->header || !loop->preheader)
+        return NULL;
+
+    uint16_t pre_idx = xi_cfg_pred_index(loop->header, loop->preheader);
+    if (pre_idx >= loop->header->npreds)
+        return NULL;
+
+    for (XiPhi *phi = loop->header->phis; phi; phi = phi->next) {
+        if (arg == &phi->value) {
+            if (pre_idx >= phi->value.nargs)
+                return NULL;
+            return phi->value.args[pre_idx];
+        }
+    }
+    return NULL;
+}
+
+static bool value_is_outside_loop(const XiLoop *loop, const XiValue *v) {
+    if (!loop || !v)
+        return false;
+    return !v->block || !xi_loop_contains_block(loop, v->block);
+}
+
+static bool guard_arg_can_be_materialized(const XiLoop *loop, const XiValue *arg) {
+    if (value_is_outside_loop(loop, arg))
+        return true;
+    return header_phi_preheader_value(loop, arg) != NULL;
+}
+
 /* Find a body block with an early-exit IF whose condition is a
  * bounds check against a loop-invariant value.  Returns the block
  * or NULL if none found.  Sets *out_check to the bounds-check value
@@ -105,17 +135,22 @@ static XiBlock *find_splittable_exit(const XiLoop *loop, XiValue **out_check,
         if (cond->nargs != 2)
             continue;
 
-        /* One argument should be related to the IV, the other
-         * should be loop-invariant. */
+        /* One argument must be the loop header phi that the guard can map
+         * to the preheader value.  Other loop-local values cannot be copied
+         * into a pre-loop guard without cloning their defining expressions. */
         bool has_iv_arg = false, has_invariant_arg = false;
         for (uint16_t a = 0; a < 2; a++) {
             XiValue *arg = cond->args[a];
             if (!arg)
                 continue;
-            bool in_loop = arg->block && xi_loop_contains_block(loop, arg->block);
-            if (in_loop)
+            if (!guard_arg_can_be_materialized(loop, arg)) {
+                has_iv_arg = false;
+                has_invariant_arg = false;
+                break;
+            }
+            if (header_phi_preheader_value(loop, arg))
                 has_iv_arg = true;
-            else
+            else if (value_is_outside_loop(loop, arg))
                 has_invariant_arg = true;
         }
 
@@ -172,18 +207,13 @@ static bool split_loop(XiFunc *f, XiLoop *loop, XiBlock *exit_block, XiValue *ch
         XiValue *arg = check->args[a];
         if (!arg)
             return false;
-        /* If arg is a header phi, use the preheader incoming value. */
-        bool is_phi = false;
-        for (XiPhi *phi = header->phis; phi; phi = phi->next) {
-            if (arg == &phi->value && pre_idx < phi->value.nargs) {
-                guard_args[a] = phi->value.args[pre_idx];
-                is_phi = true;
-                break;
-            }
-        }
-        if (!is_phi) {
-            /* Loop-invariant or defined before the loop. */
+        XiValue *pre_val = header_phi_preheader_value(loop, arg);
+        if (pre_val) {
+            guard_args[a] = pre_val;
+        } else if (value_is_outside_loop(loop, arg)) {
             guard_args[a] = arg;
+        } else {
+            return false;
         }
     }
 

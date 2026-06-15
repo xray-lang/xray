@@ -574,11 +574,47 @@ typedef struct {
     uint8_t *ctrl;       /* cap + XRT_GROUP control bytes */
     void *keys;          /* slot-indexed: XrValue[] or packed scalar[] */
     void *values;
+    int64_t *order; /* live slot indices in insertion order */
+    int64_t order_len;
+    int64_t order_cap;
     uint8_t key_type; /* XR_ELEM_ANY for tagged */
     uint8_t value_type;
     uint8_t key_size;
     uint8_t value_size;
 } xrt_map_t;
+
+static inline void xrt_map_order_reserve(xrt_map_t *m, int64_t need) {
+    if (need <= m->order_cap)
+        return;
+    int64_t new_cap = m->order_cap > 0 ? m->order_cap : 4;
+    while (new_cap < need)
+        new_cap *= 2;
+    int64_t *tmp = (int64_t *) XRT_REALLOC(m->order, (size_t) new_cap * sizeof(int64_t));
+    if (XR_UNLIKELY(!tmp)) {
+        fprintf(stderr, "xrt_map_order_reserve: out of memory\n");
+        abort();
+    }
+    m->order = tmp;
+    m->order_cap = new_cap;
+}
+
+static inline void xrt_map_order_append(xrt_map_t *m, int64_t slot) {
+    xrt_map_order_reserve(m, m->order_len + 1);
+    m->order[m->order_len++] = slot;
+}
+
+static inline void xrt_map_order_remove(xrt_map_t *m, int64_t slot) {
+    for (int64_t i = 0; i < m->order_len; i++) {
+        if (m->order[i] != slot)
+            continue;
+        if (i + 1 < m->order_len) {
+            memmove(&m->order[i], &m->order[i + 1],
+                    (size_t) (m->order_len - i - 1) * sizeof(int64_t));
+        }
+        m->order_len--;
+        return;
+    }
+}
 
 static inline int64_t xrt_map_growth_budget(int64_t slots) {
     return slots - slots / 8; /* 7/8 max load factor */
@@ -607,6 +643,9 @@ static inline XrValue xrt_map_new(int64_t cap) {
     m->value_type = XR_ELEM_ANY;
     m->key_size = (uint8_t) sizeof(XrValue);
     m->value_size = (uint8_t) sizeof(XrValue);
+    m->order = NULL;
+    m->order_len = 0;
+    m->order_cap = 0;
     xrt_map_alloc_slots(m, xrt_swiss_slots_for(cap));
     return xr_mkptr(m, XR_TAG_MAP);
 }
@@ -636,8 +675,7 @@ static inline int xrt_map_delete(xrt_map_t *m, XrValue key) {
     int64_t slot = xrt_map_find_tagged(m, key);
     if (slot < 0)
         return 0;
-    xrt_swiss_ctrl_set(m->ctrl, m->cap, slot, (uint8_t) XRT_CTRL_DELETED);
-    m->len--;
+    xrt_map_erase_slot(m, slot);
     return 1;
 }
 
@@ -914,8 +952,12 @@ static inline XrValue xrt_value_clone_for_coro(XrValue val) {
                 memcpy(dst->ctrl, src->ctrl, (size_t) src->cap + XRT_GROUP);
                 memcpy(dst->keys, src->keys, (size_t) src->cap * (size_t) src->key_size);
                 memcpy(dst->values, src->values, (size_t) src->cap * (size_t) src->value_size);
+                xrt_map_order_reserve(dst, src->order_len);
+                memcpy(dst->order, src->order, (size_t) src->order_len * sizeof(int64_t));
+                dst->order_len = src->order_len;
             } else {
-                for (int64_t slot = 0; slot < src->cap; slot++) {
+                for (int64_t oi = 0; oi < src->order_len; oi++) {
+                    int64_t slot = src->order[oi];
                     if (!xrt_map_slot_is_full(src, slot))
                         continue;
                     XrValue cloned_key = xrt_value_clone_for_coro(xrt_map_slot_key(src, slot));

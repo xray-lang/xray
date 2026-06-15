@@ -168,6 +168,11 @@ static inline void xrt_print(XrValue v) {
         case XR_TAG_NULL:
             printf("null");
             break;
+        case XR_TAG_ENUM: {
+            char buf[256];
+            fputs(xr_to_cstr(v, buf, sizeof(buf)), stdout);
+            break;
+        }
         case XR_TAG_RANGE: {
             char buf[96];
             xrt_range_format_buf((const xrt_range_t *) v.ptr, buf, sizeof(buf));

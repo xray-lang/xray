@@ -1,0 +1,9 @@
+import time
+
+fn sleeper(ms: int) -> int {
+    time.sleep(ms)
+    return ms + 1
+}
+
+let task = go sleeper(1)
+print(await task)

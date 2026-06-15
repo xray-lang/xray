@@ -94,6 +94,23 @@
 
 #include "xvm_profiler.h"
 
+#ifdef XRAY_HAS_JIT
+static inline bool vm_jit_counter_reaches_threshold(_Atomic uint32_t *counter, uint32_t threshold) {
+    if (!counter)
+        return false;
+    if (threshold == 0)
+        threshold = 1;
+    uint32_t current = atomic_load_explicit(counter, memory_order_relaxed);
+    while (current < threshold) {
+        if (atomic_compare_exchange_weak_explicit(counter, &current, current + 1,
+                                                  memory_order_relaxed, memory_order_relaxed)) {
+            return current + 1 == threshold;
+        }
+    }
+    return false;
+}
+#endif
+
 /* ========== Computed Goto Support ========== */
 #ifndef XR_USE_COMPUTED_GOTO
 #if defined(__GNUC__) || defined(__clang__)

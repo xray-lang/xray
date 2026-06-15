@@ -1,0 +1,11 @@
+let reply = Channel(1)
+let packet = [7, reply]
+
+packet[1].send(42)
+
+let value = match (reply.recv()) {
+    Recv.Value(v) -> v
+    _ -> -1
+}
+reply.close()
+print(value)

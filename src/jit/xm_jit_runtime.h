@@ -218,6 +218,7 @@ XR_FUNC XrJitResult xr_jit_chan_send(struct XrCoroutine *coro, int64_t extra_arg
 XR_FUNC XrJitResult xr_jit_chan_send_block(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_chan_recv(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_chan_recv_block(struct XrCoroutine *coro, int64_t extra_arg);
+XR_FUNC XrJitResult xr_jit_chan_recv_is_value(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_scope_enter(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_scope_exit(struct XrCoroutine *coro, int64_t extra_arg);
 XR_FUNC XrJitResult xr_jit_go(struct XrCoroutine *coro, int64_t extra_arg);

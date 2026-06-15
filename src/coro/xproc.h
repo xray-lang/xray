@@ -253,8 +253,8 @@ typedef struct XrProc {
 
     /* === Load Balancing === */
     int check_balance_reds;
-    int runq_reds;
-    int runq_max_len;
+    _Atomic int runq_reds;
+    _Atomic int runq_max_len;
 
     /* === Local Coroutine Cache Pool === */
     XrCoroutine *local_free_list;

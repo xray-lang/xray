@@ -172,6 +172,7 @@ typedef struct XrChannel {
     int64_t timer_timeout_ms;
     int64_t timer_start_ticks;
     _Atomic(bool) timer_fired;
+    _Atomic(bool) timer_disposed;   // one-shot latch; dispose runs its release path exactly once
     struct XrTWheelTimer tw_timer;  // Embedded timer wheel node (avoids polling).
     uint8_t elem_tid;               // XrTypeId: element type for reified generics (0=any)
 

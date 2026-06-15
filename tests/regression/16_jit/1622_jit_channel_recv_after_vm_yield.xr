@@ -1,0 +1,43 @@
+// 1622_jit_channel_recv_after_vm_yield.xr
+// A VM caller that yields after repeatedly calling a JIT recv helper must not
+// reuse an old JIT suspend resume entry.
+
+fn recv_int(ch: Channel<int>, fallback: int) -> int {
+    return match (ch.recv()) {
+        Recv.Value(value) -> value
+        _ -> fallback
+    }
+}
+
+fn produce(queue: Channel<int>, count: int) {
+    for (let i = 0; i < count; i++) {
+        queue.send(i)
+    }
+}
+
+fn drain(queue: Channel<int>, done: Channel<int>) {
+    let total = 0
+    while (true) {
+        let value = recv_int(queue, -1)
+        if (value < 0) {
+            break
+        }
+        total = total + 1
+    }
+    done.send(total)
+}
+
+@test
+fn test_jit_recv_resume_entry_cleared_across_vm_yield() {
+    shared const queue = Channel(64)
+    shared const done = Channel(1)
+    let count = 4000
+    let producer = go produce(queue, count)
+    let consumer = go drain(queue, done)
+    await producer
+    queue.close()
+    let total = recv_int(done, 0)
+    await consumer
+    done.close()
+    assert_eq(total, count)
+}

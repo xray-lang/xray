@@ -676,6 +676,57 @@ static struct XrProto *find_callee_proto(LowerCtx *ctx, XiFunc *child_xi) {
     return NULL;
 }
 
+static XiFunc *resolve_shared_slot_callee(XiFunc *caller, int64_t slot) {
+    if (slot < 0)
+        return NULL;
+    for (XiFunc *f = caller; f; f = f->parent_func) {
+        if (!f->shared_slot_funcs || slot >= (int64_t) f->shared_slot_func_count)
+            continue;
+        XiFunc *callee = f->shared_slot_funcs[slot];
+        if (callee)
+            return callee;
+    }
+    return NULL;
+}
+
+static XrProto *proto_tree_root(XrProto *proto) {
+    while (proto && proto->enclosing)
+        proto = proto->enclosing;
+    return proto;
+}
+
+static XrProto *find_proto_for_xi_func(XrProto *proto, XiFunc *target) {
+    if (!proto || !target)
+        return NULL;
+    if (proto->xi_func == target)
+        return proto;
+    uint32_t n = proto->protos.count;
+    for (uint32_t i = 0; i < n; i++) {
+        XrProto *sub = PROTO_PROTO(proto, i);
+        XrProto *found = find_proto_for_xi_func(sub, target);
+        if (found)
+            return found;
+    }
+    return NULL;
+}
+
+static XrProto *find_known_callee_proto(LowerCtx *ctx, XiValue *callee_val) {
+    while (callee_val && callee_val->op == XI_COPY && callee_val->nargs >= 1)
+        callee_val = callee_val->args[0];
+    if (!ctx || !callee_val)
+        return NULL;
+
+    if (callee_val->op == XI_CLOSURE_NEW)
+        return find_callee_proto(ctx, (XiFunc *) callee_val->aux);
+
+    if (callee_val->op != XI_GET_SHARED)
+        return NULL;
+
+    XiFunc *callee = resolve_shared_slot_callee(ctx->xi_func, callee_val->aux_int);
+    XrProto *root = proto_tree_root(ctx->proto);
+    return find_proto_for_xi_func(root, callee);
+}
+
 static bool jit_builtin_name_is_known(const char *name) {
     static const char *known[] = {
         "array_new",     "Bytes",      "chr",       "copy",       "dump",
@@ -812,27 +863,23 @@ static XmRef lower_call(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     for (uint16_t i = 0; i < v->nargs; i++)
         call_args[i] = get_ref(ctx, v->args[i]);
 
-    /* CALL_KNOWN optimization: if callee is a local XI_CLOSURE_NEW whose
-     * XrProto is known, emit a direct call.  Codegen loads proto->jit_entry
-     * for JIT→JIT fast path, falling back to xr_jit_call_func if the callee
-     * has not been JIT-compiled yet. */
+    /* CALL_KNOWN optimization: if callee is a local closure or a top-level
+     * function loaded from a shared slot, emit a direct call.  Codegen loads
+     * proto->jit_entry for JIT-to-JIT fast path, falling back to
+     * xr_jit_call_func if the callee has not been JIT-compiled yet. */
     if (v->op == XI_CALL && v->nargs >= 1) {
         XiValue *callee_val = v->args[0];
-        if (callee_val && callee_val->op == XI_CLOSURE_NEW) {
-            XiFunc *child_xi = (XiFunc *) callee_val->aux;
-            struct XrProto *callee_proto = find_callee_proto(ctx, child_xi);
-            if (callee_proto) {
-                uint8_t ret_rep = callee_proto->return_type_info
-                                      ? xr_type_rep(callee_proto->return_type_info)
-                                      : XR_REP_TAGGED;
-                XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) callee_proto);
-                XmRef nargs_ref = xm_const_i64(ctx->xm_func, (int64_t) nargs);
-                XmRef result =
-                    xm_emit(ctx->xm_func, blk, XM_CALL_KNOWN, ret_rep, proto_ref, nargs_ref);
-                blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
-                xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
-                return result;
-            }
+        XrProto *callee_proto = find_known_callee_proto(ctx, callee_val);
+        if (callee_proto) {
+            uint8_t ret_rep = callee_proto->return_type_info
+                                  ? xr_type_rep(callee_proto->return_type_info)
+                                  : XR_REP_TAGGED;
+            XmRef proto_ref = xm_const_ptr(ctx->xm_func, (void *) callee_proto);
+            XmRef nargs_ref = xm_const_i64(ctx->xm_func, (int64_t) nargs);
+            XmRef result = xm_emit(ctx->xm_func, blk, XM_CALL_KNOWN, ret_rep, proto_ref, nargs_ref);
+            blk->ins[blk->nins - 1].flags |= XM_FLAG_SIDE_EFFECT;
+            xm_func_bind_call_args(ctx->xm_func, result, call_args, total);
+            return result;
         }
     }
 
@@ -1506,8 +1553,8 @@ static XmRef xi2xm_chan_new(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
 }
 
 /* Direct `ch.send(x)` op (XI_CHAN_SEND: args[0]=channel, args[1]=value).
- * Routes through the same suspend-bridged helper pair the XI_CALL_METHOD
- * channel path uses, so send shares one runtime contract across both forms. */
+ * Fused channel ops use the bytecode-shaped helper pair, avoiding the
+ * source-level method/ADT bridge used by XI_CALL_METHOD. */
 static XmRef xi2xm_chan_send(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs < 2 || !v->args[0] || !v->args[1]) {
         ctx->error = true;
@@ -1517,24 +1564,15 @@ static XmRef xi2xm_chan_send(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     XmRef call_args[2];
     call_args[0] = get_ref(ctx, v->args[0]); /* channel (receiver) */
     call_args[1] = get_ref(ctx, v->args[1]); /* send value */
-    int bc_pc = slot_map_bc_pc(ctx, v->id);
-    uint16_t did = record_deopt(ctx, (uint32_t) bc_pc);
-    if (did == 0xFFFF) {
-        ctx->error = true;
-        ctx->error_op = v->op;
-        return xm_const_i64(ctx->xm_func, 0);
-    }
-    XmRef extra = xm_const_i64(ctx->xm_func, (int64_t) did);
-    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_send,
-                                             XM_HELPER_chan_method_send_block, extra, call_args, 2);
+    XmRef extra = xm_const_i64(ctx->xm_func, 0);
+    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_send,
+                                             XM_HELPER_chan_send_block, extra, call_args, 2);
     set_result_slot_metadata(ctx, v->id, result);
     return result;
 }
 
 /* Fused `match (ch.recv())` payload op (XI_CHAN_RECV: args[0]=channel).
- * Same suspend-bridged recv helper the XI_CALL_METHOD path uses; returns the
- * raw payload (the match form reads the discriminant via XI_CHAN_RECV_STATUS
- * instead of wrapping into Recv<T>). */
+ * Returns the raw payload; XI_CHAN_RECV_STATUS projects the paired ok bit. */
 static XmRef xi2xm_chan_recv(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs < 1 || !v->args[0]) {
         ctx->error = true;
@@ -1543,28 +1581,25 @@ static XmRef xi2xm_chan_recv(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     }
     XmRef call_args[1];
     call_args[0] = get_ref(ctx, v->args[0]); /* channel */
-    XmRef zero = xm_const_i64(ctx->xm_func, 0);
-    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_method_recv,
-                                             XM_HELPER_chan_method_recv_block, zero, call_args, 1);
+    XmRef extra = xm_const_i64(ctx->xm_func, 0);
+    XmRef result = emit_channel_suspend_call(ctx, blk, XM_HELPER_chan_recv,
+                                             XM_HELPER_chan_recv_block, extra, call_args, 1);
     set_result_slot_metadata(ctx, v->id, result);
     return result;
 }
 
 /* Readiness bit of a fused recv (XI_CHAN_RECV_STATUS: args[0]=the paired
- * XI_CHAN_RECV value). The helper returns a raw 0/1 read from the recv status
- * parked in scratch; the recv value is passed as an ordering arg so the
- * projection can never be scheduled ahead of its recv. */
+ * XI_CHAN_RECV value). The paired direct recv helper parks the raw 0/1 status
+ * in scratch call_args[1]; the recv value is kept as an ordering dependency. */
 static XmRef xi2xm_chan_recv_status(LowerCtx *ctx, XmBlock *blk, XiValue *v) {
     if (v->nargs < 1 || !v->args[0]) {
         ctx->error = true;
         ctx->error_op = v->op;
         return xm_const_i64(ctx->xm_func, 0);
     }
-    XmRef order_args[1];
-    order_args[0] = get_ref(ctx, v->args[0]); /* paired recv value (ordering only) */
-    XmRef zero = xm_const_i64(ctx->xm_func, 0);
-    XmRef result =
-        emit_helper_call(ctx, blk, XM_HELPER_chan_method_recv_is_value, zero, order_args, 1);
+    (void) get_ref(ctx, v->args[0]); /* paired recv value (ordering only) */
+    XmRef status_off = xm_const_i64(ctx->xm_func, XM_JIT_CALL_ARGS_OFFSET + 8);
+    XmRef result = xm_emit_unary(ctx->xm_func, blk, XM_LOAD_CORO, XR_REP_I64, status_off);
     blk->ins[blk->nins - 1].ctype = (XmType) {XM_TK_BOOL, 0, 0};
     set_result_slot_metadata(ctx, v->id, result);
     return result;

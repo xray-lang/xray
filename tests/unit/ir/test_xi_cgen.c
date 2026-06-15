@@ -2224,12 +2224,69 @@ TEST(cgen_direct_suspend_call_propagates_cps) {
     assert(contains(code, "_aot_resume") && "direct suspend call should use AOT resume entries");
     assert(nonzero_state_precedes_call(code, "_aot_resume(f->call_frame_") &&
            "direct suspend calls must publish caller state before child resume");
+    assert(contains(code, "_aot_frame_init(f->call_frame_") &&
+           "scalar direct suspend call frames should be reset and reused after synchronous "
+           "completion");
+    assert(contains(code, "    f->state = 0;\n") &&
+           "reusable AOT frame init should reset entry state without clearing cached child frames");
+    assert(contains(code, "    memset(f, 0, sizeof(*f));\n    if (!") &&
+           "fresh AOT frame allocation should still clear owned frame storage once");
     assert(contains(code, "return (abort(), XR_NULL_VAL);") &&
            "suspendable functions must keep hard-failing sync wrappers");
     assert(!contains(code, "unsupported AOT sync call") &&
            "diagnostics should go to stderr, not generated C comments");
 
     printf("  Generated direct suspend call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_shared_static_function_retain_is_elided) {
+    const char *src = "fn inc(n: int) -> int {\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "let result = inc(41)\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "static direct calls should generate without cgen errors");
+    assert(contains(code, "test_inc_") && "static function should be emitted directly");
+    assert(!contains(code, "xrt_retain(v") &&
+           "direct calls to uncaptured shared functions should not retain the callee closure");
+
+    printf("  Generated shared static call %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_shared_static_function_retain_is_elided) {
+    const char *src = "fn inc(n: int) -> int {\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return inc(n)\n"
+                      "}\n"
+                      "let task = go worker(41)\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT coroutine static calls should generate without cgen errors");
+    assert(contains(code, "test_inc_") && "static function should be emitted directly");
+    assert(!contains(code, "xrt_retain(v") && "AOT coroutine direct calls to uncaptured shared "
+                                              "functions should not retain callee closure");
+
+    printf("  Generated coroutine shared static call %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2839,6 +2896,36 @@ TEST(cgen_coro_recv_resume_uses_wait_state_slot) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
+    const char *src = "fn recv_or(ch: Channel<int>, fallback: int) -> int {\n"
+                      "    return match (ch.recv()) {\n"
+                      "        Recv.Value(n) -> n\n"
+                      "        _ -> fallback\n"
+                      "    }\n"
+                      "}\n"
+                      "let ch = new Channel<int>(1)\n"
+                      "ch.send(9)\n"
+                      "let task = go recv_or(ch, -1)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT fused scalar channel recv should generate");
+    assert(contains(code, "xr_aot_chan_recv_pair_i64(ctx,") &&
+           "fused scalar channel recv must use the typed pair bridge");
+    assert(!contains(code, "xr_aot_chan_recv_pair(ctx,") &&
+           "fused scalar channel recv must not call the generic pair bridge");
+
+    printf("  Generated fused scalar channel recv %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_scalar_channel_recv_uses_tagged_slot) {
     const char *src = "fn recv_plus(ch: Channel<int>) -> int {\n"
                       "    let v = ch.recv()\n"
@@ -3314,6 +3401,8 @@ int main(void) {
     run_cgen_unknown_method_symbol_fails_fast();
     run_cgen_suspendable_wrapper_aborts();
     run_cgen_direct_suspend_call_propagates_cps();
+    run_cgen_shared_static_function_retain_is_elided();
+    run_cgen_coro_shared_static_function_retain_is_elided();
     run_cgen_suspendable_dependency_init_fails_fast();
     run_cgen_coro_frame_params_use_typed_storage();
     run_cgen_coro_frame_skips_dead_ssa_slots();
@@ -3332,6 +3421,7 @@ int main(void) {
     run_cgen_coro_await_timeout_passes_deadline();
     run_cgen_tagged_null_equality_keeps_null_literal();
     run_cgen_coro_recv_resume_uses_wait_state_slot();
+    run_cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge();
     run_cgen_coro_scalar_channel_recv_uses_tagged_slot();
     run_cgen_coro_channel_recv_null_check_keeps_tagged_slot();
     run_cgen_coro_scalar_channel_try_recv_returns_recv_enum();

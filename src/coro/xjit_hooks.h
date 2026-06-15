@@ -52,6 +52,10 @@ typedef struct XrJitHooks {
     // Mirrors xm_jit_resume() signature.
     int (*resume)(struct XrCoroutine *coro, XrValue *result);
 
+    // Reconstruct extra return values after a successful JIT call.
+    // Mirrors xm_jit_read_multi_ret() signature.
+    void (*read_multi_ret)(struct XrCoroutine *coro, XrValue *results, int nresults);
+
     // Install background-compiled JIT result into proto.
     // Mirrors xm_jit_install_bg_result() signature.
     void (*install_bg_result)(struct XrProto *proto);

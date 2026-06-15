@@ -298,14 +298,17 @@ vmcase(OP_COPY) {
         if ((_cls->flags & (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) ==
             (XR_CLASS_VALUE_TYPE | XR_CLASS_FLAT_COPYABLE)) {
             uint32_t _fc = xr_class_instance_field_count(_cls);
-            size_t _sz = sizeof(XrInstance) + sizeof(XrValue) * _fc;
+            size_t _sz = xr_instance_size(_cls);
             XrCoroutine *_coro = (XrCoroutine *) vm_ctx->current_coro;
             XrInstance *_new =
                 _coro ? (XrInstance *) xr_alloc(_coro, _sz, XR_TINSTANCE)
                       : (XrInstance *) xr_gc_alloc(xr_isolate_get_gc(isolate), _sz, XR_TINSTANCE);
             if (_new) {
-                memcpy(_new->fields, _inst->fields, sizeof(XrValue) * _fc);
+                xr_gc_header_init_type(&_new->gc, XR_TINSTANCE);
                 _new->klass = _cls;
+                memcpy(_new->fields, _inst->fields, sizeof(XrValue) * _fc);
+                for (uint32_t _i = 0; _i < _fc; _i++)
+                    xr_rc_retain_value(_new->fields[_i]);
                 R(a) = XR_FROM_PTR(_new);
                 vmbreak;
             }

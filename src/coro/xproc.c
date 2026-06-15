@@ -48,8 +48,8 @@ void xr_proc_init(XrProc *p, int id, struct XrRuntime *runtime) {
 
     // Load balancing
     p->check_balance_reds = XR_CALL_CHECK_BALANCE_REDS;
-    p->runq_reds = 0;
-    p->runq_max_len = 0;
+    atomic_store_explicit(&p->runq_reds, 0, memory_order_relaxed);
+    atomic_store_explicit(&p->runq_max_len, 0, memory_order_relaxed);
 
     // Local coroutine pool
     p->local_free_list = NULL;

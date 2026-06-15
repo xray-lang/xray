@@ -40,36 +40,24 @@ typedef struct XrAotRuntimeArrayView {
 
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
 
-static inline XrValue xr_aot_bridge_enum_string_to_xrt(const char *enum_name,
-                                                       const char *member_name) {
-    if (!enum_name)
-        enum_name = "";
-    if (!member_name)
-        member_name = "";
-    size_t enum_len = strlen(enum_name);
-    size_t member_len = strlen(member_name);
-    XrValue out = xrt_str_alloc(enum_len + 1 + member_len);
-    char *dst = (char *) out.ptr;
-    memcpy(dst, enum_name, enum_len);
-    dst[enum_len] = '.';
-    memcpy(dst + enum_len + 1, member_name, member_len);
-    dst[enum_len + 1 + member_len] = '\0';
+static inline XrValue xr_aot_bridge_enum_key_to_xrt(XrValue value, uint32_t member_index) {
+    XrValue out = value;
+    out.tag = XR_TAG_ENUM;
+    out.ext = member_index;
     return out;
 }
 
 static inline XrValue xr_aot_bridge_runtime_enum_to_xrt(XrValue value) {
-    const char *enum_name = NULL;
-    const char *member_name = NULL;
     uint32_t member_index = 0;
     bool is_adt = false;
     int payload_count = 0;
-    if (!xr_aot_runtime_enum_value_info(value, &enum_name, &member_name, &member_index, &is_adt,
+    if (!xr_aot_runtime_enum_value_info(value, NULL, NULL, &member_index, &is_adt,
                                         &payload_count)) {
         return value;
     }
     if (is_adt && payload_count > 0)
         return XR_FROM_INT((int64_t) member_index);
-    return xr_aot_bridge_enum_string_to_xrt(enum_name, member_name);
+    return xr_aot_bridge_enum_key_to_xrt(value, member_index);
 }
 
 static inline XrValue xr_aot_bridge_runtime_adt_to_xrt(XrValue value) {
@@ -100,7 +88,7 @@ static inline XrValue xr_aot_bridge_string_to_xrt(XrValue value) {
         return XR_NULL_VAL;
 
     XrValue dst = xrt_str_alloc((size_t) src->length);
-    char *data = (char *) dst.ptr;
+    char *data = xr_str_buf(dst);
     memcpy(data, src->data, (size_t) src->length);
     data[src->length] = '\0';
     return dst;

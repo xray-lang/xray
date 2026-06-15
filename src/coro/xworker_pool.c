@@ -57,55 +57,30 @@ XrCoroutine *xr_coro_pool_get(XrRuntime *runtime) {
         return coro;
     }
 
-    // Local empty: batch steal from global free list.
+    // Local empty: bounded batch pop from the global free list.
     //
-    // Lock-free — atomic_exchange grabs the entire global list
-    // in O(1), we keep the first XR_CORO_BATCH_SIZE for local use and push
-    // the remainder back with a single CAS splice. This replaces the old
-    // xr_mutex_t pool->free_lock.
+    // The global list can hold a full storm of recycled coroutines. Taking the
+    // whole chain and pushing the remainder back would require finding the
+    // remainder tail for every batch, which turns large reuse waves into O(n^2).
+    // Pop only the batch we need from the Treiber stack.
     if (worker && runtime->isolate && runtime->isolate->sys_heap) {
         XrCoroStructPool *pool = runtime->isolate->sys_heap->coro_pool;
         if (pool && pool->initialized) {
-            // Steal entire chain.
-            XrCoroutine *chain = atomic_exchange_explicit(&pool->free_list, (XrCoroutine *) NULL,
-                                                          memory_order_acquire);
-
             int batch = 0;
-            XrCoroutine *tail_prev = NULL;  // last node we keep
-            XrCoroutine *c = chain;
-            while (c && batch < XR_CORO_BATCH_SIZE) {
-                tail_prev = c;
-                c = c->next;
-                batch++;
-            }
-
-            // Splice remainder (c..end) back onto the global free list.
-            if (c && tail_prev) {
-                XrCoroutine *remainder = c;
-                tail_prev->next = NULL;
-                // Find remainder tail.
-                XrCoroutine *rtail = remainder;
-                while (rtail->next)
-                    rtail = rtail->next;
-                // Treiber push the whole sub-chain: rtail->next = head; CAS.
-                XrCoroutine *head;
-                do {
-                    head = atomic_load_explicit(&pool->free_list, memory_order_relaxed);
-                    rtail->next = head;
-                } while (!atomic_compare_exchange_weak_explicit(&pool->free_list, &head, remainder,
-                                                                memory_order_release,
-                                                                memory_order_relaxed));
-            }
-
-            // Adopt the kept chain as the worker's local free list (prepend).
-            XrCoroutine *cur = chain;
-            while (cur && batch > 0) {
-                XrCoroutine *nxt = cur->next;
-                cur->next = worker->p.local_free_list;
-                worker->p.local_free_list = cur;
+            while (batch < XR_CORO_BATCH_SIZE) {
+                XrCoroutine *head = atomic_load_explicit(&pool->free_list, memory_order_acquire);
+                if (!head)
+                    break;
+                XrCoroutine *next = head->next;
+                if (!atomic_compare_exchange_weak_explicit(&pool->free_list, &head, next,
+                                                           memory_order_acq_rel,
+                                                           memory_order_acquire)) {
+                    continue;
+                }
+                head->next = worker->p.local_free_list;
+                worker->p.local_free_list = head;
                 worker->p.local_free_count++;
-                cur = nxt;
-                batch--;
+                batch++;
             }
 
             if (worker->p.local_free_list) {

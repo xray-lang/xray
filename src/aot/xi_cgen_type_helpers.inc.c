@@ -18,6 +18,32 @@ static bool cg_value_type_is_channel(const XiValue *v) {
     return v && cg_type_is_channel(v->type);
 }
 
+static bool cg_value_type_is_unknown(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+        v = v->args[0];
+    return !v || !v->type || v->type->kind == XR_KIND_UNKNOWN;
+}
+
+static bool cg_type_is_named_instance(const XrType *type, const char *name) {
+    if (!type || !name)
+        return false;
+    if (type->kind == XR_KIND_INSTANCE)
+        return type->instance.class_name && strcmp(type->instance.class_name, name) == 0;
+    if (type->kind == XR_KIND_UNION) {
+        for (uint8_t i = 0; i < type->union_type.member_count; i++) {
+            if (cg_type_is_named_instance(type->union_type.members[i], name))
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_value_type_is_work_queue(const XiValue *v) {
+    while (v && (v->op == XI_BOX || v->op == XI_UNBOX || v->op == XI_COPY) && v->nargs >= 1)
+        v = v->args[0];
+    return v && cg_type_is_named_instance(v->type, "WorkQueue");
+}
+
 static const char *cg_channel_field_helper(const char *field) {
     if (!field)
         return NULL;
@@ -69,11 +95,40 @@ static bool cg_task_field_needs_xrt_bridge(const char *field) {
 }
 
 static bool cg_channel_method_may_suspend(const XiValue *v) {
-    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_channel(v->args[0]))
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1)
         return false;
     const char *method = (const char *) v->aux;
-    return method && (strcmp(method, "send") == 0 || strcmp(method, "recv") == 0 ||
-                      strcmp(method, "sendTimeout") == 0 || strcmp(method, "recvTimeout") == 0);
+    if (!method)
+        return false;
+    bool blocking_channel_method = strcmp(method, "send") == 0 || strcmp(method, "recv") == 0 ||
+                                   strcmp(method, "sendTimeout") == 0 ||
+                                   strcmp(method, "recvTimeout") == 0;
+    if (!blocking_channel_method)
+        return false;
+    if (cg_value_type_is_channel(v->args[0]))
+        return true;
+    return cg_value_type_is_unknown(v->args[0]) &&
+           ((strcmp(method, "send") == 0 && v->nargs == 2) ||
+            (strcmp(method, "recv") == 0 && v->nargs == 1));
+}
+
+static bool cg_work_queue_method_needs_aot_coro(const XiValue *v) {
+    if (!v || v->op != XI_CALL_METHOD || v->nargs < 1 || !cg_value_type_is_work_queue(v->args[0]))
+        return false;
+    const char *method = (const char *) v->aux;
+    return method && (strcmp(method, "push") == 0 || strcmp(method, "pop") == 0 ||
+                      strcmp(method, "tryPop") == 0 || strcmp(method, "close") == 0);
+}
+
+static bool cg_work_queue_constructor_needs_aot_coro(const XiValue *v) {
+    if (!v || v->op != XI_CALL || v->nargs < 1)
+        return false;
+    const XiValue *callee = v->args[0];
+    while (callee && (callee->op == XI_BOX || callee->op == XI_UNBOX || callee->op == XI_COPY) &&
+           callee->nargs >= 1) {
+        callee = callee->args[0];
+    }
+    return callee && callee->op == XI_GET_BUILTIN && callee->aux_int == XR_GLOBAL_VAR_WORKQUEUE;
 }
 
 typedef struct CgSetElemInfo {
