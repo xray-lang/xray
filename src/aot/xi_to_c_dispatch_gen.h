@@ -104,6 +104,46 @@
     X(BYTES_REPEAT_FROM, "xi.bytes.repeat.from", xicgen_bytes_repeat_from)
 
 
+#define XI_TO_C_TEMPLATE_ARITH_DRIVERS(X) \
+    X(ADD, xicgen_add) \
+    X(SUB, xicgen_sub) \
+    X(MUL, xicgen_mul)
+
+
+#define XI_TO_C_TEMPLATE_DIV_MOD_DRIVERS(X) \
+    X(DIV, xicgen_div) \
+    X(MOD, xicgen_mod)
+
+
+#define XI_TO_C_TEMPLATE_BITWISE_BINARY_DRIVERS(X) \
+    X(BAND, xicgen_band) \
+    X(BOR, xicgen_bor) \
+    X(BXOR, xicgen_bxor)
+
+
+#define XI_TO_C_TEMPLATE_BITWISE_UNARY_DRIVERS(X) \
+    X(BNOT, xicgen_bnot)
+
+
+#define XI_TO_C_TEMPLATE_SHIFT_DRIVERS(X) \
+    X(SHL, xicgen_shl) \
+    X(SHR, xicgen_shr)
+
+
+#define XI_TO_C_TEMPLATE_COMPARE_DRIVERS(X) \
+    X(EQ, xicgen_eq) \
+    X(NE, xicgen_ne) \
+    X(LT, xicgen_lt) \
+    X(LE, xicgen_le) \
+    X(GT, xicgen_gt) \
+    X(GE, xicgen_ge)
+
+
+#define XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(X) \
+    X(EQ_STRICT, xicgen_eq_strict) \
+    X(NE_STRICT, xicgen_ne_strict)
+
+
 #define XI_TO_C_TEMPLATE_WIDTH_DRIVERS(X) \
     X(NARROW_I8, xicgen_narrow_i8) \
     X(NARROW_U8, xicgen_narrow_u8) \
@@ -120,6 +160,137 @@
     X(WIDEN_U32, xicgen_widen_u32) \
     X(WIDEN_F32, xicgen_widen_f32)
 
+
+static inline const char *xi_to_c_template_arith_runtime_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return "xrt_add";
+        case XI_SUB: return "xrt_sub";
+        case XI_MUL: return "xrt_mul";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_arith_native_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return "+";
+        case XI_SUB: return "-";
+        case XI_MUL: return "*";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_arith_i64_wrap_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_ADD: return "xrt_i64_add";
+        case XI_SUB: return "xrt_i64_sub";
+        case XI_MUL: return "xrt_i64_mul";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_div_mod_runtime_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_DIV: return "xrt_div";
+        case XI_MOD: return "xrt_mod";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_div_mod_int_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_DIV: return "xrt_int_div";
+        case XI_MOD: return "xrt_int_mod";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_bitwise_binary_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_BAND: return "&";
+        case XI_BOR: return "|";
+        case XI_BXOR: return "^";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_bitwise_unary_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_BNOT: return "~";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_shift_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_SHL: return "xrt_i64_shl";
+        case XI_SHR: return "xrt_i64_shr";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_compare_runtime_fn(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_EQ: return "xrt_eq";
+        case XI_NE: return "!xrt_eq";
+        case XI_LT: return "xrt_lt";
+        case XI_LE: return "xrt_le";
+        case XI_GT: return "xrt_lt";
+        case XI_GE: return "xrt_le";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline const char *xi_to_c_template_compare_native_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_EQ: return "==";
+        case XI_NE: return "!=";
+        case XI_LT: return "<";
+        case XI_LE: return "<=";
+        case XI_GT: return ">";
+        case XI_GE: return ">=";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
+
+static inline bool xi_to_c_template_compare_swaps_tagged_args(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_GT: return true;
+        case XI_GE: return true;
+        case XI_OP_COUNT: return false;
+        default: return false;
+    }
+    return false;
+}
+
+static inline const char *xi_to_c_template_strict_compare_op(uint16_t op) {
+    switch ((XiOp) op) {
+        case XI_EQ_STRICT: return "==";
+        case XI_NE_STRICT: return "!=";
+        case XI_OP_COUNT: return "";
+        default: return "";
+    }
+    return "";
+}
 
 typedef enum {
     AOT_WIDTH_TEMPLATE_INVALID = 0,

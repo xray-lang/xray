@@ -55,44 +55,6 @@ static void xicgen_move(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     xicgen_identity(ctx, out, f, v, prefix);
 }
 
-static const char *xicgen_arith_runtime_fn(uint16_t op) {
-    switch (op) {
-        case XI_ADD:
-            return "xrt_add";
-        case XI_SUB:
-            return "xrt_sub";
-        case XI_MUL:
-            return "xrt_mul";
-        default:
-            return NULL;
-    }
-}
-
-static const char *xicgen_arith_native_op(uint16_t op) {
-    switch (op) {
-        case XI_SUB:
-            return "-";
-        case XI_MUL:
-            return "*";
-        default:
-            return "+";
-    }
-}
-
-/* Wrap helper for native int64 add/sub/mul. Raw C operators are signed-
- * overflow UB; the language defines two's-complement wrap (matching VM and
- * xi_opt fold), so native-rep integer arithmetic must call these. */
-static const char *xicgen_arith_i64_wrap_fn(uint16_t op) {
-    switch (op) {
-        case XI_SUB:
-            return "xrt_i64_sub";
-        case XI_MUL:
-            return "xrt_i64_mul";
-        default:
-            return "xrt_i64_add";
-    }
-}
-
 static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
     (void) ctx;
@@ -103,7 +65,7 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     XrRep b_rep = cg_rep(v->args[1]);
     bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
     if (result_rep == XR_REP_TAGGED || any_tagged) {
-        const char *fn = xicgen_arith_runtime_fn(v->op);
+        const char *fn = xi_to_c_template_arith_runtime_fn(v->op);
         if (result_rep == XR_REP_F64) {
             fprintf(out, "%s(", fn);
             if (a_rep != XR_REP_TAGGED) {
@@ -149,30 +111,25 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         }
     } else if (result_rep == XR_REP_I64) {
         // Native int64: must wrap on overflow (raw + - * is signed UB in C).
-        fprintf(out, "%s(", xicgen_arith_i64_wrap_fn(v->op));
+        fprintf(out, "%s(", xi_to_c_template_arith_i64_wrap_fn(v->op));
         emit_vref(out, v->args[0]);
         fprintf(out, ", ");
         emit_vref(out, v->args[1]);
         fprintf(out, ")");
     } else {
-        emit_binop(out, v, xicgen_arith_native_op(v->op));
+        emit_binop(out, v, xi_to_c_template_arith_native_op(v->op));
     }
 }
 
-static void xicgen_add(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_arith(ctx, out, f, v, prefix);
-}
+#define XICGEN_DEFINE_TEMPLATE_ARITH_DRIVER(ident, driver)                                         \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_arith(ctx, out, f, v, prefix);                                                      \
+    }
 
-static void xicgen_sub(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_arith(ctx, out, f, v, prefix);
-}
+XI_TO_C_TEMPLATE_ARITH_DRIVERS(XICGEN_DEFINE_TEMPLATE_ARITH_DRIVER)
 
-static void xicgen_mul(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_arith(ctx, out, f, v, prefix);
-}
+#undef XICGEN_DEFINE_TEMPLATE_ARITH_DRIVER
 
 static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
@@ -183,7 +140,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     XrRep b_rep = cg_rep(v->args[1]);
     bool any_tagged = (a_rep == XR_REP_TAGGED || b_rep == XR_REP_TAGGED);
     if (result_rep == XR_REP_TAGGED || any_tagged) {
-        const char *fn = (v->op == XI_DIV) ? "xrt_div" : "xrt_mod";
+        const char *fn = xi_to_c_template_div_mod_runtime_fn(v->op);
         if (result_rep == XR_REP_F64) {
             fprintf(out, "%s(", fn);
             if (a_rep != XR_REP_TAGGED) {
@@ -229,7 +186,7 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         }
     } else if (result_rep == XR_REP_I64) {
         if (!emit_native_const_div_mod_expr(out, v)) {
-            const char *fn = (v->op == XI_DIV) ? "xrt_int_div" : "xrt_int_mod";
+            const char *fn = xi_to_c_template_div_mod_int_fn(v->op);
             fprintf(out, "%s(", fn);
             emit_vref(out, v->args[0]);
             fprintf(out, ", ");
@@ -237,34 +194,26 @@ static void xicgen_div_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
             fprintf(out, ")");
         }
     } else if (result_rep == XR_REP_F64) {
-        if (v->op == XI_DIV) {
-            fprintf(out, "(xrt_div(XR_FROM_FLOAT(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, "), XR_FROM_FLOAT(");
-            emit_vref(out, v->args[1]);
-            fprintf(out, ")).f)");
-        } else {
-            fprintf(out, "(xrt_mod(XR_FROM_FLOAT(");
-            emit_vref(out, v->args[0]);
-            fprintf(out, "), XR_FROM_FLOAT(");
-            emit_vref(out, v->args[1]);
-            fprintf(out, ")).f)");
-        }
+        fprintf(out, "(%s(XR_FROM_FLOAT(", xi_to_c_template_div_mod_runtime_fn(v->op));
+        emit_vref(out, v->args[0]);
+        fprintf(out, "), XR_FROM_FLOAT(");
+        emit_vref(out, v->args[1]);
+        fprintf(out, ")).f)");
     } else {
         emit_codegen_abort_expr(out);
         ctx->error = true;
     }
 }
 
-static void xicgen_div(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_div_mod(ctx, out, f, v, prefix);
-}
+#define XICGEN_DEFINE_TEMPLATE_DIV_MOD_DRIVER(ident, driver)                                       \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_div_mod(ctx, out, f, v, prefix);                                                    \
+    }
 
-static void xicgen_mod(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_div_mod(ctx, out, f, v, prefix);
-}
+XI_TO_C_TEMPLATE_DIV_MOD_DRIVERS(XICGEN_DEFINE_TEMPLATE_DIV_MOD_DRIVER)
+
+#undef XICGEN_DEFINE_TEMPLATE_DIV_MOD_DRIVER
 
 static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
@@ -289,34 +238,39 @@ static void xicgen_neg(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue
     }
 }
 
-static void xicgen_bitwise_binop(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                 const char *prefix, const char *op) {
+static void xicgen_template_bitwise_binary(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                           const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    emit_bitwise_binop_ctx(ctx, out, v, op);
+    emit_bitwise_binop_ctx(ctx, out, v, xi_to_c_template_bitwise_binary_op(v->op));
 }
 
-static void xicgen_band(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                        const char *prefix) {
-    xicgen_bitwise_binop(ctx, out, f, v, prefix, "&");
-}
+#define XICGEN_DEFINE_TEMPLATE_BITWISE_BINARY_DRIVER(ident, driver)                                \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_template_bitwise_binary(ctx, out, f, v, prefix);                                    \
+    }
 
-static void xicgen_bor(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    xicgen_bitwise_binop(ctx, out, f, v, prefix, "|");
-}
+XI_TO_C_TEMPLATE_BITWISE_BINARY_DRIVERS(XICGEN_DEFINE_TEMPLATE_BITWISE_BINARY_DRIVER)
 
-static void xicgen_bxor(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                        const char *prefix) {
-    xicgen_bitwise_binop(ctx, out, f, v, prefix, "^");
-}
+#undef XICGEN_DEFINE_TEMPLATE_BITWISE_BINARY_DRIVER
 
-static void xicgen_bnot(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                        const char *prefix) {
+static void xicgen_template_bitwise_unary(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v, const char *prefix) {
     (void) f;
     (void) prefix;
-    emit_bitwise_unop_ctx(ctx, out, v, "~");
+    emit_bitwise_unop_ctx(ctx, out, v, xi_to_c_template_bitwise_unary_op(v->op));
 }
+
+#define XICGEN_DEFINE_TEMPLATE_BITWISE_UNARY_DRIVER(ident, driver)                                 \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_template_bitwise_unary(ctx, out, f, v, prefix);                                     \
+    }
+
+XI_TO_C_TEMPLATE_BITWISE_UNARY_DRIVERS(XICGEN_DEFINE_TEMPLATE_BITWISE_UNARY_DRIVER)
+
+#undef XICGEN_DEFINE_TEMPLATE_BITWISE_UNARY_DRIVER
 
 static void xicgen_not(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                        const char *prefix) {
@@ -1382,19 +1336,22 @@ static void xicgen_struct_set(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     }
 }
 
-static void xicgen_shl(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
+static void xicgen_template_shift(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
+                                  const char *prefix) {
     (void) f;
     (void) prefix;
-    emit_shift_binop_ctx(ctx, out, v, "xrt_i64_shl");
+    emit_shift_binop_ctx(ctx, out, v, xi_to_c_template_shift_fn(v->op));
 }
 
-static void xicgen_shr(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                       const char *prefix) {
-    (void) f;
-    (void) prefix;
-    emit_shift_binop_ctx(ctx, out, v, "xrt_i64_shr");
-}
+#define XICGEN_DEFINE_TEMPLATE_SHIFT_DRIVER(ident, driver)                                         \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_template_shift(ctx, out, f, v, prefix);                                             \
+    }
+
+XI_TO_C_TEMPLATE_SHIFT_DRIVERS(XICGEN_DEFINE_TEMPLATE_SHIFT_DRIVER)
+
+#undef XICGEN_DEFINE_TEMPLATE_SHIFT_DRIVER
 
 static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                            const char *prefix) {
@@ -1405,29 +1362,8 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     XrRep a1_rep = cg_rep(v->args[1]);
     XrRep arg_rep = (a0_rep == XR_REP_TAGGED || a1_rep == XR_REP_TAGGED) ? XR_REP_TAGGED : a0_rep;
     if (arg_rep == XR_REP_TAGGED) {
-        switch (v->op) {
-            case XI_EQ:
-                fprintf(out, "xrt_eq(");
-                break;
-            case XI_NE:
-                fprintf(out, "!xrt_eq(");
-                break;
-            case XI_LT:
-                fprintf(out, "xrt_lt(");
-                break;
-            case XI_LE:
-                fprintf(out, "xrt_le(");
-                break;
-            case XI_GT:
-                fprintf(out, "xrt_lt(");
-                break;
-            case XI_GE:
-                fprintf(out, "xrt_le(");
-                break;
-            default:
-                XR_CHECK(false, "xicgen_compare: unsupported tagged compare op");
-        }
-        if (v->op == XI_GT || v->op == XI_GE) {
+        fprintf(out, "%s(", xi_to_c_template_compare_runtime_fn(v->op));
+        if (xi_to_c_template_compare_swaps_tagged_args(v->op)) {
             emit_boxed_value_ref(out, v->args[1]);
             fprintf(out, ", ");
             emit_boxed_value_ref(out, v->args[0]);
@@ -1438,84 +1374,41 @@ static void xicgen_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
         }
         fprintf(out, ")");
     } else {
-        const char *op = NULL;
-        switch (v->op) {
-            case XI_EQ:
-                op = "==";
-                break;
-            case XI_NE:
-                op = "!=";
-                break;
-            case XI_LT:
-                op = "<";
-                break;
-            case XI_LE:
-                op = "<=";
-                break;
-            case XI_GT:
-                op = ">";
-                break;
-            case XI_GE:
-                op = ">=";
-                break;
-            default:
-                XR_CHECK(false, "xicgen_compare: unsupported native compare op");
-        }
-        emit_binop(out, v, op);
+        emit_binop(out, v, xi_to_c_template_compare_native_op(v->op));
     }
 }
 
-static void xicgen_eq(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
+#define XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER(ident, driver)                                       \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_compare(ctx, out, f, v, prefix);                                                    \
+    }
 
-static void xicgen_ne(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
+XI_TO_C_TEMPLATE_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER)
+
+#undef XICGEN_DEFINE_TEMPLATE_COMPARE_DRIVER
 
 static void xicgen_strict_compare(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                                  const char *prefix, const char *op) {
+                                  const char *prefix) {
     (void) ctx;
     (void) f;
     (void) prefix;
     fprintf(out, "(");
     emit_vref(out, v->args[0]);
-    fprintf(out, ".i %s ", op);
+    fprintf(out, ".i %s ", xi_to_c_template_strict_compare_op(v->op));
     emit_vref(out, v->args[1]);
     fprintf(out, ".i)");
 }
 
-static void xicgen_eq_strict(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    xicgen_strict_compare(ctx, out, f, v, prefix, "==");
-}
+#define XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER(ident, driver)                                \
+    static void driver(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,               \
+                       const char *prefix) {                                                       \
+        xicgen_strict_compare(ctx, out, f, v, prefix);                                             \
+    }
 
-static void xicgen_ne_strict(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                             const char *prefix) {
-    xicgen_strict_compare(ctx, out, f, v, prefix, "!=");
-}
+XI_TO_C_TEMPLATE_STRICT_COMPARE_DRIVERS(XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER)
 
-static void xicgen_lt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
-
-static void xicgen_le(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
-
-static void xicgen_gt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
-
-static void xicgen_ge(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
-                      const char *prefix) {
-    xicgen_compare(ctx, out, f, v, prefix);
-}
+#undef XICGEN_DEFINE_TEMPLATE_STRICT_COMPARE_DRIVER
 
 static void xicgen_cast_i64_arg(FILE *out, const XiValue *v, const char *ctype) {
     fprintf(out, "(int64_t)(%s)", ctype);
