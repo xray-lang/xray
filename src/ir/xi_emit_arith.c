@@ -10,6 +10,7 @@
  */
 
 #include "xi_emit_internal.h"
+#include "xi_emit_vm_gen.h"
 #include "../runtime/value/xtype.h"
 #include "../runtime/value/xtype_names.h"
 
@@ -113,41 +114,10 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    OpCode op;
-    switch (v->op) {
-        case XI_ADD:
-            op = OP_ADD;
-            break;
-        case XI_SUB:
-            op = OP_SUB;
-            break;
-        case XI_MUL:
-            op = OP_MUL;
-            break;
-        case XI_DIV:
-            op = OP_DIV;
-            break;
-        case XI_MOD:
-            op = OP_MOD;
-            break;
-        case XI_BAND:
-            op = OP_BAND;
-            break;
-        case XI_BOR:
-            op = OP_BOR;
-            break;
-        case XI_BXOR:
-            op = OP_BXOR;
-            break;
-        case XI_SHL:
-            op = OP_SHL;
-            break;
-        case XI_SHR:
-            op = OP_SHR;
-            break;
-        default:
-            op = OP_NOP;
-            break;
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
     }
     emit_inst(ctx, CREATE_ABC(op, dst, b, c));
 }
@@ -158,7 +128,15 @@ XR_FUNC void xi_emit_neg(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_UNM, dst, reg_of(ctx, v->args[0]), 0));
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
 
 /* Logical not */
@@ -167,7 +145,15 @@ XR_FUNC void xi_emit_not(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_NOT, dst, reg_of(ctx, v->args[0]), 0));
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
 
 /* Bitwise not */
@@ -176,7 +162,15 @@ XR_FUNC void xi_emit_bnot(EmitCtx *ctx, XiValue *v, uint8_t dst) {
         emit_error(ctx, XI_EMIT_ERR_INTERNAL);
         return;
     }
-    emit_inst(ctx, CREATE_ABC(OP_BNOT, dst, reg_of(ctx, v->args[0]), 0));
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
+    }
+    uint8_t src = reg_of(ctx, v->args[0]);
+    if (ctx->status != XI_EMIT_OK)
+        return;
+    emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
 
 /* Comparison ops -> CMP_* (produce bool in register) */
@@ -190,37 +184,15 @@ XR_FUNC void xi_emit_cmp(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     if (ctx->status != XI_EMIT_OK)
         return;
 
-    switch (v->op) {
-        case XI_EQ:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_EQ, dst, b, c));
-            break;
-        case XI_NE:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_NE, dst, b, c));
-            break;
-        case XI_LT:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_LT, dst, b, c));
-            break;
-        case XI_LE:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_LE, dst, b, c));
-            break;
-        /* GT/GE: swap args */
-        case XI_GT:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_LT, dst, c, b));
-            break;
-        case XI_GE:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_LE, dst, c, b));
-            break;
-        /* Strict (identity) comparison */
-        case XI_EQ_STRICT:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_EQ_STRICT, dst, b, c));
-            break;
-        case XI_NE_STRICT:
-            emit_inst(ctx, CREATE_ABC(OP_CMP_NE_STRICT, dst, b, c));
-            break;
-        default:
-            emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
-            return;
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_UNSUPPORTED_OP);
+        return;
     }
+    if (xi_emit_vm_template_swaps_args(v->op))
+        emit_inst(ctx, CREATE_ABC(op, dst, c, b));
+    else
+        emit_inst(ctx, CREATE_ABC(op, dst, b, c));
 }
 
 /* Type conversion */
@@ -298,32 +270,10 @@ XR_FUNC void xi_emit_narrow(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint16_t op;
-    switch (v->op) {
-        case XI_NARROW_I8:
-            op = OP_NARROW_I8;
-            break;
-        case XI_NARROW_U8:
-            op = OP_NARROW_U8;
-            break;
-        case XI_NARROW_I16:
-            op = OP_NARROW_I16;
-            break;
-        case XI_NARROW_U16:
-            op = OP_NARROW_U16;
-            break;
-        case XI_NARROW_I32:
-            op = OP_NARROW_I32;
-            break;
-        case XI_NARROW_U32:
-            op = OP_NARROW_U32;
-            break;
-        case XI_NARROW_F32:
-            op = OP_NARROW_F32;
-            break;
-        default:
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
     }
     emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
@@ -338,32 +288,10 @@ XR_FUNC void xi_emit_widen(EmitCtx *ctx, XiValue *v, uint8_t dst) {
     uint8_t src = reg_of(ctx, v->args[0]);
     if (ctx->status != XI_EMIT_OK)
         return;
-    uint16_t op;
-    switch (v->op) {
-        case XI_WIDEN_I8:
-            op = OP_WIDEN_I8;
-            break;
-        case XI_WIDEN_U8:
-            op = OP_WIDEN_U8;
-            break;
-        case XI_WIDEN_I16:
-            op = OP_WIDEN_I16;
-            break;
-        case XI_WIDEN_U16:
-            op = OP_WIDEN_U16;
-            break;
-        case XI_WIDEN_I32:
-            op = OP_WIDEN_I32;
-            break;
-        case XI_WIDEN_U32:
-            op = OP_WIDEN_U32;
-            break;
-        case XI_WIDEN_F32:
-            op = OP_WIDEN_F32;
-            break;
-        default:
-            emit_error(ctx, XI_EMIT_ERR_INTERNAL);
-            return;
+    OpCode op = xi_emit_vm_template_opcode(v->op);
+    if (op == OP_NOP) {
+        emit_error(ctx, XI_EMIT_ERR_INTERNAL);
+        return;
     }
     emit_inst(ctx, CREATE_ABC(op, dst, src, 0));
 }
