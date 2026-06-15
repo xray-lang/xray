@@ -190,7 +190,6 @@ static inline XmMetaVerifyError xm_verify_deopt(const XmRtDeoptEntry *entries, u
 }
 
 /* Verify OSR entry table invariants.
- *  - nosr <= XM_MAX_OSR_ENTRIES
  *  - entry.entry_offset < code_size
  *  - entry.entry_offset is a multiple of arch_align (1 for x64, 4 for fixed-32)
  *  - bc_offset is unique across all entries (xm_jit_runtime_coro.c does linear
@@ -198,11 +197,6 @@ static inline XmMetaVerifyError xm_verify_deopt(const XmRtDeoptEntry *entries, u
 static inline XmMetaVerifyError xm_verify_osr(const XmOsrEntry *entries, uint32_t nosr,
                                               uint32_t code_size, uint32_t arch_align,
                                               uint32_t *err_idx) {
-    if (nosr > XM_MAX_OSR_ENTRIES) {
-        if (err_idx)
-            *err_idx = 0;
-        return XM_META_VERIFY_OSR_COUNT_OVERFLOW;
-    }
     for (uint32_t i = 0; i < nosr; i++) {
         const XmOsrEntry *e = &entries[i];
         if (e->entry_offset >= code_size) {

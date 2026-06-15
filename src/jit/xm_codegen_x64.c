@@ -317,11 +317,10 @@ static void x64_emit_prologue(X64CodegenCtx *ctx) {
     /* SUB RSP, frame_size (placeholder imm32 — patched later).
      * Always emit the imm32 form (REX.W 81 EC imm32) so the
      * displacement can be patched to any value up to 2 GiB. */
-    CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many frame sub patches");
     x64_emit8(&ctx->buf, 0x48); /* REX.W */
     x64_emit8(&ctx->buf, 0x81); /* SUB r/m64, imm32 */
     x64_emit8(&ctx->buf, 0xEC); /* ModRM: mod=11, /5, rm=RSP */
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.pos);
     x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE); /* placeholder */
 
 #ifdef _WIN32
@@ -456,11 +455,10 @@ static void x64_emit_fast_prologue(X64CodegenCtx *ctx) {
     x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
 
     /* SUB RSP, frame_size (placeholder, patched later) */
-    CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many frame sub patches");
     x64_emit8(&ctx->buf, 0x48);
     x64_emit8(&ctx->buf, 0x81);
     x64_emit8(&ctx->buf, 0xEC);
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.pos);
     x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE);
 
 #ifdef _WIN32
@@ -583,10 +581,11 @@ static void x64_emit_block(X64CodegenCtx *ctx, uint32_t block_idx) {
      * Skip when the function has coroutine deopt (AWAIT/SCOPE_EXIT): OSR
      * cannot correctly recover full interpreter state in that case and
      * may double-execute side effects (matches ARM64 behaviour). */
-    if (blk->is_loop_header && ctx->nosr_snap < XM_MAX_OSR_ENTRIES && !ctx->func->has_coro_deopt) {
-        ctx->osr_snaps[ctx->nosr_snap].block_id = blk->id;
-        ctx->osr_snaps[ctx->nosr_snap].block_offset = ctx->buf.pos;
-        ctx->nosr_snap++;
+    if (blk->is_loop_header && !ctx->func->has_coro_deopt) {
+        OsrSnapshot *snap =
+            xm_cg_osrsnap_push(&ctx->osr_snaps, &ctx->nosr_snap, &ctx->osr_snap_cap);
+        snap->block_id = blk->id;
+        snap->block_offset = ctx->buf.pos;
     }
 
     /* Emit all instructions */
@@ -1011,6 +1010,9 @@ cleanup:
     xr_free(ctx.block_offsets);
     xr_free(ctx.patches);
     xr_free(ctx.vreg_override);
+    xr_free(ctx.osr_snaps);
+    xr_free(ctx.frame_patch_sub);
+    xr_free(ctx.frame_patch_add);
     if (ctx.xra)
         xra_result_free(ctx.xra);
     return result;

@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdio.h>
 #include "../base/xdefs.h"
+#include "../base/xmalloc.h"
 
 /* ========== Constants ========== */
 
@@ -95,6 +96,38 @@ typedef struct {
     uint32_t block_offset;
 } OsrSnapshot;
 
+/* Grow-and-push helpers for codegen-side dynamic arrays shared across all
+ * targets (frame-size patch lists, OSR snapshots). Capacity doubles on demand;
+ * OOM aborts because there is no recovery path mid-emit. Replaces the old
+ * fixed-size arrays + bound asserts so OSR is not capped per function. */
+static inline void xm_cg_u32_push(uint32_t **buf, uint32_t *n, uint32_t *cap, uint32_t v) {
+    if (*n >= *cap) {
+        uint32_t nc = *cap ? *cap * 2u : 16u;
+        uint32_t *nb = (uint32_t *) xr_realloc(*buf, (size_t) nc * sizeof(uint32_t));
+        if (!nb) {
+            fprintf(stderr, "[FATAL] %s:%d: codegen u32 vector grow OOM\n", __FILE__, __LINE__);
+            abort();
+        }
+        *buf = nb;
+        *cap = nc;
+    }
+    (*buf)[(*n)++] = v;
+}
+
+static inline OsrSnapshot *xm_cg_osrsnap_push(OsrSnapshot **buf, uint32_t *n, uint32_t *cap) {
+    if (*n >= *cap) {
+        uint32_t nc = *cap ? *cap * 2u : 8u;
+        OsrSnapshot *nb = (OsrSnapshot *) xr_realloc(*buf, (size_t) nc * sizeof(OsrSnapshot));
+        if (!nb) {
+            fprintf(stderr, "[FATAL] %s:%d: codegen osr-snapshot grow OOM\n", __FILE__, __LINE__);
+            abort();
+        }
+        *buf = nb;
+        *cap = nc;
+    }
+    return &(*buf)[(*n)++];
+}
+
 typedef struct {
     uint32_t idx;
     uint8_t pair;
@@ -121,13 +154,16 @@ typedef struct {
     bool has_deopt;
     bool has_call_c;
 
-    OsrSnapshot osr_snaps[XM_MAX_OSR_ENTRIES];
+    OsrSnapshot *osr_snaps;
     uint32_t nosr_snap;
+    uint32_t osr_snap_cap;
 
-    uint32_t frame_patch_sub[8];
-    uint32_t frame_patch_add[32];
+    uint32_t *frame_patch_sub;
+    uint32_t *frame_patch_add;
     uint32_t nsub_patches;
     uint32_t nadd_patches;
+    uint32_t sub_patch_cap;
+    uint32_t add_patch_cap;
 
     uint32_t fast_entry_offset;
 

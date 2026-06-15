@@ -97,6 +97,11 @@ static void x64_osr_materialize_const(X64CodegenCtx *ctx, XmIns *def, int8_t phy
  *   5. JMP rel32 to the loop header block. block_offsets is already
  *      populated, so the displacement is computed directly (no patch). */
 XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
+    if (ctx->nosr_snap == 0)
+        return;
+    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
+    if (!result->osr_entries)
+        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
         XmOsrEntry *entry = &result->osr_entries[result->nosr];
@@ -112,11 +117,11 @@ XR_FUNC void x64_emit_osr_stubs(X64CodegenCtx *ctx, XmCodegenResult *result) {
         x64_push_r(&ctx->buf, X64_RBP);
         x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
 
-        CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many sub patches for OSR stub");
         x64_emit8(&ctx->buf, 0x48);
         x64_emit8(&ctx->buf, 0x81);
         x64_emit8(&ctx->buf, 0xEC);
-        ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+        xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap,
+                       ctx->buf.pos);
         x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE);
 
 #ifdef _WIN32
@@ -253,11 +258,10 @@ XR_FUNC void x64_emit_resume_entry(X64CodegenCtx *ctx, XmCodegenResult *result) 
     x64_push_r(&ctx->buf, X64_RBP);
     x64_mov_rr(&ctx->buf, X64_RBP, X64_RSP);
     /* SUB RSP, frame_size (placeholder, patched later) */
-    CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many sub patches for resume entry");
     x64_emit8(&ctx->buf, 0x48);
     x64_emit8(&ctx->buf, 0x81);
     x64_emit8(&ctx->buf, 0xEC);
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.pos;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.pos);
     x64_emit32(&ctx->buf, X64_JIT_FRAME_BASE);
 
 #ifdef _WIN32

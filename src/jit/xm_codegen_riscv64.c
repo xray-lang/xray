@@ -388,16 +388,14 @@ static void rv64_emit_prologue(Rv64CodegenCtx *ctx) {
     /* ADDI sp, sp, -frame_size (placeholder — patched later).
      * We emit a placeholder that will be overwritten once we know
      * the final frame size. Use the minimum frame base for now. */
-    RV64_CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many frame sub patches");
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.count);
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -(int32_t) RV64_JIT_FRAME_BASE));
 
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_FP));
 
     /* Set up frame pointer: fp = sp + frame_size.
      * Placeholder — patched later alongside the SP adjustment. */
-    RV64_CODEGEN_CHECK(ctx, ctx->nadd_patches < 8, "too many frame add patches");
-    ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_add, &ctx->nadd_patches, &ctx->add_patch_cap, ctx->buf.count);
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_FP, RV64_SP, (int32_t) RV64_JIT_FRAME_BASE));
 
     /* Save frame-resident state relative to fp so variable spill size cannot move it. */
@@ -620,10 +618,11 @@ static void rv64_emit_block(Rv64CodegenCtx *ctx, uint32_t block_idx) {
     ctx->block_offsets[blk->id] = ctx->buf.count;
 
     /* Snapshot loop headers for OSR */
-    if (blk->is_loop_header && ctx->nosr_snap < XM_MAX_OSR_ENTRIES && !ctx->func->has_coro_deopt) {
-        ctx->osr_snaps[ctx->nosr_snap].block_id = blk->id;
-        ctx->osr_snaps[ctx->nosr_snap].block_offset = ctx->buf.count;
-        ctx->nosr_snap++;
+    if (blk->is_loop_header && !ctx->func->has_coro_deopt) {
+        OsrSnapshot *snap =
+            xm_cg_osrsnap_push(&ctx->osr_snaps, &ctx->nosr_snap, &ctx->osr_snap_cap);
+        snap->block_id = blk->id;
+        snap->block_offset = ctx->buf.count;
     }
 
     /* Emit all instructions */
@@ -1068,6 +1067,9 @@ cleanup:
     xr_free(ctx.block_offsets);
     xr_free(ctx.patches);
     xr_free(ctx.vreg_override);
+    xr_free(ctx.osr_snaps);
+    xr_free(ctx.frame_patch_sub);
+    xr_free(ctx.frame_patch_add);
     if (ctx.xra)
         xra_result_free(ctx.xra);
     return result;
