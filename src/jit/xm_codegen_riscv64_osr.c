@@ -93,6 +93,11 @@ static void rv64_osr_materialize_const(Rv64CodegenCtx *ctx, XmIns *def, int8_t p
  *   5. Pass 2: materialize compile-time constants for vregs without bc_slot
  *   6. JAL x0 (J-type) to the loop header block */
 XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
+    if (ctx->nosr_snap == 0)
+        return;
+    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
+    if (!result->osr_entries)
+        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         uint32_t snap_block_id = ctx->osr_snaps[i].block_id;
         XmOsrEntry *entry = &result->osr_entries[result->nosr];
@@ -107,15 +112,15 @@ XR_FUNC void rv64_emit_osr_stubs(Rv64CodegenCtx *ctx, XmCodegenResult *result) {
         /* === Standard prologue (mirrors rv64_emit_prologue) === */
 
         /* ADDI sp, sp, -frame_size (placeholder — patched later) */
-        RV64_CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many frame sub patches for OSR stub");
-        ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+        xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap,
+                       ctx->buf.count);
         rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -(int32_t) RV64_JIT_FRAME_BASE));
 
         rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_FP));
 
         /* Set up frame pointer (placeholder — patched later) */
-        RV64_CODEGEN_CHECK(ctx, ctx->nadd_patches < 8, "too many frame add patches for OSR stub");
-        ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
+        xm_cg_u32_push(&ctx->frame_patch_add, &ctx->nadd_patches, &ctx->add_patch_cap,
+                       ctx->buf.count);
         rv64_buf_emit(&ctx->buf, rv64_addi(RV64_FP, RV64_SP, (int32_t) RV64_JIT_FRAME_BASE));
 
         /* Save ra, callee-saved GPRs (same layout as normal prologue) */
@@ -252,15 +257,13 @@ XR_FUNC void rv64_emit_resume_entry(Rv64CodegenCtx *ctx, XmCodegenResult *result
     /* === Prologue (identical frame layout to normal entry) === */
 
     /* ADDI sp, sp, -frame_size (placeholder — patched later) */
-    RV64_CODEGEN_CHECK(ctx, ctx->nsub_patches < 16, "too many frame sub patches for resume entry");
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.count);
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_SP, RV64_SP, -(int32_t) RV64_JIT_FRAME_BASE));
 
     rv64_buf_emit(&ctx->buf, rv64_mv(RV64_SCRATCH_REG, RV64_FP));
 
     /* Frame pointer setup (placeholder — patched later) */
-    RV64_CODEGEN_CHECK(ctx, ctx->nadd_patches < 8, "too many frame add patches for resume entry");
-    ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_add, &ctx->nadd_patches, &ctx->add_patch_cap, ctx->buf.count);
     rv64_buf_emit(&ctx->buf, rv64_addi(RV64_FP, RV64_SP, (int32_t) RV64_JIT_FRAME_BASE));
 
     /* Save ra, callee-saved GPRs */

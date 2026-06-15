@@ -958,8 +958,7 @@ static bool const_i64_fully_folded(CodegenCtx *ctx, XmBlock *blk, XmRef dst) {
 
 static void emit_prologue(CodegenCtx *ctx) {
     // SUB SP, SP, #frame_size (placeholder, patched later)
-    XR_DCHECK(ctx->nsub_patches < 8, "assertion failed");
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.count);
     a64_buf_emit(&ctx->buf, a64_sub_imm(A64_SP, A64_SP, JIT_FRAME_BASE));
     // STP x29, x30, [SP, #0]
     a64_buf_emit(&ctx->buf, a64_stp(A64_FP, A64_LR, A64_SP, 0));
@@ -1069,8 +1068,7 @@ static void emit_prologue(CodegenCtx *ctx) {
 // in the correct param registers.
 static void emit_fast_prologue(CodegenCtx *ctx) {
     // SUB SP, SP, #frame_size (placeholder, patched later — same as normal)
-    XR_DCHECK(ctx->nsub_patches < 8, "assertion failed");
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.count);
     a64_buf_emit(&ctx->buf, a64_sub_imm(A64_SP, A64_SP, JIT_FRAME_BASE));
     // STP x29, x30, [SP, #0]
     a64_buf_emit(&ctx->buf, a64_stp(A64_FP, A64_LR, A64_SP, 0));
@@ -1162,8 +1160,7 @@ void emit_epilogue(CodegenCtx *ctx) {
     a64_buf_emit(&ctx->buf, a64_ldp(A64_FP, A64_LR, A64_SP, 0));
     // ADD SP, SP, #frame_size (placeholder, patched later)
     // Using add_imm instead of ldp_post to support frames >504 bytes
-    XR_DCHECK(ctx->nadd_patches < 32, "assertion failed");
-    ctx->frame_patch_add[ctx->nadd_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_add, &ctx->nadd_patches, &ctx->add_patch_cap, ctx->buf.count);
     a64_buf_emit(&ctx->buf, a64_add_imm(A64_SP, A64_SP, JIT_FRAME_BASE));
 }
 
@@ -1194,8 +1191,9 @@ static void emit_block(CodegenCtx *ctx, uint32_t block_idx) {
     // Skip for functions with coroutine deopt (AWAIT/SCOPE_EXIT): OSR + deopt
     // can't correctly recover full interpreter state, causing double execution
     // of side-effecting code (spawns, array pushes).
-    if (blk->is_loop_header && ctx->nosr_snap < XM_MAX_OSR_ENTRIES && !ctx->func->has_coro_deopt) {
-        OsrSnapshot *snap = &ctx->osr_snaps[ctx->nosr_snap++];
+    if (blk->is_loop_header && !ctx->func->has_coro_deopt) {
+        OsrSnapshot *snap =
+            xm_cg_osrsnap_push(&ctx->osr_snaps, &ctx->nosr_snap, &ctx->osr_snap_cap);
         snap->block_id = blk->id;
         snap->block_offset = ctx->buf.count;
     }
@@ -1684,6 +1682,9 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
     xr_free(ctx.patches);
     xr_free(ctx.cs_patches);
     xr_free(ctx.vreg_override);
+    xr_free(ctx.osr_snaps);
+    xr_free(ctx.frame_patch_sub);
+    xr_free(ctx.frame_patch_add);
     xra_result_free(ctx.xra);
     return result;
 }

@@ -172,14 +172,18 @@ typedef struct {
 
     uint32_t fast_entry_offset;
 
-    /* Frame size patch locations */
-    uint32_t frame_patch_sub[16];
-    uint32_t frame_patch_add[8];
+    /* Frame size patch locations (dynamic: one SUB/ADD per OSR stub, and there
+     * is one OSR stub per loop header — unbounded). */
+    uint32_t *frame_patch_sub;
+    uint32_t *frame_patch_add;
     uint32_t nsub_patches;
     uint32_t nadd_patches;
+    uint32_t sub_patch_cap;
+    uint32_t add_patch_cap;
 
-    OsrSnapshot osr_snaps[XM_MAX_OSR_ENTRIES];
+    OsrSnapshot *osr_snaps;
     uint32_t nosr_snap;
+    uint32_t osr_snap_cap;
 
     uint32_t call_c_stub;
     uint32_t deopt_stub;

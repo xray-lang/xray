@@ -283,6 +283,11 @@ static void osr_materialize_const(CodegenCtx *ctx, XmIns *def, int8_t phys, int8
 // then jumps to the loop header block.
 // Uses register allocator liveness to determine which slots to load.
 XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
+    if (ctx->nosr_snap == 0)
+        return;
+    result->osr_entries = (XmOsrEntry *) xr_calloc(ctx->nosr_snap, sizeof(XmOsrEntry));
+    if (!result->osr_entries)
+        return;
     for (uint32_t i = 0; i < ctx->nosr_snap; i++) {
         OsrSnapshot *snap = &ctx->osr_snaps[i];
         XmOsrEntry *entry = &result->osr_entries[result->nosr];
@@ -296,8 +301,8 @@ XR_FUNC void a64_emit_osr_stubs(CodegenCtx *ctx, XmCodegenResult *result) {
         entry->entry_offset = ctx->buf.count * 4;
 
         // Emit standard prologue (SUB SP patched later with final frame size)
-        XR_DCHECK(ctx->nsub_patches < 8, "assertion failed");
-        ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+        xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap,
+                       ctx->buf.count);
         a64_buf_emit(&ctx->buf, a64_sub_imm(A64_SP, A64_SP, JIT_FRAME_BASE));
         a64_buf_emit(&ctx->buf, a64_stp(A64_FP, A64_LR, A64_SP, 0));
         a64_buf_emit(&ctx->buf, a64_stp(A64_X19, A64_X20, A64_SP, 16));
@@ -696,8 +701,7 @@ XR_FUNC void a64_emit_resume_entry(CodegenCtx *ctx, XmCodegenResult *result) {
     // === Prologue (identical frame layout to normal entry) ===
 
     // SUB SP, SP, #frame_size (placeholder, patched by global frame_size patch)
-    XR_DCHECK(ctx->nsub_patches < 8, "too many sub patches for resume entry");
-    ctx->frame_patch_sub[ctx->nsub_patches++] = ctx->buf.count;
+    xm_cg_u32_push(&ctx->frame_patch_sub, &ctx->nsub_patches, &ctx->sub_patch_cap, ctx->buf.count);
     a64_buf_emit(&ctx->buf, a64_sub_imm(A64_SP, A64_SP, JIT_FRAME_BASE));
     // STP x29, x30, [SP, #0]
     a64_buf_emit(&ctx->buf, a64_stp(A64_FP, A64_LR, A64_SP, 0));

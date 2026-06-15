@@ -117,8 +117,6 @@ static void test_osr_verify(void) {
     entries[1].entry_offset = 8;
 
     check_error("osr valid", xm_verify_osr(entries, 2, 16, 4, &err_idx), XM_META_VERIFY_OK);
-    check_error("osr count overflow", xm_verify_osr(NULL, XM_MAX_OSR_ENTRIES + 1, 16, 4, &err_idx),
-                XM_META_VERIFY_OSR_COUNT_OVERFLOW);
 
     entries[1].entry_offset = 16;
     check_error("osr entry oob", xm_verify_osr(entries, 2, 16, 4, &err_idx),
@@ -225,9 +223,11 @@ static void test_suspend_verify(void) {
 static void test_wrapper_verify(void) {
     XmCodegenResult result = {0};
     result.code_size = 16;
+    XmOsrEntry osr[1] = {0};
+    osr[0].bc_offset = 1;
+    osr[0].entry_offset = 32;
+    result.osr_entries = osr;
     result.nosr = 1;
-    result.osr_entries[0].bc_offset = 1;
-    result.osr_entries[0].entry_offset = 32;
     result.success = true;
 
     check_bool("wrapper rejects invalid metadata", !xm_verify_metadata_or_fail(&result, 4, "test"));

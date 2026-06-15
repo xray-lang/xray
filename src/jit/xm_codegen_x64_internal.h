@@ -206,18 +206,21 @@ typedef struct {
     uint32_t fast_entry_offset;  // byte offset of fast-path entry
 
     /* Frame size patch locations (byte offsets where sub rsp/add rsp imm32 lives).
-     * Capacity 16 covers normal + fast prologue + up to XM_MAX_OSR_ENTRIES (8)
-     * OSR stubs, each of which emits its own SUB RSP, imm32. */
-    uint32_t frame_patch_sub[16];
-    uint32_t frame_patch_add[8];
+     * Dynamic: normal + fast prologue + one SUB RSP per OSR stub, of which there
+     * is one per loop header (unbounded). */
+    uint32_t *frame_patch_sub;
+    uint32_t *frame_patch_add;
     uint32_t nsub_patches;
     uint32_t nadd_patches;
+    uint32_t sub_patch_cap;
+    uint32_t add_patch_cap;
 
     /* Loop-header snapshots for later OSR stub emission. Filled by
      * x64_emit_block when it sees a loop_header block; consumed by
      * x64_emit_osr_stubs to materialize a stub per snapshot. */
-    OsrSnapshot osr_snaps[XM_MAX_OSR_ENTRIES];
+    OsrSnapshot *osr_snaps;
     uint32_t nosr_snap;
+    uint32_t osr_snap_cap;
 
     uint32_t call_c_stub;        // byte offset of call_c_stub in code buffer
     uint32_t deopt_stub;         // byte offset of deopt stub

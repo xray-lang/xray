@@ -28,8 +28,6 @@
 
 /* ========== OSR Entry Point ========== */
 
-#define XM_MAX_OSR_ENTRIES 8
-
 // OSR entry metadata consumed at runtime: the loop-header match key (bc_offset)
 // and the stub address (entry_offset). The bc_slot -> phys_reg restore is baked
 // into the stub machine code, so no per-slot table is kept here.
@@ -104,8 +102,10 @@ typedef struct {
     // (skip param loading, for register-passing cross-function calls).
     // Both ARM64 and x64 codegens return byte offsets.
     uint32_t fast_entry_offset;
-    // OSR entry points for loop headers
-    XmOsrEntry osr_entries[XM_MAX_OSR_ENTRIES];
+    // OSR entry points for loop headers: heap array sized to the loop-header
+    // count, ownership transfers to XrProto.osr_entries (one xr_free). NULL
+    // when nosr == 0.
+    XmOsrEntry *osr_entries;
     uint32_t nosr;
     // Runtime deopt table: one heap block holding the XmRtDeoptEntry array
     // immediately followed by every entry's slots (each entry->slots points

@@ -635,6 +635,7 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
                        proto->name ? XR_STRING_CHARS(proto->name) : "?",
                        res.error ? res.error : "unknown");
         xr_free(res.deopt_entries);  // built before success flag; NULL on early fail
+        xr_free(res.osr_entries);
         xm_func_destroy(func);
         xr_free(shared_protos);
         return false;
@@ -651,14 +652,10 @@ bool xm_jit_try_compile(XmJitState *jit, XrProto *proto) {
     XmRtDeoptEntry *deopt_copy = res.deopt_entries;
     res.deopt_entries = NULL;
 
-    // Heap-copy OSR entries from codegen result
-    XmOsrEntry *osr_copy = NULL;
-    if (res.nosr > 0) {
-        size_t osr_size = res.nosr * sizeof(XmOsrEntry);
-        osr_copy = (XmOsrEntry *) xr_malloc(osr_size);
-        if (osr_copy)
-            memcpy(osr_copy, res.osr_entries, osr_size);
-    }
+    // Transfer ownership of the OSR entry array (heap-allocated by codegen,
+    // sized to the loop-header count). POD entries, single allocation.
+    XmOsrEntry *osr_copy = res.osr_entries;
+    res.osr_entries = NULL;
 
     // Install all metadata + jit_entry via unified helper (correct write order
     // with release fence — see xm_jit_install_to_proto for the contract).

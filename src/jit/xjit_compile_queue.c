@@ -146,6 +146,8 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
         xr_log_debug("jit-bg", "codegen failed for %s: %s",
                      proto->name ? XR_STRING_CHARS(proto->name) : "?",
                      res.error ? res.error : "unknown");
+        xr_free(res.deopt_entries);
+        xr_free(res.osr_entries);
         xm_func_destroy(func);
         goto fail_clear_sentinel;
     }
@@ -155,6 +157,8 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
     // The main thread installs everything atomically at OP_CALL time.
     XmBgResult *bgr = (XmBgResult *) xr_calloc(1, sizeof(XmBgResult));
     if (!bgr) {
+        xr_free(res.deopt_entries);
+        xr_free(res.osr_entries);
         xm_func_destroy(func);
         goto fail_clear_sentinel;
     }
@@ -168,27 +172,17 @@ static void bg_compile_one(XmCompileQueue *q, uint32_t worker_id, const XmBgTask
     bgr->opt_level = (uint8_t) opt;
     bgr->stack_map = res.stack_map;
 
-    // Copy deopt table
-    if (res.ndeopt > 0) {
-        size_t deopt_size = res.ndeopt * sizeof(XmRtDeoptEntry);
-        XmRtDeoptEntry *entries = (XmRtDeoptEntry *) xr_malloc(deopt_size);
-        if (entries) {
-            memcpy(entries, res.deopt_entries, deopt_size);
-            bgr->deopt_table = entries;
-            bgr->ndeopt = res.ndeopt;
-        }
-    }
+    // Transfer ownership of the deopt-table block (single allocation: entries
+    // followed by their slots, each entry->slots points inside it, so it must
+    // be moved, not shallow-copied).
+    bgr->deopt_table = res.deopt_entries;
+    bgr->ndeopt = res.ndeopt;
+    res.deopt_entries = NULL;
 
-    // Copy OSR entries
-    if (res.nosr > 0) {
-        size_t osr_size = res.nosr * sizeof(XmOsrEntry);
-        XmOsrEntry *entries = (XmOsrEntry *) xr_malloc(osr_size);
-        if (entries) {
-            memcpy(entries, res.osr_entries, osr_size);
-            bgr->osr_entries = entries;
-            bgr->nosr = res.nosr;
-        }
-    }
+    // Transfer ownership of the OSR entry array.
+    bgr->osr_entries = res.osr_entries;
+    bgr->nosr = res.nosr;
+    res.osr_entries = NULL;
 
     // Publish result to main thread via jit_entry_pending.
     // Main thread reads with acquire in OP_CALL, installing all metadata.
