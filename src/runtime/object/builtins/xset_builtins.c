@@ -77,9 +77,9 @@ XrValue xr_builtin_set_from(XrayIsolate *isolate, XrValue self, XrValue *args, i
         XrSet *set = xr_set_new(xr_current_coro(isolate));
 
         if (src->entries) {
-            for (uint32_t i = 0; i < src->capacity; i++) {
+            for (uint32_t i = 0; i < src->nentries; i++) {
                 XrSetEntry *entry = &src->entries[i];
-                if (entry->state >= 0x80) {
+                if (!XR_SET_ENTRY_EMPTY(entry)) {
                     xr_set_add(set, entry->value);
                 }
             }

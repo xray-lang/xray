@@ -364,9 +364,9 @@ XrValue xr_deep_copy_set_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     XrValue result = XR_FROM_PTR(new_set);
     xr_copy_context_record(ctx, set, result);
     ctx->objects_copied++;
-    for (uint32_t i = 0; i < set->capacity; i++) {
+    for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
-        if (entry->state & XR_SET_VALID)
+        if (!XR_SET_ENTRY_EMPTY(entry))
             xr_set_add(new_set, xr_deep_copy_with_ctx(ctx, entry->value));
     }
     return result;
@@ -826,9 +826,9 @@ XrValue xr_to_shared_set(struct XrayIsolate *X, XrGCHeader *obj) {
     new_set->elem_tid = set->elem_tid;
     XR_GC_SET_STORAGE(&new_set->gc, XR_GC_STORAGE_SHARED);
     xr_shared_set_refc(&new_set->gc, 1);
-    for (uint32_t i = 0; i < set->capacity; i++) {
+    for (uint32_t i = 0; i < set->nentries; i++) {
         XrSetEntry *entry = &set->entries[i];
-        if (entry->state & XR_SET_VALID)
+        if (!XR_SET_ENTRY_EMPTY(entry))
             xr_set_add(new_set, xr_to_shared(X, entry->value));
     }
     return XR_FROM_PTR(new_set);

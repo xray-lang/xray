@@ -5,13 +5,18 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xset.h - Hash-based Set with open addressing
+ * xset.h - Compact ordered hash set (CPython-style compact dict)
  *
  * KEY CONCEPT:
- *   - Open addressing with linear probing
- *   - Tombstone mechanism for deletion
- *   - Small set optimization (linear scan for <=8 elements)
- *   - 75% load factor, power-of-2 capacity
+ *   - Insertion-ordered: entries[] is a dense, append-only array kept in the
+ *     order values were first added; iteration scans it directly, so order
+ *     matches the Map/Set iteration contract (insertion order).
+ *   - indices[] is an open-addressing (linear-probing) hash table of int32
+ *     slots that hold an index into entries[] (or EMPTY / DELETED sentinels).
+ *   - Deletion tombstones the entry (val_tt = 0) and marks its index slot
+ *     DELETED; dead entries are reclaimed when the table is resized/compacted.
+ *   - Empty set allocates nothing (entries/indices NULL, DUMMY flag set); the
+ *     first add allocates both arrays.
  */
 
 #ifndef XSET_H
@@ -23,39 +28,51 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-/* ========== Set Entry ========== */
+/* ========== Set Entry (insertion-order dense slot) ========== */
 
-// state encoding: 0x00=empty, 0x7F=tombstone, 0x80-0xFF=valid (bit7=1, low7=hash prefix)
 typedef struct XrSetEntry {
     XrValue value;
-    uint8_t state;
+    uint32_t hash;   // Cached value hash (avoids recompute on resize/lookup)
+    uint8_t val_tt;  // Value type tag (+1); 0 = empty/tombstone slot
+    uint8_t _pad[3];
 } XrSetEntry;
 
-#define XR_SET_EMPTY 0x00
-#define XR_SET_TOMBSTONE 0x7F
-#define XR_SET_VALID 0x80
+// Entry state
+#define XR_SET_ENTRY_NIL 0
+#define XR_SET_ENTRY_EMPTY(e) ((e)->val_tt == XR_SET_ENTRY_NIL)
+
+/* Index-table sentinels (stored in indices[]). Non-negative values are a
+ * direct index into entries[]. */
+#define XR_SET_IX_EMPTY (-1)
+#define XR_SET_IX_DELETED (-2)
 
 /* ========== Set Object ========== */
 
 typedef struct XrSet {
     XrGCHeader gc;
-    uint32_t capacity;
-    uint32_t count;
-    uint32_t tombstones;
-    XrSetEntry *entries;
+    uint32_t count;         // Live entries (excludes tombstones)
+    uint32_t nentries;      // Used entry slots incl. tombstones (= next append index)
+    uint32_t entries_cap;   // Allocated entries[] capacity
+    uint32_t indices_size;  // indices[] slot count (power of two, 0 = dummy)
+    int32_t *indices;       // Open-addressing table -> entries index / sentinel
+    XrSetEntry *entries;    // Dense insertion-order array
     uint8_t flags;
     uint8_t elem_tid;  // XrTypeId: element type for reified generics (0=any)
     uint8_t _pad[2];   // Alignment
 } XrSet;
 
+// Macros
+#define xr_set_entry(s, i) (&(s)->entries[i])
+
+// Flags
 #define XR_SET_FLAG_WEAK 0x01
+#define XR_SET_FLAG_DUMMY 0x02        // Empty set: no entries/indices allocation
+#define XR_SET_FLAG_NODES_ON_GC 0x04  // entries[]/indices[] live on Region GC heap
 
-/* ========== Set Parameters ========== */
+#define xr_set_isdummy(s) ((s)->flags & XR_SET_FLAG_DUMMY)
 
-#define XR_SET_MIN_CAPACITY 8
-#define XR_SET_LOAD_FACTOR 0.75
-#define XR_SET_GROW_FACTOR 2
-#define XR_SET_SMALL_SIZE 8
+// Max index-table bits
+#define XR_SET_MAXHBITS 30
 
 /* ========== Basic Operations ========== */
 
@@ -84,11 +101,5 @@ XR_FUNC bool xr_set_is_superset(XrSet *set1, XrSet *set2);
 /* ========== Iteration Methods ========== */
 
 XR_FUNC XrArray *xr_set_values(struct XrCoroutine *coro, XrSet *set);
-
-/* ========== Internal Functions ========== */
-
-XR_FUNC XrSetEntry *xr_set_find_entry(XrSet *set, XrValue value, uint32_t *out_index);
-XR_FUNC void xr_set_resize(XrSet *set, uint32_t new_capacity);
-XR_FUNC XrSetEntry *xr_set_find_linear(XrSet *set, XrValue value, uint32_t *out_index);
 
 #endif  // XSET_H

@@ -191,9 +191,9 @@ bool xr_iterator_has_next(XrIterator *iter) {
             return false;
 
         XrSet *set = (XrSet *) iter->source.set;
-        // Skip empty/tombstone entries, park scan_index at next valid entry
-        while (iter->scan_index < set->capacity) {
-            if (set->entries[iter->scan_index].state >= 0x80) {
+        // Skip tombstoned entries, park scan_index at next live entry
+        while (iter->scan_index < set->nentries) {
+            if (!XR_SET_ENTRY_EMPTY(&set->entries[iter->scan_index])) {
                 return true;
             }
             iter->scan_index++;
@@ -270,12 +270,12 @@ XrValue xr_iterator_next(XrIterator *iter) {
         }
 
         XrSet *set = (XrSet *) iter->source.set;
-        while (iter->scan_index < set->capacity) {
+        while (iter->scan_index < set->nentries) {
             XrSetEntry *entry = &set->entries[iter->scan_index];
             iter->scan_index++;  // Move to next position
 
-            // Skip empty slots and tombstones
-            if (entry->state >= 0x80) {
+            // Skip tombstoned entries
+            if (!XR_SET_ENTRY_EMPTY(entry)) {
                 // Found valid entry, return value directly
                 return entry->value;
             }
