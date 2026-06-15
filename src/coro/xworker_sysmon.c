@@ -273,7 +273,10 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     if (!atomic_load(&runtime->running)) {
         // Only join threads if they were started in previous run
         if (atomic_load(&runtime->threads_started)) {
-            xr_thread_join(runtime->sysmon_thread, NULL);
+            if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
+                xr_thread_join(runtime->sysmon_thread, NULL);
+                atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
+            }
             for (int i = 1; i < runtime->worker_count; i++) {
                 XrMachine *wm = runtime->workers[i].m;
                 if (wm)
@@ -284,6 +287,7 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
         // Reset state for next run (threads created lazily on next spawn)
         atomic_store(&runtime->started_workers, 0);
         atomic_store(&runtime->exited_workers, 0);
+        atomic_store(&runtime->sysmon_started, false);
         atomic_store(&runtime->threads_started, false);
         atomic_store(&runtime->running, true);
     }
@@ -332,13 +336,17 @@ int xr_main_thread_run(XrayIsolate *X, XrCoroutine *main_coro) {
     // Join worker threads before returning — prevents use-after-free when
     // caller frees protos while workers still execute coroutine bytecode.
     if (atomic_load(&runtime->threads_started)) {
-        xr_thread_join(runtime->sysmon_thread, NULL);
+        if (atomic_load_explicit(&runtime->sysmon_started, memory_order_acquire)) {
+            xr_thread_join(runtime->sysmon_thread, NULL);
+            atomic_store_explicit(&runtime->sysmon_started, false, memory_order_release);
+        }
         for (int i = 1; i < runtime->worker_count; i++) {
             XrMachine *wm = runtime->workers[i].m;
             if (wm)
                 xr_thread_join(wm->thread, NULL);
         }
         // Mark threads as joined so next run doesn't double-join
+        atomic_store(&runtime->sysmon_started, false);
         atomic_store(&runtime->threads_started, false);
     }
 

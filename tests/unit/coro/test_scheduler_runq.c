@@ -381,6 +381,19 @@ TEST(coro_ext_init_sets_timer_and_owner_sentinels) {
     xr_free(ext);
 }
 
+TEST(single_worker_ensure_skips_sysmon_thread) {
+    SchedulerFixture f;
+    ASSERT_TRUE(scheduler_fixture_init(&f));
+
+    xr_runtime_ensure_workers(&f.runtime);
+
+    ASSERT_TRUE(atomic_load_explicit(&f.runtime.threads_started, memory_order_acquire));
+    ASSERT_FALSE(atomic_load_explicit(&f.runtime.sysmon_started, memory_order_acquire));
+    ASSERT_EQ_INT(atomic_load_explicit(&f.runtime.started_workers, memory_order_acquire), 0);
+
+    scheduler_fixture_cleanup(&f);
+}
+
 TEST(work_stealing_moves_batch_and_returns_direct_item) {
     StealFixture f;
     ASSERT_TRUE(steal_fixture_init(&f));
@@ -557,6 +570,7 @@ RUN_TEST(lifo_budget_flushes_run_next_to_local_queue);
 RUN_TEST(global_inject_spill_preserves_all_work);
 RUN_TEST(global_coro_pool_get_pops_bounded_batches);
 RUN_TEST(coro_ext_init_sets_timer_and_owner_sentinels);
+RUN_TEST(single_worker_ensure_skips_sysmon_thread);
 RUN_TEST(work_stealing_moves_batch_and_returns_direct_item);
 RUN_TEST(spawn_burst_shares_same_parent_fanout);
 RUN_TEST(spawn_burst_resets_after_yield);
