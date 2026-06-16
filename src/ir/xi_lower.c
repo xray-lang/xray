@@ -56,10 +56,12 @@ static void xi_lower_grow_vars(XiLower *l, int need) {
         l->shared_slot_classes, (size_t) nc * sizeof(struct XiClassData *));
     l->shared_slot_enums =
         (XiEnumData **) xr_realloc(l->shared_slot_enums, (size_t) nc * sizeof(XiEnumData *));
+    l->shared_slot_imports =
+        (XiImportRef **) xr_realloc(l->shared_slot_imports, (size_t) nc * sizeof(XiImportRef *));
     l->var_defs = (XiValue **) xr_realloc(l->var_defs,
                                           (size_t) nc * (size_t) l->block_cap * sizeof(XiValue *));
     XR_CHECK(l->vars && l->shared_map && l->shared_slot_funcs && l->shared_slot_classes &&
-                 l->shared_slot_enums && l->var_defs,
+                 l->shared_slot_enums && l->shared_slot_imports && l->var_defs,
              "xi_lower: grow vars OOM");
 
     int added = nc - l->var_cap;
@@ -69,6 +71,7 @@ static void xi_lower_grow_vars(XiLower *l, int need) {
     memset(&l->shared_slot_funcs[l->var_cap], 0, (size_t) added * sizeof(struct XiFunc *));
     memset(&l->shared_slot_classes[l->var_cap], 0, (size_t) added * sizeof(struct XiClassData *));
     memset(&l->shared_slot_enums[l->var_cap], 0, (size_t) added * sizeof(XiEnumData *));
+    memset(&l->shared_slot_imports[l->var_cap], 0, (size_t) added * sizeof(XiImportRef *));
     memset(&l->var_defs[(size_t) l->var_cap * (size_t) l->block_cap], 0,
            (size_t) added * (size_t) l->block_cap * sizeof(XiValue *));
     l->var_cap = nc;
@@ -493,10 +496,11 @@ XR_FUNC void xi_lower_init(XiLower *l, struct XaAnalyzer *analyzer, struct XrayI
     l->shared_slot_classes =
         (struct XiClassData **) xr_calloc((size_t) l->var_cap, sizeof(struct XiClassData *));
     l->shared_slot_enums = (XiEnumData **) xr_calloc((size_t) l->var_cap, sizeof(XiEnumData *));
+    l->shared_slot_imports = (XiImportRef **) xr_calloc((size_t) l->var_cap, sizeof(XiImportRef *));
     l->var_defs =
         (XiValue **) xr_calloc((size_t) l->var_cap * (size_t) l->block_cap, sizeof(XiValue *));
     XR_CHECK(l->vars && l->shared_map && l->shared_slot_funcs && l->shared_slot_classes &&
-                 l->shared_slot_enums && l->var_defs,
+                 l->shared_slot_enums && l->shared_slot_imports && l->var_defs,
              "xi_lower: failed to allocate variable maps");
 
     /* Initialize shared_map to -1 (no shared index) */
@@ -528,6 +532,8 @@ XR_FUNC void xi_lower_cleanup(XiLower *l) {
     l->shared_slot_classes = NULL;
     xr_free(l->shared_slot_enums);
     l->shared_slot_enums = NULL;
+    xr_free(l->shared_slot_imports);
+    l->shared_slot_imports = NULL;
 }
 
 /* ========== Method Symbol Resolution ========== */
@@ -1140,7 +1146,7 @@ XR_FUNC XiFunc *xi_lower_program_ex(AstNode *program_node, struct XaAnalyzer *an
     if (repl_syms) {
         for (int i = 0; i < repl_syms->count; i++) {
             XrReplSymbol *s = &repl_syms->symbols[i];
-            if (!s->name || !s->name->data)
+            if (!s->name || s->name->length == 0)
                 continue;
             int vid = xi_lower_var_create(&l, 0, s->name->data, l.type_any);
             if (vid < 0 || vid >= l.var_cap)

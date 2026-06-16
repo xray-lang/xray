@@ -1,0 +1,8 @@
+import math
+import { sqrt, pow } from "math"
+
+print(int(math.sqrt(81)))
+print(int(math.pow(2, 10)))
+print(math.PI > 3.0)
+print(int(sqrt(64)))
+print(int(pow(3, 4)))

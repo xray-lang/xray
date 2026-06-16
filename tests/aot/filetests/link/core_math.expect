@@ -1,0 +1,11 @@
+contains=xaot-plan v0
+contains="generated_c_files": ["<aot-generated-c>"]
+contains="runtime_objects": []
+contains="stdlib_objects": ["math"]
+contains="system_libs": ["m"]
+contains="defines": ["XRT_IMPL"]
+not_contains="runtime_objects": ["xray_core"]
+c_contains=sqrt(
+c_contains=pow(
+c_not_contains=XR_FROM_FLOAT(sqrt
+c_not_contains=xrt_method_

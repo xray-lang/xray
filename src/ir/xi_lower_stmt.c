@@ -2627,6 +2627,8 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
             b.slot = l->shared_map[var_id];
             b.name = l->vars[var_id].name;
             b.type = l->vars[var_id].type;
+            if (b.slot < l->var_cap)
+                l->shared_slot_imports[b.slot] = ref;
             xi_lower_emit_top_store(l, b, v);
         }
         return;
@@ -2683,6 +2685,8 @@ static void lower_import_stmt(XiLower *l, AstNode *node) {
             b.slot = l->shared_map[var_id];
             b.name = l->vars[var_id].name;
             b.type = l->vars[var_id].type;
+            if (b.slot < l->var_cap)
+                l->shared_slot_imports[b.slot] = ref;
             xi_lower_emit_top_store(l, b, v);
         }
     }

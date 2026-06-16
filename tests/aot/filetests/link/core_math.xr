@@ -1,0 +1,6 @@
+import math
+import { sqrt, pow } from "math"
+
+print(math.sqrt(81))
+print(sqrt(64))
+print(pow(3, 4))

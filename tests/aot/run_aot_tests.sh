@@ -62,7 +62,7 @@ run_test() {
     else
         if ! cc -O2 -Wall -Wno-initializer-overrides \
                 -I "$AOT_INCLUDE" -I "$VM_INCLUDE" \
-                "$c_out" -o "$bin_out" 2>/dev/null; then
+                "$c_out" -o "$bin_out" -lm 2>/dev/null; then
             echo "FAIL (C compile error)"
             FAIL=$((FAIL + 1))
             return

@@ -311,6 +311,22 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     fprintf(out, ")");
 }
 
+static bool xicgen_import_ref_is_core_math_member(const XiImportRef *ref) {
+    if (!ref || !ref->module_path || strcmp(ref->module_path, "math") != 0 || !ref->member_name)
+        return false;
+    static const char *members[] = {
+        "abs",  "floor", "ceil",  "round",    "sqrt",     "pow",   "sin",   "cos",      "tan",
+        "asin", "acos",  "atan",  "atan2",    "log",      "log10", "log2",  "exp",      "sinh",
+        "cosh", "tanh",  "hypot", "cbrt",     "trunc",    "fmod",  "log1p", "expm1",    "min",
+        "max",  "clamp", "lerp",  "degToRad", "radToDeg", "sign",  "isNaN", "isFinite",
+    };
+    for (int i = 0; i < (int) (sizeof(members) / sizeof(members[0])); i++) {
+        if (strcmp(ref->member_name, members[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                               const char *prefix) {
     (void) f;
@@ -337,8 +353,11 @@ static void xicgen_import_ref(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         }
     }
     if (!found) {
-        if (ref && ref->module_path && !ref->member_name && strcmp(ref->module_path, "time") == 0) {
-            fprintf(out, "XR_NULL_VAL /* builtin module: time */");
+        if (ref && ref->module_path && !ref->member_name &&
+            (strcmp(ref->module_path, "time") == 0 || strcmp(ref->module_path, "math") == 0)) {
+            fprintf(out, "XR_NULL_VAL /* builtin module: %s */", ref->module_path);
+        } else if (xicgen_import_ref_is_core_math_member(ref)) {
+            fprintf(out, "XR_NULL_VAL /* builtin math.%s */", ref->member_name);
         } else {
             ctx->error = true;
             fprintf(stderr, "[xi_cgen] ERROR: unresolved AOT import '%s.%s'\n",
@@ -881,6 +900,170 @@ static void xicgen_range(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
     fprintf(out, ")");
 }
 
+static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {
+    if (!name || !out_rep)
+        return false;
+    if (strcmp(name, "floor") == 0 || strcmp(name, "ceil") == 0 || strcmp(name, "round") == 0 ||
+        strcmp(name, "trunc") == 0 || strcmp(name, "sign") == 0 || strcmp(name, "isNaN") == 0 ||
+        strcmp(name, "isFinite") == 0) {
+        *out_rep = XR_REP_I64;
+        return true;
+    }
+    *out_rep = XR_REP_F64;
+    return true;
+}
+
+static void xicgen_emit_math_arg(FILE *out, const XiValue *v) {
+    if (cg_rep(v) == XR_REP_TAGGED) {
+        fprintf(out, "xr_value_to_f64_coerce(");
+        emit_vref(out, v);
+        fprintf(out, ")");
+        return;
+    }
+    emit_value_as_rep(out, v, XR_REP_F64);
+}
+
+static void xicgen_emit_math_minmax(FILE *out, const XiValue *v, const char *fn, uint16_t index) {
+    if (index >= v->nargs) {
+        fprintf(out, "NAN");
+        return;
+    }
+    if (index + 1 == v->nargs) {
+        xicgen_emit_math_arg(out, v->args[index]);
+        return;
+    }
+    fprintf(out, "%s(", fn);
+    xicgen_emit_math_arg(out, v->args[index]);
+    fprintf(out, ", ");
+    xicgen_emit_math_minmax(out, v, fn, (uint16_t) (index + 1));
+    fprintf(out, ")");
+}
+
+static bool xicgen_emit_math_raw_expr(FILE *out, const XiValue *v, const char *name) {
+    if (!name || !v)
+        return false;
+
+    if (strcmp(name, "min") == 0) {
+        xicgen_emit_math_minmax(out, v, "fmin", 0);
+        return true;
+    }
+    if (strcmp(name, "max") == 0) {
+        xicgen_emit_math_minmax(out, v, "fmax", 0);
+        return true;
+    }
+    if (strcmp(name, "clamp") == 0 && v->nargs == 3) {
+        fprintf(out, "fmin(fmax(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ", ");
+        xicgen_emit_math_arg(out, v->args[1]);
+        fprintf(out, "), ");
+        xicgen_emit_math_arg(out, v->args[2]);
+        fprintf(out, ")");
+        return true;
+    }
+    if (strcmp(name, "lerp") == 0 && v->nargs == 3) {
+        fprintf(out, "(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, " + (");
+        xicgen_emit_math_arg(out, v->args[1]);
+        fprintf(out, " - ");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ") * ");
+        xicgen_emit_math_arg(out, v->args[2]);
+        fprintf(out, ")");
+        return true;
+    }
+    if (strcmp(name, "degToRad") == 0 && v->nargs == 1) {
+        fprintf(out, "(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, " * 0.01745329251994329577)");
+        return true;
+    }
+    if (strcmp(name, "radToDeg") == 0 && v->nargs == 1) {
+        fprintf(out, "(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, " * 57.2957795130823208768)");
+        return true;
+    }
+    if (strcmp(name, "sign") == 0 && v->nargs == 1) {
+        fprintf(out, "((int64_t)((");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ") > 0.0) - (int64_t)((");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ") < 0.0))");
+        return true;
+    }
+    if (strcmp(name, "isNaN") == 0 && v->nargs == 1) {
+        fprintf(out, "isnan(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ")");
+        return true;
+    }
+    if (strcmp(name, "isFinite") == 0 && v->nargs == 1) {
+        fprintf(out, "isfinite(");
+        xicgen_emit_math_arg(out, v->args[0]);
+        fprintf(out, ")");
+        return true;
+    }
+
+    struct {
+        const char *name;
+        const char *c_name;
+        uint16_t nargs;
+        bool returns_int;
+    } table[] = {
+        {"abs", "fabs", 1, false},    {"floor", "floor", 1, true},  {"ceil", "ceil", 1, true},
+        {"round", "round", 1, true},  {"sqrt", "sqrt", 1, false},   {"pow", "pow", 2, false},
+        {"sin", "sin", 1, false},     {"cos", "cos", 1, false},     {"tan", "tan", 1, false},
+        {"asin", "asin", 1, false},   {"acos", "acos", 1, false},   {"atan", "atan", 1, false},
+        {"atan2", "atan2", 2, false}, {"log", "log", 1, false},     {"log10", "log10", 1, false},
+        {"log2", "log2", 1, false},   {"exp", "exp", 1, false},     {"sinh", "sinh", 1, false},
+        {"cosh", "cosh", 1, false},   {"tanh", "tanh", 1, false},   {"hypot", "hypot", 2, false},
+        {"cbrt", "cbrt", 1, false},   {"trunc", "trunc", 1, true},  {"fmod", "fmod", 2, false},
+        {"log1p", "log1p", 1, false}, {"expm1", "expm1", 1, false},
+    };
+
+    for (int i = 0; i < (int) (sizeof(table) / sizeof(table[0])); i++) {
+        if (strcmp(name, table[i].name) != 0)
+            continue;
+        if (v->nargs != table[i].nargs)
+            return false;
+        if (table[i].returns_int)
+            fprintf(out, "(int64_t)");
+        fprintf(out, "%s(", table[i].c_name);
+        xicgen_emit_math_arg(out, v->args[0]);
+        if (table[i].nargs == 2) {
+            fprintf(out, ", ");
+            xicgen_emit_math_arg(out, v->args[1]);
+        }
+        fprintf(out, ")");
+        return true;
+    }
+    return false;
+}
+
+static bool xicgen_emit_math_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                          const XiValue *v, const char *bn) {
+    if (!bn || strncmp(bn, "math.", 5) != 0)
+        return false;
+    const char *name = bn + 5;
+    XrRep expr_rep = XR_REP_TAGGED;
+    if (!xicgen_math_result_rep(name, &expr_rep)) {
+        ctx->error = true;
+        emit_codegen_abort_expr(out);
+        return true;
+    }
+    XrRep target_rep = xicgen_value_c_storage_rep(ctx, f, v);
+    const char *suffix = emit_conversion_prefix(out, v ? v->type : NULL, expr_rep, target_rep);
+    if (!xicgen_emit_math_raw_expr(out, v, name)) {
+        fprintf(stderr, "[xi_cgen] ERROR: unsupported AOT math builtin '%s'\n", name);
+        emit_codegen_abort_expr(out);
+        ctx->error = true;
+    }
+    emit_conversion_suffix(out, suffix);
+    return true;
+}
+
 static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
     const char *bn = v->aux ? (const char *) v->aux : "";
@@ -964,6 +1147,8 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         xicgen_range(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "typeof") == 0) {
         xicgen_typeof(ctx, out, f, v, prefix);
+    } else if (xicgen_emit_math_builtin_expr(ctx, out, f, v, bn)) {
+        /* Expression emitted by the math helper. */
     } else if (strcmp(bn, "regex_compile") == 0) {
         XR_DCHECK(v->nargs >= 2, "builtin regex_compile: need 2 args");
         fprintf(out, "xr_regex_compile_literal(iso, ");
