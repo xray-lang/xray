@@ -1,8 +1,8 @@
 // anchor: frontend-var-count-limit
 // Lifted frontend cap XI_LOWER_MAX_VARS (was a fixed 256): a function may
-// now declare more than 256 distinct source variables.  Register pressure
-// stays low here (each temp dies before the next), so this clears the old
-// var cap without hitting the bytecode 255-register ABI limit.
+// now declare more than 256 distinct source variables. Register pressure stays
+// low here (each temp dies before the next), so this isolates the frontend var
+// cap without depending on the widened 16-bit bytecode register operand space.
 fn many() -> int {
     let total = 0
     let a0 = 0; total = total + a0; let a1 = 1; total = total + a1; let a2 = 2; total = total + a2; let a3 = 3; total = total + a3; let a4 = 4; total = total + a4;
