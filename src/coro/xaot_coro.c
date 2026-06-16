@@ -47,6 +47,7 @@ typedef struct XrAotCoroState {
 
 enum {
     XR_AOT_VALUE_TAG_ARRAY = 15,
+    XR_AOT_VALUE_TAG_ENUM = 24,
 };
 
 typedef struct XrAotArrayView {
@@ -561,7 +562,11 @@ static XrValue aot_builtin_enum_member(const XrAotContext *ctx, int builtin_inde
     XrEnumType *type = aot_builtin_enum_type(ctx, builtin_index);
     if (!type || member_index >= type->member_count || !type->members[member_index].instance)
         return xr_null();
-    return XR_FROM_PTR(type->members[member_index].instance);
+    XrValue value = xr_null();
+    value.tag = XR_AOT_VALUE_TAG_ENUM;
+    value.ext = member_index;
+    value.ptr = type->members[member_index].instance;
+    return value;
 }
 
 static XrValue aot_builtin_adt_value(const XrAotContext *ctx, int builtin_index,
@@ -1006,12 +1011,26 @@ XrAotResult xr_aot_await_task(const XrAotContext *ctx, XrValue task_value, XrSlo
     return xr_aot_error(XR_NULL_VAL, false);
 }
 
+static XrTask *aot_resume_await_task(XrCoroWaitState *wait) {
+    if (!wait)
+        return NULL;
+    XrTask *task = atomic_load_explicit(&wait->await_task, memory_order_acquire);
+    if (task)
+        return task;
+    /* A wake/unregister race can clear await_task before AOT resumes; a
+     * resolved token still records the task that published the result. */
+    int state = atomic_load_explicit(&wait->await_token.state, memory_order_acquire);
+    if (state == XR_AWAIT_WAIT_RESOLVED)
+        return atomic_load_explicit(&wait->await_token.task, memory_order_acquire);
+    return NULL;
+}
+
 XrAotResult xr_aot_await_task_resume(const XrAotContext *ctx, XrSlotRef out_slot,
                                      bool discard_result) {
     if (!ctx || !ctx->coro)
         return xr_aot_error(XR_NULL_VAL, false);
     XrCoroWaitState *wait = xr_coro_wait_state(ctx->coro);
-    XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
+    XrTask *task = aot_resume_await_task(wait);
     if (!task)
         return xr_aot_error(XR_NULL_VAL, false);
     XrCoroBlockResult block =
@@ -1106,7 +1125,7 @@ XrAotResult xr_aot_task_await_result_resume(const XrAotContext *ctx, XrSlotRef r
         return xr_aot_error(XR_NULL_VAL, false);
 
     XrCoroWaitState *wait = xr_coro_wait_state(ctx->coro);
-    XrTask *task = wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
+    XrTask *task = aot_resume_await_task(wait);
     if (!task)
         return xr_aot_error(XR_NULL_VAL, false);
 

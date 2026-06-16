@@ -709,6 +709,8 @@ static bool cg_coro_phi_needs_frame(XiCgenCtx *ctx, const XiFunc *f, const XiLiv
 
 static bool cg_coro_value_may_hold_frame_root(XiCgenCtx *ctx, const XiFunc *f,
                                               const XiLiveness *live, const XiValue *v) {
+    if (v && v->op == XI_GO)
+        return true;
     return cg_coro_value_live_across_suspend(ctx, f, live, v) ||
            cg_coro_value_needs_runtime_slot(v) || cg_coro_value_is_aggregate_await_tasks(f, v);
 }
@@ -2144,13 +2146,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
             char tmp[32];
             snprintf(tmp, sizeof(tmp), "_task_field_%u", v->id);
             emit_assign_from_xrvalue_temp(out, v, tmp);
-            if (cg_rep(v) == XR_REP_TAGGED && cg_task_field_needs_xrt_bridge(field)) {
-                fprintf(out, "    ");
-                emit_vref(out, v);
-                fprintf(out, " = xr_aot_bridge_value_to_xrt(");
-                emit_vref(out, v);
-                fprintf(out, ");\n");
-            }
         }
         return;
     }
@@ -2316,6 +2311,9 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = %d;\n", sid);
+        fprintf(out, "    _wq_pop_slot_%u = ", v->id);
+        emit_coro_optional_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
         fprintf(out, "    _wq_pop_%u = xr_aot_work_queue_pop_resume(ctx, _wq_pop_slot_%u);\n",
                 v->id, v->id);
         fprintf(out, "    if (_wq_pop_%u.kind == XR_AOT_RUN_BLOCKED)\n", v->id);
@@ -2489,6 +2487,16 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    goto S%d_DONE;\n", sid);
         fprintf(out, "S%d:;\n", sid);
         fprintf(out, "    f->state = 0;\n");
+        fprintf(out, "    _chan_recv_slot_%u = ", v->id);
+        emit_coro_slot_ref(ctx, out, f, prefix, v);
+        fprintf(out, ";\n");
+        fprintf(out, "    _chan_recv_ok_slot_%u = ", v->id);
+        if (status) {
+            emit_coro_slot_ref(ctx, out, f, prefix, status);
+        } else {
+            fprintf(out, "xr_slot_none()");
+        }
+        fprintf(out, ";\n");
         fprintf(out,
                 "    _chan_recv_%u = xr_aot_chan_recv_pair_resume(ctx, _chan_recv_slot_%u, "
                 "_chan_recv_ok_slot_%u);\n",

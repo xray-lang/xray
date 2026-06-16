@@ -3184,6 +3184,8 @@ TEST(cgen_coro_fused_scalar_channel_recv_uses_typed_pair_bridge) {
            "fused scalar channel recv must use the typed pair bridge");
     assert(!contains(code, "xr_aot_chan_recv_pair(ctx,") &&
            "fused scalar channel recv must not call the generic pair bridge");
+    assert(contains(code, "S1:;\n    f->state = 0;\n    _chan_recv_slot_") &&
+           "fused channel recv resume must rebuild the frame slot after jumping to the label");
 
     printf("  Generated fused scalar channel recv %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -3542,7 +3544,38 @@ TEST(cgen_channel_fields_use_aot_helpers) {
     xi_func_free(ir);
 }
 
-TEST(cgen_coro_task_status_uses_task_bridge) {
+TEST(cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task) {
+    const char *src = "shared const queue: WorkQueue<int> = WorkQueue<int>(1, 4)\n"
+                      "fn consumer() -> int {\n"
+                      "    let item = queue.pop(0)\n"
+                      "    return item ?? 0\n"
+                      "}\n"
+                      "let task = go consumer()\n"
+                      "assert_true(queue.push(7, 0))\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT WorkQueue pop should generate");
+    assert(contains(code, "xr_aot_work_queue_pop(ctx,") &&
+           "initial WorkQueue.pop must use the AOT bridge");
+    assert(contains(code, "S1:;\n    f->state = 1;\n    _wq_pop_slot_") &&
+           "WorkQueue.pop resume must rebuild the frame slot after jumping to the label");
+    assert(contains(code, "xr_aot_work_queue_pop_resume(ctx, _wq_pop_slot_") &&
+           "WorkQueue.pop resume must use the rebuilt slot");
+    assert(contains(code, "xr_aot_trace_frame_value(visitor, f->v") &&
+           "go-created Task values kept across spawn continuation must be traced");
+
+    printf("  Generated WorkQueue resume slot rebuild %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_task_status_uses_native_enum_status) {
     const char *src = "fn wait_for_value(ch: Channel<int>) -> int {\n"
                       "    match (ch.recv()) {\n"
                       "        Recv.Value(value) -> { return value }\n"
@@ -3590,6 +3623,8 @@ TEST(cgen_coro_task_status_uses_task_bridge) {
     assert(contains(code, "xr_aot_task_cancel(ctx,") && "Task.cancel must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_done(ctx,") && "Task.done must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_status(ctx,") && "Task.status must use the AOT Task bridge");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_task_status") &&
+           "Task.status must already return AOT-native enum values");
     assert(contains(code, "xr_aot_task_poll(ctx,") && "Task.poll must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_await_result(ctx,") &&
            "Task.awaitResult must use the AOT TaskResult bridge");
@@ -3597,6 +3632,8 @@ TEST(cgen_coro_task_status_uses_task_bridge) {
            "sync AOT Task.done must use the AOT Task bridge");
     assert(contains(code, "xr_aot_task_status(NULL,") &&
            "sync AOT Task.status must use the AOT Task bridge");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(xr_aot_task_status(NULL") &&
+           "sync Task.status must already return AOT-native enum values");
     assert(contains(code, "xr_aot_task_poll(NULL,") &&
            "sync AOT Task.poll must use the AOT Task bridge");
     assert(!contains(code, "xrt_method_0(v") &&
@@ -3604,7 +3641,7 @@ TEST(cgen_coro_task_status_uses_task_bridge) {
     assert(!contains(code, "xrt_getprop(v") &&
            "Task fields must not fall back to AOT dynamic property dispatch");
 
-    printf("  Generated Task status bridge %zu bytes of C code\n", strlen(code));
+    printf("  Generated native Task.status helper %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -3703,7 +3740,8 @@ int main(void) {
     run_cgen_coro_await_any_uses_typed_aggregate_bridge();
     run_cgen_coro_scope_exit_publishes_state_before_block();
     run_cgen_channel_fields_use_aot_helpers();
-    run_cgen_coro_task_status_uses_task_bridge();
+    run_cgen_coro_work_queue_resume_rebuilds_slot_and_traces_task();
+    run_cgen_coro_task_status_uses_native_enum_status();
 
     teardown();
 
