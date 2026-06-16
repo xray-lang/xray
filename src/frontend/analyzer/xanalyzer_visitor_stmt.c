@@ -55,6 +55,121 @@ XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *ta
                                &loc);
 }
 
+static bool xa_shared_init_type_needs_boundary(XrType *type) {
+    if (!type || XR_TYPE_IS_UNKNOWN(type) || XR_TYPE_IS_NULL(type))
+        return false;
+    if (type->is_value_type)
+        return true;
+    if (XR_TYPE_IS_UNION(type)) {
+        int n = xr_type_union_count(type);
+        for (int i = 0; i < n; i++) {
+            if (xa_shared_init_type_needs_boundary(xr_type_union_member(type, i)))
+                return true;
+        }
+        return false;
+    }
+    switch (type->kind) {
+        case XR_KIND_ARRAY:
+        case XR_KIND_MAP:
+        case XR_KIND_SET:
+        case XR_KIND_CHANNEL:
+        case XR_KIND_JSON:
+        case XR_KIND_INSTANCE:
+        case XR_KIND_FUNCTION:
+        case XR_KIND_TUPLE:
+        case XR_KIND_FIXED_ARRAY:
+        case XR_KIND_TYPE_PARAM:
+            return true;
+        default:
+            return false;
+    }
+}
+
+static bool xa_call_is_copy_builtin(AstNode *node) {
+    if (!node || node->type != AST_CALL_EXPR)
+        return false;
+    CallExprNode *call = &node->as.call_expr;
+    return call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+           strcmp(call->callee->as.variable.name, "copy") == 0 && call->arg_count == 1;
+}
+
+static AstNode *xa_shared_boundary_source(AstNode *init, bool *is_move) {
+    if (is_move)
+        *is_move = false;
+    if (!init || xa_call_is_copy_builtin(init))
+        return NULL;
+    if (init->type == AST_MOVE_EXPR) {
+        if (is_move)
+            *is_move = true;
+        AstNode *inner = init->as.move_expr.expr;
+        return (inner && inner->type == AST_VARIABLE) ? inner : NULL;
+    }
+    return init->type == AST_VARIABLE ? init : NULL;
+}
+
+static XaSymbol *xa_lookup_shared_source_symbol(XaInferContext *ctx, AstNode *source) {
+    if (!ctx || !source || source->type != AST_VARIABLE || !source->as.variable.name)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, source->as.variable.name);
+    if (!sym && ctx->analyzer->global_scope)
+        sym = xa_scope_lookup(ctx->analyzer->global_scope, source->as.variable.name);
+    return sym;
+}
+
+static void xa_check_shared_initializer_boundary(XaInferContext *ctx, AstNode *decl_node,
+                                                 XrType *init_type) {
+    if (!ctx || !decl_node)
+        return;
+    VarDeclNode *var = &decl_node->as.var_decl;
+    if (var->storage_mode != XR_STORAGE_SHARED || !var->initializer)
+        return;
+
+    bool is_move = false;
+    AstNode *source = xa_shared_boundary_source(var->initializer, &is_move);
+    if (!source)
+        return;
+
+    XaSymbol *src_sym = xa_lookup_shared_source_symbol(ctx, source);
+    if (!src_sym || src_sym->kind != XA_SYM_VARIABLE)
+        return;
+
+    XrLocation loc = {
+        .file = ctx->file_path, .line = var->initializer->line, .column = var->initializer->column};
+    const char *src_name = source->as.variable.name ? source->as.variable.name : "?";
+
+    if (src_sym->is_shared) {
+        if (!is_move && src_sym->is_const && var->is_const)
+            return;
+        if (is_move)
+            return;
+        char msg[256];
+        snprintf(msg, sizeof(msg),
+                 "shared binding from 'shared let' variable '%s' must use 'move %s' or "
+                 "'copy(%s)'",
+                 src_name, src_name, src_name);
+        xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH,
+                                   msg, &loc);
+        return;
+    }
+
+    if (!xa_shared_init_type_needs_boundary(init_type))
+        return;
+
+    char msg[256];
+    if (is_move) {
+        snprintf(msg, sizeof(msg),
+                 "move cannot promote local reference value '%s' into a shared binding; "
+                 "use copy(%s)",
+                 src_name, src_name);
+    } else {
+        snprintf(msg, sizeof(msg),
+                 "shared binding from local reference value '%s' requires copy(%s)", src_name,
+                 src_name);
+    }
+    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR, XR_ERR_ANALYZE_TYPE_MISMATCH, msg,
+                               &loc);
+}
+
 /* ============================================================================
  * Pass 2: Statement Visitors
  * ============================================================================
@@ -107,6 +222,7 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
         // Store inferred initializer type in the analyzer side table
         // (the canonical source for downstream codegen / LSP).
         xa_analyzer_set_node_type(ctx->analyzer, var->initializer, init_type);
+        xa_check_shared_initializer_boundary(ctx, node, init_type);
 
         if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
             XrLocation loc = {.file = ctx->file_path, .line = node->line, .column = node->column};
