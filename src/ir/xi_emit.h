@@ -21,9 +21,12 @@
  *     5. Jump target patching
  *
  * CONSTRAINTS:
- *   - Max 255 registers (VM limit). Functions exceeding this fail.
- *   - Constants are added to XrProto.constants pool.
- *   - Line info is set to 0 (no source mapping in v1).
+ *   - VM operands are 16-bit; 0xffff is reserved internally as the emitter
+ *     sentinel, so functions may use registers 0..65534.
+ *   - Constants are added to XrProto.constants pool and encoded through
+ *     widened 32-bit Bx payloads where applicable.
+ *   - Source line info is preserved in XrProto.lineinfo for diagnostics and
+ *     native debug mapping.
  */
 
 #ifndef XI_EMIT_H

@@ -87,6 +87,10 @@ TEST(opcode_fits_16bits) {
 
 /* ========== Instruction Size Constants ========== */
 
+TEST(instruction_word_is_64_bits) {
+    ASSERT_EQ_UINT(sizeof(XrInstruction), 8);
+}
+
 TEST(instruction_size_constants) {
     ASSERT_EQ_INT(SIZE_OP, 16);
     ASSERT_EQ_INT(SIZE_A, 16);
@@ -147,6 +151,7 @@ static void run_all_tests(void) {
     RUN_TEST(opcode_fits_16bits);
 
     RUN_TEST_SUITE("Instruction Constants");
+    RUN_TEST(instruction_word_is_64_bits);
     RUN_TEST(instruction_size_constants);
     RUN_TEST(instruction_max_constants);
 

@@ -265,8 +265,8 @@ static bool cg_func_needs_aot_coro(const XiFunc *f) {
 /* ========== Codegen Context ========== */
 /* Initial capacities for the per-module shared-slot / method / import tables.
  * These grow on demand (cg_reserve_shared / _methods / _imports), so AOT can
- * compile modules with more than the starting counts — the real ceiling for
- * large programs, since AOT (Xi->C) has no bytecode 255-register limit. */
+ * compile modules with more than the starting counts.  The Xi->C path is not
+ * constrained by the VM bytecode register operand space. */
 #define CG_INIT_SHARED 512
 #define CG_INIT_METHODS 256
 #define CG_INIT_IMPORTS 256
