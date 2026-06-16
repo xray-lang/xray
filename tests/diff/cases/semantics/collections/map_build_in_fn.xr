@@ -1,0 +1,34 @@
+// anchor: collection-map-build-in-function
+// Regression for a JIT codegen bug: building a map inside a (non-main)
+// function with the loop induction variable as the key crashed with
+// "map_set: NULL key". The induction variable is a tagged i64 phi; its proven
+// scalar tag was not exposed to call-argument boxing, so the key was emitted
+// with an unwritten (null) runtime tag and decoded as null. Returning the map
+// forces a full JIT compile (no field-load bail-out), exposing the bug.
+// Must agree across VM / JIT / AOT.
+fn squares(n: int) -> Map<int, int> {
+    let m: Map<int, int> = #{}
+    for (i in 0..n) {
+        m.set(i, i * i)
+    }
+    return m
+}
+
+fn total(m: Map<int, int>) -> int {
+    let sum = 0
+    for (k, v in m) {
+        sum = sum + v
+    }
+    return sum
+}
+
+let sq = squares(6)
+print(sq.length)
+print(sq[0])
+print(sq[3])
+print(sq[5])
+print(total(sq))
+
+let sq2 = squares(3)
+print(sq2.length)
+print(sq2[2])
