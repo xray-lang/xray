@@ -2367,8 +2367,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         fprintf(out, "    if (_chan_send_timeout_%u.kind == XR_AOT_RUN_ERROR)\n", v->id);
         fprintf(out, "        return _chan_send_timeout_%u;\n", v->id);
         fprintf(out, "S%d_DONE:;\n", sid);
-        if (cg_coro_value_has_storage(f, v))
-            emit_bridge_stored_tagged_value(out, v);
         return;
     }
 
