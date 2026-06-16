@@ -32,6 +32,9 @@
 
 /* ========== Feature Set ========== */
 
+#define XAOT_MAX_STDLIB_SYMBOLS 128
+#define XAOT_STDLIB_SYMBOL_NAME_MAX 96
+
 /* Bitfield of stdlib modules referenced by the compiled bundle.
  * One bit per module — used to decide which stdlib .o files to link. */
 typedef uint32_t XaotStdlibSet;
@@ -71,6 +74,8 @@ typedef struct {
     bool need_stacktrace;
     bool need_instanceof;
     XaotStdlibSet stdlib;
+    char stdlib_symbols[XAOT_MAX_STDLIB_SYMBOLS][XAOT_STDLIB_SYMBOL_NAME_MAX];
+    uint16_t n_stdlib_symbols;
 } XaotFeatureSet;
 
 /* ========== Build API ========== */

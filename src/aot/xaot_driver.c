@@ -117,6 +117,19 @@ static XaotStdlibSet stdlib_flag_for_import(const char *name) {
     return 0;
 }
 
+static void features_add_stdlib_symbol(XaotFeatureSet *fs, const char *symbol) {
+    if (!fs || !symbol || !symbol[0] || strlen(symbol) >= XAOT_STDLIB_SYMBOL_NAME_MAX)
+        return;
+    for (uint16_t i = 0; i < fs->n_stdlib_symbols; i++) {
+        if (strcmp(fs->stdlib_symbols[i], symbol) == 0)
+            return;
+    }
+    if (fs->n_stdlib_symbols >= XAOT_MAX_STDLIB_SYMBOLS)
+        return;
+    memcpy(fs->stdlib_symbols[fs->n_stdlib_symbols], symbol, strlen(symbol) + 1);
+    fs->n_stdlib_symbols++;
+}
+
 /* Scan a single XiFunc (non-recursive) for feature-indicating ops */
 static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
     XR_DCHECK(f != NULL, "scan_func_features: NULL func");
@@ -164,6 +177,14 @@ static void scan_func_features(XiFunc *f, XaotFeatureSet *fs) {
                         fs->need_timer = true;
                     }
                     break;
+                case XI_CALL_BUILTIN: {
+                    const char *name = (const char *) v->aux;
+                    if (name && strncmp(name, "math.", 5) == 0) {
+                        fs->stdlib |= XAOT_STDLIB_MATH;
+                        features_add_stdlib_symbol(fs, name);
+                    }
+                    break;
+                }
                 case XI_TRY:
                 case XI_THROW:
                     fs->need_exception = true;
@@ -227,6 +248,16 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {
         if ((stdlib & table[i].flag) &&
             !xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_OBJECT, table[i].name))
+            return false;
+    }
+    return true;
+}
+
+static bool add_stdlib_symbol_manifest_entries(XaotLinkManifest *manifest,
+                                               const XaotFeatureSet *features) {
+    for (uint16_t i = 0; i < features->n_stdlib_symbols; i++) {
+        if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_STDLIB_SYMBOL,
+                                           features->stdlib_symbols[i]))
             return false;
     }
     return true;
@@ -299,6 +330,8 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     }
 
     if (!add_stdlib_manifest_entries(manifest, features->stdlib))
+        goto done;
+    if (!add_stdlib_symbol_manifest_entries(manifest, features))
         goto done;
     ok = true;
 

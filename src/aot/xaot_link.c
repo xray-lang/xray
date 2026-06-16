@@ -44,6 +44,10 @@ static bool xaot_link_select_list(XaotLinkManifest *manifest, XaotLinkEntryKind 
             *out_items = &manifest->stdlib_objects;
             *out_count = &manifest->n_stdlib_objects;
             return true;
+        case XAOT_LINK_STDLIB_SYMBOL:
+            *out_items = &manifest->stdlib_symbols;
+            *out_count = &manifest->n_stdlib_symbols;
+            return true;
         case XAOT_LINK_SYSTEM_LIB:
             *out_items = &manifest->system_libs;
             *out_count = &manifest->n_system_libs;
@@ -82,6 +86,10 @@ static bool xaot_link_list_for_kind(const XaotLinkManifest *manifest, XaotLinkEn
         case XAOT_LINK_STDLIB_OBJECT:
             *out_items = manifest->stdlib_objects;
             *out_count = manifest->n_stdlib_objects;
+            return true;
+        case XAOT_LINK_STDLIB_SYMBOL:
+            *out_items = manifest->stdlib_symbols;
+            *out_count = manifest->n_stdlib_symbols;
             return true;
         case XAOT_LINK_SYSTEM_LIB:
             *out_items = manifest->system_libs;
@@ -347,6 +355,7 @@ XR_FUNC void xaot_link_manifest_free(XaotLinkManifest *manifest) {
     xaot_link_string_list_free(manifest->generated_c_files, manifest->n_generated_c_files);
     xaot_link_string_list_free(manifest->runtime_objects, manifest->n_runtime_objects);
     xaot_link_string_list_free(manifest->stdlib_objects, manifest->n_stdlib_objects);
+    xaot_link_string_list_free(manifest->stdlib_symbols, manifest->n_stdlib_symbols);
     xaot_link_string_list_free(manifest->system_libs, manifest->n_system_libs);
     xaot_link_string_list_free(manifest->defines, manifest->n_defines);
     xaot_link_string_list_free(manifest->cc_flags, manifest->n_cc_flags);
@@ -455,6 +464,8 @@ XR_FUNC char *xaot_link_manifest_dump_json(const XaotLinkManifest *manifest) {
                                             manifest->n_runtime_objects, true);
     ok = ok && xaot_json_write_string_array(out, "stdlib_objects", manifest->stdlib_objects,
                                             manifest->n_stdlib_objects, true);
+    ok = ok && xaot_json_write_string_array(out, "stdlib_symbols", manifest->stdlib_symbols,
+                                            manifest->n_stdlib_symbols, true);
     ok = ok && xaot_json_write_string_array(out, "system_libs", manifest->system_libs,
                                             manifest->n_system_libs, true);
     ok = ok &&
