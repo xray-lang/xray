@@ -37,6 +37,8 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <float.h>
+#include <math.h>
 
 /* ========== Forward Declarations ========== */
 
@@ -594,12 +596,119 @@ static int json_field_index(struct XrType *type, const char *name) {
     return -1;
 }
 
+static const XiImportRef *lower_import_ref_from_value(XiLower *l, const XiValue *v) {
+    while (v &&
+           (v->op == XI_COPY || v->op == XI_MOVE || v->op == XI_BOX || v->op == XI_UNBOX ||
+            v->op == XI_RETAIN || v->op == XI_RELEASE) &&
+           v->nargs >= 1) {
+        v = v->args[0];
+    }
+    if (!v)
+        return NULL;
+    if (v->op == XI_IMPORT_REF && v->aux)
+        return (const XiImportRef *) v->aux;
+    if (v->op != XI_GET_SHARED || v->aux_int < 0)
+        return NULL;
+    int slot = (int) v->aux_int;
+    for (XiLower *p = l; p; p = p->parent) {
+        if (p->is_program && slot < p->var_cap)
+            return p->shared_slot_imports ? p->shared_slot_imports[slot] : NULL;
+    }
+    return NULL;
+}
+
+static bool lower_value_is_whole_module_import(XiLower *l, const XiValue *v,
+                                               const char *module_name) {
+    const XiImportRef *ref = lower_import_ref_from_value(l, v);
+    return ref && ref->module_path && strcmp(ref->module_path, module_name) == 0 &&
+           ref->member_name == NULL;
+}
+
+static bool lower_math_constant(XiLower *l, const char *name, XiValue **out) {
+    if (!out)
+        return false;
+    if (out)
+        *out = NULL;
+    if (!name)
+        return false;
+
+    if (strcmp(name, "PI") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 3.14159265358979323846, l->type_float);
+    else if (strcmp(name, "E") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 2.71828182845904523536, l->type_float);
+    else if (strcmp(name, "TAU") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 6.28318530717958647692, l->type_float);
+    else if (strcmp(name, "SQRT2") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 1.41421356237309504880, l->type_float);
+    else if (strcmp(name, "LN2") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 0.69314718055994530942, l->type_float);
+    else if (strcmp(name, "LN10") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 2.30258509299404568402, l->type_float);
+    else if (strcmp(name, "LOG2E") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 1.44269504088896340736, l->type_float);
+    else if (strcmp(name, "LOG10E") == 0)
+        *out = xi_const_float(l->func, l->cur_block, 0.43429448190325182765, l->type_float);
+    else if (strcmp(name, "EPSILON") == 0)
+        *out = xi_const_float(l->func, l->cur_block, DBL_EPSILON, l->type_float);
+    else if (strcmp(name, "MAX_INT") == 0)
+        *out = xi_const_int(l->func, l->cur_block, INT64_MAX, l->type_int);
+    else if (strcmp(name, "MIN_INT") == 0)
+        *out = xi_const_int(l->func, l->cur_block, INT64_MIN, l->type_int);
+    else if (strcmp(name, "MAX_FLOAT") == 0)
+        *out = xi_const_float(l->func, l->cur_block, DBL_MAX, l->type_float);
+    else if (strcmp(name, "INF") == 0)
+        *out = xi_const_float(l->func, l->cur_block, INFINITY, l->type_float);
+    else if (strcmp(name, "NAN") == 0)
+        *out = xi_const_float(l->func, l->cur_block, NAN, l->type_float);
+    else
+        return false;
+
+    return *out != NULL;
+}
+
+static bool lower_math_call_arity_ok(const char *name, int nargs) {
+    if (!name || nargs < 0)
+        return false;
+    if (strcmp(name, "min") == 0 || strcmp(name, "max") == 0)
+        return true;
+    if (strcmp(name, "pow") == 0 || strcmp(name, "atan2") == 0 || strcmp(name, "hypot") == 0 ||
+        strcmp(name, "fmod") == 0)
+        return nargs == 2;
+    if (strcmp(name, "clamp") == 0 || strcmp(name, "lerp") == 0)
+        return nargs == 3;
+    static const char *unary[] = {
+        "abs",  "floor", "ceil",  "round", "sqrt",     "sin",      "cos",  "tan",   "asin",
+        "acos", "atan",  "log",   "log10", "log2",     "exp",      "sinh", "cosh",  "tanh",
+        "cbrt", "trunc", "log1p", "expm1", "degToRad", "radToDeg", "sign", "isNaN", "isFinite",
+    };
+    for (int i = 0; i < (int) (sizeof(unary) / sizeof(unary[0])); i++) {
+        if (strcmp(name, unary[i]) == 0)
+            return nargs == 1;
+    }
+    return false;
+}
+
+static struct XrType *lower_math_call_result_type(XiLower *l, const char *member) {
+    if (strcmp(member, "floor") == 0 || strcmp(member, "ceil") == 0 ||
+        strcmp(member, "round") == 0 || strcmp(member, "trunc") == 0 || strcmp(member, "sign") == 0)
+        return l->type_int;
+    if (strcmp(member, "isNaN") == 0 || strcmp(member, "isFinite") == 0)
+        return l->type_bool;
+    return l->type_float;
+}
+
 static XiValue *lower_member_access(XiLower *l, AstNode *node) {
     MemberAccessNode *ma = &node->as.member_access;
 
     XiValue *obj = xi_lower_expr(l, ma->object);
     if (!obj)
         return NULL;
+
+    if (lower_value_is_whole_module_import(l, obj, "math")) {
+        XiValue *constant = NULL;
+        if (lower_math_constant(l, ma->name, &constant))
+            return constant;
+    }
 
     struct XrType *result_type = xi_lower_node_type(l, node);
 
@@ -1480,6 +1589,10 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         struct XrType *result_type = xi_lower_node_type(l, node);
 
+        if (lower_value_is_whole_module_import(l, recv, "math") &&
+            lower_math_call_arity_ok(ma->name, n))
+            result_type = lower_math_call_result_type(l, ma->name);
+
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
             strcmp(ma->name, "reserve") == 0 && n == 1) {
             XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL_BUILTIN, result_type, 2);
@@ -1678,6 +1791,13 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
     XiValue **arg_vals = args.items;
     int n = args.count;
 
+    const XiImportRef *callee_import = lower_import_ref_from_value(l, callee_val);
+    const char *math_callee_member =
+        (callee_import && callee_import->module_path &&
+         strcmp(callee_import->module_path, "math") == 0 && callee_import->member_name)
+            ? callee_import->member_name
+            : NULL;
+
     /* Implicit int→float promotion: when a parameter is declared as float
      * but the argument is int, insert XI_CONVERT to coerce at the call site.
      * For generic functions with explicit type args (e.g. identity<float>(0)),
@@ -1725,6 +1845,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
                          callee_val->var_id == (XiVarId) l->self_var_id);
 
     struct XrType *result_type = xi_lower_node_type(l, node);
+    if (math_callee_member && lower_math_call_arity_ok(math_callee_member, n))
+        result_type = lower_math_call_result_type(l, math_callee_member);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
     if (!v)
         return NULL;

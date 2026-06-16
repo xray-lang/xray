@@ -149,6 +149,7 @@ typedef struct XiLower {
     struct XiFunc **shared_slot_funcs;
     struct XiClassData **shared_slot_classes;
     XiEnumData **shared_slot_enums;
+    XiImportRef **shared_slot_imports;
 
     /* Whether this lowering context is for a top-level program */
     bool is_program;

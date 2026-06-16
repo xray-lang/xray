@@ -232,6 +232,10 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
     return true;
 }
 
+static bool stdlib_set_needs_runtime_provider(XaotStdlibSet stdlib) {
+    return (stdlib & ~XAOT_STDLIB_MATH) != 0;
+}
+
 static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest *manifest) {
     XaotTarget target;
     bool ok = false;
@@ -267,7 +271,7 @@ static bool build_link_manifest(const XaotFeatureSet *features, XaotLinkManifest
     if (features->need_coro || features->need_channel || features->need_scope ||
         features->need_timer || features->need_netpoll || features->need_deep_copy ||
         features->need_exception || features->need_reflection || features->need_stacktrace ||
-        features->need_instanceof || features->stdlib) {
+        features->need_instanceof || stdlib_set_needs_runtime_provider(features->stdlib)) {
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_RUNTIME_OBJECT, "xray_core"))
             goto done;
         if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_SYSTEM_LIB, "pthread"))

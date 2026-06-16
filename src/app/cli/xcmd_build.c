@@ -495,11 +495,6 @@ static bool xaot_cli_build_link_command(const XrCliToolchainPlan *plan,
                  xr_cli_toolchain_kind_name(plan->kind));
         return false;
     }
-    if (manifest->n_stdlib_objects > 0 && !needs_runtime) {
-        snprintf(err, err_size, "AOT stdlib manifest entries have no runtime object provider");
-        return false;
-    }
-
     memset(cmd, 0, sizeof(*cmd));
     cmd->program = plan->program;
     if (!xaot_cli_link_add_arg(cmd, plan->program, err, err_size))
