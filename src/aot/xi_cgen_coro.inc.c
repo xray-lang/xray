@@ -2556,7 +2556,6 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                 char tmp[32];
                 snprintf(tmp, sizeof(tmp), "_chan_method_%u", v->id);
                 emit_assign_from_xrvalue_temp(out, v, tmp);
-                emit_bridge_stored_tagged_value(out, v);
             }
             return;
         }

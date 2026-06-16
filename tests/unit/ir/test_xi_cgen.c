@@ -2984,6 +2984,8 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
            "scalar channel trySend should not emit a dead boxed send operand");
     assert(!contains(code, "xrt_value_clone_for_coro(") &&
            "scalar channel trySend values must not call the deep-copy helper");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(") &&
+           "trySend returns a native no-payload SendResult enum and must not be bridged");
 
     printf("  Generated scalar channel trySend %zu bytes of C code\n", strlen(code));
     xr_free(code);
