@@ -228,7 +228,15 @@ XrValue xr_aot_load_builtin_field(const XrAotContext *ctx, int32_t index, const 
                     if (enum_type->members[i].name &&
                         strcmp(enum_type->members[i].name, field) == 0 &&
                         enum_type->members[i].instance) {
-                        return XR_FROM_PTR(enum_type->members[i].instance);
+                        XrValue value = XR_FROM_PTR(enum_type->members[i].instance);
+                        int payload_count = 0;
+                        if (enum_type->is_adt && enum_type->payload_counts)
+                            payload_count = enum_type->payload_counts[i];
+                        if (!enum_type->is_adt || payload_count == 0) {
+                            value.tag = XR_AOT_VALUE_TAG_ENUM;
+                            value.ext = i;
+                        }
+                        return value;
                     }
                 }
                 return XR_NULL_VAL;

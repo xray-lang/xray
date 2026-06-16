@@ -237,6 +237,23 @@ static const XiValue *cg_coro_builtin_origin(const XiValue *v) {
     return origin && origin->op == XI_GET_BUILTIN ? origin : NULL;
 }
 
+static bool cg_coro_builtin_field_needs_xrt_bridge(const XiValue *builtin, const char *field) {
+    if (!builtin || builtin->op != XI_GET_BUILTIN || !field)
+        return true;
+    switch ((int) builtin->aux_int) {
+        case XR_GLOBAL_VAR_ORDERING:
+        case XR_GLOBAL_VAR_SEND_RESULT:
+        case XR_GLOBAL_VAR_TASK_STATUS:
+            return false;
+        case XR_GLOBAL_VAR_RECV:
+            return strcmp(field, "Value") == 0;
+        case XR_GLOBAL_VAR_TASK_RESULT:
+            return strcmp(field, "Success") == 0 || strcmp(field, "Failed") == 0;
+        default:
+            return true;
+    }
+}
+
 static bool cg_coro_value_from_runtime_bridge(const XiValue *v) {
     const XiValue *origin = cg_coro_release_origin(v);
     if (!origin)
@@ -2116,7 +2133,8 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
                     "    XrValue _builtin_field_%u = xr_aot_load_builtin_field(ctx, %d, "
                     "\"%s\");\n",
                     v->id, (int) builtin->aux_int, field);
-            if (cg_rep(v) == XR_REP_TAGGED)
+            if (cg_rep(v) == XR_REP_TAGGED &&
+                cg_coro_builtin_field_needs_xrt_bridge(builtin, field))
                 fprintf(out,
                         "    _builtin_field_%u = xr_aot_bridge_value_to_xrt(_builtin_field_%u);\n",
                         v->id, v->id);
