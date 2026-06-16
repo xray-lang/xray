@@ -11,7 +11,7 @@
  *   Replaces scattered XrayIsolateParams setup across CLI subcommands and
  *   MCP server with a single factory.  Each profile sets appropriate
  *   init_flags and runtime defaults; callers can override individual fields
- *   (JIT, trace, workers) before calling xr_isolate_profile_create().
+ *   (trace, workers) before calling xr_isolate_profile_create().
  *
  *   Lives in src/api/ so CLI, MCP, LSP, DAP and embedders share one
  *   authoritative isolate factory and avoid sibling-app cross-dependencies.
@@ -30,7 +30,7 @@ typedef enum {
     XR_ISOLATE_PROFILE_EVAL,    /* Same as RUN but for eval/stdin */
     XR_ISOLATE_PROFILE_PARSE,   /* Parse only: compiler + source cache (no stdlib) */
     XR_ISOLATE_PROFILE_ANALYZE, /* Check/fmt: compiler + analyzer + source cache */
-    XR_ISOLATE_PROFILE_TEST,    /* Test: full runtime (JIT configurable) */
+    XR_ISOLATE_PROFILE_TEST,    /* Test: full runtime */
     XR_ISOLATE_PROFILE_REPL,    /* REPL: full runtime + source cache */
 } XrIsolateProfile;
 

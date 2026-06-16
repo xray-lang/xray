@@ -20,9 +20,7 @@
 
 void xr_cli_print_version(void) {
     printf("xray v%d.%d.%d (", XRAY_VERSION_MAJOR, XRAY_VERSION_MINOR, XRAY_VERSION_PATCH);
-#ifdef XRAY_HAS_JIT
-    printf("JIT");
-#elif defined(XRAY_HAS_AOT)
+#ifdef XRAY_HAS_AOT
     printf("AOT");
 #else
     printf("VM");

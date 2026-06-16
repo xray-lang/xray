@@ -23,8 +23,6 @@ void xray_isolate_params_init(XrayIsolateParams *params) {
     memset(params, 0, sizeof(XrayIsolateParams));
 
     params->backend_type = XRAY_BACKEND_BYTECODE;
-    params->enable_jit = false;
-    params->jit_threshold = 100;
     params->initial_heap_size = 1024 * 1024;
     params->max_heap_size = 0;
     params->enable_gc = true;

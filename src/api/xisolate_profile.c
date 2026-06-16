@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Each profile selects appropriate init_flags; callers override only what
- *   they need (JIT, trace, workers, etc.).  This eliminates the repeated
+ *   they need (trace, workers, etc.).  This eliminates the repeated
  *   XrayIsolateParams boilerplate across run/repl/test/check/fmt/compile/
  *   deps/eval and the MCP analyzer isolate.
  */
@@ -31,21 +31,9 @@ void xr_isolate_profile_params(XrIsolateProfile profile, XrayIsolateParams *out)
         case XR_ISOLATE_PROFILE_RUN:
         case XR_ISOLATE_PROFILE_EVAL:
         case XR_ISOLATE_PROFILE_TEST:
+        case XR_ISOLATE_PROFILE_REPL:
             /* Full runtime: all subsystems */
             xray_isolate_setup_full(out);
-            break;
-
-        case XR_ISOLATE_PROFILE_REPL:
-            /* Full runtime, but JIT is force-disabled.  Each REPL input
-             * is a one-shot top-level proto; tier-up call-count
-             * thresholds will never be reached for the new code, and
-             * compiling the same proto on every input would only add
-             * latency to interactive prompts.  Cross-input shared
-             * variables also bypass the shapes JIT relies on.  Keep
-             * REPL on the interpreter path exclusively — predictable
-             * latency wins over peak throughput here. */
-            xray_isolate_setup_full(out);
-            out->enable_jit = false;
             break;
 
         case XR_ISOLATE_PROFILE_PARSE:
