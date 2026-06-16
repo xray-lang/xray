@@ -1,0 +1,24 @@
+// anchor: ownership-move-local-in-fn
+// 116 boundary: `move` bound to an intermediate local inside a function body.
+// Regression for AOT identity codegen, which emitted a rep-mismatched
+// initializer when a native-local PTR array was moved into a TAGGED-declared
+// local (`XrValue t = <xrt_array_t*>`). Top-level move and `return move x`
+// were unaffected, so this exercises the in-function bind-to-local path.
+// Must agree across VM/JIT/AOT.
+fn take_owned() -> Array<int> {
+    let buf = [10, 20, 30]
+    let taken = move buf
+    taken.push(40)
+    return taken
+}
+
+fn observe() {
+    let local = [1, 2, 3]
+    let moved = move local
+    print(moved.length)
+}
+
+observe()
+let r = take_owned()
+print(r.length)
+print(r[0] + r[3])

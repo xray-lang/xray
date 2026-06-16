@@ -931,6 +931,17 @@ static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const Xi
     return local_ctype_str(v);
 }
 
+/* Storage representation of v's declared C local. Must stay in sync with
+ * local_ctype_str_ctx: a native-local array is emitted as xrt_array_t* (PTR),
+ * everything else uses its planned storage rep. Identity ops (XI_COPY/XI_MOVE)
+ * use this to bridge a source whose declared rep differs from the result's,
+ * e.g. a native-local PTR array moved into a TAGGED-declared local. */
+static XrRep cg_value_decl_storage_rep(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
+    if (cg_array_value_uses_native_local(ctx, f, v))
+        return XR_REP_PTR;
+    return cg_value_plan_storage_rep(ctx, v);
+}
+
 /* Write a phi variable reference: phi<id> */
 static void emit_phi_ref(FILE *out, const XiPhi *phi) {
     fprintf(out, "phi%u", phi->value.id);
