@@ -513,6 +513,63 @@ TEST(cgen_module_prefix_is_c_identifier) {
     xi_func_free(ir);
 }
 
+TEST(cgen_emits_source_line_directives) {
+    const char *src = "print(1)\n"
+                      "print(2)\n"
+                      "print(3)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    assert(ir->module != NULL && "pipeline should produce module metadata");
+    ir->module->path = "debug_map.xr";
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "source-line directive test should generate");
+    assert(contains(code, "#line 1 \"debug_map.xr\"") &&
+           "first source statement should be mapped to the module path");
+    assert(contains(code, "#line 2 \"debug_map.xr\"") &&
+           "second source statement should be mapped to the module path");
+    assert(contains(code, "#line 3 \"debug_map.xr\"") &&
+           "print statement should be mapped to the module path");
+
+    printf("  Generated source-line mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_coro_emits_source_line_directives) {
+    const char *src = "fn worker(n: int) -> int {\n"
+                      "    yield\n"
+                      "    return n + 1\n"
+                      "}\n"
+                      "let task = go worker(41)\n"
+                      "let result = await task\n"
+                      "print(result)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+    assert(ir->module != NULL && "pipeline should produce module metadata");
+    ir->module->path = "debug_coro.xr";
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "coroutine source-line directive test should generate");
+    assert(contains(code, "_aot_resume") && "test source should emit a coroutine resume body");
+    assert(contains(code, "#line 2 \"debug_coro.xr\"") &&
+           "yield should be mapped inside the coroutine resume body");
+    assert(contains(code, "#line 6 \"debug_coro.xr\"") &&
+           "await should be mapped inside the entry coroutine resume body");
+    assert(contains(code, "#line 7 \"debug_coro.xr\"") &&
+           "post-await print should be mapped inside the entry coroutine resume body");
+
+    printf("  Generated coroutine source-line mapped C %zu bytes\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_recursive) {
     /* Recursive function: factorial */
     const char *src = "fn fact(n: int) -> int {\n"
@@ -3437,6 +3494,8 @@ int main(void) {
     run_cgen_function_call();
     run_cgen_stats_tracks_native_abi();
     run_cgen_module_prefix_is_c_identifier();
+    run_cgen_emits_source_line_directives();
+    run_cgen_coro_emits_source_line_directives();
     run_cgen_recursive();
     run_cgen_for_loop();
     run_cgen_typed_array_uses_raw_storage_fast_path();

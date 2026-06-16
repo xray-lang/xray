@@ -273,6 +273,7 @@ static bool emit_structured_counted_loop_stmt(XiCgenCtx *ctx, FILE *out, const X
     uint16_t pre_idx = find_pred_idx(loop.guard, loop.preheader);
     uint16_t body_idx = find_pred_idx(loop.guard, loop.body);
     emit_phi_copies(ctx, out, f, loop.guard, pre_idx);
+    emit_value_source_line(ctx, out, loop.guard->control);
     fprintf(out, "    while (");
     (void) emit_structured_loop_condition_expr_ctx(ctx, out, loop.guard->control);
     fprintf(out, ") {\n");
@@ -296,6 +297,7 @@ static bool emit_structured_array_fill_loop_stmt(XiCgenCtx *ctx, FILE *out, cons
     uint16_t entry_idx = find_pred_idx(loop.body, loop.entry);
     uint16_t body_idx = find_pred_idx(loop.body, loop.body);
     emit_phi_copies(ctx, out, f, loop.body, entry_idx);
+    emit_value_source_line(ctx, out, loop.body->control);
     fprintf(out, "    while (");
     emit_value_as_rep_ctx(ctx, out, loop.fill.index_value, XR_REP_I64);
     fprintf(out, " < ");

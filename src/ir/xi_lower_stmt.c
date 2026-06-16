@@ -1981,10 +1981,12 @@ static void lower_defer(XiLower *l, AstNode *node) {
     }
 }
 
-static void lower_yield_stmt(XiLower *l) {
+static void lower_yield_stmt(XiLower *l, AstNode *node) {
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_YIELD, l->type_unit, 0);
-    if (v)
+    if (v) {
         v->flags |= XI_FLAG_SIDE_EFFECT;
+        v->line = node ? (uint32_t) node->line : 0;
+    }
 }
 
 /* ========== Destructuring (from xi_lower_expr.c) ========== */
@@ -2771,7 +2773,7 @@ XR_FUNC void xi_lower_stmt(XiLower *l, AstNode *node) {
 
         /* Yield execution */
         case AST_YIELD_STMT:
-            lower_yield_stmt(l);
+            lower_yield_stmt(l, node);
             break;
 
         /* Destructuring */

@@ -1484,6 +1484,7 @@ static void emit_coro_sync_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, c
 static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                  const char *prefix, int *state_id) {
     XR_DCHECK(v != NULL, "emit_coro_value_stmt: NULL value");
+    emit_value_source_line(ctx, out, v);
 
     if (v->op == XI_YIELD) {
         int sid = ++(*state_id);
@@ -2673,6 +2674,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
 
     switch (blk->kind) {
         case XI_BLOCK_RETURN:
+            emit_value_source_line(ctx, out, blk->control);
             if (blk->control) {
                 fprintf(out, "    return xr_aot_done(");
                 emit_boxed_vref(out, blk->control);
@@ -2689,6 +2691,7 @@ static void emit_coro_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
             break;
         case XI_BLOCK_IF:
             XR_DCHECK(blk->control != NULL, "AOT coro IF block missing control");
+            emit_value_source_line(ctx, out, blk->control);
             fprintf(out, "    if (");
             emit_condition_expr(out, blk->control);
             fprintf(out, ") {\n");

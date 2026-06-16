@@ -974,10 +974,7 @@ static XiValue *lower_array_literal(XiLower *l, AstNode *node) {
 static const char *make_assert_loc(XiLower *l, int line) {
     char buf[64];
     snprintf(buf, sizeof(buf), "line %d", line);
-    /* Intern the string so it survives in the constant pool.
-     * Use the isolate's compile-time interning. */
-    XrString *s = xr_string_new(l->isolate, buf, strlen(buf));
-    return s ? s->data : "?";
+    return arena_strdup(l->func, buf);
 }
 
 /* Intercept known compile-time builtin function calls.
