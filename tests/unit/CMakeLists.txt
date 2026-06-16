@@ -716,14 +716,6 @@ add_test(
         --xisagen ${XISAGEN}
 )
 
-add_test(
-    NAME test_codegen_dispatch
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_codegen_dispatch.py
-        --root ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
-
 add_executable(test_dispatch_meta jit/test_dispatch_meta.c)
 add_dependencies(test_dispatch_meta gen-xm-ops)
 target_include_directories(test_dispatch_meta PRIVATE
@@ -761,14 +753,6 @@ target_include_directories(test_patch_verify PRIVATE
 add_test(NAME test_patch_verify COMMAND test_patch_verify)
 
 add_xray_unit_test(test_metadata_verify jit/test_metadata_verify.c)
-
-add_test(
-    NAME test_codegen_helpers
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_SOURCE_DIR}/scripts/check_codegen_helpers.py
-        --root ${CMAKE_SOURCE_DIR}
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-)
 
 # ============================================================================
 # Reverse-invariant checks for the Xi IR layer (static grep-based gates).

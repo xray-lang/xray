@@ -35,93 +35,22 @@
 
 ## 运行方式
 
-### 099 VM-first 推荐门禁
-
-当前协程性能主线先把 VM 正确性和 VM/Go baseline 压稳。JIT/AOT 暂停作为
-主性能线外的专项；日常性能结论默认只看 `xray-vm` 和 `go`：
+### 单个测试
 
 ```bash
-cmake -B build-release -DCMAKE_BUILD_TYPE=Release
-cmake --build build-release -j8
-XRAY_BIN=build-release/xray scripts/run_coro_scaling_gate.sh \
-  --vm-go \
-  --repeats 5 \
-  --workers 1,2,4,8,16 \
-  --tests spawn,chain_spawn,pingpong,producer_consumer,work_pool,pipeline,skynet,select_multiplex,cancel_storm \
-  --sched-stats \
-  --json /tmp/xray_coro_vm_go_gate.json \
-  --markdown /tmp/xray_coro_vm_go_gate.md
+# xray（VM 解释执行）
+./build/xray run tests/benchmarks/coro/spawn/spawn.xr
+
+# xray（AOT 原生）
+./build/xray build --native tests/benchmarks/coro/spawn/spawn.xr -o /tmp/spawn_aot && /tmp/spawn_aot
+
+# Go
+cd tests/benchmarks/coro/spawn && go run spawn.go
 ```
 
-runtime 约定：
-
-- `xray-vm`: 固定 `xray run --no-jit file.xr -- args...`
-- `go`: 先 `go build -o ...`，计时只跑已构建二进制
-
-JSON 会区分 `reported_time_ms`、`wall_time_ms`、`runtime_time_ms`、RSS、
-`scaling_efficiency` 和 `vm_go_comparisons`。小 cardinality 只用于 correctness；
-性能结论应使用 reported time 不再归零的 focused baseline。
-
-需要 JIT 语义对照时显式使用 `--vm-jit` 或 `--vm-jit-go`，但 JIT 结果不再定义
-协程语义。需要完整旧矩阵时再使用 `--all-backends`。
-
-AOT 默认不进入 VM/JIT 性能门禁。需要观察 AOT correctness 时显式追加：
-
-```bash
-XRAY_BIN=build-release/xray scripts/run_coro_scaling_gate.sh \
-  --vm-go \
-  --include-aot-correctness \
-  --tests pingpong,pipeline \
-  --workers 1,4 \
-  --repeats 1 \
-  --json /tmp/xray_coro_aot_correctness.json \
-  --markdown /tmp/xray_coro_aot_correctness.md
-```
-
-`--include-aot-correctness` 会报告 AOT 结果，但不会让已知 AOT blocker 污染
-VM gate 的退出码。`--all-backends` 仍会把 AOT 失败计入矩阵失败。
-
-### xray 测试
-```bash
-# 单个测试
-./build/xray run --no-jit tests/benchmarks/coro/spawn/spawn.xr
-
-# 全部测试
-./scripts/run_coro_benchmark.sh
-
-# 指定 worker 数并输出 JSON
-./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --json docs/bench/coro-latest.json
-
-# 同时采集调度器统计指标
-./scripts/run_coro_benchmark.sh --workers 1,2,4,8 --sched-stats --json docs/bench/coro-sched.json
-
-# 同时运行 xray VM 和 xray JIT
-./scripts/run_coro_benchmark.sh --vm-jit --tests pingpong,pipeline --args "100000"
-
-# 增加 xray AOT 对照；AOT 编译失败会记录为 build-fail，不计作运行速度
-./scripts/run_coro_benchmark.sh --include-aot-correctness --tests pingpong,parallel_sum --args "100000"
-
-# 只跑部分场景
-./scripts/run_coro_benchmark.sh --tests producer_consumer,select_multiplex,thundering_herd
-```
-
-### 扩展曲线门禁
-
-`run_coro_scaling_gate.sh` 用于阶段性性能门禁。它会预编译 Go benchmark，
-使用相同参数矩阵运行 Xray VM/JIT/Go，以及显式 opt-in 的 AOT，记录 repeated runs 的 median/min/max，
-并把正确性、wall time、reported time、RSS 与调度指标写入 JSON。
-
-```bash
-cmake -B build-release -DCMAKE_BUILD_TYPE=Release && cmake --build build-release -j8
-XRAY_BIN=build-release/xray scripts/run_coro_scaling_gate.sh \
-  --vm-go --repeats 5 --workers 1,2,4,8,16 \
-  --tests spawn,pingpong,producer_consumer,pipeline \
-  --json /tmp/xray_coro_scaling.json \
-  --markdown /tmp/xray_coro_scaling.md
-```
-
-Go 对照必须运行已构建二进制，不能使用 `go run` 计时。Xray VM 参数必须走
-`xray run --no-jit file.xr -- args...`，确保 benchmark 规模参数传给脚本而不是 CLI。
+> 批量基准运行器与扩展曲线门禁（旧 `run_coro_benchmark.sh` / `run_coro_scaling_gate.sh`）
+> 随 JIT 后端移除一并删除——它们的设计前提是 VM/JIT/AOT 多后端对比与 JIT 专项指标分析。
+> 双后端（VM/AOT/Go）的统一基准运行器将按需重写。
 
 ## 等价性规则
 
@@ -135,26 +64,11 @@ correctness: true
 reported_time_ms: <float>
 ```
 
-旧 benchmark 的中文输出仍会被 gate 兼容解析，例如 `正确: true`、
+旧 benchmark 的中文输出仍会被兼容解析，例如 `正确: true`、
 `总会合次数/预期会合次数`、`成功取消: X / Y`、`短任务完成: X / Y`。
 新 benchmark 不应只打印局部阶段耗时；`reported_time_ms` 或 `总时间` 必须覆盖完整工作、
 等待子任务和清理路径。失败时必须非零退出或输出 `correctness: false`，不能吞掉错误后
 继续输出成功结果。
-
-### Go 测试
-```bash
-# 单个测试
-cd tests/coro_benchmark/spawn && go run spawn.go
-
-# 全部测试
-./scripts/run_coro_benchmark.sh --go-only
-
-# 同时设置 Go 的 GOMAXPROCS 与 xray 的 XRAY_WORKERS
-./scripts/run_coro_benchmark.sh --all --workers 1,2,4,8 --json docs/bench/coro-xray-go.json
-
-# 同时运行 xray VM、xray JIT、xray AOT 和 Go
-./scripts/run_coro_benchmark.sh --all-backends --workers 1,2,4,8 --json docs/bench/coro-all-backends.json
-```
 
 ## 测试参数
 

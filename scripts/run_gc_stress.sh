@@ -4,10 +4,8 @@
 #
 # Usage: scripts/run_gc_stress.sh [rounds]
 #
-# Cycles through the GC-heavy regression files N times under
-# --jit-force or --no-jit as appropriate (1206 exercises the JIT path,
-# 1205/1207 are interpreter-only NOJIT tests). Returns 0 only if every
-# round of every test passed.
+# Cycles through the GC-heavy regression files N times. Returns 0 only
+# if every round of every test passed.
 #
 # Note on `mode` parameter from 082 plan:
 #   The original plan listed sticky/gen/inc/atomic GC modes, but the
@@ -48,16 +46,10 @@ if [ -z "${XRAY_BIN:-}" ]; then
     fi
 fi
 
-# JIT-mode tests: 1206 exercises GC interaction with JIT-compiled
-# frames (the path that surfaced Bug #10 / #11 in May 2026).
-jit_tests=(
-    "${PROJECT_ROOT}/tests/regression/10_stdlib/1206_gc_enhanced.xr"
-)
-# NOJIT-mode tests: 1205 / 1207 are GC pressure / stress tests that
-# tests/known_failures.txt deliberately marks NOJIT (interpreter is
-# the canonical baseline; JIT diff has its own coverage in 16_jit/).
-nojit_tests=(
+# GC-heavy regression files (interpreter is the canonical baseline).
+gc_tests=(
     "${PROJECT_ROOT}/tests/regression/10_stdlib/1205_gc_incremental_pressure.xr"
+    "${PROJECT_ROOT}/tests/regression/10_stdlib/1206_gc_enhanced.xr"
     "${PROJECT_ROOT}/tests/regression/10_stdlib/1207_gc_stress.xr"
 )
 
@@ -68,46 +60,35 @@ mkdir -p "$(dirname "$FAIL_LOG")"
 : >"$FAIL_LOG"
 
 run_one() {
-    local mode="$1"  # jit | nojit
-    local test_path="$2"
-    local round="$3"
+    local test_path="$1"
+    local round="$2"
 
     if [ ! -f "$test_path" ]; then
         echo "  SKIP: missing $test_path"
         return 0
     fi
 
-    local flag
-    case "$mode" in
-        jit)   flag="--jit-force" ;;
-        nojit) flag="--no-jit"   ;;
-        *)     echo "FAIL: unknown mode $mode" >&2; return 2 ;;
-    esac
-
-    if "$XRAY_BIN" test "$flag" "$test_path" >/dev/null 2>&1; then
+    if "$XRAY_BIN" test "$test_path" >/dev/null 2>&1; then
         PASS=$((PASS + 1))
         return 0
     fi
     FAIL=$((FAIL + 1))
     {
-        echo "==== FAIL round=${round} mode=${mode} test=${test_path} ===="
-        "$XRAY_BIN" test "$flag" "$test_path" 2>&1 | tail -n 30
+        echo "==== FAIL round=${round} test=${test_path} ===="
+        "$XRAY_BIN" test "$test_path" 2>&1 | tail -n 30
         echo
     } >>"$FAIL_LOG"
-    echo "  FAIL: round=${round} ${flag} ${test_path}"
+    echo "  FAIL: round=${round} ${test_path}"
     return 1
 }
 
 echo "gc-stress: rounds=${ROUNDS} bin=${XRAY_BIN}"
-echo "gc-stress: jit_tests=${#jit_tests[@]} nojit_tests=${#nojit_tests[@]}"
+echo "gc-stress: tests=${#gc_tests[@]}"
 
 for r in $(seq 1 "$ROUNDS"); do
     echo "==== round ${r}/${ROUNDS} ===="
-    for t in "${jit_tests[@]}"; do
-        run_one jit "$t" "$r" || true
-    done
-    for t in "${nojit_tests[@]}"; do
-        run_one nojit "$t" "$r" || true
+    for t in "${gc_tests[@]}"; do
+        run_one "$t" "$r" || true
     done
 done
 

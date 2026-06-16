@@ -72,9 +72,6 @@ PARALLEL_JOBS=${XRAY_TEST_JOBS:-$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/
 # Known-skip list (colon-separated for export to subshells)
 SKIP_TESTS=""
 
-# Tests requiring --no-jit flag (colon-separated)
-NOJIT_TESTS="1148_scope_race_stress.xr:1205_gc_incremental_pressure.xr:1207_gc_stress.xr:0915_shared_const_for_go.xr:1430_net_basic.xr:1433_net_loopback.xr:1438_ws_self_connect.xr"
-
 # 自动构建（除非设置 XRAY_SKIP_BUILD=1）
 if [ "${XRAY_SKIP_BUILD}" != "1" ]; then
     echo -e "${BLUE}正在构建 ${BUILD_DIR}...${NC}"
@@ -141,37 +138,24 @@ run_one_test() {
         return
     fi
 
-    # Determine flags
-    # XRAY_JIT_FORCE=1 forces all eligible tests through the JIT path,
-    # mirroring the PR-gate sanitizer matrix that exposed the May 2026
-    # x64 codegen / GC corruption family. NOJIT_TESTS still wins
-    # because those scenarios deliberately exercise interpreter-only
-    # behaviour (stress / scope-race / GC-pressure).
-    local jit_flag=""
-    if is_in_list "${test_name}" "${NOJIT_TESTS}"; then
-        jit_flag="--no-jit"
-    elif [ "${XRAY_JIT_FORCE:-0}" = "1" ]; then
-        jit_flag="--jit-force"
-    fi
-
     # All regression tests use @test functions — run with 'xray test'
     local xray_cmd="test"
 
     # Run with timeout. Always capture stdout+stderr through a real
-    # file rather than $(...). $(...) strips NUL bytes (common in JIT
-    # crash reports) and discards anything the child wrote between the
-    # last buffer flush and an abort, which is exactly when we most
-    # need the output for triage.
+    # file rather than $(...). $(...) strips NUL bytes (common in crash
+    # reports) and discards anything the child wrote between the last
+    # buffer flush and an abort, which is exactly when we most need the
+    # output for triage.
     local exit_code
     local output
     local tmp_out="${RESULTS_DIR}/${test_name}.out"
     if [ -n "${TIMEOUT_CMD}" ]; then
-        "${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" \
+        "${TIMEOUT_CMD}" "${TIMEOUT_SECS}" "${XRAY_BIN}" ${xray_cmd} "${test_file}" \
             > "${tmp_out}" 2>&1
         exit_code=$?
     else
         # Shell-based timeout fallback — kill the child after TIMEOUT_SECS
-        "${XRAY_BIN}" ${xray_cmd} ${jit_flag} "${test_file}" > "${tmp_out}" 2>&1 &
+        "${XRAY_BIN}" ${xray_cmd} "${test_file}" > "${tmp_out}" 2>&1 &
         local pid=$!
         ( sleep "${TIMEOUT_SECS}"; kill "$pid" 2>/dev/null ) &
         local watcher=$!
@@ -212,7 +196,7 @@ run_one_test() {
 }
 export -f run_one_test is_in_list
 export XRAY_BIN TIMEOUT_SECS TIMEOUT_CMD RESULTS_DIR
-export SKIP_TESTS NOJIT_TESTS XRAY_TEST_DUMP_FAILED
+export SKIP_TESTS XRAY_TEST_DUMP_FAILED
 
 # 开始时间
 start_time=$(date +%s)
