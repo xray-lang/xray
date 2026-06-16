@@ -1147,6 +1147,18 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
+    add_test(
+        NAME aot_native_debug_smoke
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/aot/run_native_debug_smoke.sh
+                $<TARGET_FILE:xray>
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    )
+    set_tests_properties(aot_native_debug_smoke PROPERTIES
+        LABELS "aot;debug;smoke"
+        SKIP_RETURN_CODE 77
+        TIMEOUT 120
+    )
+
     # Cross-backend differential net: same .xr through VM / JIT / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
