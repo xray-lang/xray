@@ -1,0 +1,6 @@
+fn mutate(data: in Array<int>) {
+    data.push(4)
+}
+
+let values: Array<int> = [1, 2, 3]
+mutate(values)

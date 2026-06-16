@@ -154,13 +154,14 @@ struct XaSymbol {
     XrLocation location;  // Definition location
 
     // Modifiers
-    bool is_const;         // const declaration
-    bool is_exported;      // export modifier
-    bool is_static;        // static member
-    bool is_private;       // private member (starts with _)
-    bool is_shared;        // shared variable
-    bool is_builtin;       // built-in type member (Array.push, etc.)
-    uint8_t passing_mode;  // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
+    bool is_const;          // const declaration
+    bool is_exported;       // export modifier
+    bool is_static;         // static member
+    bool is_private;        // private member (starts with _)
+    bool is_shared;         // shared variable
+    bool is_builtin;        // built-in type member (Array.push, etc.)
+    bool mutates_receiver;  // method body writes through `this`
+    uint8_t passing_mode;   // XR_PARAM_VALUE / XR_PARAM_IN / XR_PARAM_REF (for parameters)
 
     // Parent references
     XaScope *scope;    // Containing scope

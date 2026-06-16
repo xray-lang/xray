@@ -48,6 +48,172 @@
 #include "../../base/xchecks.h"
 #include "../../runtime/value/xstruct_layout.h"
 
+static bool xa_expr_roots_at_this(AstNode *node) {
+    if (!node)
+        return false;
+    switch (node->type) {
+        case AST_THIS_EXPR:
+            return true;
+        case AST_VARIABLE:
+            return node->as.variable.name && strcmp(node->as.variable.name, "this") == 0;
+        case AST_MEMBER_ACCESS:
+            return xa_expr_roots_at_this(node->as.member_access.object);
+        case AST_INDEX_GET:
+            return xa_expr_roots_at_this(node->as.index_get.array);
+        default:
+            return false;
+    }
+}
+
+static bool xa_method_body_mutates_receiver(AstNode *node) {
+    if (!node)
+        return false;
+    switch (node->type) {
+        case AST_BLOCK:
+            for (int i = 0; i < node->as.block.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.block.statements[i]))
+                    return true;
+            }
+            return false;
+        case AST_EXPR_STMT:
+            return xa_method_body_mutates_receiver(node->as.expr_stmt);
+        case AST_MEMBER_SET:
+            return xa_expr_roots_at_this(node->as.member_set.object) ||
+                   xa_method_body_mutates_receiver(node->as.member_set.value);
+        case AST_INDEX_SET:
+            return xa_expr_roots_at_this(node->as.index_set.array) ||
+                   xa_method_body_mutates_receiver(node->as.index_set.index) ||
+                   xa_method_body_mutates_receiver(node->as.index_set.value);
+        case AST_CALL_EXPR: {
+            CallExprNode *call = &node->as.call_expr;
+            if (call->callee && call->callee->type == AST_MEMBER_ACCESS) {
+                MemberAccessNode *ma = &call->callee->as.member_access;
+                if (xa_expr_roots_at_this(ma->object) && xa_method_name_mutates_receiver(ma->name))
+                    return true;
+            }
+            for (int i = 0; i < call->arg_count; i++) {
+                if (xa_method_body_mutates_receiver(call->arguments[i]))
+                    return true;
+            }
+            return false;
+        }
+        case AST_ASSIGNMENT:
+            return (node->as.assignment.name && strcmp(node->as.assignment.name, "this") == 0) ||
+                   xa_method_body_mutates_receiver(node->as.assignment.value);
+        case AST_COMPOUND_ASSIGNMENT:
+            return (node->as.compound_assignment.name &&
+                    strcmp(node->as.compound_assignment.name, "this") == 0) ||
+                   xa_method_body_mutates_receiver(node->as.compound_assignment.object) ||
+                   xa_method_body_mutates_receiver(node->as.compound_assignment.value);
+        case AST_VAR_DECL:
+        case AST_CONST_DECL:
+            return xa_method_body_mutates_receiver(node->as.var_decl.initializer);
+        case AST_RETURN_STMT:
+            for (int i = 0; i < node->as.return_stmt.value_count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.return_stmt.values[i]))
+                    return true;
+            }
+            return false;
+        case AST_IF_STMT:
+            return xa_method_body_mutates_receiver(node->as.if_stmt.condition) ||
+                   xa_method_body_mutates_receiver(node->as.if_stmt.then_branch) ||
+                   xa_method_body_mutates_receiver(node->as.if_stmt.else_branch);
+        case AST_WHILE_STMT:
+            return xa_method_body_mutates_receiver(node->as.while_stmt.condition) ||
+                   xa_method_body_mutates_receiver(node->as.while_stmt.body);
+        case AST_FOR_STMT:
+            return xa_method_body_mutates_receiver(node->as.for_stmt.initializer) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.condition) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.increment) ||
+                   xa_method_body_mutates_receiver(node->as.for_stmt.body);
+        case AST_FOR_IN_STMT:
+            return xa_method_body_mutates_receiver(node->as.for_in_stmt.collection) ||
+                   xa_method_body_mutates_receiver(node->as.for_in_stmt.body);
+        case AST_DESTRUCTURE_DECL:
+            return xa_method_body_mutates_receiver(node->as.destructure_decl.initializer);
+        case AST_DESTRUCTURE_ASSIGN:
+            return xa_method_body_mutates_receiver(node->as.destructure_assign.value);
+        case AST_ARRAY_LITERAL:
+            for (int i = 0; i < node->as.array_literal.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.array_literal.elements[i]))
+                    return true;
+            }
+            return false;
+        case AST_TUPLE_LITERAL:
+            for (int i = 0; i < node->as.tuple_literal.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.tuple_literal.elements[i]))
+                    return true;
+            }
+            return false;
+        case AST_OBJECT_LITERAL:
+            for (int i = 0; i < node->as.object_literal.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.object_literal.keys[i]) ||
+                    xa_method_body_mutates_receiver(node->as.object_literal.values[i]))
+                    return true;
+            }
+            return false;
+        case AST_MAP_LITERAL:
+            for (int i = 0; i < node->as.map_literal.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.map_literal.keys[i]) ||
+                    xa_method_body_mutates_receiver(node->as.map_literal.values[i]))
+                    return true;
+            }
+            return false;
+        case AST_SET_LITERAL:
+            for (int i = 0; i < node->as.set_literal.count; i++) {
+                if (xa_method_body_mutates_receiver(node->as.set_literal.elements[i]))
+                    return true;
+            }
+            return false;
+        case AST_BINARY_ADD:
+        case AST_BINARY_SUB:
+        case AST_BINARY_MUL:
+        case AST_BINARY_DIV:
+        case AST_BINARY_MOD:
+        case AST_BINARY_EQ:
+        case AST_BINARY_NE:
+        case AST_BINARY_EQ_STRICT:
+        case AST_BINARY_NE_STRICT:
+        case AST_BINARY_LT:
+        case AST_BINARY_LE:
+        case AST_BINARY_GT:
+        case AST_BINARY_GE:
+        case AST_BINARY_AND:
+        case AST_BINARY_OR:
+        case AST_BINARY_BAND:
+        case AST_BINARY_BOR:
+        case AST_BINARY_BXOR:
+        case AST_BINARY_LSHIFT:
+        case AST_BINARY_RSHIFT:
+            return xa_method_body_mutates_receiver(node->as.binary.left) ||
+                   xa_method_body_mutates_receiver(node->as.binary.right);
+        case AST_UNARY_NEG:
+        case AST_UNARY_NOT:
+        case AST_UNARY_BNOT:
+            return xa_method_body_mutates_receiver(node->as.unary.operand);
+        case AST_INDEX_GET:
+            return xa_method_body_mutates_receiver(node->as.index_get.array) ||
+                   xa_method_body_mutates_receiver(node->as.index_get.index);
+        case AST_MEMBER_ACCESS:
+            return xa_method_body_mutates_receiver(node->as.member_access.object);
+        case AST_TERNARY:
+            return xa_method_body_mutates_receiver(node->as.ternary.condition) ||
+                   xa_method_body_mutates_receiver(node->as.ternary.true_expr) ||
+                   xa_method_body_mutates_receiver(node->as.ternary.false_expr);
+        case AST_MOVE_EXPR:
+            return xa_method_body_mutates_receiver(node->as.move_expr.expr);
+        case AST_AWAIT_EXPR:
+            return xa_method_body_mutates_receiver(node->as.await_expr.expr) ||
+                   xa_method_body_mutates_receiver(node->as.await_expr.timeout);
+        case AST_SCOPE_BLOCK:
+            return xa_method_body_mutates_receiver(node->as.scope_block.body);
+        case AST_DEFER_STMT:
+            return xa_method_body_mutates_receiver(node->as.defer_stmt.expr);
+        default:
+            return false;
+    }
+}
+
 // Recursively collect all return types from a statement tree
 static void collect_return_types(XaInferContext *ctx, AstNode *node, XrType ***types, int *count,
                                  int *cap) {
@@ -562,32 +728,6 @@ void xa_visit_collect_function_body(XaInferContext *ctx, AstNode *node) {
                                         : xr_type_new_unknown(NULL);
             }
             param_links->is_definitely_assigned = true;
-
-            // Validate in/ref: only struct (value type) parameters allowed
-            if (p->passing_mode != XR_PARAM_VALUE && param_links->type) {
-                XrType *pt = param_links->type;
-                bool is_struct = false;
-                if ((pt->kind == XR_KIND_CLASS || pt->kind == XR_KIND_INSTANCE) &&
-                    pt->instance.class_name) {
-                    XaSymbol *csym = xa_analyzer_lookup(ctx->analyzer, pt->instance.class_name);
-                    if (csym) {
-                        XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, csym);
-                        if (cl && cl->type && cl->type->is_value_type)
-                            is_struct = true;
-                    }
-                }
-                if (!is_struct) {
-                    const char *mode = (p->passing_mode == XR_PARAM_IN) ? "in" : "ref";
-                    XrLocation loc = {.file = ctx->file_path, .line = p->line};
-                    char msg[256];
-                    snprintf(
-                        msg, sizeof(msg),
-                        "'%s' modifier on parameter '%s' is only allowed for struct (value) types",
-                        mode, p->name);
-                    xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                               XR_ERR_ANALYZE_TYPE_MISMATCH, msg, &loc);
-                }
-            }
         }
     }
 
@@ -1424,6 +1564,7 @@ skip_layout:
             method_sym->location.line = method->line;
             method_sym->is_static = md->is_static;
             method_sym->is_private = md->is_private;
+            method_sym->mutates_receiver = xa_method_body_mutates_receiver(md->body);
             xa_visit_add_symbol_checked(ctx, method_sym, 0);
 
             // Build method type
@@ -1444,36 +1585,6 @@ skip_layout:
                             ? xr_tref_resolve(ctx->analyzer->isolate, md->param_types[j])
                             : xr_type_new_unknown(NULL);
                     param_names[j] = md->parameters ? md->parameters[j] : NULL;
-
-                    // Validate in/ref: only struct (value type) allowed
-                    if (md->param_passing_modes && md->param_passing_modes[j] != XR_PARAM_VALUE &&
-                        param_types[j] && !XR_TYPE_IS_UNKNOWN(param_types[j])) {
-                        XrType *pt = param_types[j];
-                        bool is_vt = false;
-                        if ((pt->kind == XR_KIND_CLASS || pt->kind == XR_KIND_INSTANCE) &&
-                            pt->instance.class_name) {
-                            XaSymbol *csym =
-                                xa_analyzer_lookup(ctx->analyzer, pt->instance.class_name);
-                            if (csym) {
-                                XaSymbolLinks *cl = xa_analyzer_get_links(ctx->analyzer, csym);
-                                if (cl && cl->type && cl->type->is_value_type)
-                                    is_vt = true;
-                            }
-                        }
-                        if (!is_vt) {
-                            const char *mode =
-                                (md->param_passing_modes[j] == XR_PARAM_IN) ? "in" : "ref";
-                            char msg2[256];
-                            snprintf(msg2, sizeof(msg2),
-                                     "'%s' modifier on parameter '%s' of method '%s' is only "
-                                     "allowed for struct (value) types",
-                                     mode, md->parameters ? md->parameters[j] : "?",
-                                     md->name ? md->name : "?");
-                            XrLocation loc2 = {.file = ctx->file_path, .line = method->line};
-                            xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
-                                                       XR_ERR_ANALYZE_TYPE_MISMATCH, msg2, &loc2);
-                        }
-                    }
 
                     // Warn: method parameter missing type annotation (skip constructor)
                     if (!(md->param_types && md->param_types[j]) && !md->is_constructor) {

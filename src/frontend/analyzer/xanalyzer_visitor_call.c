@@ -293,6 +293,42 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
         MemberAccessNode *ma = &call->callee->as.member_access;
         method_name = ma->name;
         callee_obj_type = xa_visit_infer_expr(ctx, ma->object);
+        XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, ma->object);
+        if (in_param && method_name) {
+            // Decide whether the call mutates the `in` receiver. For user class
+            // instances use the precise body-derived flag (mutates_receiver); the
+            // method-name heuristic only applies to builtin containers/strings,
+            // which have no analyzable body. Applying the name list to instances
+            // would wrongly reject immutable value-style APIs (e.g. a read-only
+            // `Vec.add` that returns a new value without touching `this`).
+            bool call_mutates_receiver;
+            const char *recv_class_name =
+                callee_obj_type ? xr_type_get_class_name(callee_obj_type) : NULL;
+            if (recv_class_name) {
+                XaSymbol *class_sym = xa_scope_lookup(ctx->analyzer->global_scope, recv_class_name);
+                XaSymbolLinks *class_links =
+                    class_sym ? xa_analyzer_get_links(ctx->analyzer, class_sym) : NULL;
+                XaSymbol *method_sym =
+                    (class_links && class_links->class_info)
+                        ? xa_class_info_lookup_member(class_links->class_info, method_name)
+                        : NULL;
+                call_mutates_receiver =
+                    method_sym && method_sym->kind == XA_SYM_METHOD && method_sym->mutates_receiver;
+            } else {
+                call_mutates_receiver = xa_method_name_mutates_receiver(method_name);
+            }
+            if (call_mutates_receiver) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[192];
+                snprintf(msg, sizeof(msg),
+                         "Cannot call mutating method '%s' on 'in' parameter '%s' (readonly "
+                         "reference)",
+                         method_name, in_param->name ? in_param->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
+        }
 
         // Extract element type from container
         if (XR_TYPE_IS_ARRAY(callee_obj_type) && callee_obj_type->container.element_type) {
