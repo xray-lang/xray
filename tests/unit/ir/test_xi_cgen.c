@@ -2992,6 +2992,40 @@ TEST(cgen_coro_scalar_channel_try_send_uses_typed_bridge) {
     xi_func_free(ir);
 }
 
+TEST(cgen_coro_builtin_no_payload_enum_fields_skip_bridge) {
+    const char *src = "fn read_builtin_enums() -> int {\n"
+                      "    yield\n"
+                      "    let sent = SendResult.Sent\n"
+                      "    let closed = Recv.Closed\n"
+                      "    let pending = TaskResult.Pending\n"
+                      "    let status = TaskStatus.Success\n"
+                      "    print(sent)\n"
+                      "    print(closed)\n"
+                      "    print(pending)\n"
+                      "    print(status)\n"
+                      "    return 1\n"
+                      "}\n"
+                      "let task = go read_builtin_enums()\n"
+                      "print(await task)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "AOT builtin enum field coroutine should generate");
+    assert(contains(code, "xr_aot_load_builtin_field(ctx,") &&
+           "builtin enum fields should use the AOT builtin field helper");
+    assert(!contains(code, "xr_aot_bridge_value_to_xrt(_builtin_field_") &&
+           "no-payload builtin enum fields must be returned as native AOT enum keys");
+
+    printf("  Generated builtin no-payload enum field bridge skip %zu bytes of C code\n",
+           strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_coro_await_clones_tagged_result) {
     const char *src = "fn worker() -> Array<int> {\n"
                       "    yield\n"
@@ -3730,6 +3764,7 @@ int main(void) {
     run_cgen_coro_channel_send_clones_value();
     run_cgen_coro_scalar_channel_send_skips_clone();
     run_cgen_coro_scalar_channel_try_send_uses_typed_bridge();
+    run_cgen_coro_builtin_no_payload_enum_fields_skip_bridge();
     run_cgen_coro_await_clones_tagged_result();
     run_cgen_coro_scalar_await_uses_tagged_slot();
     run_cgen_coro_await_timeout_passes_deadline();
