@@ -35,9 +35,6 @@ typedef struct {
     bool trace;
     bool dump_bytecode;
     bool dump_ic;
-    bool jitless;
-    bool jit_force;
-    bool jit_stats;
     int num_workers;          // 0 = auto-detect
     int coro_watch_interval;  // 0 = disabled, >0 = refresh interval(ms)
     int coro_http_port;       // 0 = disabled, >0 = HTTP port
@@ -50,10 +47,6 @@ static XrayIsolate *create_run_isolate(const RunOptions *opts) {
     params.trace_execution = opts->trace;
     params.dump_bytecode = opts->dump_bytecode;
     params.dump_ic_feedback = opts->dump_ic;
-    params.enable_jit = !opts->jitless;
-    if (opts->jit_force)
-        params.jit_threshold = 1;
-    params.jit_stats = opts->jit_stats;
 
     XrayIsolate *iso = xr_isolate_profile_create(&params);
     if (!iso)
@@ -82,9 +75,6 @@ static void fill_run_options(RunOptions *opts, const XrCliInvocation *inv) {
     opts->trace = xr_cli_opt_bool(&inv->options, "trace");
     opts->dump_bytecode = xr_cli_opt_bool(&inv->options, "dump-bytecode");
     opts->dump_ic = xr_cli_opt_bool(&inv->options, "dump-ic");
-    opts->jitless = xr_cli_opt_bool(&inv->options, "no-jit");
-    opts->jit_force = xr_cli_opt_bool(&inv->options, "jit-force");
-    opts->jit_stats = xr_cli_opt_bool(&inv->options, "jit-stats");
     opts->num_workers = xr_cli_opt_int(&inv->options, "workers", 0);
     opts->coro_watch_interval = xr_cli_opt_int(&inv->options, "coro-watch", 0);
     opts->coro_http_port = xr_cli_opt_int(&inv->options, "coro-http", 0);

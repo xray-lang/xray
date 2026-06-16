@@ -123,15 +123,6 @@ TEST(globals_dict_missing_key_returns_null) {
 
 /* ========== Profile Invariants ========== */
 
-TEST(repl_profile_disables_jit) {
-    /* The REPL profile must keep JIT off: one-shot top-level protos
-     * never hit tier-up thresholds, and cross-input shape changes
-     * would invalidate any speculated guards anyway. */
-    XrayIsolateParams p;
-    xr_isolate_profile_params(XR_ISOLATE_PROFILE_REPL, &p);
-    ASSERT_FALSE(p.enable_jit);
-}
-
 TEST(repl_profile_clears_each_call) {
     /* Each xr_isolate_profile_params call must fully initialize the out
      * struct — leftover bits from a prior call on the same struct
@@ -139,9 +130,9 @@ TEST(repl_profile_clears_each_call) {
      * to catch any field that depends on prior content. */
     XrayIsolateParams p;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_RUN, &p);
-    p.enable_jit = true; /* sentinel */
+    p.trace_execution = true; /* sentinel */
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_REPL, &p);
-    ASSERT_FALSE(p.enable_jit);
+    ASSERT_FALSE(p.trace_execution);
 }
 
 /* ========== Symbol Table Lifecycle ========== */
@@ -688,7 +679,6 @@ RUN_TEST(globals_dict_overwrite_keeps_count);
 RUN_TEST(globals_dict_missing_key_returns_null);
 
 RUN_TEST_SUITE("REPL Profile");
-RUN_TEST(repl_profile_disables_jit);
 RUN_TEST(repl_profile_clears_each_call);
 
 RUN_TEST_SUITE("REPL Symbol Table");

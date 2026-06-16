@@ -1,7 +1,7 @@
 #!/bin/bash
 # run_backend_diff.sh - cross-backend differential test (107).
 #
-# Runs the same .xr program through VM, JIT (forced), and AOT, and asserts
+# Runs the same .xr program through VM and AOT, and asserts
 # their observable output is byte-for-byte identical: stdout, exit code, and
 # (normalized) stderr. This is the safety net for 108-118: any change that
 # alters observable behavior must be caught here.
@@ -11,7 +11,7 @@
 #
 # Environment:
 #   XRAY_BIN            xray binary (default: build/xray; also XRAY_BUILD_DIR)
-#   XRAY_DIFF_BACKENDS  comma list subset of vm,jit,aot (default: vm,jit,aot)
+#   XRAY_DIFF_BACKENDS  comma list subset of vm,aot (default: vm,aot)
 #
 # Per-case optional sidecar:
 #   <case>.args    first line = whitespace-separated program arguments
@@ -41,9 +41,9 @@ if [ -z "$XRAY" ]; then
     fi
 fi
 
-BACKENDS="${XRAY_DIFF_BACKENDS:-vm,jit,aot}"
+BACKENDS="${XRAY_DIFF_BACKENDS:-vm,aot}"
 # Observable contract = stdout + exit code (matches tests/aot/run_aot_tests.sh).
-# stderr is backend-diagnostic-heavy (JIT disasm, AOT cc/build logs, native-class
+# stderr is backend-diagnostic-heavy (AOT cc/build logs, native-class
 # warnings), so it is NOT part of pass/fail unless XRAY_DIFF_STDERR=1.
 DIFF_STDERR="${XRAY_DIFF_STDERR:-0}"
 
@@ -96,13 +96,6 @@ run_backend() {
                 "$XRAY" run "$case" >"$out_prefix.out" 2>"$raw_err" || rc=$?
             fi
             ;;
-        jit)
-            if [ "$#" -gt 0 ]; then
-                "$XRAY" run --jit-force "$case" -- "$@" >"$out_prefix.out" 2>"$raw_err" || rc=$?
-            else
-                "$XRAY" run --jit-force "$case" >"$out_prefix.out" 2>"$raw_err" || rc=$?
-            fi
-            ;;
         aot)
             local bin="$out_prefix.bin"
             if ! "$XRAY" build --native "$case" -o "$bin" >"$out_prefix.buildlog" 2>&1; then
@@ -132,7 +125,7 @@ run_case() {
     anchor="$(sed -n '1{s#^// *anchor: *##p;}' "$case" 2>/dev/null)"
 
     # Per-case backend restriction. A case may carry, within its first 5 lines,
-    #   // diff-backends: vm,jit
+    #   // diff-backends: vm,aot
     # to opt out of backends that have a known, tracked divergence.  The
     # exclusion is printed (never silent) so the net still documents what it
     # is not yet covering.
@@ -148,7 +141,7 @@ run_case() {
     fi
 
     local enabled="" excluded=""
-    for b in vm jit aot; do
+    for b in vm aot; do
         backend_enabled "$b" || continue
         if [ -n "$case_backends" ]; then
             case ",$case_backends," in
@@ -221,7 +214,7 @@ run_case() {
     return 1
 }
 
-echo "=== Backend Differential (VM / JIT / AOT) ==="
+echo "=== Backend Differential (VM / AOT) ==="
 echo "Binary:   $XRAY"
 echo "Backends: $BACKENDS"
 echo ""

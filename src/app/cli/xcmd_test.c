@@ -240,17 +240,13 @@ static int run_hooks(XrayIsolate *X, XrTestFunc *hooks, int count) {
 
 /* ========== Run Single Test File ========== */
 
-static void run_test_file(const char *filepath, XrTestConfig *config, bool jitless, bool jit_force,
-                          XrTestFileResult *result) {
+static void run_test_file(const char *filepath, XrTestConfig *config, XrTestFileResult *result) {
     memset(result, 0, sizeof(*result));
     strncpy(result->filepath, filepath, sizeof(result->filepath) - 1);
 
     // Create fresh isolate via profile factory
     XrayIsolateParams params;
     xr_isolate_profile_params(XR_ISOLATE_PROFILE_TEST, &params);
-    params.enable_jit = !jitless;
-    if (jit_force)
-        params.jit_threshold = 1;
     XrayIsolate *X = xr_isolate_profile_create(&params);
     if (!X) {
         result->has_error = true;
@@ -504,8 +500,6 @@ typedef struct {
     _Atomic int next_idx;
     XrTestFileResult *results;
     XrTestConfig config;
-    bool jitless;
-    bool jit_force;
 } XrTestParallelCtx;
 
 static void *test_worker_thread(void *arg) {
@@ -514,8 +508,7 @@ static void *test_worker_thread(void *arg) {
         int idx = atomic_fetch_add(&ctx->next_idx, 1);
         if (idx >= ctx->file_count)
             break;
-        run_test_file(ctx->files[idx], &ctx->config, ctx->jitless, ctx->jit_force,
-                      &ctx->results[idx]);
+        run_test_file(ctx->files[idx], &ctx->config, &ctx->results[idx]);
     }
     return NULL;
 }
@@ -719,8 +712,6 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
     bool verbose = xr_cli_opt_bool(&inv->options, "verbose");
     bool quiet = xr_cli_opt_bool(&inv->options, "quiet");
     bool fail_fast = xr_cli_opt_bool(&inv->options, "fail-fast");
-    bool jitless = xr_cli_opt_bool(&inv->options, "no-jit");
-    bool jit_force = xr_cli_opt_bool(&inv->options, "jit-force");
     const char *filter = xr_cli_opt_string(&inv->options, "filter", NULL);
     int num_threads = xr_cli_opt_int(&inv->options, "jobs", 1);
     if (num_threads < 1)
@@ -770,7 +761,7 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
         int aw = quiet ? 0 : compute_align_width(fl.paths, fl.count);
         char last_dir[1024] = "";
         for (int i = 0; i < fl.count; i++) {
-            run_test_file(fl.paths[i], &config, jitless, jit_force, &results[i]);
+            run_test_file(fl.paths[i], &config, &results[i]);
 
             if (!quiet) {
                 char dir_buf[1024];
@@ -800,8 +791,6 @@ XR_FUNC int cmd_test(const XrCliInvocation *inv) {
             .next_idx = 0,
             .results = results,
             .config = config,
-            .jitless = jitless,
-            .jit_force = jit_force,
         };
 
         int nworkers = num_threads;

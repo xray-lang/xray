@@ -25,9 +25,6 @@ static const XrCliOptionSpec run_options[] = {
     {"workers", 'W', XR_CLI_VALUE_INT, false, false, "N", "Number of worker threads"},
     {"coro-watch", 'w', XR_CLI_VALUE_INT, false, false, "MS", "Coroutine watch interval (ms)"},
     {"coro-http", 'H', XR_CLI_VALUE_INT, false, false, "PORT", "Coroutine HTTP monitor port"},
-    {"no-jit", 'J', XR_CLI_VALUE_NONE, false, false, NULL, "Disable JIT compiler"},
-    {"jit-force", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Force JIT on first call"},
-    {"jit-stats", 'S', XR_CLI_VALUE_NONE, false, false, NULL, "Print JIT statistics"},
     {"dump-ic", 'I', XR_CLI_VALUE_NONE, false, false, NULL, "Dump inline cache feedback"},
     XR_CLI_OPT_END};
 
@@ -41,8 +38,6 @@ static const XrCliOptionSpec test_options[] = {
     {"verbose", 'v', XR_CLI_VALUE_NONE, false, false, NULL, "Verbose output"},
     {"fail-fast", 'F', XR_CLI_VALUE_NONE, false, false, NULL, "Stop on first failure"},
     {"filter", 'f', XR_CLI_VALUE_STRING, false, false, "PATTERN", "Only run matching tests"},
-    {"no-jit", 'J', XR_CLI_VALUE_NONE, false, false, NULL, "Disable JIT compiler"},
-    {"jit-force", 0, XR_CLI_VALUE_NONE, false, false, NULL, "Force JIT on first call"},
     {"quiet", 'q', XR_CLI_VALUE_NONE, false, false, NULL, "Quiet mode (exit code only)"},
     {"jobs", 'j', XR_CLI_VALUE_INT, false, false, "N", "Parallel threads (default 1)"},
     XR_CLI_OPT_END};

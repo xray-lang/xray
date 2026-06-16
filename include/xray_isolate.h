@@ -28,8 +28,6 @@ typedef struct XrayIsolate XrayIsolate;
 
 typedef enum {
     XRAY_BACKEND_BYTECODE,  // Bytecode interpreter (default, fast startup)
-    XRAY_BACKEND_LLVM_JIT,  // LLVM JIT compiler (future)
-    XRAY_BACKEND_MIXED      // Mixed mode: Bytecode + JIT for hot code (future)
 } XrayBackendType;
 
 /* ========== Init Flags ========== */
@@ -58,11 +56,6 @@ typedef struct {
 
     /* === Backend === */
     XrayBackendType backend_type;
-
-    /* === JIT (for LLVM/Mixed backends) === */
-    bool enable_jit;
-    int jit_threshold;  // Call count before JIT (default: 100)
-    bool jit_stats;     // --jit-stats: print compilation statistics on exit
 
     /* === Memory === */
     size_t initial_heap_size;  // 0 = use default
@@ -97,7 +90,7 @@ typedef struct {
 // Returns NULL on failure.
 XRAY_API XrayIsolate *xray_isolate_new(const XrayIsolateParams *params);
 
-// Initialize params with defaults: Bytecode backend, GC enabled, JIT disabled
+// Initialize params with defaults: Bytecode backend, GC enabled
 XRAY_API void xray_isolate_params_init(XrayIsolateParams *params);
 
 // Setup full runtime (compiler, classes, modules, reflection, regex, etc.)

@@ -1159,7 +1159,7 @@ if(BUILD_TESTS)
         TIMEOUT 120
     )
 
-    # Cross-backend differential net: same .xr through VM / JIT / AOT must
+    # Cross-backend differential net: same .xr through VM / AOT must
     # produce byte-identical observable output. Safety net for the backend
     # unification work (tasks 108-118).
     add_test(
