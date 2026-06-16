@@ -314,6 +314,24 @@ TEST(parse_build_native_verbose) {
     xr_cli_invocation_free(&inv);
 }
 
+TEST(parse_build_native_debug_strip) {
+    const XrCliCommandSpec *spec = xr_cli_find_command("build");
+    ASSERT_NOT_NULL(spec);
+
+    XrCliContext ctx = {.program = "xray"};
+    XrCliInvocation inv;
+    char *argv[] = {"--native", "-g", "--strip", "file.xr"};
+
+    XrCliExitCode rc = xr_cli_parse_command(spec, 4, argv, &ctx, &inv);
+    ASSERT_EQ_INT(rc, XR_CLI_EXIT_OK);
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "native"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "debug"));
+    ASSERT_TRUE(xr_cli_opt_bool(&inv.options, "strip"));
+    ASSERT_EQ_INT(inv.positional_count, 1);
+
+    xr_cli_invocation_free(&inv);
+}
+
 TEST(parse_build_cross_toolchain_options) {
     const XrCliCommandSpec *spec = xr_cli_find_command("build");
     ASSERT_NOT_NULL(spec);
@@ -603,6 +621,7 @@ RUN_TEST_SUITE("Command Parser");
 RUN_TEST(parse_cmd_simple_flag);
 RUN_TEST(parse_cmd_short_flag);
 RUN_TEST(parse_build_native_verbose);
+RUN_TEST(parse_build_native_debug_strip);
 RUN_TEST(parse_build_cross_toolchain_options);
 RUN_TEST(parse_toolchain_doctor_with_zig);
 RUN_TEST(parse_cmd_long_option_with_value);
