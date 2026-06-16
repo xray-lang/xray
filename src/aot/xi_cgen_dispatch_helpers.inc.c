@@ -1623,13 +1623,9 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
             fprintf(out, "XR_TO_INT(");
         else if (cg_rep(v) == XR_REP_F64)
             fprintf(out, "XR_TO_FLOAT(");
-        if (cg_task_field_needs_xrt_bridge(field))
-            fprintf(out, "xr_aot_bridge_value_to_xrt(");
         fprintf(out, "%s(NULL, ", task_helper);
         emit_vref(out, v->args[0]);
         fprintf(out, ")");
-        if (cg_task_field_needs_xrt_bridge(field))
-            fprintf(out, ")");
         if (cg_rep(v) == XR_REP_I64 || cg_rep(v) == XR_REP_F64)
             fprintf(out, ")");
         return;

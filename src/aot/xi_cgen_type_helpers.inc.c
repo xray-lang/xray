@@ -110,10 +110,6 @@ static const char *cg_task_field_helper(const char *field) {
     return NULL;
 }
 
-static bool cg_task_field_needs_xrt_bridge(const char *field) {
-    return field && strcmp(field, "status") == 0;
-}
-
 static bool cg_channel_method_may_suspend(const XiValue *v) {
     if (!v || v->op != XI_CALL_METHOD || v->nargs < 1)
         return false;
