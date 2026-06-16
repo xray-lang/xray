@@ -1,0 +1,54 @@
+class Box {
+    value: int
+
+    constructor(v) {
+        this.value = v
+    }
+
+    get() -> int {
+        return this.value
+    }
+
+    set(v: int) {
+        this.value = v
+    }
+}
+
+fn sum(data: in Array<int>) -> int {
+    let total = 0
+    for (item in data) {
+        total = total + item
+    }
+    return total
+}
+
+fn put(table: ref Map<string, int>, key: string, value: int) {
+    table.set(key, value)
+}
+
+fn hasKey(table: in Map<string, int>, key: string) -> bool {
+    return table.has(key)
+}
+
+fn setBox(box: ref Box, value: int) {
+    box.set(value)
+}
+
+fn readBox(box: in Box) -> int {
+    return box.get()
+}
+
+let values: Array<int> = [1, 2, 3]
+print(sum(values))
+values.push(4)
+print(sum(values))
+
+let table: Map<string, int> = #{}
+put(table, "x", 7)
+print(hasKey(table, "x"))
+print(table["x"])
+
+let box = new Box(3)
+print(readBox(box))
+setBox(box, 8)
+print(readBox(box))

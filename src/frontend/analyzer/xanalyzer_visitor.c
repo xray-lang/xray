@@ -69,6 +69,32 @@ static XrClassInfo *member_set_class_info(XaInferContext *ctx, XrType *type,
     return info;
 }
 
+XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr) {
+    if (!ctx || !ctx->analyzer || !expr || expr->type != AST_VARIABLE || !expr->as.variable.name)
+        return NULL;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, expr->as.variable.name);
+    if (sym && sym->kind == XA_SYM_PARAMETER && sym->passing_mode == XR_PARAM_IN)
+        return sym;
+    return NULL;
+}
+
+XR_FUNC bool xa_method_name_mutates_receiver(const char *name) {
+    if (!name)
+        return false;
+    static const char *const mutators[] = {
+        "push",     "pop",     "shift",       "unshift",      "reserve",     "resize",
+        "splice",   "reverse", "sort",        "fill",         "copyWithin",  "repeatFrom",
+        "copyFrom", "set",     "delete",      "clear",        "add",         "send",
+        "recv",     "trySend", "tryRecv",     "sendTimeout",  "recvTimeout", "close",
+        "cancel",   "poll",    "awaitResult", "awaitTimeout", "append",      "flush",
+        "tryPop",   NULL};
+    for (const char *const *p = mutators; *p; p++) {
+        if (strcmp(name, *p) == 0)
+            return true;
+    }
+    return false;
+}
+
 static XrType *member_set_substitute_field_type(XaInferContext *ctx, XrType *type,
                                                 XaSymbolLinks *class_links, XrType *field_type) {
     if (!ctx || !ctx->analyzer || !type || !class_links || !field_type)
@@ -2259,6 +2285,17 @@ void xa_visit_infer_stmt(XaInferContext *ctx, AstNode *node) {
                 index_type = xa_visit_infer_expr(ctx, is->index);
             if (is->value)
                 xa_visit_infer_expr(ctx, is->value);
+            XaSymbol *in_param = xa_in_param_symbol_for_expr(ctx, is->array);
+            if (in_param) {
+                XrLocation loc = {
+                    .file = ctx->file_path, .line = node->line, .column = node->column};
+                char msg[160];
+                snprintf(msg, sizeof(msg),
+                         "Cannot assign through 'in' parameter '%s' (readonly reference)",
+                         in_param->name ? in_param->name : "?");
+                xa_analyzer_add_diagnostic(ctx->analyzer, XR_DIAG_SEV_ERROR,
+                                           XR_ERR_ANALYZE_CONST_ASSIGN, msg, &loc);
+            }
             // Tuples are immutable: reject index-based assignment
             if (array_type && XR_TYPE_IS_TUPLE(array_type)) {
                 XrLocation loc = {

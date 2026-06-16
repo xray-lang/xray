@@ -71,6 +71,8 @@ XR_FUNC const char *get_typeof_arg_name(AstNode *node);
 XR_FUNC void xa_assign_check_type(XaInferContext *ctx, AstNode *node, XrType *target_type,
                                   XrType *value_type, const char *target_name,
                                   const char *target_kind);
+XR_FUNC XaSymbol *xa_in_param_symbol_for_expr(XaInferContext *ctx, AstNode *expr);
+XR_FUNC bool xa_method_name_mutates_receiver(const char *name);
 
 // Module graph exports lookup (defined in xanalyzer_visitor.c).
 // Resolves an import specifier to the target module's exports hashmap.
