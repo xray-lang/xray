@@ -3388,6 +3388,12 @@ TEST(cgen_coro_channel_timeout_publishes_state_before_block) {
            "sendTimeout must use the AOT timeout bridge");
     assert(contains(code, "xr_aot_chan_recv_slot(ctx,") &&
            "recvTimeout must use the AOT recv slot bridge");
+    const char *send_timeout = strstr(code, "XrAotResult _chan_send_timeout_");
+    const char *recv_timeout =
+        send_timeout ? strstr(send_timeout, "XrAotResult _chan_recv_timeout_") : NULL;
+    assert(send_timeout != NULL && recv_timeout != NULL && "timeout send/recv blocks should exist");
+    assert(count_between(send_timeout, recv_timeout, "xr_aot_bridge_value_to_xrt(") == 0 &&
+           "sendTimeout result is a native no-payload SendResult enum and must not be bridged");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_send_timeout") &&
            "sendTimeout must publish the AOT resume state before runtime blocking");
     assert(nonzero_state_precedes_call(code, "xr_aot_chan_recv_slot(ctx,") &&
