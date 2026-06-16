@@ -89,6 +89,7 @@ static const XrCliOptionSpec build_options[] = {
     {"cc", 'C', XR_CLI_VALUE_STRING, false, false, "CC", "C compiler to use"},
     {"opt", 'O', XR_CLI_VALUE_STRING, false, false, "LEVEL",
      "Optimization (0,1,2,3,s,fast; default 3)"},
+    {"debug", 'g', XR_CLI_VALUE_NONE, false, false, NULL, "Emit native debug information"},
     {"cpu", 0, XR_CLI_VALUE_STRING, false, false, "CPU",
      "Tune for CPU via -march (e.g. native); host --native builds only"},
     {"sysroot", 'r', XR_CLI_VALUE_STRING, false, false, "DIR", "System root directory"},

@@ -400,8 +400,10 @@ XR_FUNC bool xr_cli_toolchain_build_standalone(const XrCliToolchainPlan *plan,
         out->argv[ai++] = "-fdata-sections";
         out->argv[ai++] = "-Wl,--gc-sections";
     }
-    if (strip_symbols)
+    if (strip_symbols) {
+        out->argv[ai++] = "-Wl,-S";
         out->argv[ai++] = "-Wl,-x";
+    }
 
     out->argv[ai] = NULL;
     (void) err;
