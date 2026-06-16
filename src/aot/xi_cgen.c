@@ -894,6 +894,28 @@ static bool cg_array_block_has_no_side_effect_before(const XiBlock *blk, const X
 static bool cg_array_index_access_bounds_proven(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v);
 static void emit_condition_expr(FILE *out, const XiValue *v);
 static void emit_condition_expr_ctx(XiCgenCtx *ctx, FILE *out, const XiValue *v);
+
+static const char *cg_current_source_path(const XiCgenCtx *ctx) {
+    if (ctx && ctx->module && ctx->module->path && ctx->module->path[0])
+        return ctx->module->path;
+    if (ctx && ctx->module && ctx->module->name && ctx->module->name[0])
+        return ctx->module->name;
+    return "<xray>";
+}
+
+static void emit_source_line_directive(XiCgenCtx *ctx, FILE *out, uint32_t line) {
+    if (!out || line == 0)
+        return;
+    fprintf(out, "#line %u ", line);
+    emit_c_string_literal(out, cg_current_source_path(ctx));
+    fprintf(out, "\n");
+}
+
+static void emit_value_source_line(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
+    if (v)
+        emit_source_line_directive(ctx, out, v->line);
+}
+
 #include "xi_cgen_struct_helpers.inc.c"
 #include "xi_cgen_class_helpers.inc.c"
 static bool cg_has_exception_handling(const XiFunc *f);
@@ -1073,6 +1095,7 @@ static void emit_default_return_for_abi(XiCgenCtx *ctx, FILE *out, const XiFunc 
 static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
     XR_DCHECK(v != NULL, "emit_value_stmt: NULL value");
+    emit_value_source_line(ctx, out, v);
 
     /* Inlined struct: emit local anonymous C struct with native fields. */
     if (v->op == XI_STRUCT_NEW && cg_struct_can_inline(f, v)) {
@@ -1258,6 +1281,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
         case XI_BLOCK_RETURN: {
             if (blk->control && blk->control->op == XI_ERR_RETURN)
                 break;
+            emit_value_source_line(ctx, out, blk->control);
             emit_class_field_cache_flush(ctx, out);
             emit_deferred_calls(ctx, out, f, prefix);
             if (emit_class_native_return_stmt(ctx, out, f, blk))
@@ -1288,6 +1312,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             XR_DCHECK(blk->control != NULL, "IF block missing control");
             XR_DCHECK(blk->succs[0] != NULL, "IF block missing then");
             XR_DCHECK(blk->succs[1] != NULL, "IF block missing else");
+            emit_value_source_line(ctx, out, blk->control);
             if (emit_structured_array_fill_loop_stmt(ctx, out, f, blk, prefix))
                 break;
             if (emit_bool_accumulate_diamond_stmt(ctx, out, blk))
