@@ -323,35 +323,6 @@ TEST(code_action_go_capture_to_shared_const) {
     xlsp_server_free(server);
 }
 
-TEST(code_action_move_to_shared_let) {
-    XrLspServer *server = xlsp_server_new();
-    ASSERT(server != NULL);
-
-    // Line 0: fn t() {
-    // Line 1:     let data = [1, 2, 3]
-    // Line 2:     go fn(d: Array<int>) { print(d.length) }(move data)
-    // Line 3: }
-    const char *content = "fn t() {\n"
-                          "    let data = [1, 2, 3]\n"
-                          "    go fn(d: Array<int>) { print(d.length) }(move data)\n"
-                          "}\n";
-    XrLspDocument *doc = xlsp_document_open(server, "file:///m.xr", content, 1);
-    ASSERT(doc != NULL);
-
-    XrJsonValue *params =
-        make_code_action_params("file:///m.xr", 2, 48, 52,
-                                "'move' requires 'data' to be declared as 'shared let'\n"
-                                "hint: change the declaration to 'shared let data = ...'");
-
-    XrJsonValue *actions = xlsp_handle_code_action(server, params);
-    ASSERT(actions != NULL);
-    ASSERT(actions_contain_title_with(actions, "shared let", "data"));
-
-    xjson_free(params);
-    xjson_free(actions);
-    xlsp_server_free(server);
-}
-
 TEST(code_action_quickfix_skips_when_decl_missing) {
     // If the declaration line cannot be located (e.g. variable declared in
     // another file), the quick-fix helper should simply not emit an action
@@ -409,7 +380,6 @@ int main(int argc, char **argv) {
 
     printf("\nCode action concurrency quick-fix tests:\n");
     RUN_TEST(code_action_go_capture_to_shared_const);
-    RUN_TEST(code_action_move_to_shared_let);
     RUN_TEST(code_action_quickfix_skips_when_decl_missing);
 
     printf("\n=== Results: %d passed, %d failed ===\n\n", tests_passed, tests_failed);

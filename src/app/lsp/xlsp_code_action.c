@@ -241,20 +241,6 @@ XrJsonValue *xlsp_handle_code_action(XrLspServer *server, XrJsonValue *params) {
                                              title);
                 }
             }
-
-            // QuickFix: E0363 move requires shared let -> insert 'shared'
-            // Matches: "'move' requires 'NAME' to be declared as 'shared let'"
-            if (msg && strstr(msg, "'move' requires '")) {
-                char var_name[128];
-                if (extract_quoted_name_after(msg, "'move' requires '", var_name,
-                                              sizeof(var_name))) {
-                    char title[192];
-                    snprintf(title, sizeof(title),
-                             "Declare '%s' as 'shared let' (allow ownership transfer)", var_name);
-                    push_decl_rewrite_action(actions, uri, doc->content, var_name, "shared let",
-                                             title);
-                }
-            }
         }
     }
 

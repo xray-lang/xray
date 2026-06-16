@@ -91,22 +91,6 @@ static void ea_register_var(EaContext *ctx, const char *name, AstNode *decl) {
 }
 
 /*
- * Look up variable declaration by name, searching from current scope outward.
- * Stops at function boundary (no cross-function escape promotion).
- */
-static AstNode *ea_lookup_var(EaContext *ctx, const char *name) {
-    for (int d = ctx->depth; d >= ctx->func_boundary; d--) {
-        EaScope *scope = &ctx->scopes[d];
-        for (int i = scope->count - 1; i >= 0; i--) {
-            if (scope->vars[i].name && strcmp(scope->vars[i].name, name) == 0) {
-                return scope->vars[i].decl_node;
-            }
-        }
-    }
-    return NULL;
-}
-
-/*
  * Check if a name exists in the current function scope (including params).
  * Used to distinguish local variables from captured outer variables.
  */
@@ -187,36 +171,25 @@ static void ea_walk(EaContext *ctx, AstNode *node);
 static void ea_walk_statements(EaContext *ctx, AstNode **stmts, int count);
 
 /*
- * Enforce the explicit sharing model for `move var` arguments:
- *   - shared let    -> allowed (the intended use case); already shared storage
- *   - shared const  -> ERROR at move check time (xa_visit_move_expr)
- *   - plain let     -> ERROR here: require explicit `shared let` declaration
- *   - const         -> ERROR at move check time (xa_visit_move_expr)
+ * Validate `move var` arguments seen by coroutine/channel boundaries:
+ *   - shared let    -> allowed; already shared storage, ownership is explicit
+ *   - plain let     -> allowed by move strategy B; channel/go call paths keep
+ *                      their existing deep-copy isolation while the source is
+ *                      invalidated by the type checker
+ *   - const/shared const/thread-safe primitives -> rejected by xa_visit_move_expr
  */
-static void ea_mark_escaped(EaContext *ctx, AstNode *ref_node, const char *var_name) {
-    AstNode *decl = ea_lookup_var(ctx, var_name);
-    if (!decl)
-        return;
-    if (decl->type != AST_VAR_DECL && decl->type != AST_CONST_DECL)
-        return;
-    VarDeclNode *vd = &decl->as.var_decl;
-    // Already explicitly shared — legal; no action required here.
-    if (vd->storage_mode == XR_STORAGE_SHARED)
-        return;
-    // const is handled elsewhere (xa_visit_move_expr rejects move of const).
-    if (vd->is_const)
-        return;
-    // Plain let with `move` — reject; `move` is only valid on `shared let`.
-    ea_emit_error(ctx, ref_node, XR_ERR_ANALYZE_CLOSURE_CAPTURE,
-                  "'move' requires '%s' to be declared as 'shared let'\n"
-                  "hint: change the declaration to 'shared let %s = ...' or drop 'move' "
-                  "to rely on deep-copy semantics",
-                  var_name);
+static void ea_note_move_arg(EaContext *ctx, AstNode *ref_node, const char *var_name) {
+    // Move strategy B allows mutable locals and shared lets; this pass only
+    // keeps the cross-go capture discipline. The type checker handles const
+    // and thread-safe runtime primitives, and records use-after-move state.
+    (void) ctx;
+    (void) ref_node;
+    (void) var_name;
 }
 
 /*
  * Check arguments of a go call or ch.send for move expressions.
- * For each 'move var', mark the variable as escaped.
+ * For each 'move var', keep the move visible to the normal expression walk.
  */
 static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
     for (int i = 0; i < arg_count; i++) {
@@ -226,7 +199,7 @@ static void ea_check_move_args(EaContext *ctx, AstNode **args, int arg_count) {
         if (arg->type == AST_MOVE_EXPR) {
             AstNode *inner = arg->as.move_expr.expr;
             if (inner && inner->type == AST_VARIABLE) {
-                ea_mark_escaped(ctx, arg, inner->as.variable.name);
+                ea_note_move_arg(ctx, arg, inner->as.variable.name);
             }
         }
         // Also walk the argument (it may contain nested expressions)

@@ -17,9 +17,9 @@
  *     (must be passed via argument or declared `shared const`)
  *   - Mutable `shared let x` captured by a go closure  -> ERROR
  *     (only `shared const` may be captured; `shared let` is move-only)
- *   - `move x` where `x` is a plain `let`              -> ERROR
- *     (move requires `shared let`)
- *   - `move x` where `x` is `const` / `shared const`   -> handled by
+ *   - `move x` for a mutable local                     -> allowed
+ *     (source invalidation is handled by the type checker)
+ *   - `move x` where `x` is `const` / shared primitive -> handled by
  *     xa_visit_move_expr in the type checker
  *
  * Function-local analysis only (no cross-function inference).
