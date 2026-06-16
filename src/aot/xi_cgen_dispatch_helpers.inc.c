@@ -38,11 +38,18 @@ static void xicgen_param(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
 
 static void xicgen_identity(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                             const char *prefix) {
-    (void) ctx;
-    (void) f;
     (void) prefix;
     XR_DCHECK(v->nargs >= 1, "xicgen_identity: need arg");
+    /* XI_COPY/XI_MOVE are value-level identities, but the rep planner may give
+     * the result a different declared rep than its source (e.g. a native-local
+     * PTR array moved into a TAGGED-declared local). Bridge that gap so the
+     * emitted initializer matches the result's declared C type; when the reps
+     * already agree this is a no-op and emits the bare source reference. */
+    XrRep from_rep = cg_value_decl_storage_rep(ctx, f, v->args[0]);
+    XrRep to_rep = cg_value_decl_storage_rep(ctx, f, v);
+    const char *conv_suffix = emit_conversion_prefix(out, v->type, from_rep, to_rep);
     emit_vref(out, v->args[0]);
+    emit_conversion_suffix(out, conv_suffix);
 }
 
 static void xicgen_copy(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
