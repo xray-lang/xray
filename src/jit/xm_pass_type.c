@@ -810,6 +810,38 @@ XmPassChange xm_pass_type_prop(XmFunc *func) {
                                                : xm_pass_no_change();
 }
 
+/* Collapse the per-vreg type resolution into a single authoritative field.
+ *
+ * Inference scatters a value's type across channels: instruction results carry
+ * it on def->ctype, def-less phi/param values only get the inferred xrtype, and
+ * everything else falls back to the machine rep. Consumers that need a runtime
+ * tag (call-argument boxing, deopt safepoint reconstruction) used to each pick a
+ * different channel, so a def-less induction phi — typed only via xrtype — read
+ * as UNKNOWN at those sites and decoded to a null tag.
+ *
+ * Materializing the resolved type onto vregs[].ctype once, after inference and
+ * before codegen, gives xm_ref_ctype one source every consumer agrees on.
+ * Def-having vregs keep exactly what def->ctype said (so heap_cid and existing
+ * behavior are preserved); only def-less vregs gain a first-class type. */
+XR_FUNC void xm_func_materialize_vreg_ctype(XmFunc *func) {
+    if (!func)
+        return;
+    for (uint32_t vi = 0; vi < func->nvreg; vi++) {
+        XmVReg *v = &func->vregs[vi];
+        XmType t;
+        if (v->def) {
+            t = v->def->ctype;
+        } else if (v->xrtype) {
+            t = (XmType) {vtag_to_type_kind(xrtype_to_vtag(v->xrtype)), 0, 0};
+            if (xm_type_is_ptr(t.kind) && v->heap_type)
+                t.heap_cid = v->heap_type;
+        } else {
+            t = xm_type_from_rep(v->rep);
+        }
+        v->ctype = t;
+    }
+}
+
 /* ========== Type-Driven Specialization ========== */
 
 /*

@@ -526,6 +526,13 @@ typedef struct {
     uint16_t cost;        // spill cost (heuristic)
     uint32_t start, end;  // live range [start, end)
     XrType *xrtype;       // precise static type (NULL = unknown)
+    XmType ctype;         // Authoritative resolved XM type for this vreg: the single
+                          // source of truth every consumer (call-arg boxing, deopt
+                          // safepoint tags, codegen) reads via xm_ref_ctype(). Unlike
+                          // def->ctype it also exists for def-less vregs (phi/param),
+                          // so a proven scalar tag is visible everywhere. Filled by
+                          // xm_func_materialize_vreg_ctype() before codegen; UNKNOWN
+                          // beforehand (inference reads the fallback channels).
     // Compiler hints for optimization
     struct XrProto *callee_proto;   // known callee proto (from OP_CLOSURE/GETSHARED)
     struct XrStructLayout *layout;  // struct field layout (from OP_NEW_STRUCT / params)
@@ -766,16 +773,24 @@ static inline XmType xm_ref_ctype(XmFunc *func, XmRef ref) {
     uint32_t vi = XM_REF_INDEX(ref);
     if (vi >= func->nvreg)
         return XM_TYPE_UNKNOWN;
-    XmIns *def = func->vregs[vi].def;
+    XmVReg *v = &func->vregs[vi];
+    /* Authoritative resolved type. xm_func_materialize_vreg_ctype() fills this
+     * for every vreg (including def-less phi/param) once type inference has
+     * converged, so all post-inference consumers — call-argument boxing, deopt
+     * safepoint tags, codegen — read one consistent source instead of each
+     * re-deriving from a different channel (def->ctype / xrtype / rep / runtime
+     * tags) and disagreeing on def-less values. */
+    if (v->ctype.kind != XM_TK_UNKNOWN)
+        return v->ctype;
+    /* Pre-materialization fallbacks, used while type inference is still running
+     * (it calls xm_ref_ctype on operands before ctype is materialized). */
+    XmIns *def = v->def;
     if (def)
         return def->ctype;
-    /* Phi / param vregs have no defining instruction to hold a ctype, so the
-     * type pass records a proven scalar type in xrtype (e.g. an int induction
-     * phi whose tagged inputs all carry an i64 tag). Surface that here so
-     * tag-sensitive consumers — notably call-argument boxing — read the real
-     * tag instead of falling back to an unwritten runtime tag slot (which
-     * decodes raw 0 as NULL). Heap/unknown xrtypes defer to the machine rep. */
-    XrType *xt = func->vregs[vi].xrtype;
+    /* Def-less vregs (phi/param) record a proven scalar type in xrtype; surface
+     * it so an in-flight inference scan sees the same tag the materialized field
+     * will later carry. Heap/unknown xrtypes defer to the machine rep. */
+    XrType *xt = v->xrtype;
     if (xt) {
         switch (xt->kind) {
             case XR_KIND_INT:
@@ -790,7 +805,7 @@ static inline XmType xm_ref_ctype(XmFunc *func, XmRef ref) {
                 break;
         }
     }
-    return xm_type_from_rep(func->vregs[vi].rep);
+    return xm_type_from_rep(v->rep);
 }
 
 /* ========== Dominator Utilities ========== */
@@ -804,5 +819,12 @@ XR_FUNC void xm_compute_idom(XmFunc *func, uint32_t *idom, uint32_t nblk);
 // Rebuild vreg.def pointers by scanning all instructions.
 // Call after any pass that moves or compacts instructions in block arrays.
 XR_FUNC void xm_rebuild_vreg_defs(XmFunc *func);
+
+// Materialize XmVReg.ctype for every vreg from the resolved type information
+// (def->ctype for instruction results, the inferred xrtype for def-less
+// phi/param values, machine rep as a last resort). Run once after type
+// inference converges and before codegen, so xm_ref_ctype exposes one
+// authoritative type to all consumers. Idempotent.
+XR_FUNC void xm_func_materialize_vreg_ctype(XmFunc *func);
 
 #endif  // XM_H
