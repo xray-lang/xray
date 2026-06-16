@@ -769,6 +769,27 @@ static inline XmType xm_ref_ctype(XmFunc *func, XmRef ref) {
     XmIns *def = func->vregs[vi].def;
     if (def)
         return def->ctype;
+    /* Phi / param vregs have no defining instruction to hold a ctype, so the
+     * type pass records a proven scalar type in xrtype (e.g. an int induction
+     * phi whose tagged inputs all carry an i64 tag). Surface that here so
+     * tag-sensitive consumers — notably call-argument boxing — read the real
+     * tag instead of falling back to an unwritten runtime tag slot (which
+     * decodes raw 0 as NULL). Heap/unknown xrtypes defer to the machine rep. */
+    XrType *xt = func->vregs[vi].xrtype;
+    if (xt) {
+        switch (xt->kind) {
+            case XR_KIND_INT:
+                return (XmType) {XM_TK_INT, 0, 0};
+            case XR_KIND_FLOAT:
+                return (XmType) {XM_TK_FLOAT, 0, 0};
+            case XR_KIND_BOOL:
+                return (XmType) {XM_TK_BOOL, 0, 0};
+            case XR_KIND_NULL:
+                return (XmType) {XM_TK_NULL, 0, 0};
+            default:
+                break;
+        }
+    }
     return xm_type_from_rep(func->vregs[vi].rep);
 }
 
