@@ -7,7 +7,7 @@
 # Usage: scripts/repro_win11_coro_burn.sh [N]
 #
 # N defaults to 5 (matches nightly.yml). Each case is run N times
-# under --jit-force on the project xray binary. The driver is
+# on the project xray binary. The driver is
 # deliberately bash-portable so it runs both natively on Windows
 # (Git Bash / WSL) and on Linux/macOS sanitizer hosts during local
 # triage; the underlying race is heap corruption rather than truly
@@ -80,13 +80,13 @@ for round in $(seq 1 "$N"); do
             echo "  SKIP: missing $c"
             continue
         fi
-        if "$XRAY_BIN" test --jit-force "$c" >/dev/null 2>&1; then
+        if "$XRAY_BIN" test "$c" >/dev/null 2>&1; then
             PASS=$((PASS + 1))
         else
             FAIL=$((FAIL + 1))
             {
                 echo "==== FAIL round=${round} test=${c} ===="
-                "$XRAY_BIN" test --jit-force "$c" 2>&1 | tail -n 30
+                "$XRAY_BIN" test "$c" 2>&1 | tail -n 30
                 echo
             } >>"$FAIL_LOG"
             echo "  FAIL: round=${round} $(basename "$c")"

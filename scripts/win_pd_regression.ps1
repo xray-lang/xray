@@ -1,8 +1,7 @@
 # Windows regression runner intended to be invoked from win_pd_test.sh
 # via prlctl exec. Mirrors the discipline of scripts/run_regression_tests.sh:
-# iterate every regression .xr, apply a per-test timeout, honour the
-# --no-jit list, skip helper files (_*), and emit a single-line summary
-# the host watchdog can parse.
+# iterate every regression .xr, apply a per-test timeout, skip helper
+# files (_*), and emit a single-line summary the host watchdog can parse.
 
 param(
     [string]$XrayBin = 'C:\workspace\xray-build\xray.exe',
@@ -11,12 +10,6 @@ param(
 )
 
 $ErrorActionPreference = 'Continue'
-
-$NoJit = @(
-    '1148_scope_race_stress.xr',
-    '1205_gc_incremental_pressure.xr',
-    '1207_gc_stress.xr'
-)
 
 if (-not (Test-Path $XrayBin)) {
     Write-Host "[regression] xray.exe not found: $XrayBin"
@@ -96,7 +89,6 @@ $start = Get-Date
 
 foreach ($f in $Files) {
     $argv = @('test')
-    if ($NoJit -contains $f.Name) { $argv += '--no-jit' }
     $argv += $f.FullName
 
     $stdout = [System.IO.Path]::GetTempFileName()
