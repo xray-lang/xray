@@ -1474,6 +1474,11 @@ XmCodegenResult xm_codegen_arm64(XmFunc *func, XmCodeAlloc *alloc) {
         }
     }
 
+    // Collapse resolved types onto vregs[].ctype now that inference is done and
+    // def pointers are fresh, so call-arg boxing and deopt safepoints below read
+    // one authoritative type per vreg (including def-less phi/param values).
+    xm_func_materialize_vreg_ctype(func);
+
     CodegenCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     for (uint32_t i = 0; i < XM_MAX_SUSPEND_ENTRIES; i++) {

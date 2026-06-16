@@ -566,7 +566,20 @@ XR_FUNC void a64_build_deopt_safepoints(CodegenCtx *ctx, XmCodegenResult *result
             XmLiveSlot *rs = &slots[nslots];
             rs->bc_slot = slot->bc_slot;
             rs->type = slot->rep;
+            /* Prefer the authoritative resolved type (materialized on the vreg)
+             * over the tag captured during lowering. A def-less induction phi is
+             * typed only after XM inference runs, so its lowering-time slot tag
+             * can be a stale null that deopt would otherwise rebuild as a null
+             * value -- the exact failure when a loop key is read back in the VM.
+             * xm_ref_ctype is the same source call-argument boxing reads, so both
+             * JIT paths agree. Only concrete scalars are overridden; dynamic and
+             * pointer values keep their precise lowering-time tag. */
             rs->xr_tag = slot->xr_tag;
+            if (xm_ref_is_vreg(slot->value)) {
+                uint8_t vk = type_kind_to_vtag(xm_ref_ctype(func, slot->value).kind);
+                if (vtag_is_concrete(vk))
+                    rs->xr_tag = vtag_to_value_tag(vk);
+            }
             rs->_pad = 0;
             rs->vreg_idx =
                 xm_ref_is_vreg(slot->value) ? (uint16_t) XM_REF_INDEX(slot->value) : 0xFFFF;

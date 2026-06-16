@@ -850,6 +850,10 @@ XmCodegenResult xm_codegen_x64(XmFunc *func, XmCodeAlloc *alloc) {
         }
     }
 
+    /* Collapse resolved types onto vregs[].ctype so call-arg boxing reads one
+     * authoritative type per vreg (including def-less phi/param values). */
+    xm_func_materialize_vreg_ctype(func);
+
     X64CodegenCtx ctx;
     memset(&ctx, 0, sizeof(ctx));
     for (uint32_t i = 0; i < XM_MAX_SUSPEND_ENTRIES; i++) {
