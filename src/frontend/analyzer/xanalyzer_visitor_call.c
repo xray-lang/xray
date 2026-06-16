@@ -740,6 +740,18 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     if (builtin_override)
         return_type = builtin_override;
 
+    /* copy(x): the deep-copy builtin is an identity over types and must
+     * preserve the argument's static type. It is registered as any->any, so
+     * without this the result is unknown and cannot be passed to a typed
+     * parameter (breaks `shared const c = copy(obj)` feeding a typed callee).
+     * Guard on unknown so a user-defined copy with a concrete signature wins. */
+    if (call->callee && call->callee->type == AST_VARIABLE && call->callee->as.variable.name &&
+        strcmp(call->callee->as.variable.name, "copy") == 0 && arg_count == 1 &&
+        effective_arg_types && effective_arg_types[0] &&
+        (!return_type || XR_TYPE_IS_UNKNOWN(return_type))) {
+        return_type = effective_arg_types[0];
+    }
+
     // Apply type substitution for generic method calls: obj.method<T>()
     if (callee_obj_type && call->callee->type == AST_MEMBER_ACCESS) {
         MemberAccessNode *ma = &call->callee->as.member_access;

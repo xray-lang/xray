@@ -1,0 +1,14 @@
+// 116 boundary: build a `shared let` map, freeze it into `shared const` with
+// `move`, then share it read-only across two goroutines (zero-copy capture).
+fn reader(t: Map<int, int>) -> int {
+    return t.length
+}
+
+shared let table: Map<int, int> = #{}
+table.set(1, 10)
+table.set(2, 20)
+shared const ro = move table
+let a = go reader(ro)
+let b = go reader(ro)
+print(await a)
+print(await b)
