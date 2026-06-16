@@ -1,0 +1,32 @@
+// copy(x) preserves the static type of x: the deep copy can be passed to a
+// typed parameter and bound to a typed `shared const`. Guards the analyzer
+// inference for the deep-copy builtin (116 copy / shared-promotion demos).
+class Box {
+    value: int
+
+    constructor(v: int) {
+        this.value = v
+    }
+}
+
+fn readValue(b: Box) -> int {
+    return b.value
+}
+
+let original = new Box(42)
+let duplicate = copy(original)
+print(readValue(duplicate))
+
+shared const frozen = copy(original)
+print(readValue(frozen))
+
+fn total(a: Array<int>) -> int {
+    let s = 0
+    for (x in a) {
+        s = s + x
+    }
+    return s
+}
+
+let xs: Array<int> = [1, 2, 3]
+print(total(copy(xs)))

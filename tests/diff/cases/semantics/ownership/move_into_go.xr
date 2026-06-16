@@ -1,0 +1,9 @@
+// 116 boundary: `shared let` ownership transferred into a goroutine via `move`.
+// Deterministic via await; output must match across VM/JIT/AOT.
+fn consume(data: Array<int>) -> int {
+    return data.length
+}
+
+shared let job: Array<int> = [1, 2, 3]
+let t = go consume(move job)
+print(await t)
