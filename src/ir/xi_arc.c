@@ -50,14 +50,47 @@ static bool stack_alloc_has_const_capacity(const XiValue *v) {
            v->args[0]->aux_int >= 0;
 }
 
-static bool stack_alloc_can_preserve_semantics(const XiValue *v) {
+static bool stack_alloc_closure_uses_are_direct_calls(const XiFunc *f, const XiValue *target) {
+    bool saw_use = false;
+    for (uint32_t b = 0; b < f->nblocks; b++) {
+        const XiBlock *blk = f->blocks[b];
+        if (!blk)
+            continue;
+        for (uint32_t i = 0; i < blk->nvalues; i++) {
+            const XiValue *user = blk->values[i];
+            if (!user)
+                continue;
+            for (uint16_t a = 0; a < user->nargs; a++) {
+                if (user->args[a] != target)
+                    continue;
+                if (user->op != XI_CALL || a != 0)
+                    return false;
+                saw_use = true;
+            }
+        }
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t a = 0; a < phi->value.nargs; a++) {
+                if (phi->value.args[a] == target)
+                    return false;
+            }
+        }
+        if (blk->control == target)
+            return false;
+    }
+    return saw_use;
+}
+
+static bool stack_alloc_can_preserve_semantics(const XiFunc *f, const XiValue *v) {
     if (!v || !stack_alloc_has_const_capacity(v))
-        return false;
+        return v && v->op == XI_CLOSURE_NEW && v->aux &&
+               stack_alloc_closure_uses_are_direct_calls(f, v);
     switch (v->op) {
         case XI_ARRAY_NEW:
         case XI_MAP_NEW:
         case XI_SET_NEW:
             return v->aux_int == 0;
+        case XI_CLOSURE_NEW:
+            return v->aux && stack_alloc_closure_uses_are_direct_calls(f, v);
         default:
             return false;
     }
@@ -93,8 +126,10 @@ XR_FUNC void xi_stack_alloc_rewrite(XiFunc *f) {
                 continue; /* scalars: no alloc */
             if (!xi_op_is_heap_alloc(v->op))
                 continue;
-            if (!stack_alloc_can_preserve_semantics(v))
+            if (!stack_alloc_can_preserve_semantics(f, v)) {
+                v->escape = (uint8_t) XI_ESC_ARG;
                 continue;
+            }
             rewrite_to_stack(v);
         }
     }
@@ -326,7 +361,7 @@ static bool tracks_rc(const XiValue *v) {
     if (!v)
         return false;
     if (v->op == XI_STACK_ALLOC)
-        return false; /* frame lifetime, no RC */
+        return v->aux_int == XI_CLOSURE_NEW && xi_own_type_is_rc(v->type);
     if (v->op != XI_PARAM && !op_has_trackable_result(v->op))
         return false; /* side-effect op: no owning result */
     /* Call results: a callee may return either a fresh (+1) reference or an
@@ -365,6 +400,8 @@ static XiFunc *arc_resolve_callee(const XiFunc *caller, const XiValue *cv) {
     if (!cv)
         return NULL;
     if (cv->op == XI_CLOSURE_NEW && cv->aux)
+        return (XiFunc *) cv->aux;
+    if (cv->op == XI_STACK_ALLOC && cv->aux_int == XI_CLOSURE_NEW && cv->aux)
         return (XiFunc *) cv->aux;
     if (cv->op == XI_GET_SHARED) {
         int64_t slot = cv->aux_int;

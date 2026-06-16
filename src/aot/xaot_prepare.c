@@ -1062,7 +1062,10 @@ static bool prepare_value_has_cell(const XiFunc *func, const XiValue *target) {
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *value = blk->values[vi];
-            if (!value || value->op != XI_CLOSURE_NEW || !value->aux)
+            if (!value ||
+                !(value->op == XI_CLOSURE_NEW ||
+                  (value->op == XI_STACK_ALLOC && value->aux_int == XI_CLOSURE_NEW)) ||
+                !value->aux)
                 continue;
             const XiFunc *child = (const XiFunc *) value->aux;
             for (uint16_t ci = 0; ci < child->ncaptures; ci++) {

@@ -77,7 +77,8 @@ static void test_use_policy(void) {
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL_METHOD, 0), false, "CALL_METHOD borrows receiver");
     ASSERT_EQ(xi_own_use_is_consuming(XI_CALL_METHOD, 1), true,
               "CALL_METHOD consumes non-receiver args");
-    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 0), true, "CALL consumes args");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 0), false, "CALL borrows callee");
+    ASSERT_EQ(xi_own_use_is_consuming(XI_CALL, 1), true, "CALL consumes ordinary args");
     ASSERT_EQ(xi_own_use_is_consuming(XI_OP_COUNT, 0), true, "unknown op conservatively consumes");
 }
 

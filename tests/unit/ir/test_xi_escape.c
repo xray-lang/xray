@@ -41,6 +41,7 @@ static XrType t_array = {.kind = XR_KIND_ARRAY, .id = 2, .frozen = true};
 static XrType t_map = {.kind = XR_KIND_MAP, .id = 3, .frozen = true};
 static XrType t_any = {.kind = XR_KIND_UNKNOWN, .id = 4, .frozen = true};
 static XrType t_set = {.kind = XR_KIND_SET, .id = 5, .frozen = true};
+static XrType t_func = {.kind = XR_KIND_FUNCTION, .id = 6, .frozen = true};
 
 /* Helper: create function with sealed entry block */
 static XiFunc *make_func(const char *name, XrType *ret) {
@@ -502,9 +503,49 @@ static void test_stack_alloc_skips_metadata_or_dynamic_capacity(void) {
     xi_stack_alloc_rewrite(f);
 
     ASSERT_EQ(typed_arr->op, XI_ARRAY_NEW, "typed array should keep metadata and stay heap");
+    ASSERT_EQ(typed_arr->escape, XI_ESC_ARG, "skipped typed array should re-enter ARC");
     ASSERT_EQ(typed_map->op, XI_MAP_NEW, "typed map should keep metadata and stay heap");
+    ASSERT_EQ(typed_map->escape, XI_ESC_ARG, "skipped typed map should re-enter ARC");
     ASSERT_EQ(weak_set->op, XI_SET_NEW, "weak set should keep weak flag and stay heap");
+    ASSERT_EQ(weak_set->escape, XI_ESC_ARG, "skipped weak set should re-enter ARC");
     ASSERT_EQ(dyn_map->op, XI_MAP_NEW, "dynamic-capacity map should stay heap");
+    ASSERT_EQ(dyn_map->escape, XI_ESC_ARG, "skipped dynamic map should re-enter ARC");
+
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RELEASE) >= 4, 1,
+              "skipped NO_ESCAPE heap allocations should receive death drops");
+    xi_func_free(f);
+}
+
+static void test_stack_alloc_direct_closure(void) {
+    XiFunc *f = make_func("stack_closure", &t_int);
+    XiBlock *b0 = f->entry;
+
+    XiFunc *child = make_func("child", &t_int);
+    child->parent_func = f;
+    XiValue *one = xi_const_int(child, child->entry, 1, &t_int);
+    xi_block_set_return(child->entry, one);
+
+    f->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    XR_CHECK(f->children != NULL, "test_stack_alloc_direct_closure: child allocation failed");
+    f->children[0] = child;
+    f->children_cap = 1;
+    f->nchildren = 1;
+
+    XiValue *closure = xi_value_new(f, b0, XI_CLOSURE_NEW, &t_func, 0);
+    closure->aux = child;
+    XiValue *call = xi_value_new(f, b0, XI_CALL, &t_int, 1);
+    call->args[0] = closure;
+    xi_block_set_return(b0, call);
+
+    xi_escape_analyze(f);
+    ASSERT_EQ(closure->escape, XI_ESC_NONE, "direct-call callee closure should not escape");
+    xi_stack_alloc_rewrite(f);
+    ASSERT_EQ(closure->op, XI_STACK_ALLOC, "direct-call closure should become STACK_ALLOC");
+    ASSERT_EQ(closure->aux_int, XI_CLOSURE_NEW, "closure STACK_ALLOC should preserve original op");
+    xi_arc_insert(f);
+    ASSERT_EQ(count_ops(f, XI_RELEASE) >= 1, 1,
+              "stack closure should be destructed at its death point");
     xi_func_free(f);
 }
 
@@ -543,6 +584,7 @@ int main(void) {
     test_stack_alloc_local_array();
     test_stack_alloc_local_plain_map_set();
     test_stack_alloc_skips_metadata_or_dynamic_capacity();
+    test_stack_alloc_direct_closure();
     test_stack_alloc_escaping_stays();
 
     printf("\n=== test_xi_escape: %d passed, %d failed ===\n", g_passed, g_failed);

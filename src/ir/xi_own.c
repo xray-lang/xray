@@ -106,6 +106,8 @@ static bool use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
 }
 
 XR_FUNC bool xi_own_use_is_consuming(uint16_t user_op, uint16_t arg_idx) {
+    if (user_op == XI_CALL && arg_idx == 0)
+        return false; /* callee closure is borrowed for the duration of the call */
     switch (xi_generated_op_own_use(user_op)) {
         case XI_GEN_OWN_USE_BORROW:
             return false;
