@@ -1126,6 +1126,17 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         fprintf(out, "xrt_json_get_field(");
         emit_vref(out, v->args[0]);
         fprintf(out, ", %d)", (int) v->aux_int);
+    } else if (strcmp(bn, "copy") == 0) {
+        /* copy(x): explicit deep copy. Reuses the coroutine deep-clone runtime
+         * (xrt_value_clone_for_coro / xrt_json_clone_for_coro), giving an
+         * independent recursive copy that matches the VM OP_COPY semantics. */
+        XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
+        bool is_json = v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_JSON;
+        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        fprintf(out, "%s(", is_json ? "xrt_json_clone_for_coro" : "xrt_value_clone_for_coro");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        emit_conversion_suffix(out, conv_suffix);
     } else if (strcmp(bn, "iter_new") == 0) {
         XR_DCHECK(v->nargs >= 1, "builtin iter_new: need arg");
         fprintf(out, "xrt_method_0(");
