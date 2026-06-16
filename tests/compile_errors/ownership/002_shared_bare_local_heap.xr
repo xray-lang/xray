@@ -1,0 +1,3 @@
+let source: Array<int> = [1, 2]
+shared const snapshot = source
+print(snapshot.length)

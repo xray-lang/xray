@@ -1,0 +1,1 @@
+shared binding from 'shared let' variable 'source' must use 'move source' or 'copy(source)'
