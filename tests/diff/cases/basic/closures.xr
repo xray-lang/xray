@@ -12,6 +12,9 @@ print(c())
 print(c())
 print(c())
 
+let base = 10
+print(((x: int) -> x + base)(5))
+
 fn fib(n: int) -> int {
     if (n < 2) {
         return n

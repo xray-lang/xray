@@ -1603,19 +1603,52 @@ typedef struct xrt_closure {
     XrValue upvals[];  // captured values (flexible array)
 } xrt_closure_t;
 
+static inline size_t xrt_closure_object_size(int nupvals) {
+    if (nupvals < 0)
+        nupvals = 0;
+    if ((size_t) nupvals > (SIZE_MAX - sizeof(xrt_closure_t)) / sizeof(XrValue)) {
+        fprintf(stderr, "xrt_closure_new: allocation size overflow\n");
+        abort();
+    }
+    return sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue);
+}
+
+static inline void xrt_closure_init(xrt_closure_t *c, void *fn, int nupvals) {
+    if (nupvals < 0)
+        nupvals = 0;
+    c->fn = fn;
+    c->nupvals = nupvals;
+    for (int i = 0; i < nupvals; i++)
+        c->upvals[i] = XR_NULL_VAL;
+}
+
 static inline XrValue xrt_closure_new(void *fn, int nupvals) {
-    xrt_closure_t *c =
-        (xrt_closure_t *) xrt_arc_alloc(sizeof(xrt_closure_t) + (size_t) nupvals * sizeof(XrValue));
+    xrt_closure_t *c = (xrt_closure_t *) xrt_arc_alloc(xrt_closure_object_size(nupvals));
     if (XR_UNLIKELY(!c)) {
         fprintf(stderr, "xrt_closure_new: out of memory\n");
         abort();
     }
-    c->fn = fn;
-    c->nupvals = nupvals;
-    for (int i = 0; i < nupvals; i++)
-        c->upvals[i] = (XrValue) {.i = 0, .tag = XR_TAG_NULL};
+    xrt_arc_mark_builtin(c, XRT_ARC_KIND_CLOSURE);
+    xrt_closure_init(c, fn, nupvals);
     return xr_mkptr(c, XR_TAG_CLOSURE);
 }
+
+#ifndef xrt_closure_stack_new
+#define xrt_closure_stack_new(fn_expr, nupvals_expr)                                               \
+    ({                                                                                             \
+        int _nupvals = (nupvals_expr);                                                             \
+        if (_nupvals < 0)                                                                          \
+            _nupvals = 0;                                                                          \
+        size_t _obj_size = xrt_closure_object_size(_nupvals);                                      \
+        XrGCHeader *_hdr = (XrGCHeader *) __builtin_alloca(sizeof(XrGCHeader) + _obj_size);        \
+        memset(_hdr, 0, sizeof(XrGCHeader) + _obj_size);                                           \
+        _hdr->extra = XR_OBJ_HAS_DTOR | XR_OBJ_STORAGE_STACK;                                      \
+        _hdr->_rsv = XRT_ARC_KIND_CLOSURE;                                                         \
+        xrt_closure_t *_c = (xrt_closure_t *) ((char *) _hdr + sizeof(XrGCHeader));                \
+        xrt_closure_init(_c, (fn_expr), _nupvals);                                                 \
+        xr_mkptr(_c, XR_TAG_CLOSURE);                                                              \
+    })
+#endif
 
 typedef struct xrt_cell {
     XrValue value;
@@ -1627,6 +1660,7 @@ static inline XrValue xrt_cell_new(XrValue value) {
         fprintf(stderr, "xrt_cell_new: out of memory\n");
         abort();
     }
+    xrt_arc_mark_builtin(cell, XRT_ARC_KIND_CELL);
     cell->value = value;
     return xr_mkptr(cell, XR_TAG_CELL);
 }
@@ -1641,6 +1675,24 @@ static inline void xrt_cell_set(XrValue cell_value, XrValue value) {
     if (cell_value.tag != XR_TAG_CELL || !cell_value.ptr)
         return;
     ((xrt_cell_t *) cell_value.ptr)->value = value;
+}
+
+static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
+    if (!obj)
+        return;
+    switch (kind) {
+        case XRT_ARC_KIND_CLOSURE: {
+            xrt_closure_t *c = (xrt_closure_t *) obj;
+            for (int i = 0; i < c->nupvals; i++)
+                xrt_release(c->upvals[i]);
+            break;
+        }
+        case XRT_ARC_KIND_CELL:
+            xrt_release(((xrt_cell_t *) obj)->value);
+            break;
+        default:
+            break;
+    }
 }
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {

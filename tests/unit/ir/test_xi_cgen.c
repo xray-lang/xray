@@ -15,6 +15,8 @@
 #include "../../../src/aot/xaot_verify.h"
 #include "../../../src/ir/xi_opt.h"
 #include "../../../src/ir/xi_own.h"
+#include "../../../src/ir/xi_arc.h"
+#include "../../../src/ir/xi_escape.h"
 #include "../../../src/ir/xi_pipeline.h"
 #include "../../../src/runtime/value/xtype.h"
 #include "../../../src/runtime/value/xchunk.h"
@@ -2001,6 +2003,135 @@ TEST(cgen_closure_cell_var_id_above_255) {
     xi_func_free(ir);
 }
 
+TEST(cgen_stack_alloc_direct_closure_uses_stack_runtime) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 910, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 911, .frozen = true};
+
+    XiFunc *ir = xi_func_new("manual_stack_closure", &int_type);
+    assert(ir != NULL);
+    XiBlock *entry = xi_block_new(ir);
+    entry->sealed = true;
+
+    XiValue *captured = xi_const_int(ir, entry, 7, &int_type);
+
+    XiFunc *child = xi_func_new("manual_stack_child", &int_type);
+    assert(child != NULL);
+    child->parent_func = ir;
+    XiBlock *child_entry = xi_block_new(child);
+    child_entry->sealed = true;
+    XiValue *ret = xi_const_int(child, child_entry, 1, &int_type);
+    xi_block_set_return(child_entry, ret);
+    child->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = false,
+        .type = &int_type,
+        .value = captured,
+        .name = "captured",
+    };
+    child->ncaptures = 1;
+
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(ir->children != NULL);
+    ir->children[0] = child;
+    ir->children_cap = 1;
+    ir->nchildren = 1;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_CLOSURE_NEW, &func_type, 1);
+    assert(closure != NULL);
+    closure->aux = (void *) child;
+    closure->args[0] = captured;
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
+    assert(call != NULL);
+    call->args[0] = closure;
+    xi_block_set_return(entry, call);
+
+    xi_escape_analyze(ir);
+    xi_stack_alloc_rewrite(ir);
+    assert(closure->op == XI_STACK_ALLOC && "direct closure should stack allocate");
+    xi_arc_insert(ir);
+    xi_arc_elim(ir);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "stack closure should generate");
+    assert(contains(code, "xrt_closure_stack_new((void*)") &&
+           "direct no-escape closure should use stack closure runtime");
+    assert(!contains(code, "xrt_closure_new((void*)") &&
+           "direct no-escape closure must not allocate a heap closure");
+    assert(contains(code, "xrt_release(") && contains(code, "XR_TAG_CLOSURE") &&
+           "stack closure should still run ARC destruction at its death point");
+
+    printf("  Generated stack closure path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_stack_alloc_closure_preserves_cell_capture) {
+    XrType int_type = {.kind = XR_KIND_INT, .id = 912, .frozen = true};
+    XrType func_type = {.kind = XR_KIND_FUNCTION, .id = 913, .frozen = true};
+
+    XiFunc *ir = xi_func_new("manual_stack_cell_closure", &int_type);
+    assert(ir != NULL);
+    XiBlock *entry = xi_block_new(ir);
+    entry->sealed = true;
+
+    XiValue *captured = xi_const_int(ir, entry, 7, &int_type);
+    captured->var_id = 37;
+
+    XiFunc *child = xi_func_new("manual_stack_cell_child", &int_type);
+    assert(child != NULL);
+    child->parent_func = ir;
+    XiBlock *child_entry = xi_block_new(child);
+    child_entry->sealed = true;
+    XiValue *ret = xi_const_int(child, child_entry, 1, &int_type);
+    xi_block_set_return(child_entry, ret);
+    child->captures[0] = (XiCapture) {
+        .source = XI_CAPTURE_SRC_REG,
+        .needs_cell = true,
+        .type = &int_type,
+        .value = captured,
+        .name = "captured",
+    };
+    child->ncaptures = 1;
+
+    ir->children = (XiFunc **) xr_calloc(1, sizeof(XiFunc *));
+    assert(ir->children != NULL);
+    ir->children[0] = child;
+    ir->children_cap = 1;
+    ir->nchildren = 1;
+
+    XiValue *closure = xi_value_new(ir, entry, XI_CLOSURE_NEW, &func_type, 1);
+    assert(closure != NULL);
+    closure->aux = (void *) child;
+    closure->args[0] = captured;
+    XiValue *call = xi_value_new(ir, entry, XI_CALL, &int_type, 1);
+    assert(call != NULL);
+    call->args[0] = closure;
+    xi_block_set_return(entry, call);
+
+    xi_escape_analyze(ir);
+    xi_stack_alloc_rewrite(ir);
+    assert(closure->op == XI_STACK_ALLOC && "direct closure should stack allocate");
+    xi_arc_insert(ir);
+    xi_arc_elim(ir);
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "stack closure cell capture should generate");
+    assert(contains(code, "xrt_closure_stack_new((void*)") &&
+           "direct no-escape closure should use stack closure runtime");
+    assert(contains(code, "xrt_cell_new(") &&
+           "mutable capture for stack closure must allocate a cell");
+    assert(contains(code, "_c->upvals[0] = cell_37") &&
+           "stack closure upvalue must receive the mutable capture cell");
+
+    printf("  Generated stack closure cell path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
     const char *src = "fn sum() -> int {\n"
                       "    let bytes: Array<uint8> = []\n"
@@ -3527,6 +3658,8 @@ int main(void) {
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
     run_cgen_closure_cell_var_id_above_255();
+    run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
+    run_cgen_stack_alloc_closure_preserves_cell_capture();
     run_cgen_typed_array_filter_readonly_result_caches_data_pointer();
     run_cgen_typed_array_filter_captured_callback_uses_runtime_helper();
     run_cgen_typed_array_reduce_uses_native_accumulator_fast_path();

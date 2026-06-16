@@ -79,6 +79,11 @@ static CgStaticFunctionCall cg_resolve_static_function_call(XiCgenCtx *ctx, cons
         return cg_static_function_call(target, cg_module_prefix_for_func(ctx, target));
     }
 
+    if (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW && callee->aux) {
+        const XiFunc *target = (const XiFunc *) callee->aux;
+        return cg_static_function_call(target, cg_module_prefix_for_func(ctx, target));
+    }
+
     if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL && current &&
         current->name) {
         return cg_static_function_call(current, NULL);

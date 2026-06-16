@@ -117,6 +117,12 @@ static void cg_note_var_id(const XiValue *v, uint32_t *max_var_id, bool *has_var
     *has_var_id = true;
 }
 
+static bool cg_value_is_closure_alloc(const XiValue *v) {
+    return v &&
+           (v->op == XI_CLOSURE_NEW || (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) &&
+           v->aux;
+}
+
 static uint32_t cg_cell_var_count_for_func(const XiFunc *f) {
     uint32_t max_var_id = 0;
     bool has_var_id = false;
@@ -137,7 +143,7 @@ static uint32_t cg_cell_var_count_for_func(const XiFunc *f) {
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             cg_note_var_id(v, &max_var_id, &has_var_id);
-            if (!v || v->op != XI_CLOSURE_NEW || !v->aux)
+            if (!cg_value_is_closure_alloc(v))
                 continue;
             const XiFunc *child = (const XiFunc *) v->aux;
             for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
@@ -189,7 +195,7 @@ static void cg_prepare_cell_vars(XiCgenCtx *ctx, const XiFunc *f) {
             continue;
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
-            if (!v || v->op != XI_CLOSURE_NEW || !v->aux)
+            if (!cg_value_is_closure_alloc(v))
                 continue;
             const XiFunc *child = (const XiFunc *) v->aux;
             for (uint16_t ci = 0; ci < child->ncaptures; ci++) {
@@ -419,7 +425,10 @@ static void emit_closure_new_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *curre
             return;
         }
         uint16_t ncap = child->ncaptures;
-        fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)xrt_closure_new((void*)");
+        const char *alloc_fn = (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)
+                                   ? "xrt_closure_stack_new"
+                                   : "xrt_closure_new";
+        fprintf(out, "({ xrt_closure_t *_c = (xrt_closure_t*)%s((void*)", alloc_fn);
         if (cg_func_uses_typed_abi(ctx, child) && !cg_func_needs_aot_coro_ctx(ctx, child))
             emit_typed_abi_fname(ctx, out, prefix, child);
         else

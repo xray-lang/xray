@@ -60,9 +60,12 @@ typedef struct XrGCHeader XrObjHeader;
  *   bit 3  HAS_DTOR      - object's type has a destructor to run at rc==0.
  *   bit 11 STORAGE_BUMP  - AOT bump-allocated: RC dup/drop are no-ops (freed in
  *                          bulk with the bump arena) and the GC never scans it.
+ *   bit 12 STORAGE_STACK - AOT stack-allocated object with a real destructor
+ *                          but no heap block to free.
  */
 #define XR_OBJ_HAS_DTOR 0x0008
 #define XR_OBJ_STORAGE_BUMP 0x0800
+#define XR_OBJ_STORAGE_STACK 0x1000
 
 /* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so VM,
  * JIT, and AOT fast paths never mistake them for unique thread-local objects. */

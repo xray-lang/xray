@@ -18,7 +18,7 @@
 #define XRT_ARC_H
 
 #include "xrt_value.h"
-#include "../shared/xr_obj_header.h" /* unified XrGCHeader + STORAGE_BUMP/HAS_DTOR */
+#include "../shared/xr_obj_header.h" /* unified XrGCHeader + storage/dtor flags */
 
 /* =========================================================================
  * AOT allocator adapter
@@ -95,6 +95,11 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
  * the table type is visible (L5). Runs the object's destructor if its type
  * registered one; no-op otherwise. */
 static inline void xrt_dispatch_destructor(uint16_t type_id, void *obj);
+static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj);
+
+#define XRT_ARC_KIND_NONE 0u
+#define XRT_ARC_KIND_CLOSURE 1u
+#define XRT_ARC_KIND_CELL 2u
 
 /* =========================================================================
  * Bump allocator
@@ -200,6 +205,12 @@ static inline void *xrt_arc_alloc(size_t obj_size) {
     return (char *) hdr + sizeof(XrGCHeader);
 }
 
+static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
+    XrGCHeader *hdr = XRT_ARC_HDR(obj);
+    hdr->_rsv = kind;
+    hdr->extra |= XR_OBJ_HAS_DTOR;
+}
+
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
@@ -230,9 +241,14 @@ static inline void xrt_retain(XrValue v) {
  * xrt_release. */
 static inline void xrt_finalize_one(XrGCHeader *hdr) {
     void *obj = (char *) hdr + sizeof(XrGCHeader);
-    if (hdr->extra & XR_OBJ_HAS_DTOR)
-        xrt_dispatch_destructor(hdr->type, obj);
-    XRT_FREE(hdr);
+    if (hdr->extra & XR_OBJ_HAS_DTOR) {
+        if (hdr->_rsv != XRT_ARC_KIND_NONE)
+            xrt_dispatch_builtin_destructor(hdr->_rsv, obj);
+        else
+            xrt_dispatch_destructor(hdr->type, obj);
+    }
+    if (!(hdr->extra & XR_OBJ_STORAGE_STACK))
+        XRT_FREE(hdr);
 }
 
 static inline void xrt_release(XrValue v) {

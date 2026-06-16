@@ -278,6 +278,8 @@ XR_FUNC const XiFunc *xaot_boundary_resolve_direct_call_target(const XaotBundle 
         return NULL;
     if (callee->op == XI_CLOSURE_NEW && callee->aux)
         return (const XiFunc *) callee->aux;
+    if (callee->op == XI_STACK_ALLOC && callee->aux_int == XI_CLOSURE_NEW && callee->aux)
+        return (const XiFunc *) callee->aux;
     if (callee->op == XI_CONST && callee->type && callee->type->kind == XR_KIND_NULL &&
         current->name)
         return current;

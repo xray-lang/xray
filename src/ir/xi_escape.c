@@ -50,7 +50,8 @@ static inline void raise_esc(XiValue *v, XiEscapeLevel level) {
  * value being used. Returns the minimum escape level required. */
 static XiEscapeLevel use_escape_level(const XiValue *user, uint16_t arg_idx) {
     XR_DCHECK(user != NULL, "use_escape_level: NULL user");
-    (void) arg_idx;
+    if (user->op == XI_CALL && arg_idx == 0)
+        return XI_ESC_NONE; /* calling a closure does not make the closure escape */
     return xi_op_use_escape_level(user->op);
 }
 
