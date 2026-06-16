@@ -1386,6 +1386,69 @@ static void xicgen_emit_runtime_method(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_conversion_suffix(out, conv_suffix);
 }
 
+/* Resolve a class constructor XiFunc + module prefix by class name, searching
+ * the current module first and then every module (cross-module `new`). */
+static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *class_name,
+                                                 const char **out_prefix) {
+    if (out_prefix)
+        *out_prefix = NULL;
+    if (!class_name)
+        return NULL;
+    const XiFunc *ctor = cg_lookup_class_ctor(ctx, class_name);
+    if (ctor) {
+        if (out_prefix)
+            *out_prefix = cg_module_prefix_for_func(ctx, ctor);
+        return ctor;
+    }
+    for (int i = 0; ctx && i < ctx->all_nmodules; i++) {
+        XiModule *mod = ctx->all_modules[i];
+        if (!mod || mod == ctx->module)
+            continue;
+        for (uint16_t s = 0; s < mod->nslots; s++) {
+            const XiClassData *cd = mod->slot_classes ? mod->slot_classes[s] : NULL;
+            if (!cd || !cd->class_name)
+                continue;
+            if (strcmp(cd->class_name, class_name) == 0 ||
+                (cd->display_name && strcmp(cd->display_name, class_name) == 0)) {
+                const XiFunc *c = cg_find_constructor(mod->init, cd);
+                if (c) {
+                    if (out_prefix)
+                        *out_prefix = mod->name;
+                    return c;
+                }
+            }
+        }
+    }
+    return NULL;
+}
+
+/* `new X(args)` lowers to XI_CALL_METHOD with method "constructor" and the class
+ * object (typed `any`) as the receiver, so the receiver-based method dispatch
+ * cannot recover the class. Resolve the constructor from the call's result type
+ * (always the constructed instance type) and emit it exactly like a bare class
+ * call `X(args)`, keeping AOT consistent with VM/JIT for the `new` form. */
+static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                         const XiValue *v, const char *prefix) {
+    const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;
+    if (!class_name)
+        return false;
+    const char *call_prefix = NULL;
+    const XiFunc *ctor = cg_lookup_class_ctor_global(ctx, class_name, &call_prefix);
+    if (!ctor)
+        return false;
+    if (emit_class_native_constructor_boxed_expr(ctx, out, f, prefix, v, ctor, call_prefix))
+        return true;
+    fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
+    emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);
+    fprintf(out, "(NULL, _inst");
+    for (uint16_t a = 1; a < v->nargs; a++) {
+        fprintf(out, ", ");
+        emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+    }
+    fprintf(out, "); _inst; })");
+    return true;
+}
+
 static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                const char *prefix) {
     XR_DCHECK(v->nargs >= 1, "xicgen_call_method: need receiver");
@@ -1395,6 +1458,9 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     const char *method_prefix = NULL;
 
     if (xicgen_emit_time_method(ctx, out, f, v))
+        return;
+    if (!is_super && method && strcmp(method, "constructor") == 0 &&
+        xicgen_emit_user_constructor(ctx, out, f, v, prefix))
         return;
     if (is_super)
         mfunc = xicgen_lookup_super_method(ctx, f, method, &method_prefix);
