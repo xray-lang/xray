@@ -26,6 +26,7 @@ typedef enum XaotLinkEntryKind {
     XAOT_LINK_GENERATED_C_FILE,
     XAOT_LINK_RUNTIME_OBJECT,
     XAOT_LINK_STDLIB_OBJECT,
+    XAOT_LINK_STDLIB_SYMBOL,
     XAOT_LINK_SYSTEM_LIB,
     XAOT_LINK_DEFINE,
     XAOT_LINK_CC_FLAG,
@@ -43,6 +44,9 @@ typedef struct XaotLinkManifest {
 
     char **stdlib_objects;
     uint32_t n_stdlib_objects;
+
+    char **stdlib_symbols;
+    uint32_t n_stdlib_symbols;
 
     char **system_libs;
     uint32_t n_system_libs;
