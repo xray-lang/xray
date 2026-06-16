@@ -1,0 +1,6 @@
+// anchor: ownership-move-local-heap
+let source: Array<int> = [1, 2, 3]
+let moved = move source
+moved.push(4)
+print(moved.length)
+print(moved[0] + moved[3])
