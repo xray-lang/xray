@@ -1799,6 +1799,8 @@ TEST(cgen_typed_array_filter_preserves_raw_storage_fast_path) {
            "pure Array<uint8>.filter callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
            "pure inlined Array<uint8>.filter must not allocate a callback closure");
+    assert(!contains(code, "static XrValue test___anonymous__") &&
+           "pure inlined Array<uint8>.filter must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "inlined Array<uint8>.filter must preallocate typed result storage");
@@ -1847,6 +1849,8 @@ TEST(cgen_typed_array_map_uses_typed_result_storage_fast_path) {
            "pure Array<int>.map callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
            "pure inlined Array<int>.map must not allocate a callback closure");
+    assert(!contains(code, "static XrValue test___anonymous__") &&
+           "pure inlined Array<int>.map must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "inlined Array<int>.map must preallocate typed result storage");
@@ -1901,6 +1905,8 @@ TEST(cgen_typed_array_map_readonly_result_caches_data_pointer) {
            "read-only pure Array<int>.map must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
            "read-only pure Array<int>.map must not allocate a callback closure");
+    assert(!contains(code, "static XrValue test___anonymous__") &&
+           "read-only pure Array<int>.map must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "read-only pure Array<int>.map must preallocate typed result storage");
@@ -1946,6 +1952,32 @@ TEST(cgen_typed_array_map_captured_callback_uses_runtime_helper) {
            "captured Array<int>.map must not fall back to dynamic method dispatch");
 
     printf("  Generated captured typed array map helper path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_dynamic_uncaptured_callback_keeps_boxed_adapter) {
+    const char *src = "fn apply(f: (int) -> int, x: int) -> int {\n"
+                      "    return f(x)\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    return apply(fn(n: int) -> int { return n + 1 }, 41)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "dynamic uncaptured callback should generate");
+    assert(contains(code, "xrt_closure_new((void*)test___anonymous__") &&
+           "dynamic uncaptured callback must allocate a closure value");
+    assert(contains(code, "static XrValue test___anonymous__") &&
+           "dynamic uncaptured typed callback must keep its boxed adapter");
+
+    printf("  Generated dynamic uncaptured callback path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2161,6 +2193,8 @@ TEST(cgen_typed_array_filter_readonly_result_caches_data_pointer) {
            "read-only pure Array<uint8>.filter must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
            "read-only pure Array<uint8>.filter must not allocate a callback closure");
+    assert(!contains(code, "static XrValue test___anonymous__") &&
+           "read-only pure Array<uint8>.filter must not emit a dead boxed callback adapter");
     assert((contains(code, "xrt_array_new_typed_uninit(") ||
             contains(code, "xrt_array_new_typed_uninit_ptr(")) &&
            "read-only pure Array<uint8>.filter must preallocate typed result storage");
@@ -2233,6 +2267,8 @@ TEST(cgen_typed_array_reduce_uses_native_accumulator_fast_path) {
            "pure Array<int>.reduce callback must inline instead of using boxed runtime helper");
     assert(!contains(code, "xrt_closure_new((void*)test___anonymous__") &&
            "pure inlined Array<int>.reduce must not allocate a callback closure");
+    assert(!contains(code, "static XrValue test___anonymous__") &&
+           "pure inlined Array<int>.reduce must not emit a dead boxed callback adapter");
     assert(contains(code, "int64_t _acc") &&
            "inlined Array<int>.reduce must use a native accumulator");
     assert(contains(code, "int64_t *_srcd") &&
@@ -3736,6 +3772,7 @@ int main(void) {
     run_cgen_typed_array_map_uses_typed_result_storage_fast_path();
     run_cgen_typed_array_map_readonly_result_caches_data_pointer();
     run_cgen_typed_array_map_captured_callback_uses_runtime_helper();
+    run_cgen_dynamic_uncaptured_callback_keeps_boxed_adapter();
     run_cgen_closure_cell_var_id_above_255();
     run_cgen_stack_alloc_direct_closure_uses_stack_runtime();
     run_cgen_stack_alloc_closure_preserves_cell_capture();
