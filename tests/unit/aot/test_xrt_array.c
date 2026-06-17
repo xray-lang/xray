@@ -170,7 +170,7 @@ static void test_slice_marks_borrowed_storage(void) {
     XrValue slice_value = xrt_array_slice_view(value, 1, 3);
     xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
     ASSERT_TRUE(slice != NULL, "slice allocated");
-    ASSERT_EQ_INT(slice->is_slice, 1, "slice keeps is_slice flag");
+    ASSERT_EQ_INT(slice->data_storage, XRT_ARRAY_DATA_BORROWED, "slice marked BORROWED");
     ASSERT_TRUE(xrt_array_data_is_borrowed(slice), "slice data is borrowed");
     ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 1, "slice points into source data");
 
