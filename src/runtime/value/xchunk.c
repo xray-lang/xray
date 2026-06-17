@@ -64,6 +64,16 @@ int xr_valuearray_add(ValueArray *array, XrValue value) {
             continue;
         if (XR_IS_FLOAT(existing) != XR_IS_FLOAT(value))
             continue;
+        if (XR_IS_FLOAT(value)) {
+            /* Float constants must dedup by exact bit pattern. xr_value_deep_eq
+             * compares with ==, under which -0.0 equals +0.0, so it would fold a
+             * -0.0 literal onto an existing +0.0 pool slot and silently drop the
+             * sign of zero (diverging from the AOT backend, which emits the
+             * literal directly). Bit comparison keeps -0.0 and +0.0 distinct. */
+            if (memcmp(&existing.f, &value.f, sizeof(double)) == 0)
+                return i;
+            continue;
+        }
         if (xr_value_deep_eq(existing, value)) {
             return i;  // Found duplicate with same type, return existing index
         }

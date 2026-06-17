@@ -1,0 +1,11 @@
+// anchor: float-neg-zero-const-pool
+// Regression: the VM constant pool deduplicated float constants with ==, under
+// which -0.0 == +0.0. When a +0.0 constant entered the pool first (here via the
+// float32 `a * 0.0`, which also yields -0.0), a later -0.0 literal folded onto
+// that +0.0 slot and lost its sign, so the VM printed 0.0 while AOT (which emits
+// the literal directly) printed -0.0. The pool now dedups floats by exact bits.
+let a: float32 = -42.75
+print(a * 0.0)
+print(-0.0)
+print(0.0)
+print(-0.0 * 1.0)
