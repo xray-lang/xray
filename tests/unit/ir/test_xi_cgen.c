@@ -1487,8 +1487,9 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
            "Set<int>.length/size should not box the native length field");
     assert(count_between(fn, fn_end, "xrt_add(") == 0 &&
            "Set<int>.length + size should use native integer arithmetic");
-    assert(count_between(fn, fn_end, "xrt_i64_add(") > 0 &&
-           "Set<int>.length + size should emit a native int64 add");
+    assert(count_between(fn, fn_end, "(int64_t)((uint64_t)(") > 0 &&
+           count_between(fn, fn_end, "xrt_i64_add(") == 0 &&
+           "Set<int>.length + size should emit inline native wrap arithmetic");
 
     printf("  Generated class Set<int> scalar length/size fast path %zu bytes of C code\n",
            strlen(code));
@@ -1697,10 +1698,11 @@ TEST(cgen_class_bool_key_map_uses_specialized_direct_helpers) {
     assert(count_between(code, code_end, "xrt_map_set_bool_i64_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_has_bool_i64_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_delete_bool_i64_typed(") == 1);
-    assert(count_between(code, code_end, "xrt_map_find_i64_typed(") == 4 &&
+    assert(count_between(code, code_end, "xrt_map_find_bool_typed(") == 4 &&
            count_between(code, code_end, "xrt_map_get_f64_value_typed(") == 2 &&
            count_between(code, code_end, "xrt_map_get_i64_value_typed(") == 2);
     assert(!contains(code, "xrt_map_set_i64_i64_typed(") &&
+           !contains(code, "xrt_map_find_i64_typed(") &&
            !contains(code, "xrt_map_get_i64_i64_typed(") &&
            !contains(code, "xrt_map_set_i64_f64_typed(") &&
            !contains(code, "xrt_map_has_i64_typed(") &&

@@ -403,6 +403,25 @@ static inline int64_t xrt_map_find_i64_typed(xrt_map_t *m, int64_t key, uint8_t 
     return xrt_map_find_i64_hashed(m, bits, xrt_hash_mix_u64(bits));
 }
 
+static inline int64_t xrt_map_find_bool_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
+                                              uint8_t value_type) {
+    (void) key_type;
+    (void) value_type;
+    uint8_t needle = key != 0 ? 1u : 0u;
+    const uint8_t *keys = (const uint8_t *) m->keys;
+    if (m->order_len > 0) {
+        int64_t slot0 = m->order[0];
+        if (keys[slot0] == needle)
+            return slot0;
+    }
+    if (m->order_len > 1) {
+        int64_t slot1 = m->order[1];
+        if (keys[slot1] == needle)
+            return slot1;
+    }
+    return -1;
+}
+
 static inline int64_t xrt_map_find_f64_typed(xrt_map_t *m, double key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) value_type;
@@ -592,49 +611,75 @@ static inline void xrt_map_set_f64_f64_typed(xrt_map_t *m, double key, double va
 static inline int64_t xrt_map_get_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                  uint8_t value_type) {
     (void) key_type;
-    return xrt_map_get_i64_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    int64_t slot = xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type);
+    return slot >= 0 ? xrt_map_get_i64_value_typed(m, slot, value_type) : 0;
 }
 
 static inline int xrt_map_has_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) key_type;
-    return xrt_map_has_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    return xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type) >= 0;
 }
 
 static inline int xrt_map_delete_bool_i64_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    return xrt_map_delete_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    int64_t slot = xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type);
+    if (slot < 0)
+        return 0;
+    xrt_map_erase_slot(m, slot);
+    return 1;
 }
 
 static inline void xrt_map_set_bool_i64_typed(xrt_map_t *m, int64_t key, int64_t value,
                                               uint8_t key_type, uint8_t value_type) {
     (void) key_type;
-    xrt_map_set_i64_i64_typed(m, key != 0 ? 1 : 0, value, XR_ELEM_BOOL, value_type);
+    int64_t normalized = key != 0 ? 1 : 0;
+    int64_t slot = xrt_map_find_bool_typed(m, normalized, XR_ELEM_BOOL, value_type);
+    if (slot < 0) {
+        uint64_t bits = (uint64_t) normalized;
+        uint64_t hash = xrt_hash_mix_u64(bits);
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_i64(m, slot, normalized);
+    }
+    xrt_map_store_i64_value_typed(m, slot, value, value_type);
 }
 
 static inline double xrt_map_get_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    return xrt_map_get_i64_f64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    int64_t slot = xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type);
+    return slot >= 0 ? xrt_map_get_f64_value_typed(m, slot, value_type) : 0.0;
 }
 
 static inline int xrt_map_has_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                              uint8_t value_type) {
     (void) key_type;
-    return xrt_map_has_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    return xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type) >= 0;
 }
 
 static inline int xrt_map_delete_bool_f32_typed(xrt_map_t *m, int64_t key, uint8_t key_type,
                                                 uint8_t value_type) {
     (void) key_type;
-    return xrt_map_delete_i64_typed(m, key != 0 ? 1 : 0, XR_ELEM_BOOL, value_type);
+    int64_t slot = xrt_map_find_bool_typed(m, key, XR_ELEM_BOOL, value_type);
+    if (slot < 0)
+        return 0;
+    xrt_map_erase_slot(m, slot);
+    return 1;
 }
 
 static inline void xrt_map_set_bool_f32_typed(xrt_map_t *m, int64_t key, double value,
                                               uint8_t key_type, uint8_t value_type) {
     (void) key_type;
-    xrt_map_set_i64_f64_typed(m, key != 0 ? 1 : 0, value, XR_ELEM_BOOL, value_type);
+    int64_t normalized = key != 0 ? 1 : 0;
+    int64_t slot = xrt_map_find_bool_typed(m, normalized, XR_ELEM_BOOL, value_type);
+    if (slot < 0) {
+        uint64_t bits = (uint64_t) normalized;
+        uint64_t hash = xrt_hash_mix_u64(bits);
+        slot = xrt_map_insert_slot(m, hash);
+        xrt_map_slot_key_store_i64(m, slot, normalized);
+    }
+    xrt_map_store_f64_value_typed(m, slot, value, value_type);
 }
 
 static inline double xrt_map_get_f32_f32_typed(xrt_map_t *m, double key, uint8_t key_type,

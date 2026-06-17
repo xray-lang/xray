@@ -45,3 +45,31 @@ static bool emit_native_const_div_mod_expr(FILE *out, const XiValue *v) {
     }
     return false;
 }
+
+static bool emit_native_i64_wrap_arith_expr(FILE *out, const XiValue *v) {
+    if (!out || !v || v->nargs < 2 || cg_rep(v) != XR_REP_I64 || cg_rep(v->args[0]) != XR_REP_I64 ||
+        cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
+
+    const char *op = NULL;
+    switch (v->op) {
+        case XI_ADD:
+            op = "+";
+            break;
+        case XI_SUB:
+            op = "-";
+            break;
+        case XI_MUL:
+            op = "*";
+            break;
+        default:
+            return false;
+    }
+
+    fprintf(out, "(int64_t)((uint64_t)(");
+    emit_vref(out, v->args[0]);
+    fprintf(out, ") %s (uint64_t)(", op);
+    emit_vref(out, v->args[1]);
+    fprintf(out, "))");
+    return true;
+}
