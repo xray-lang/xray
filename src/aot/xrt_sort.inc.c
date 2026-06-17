@@ -287,7 +287,7 @@ static XrValue xrt_array_sort(XrValue recv, xrt_closure_t *cl) {
     if (recv.tag != XR_TAG_ARRAY || !recv.ptr)
         return recv;
     xrt_array_t *arr = (xrt_array_t *) recv.ptr;
-    int64_t n = arr->len;
+    int64_t n = arr->length;
     if (n < 2)
         return recv;
     if (!cl) {

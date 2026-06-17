@@ -27,10 +27,11 @@
 // Array initial capacity
 #define XR_ARRAY_INIT_CAPACITY 8
 
-/* Element type enum and typed-storage ops are shared across VM/AOT.
- * Canonical definitions live in src/shared/. */
+/* Element type enum, typed-storage ops, and the array field ABI are shared
+ * across VM/AOT. Canonical definitions live in src/shared/. */
 #include "../../shared/xr_elem_type.h"
 #include "../../shared/xr_typed_ops.h"
+#include "../../shared/xr_array_abi.h"
 
 /* ====== Convenience Macros ====== */
 
@@ -51,8 +52,12 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
 /*
  * Array object structure (slice-capable design)
  *
- * Slicing sets data pointer offset directly (zero-copy).
- * capacity == 0 && source != NULL marks a slice (cannot resize).
+ * Slicing sets the data pointer offset directly (zero-copy). A slice is marked
+ * by data_storage == XR_ARRAY_DATA_BORROWED (single discriminator); its
+ * `source` retains the backing array for RC / cycle collection.
+ *
+ * Shared fields (data/length/capacity/source/data_storage/elem_*) come from
+ * XR_ARRAY_ABI_FIELDS so the VM and AOT array layouts stay in lockstep.
  *
  * elem_type determines storage layout:
  *   XR_ELEM_ANY  → data is XrValue[], GC-traced
@@ -64,16 +69,9 @@ XR_FUNC void xr_array_init_inplace(struct XrArray *arr, int capacity, uint8_t el
  */
 struct XrArray {
     XrGCHeader gc;
-    void *data;  // Generic data pointer (type depends on elem_type)
-    int32_t length;
-    int32_t capacity;         // 0 for slices (no resize)
-    struct XrArray *source;   // Source array for slices (GC tracking)
-    uint8_t elem_type;        // XrArrayElemType (storage layout)
-    uint8_t elem_size;        // Cached: bytes per element
-    uint8_t elem_tid;         // XrTypeId: semantic type for reified generics (0=any)
-    uint8_t has_gc_ptrs;      // Monotonic flag: 1 if any GC pointer was ever stored
-    uint8_t data_on_gc_heap;  // 1 if data buffer is on Region GC heap (no free needed)
-    uint8_t _pad[3];          // Alignment / reserved
+    XR_ARRAY_ABI_FIELDS;
+    uint8_t data_on_gc_heap;  // VM-only: 1 if data buffer is on Region GC heap (no free needed)
+    uint8_t _pad[2];          // Alignment / reserved
 };
 typedef struct XrArray XrArray;
 
@@ -144,7 +142,7 @@ XR_FUNC void xr_array_ensure_capacity(XrArray *arr, int min_capacity);
 XR_FUNC XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end);
 
 static inline bool xr_array_is_slice(XrArray *arr) {
-    return arr && arr->capacity == 0 && arr->source != NULL;
+    return arr && arr->data_storage == XR_ARRAY_DATA_BORROWED;
 }
 
 XR_FUNC XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice);

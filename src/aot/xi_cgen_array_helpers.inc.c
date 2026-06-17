@@ -976,7 +976,7 @@ static void emit_typed_array_final_len_stores(XiCgenCtx *ctx, FILE *out, const X
                 continue;
             fprintf(out, "    ");
             emit_typed_array_ptr_expr(ctx, out, f, fill.storage_value, NULL);
-            fprintf(out, "->len = ");
+            fprintf(out, "->length = ");
             emit_typed_array_final_len_expr(out, fill.cap_value);
             fprintf(out, ";\n");
         }
@@ -1150,7 +1150,7 @@ static bool emit_bytes_new_native_local_expr(FILE *out, const XiValue *v) {
         emit_value_as_rep(out, v->args[0], XR_REP_I64);
         fprintf(out, "; if (_n < 0) _n = 0; ");
         fprintf(out, "xrt_array_t *_b = xrt_array_new_typed_ptr(_n, XR_ELEM_U8); ");
-        fprintf(out, "_b->len = _n; _b; })");
+        fprintf(out, "_b->length = _n; _b; })");
         return true;
     }
     return false;
@@ -1209,8 +1209,8 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
-        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->len) ? (double)");
+        fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
+        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (double)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
@@ -1223,8 +1223,8 @@ static bool emit_typed_array_index_get_expr(XiCgenCtx *ctx, FILE *out, const XiF
         emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
         fprintf(out, "; int64_t _idx = ");
         emit_value_as_rep(out, v->args[1], XR_REP_I64);
-        fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
-        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->len) ? (int64_t)");
+        fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
+        fprintf(out, "XR_LIKELY(_idx >= 0 && _idx < _a->length) ? (int64_t)");
         if (use_cache) {
             emit_typed_array_data_cache_ref(out, cached_origin);
             fprintf(out, "[_idx]");
@@ -1270,19 +1270,20 @@ static bool emit_typed_array_index_set_expr(XiCgenCtx *ctx, FILE *out, const XiF
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
     fprintf(out, "; int64_t _idx = ");
     emit_value_as_rep(out, v->args[1], XR_REP_I64);
-    fprintf(out, "; if (_idx < 0) _idx += _a->len; ");
-    fprintf(out,
-            "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->cap)) { if (_a->data_storage == "
-            "XRT_ARRAY_DATA_BORROWED) { "
-            "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
-            "int64_t _ncap = _a->cap == 0 ? 4 : _a->cap; while (_idx >= _ncap) _ncap *= 2; "
-            "xrt_array_data_grow(_a, _ncap); } "
-            "if (_idx > _a->len) { memset((uint8_t*)_a->data + (size_t)_a->len * "
-            "sizeof(%s), 0, (size_t)(_idx - _a->len) * sizeof(%s)); "
-            "_a->len = _idx; } ((%s*)_a->data)[_idx] = ",
-            info.ctype, info.ctype, info.ctype);
+    fprintf(out, "; if (_idx < 0) _idx += _a->length; ");
+    fprintf(
+        out,
+        "if (_idx >= 0) { if (XR_UNLIKELY(_idx >= _a->capacity)) { if (_a->data_storage == "
+        "XR_ARRAY_DATA_BORROWED) { "
+        "fprintf(stderr, \"xrt_array_set: cannot grow array slice\\n\"); abort(); } "
+        "int64_t _ncap = _a->capacity == 0 ? 4 : _a->capacity; while (_idx >= _ncap) _ncap *= 2; "
+        "xrt_array_data_grow(_a, _ncap); } "
+        "if (_idx > _a->length) { memset((uint8_t*)_a->data + (size_t)_a->length * "
+        "sizeof(%s), 0, (size_t)(_idx - _a->length) * sizeof(%s)); "
+        "_a->length = _idx; } ((%s*)_a->data)[_idx] = ",
+        info.ctype, info.ctype, info.ctype);
     emit_typed_array_store_value(out, &info, v->args[2]);
-    fprintf(out, "; if (_idx == _a->len) _a->len++; } XR_NULL_VAL; })");
+    fprintf(out, "; if (_idx == _a->length) _a->length++; } XR_NULL_VAL; })");
     return true;
 }
 
@@ -1326,7 +1327,7 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
         if (use_cache && use_final_len)
             emit_aot_hot_region_end(out, "typed_array_raw_access");
         if (!use_final_len) {
-            fprintf(out, "; _a->len = ");
+            fprintf(out, "; _a->length = ");
             if (fill.next_index_value && cg_array_value_available_at(fill.next_index_value, call)) {
                 emit_value_as_rep(out, fill.next_index_value, XR_REP_I64);
             } else {
@@ -1343,11 +1344,11 @@ static bool emit_typed_array_push_expr(XiCgenCtx *ctx, FILE *out, const XiFunc *
     emit_typed_array_ptr_expr(ctx, out, f, recv, prefix);
     {
         fprintf(out,
-                "; if (_a->data_storage == XRT_ARRAY_DATA_BORROWED) { fprintf(stderr, "
+                "; if (_a->data_storage == XR_ARRAY_DATA_BORROWED) { fprintf(stderr, "
                 "\"xrt_array_push: cannot push to array slice\\n\"); abort(); } "
-                "if (XR_UNLIKELY(_a->len >= _a->cap)) { "
-                "xrt_array_data_grow(_a, _a->cap == 0 ? 4 : _a->cap * 2); } "
-                "((%s*)_a->data)[_a->len++] = ",
+                "if (XR_UNLIKELY(_a->length >= _a->capacity)) { "
+                "xrt_array_data_grow(_a, _a->capacity == 0 ? 4 : _a->capacity * 2); } "
+                "((%s*)_a->data)[_a->length++] = ",
                 info.ctype);
     }
     emit_typed_array_store_value(out, &info, arg);
@@ -1501,7 +1502,7 @@ static bool emit_typed_array_length_expr(XiCgenCtx *ctx, FILE *out, const XiFunc
 
     const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_I64, cg_rep(v));
     emit_typed_array_ptr_expr(ctx, out, f, v->args[0], prefix);
-    fprintf(out, "->len");
+    fprintf(out, "->length");
     emit_conversion_suffix(out, conv_suffix);
     return true;
 }
@@ -1573,7 +1574,7 @@ static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
     fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->len; XrValue _outv = ");
+    fprintf(out, ".ptr; int64_t _n = _src->length; XrValue _outv = ");
     fprintf(out, "xrt_array_new_typed_uninit(_n, %s); ", map.dst_info.elem_name);
     fprintf(out, "xrt_array_t *_out = (xrt_array_t*)_outv.ptr; ");
     fprintf(out, "%s *_srcd = ", map.src_info.ctype);
@@ -1590,7 +1591,7 @@ static bool emit_typed_array_map_inline_expr_cached(XiCgenCtx *ctx, FILE *out,
     }
     fprintf(out, "for (int64_t _i = 0; _i < _n; _i++) { _dstd[_i] = (%s)", map.dst_info.ctype);
     emit_fname(ctx, out, map.target_prefix, map.target);
-    fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->len = _n; _outv; })", ctype_str(map.param_rep));
+    fprintf(out, "(NULL, (%s)_srcd[_i]); } _out->length = _n; _outv; })", ctype_str(map.param_rep));
     return true;
 }
 
@@ -1656,7 +1657,7 @@ static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
     fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->len; XrValue _outv = ");
+    fprintf(out, ".ptr; int64_t _n = _src->length; XrValue _outv = ");
     fprintf(out, "xrt_array_new_typed_uninit(_n, %s); ", filter.dst_info.elem_name);
     fprintf(out, "xrt_array_t *_out = (xrt_array_t*)_outv.ptr; ");
     fprintf(out, "%s *_srcd = ", filter.src_info.ctype);
@@ -1677,7 +1678,7 @@ static bool emit_typed_array_filter_inline_expr_cached(XiCgenCtx *ctx, FILE *out
     emit_fname(ctx, out, filter.target_prefix, filter.target);
     fprintf(out, "(NULL, (%s)_x) != 0) { _dstd[_out_len++] = (%s)_x; } } ",
             ctype_str(filter.param_rep), filter.dst_info.ctype);
-    fprintf(out, "_out->len = _out_len; _outv; })");
+    fprintf(out, "_out->length = _out_len; _outv; })");
     return true;
 }
 
@@ -1750,7 +1751,7 @@ static bool emit_typed_array_reduce_inline_expr(XiCgenCtx *ctx, FILE *out, const
     bool use_cache = cg_array_data_cache_for_value(ctx, v->args[0], &cached_origin);
     fprintf(out, "({ xrt_array_t *_src = (xrt_array_t*)");
     emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
-    fprintf(out, ".ptr; int64_t _n = _src->len; %s _acc = (%s)", ctype_str(reduce.acc_rep),
+    fprintf(out, ".ptr; int64_t _n = _src->length; %s _acc = (%s)", ctype_str(reduce.acc_rep),
             ctype_str(reduce.acc_rep));
     emit_value_as_rep(out, v->args[2], reduce.acc_rep);
     fprintf(out, "; %s *_srcd = ", reduce.src_info.ctype);

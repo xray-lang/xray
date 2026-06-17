@@ -27,13 +27,13 @@ static inline XrValue xrt_array_map_typed(XrValue recv, XrValue callback,
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
     typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
     xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
-    XrValue arr = xrt_array_new_typed_uninit(a->len, result_elem_type);
+    XrValue arr = xrt_array_new_typed_uninit(a->length, result_elem_type);
     xrt_array_t *out = (xrt_array_t *) arr.ptr;
-    for (int64_t i = 0; i < a->len; i++) {
+    for (int64_t i = 0; i < a->length; i++) {
         XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
         xrt_array_write_preallocated(out, i, fn(cl, elem));
     }
-    out->len = a->len;
+    out->length = a->length;
     return arr;
 }
 
@@ -44,13 +44,13 @@ static inline XrValue xrt_array_filter_typed(XrValue recv, XrValue callback) {
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
     typedef XrValue (*xrt_fn1_t)(xrt_closure_t *, XrValue);
     xrt_fn1_t fn = (xrt_fn1_t) cl->fn;
-    XrValue arr = xrt_array_new_typed_uninit(a->len, a->elem_type);
+    XrValue arr = xrt_array_new_typed_uninit(a->length, a->elem_type);
     xrt_array_t *out = (xrt_array_t *) arr.ptr;
-    for (int64_t i = 0; i < a->len; i++) {
+    for (int64_t i = 0; i < a->length; i++) {
         XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
         if (xr_truthy(fn(cl, elem))) {
-            xrt_array_write_preallocated(out, out->len, elem);
-            out->len++;
+            xrt_array_write_preallocated(out, out->length, elem);
+            out->length++;
         }
     }
     return arr;
@@ -64,7 +64,7 @@ static inline XrValue xrt_array_reduce_typed(XrValue recv, XrValue callback, XrV
     typedef XrValue (*xrt_fn2_t)(xrt_closure_t *, XrValue, XrValue);
     xrt_fn2_t fn = (xrt_fn2_t) cl->fn;
     XrValue acc = initial;
-    for (int64_t i = 0; i < a->len; i++) {
+    for (int64_t i = 0; i < a->length; i++) {
         XrValue elem = xr_typed_get(a->data, (int32_t) i, a->elem_type);
         acc = fn(cl, acc, elem);
     }
