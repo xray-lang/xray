@@ -412,6 +412,24 @@ static inline double xr_value_to_f64_coerce(XrValue v) {
     return 0.0;
 }
 
+static inline double xrt_math_number(XrValue v) {
+    if (XR_IS_INT(v))
+        return (double) v.i;
+    if (XR_IS_FLOAT(v))
+        return v.f;
+    return NAN;
+}
+
+static inline XrValue xrt_math_abs(XrValue v) {
+    if (XR_IS_INT(v)) {
+        int64_t i = v.i;
+        if (i == INT64_MIN)
+            return XR_FROM_FLOAT((double) INT64_MAX + 1.0);
+        return XR_FROM_INT(i < 0 ? -i : i);
+    }
+    return XR_FROM_FLOAT(fabs(xrt_math_number(v)));
+}
+
 /* =========================================================================
  * String helpers
  * ========================================================================= */

@@ -6,9 +6,12 @@ static void xicgen_const(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
                          const char *prefix) {
     (void) f;
     (void) prefix;
-    if (v->type->kind == XR_KIND_INT)
-        fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
-    else if (v->type->kind == XR_KIND_FLOAT) {
+    if (v->type->kind == XR_KIND_INT) {
+        if (v->aux_int == INT64_MIN)
+            fprintf(out, "INT64_MIN");
+        else
+            fprintf(out, "INT64_C(%" PRId64 ")", v->aux_int);
+    } else if (v->type->kind == XR_KIND_FLOAT) {
         double d;
         memcpy(&d, &v->aux_int, sizeof(double));
         fprintf(out, "%a", d);
@@ -985,7 +988,7 @@ static bool xicgen_math_result_rep(const char *name, XrRep *out_rep) {
 
 static void xicgen_emit_math_arg(FILE *out, const XiValue *v) {
     if (cg_rep(v) == XR_REP_TAGGED) {
-        fprintf(out, "xr_value_to_f64_coerce(");
+        fprintf(out, "xrt_math_number(");
         emit_vref(out, v);
         fprintf(out, ")");
         return;
@@ -993,7 +996,41 @@ static void xicgen_emit_math_arg(FILE *out, const XiValue *v) {
     emit_value_as_rep(out, v, XR_REP_F64);
 }
 
-static void xicgen_emit_math_minmax(FILE *out, const XiValue *v, const char *fn, uint16_t index) {
+static bool xicgen_math_all_args_rep(const XiValue *v, XrRep rep) {
+    if (!v || v->nargs == 0)
+        return false;
+    for (uint16_t i = 0; i < v->nargs; i++) {
+        if (!v->args[i] || cg_rep(v->args[i]) != rep)
+            return false;
+    }
+    return true;
+}
+
+static void xicgen_emit_math_i64_arg(FILE *out, const XiValue *v) {
+    emit_value_as_rep(out, v, XR_REP_I64);
+}
+
+static void xicgen_emit_math_i64_minmax(FILE *out, const XiValue *v, bool is_min, uint16_t index) {
+    if (index >= v->nargs) {
+        fprintf(out, "INT64_C(0)");
+        return;
+    }
+    if (index + 1 == v->nargs) {
+        xicgen_emit_math_i64_arg(out, v->args[index]);
+        return;
+    }
+    fprintf(out, "(((");
+    xicgen_emit_math_i64_arg(out, v->args[index]);
+    fprintf(out, ") %c (", is_min ? '<' : '>');
+    xicgen_emit_math_i64_minmax(out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_i64_arg(out, v->args[index]);
+    fprintf(out, ") : (");
+    xicgen_emit_math_i64_minmax(out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, "))");
+}
+
+static void xicgen_emit_math_f64_minmax(FILE *out, const XiValue *v, bool is_min, uint16_t index) {
     if (index >= v->nargs) {
         fprintf(out, "NAN");
         return;
@@ -1002,33 +1039,126 @@ static void xicgen_emit_math_minmax(FILE *out, const XiValue *v, const char *fn,
         xicgen_emit_math_arg(out, v->args[index]);
         return;
     }
-    fprintf(out, "%s(", fn);
+    fprintf(out, "(isnan(");
+    xicgen_emit_math_arg(out, v->args[index]);
+    fprintf(out, ") ? NAN : (isnan(");
+    xicgen_emit_math_f64_minmax(out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ") ? NAN : f%s(", is_min ? "min" : "max");
     xicgen_emit_math_arg(out, v->args[index]);
     fprintf(out, ", ");
-    xicgen_emit_math_minmax(out, v, fn, (uint16_t) (index + 1));
-    fprintf(out, ")");
+    xicgen_emit_math_f64_minmax(out, v, is_min, (uint16_t) (index + 1));
+    fprintf(out, ")))");
+}
+
+static void xicgen_emit_math_i64_clamp(FILE *out, const XiValue *x, const XiValue *lo,
+                                       const XiValue *hi) {
+    fprintf(out, "(((");
+    xicgen_emit_math_i64_arg(out, lo);
+    fprintf(out, ") <= (");
+    xicgen_emit_math_i64_arg(out, hi);
+    fprintf(out, ")) ? (((");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, ") < (");
+    xicgen_emit_math_i64_arg(out, lo);
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_i64_arg(out, lo);
+    fprintf(out, ") : (((");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, ") > (");
+    xicgen_emit_math_i64_arg(out, hi);
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_i64_arg(out, hi);
+    fprintf(out, ") : (");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, "))) : (((");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, ") < (");
+    xicgen_emit_math_i64_arg(out, hi);
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_i64_arg(out, hi);
+    fprintf(out, ") : (((");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, ") > (");
+    xicgen_emit_math_i64_arg(out, lo);
+    fprintf(out, ")) ? (");
+    xicgen_emit_math_i64_arg(out, lo);
+    fprintf(out, ") : (");
+    xicgen_emit_math_i64_arg(out, x);
+    fprintf(out, "))))");
+}
+
+static void xicgen_emit_math_f64_clamp(FILE *out, const XiValue *x, const XiValue *lo,
+                                       const XiValue *hi) {
+    fprintf(out, "(isnan(");
+    xicgen_emit_math_arg(out, x);
+    fprintf(out, ") || isnan(");
+    xicgen_emit_math_arg(out, lo);
+    fprintf(out, ") || isnan(");
+    xicgen_emit_math_arg(out, hi);
+    fprintf(out, ") ? NAN : (((");
+    xicgen_emit_math_arg(out, lo);
+    fprintf(out, ") <= (");
+    xicgen_emit_math_arg(out, hi);
+    fprintf(out, ")) ? fmin(fmax(");
+    xicgen_emit_math_arg(out, x);
+    fprintf(out, ", ");
+    xicgen_emit_math_arg(out, lo);
+    fprintf(out, "), ");
+    xicgen_emit_math_arg(out, hi);
+    fprintf(out, ") : fmin(fmax(");
+    xicgen_emit_math_arg(out, x);
+    fprintf(out, ", ");
+    xicgen_emit_math_arg(out, hi);
+    fprintf(out, "), ");
+    xicgen_emit_math_arg(out, lo);
+    fprintf(out, ")))");
 }
 
 static bool xicgen_emit_math_raw_expr(FILE *out, const XiValue *v, const char *name) {
     if (!name || !v)
         return false;
 
+    if (strcmp(name, "abs") == 0 && v->nargs == 1 && cg_rep(v) == XR_REP_TAGGED) {
+        fprintf(out, "xrt_math_abs(");
+        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        fprintf(out, ")");
+        return true;
+    }
     if (strcmp(name, "min") == 0) {
-        xicgen_emit_math_minmax(out, v, "fmin", 0);
+        if (v->nargs == 0 && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "XR_NULL_VAL");
+            return true;
+        }
+        if (v->nargs == 1 && cg_rep(v) == XR_REP_TAGGED) {
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            return true;
+        }
+        if (cg_rep(v) == XR_REP_I64 && xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_emit_math_i64_minmax(out, v, true, 0);
+        else
+            xicgen_emit_math_f64_minmax(out, v, true, 0);
         return true;
     }
     if (strcmp(name, "max") == 0) {
-        xicgen_emit_math_minmax(out, v, "fmax", 0);
+        if (v->nargs == 0 && cg_rep(v) == XR_REP_TAGGED) {
+            fprintf(out, "XR_NULL_VAL");
+            return true;
+        }
+        if (v->nargs == 1 && cg_rep(v) == XR_REP_TAGGED) {
+            emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+            return true;
+        }
+        if (cg_rep(v) == XR_REP_I64 && xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_emit_math_i64_minmax(out, v, false, 0);
+        else
+            xicgen_emit_math_f64_minmax(out, v, false, 0);
         return true;
     }
     if (strcmp(name, "clamp") == 0 && v->nargs == 3) {
-        fprintf(out, "fmin(fmax(");
-        xicgen_emit_math_arg(out, v->args[0]);
-        fprintf(out, ", ");
-        xicgen_emit_math_arg(out, v->args[1]);
-        fprintf(out, "), ");
-        xicgen_emit_math_arg(out, v->args[2]);
-        fprintf(out, ")");
+        if (cg_rep(v) == XR_REP_I64 && xicgen_math_all_args_rep(v, XR_REP_I64))
+            xicgen_emit_math_i64_clamp(out, v->args[0], v->args[1], v->args[2]);
+        else
+            xicgen_emit_math_f64_clamp(out, v->args[0], v->args[1], v->args[2]);
         return true;
     }
     if (strcmp(name, "lerp") == 0 && v->nargs == 3) {
@@ -1118,7 +1248,21 @@ static bool xicgen_emit_math_builtin_expr(XiCgenCtx *ctx, FILE *out, const XiFun
         return false;
     const char *name = bn + 5;
     XrRep expr_rep = XR_REP_TAGGED;
-    if (!xicgen_math_result_rep(name, &expr_rep)) {
+    if (strcmp(name, "abs") == 0 && cg_rep(v) == XR_REP_TAGGED) {
+        expr_rep = XR_REP_TAGGED;
+    } else if ((strcmp(name, "min") == 0 || strcmp(name, "max") == 0) && v &&
+               cg_rep(v) == XR_REP_I64 && xicgen_math_all_args_rep(v, XR_REP_I64)) {
+        expr_rep = XR_REP_I64;
+    } else if (strcmp(name, "clamp") == 0 && v && cg_rep(v) == XR_REP_I64 &&
+               xicgen_math_all_args_rep(v, XR_REP_I64)) {
+        expr_rep = XR_REP_I64;
+    } else if ((strcmp(name, "min") == 0 || strcmp(name, "max") == 0) && v && v->nargs == 0 &&
+               cg_rep(v) == XR_REP_TAGGED) {
+        expr_rep = XR_REP_TAGGED;
+    } else if ((strcmp(name, "min") == 0 || strcmp(name, "max") == 0) && v && v->nargs == 1 &&
+               cg_rep(v) == XR_REP_TAGGED) {
+        expr_rep = XR_REP_TAGGED;
+    } else if (!xicgen_math_result_rep(name, &expr_rep)) {
         ctx->error = true;
         emit_codegen_abort_expr(out);
         return true;

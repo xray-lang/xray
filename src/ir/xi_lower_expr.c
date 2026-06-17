@@ -743,7 +743,34 @@ static bool lower_math_call_arity_ok(const char *name, int nargs) {
     return false;
 }
 
-static struct XrType *lower_math_call_result_type(XiLower *l, const char *member) {
+static bool lower_math_args_all_int(XiValue **arg_vals, int arg_count) {
+    if (!arg_vals || arg_count <= 0)
+        return false;
+    for (int i = 0; i < arg_count; i++) {
+        if (!arg_vals[i] || !arg_vals[i]->type || !XR_TYPE_IS_INT(arg_vals[i]->type))
+            return false;
+    }
+    return true;
+}
+
+static bool lower_math_preserves_int_arg_shape(const char *member) {
+    return member && (strcmp(member, "abs") == 0 || strcmp(member, "min") == 0 ||
+                      strcmp(member, "max") == 0 || strcmp(member, "clamp") == 0);
+}
+
+static struct XrType *lower_math_call_result_type(XiLower *l, const char *member,
+                                                  XiValue **arg_vals, int arg_count) {
+    if (strcmp(member, "abs") == 0 && arg_count == 1 &&
+        lower_math_args_all_int(arg_vals, arg_count))
+        return l->type_any;
+    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count == 0)
+        return l->type_any;
+    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) &&
+        lower_math_args_all_int(arg_vals, arg_count))
+        return l->type_int;
+    if (strcmp(member, "clamp") == 0 && arg_count == 3 &&
+        lower_math_args_all_int(arg_vals, arg_count))
+        return l->type_int;
     if (strcmp(member, "floor") == 0 || strcmp(member, "ceil") == 0 ||
         strcmp(member, "round") == 0 || strcmp(member, "trunc") == 0 || strcmp(member, "sign") == 0)
         return l->type_int;
@@ -1646,7 +1673,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
         if (lower_value_is_whole_module_import(l, recv, "math") &&
             lower_math_call_arity_ok(ma->name, n))
-            result_type = lower_math_call_result_type(l, ma->name);
+            result_type = lower_math_call_result_type(l, ma->name, arg_vals, n);
 
         if (recv->type && XR_TYPE_IS_ARRAY(recv->type) && ma->name &&
             strcmp(ma->name, "reserve") == 0 && n == 1) {
@@ -1879,7 +1906,8 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
             if (!pt)
                 continue;
             /* int → float coercion */
-            if (XR_TYPE_IS_FLOAT(pt) && XR_TYPE_IS_INT(arg_vals[i]->type)) {
+            if (XR_TYPE_IS_FLOAT(pt) && XR_TYPE_IS_INT(arg_vals[i]->type) &&
+                !lower_math_preserves_int_arg_shape(math_callee_member)) {
                 XiValue *conv = xi_value_new(l->func, l->cur_block, XI_CONVERT, l->type_float, 1);
                 if (conv) {
                     conv->args[0] = arg_vals[i];
@@ -1901,7 +1929,7 @@ static XiValue *lower_call(XiLower *l, AstNode *node) {
 
     struct XrType *result_type = xi_lower_node_type(l, node);
     if (math_callee_member && lower_math_call_arity_ok(math_callee_member, n))
-        result_type = lower_math_call_result_type(l, math_callee_member);
+        result_type = lower_math_call_result_type(l, math_callee_member, arg_vals, n);
     XiValue *v = xi_value_new(l->func, l->cur_block, XI_CALL, result_type, nargs);
     if (!v)
         return NULL;

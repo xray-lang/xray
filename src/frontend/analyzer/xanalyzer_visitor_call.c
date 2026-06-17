@@ -75,6 +75,56 @@ static XrType *xa_csv_parse_return_type(XaInferContext *ctx, CallExprNode *call)
     return NULL;
 }
 
+static bool xa_call_object_is_module(XaInferContext *ctx, AstNode *object,
+                                     const char *module_name) {
+    if (!ctx || !ctx->analyzer || !object || object->type != AST_VARIABLE || !module_name)
+        return false;
+    const char *name = object->as.variable.name;
+    if (!name)
+        return false;
+    XaSymbol *sym = xa_scope_lookup(ctx->analyzer->current_scope, name);
+    if (!sym || sym->kind != XA_SYM_MODULE)
+        return false;
+    XaSymbolLinks *links = xa_analyzer_get_links(ctx->analyzer, sym);
+    return links && links->module_name && strcmp(links->module_name, module_name) == 0;
+}
+
+static const char *xa_math_module_call_member(XaInferContext *ctx, CallExprNode *call) {
+    if (!call || !call->callee || call->callee->type != AST_MEMBER_ACCESS)
+        return NULL;
+    MemberAccessNode *ma = &call->callee->as.member_access;
+    if (!ma->name || !xa_call_object_is_module(ctx, ma->object, "math"))
+        return NULL;
+    return ma->name;
+}
+
+static bool xa_all_args_are_int(XrType **arg_types, int arg_count) {
+    if (!arg_types || arg_count <= 0)
+        return false;
+    for (int i = 0; i < arg_count; i++) {
+        if (!arg_types[i] || !XR_TYPE_IS_INT(arg_types[i]))
+            return false;
+    }
+    return true;
+}
+
+static XrType *xa_math_runtime_shape_return_type(XaInferContext *ctx, CallExprNode *call,
+                                                 XrType **arg_types, int arg_count) {
+    const char *member = xa_math_module_call_member(ctx, call);
+    if (!member)
+        return NULL;
+    if (strcmp(member, "abs") == 0 && arg_count == 1 && xa_all_args_are_int(arg_types, 1))
+        return xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) && arg_count == 0)
+        return xr_type_new_unknown(ctx && ctx->analyzer ? ctx->analyzer->isolate : NULL);
+    if ((strcmp(member, "min") == 0 || strcmp(member, "max") == 0) &&
+        xa_all_args_are_int(arg_types, arg_count))
+        return xr_type_new_int(NULL);
+    if (strcmp(member, "clamp") == 0 && arg_count == 3 && xa_all_args_are_int(arg_types, 3))
+        return xr_type_new_int(NULL);
+    return NULL;
+}
+
 /* ----------------------------------------------------------------------------
  * Function Call Type Inference
  * Handles: argument count/type checking, generic type argument validation,
@@ -739,6 +789,11 @@ XrType *xa_visit_call(XaInferContext *ctx, AstNode *node) {
     XrType *builtin_override = xa_csv_parse_return_type(ctx, call);
     if (builtin_override)
         return_type = builtin_override;
+
+    XrType *math_shape_type =
+        xa_math_runtime_shape_return_type(ctx, call, effective_arg_types, arg_count);
+    if (math_shape_type)
+        return_type = math_shape_type;
 
     /* copy(x): the deep-copy builtin is an identity over types and must
      * preserve the argument's static type. It is registered as any->any, so

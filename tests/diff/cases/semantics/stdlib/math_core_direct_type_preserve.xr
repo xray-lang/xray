@@ -1,0 +1,34 @@
+// AOT core-math direct calls must preserve the stdlib runtime's dynamic value
+// shape for integer-preserving helpers. These used to lower to double-only C
+// expressions, producing 42.0/3.0/7.0 and "float" where the VM produced ints.
+import math
+import { min as mmin, max as mmax, clamp as cclamp } from "math"
+
+let a = math.abs(-42)
+print(typeof(a))
+print(a)
+
+let amin = math.abs(math.MIN_INT)
+print(typeof(amin))
+
+print(typeof(math.min()))
+print(math.min())
+
+let mn = math.min(3, 7, 5)
+print(typeof(mn))
+print(mn)
+
+let mx = math.max(3, 7, 5)
+print(typeof(mx))
+print(mx)
+
+let cl = math.clamp(5, 10, 0)
+print(typeof(cl))
+print(cl)
+
+print(mmin(9, 4, 6))
+print(mmax(9, 4, 6))
+print(cclamp(15, 10, 0))
+
+print(typeof(math.min(3.5, 7.2)))
+print(math.clamp(5.5, 10.0, 0.0))
