@@ -38,11 +38,27 @@ static bool cg_class_native_field_is_ref(const XrStructFieldLayout *field) {
                      cg_class_native_ref_field_tag_name(field->native_type) != NULL);
 }
 
+static bool cg_class_native_field_is_arc_managed_ref(const XrStructFieldLayout *field) {
+    if (!cg_class_native_field_is_ref(field))
+        return false;
+    return field->native_type == XR_NATIVE_STRING;
+}
+
 static bool cg_class_native_layout_has_ref_fields(const XrStructLayout *layout) {
     if (!layout)
         return false;
     for (uint16_t i = 0; i < layout->field_count; i++) {
         if (cg_class_native_field_is_ref(cg_struct_field(layout, i)))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_class_native_layout_has_arc_ref_fields(const XrStructLayout *layout) {
+    if (!layout)
+        return false;
+    for (uint16_t i = 0; i < layout->field_count; i++) {
+        if (cg_class_native_field_is_arc_managed_ref(cg_struct_field(layout, i)))
             return true;
     }
     return false;
@@ -84,9 +100,13 @@ static bool emit_class_native_ref_field_store_expr(XiCgenCtx *ctx, FILE *out, co
     const char *tag_name = cg_class_native_ref_field_tag_name(field->native_type);
     fprintf(out, "({ XrValue _new = ");
     emit_value_as_rep_ctx(ctx, out, value, XR_REP_TAGGED);
-    fprintf(out, "; xrt_retain(_new); xrt_release(");
-    emit_class_native_ref_field_value(ctx, out, cd, layout, idx, object_expr);
-    fprintf(out, "); ");
+    if (cg_class_native_field_is_arc_managed_ref(field)) {
+        fprintf(out, "; xrt_retain(_new); xrt_release(");
+        emit_class_native_ref_field_value(ctx, out, cd, layout, idx, object_expr);
+        fprintf(out, "); ");
+    } else {
+        fprintf(out, "; ");
+    }
     emit_class_native_field_ref(ctx, out, cd, object_expr, idx);
     if (tag_name) {
         fprintf(out, " = (%s)_new.ptr", cg_struct_field_c_type(layout, idx));
@@ -108,7 +128,7 @@ static void emit_class_native_type_register_expr(XiCgenCtx *ctx, FILE *out, cons
     const char *name = cd && cd->class_name ? cd->class_name : "?";
     bool native_layout = cg_class_native_type_registers_native_layout(ctx, cd);
     fprintf(out, "xrt_type_register(\"%s\", 0, NULL, 0, ", name);
-    if (native_layout && cg_class_native_layout_has_ref_fields(cd->instance_layout)) {
+    if (native_layout && cg_class_native_layout_has_arc_ref_fields(cd->instance_layout)) {
         emit_class_native_dtor_name(out, prefix, cd);
     } else {
         fprintf(out, "NULL");
@@ -1740,6 +1760,18 @@ static const XiValue *cg_class_native_prev_block_value(const XiValue *site) {
     return prev;
 }
 
+static const XiValue *cg_class_native_prev_error_source_value(const XiValue *site) {
+    const XiValue *prev = cg_class_native_prev_block_value(site);
+    for (uint8_t depth = 0; prev && depth < 8; depth++) {
+        if ((prev->op != XI_BOX && prev->op != XI_UNBOX && prev->op != XI_COPY &&
+             prev->op != XI_MOVE) ||
+            prev->nargs < 1)
+            break;
+        prev = prev->args[0];
+    }
+    return prev;
+}
+
 static const XiFunc *cg_class_native_resolve_method_call(XiCgenCtx *ctx, const XiFunc *current,
                                                          const XiValue *call,
                                                          const char **out_prefix) {
@@ -2342,7 +2374,12 @@ static bool cg_class_native_call_is_nothrow_direct_depth(XiCgenCtx *ctx, const X
         return true;
     if (cg_class_native_set_method_call_is_direct(ctx, current, call))
         return true;
-    if (call->op == XI_CALL) {
+    if (call->op == XI_CALL && call->nargs >= 1) {
+        CgStaticFunctionCall direct = cg_resolve_static_function_call(ctx, current, call->args[0]);
+        if (direct.func && !direct.is_class_constructor && !cg_func_needs_aot_coro(direct.func) &&
+            !cg_class_native_func_has_error_flow(ctx, direct.func, (uint8_t) (depth + 1)))
+            return true;
+
         const XiFunc *target = NULL;
         const XiClassData *cd = cg_class_native_ctor_call_data(ctx, current, call, &target, NULL);
         return cd && target && cg_class_func_is_native_constructor(ctx, target) &&
@@ -2372,7 +2409,7 @@ static bool cg_class_native_err_check_is_dead(XiCgenCtx *ctx, const XiFunc *curr
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     return cg_class_native_call_is_nothrow_direct(ctx, current,
-                                                  cg_class_native_prev_block_value(check));
+                                                  cg_class_native_prev_error_source_value(check));
 }
 
 static bool cg_class_native_const_int_value(const XiValue *value, int64_t *out) {
@@ -2383,9 +2420,17 @@ static bool cg_class_native_const_int_value(const XiValue *value, int64_t *out) 
     return true;
 }
 
-static bool cg_class_native_value_is_nothrow_arith(const XiValue *v) {
-    if (!v || (v->op != XI_DIV && v->op != XI_MOD) || v->nargs < 2 || cg_rep(v) != XR_REP_I64 ||
-        cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+static bool cg_class_native_value_is_nothrow_native_scalar(const XiValue *v) {
+    if (!v || v->nargs < 2 || cg_rep(v->args[0]) != XR_REP_I64 || cg_rep(v->args[1]) != XR_REP_I64)
+        return false;
+    if (v->op == XI_EQ || v->op == XI_NE || v->op == XI_LT || v->op == XI_LE || v->op == XI_GT ||
+        v->op == XI_GE)
+        return true;
+    if (cg_rep(v) != XR_REP_I64)
+        return false;
+    if (v->op == XI_ADD || v->op == XI_SUB || v->op == XI_MUL)
+        return true;
+    if (v->op != XI_DIV && v->op != XI_MOD)
         return false;
     int64_t divisor = 0;
     return cg_class_native_const_int_value(v->args[1], &divisor) && divisor != 0;
@@ -2410,7 +2455,7 @@ static bool cg_class_native_func_has_error_flow(XiCgenCtx *ctx, const XiFunc *f,
             if (v->flags & XI_FLAG_MAY_SUSPEND)
                 return true;
             if (v->flags & XI_FLAG_MAY_THROW) {
-                if (cg_class_native_value_is_nothrow_arith(v))
+                if (cg_class_native_value_is_nothrow_native_scalar(v))
                     continue;
                 if (!cg_class_native_call_is_nothrow_direct_depth(ctx, f, v, (uint8_t) (depth + 1)))
                     return true;
@@ -2425,7 +2470,7 @@ static bool cg_class_native_err_check_after_nothrow_call(XiCgenCtx *ctx, const X
     if (!check || check->op != XI_ERR_CHECK || cg_value_type_is_bool(check))
         return false;
     return cg_class_native_call_is_nothrow_direct(ctx, current,
-                                                  cg_class_native_prev_block_value(check));
+                                                  cg_class_native_prev_error_source_value(check));
 }
 
 static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *module,
@@ -2449,7 +2494,7 @@ static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *modu
         fprintf(out, "} ");
         emit_class_native_type_name(out, prefix, cd->class_name);
         fprintf(out, ";\n");
-        if (!cg_class_native_layout_has_ref_fields(cd->instance_layout))
+        if (!cg_class_native_layout_has_arc_ref_fields(cd->instance_layout))
             continue;
         fprintf(out, "static void ");
         emit_class_native_dtor_name(out, prefix, cd);
@@ -2461,7 +2506,7 @@ static void emit_class_native_typedefs(XiCgenCtx *ctx, FILE *out, XiModule *modu
         fprintf(out, "*)obj;\n");
         fprintf(out, "    if (!self) return;\n");
         for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++) {
-            if (!cg_class_native_field_is_ref(cg_struct_field(cd->instance_layout, fi)))
+            if (!cg_class_native_field_is_arc_managed_ref(cg_struct_field(cd->instance_layout, fi)))
                 continue;
             fprintf(out, "    xrt_release(");
             emit_class_native_ref_field_value(ctx, out, cd, cd->instance_layout, fi, "self");

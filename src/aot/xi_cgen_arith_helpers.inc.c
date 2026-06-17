@@ -31,7 +31,9 @@ static bool emit_native_const_div_mod_expr(FILE *out, const XiValue *v) {
             emit_vref(out, v->args[0]);
             fprintf(out, ")");
         } else {
-            emit_binop(out, v, "/");
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, " / INT64_C(%" PRId64 "))", divisor);
         }
         return true;
     }
@@ -39,7 +41,9 @@ static bool emit_native_const_div_mod_expr(FILE *out, const XiValue *v) {
         if (divisor == -1) {
             fprintf(out, "INT64_C(0)");
         } else {
-            emit_binop(out, v, "%");
+            fprintf(out, "(");
+            emit_vref(out, v->args[0]);
+            fprintf(out, " %% INT64_C(%" PRId64 "))", divisor);
         }
         return true;
     }

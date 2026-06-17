@@ -15,7 +15,7 @@ contains=kind=func-abi func=constructor value=- input=- reason=tagged-type
 contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
 c_regex=static xrt_native_tagged_boundary_Counter \* tagged_boundary_make_counter_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
 c_regex=static int64_t tagged_boundary_read_counter_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_Counter \*p0\)
-c_regex=return xrt_box_obj\(tagged_boundary_make_counter_[0-9]+
+c_regex=void \* v[0-9]+ = tagged_boundary_make_counter_[0-9]+\(NULL, v[0-9]+\)
 c_regex=xrt_shared\[[0-9]+\] = xrt_box_obj\(v[0-9]+\)
 c_regex=tagged_boundary_read_counter_[0-9]+\(NULL, \(v[0-9]+\)\.ptr\)
 c_regex=tagged_boundary_bump_[0-9]+\(NULL, \(\(xrt_native_tagged_boundary_Counter\*\)v[0-9]+\)\)

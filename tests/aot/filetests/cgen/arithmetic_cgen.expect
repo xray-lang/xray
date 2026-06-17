@@ -2,5 +2,7 @@ contains=xaot-plan v0
 contains=function 1 name=hot module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
 c_regex=static (XRT_FN_[A-Z]+ )?int64_t arithmetic_cgen_hot_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
 c_contains=while ((phi
-c_contains=return XR_FROM_INT(arithmetic_cgen_hot_
+c_regex=int64_t v[0-9]+ = arithmetic_cgen_hot_[0-9]+\(NULL, v[0-9]+\);
+c_contains=printf("%lld", (long long)
+c_not_contains=xrt_has_pending_error()
 contains=stats functions=2 native=1 tagged=1 coro=0

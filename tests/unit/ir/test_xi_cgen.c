@@ -318,14 +318,58 @@ TEST(cgen_simple_arith) {
     char *code = generate_c(ir, "test");
     assert(code != NULL && "C code generation failed");
 
-    /* Should contain xrt_println or xrt_print */
-    assert(contains(code, "xrt_print") && "should call xrt_print");
+    assert(contains(code, "printf(\"%lld\", (long long)") &&
+           "native int print should use direct printf");
+    assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
+           "native int print should not call the generic tagged printer");
+    assert(!contains(code, "XR_FROM_INT(v") &&
+           "print-only int boxes should be elided from generated C");
     /* Should have a main function that accepts script arguments. */
     assert(contains(code, "int main(int argc, char **argv)") && "should have main()");
     /* Should include xrt.h */
     assert(contains(code, "#include \"xrt.h\"") && "should include xrt.h");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_skips_unused_process_builtin_init) {
+    const char *src = "print(1 + 2)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "simple AOT program should generate");
+    assert(!contains(code, "xrt_process_new(") &&
+           "AOT entry must not construct process.args when process is unused");
+    assert(!contains(code, "xrt_builtins[5] =") &&
+           "unused process builtin slot must not be initialized");
+
+    printf("  Generated process-free entry %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_initializes_used_process_builtin) {
+    const char *src = "print(process.args.length)\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "process.args AOT program should generate");
+    assert(contains(code, "xrt_builtins[5] = xrt_process_new(") &&
+           "used process builtin slot must be initialized");
+    assert(contains(code, "argc > 1 ? argc - 1 : 0") &&
+           "process.args must still receive script arguments");
+
+    printf("  Generated process-aware entry %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -346,7 +390,10 @@ TEST(cgen_variable_and_print) {
 
     /* Should contain the constant 42 */
     assert(contains(code, "42") && "should contain constant 42");
-    assert(contains(code, "xrt_print") && "should call print");
+    assert(contains(code, "printf(\"%lld\", (long long)") && contains(code, "putchar('\\n')") &&
+           "native int print should use direct printf/putchar");
+    assert(!contains(code, "xrt_println(") && !contains(code, "xrt_print(") &&
+           "native int print should not call the generic tagged printer");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -399,7 +446,8 @@ TEST(cgen_multi_print) {
     assert(contains(code, "10") && "should contain 10");
     assert(contains(code, "20") && "should contain 20");
     assert(contains(code, "+") && "should contain addition");
-    assert(contains(code, "xrt_print") && "should call print");
+    assert(contains(code, "printf(\"%lld\", (long long)") &&
+           "native int print should use direct printf");
 
     printf("  Generated %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -495,7 +543,10 @@ TEST(cgen_stats_tracks_native_abi) {
     assert(stats.functions_total >= 2 && "module init plus static function should be counted");
     assert(stats.functions_native_abi >= 1 && "inc should use native scalar ABI");
     assert(stats.functions_tagged_abi >= 1 && "module init remains a tagged boundary");
-    assert(stats.boxed_adapters >= 1 && "native function should expose a boxed adapter");
+    assert(stats.boxed_adapters == 0 &&
+           "direct-only native function should not expose a boxed adapter");
+    assert(!contains(code, "xrt_closure_new((void*)test_inc_") &&
+           "direct-only shared function should not allocate a runtime closure");
 
     xr_free(code);
     xi_func_free(ir);
@@ -512,9 +563,9 @@ TEST(cgen_module_prefix_is_c_identifier) {
     char *code = generate_c_with_status(ir, "1127_coro_numeric_prefix", &had_error);
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "numeric module prefixes should generate");
-    assert(contains(code, "static XrValue _1127_coro_numeric_prefix_compute_") &&
+    assert(contains(code, "_1127_coro_numeric_prefix_compute_") &&
            "numeric module prefixes must be emitted as legal C identifiers");
-    assert(!contains(code, "static XrValue 1127_coro_numeric_prefix_compute_") &&
+    assert(!contains(code, " 1127_coro_numeric_prefix_compute_") &&
            "numeric module prefixes must not be emitted raw");
 
     printf("  Generated numeric-prefix module %zu bytes of C code\n", strlen(code));
@@ -723,10 +774,10 @@ TEST(cgen_bytes_methods_use_raw_memory_helpers) {
     assert(fn != NULL && "run declaration should exist");
     fn = strstr(fn + 1, "static int64_t test_run_");
     assert(fn != NULL && "run definition should exist");
-    const char *fn_end = strstr(fn, "static XrValue test_run_");
-    assert(fn_end != NULL && "boxed run adapter should follow typed function");
     const char *fn_body = strchr(fn, '{');
-    assert(fn_body != NULL && fn_body < fn_end && "run function body should be bounded");
+    const char *fn_end = fn_body ? strstr(fn_body, "\n}\n\nstatic") : NULL;
+    assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
+           "run function body should be bounded");
 
     assert(count_between(fn_body, fn_end, "xrt_bytes_load_u32_le_raw(") > 0 &&
            "Bytes.loadU32LE must lower to the raw AOT helper");
@@ -1016,10 +1067,10 @@ TEST(cgen_fixed_array_struct_field_uses_embedded_heap_native_storage) {
     assert(fn != NULL && "run declaration should exist");
     fn = strstr(fn + 1, "static int64_t test_run_");
     assert(fn != NULL && "run definition should exist");
-    const char *fn_end = strstr(fn, "static XrValue test_run_");
-    assert(fn_end != NULL && "boxed run adapter should follow typed function");
     const char *fn_body = strchr(fn, '{');
-    assert(fn_body != NULL && fn_body < fn_end && "run function body should be bounded");
+    const char *fn_end = fn_body ? strstr(fn_body, "\n}\n\nstatic") : NULL;
+    assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
+           "run function body should be bounded");
 
     assert(contains(code, "uint8_t f0[4]") &&
            "fixed array field must be embedded in the native heap layout");
@@ -1073,10 +1124,10 @@ TEST(cgen_shared_struct_alias_elides_tagged_hot_locals) {
     assert(fn != NULL && "run declaration should exist");
     fn = strstr(fn + 1, "static int64_t test_run_");
     assert(fn != NULL && "run definition should exist");
-    const char *fn_end = strstr(fn, "static XrValue test_run_");
-    assert(fn_end != NULL && "boxed run adapter should follow typed function");
     const char *fn_body = strchr(fn, '{');
-    assert(fn_body != NULL && fn_body < fn_end && "run function body should be bounded");
+    const char *fn_end = fn_body ? strstr(fn_body, "\n}\n\nstatic") : NULL;
+    assert(fn_body != NULL && fn_end != NULL && fn_body < fn_end &&
+           "run function body should be bounded");
 
     assert(contains(code, "XR_TAG_STRUCT_REF") &&
            "shared primitive struct must use native heap storage");
@@ -1191,8 +1242,10 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     assert(run != NULL && "run function should use typed ABI");
     run = strstr(run + 1, "static int64_t test_run_");
     assert(run != NULL && "run function definition should follow its declaration");
-    const char *run_end = strstr(run, "static XrValue test_run_");
-    assert(run_end != NULL && "boxed run adapter should follow run definition");
+    const char *run_body = strchr(run, '{');
+    const char *run_end = run_body ? strstr(run_body, "\n}\n\nstatic") : NULL;
+    assert(run_body != NULL && run_end != NULL && run_body < run_end &&
+           "run function body should be bounded");
     assert(count_between(run, run_end, "xrt_map_new(") == 0 &&
            count_between(run, run_end, "xrt_map_get(") == 0 &&
            count_between(run, run_end, "xrt_map_set(") == 0 &&
@@ -1258,11 +1311,8 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
            "typed native class return should not box inside the producer");
     assert(count_between(make, make_end, "xrt_map_new(") == 0 &&
            "escaping native class constructor must not allocate a map instance");
-    const char *make_boxed = strstr(make_end, "static XrValue test_make_");
-    assert(make_boxed != NULL && "make should keep a boxed adapter for closure/shared calls");
-    assert(count_between(make_boxed, next_static_after(make_boxed), "xrt_box_obj(test_make_") ==
-               1 &&
-           "make boxed adapter should box the native pointer return");
+    assert(!contains(code, "static XrValue test_make_") &&
+           "direct-only native class producer should not emit a boxed adapter");
 
     const char *touch = strstr(code, "static int64_t test_touch_");
     assert(touch != NULL && "touch function should use typed scalar return ABI");
@@ -1332,15 +1382,18 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     run = strstr(run + 1, "static int64_t test_run_");
     assert(run != NULL && "run function definition should follow its declaration");
     const char *run_end = next_static_after(run);
-    assert(count_between(run, run_end, "xrt_obj_alloc(") == 1 &&
-           "run should allocate one native IntBag instance");
+    assert(count_between(run, run_end, "xrt_obj_alloc(") == 0 &&
+           "non-escaping ref-field native class should be stack-constructed");
+    assert(count_between(run, run_end, "xrt_native_test_IntBag _ci") == 1 &&
+           count_between(run, run_end, "xrt_native_test_IntBag_dtor(&_ci") == 0 &&
+           "stack-constructed collection-only ref field class should skip no-op destructor calls");
     assert(count_between(run, run_end, "xrt_box_obj(_inst)") == 0 &&
            "local native class constructor result must not be boxed before direct method calls");
     assert(count_between(run, run_end, "test_scan_") >= 1 &&
            count_between(run, run_end, "test_scan_2_boxed(") == 0 &&
            "local native class method call should target the typed receiver entry");
-    assert(count_between(run, run_end, "((xrt_native_test_IntBag*)v") >= 1 &&
-           "direct method call should cast the pointer local, not pass a tagged XrValue");
+    assert(count_between(run, run_end, "XR_FROM_INT(test_scan_") == 0 &&
+           "stack-return path should keep the method result native until return");
     assert(count_between(run, run_end, "xrt_getprop_name(") == 0 &&
            count_between(run, run_end, "xrt_setprop_name(") == 0 &&
            count_between(run, run_end, "xrt_map_get(") == 0 &&
@@ -1353,7 +1406,7 @@ TEST(cgen_native_class_ref_field_constructor_result_uses_ptr_storage) {
     xi_func_free(ir);
 }
 
-TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
+TEST(cgen_native_class_collection_ref_fields_skip_noop_arc) {
     const char *src = "class Bag {\n"
                       "    values: Array<int>\n"
                       "    constructor(values: Array<int>) {\n"
@@ -1391,26 +1444,25 @@ TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
     assert(code != NULL && "C code generation failed");
     assert(!had_error && "native class ref field ownership path should generate");
 
-    assert(contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
-           "native class ref fields should generate a type destructor");
-    assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
-           "native class destructor should release pointer ref fields");
-    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
+    assert(!contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
+           "AOT collection ref fields are not prepend-header ARC-managed and need no destructor");
+    assert(!contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
+           "collection ref field destructors should not emit no-op releases");
+    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, NULL, "
                           "(uint32_t)sizeof(xrt_native_test_Bag))") &&
-           "class type registration should wire the native destructor and instance size");
+           "class type registration should not wire a destructor for collection-only refs");
 
     const char *replace = strstr(code, "static int64_t test_replace_");
     assert(replace != NULL && "replace method should use typed ABI");
     replace = strstr(replace + 1, "static int64_t test_replace_");
     assert(replace != NULL && "replace method definition should follow its declaration");
     const char *replace_end = next_static_after(replace);
-    const char *retain = strstr(replace, "xrt_retain(_new);");
-    const char *release = strstr(replace, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));");
     const char *assign = strstr(replace, "(p0)->f0 = (xrt_array_t *)_new.ptr");
-    assert(retain && release && assign && retain < release && release < assign &&
-           release < replace_end &&
-           "direct native receiver ref stores must retain new, release "
-           "old, then assign");
+    assert(assign && assign < replace_end &&
+           count_between(replace, replace_end, "xrt_retain(_new);") == 0 &&
+           count_between(replace, replace_end, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));") ==
+               0 &&
+           "direct native receiver collection ref stores should assign without no-op ARC calls");
 
     const char *swap = strstr(code, "static int64_t test_swap_");
     assert(swap != NULL && "swap function should use typed scalar return ABI");
@@ -1423,13 +1475,11 @@ TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
            count_between(swap, swap_end, "xrt_map_get(") == 0 &&
            count_between(swap, swap_end, "xrt_map_set(") == 0 &&
            "native class pointer parameters should access ref fields without Map fallback");
-    retain = strstr(swap, "xrt_retain(_new);");
-    release = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));");
     assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");
-    assert(retain && release && assign && retain < release && release < assign &&
-           release < swap_end &&
-           "heap native instance ref stores must retain new, release old, "
-           "then assign");
+    assert(assign && assign < swap_end && count_between(swap, swap_end, "xrt_retain(_new);") == 0 &&
+           count_between(swap, swap_end, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));") ==
+               0 &&
+           "heap native instance collection ref stores should assign without no-op ARC calls");
 
     const char *local = strstr(code, "static int64_t test_local_");
     assert(local != NULL && "local function should use typed scalar return ABI");
@@ -1440,7 +1490,8 @@ TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
            count_between(local, local_end, "_ci") == 0 &&
            "ref-field native classes should not stack-inline without stack destructors");
 
-    printf("  Generated native class ref field ownership path %zu bytes of C code\n", strlen(code));
+    printf("  Generated native class collection ref field path %zu bytes of C code\n",
+           strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -2631,6 +2682,8 @@ TEST(cgen_int_const_div_mod_uses_native_ops) {
            "constant non-zero integer division should emit C /");
     assert(count_between(code, code_end, " % ") >= 1 &&
            "constant non-zero integer modulo should emit C %");
+    assert(contains(code, " / INT64_C(5)") && contains(code, " % INT64_C(7)") &&
+           "constant div/mod RHS must stay literal so C compilers can strength-reduce it");
 
     printf("  Generated integer div/mod fast path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -4019,6 +4072,8 @@ int main(void) {
     setup();
 
     run_cgen_simple_arith();
+    run_cgen_skips_unused_process_builtin_init();
+    run_cgen_initializes_used_process_builtin();
     run_cgen_variable_and_print();
     run_cgen_if_else();
     run_cgen_multi_print();
@@ -4046,7 +4101,7 @@ int main(void) {
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_native_class_ref_field_constructor_result_uses_ptr_storage();
-    run_cgen_native_class_ref_fields_register_destructor_and_store_rc();
+    run_cgen_native_class_collection_ref_fields_skip_noop_arc();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
