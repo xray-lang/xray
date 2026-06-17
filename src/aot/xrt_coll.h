@@ -15,6 +15,7 @@
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
 #include "../shared/xr_elem_type.h"
+#include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
 #include "../shared/xr_typed_ops.h"
 #include <string.h>
@@ -416,8 +417,8 @@ static inline void xrt_strbuf_append(XrValue sbv, XrValue val) {
         sb->len += n;
         sb->buf[sb->len] = 0;
     } else if (val.tag == XR_TAG_F64) {
-        char tmp[32];
-        int n = snprintf(tmp, sizeof(tmp), "%g", val.f);
+        char tmp[64];
+        int n = xr_format_float(tmp, sizeof(tmp), val.f);
         xrt_strbuf_grow(sb, n);
         memcpy(sb->buf + sb->len, tmp, (size_t) n);
         sb->len += n;

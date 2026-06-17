@@ -23,6 +23,7 @@
 #include "../object/xstring.h"
 #include "../symbol/xsymbol_table.h"
 #include "../../base/xconstants.h"
+#include "../../shared/xr_float_fmt.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -39,14 +40,7 @@ static inline XrValue xr_float_to_string_method(XrayIsolate *iso, XrValue self, 
     (void) argc;
     XR_DCHECK(iso != NULL, "xr_float_to_string_method: NULL isolate");
     char buffer[64];
-    int len = snprintf(buffer, sizeof(buffer), "%.15g", XR_TO_FLOAT(self));
-    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'E') &&
-        len + 2 < (int) sizeof(buffer)) {
-        buffer[len] = '.';
-        buffer[len + 1] = '0';
-        buffer[len + 2] = '\0';
-        len += 2;
-    }
+    int len = xr_format_float(buffer, sizeof(buffer), XR_TO_FLOAT(self));
     XrString *str = xr_string_intern(iso, buffer, (size_t) len, 0);
     return xr_string_value(str);
 }
