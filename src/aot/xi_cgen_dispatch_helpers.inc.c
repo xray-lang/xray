@@ -314,7 +314,7 @@ static void xicgen_set_shared(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
     (void) f;
     (void) prefix;
     fprintf(out, "(%s[%d] = ", ctx->shared_name, (int) v->aux_int);
-    emit_vref(out, v->args[0]);
+    emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
     fprintf(out, ")");
 }
 
@@ -571,7 +571,7 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     }
 
     if (target && is_class_call) {
-        if (emit_class_native_constructor_boxed_expr(ctx, out, f, prefix, v, target, call_prefix))
+        if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, target, call_prefix))
             return;
         fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
         emit_fname(ctx, out, call_prefix ? call_prefix : prefix, target);
@@ -1139,9 +1139,10 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
          * independent recursive copy that matches the VM OP_COPY semantics. */
         XR_DCHECK(v->nargs >= 1, "builtin copy: need arg");
         bool is_json = v->args[0] && v->args[0]->type && v->args[0]->type->kind == XR_KIND_JSON;
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         fprintf(out, "%s(", is_json ? "xrt_json_clone_for_coro" : "xrt_value_clone_for_coro");
-        emit_value_as_rep(out, v->args[0], XR_REP_TAGGED);
+        emit_value_as_rep_ctx(ctx, out, v->args[0], XR_REP_TAGGED);
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);
     } else if (strcmp(bn, "iter_new") == 0) {
@@ -1454,7 +1455,7 @@ static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc
     const XiFunc *ctor = cg_lookup_class_ctor_global(ctx, class_name, &call_prefix);
     if (!ctor)
         return false;
-    if (emit_class_native_constructor_boxed_expr(ctx, out, f, prefix, v, ctor, call_prefix))
+    if (emit_class_native_constructor_expr(ctx, out, f, prefix, v, ctor, call_prefix))
         return true;
     fprintf(out, "({ XrValue _inst = xrt_map_new(4); ");
     emit_fname(ctx, out, call_prefix ? call_prefix : prefix, ctor);

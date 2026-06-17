@@ -1299,7 +1299,7 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
                 break;
             if (blk->control) {
                 fprintf(out, "    return ");
-                emit_value_as_rep(out, blk->control, cg_func_return_abi_rep(ctx, f));
+                emit_value_as_rep_ctx(ctx, out, blk->control, cg_func_return_abi_rep(ctx, f));
                 fprintf(out, ";\n");
             } else {
                 if (cg_func_return_abi_rep(ctx, f) == XR_REP_TAGGED)
