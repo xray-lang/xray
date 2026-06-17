@@ -147,38 +147,59 @@ static inline int64_t xrt_le(XrValue a, XrValue b) {
  * Inline print
  * ========================================================================= */
 
-static inline void xrt_print(XrValue v) {
+/* Recursion / element caps must match the VM formatter (xvalue_format.c:
+ * XR_FORMAT_MAX_DEPTH / XR_FORMAT_MAX_ELEMENTS) so container printing is
+ * byte-identical across backends. */
+#define XRT_FORMAT_MAX_DEPTH 3
+#define XRT_FORMAT_MAX_ELEMENTS 32
+
+static void xrt_print_value(XrValue v, int depth) {
     switch (v.tag) {
         case XR_TAG_STR:
         case XR_TAG_STR_ARC:
+            /* Nested strings are quoted, matching the VM formatter. */
+            if (depth > 0)
+                putchar('"');
             fwrite(xr_str_data(v), 1, (size_t) xr_str_len(v), stdout);
-            break;
+            if (depth > 0)
+                putchar('"');
+            return;
         case XR_TAG_I64:
             printf("%lld", (long long) v.i);
-            break;
+            return;
         case XR_TAG_F64: {
             char buf[64];
             xrt_format_float(buf, sizeof(buf), v.f);
             fputs(buf, stdout);
-            break;
+            return;
         }
         case XR_TAG_BOOL:
             printf("%s", v.i ? "true" : "false");
-            break;
+            return;
         case XR_TAG_NULL:
             printf("null");
-            break;
+            return;
         case XR_TAG_ENUM: {
             char buf[256];
             fputs(xr_to_cstr(v, buf, sizeof(buf)), stdout);
-            break;
+            return;
         }
         case XR_TAG_RANGE: {
             char buf[96];
             xrt_range_format_buf((const xrt_range_t *) v.ptr, buf, sizeof(buf));
             fputs(buf, stdout);
-            break;
+            return;
         }
+        default:
+            break;
+    }
+
+    if (depth > XRT_FORMAT_MAX_DEPTH) {
+        fputs("...", stdout);
+        return;
+    }
+
+    switch (v.tag) {
         case XR_TAG_ARRAY: {
             xrt_array_t *a = (xrt_array_t *) v.ptr;
             if (a && a->adt_enum_name && a->adt_member_name) {
@@ -188,19 +209,51 @@ static inline void xrt_print(XrValue v) {
                     for (int64_t i = 1; i < a->len; i++) {
                         if (i > 1)
                             printf(", ");
-                        xrt_print(xr_typed_get(a->data, (int32_t) i, a->elem_type));
+                        xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type),
+                                        depth + 1);
                     }
                     printf(")");
                 }
-                break;
+                return;
             }
-            printf("<object@%p>", v.ptr);
-            break;
+            int64_t len = a ? a->len : 0;
+            int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
+            putchar('[');
+            for (int64_t i = 0; i < limit; i++) {
+                if (i > 0)
+                    fputs(", ", stdout);
+                xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type), depth + 1);
+            }
+            if (len > limit)
+                printf(", ...(%lld more)", (long long) (len - limit));
+            putchar(']');
+            return;
+        }
+        case XR_TAG_TUPLE: {
+            xrt_tuple_t *t = (xrt_tuple_t *) v.ptr;
+            int64_t len = t ? t->len : 0;
+            int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
+            putchar('(');
+            for (int64_t i = 0; i < limit; i++) {
+                if (i > 0)
+                    fputs(", ", stdout);
+                xrt_print_value(t->items[i], depth + 1);
+            }
+            if (len > limit)
+                printf(", ...(%lld more)", (long long) (len - limit));
+            if (len == 1)
+                putchar(',');
+            putchar(')');
+            return;
         }
         default:
             printf("<object@%p>", v.ptr);
-            break;
+            return;
     }
+}
+
+static inline void xrt_print(XrValue v) {
+    xrt_print_value(v, 0);
 }
 
 static inline void xrt_println(XrValue v) {
