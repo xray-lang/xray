@@ -17,3 +17,4 @@ regex="ld_flags": \[
 contains="-Wl,--gc-sections"
 not_contains="runtime_objects": ["xray_core"]
 not_contains=-Wl,-dead_strip
+not_contains=-fsanitize=

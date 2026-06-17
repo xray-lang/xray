@@ -276,9 +276,12 @@ static bool xaot_cli_normalize_manifest_for_target(XaotLinkManifest *manifest,
     return true;
 }
 
-static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest, char *err,
+static bool xaot_cli_add_build_sanitizer_flags(XaotLinkManifest *manifest,
+                                               const XrCliBuildTarget *target, char *err,
                                                size_t err_size) {
     if (!manifest)
+        return true;
+    if (target && !target->is_native)
         return true;
 #if defined(XR_BUILD_ASAN) && XR_BUILD_ASAN
     if (!xaot_link_manifest_add_unique(manifest, XAOT_LINK_CC_FLAG, "-fsanitize=address") ||
@@ -959,7 +962,7 @@ static int cmd_build_native(const char *input, const char *output, const char *c
             xaot_build_result_free(&aot_result);
             return 1;
         }
-        if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, normalize_err,
+        if (!xaot_cli_add_build_sanitizer_flags(&aot_result.link_manifest, target, normalize_err,
                                                 sizeof(normalize_err))) {
             fprintf(stderr, "Error: %s\n", normalize_err);
             xaot_build_result_free(&aot_result);
