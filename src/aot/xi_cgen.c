@@ -1541,21 +1541,104 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
     return false;
 }
 
+static bool cg_native_receiver_method_call_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                               const XiValue *call,
+                                                               const XiFunc *target) {
+    if (!ctx || !owner || !call || !target ||
+        (call->op != XI_CALL_METHOD && call->op != XI_CALL_METHOD_DIRECT) || call->nargs < 1)
+        return false;
+
+    const char *method_prefix = NULL;
+    const XiFunc *mfunc = cg_class_native_resolve_method_call(ctx, owner, call, &method_prefix);
+    (void) method_prefix;
+    if (mfunc != target)
+        return false;
+
+    CgClassNativeFunc target_info = cg_class_native_func(ctx, target);
+    const XiClassData *source_info = cg_class_native_instance_data(ctx, owner, call->args[0]);
+    return !(cg_class_native_instance_origin(ctx, owner, call->args[0]) &&
+             cg_class_native_can_pass_instance_as(ctx, source_info, target_info.class_data));
+}
+
+static bool cg_native_receiver_ctor_call_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *owner,
+                                                             const XiValue *call,
+                                                             const XiFunc *target) {
+    if (!ctx || !owner || !call || call->op != XI_CALL || !target)
+        return false;
+
+    const XiFunc *ctor = NULL;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, owner, call, &ctor, NULL);
+    if (!cd || ctor != target)
+        return false;
+
+    int shared_slot = -1;
+    if (cg_class_native_ctor_can_inline(ctx, owner, call) ||
+        cg_class_shared_native_ctor_value_is_elided(ctx, owner, call, &shared_slot))
+        return false;
+    return true;
+}
+
+static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *owner,
+                                                  const XiFunc *target, const char *prefix) {
+    if (!ctx || !owner || !target)
+        return false;
+
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v)
+                continue;
+            if (cg_value_allocates_closure_for_func(v, target) &&
+                !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
+                return true;
+            if (cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
+                cg_native_receiver_ctor_call_needs_boxed_adapter(ctx, owner, v, target))
+                return true;
+        }
+    }
+
+    for (uint16_t i = 0; i < owner->nchildren; i++) {
+        if (cg_func_has_native_receiver_boxed_use(ctx, owner->children[i], target, prefix))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_has_native_receiver_boxed_use_in_bundle(XiCgenCtx *ctx, const XiFunc *target,
+                                                            const char *prefix) {
+    if (!ctx || !target)
+        return false;
+
+    bool scanned_current = false;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *mod = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (!mod || !mod->init)
+            continue;
+        if (mod == ctx->module)
+            scanned_current = true;
+        if (cg_func_has_native_receiver_boxed_use(ctx, mod->init, target, prefix))
+            return true;
+    }
+
+    const XiFunc *root = ctx->module ? ctx->module->init : NULL;
+    return !scanned_current && cg_func_has_native_receiver_boxed_use(ctx, root, target, prefix);
+}
+
 static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
                                         bool typed_abi, bool native_receiver) {
     if (!typed_abi && !native_receiver)
         return false;
 
-    if (native_receiver) {
-        /* Dynamic map-backed receiver calls still enter through the boxed
-         * adapter until the class receiver boundary stops using Map marshalling. */
-        return true;
-    }
-
     if (cg_func_is_shared_slot_value(ctx, f))
         return true;
 
     const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
+    if (native_receiver)
+        return cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
+
     return cg_func_has_unelided_closure_value_use(ctx, root, f, prefix);
 }
 
