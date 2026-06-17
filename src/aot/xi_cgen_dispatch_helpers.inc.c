@@ -118,11 +118,13 @@ static void xicgen_arith(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiVal
         }
     } else if (result_rep == XR_REP_I64) {
         // Native int64: must wrap on overflow (raw + - * is signed UB in C).
-        fprintf(out, "%s(", xi_to_c_template_arith_i64_wrap_fn(v->op));
-        emit_vref(out, v->args[0]);
-        fprintf(out, ", ");
-        emit_vref(out, v->args[1]);
-        fprintf(out, ")");
+        if (!emit_native_i64_wrap_arith_expr(out, v)) {
+            fprintf(out, "%s(", xi_to_c_template_arith_i64_wrap_fn(v->op));
+            emit_vref(out, v->args[0]);
+            fprintf(out, ", ");
+            emit_vref(out, v->args[1]);
+            fprintf(out, ")");
+        }
     } else {
         emit_binop(out, v, xi_to_c_template_arith_native_op(v->op));
     }
