@@ -70,3 +70,63 @@ static void emit_class_native_type_name(FILE *out, const char *prefix, const cha
     sanitize_c_ident_part(class_buf, sizeof(class_buf), class_name ? class_name : "Class");
     fprintf(out, "xrt_native_%s_%s", prefix_buf, class_buf);
 }
+
+static bool cg_class_native_data_matches(const XiClassData *a, const XiClassData *b) {
+    if (!a || !b)
+        return false;
+    if (a == b)
+        return true;
+    return a->class_name && b->class_name && strcmp(a->class_name, b->class_name) == 0;
+}
+
+static int cg_class_native_slot_in_module(const XiModule *module, const XiClassData *cd) {
+    if (!module || !cd || !module->slot_classes)
+        return -1;
+    for (uint16_t s = 0; s < module->nslots; s++) {
+        if (cg_class_native_data_matches(module->slot_classes[s], cd))
+            return (int) s;
+    }
+    return -1;
+}
+
+static const XiModule *cg_class_native_module_for_data(const XiCgenCtx *ctx,
+                                                       const XiClassData *cd) {
+    if (!ctx || !cd)
+        return NULL;
+    if (ctx->module && cg_class_native_slot_in_module(ctx->module, cd) >= 0)
+        return ctx->module;
+    for (int i = 0; i < ctx->all_nmodules; i++) {
+        const XiModule *module = ctx->all_modules ? ctx->all_modules[i] : NULL;
+        if (module && cg_class_native_slot_in_module(module, cd) >= 0)
+            return module;
+    }
+    return NULL;
+}
+
+static const char *cg_class_native_prefix_for_data(const XiCgenCtx *ctx, const XiClassData *cd,
+                                                   const char *fallback) {
+    const XiModule *module = cg_class_native_module_for_data(ctx, cd);
+    if (module && module->name)
+        return module->name;
+    for (int i = 0; ctx && i < ctx->nimports; i++) {
+        const CgImportEntry *imp = &ctx->imports[i];
+        if (cg_class_native_data_matches(imp->target_class, cd) && imp->target_mod_name)
+            return imp->target_mod_name;
+    }
+    return fallback;
+}
+
+static bool emit_class_native_type_id_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd) {
+    const XiModule *module = cg_class_native_module_for_data(ctx, cd);
+    if (!module)
+        return false;
+    int slot = cg_class_native_slot_in_module(module, cd);
+    if (slot < 0)
+        return false;
+    if (module == ctx->module) {
+        fprintf(out, "%s[%d].i", ctx && ctx->shared_name ? ctx->shared_name : "xrt_shared", slot);
+    } else {
+        fprintf(out, "xrt_shared_%s[%d].i", module->name ? module->name : "mod", slot);
+    }
+    return true;
+}

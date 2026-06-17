@@ -1875,6 +1875,8 @@ static void xicgen_load_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const 
         return;
     if (emit_class_native_receiver_field_load_expr(ctx, out, f, v))
         return;
+    if (emit_class_native_instance_field_load_expr(ctx, out, f, v, prefix))
+        return;
     const char *field = (const char *) v->aux;
     if (!field && v->aux_int >= 0) {
         const char *conv_suffix =
@@ -1958,6 +1960,8 @@ static void xicgen_store_field(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     if (emit_class_cached_field_store_expr(ctx, out, v))
         return;
     if (emit_class_native_receiver_field_store_expr(ctx, out, f, v))
+        return;
+    if (emit_class_native_instance_field_store_expr(ctx, out, f, v, prefix))
         return;
     const char *field = (const char *) v->aux;
     if (cg_value_type_is_json(v->args[0])) {
