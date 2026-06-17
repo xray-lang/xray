@@ -1246,15 +1246,21 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     assert(contains(code, "xrt_instanceof(") &&
            "boxed native class paths should guard the concrete class id");
 
-    const char *make = strstr(code, "static XrValue test_make_");
-    assert(make != NULL && "make function should return a tagged class value");
-    make = strstr(make + 1, "static XrValue test_make_");
+    const char *make_sig = "static xrt_native_test_Counter * test_make_";
+    const char *make = strstr(code, make_sig);
+    assert(make != NULL && "make function should return a native class pointer");
+    make = strstr(make + 1, make_sig);
     assert(make != NULL && "make function definition should follow its declaration");
     const char *make_end = next_static_after(make);
     assert(count_between(make, make_end, "xrt_obj_alloc(") == 1 &&
            "make should allocate exactly one heap native instance");
     assert(count_between(make, make_end, "xrt_map_new(") == 0 &&
            "escaping native class constructor must not allocate a map instance");
+    const char *make_boxed = strstr(make_end, "static XrValue test_make_");
+    assert(make_boxed != NULL && "make should keep a boxed adapter for closure/shared calls");
+    assert(count_between(make_boxed, next_static_after(make_boxed), "xrt_box_obj(test_make_") ==
+               1 &&
+           "make boxed adapter should box the native pointer return");
 
     const char *touch = strstr(code, "static int64_t test_touch_");
     assert(touch != NULL && "touch function should use typed scalar return ABI");

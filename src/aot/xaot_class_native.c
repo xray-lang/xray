@@ -30,6 +30,34 @@ static XaotClassNativeFunc xaot_class_native_make_func(const XiClassData *class_
     return info;
 }
 
+static bool xaot_class_native_data_name_matches(const XiClassData *class_data, const char *name) {
+    if (!class_data || !name)
+        return false;
+    if (class_data->class_name && strcmp(class_data->class_name, name) == 0)
+        return true;
+    return class_data->display_name && strcmp(class_data->display_name, name) == 0;
+}
+
+XR_FUNC const XiClassData *xaot_class_native_data_for_type(const XaotBundle *bundle,
+                                                           const XrType *type) {
+    if (!bundle || !type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_name)
+        return NULL;
+
+    for (uint32_t mi = 0; mi < bundle->nmodules; mi++) {
+        const XiModule *module = bundle->modules ? bundle->modules[mi] : NULL;
+        if (!module || !module->slot_classes)
+            continue;
+        for (uint16_t si = 0; si < module->nslots; si++) {
+            const XiClassData *class_data = module->slot_classes[si];
+            if (class_data && class_data->instance_layout &&
+                xaot_class_native_data_name_matches(class_data, type->instance.class_name))
+                return class_data;
+        }
+    }
+    return NULL;
+}
+
 static XaotClassNativeFunc xaot_class_native_func_in_module(const XiModule *module,
                                                             const XiFunc *func,
                                                             bool want_constructor) {

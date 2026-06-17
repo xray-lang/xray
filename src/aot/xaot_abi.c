@@ -9,6 +9,7 @@
  */
 
 #include "xaot_abi.h"
+#include "xaot_class_native.h"
 #include "xaot_abi_gen.h"
 #include "../ir/xi_ops_gen.h"
 #include "../base/xmalloc.h"
@@ -61,6 +62,49 @@ static XaotAbiSlot tagged_slot(const XrType *type) {
     return slot;
 }
 
+static bool type_is_class_instance_ptr_boundary(const XaotBundle *bundle, const XrType *type) {
+    return type && !type->is_nullable &&
+           (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+           type->instance.class_name != NULL && xaot_class_native_data_for_type(bundle, type);
+}
+
+static XaotValueRep ptr_value_rep_for_type(const XrType *type) {
+    XaotValueRep rep;
+    memset(&rep, 0, sizeof(rep));
+    rep.kind = XAOT_VALUE_PTR;
+    rep.rep = XAOT_REP_PTR;
+    rep.type = type;
+    rep.c_type = "void *";
+    return rep;
+}
+
+static XaotAbiSlot ptr_slot(const XrType *type) {
+    XaotAbiSlot slot;
+    memset(&slot, 0, sizeof(slot));
+    slot.cls = XAOT_ARG_PTR;
+    slot.rep = ptr_value_rep_for_type(type);
+    slot.c_type = slot.rep.c_type;
+    return slot;
+}
+
+static bool abi_type_can_use_typed_boundary(const XaotBundle *bundle, const XrType *type) {
+    return xaot_abi_type_can_use_typed_boundary(type) ||
+           type_is_class_instance_ptr_boundary(bundle, type);
+}
+
+static XaotAbiSlot native_slot_for_type(const XaotBundle *bundle, const XrType *type) {
+    XaotAbiSlot slot;
+
+    if (type_is_class_instance_ptr_boundary(bundle, type))
+        return ptr_slot(type);
+
+    memset(&slot, 0, sizeof(slot));
+    slot.rep = xaot_value_rep_for_type(type);
+    slot.cls = arg_class_for_value_rep(slot.rep);
+    slot.c_type = slot.rep.c_type;
+    return slot;
+}
+
 static XaotBoundaryReason tagged_reason_for_func(const XiFunc *func, bool is_module_init) {
     if (is_module_init)
         return XAOT_BOUNDARY_MODULE_INIT;
@@ -73,7 +117,8 @@ static XaotBoundaryReason tagged_reason_for_func(const XiFunc *func, bool is_mod
     return XAOT_BOUNDARY_TAGGED_TYPE;
 }
 
-XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XiFunc *func, bool is_module_init) {
+XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, const XiFunc *func,
+                                 bool is_module_init) {
     bool native_abi;
     uint16_t i;
 
@@ -91,7 +136,7 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XiFunc *func, bool is_m
     native_abi = !is_module_init && func->ncaptures == 0 &&
                  !func_has_op_class(func, XI_GEN_CLASS_COROUTINE) &&
                  !func_has_op_class(func, XI_GEN_CLASS_EXCEPTION) &&
-                 xaot_abi_type_can_use_typed_boundary(func->return_type);
+                 abi_type_can_use_typed_boundary(bundle, func->return_type);
 
     if (!native_abi) {
         abi->kind =
@@ -107,14 +152,10 @@ XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XiFunc *func, bool is_m
 
     abi->kind = XAOT_ABI_NATIVE;
     abi->boundary_reason = XAOT_BOUNDARY_NONE;
-    abi->ret.rep = xaot_value_rep_for_type(func->return_type);
-    abi->ret.cls = arg_class_for_value_rep(abi->ret.rep);
-    abi->ret.c_type = abi->ret.rep.c_type;
+    abi->ret = native_slot_for_type(bundle, func->return_type);
     for (i = 0; i < func->nparams; i++) {
         const XiValue *param = func->params ? func->params[i] : NULL;
-        abi->params[i].rep = xaot_value_rep_for_type(param ? param->type : NULL);
-        abi->params[i].cls = arg_class_for_value_rep(abi->params[i].rep);
-        abi->params[i].c_type = abi->params[i].rep.c_type;
+        abi->params[i] = native_slot_for_type(bundle, param ? param->type : NULL);
     }
     return true;
 }

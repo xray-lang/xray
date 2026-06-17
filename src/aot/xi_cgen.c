@@ -1639,6 +1639,9 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
     if (native_receiver)
         return cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
 
+    if (cg_func_needs_sync_go_wrapper_ctx(ctx, f) && cg_func_has_native_class_ptr_param(ctx, f))
+        return true;
+
     return cg_func_has_unelided_closure_value_use(ctx, root, f, prefix);
 }
 
@@ -1732,30 +1735,32 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
         emit_class_native_boxed_adapter(ctx, out, prefix, f);
     } else if (typed_abi && boxed_adapter) {
         ctx->stats.boxed_adapters++;
-        fprintf(out, "static XrValue ");
-        emit_typed_abi_fname(ctx, out, prefix, f);
-        fprintf(out, "(xrt_closure_t *_cl");
-        for (uint16_t i = 0; i < f->nparams; i++)
-            fprintf(out, ", XrValue p%u", i);
-        fprintf(out, ") {\n");
-        fprintf(out, "    return ");
-        const char *conv_suffix = emit_conversion_prefix(
-            out, f->return_type, cg_func_return_abi_rep(ctx, f), XR_REP_TAGGED);
-        emit_fname(ctx, out, prefix, f);
-        fprintf(out, "(_cl");
-        for (uint16_t i = 0; i < f->nparams; i++) {
-            fprintf(out, ", ");
-            XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
-            const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
-            const char *param_suffix =
-                emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
-            fprintf(out, "p%u", i);
-            emit_conversion_suffix(out, param_suffix);
+        if (!emit_class_native_typed_boxed_adapter(ctx, out, prefix, f)) {
+            fprintf(out, "static XrValue ");
+            emit_typed_abi_fname(ctx, out, prefix, f);
+            fprintf(out, "(xrt_closure_t *_cl");
+            for (uint16_t i = 0; i < f->nparams; i++)
+                fprintf(out, ", XrValue p%u", i);
+            fprintf(out, ") {\n");
+            fprintf(out, "    return ");
+            const char *conv_suffix = emit_conversion_prefix(
+                out, f->return_type, cg_func_return_abi_rep(ctx, f), XR_REP_TAGGED);
+            emit_fname(ctx, out, prefix, f);
+            fprintf(out, "(_cl");
+            for (uint16_t i = 0; i < f->nparams; i++) {
+                fprintf(out, ", ");
+                XrRep param_rep = cg_func_param_abi_rep(ctx, f, i);
+                const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
+                const char *param_suffix =
+                    emit_conversion_prefix(out, param_type, XR_REP_TAGGED, param_rep);
+                fprintf(out, "p%u", i);
+                emit_conversion_suffix(out, param_suffix);
+            }
+            fprintf(out, ")");
+            emit_conversion_suffix(out, conv_suffix);
+            fprintf(out, ";\n");
+            fprintf(out, "}\n\n");
         }
-        fprintf(out, ")");
-        emit_conversion_suffix(out, conv_suffix);
-        fprintf(out, ";\n");
-        fprintf(out, "}\n\n");
     }
 
     if (cg_func_needs_sync_go_wrapper_ctx(ctx, f)) {

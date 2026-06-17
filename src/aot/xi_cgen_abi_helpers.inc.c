@@ -113,6 +113,11 @@ static const char *cg_ptr_box_suffix_for_type(const XrType *type) {
     }
 }
 
+static bool cg_type_is_class_instance_ptr(const XrType *type) {
+    return type && (type->kind == XR_KIND_CLASS || type->kind == XR_KIND_INSTANCE) &&
+           type->instance.class_name != NULL;
+}
+
 static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep from_rep,
                                           XrRep to_rep) {
     if (from_rep == to_rep)
@@ -120,6 +125,10 @@ static const char *emit_conversion_prefix(FILE *out, const XrType *type, XrRep f
     if (to_rep == XR_REP_TAGGED) {
         if (from_rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
             fprintf(out, "xr_str_value_from_ptr(");
+            return ")";
+        }
+        if (from_rep == XR_REP_PTR && cg_type_is_class_instance_ptr(type)) {
+            fprintf(out, "xrt_box_obj(");
             return ")";
         }
         if (from_rep == XR_REP_PTR) {

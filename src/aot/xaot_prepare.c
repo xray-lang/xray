@@ -1906,6 +1906,25 @@ static bool prepare_func_type_plans(XaotBundle *bundle, XiFunc *func) {
     return true;
 }
 
+static bool prepare_apply_param_abi_value_plan(XaotBundle *bundle, const XiFunc *func,
+                                               XaotValuePlan *vp) {
+    const XaotFuncPlan *func_plan;
+    const XiValue *value;
+    uint16_t param_idx;
+
+    if (!bundle || !func || !vp)
+        return false;
+    value = vp->value;
+    if (!value || value->op != XI_PARAM || value->aux_int < 0)
+        return true;
+    param_idx = (uint16_t) value->aux_int;
+    func_plan = xaot_bundle_find_func_plan(bundle, func);
+    if (!func_plan || func_plan->abi.kind != XAOT_ABI_NATIVE || param_idx >= func_plan->abi.nparams)
+        return true;
+    vp->rep = xaot_abi_slot_value_rep(&func_plan->abi.params[param_idx]);
+    return true;
+}
+
 static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
     uint32_t bi;
     if (!bundle || !func)
@@ -1932,6 +1951,8 @@ static bool prepare_func_values(XaotBundle *bundle, XiFunc *func) {
                 bundle->error_msg = "failed to allocate AOT value plan";
                 return false;
             }
+            if (!prepare_apply_param_abi_value_plan(bundle, func, vp))
+                return false;
             record_value_stats(&bundle->stats, vp->rep.kind);
             if (!prepare_container_type(bundle, blk->values[vi]->type))
                 return false;
@@ -2183,7 +2204,7 @@ static bool prepare_func_recursive(XaotBundle *bundle, XiFunc *func, uint32_t mo
         bundle->error_msg = "failed to allocate AOT function plan";
         return false;
     }
-    if (!xaot_abi_build_func(&plan->abi, func, is_module_init)) {
+    if (!xaot_abi_build_func(&plan->abi, bundle, func, is_module_init)) {
         bundle->error_msg = "failed to build AOT function ABI";
         return false;
     }

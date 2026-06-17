@@ -1160,6 +1160,8 @@ static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint
     } else if (rep == XR_REP_PTR && f->params[index]->type &&
                f->params[index]->type->kind == XR_KIND_STRING) {
         fprintf(out, "xr_str_value_from_ptr(f->p%u)", index);
+    } else if (rep == XR_REP_PTR && cg_type_is_class_instance_ptr(f->params[index]->type)) {
+        fprintf(out, "xrt_box_obj(f->p%u)", index);
     } else if (rep == XR_REP_PTR) {
         fprintf(out, "xr_mkptr(f->p%u%s", index,
                 cg_ptr_box_suffix_for_type(f->params[index]->type));
@@ -1171,10 +1173,14 @@ static void emit_sync_go_frame_param_as_xrvalue(FILE *out, const XiFunc *f, uint
 static void emit_sync_go_frame_param_for_func_abi(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                                   uint16_t index) {
     XrRep param_rep = cg_func_param_abi_rep(ctx, f, index);
+    XrRep frame_rep = cg_rep(f->params[index]);
     if (param_rep == XR_REP_TAGGED) {
         emit_sync_go_frame_param_as_xrvalue(out, f, index);
     } else {
+        const char *suffix =
+            emit_conversion_prefix(out, f->params[index]->type, frame_rep, param_rep);
         fprintf(out, "f->p%u", index);
+        emit_conversion_suffix(out, suffix);
     }
 }
 
@@ -1184,6 +1190,8 @@ static void emit_xrvalue_from_native_expr(FILE *out, const XrType *type, XrRep r
         fprintf(out, "%s", expr);
     } else if (rep == XR_REP_PTR && type && type->kind == XR_KIND_STRING) {
         fprintf(out, "xr_str_value_from_ptr(%s)", expr);
+    } else if (rep == XR_REP_PTR && cg_type_is_class_instance_ptr(type)) {
+        fprintf(out, "xrt_box_obj(%s)", expr);
     } else if (rep == XR_REP_PTR) {
         fprintf(out, "xr_mkptr(%s%s", expr, cg_ptr_box_suffix_for_type(type));
     } else if (rep == XR_REP_F64) {
@@ -1193,6 +1201,16 @@ static void emit_xrvalue_from_native_expr(FILE *out, const XrType *type, XrRep r
     } else {
         fprintf(out, "XR_FROM_INT(%s)", expr);
     }
+}
+
+static bool cg_sync_go_uses_class_param_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return false;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_rep(f->params[i]) == XR_REP_TAGGED && cg_func_param_native_class_data(ctx, f, i))
+            return true;
+    }
+    return false;
 }
 
 static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
@@ -1214,20 +1232,35 @@ static void emit_sync_go_wrapper(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
     fprintf(out, "    (void)ctx;\n");
     fprintf(out, "    if (!f)\n        return xr_aot_error(XR_NULL_VAL, false);\n");
     XrRep result_rep = cg_func_return_abi_rep(ctx, f);
-    fprintf(out, "    %s _raw_result = ", ctype_str(result_rep));
-    emit_fname(ctx, out, prefix, f);
-    if (cg_func_frame_needs_cl(f))
-        fprintf(out, "(f->_cl");
-    else
-        fprintf(out, "(NULL");
-    for (uint16_t i = 0; i < f->nparams; i++) {
-        fprintf(out, ", ");
-        emit_sync_go_frame_param_for_func_abi(ctx, out, f, i);
+    bool use_boxed_adapter = cg_sync_go_uses_class_param_boxed_adapter(ctx, f);
+    if (use_boxed_adapter) {
+        fprintf(out, "    XrValue _result = ");
+        emit_typed_abi_fname(ctx, out, prefix, f);
+        if (cg_func_frame_needs_cl(f))
+            fprintf(out, "(f->_cl");
+        else
+            fprintf(out, "(NULL");
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            fprintf(out, ", ");
+            emit_sync_go_frame_param_as_xrvalue(out, f, i);
+        }
+        fprintf(out, ");\n");
+    } else {
+        fprintf(out, "    %s _raw_result = ", ctype_str(result_rep));
+        emit_fname(ctx, out, prefix, f);
+        if (cg_func_frame_needs_cl(f))
+            fprintf(out, "(f->_cl");
+        else
+            fprintf(out, "(NULL");
+        for (uint16_t i = 0; i < f->nparams; i++) {
+            fprintf(out, ", ");
+            emit_sync_go_frame_param_for_func_abi(ctx, out, f, i);
+        }
+        fprintf(out, ");\n");
+        fprintf(out, "    XrValue _result = ");
+        emit_xrvalue_from_native_expr(out, f->return_type, result_rep, "_raw_result");
+        fprintf(out, ";\n");
     }
-    fprintf(out, ");\n");
-    fprintf(out, "    XrValue _result = ");
-    emit_xrvalue_from_native_expr(out, f->return_type, result_rep, "_raw_result");
-    fprintf(out, ";\n");
     for (uint16_t i = 0; i < f->nparams; i++) {
         if (!cg_sync_go_param_needs_release(f, i))
             continue;

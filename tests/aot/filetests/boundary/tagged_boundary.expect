@@ -2,11 +2,20 @@ contains=xaot-plan v0
 contains=function 0 name=<main> module=0 depth=0 abi=tagged boundary=module-init
 contains=function 1 name=constructor module=0 depth=1 abi=tagged boundary=tagged-type params=2
 contains=function 2 name=bump module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
-contains=  param 0 class=tagged kind=tagged rep=tagged c_type=XrValue
-contains=function 3 name=read_counter module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
-contains=  param 0 class=tagged kind=tagged rep=tagged c_type=XrValue
+contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
+contains=function 3 name=make_counter module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
+contains=  ret class=ptr kind=ptr rep=ptr c_type=void *
+contains=function 4 name=read_counter module=0 depth=1 abi=native boundary=none params=1 ret=int64_t/scalar/i64
+contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
 contains=boundary 0 kind=func-abi func=<main> value=- input=- reason=module-init
-contains=boundary 1 kind=value-rep func=<main>
+regex=boundary [0-9]+ kind=direct-call-ret func=<main> value=v[0-9]+ input=- reason=direct-call target=make_counter arg=- from=ptr/ptr to=tagged/tagged
+regex=boundary [0-9]+ kind=direct-call-arg func=<main> value=v[0-9]+ input=v[0-9]+ reason=direct-call target=read_counter arg=0 from=tagged/tagged to=ptr/ptr
 contains=reason=box
-contains=boundary 2 kind=func-abi func=constructor value=- input=- reason=tagged-type
-contains=stats functions=4 native=2 tagged=2 coro=0
+contains=kind=func-abi func=constructor value=- input=- reason=tagged-type
+contains=  value v0 op=CLASS_CREATE kind=tagged rep=tagged c_type=XrValue
+c_regex=static xrt_native_tagged_boundary_Counter \* tagged_boundary_make_counter_[0-9]+\(xrt_closure_t \*_cl, int64_t p0\)
+c_regex=static int64_t tagged_boundary_read_counter_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_Counter \*p0\)
+c_regex=return xrt_box_obj\(tagged_boundary_make_counter_[0-9]+
+c_regex=tagged_boundary_read_counter_[0-9]+\(NULL, \(v[0-9]+\)\.ptr\)
+c_regex=tagged_boundary_bump_[0-9]+_boxed\(NULL, xrt_box_obj\(v[0-9]+\)\)
+contains=stats functions=5 native=3 tagged=2 coro=0
