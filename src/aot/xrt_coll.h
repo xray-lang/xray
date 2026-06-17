@@ -15,6 +15,7 @@
 #include "xrt_arc.h"  // xrt_str_alloc used by xrt_strbuf_finish
 #include "xrt_range.h"
 #include "../shared/xr_array_abi.h"
+#include "../shared/xr_cell_abi.h"
 #include "../shared/xr_elem_type.h"
 #include "../shared/xr_float_fmt.h"
 #include "../shared/xr_map_set_abi.h"
@@ -1654,8 +1655,10 @@ static inline XrValue xrt_closure_new(void *fn, int nupvals) {
     })
 #endif
 
+/* Post-header field set shared with the VM's XrCell (src/shared/xr_cell_abi.h)
+ * so the AOT and VM cell layouts stay in lockstep. */
 typedef struct xrt_cell {
-    XrValue value;
+    XR_CELL_ABI_FIELDS;
 } xrt_cell_t;
 
 static inline XrValue xrt_cell_new(XrValue value) {

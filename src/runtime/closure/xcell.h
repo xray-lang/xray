@@ -23,6 +23,7 @@
 #include "../../base/xdefs.h"
 #include "../gc/xgc_header.h"
 #include "../value/xvalue.h"
+#include "../../shared/xr_cell_abi.h"
 
 /* ========== XrCell: single-slot mutable capture cell (32 bytes) ========== */
 
@@ -30,10 +31,13 @@
  * MEMORY LAYOUT:
  *   [XrGCHeader 16B][value 16B]
  *   Total = 32 bytes
+ *
+ * The post-header field set (XR_CELL_ABI_FIELDS) is shared with the AOT
+ * runtime's xrt_cell_t so both backends keep an identical cell layout.
  */
 typedef struct XrCell {
     XrGCHeader gc;  // GC header, type = XR_TCELL
-    XrValue value;  // captured variable value
+    XR_CELL_ABI_FIELDS;
 } XrCell;
 
 #define XR_CELL_SIZE (sizeof(XrCell))
