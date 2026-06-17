@@ -28,6 +28,7 @@
 #include <math.h>
 
 #include "xrt_hash.h"
+#include "../shared/xr_float_fmt.h"
 
 /* =========================================================================
  * Branch expectation and code-layout hints.
@@ -359,15 +360,7 @@ static inline double xr_value_to_f64_coerce(XrValue v) {
  * ========================================================================= */
 
 static inline int xrt_format_float(char *buf, size_t bufsz, double value) {
-    int len = snprintf(buf, bufsz, "%.15g", value);
-    if (len >= 0 && !strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E') &&
-        len + 2 < (int) bufsz) {
-        buf[len] = '.';
-        buf[len + 1] = '0';
-        buf[len + 2] = '\0';
-        len += 2;
-    }
-    return len;
+    return xr_format_float(buf, bufsz, value);
 }
 
 static inline const char *xr_to_cstr(XrValue v, char *buf, size_t bufsz) {

@@ -32,6 +32,7 @@
 #include <time.h>
 
 #include "../xstdlib_bridge.h"
+#include "../../shared/xr_float_fmt.h"
 #include "xvalue_format.h"
 
 // Max recursion depth for dump functions
@@ -54,13 +55,7 @@ void xr_value_fprint(FILE *stream, XrValue value) {
             fprintf(stream, "%lld", (long long) XR_TO_INT(value));
         else if (XR_IS_FLOAT(value)) {
             char _fb[64];
-            int _fn = snprintf(_fb, sizeof(_fb), "%.15g", XR_TO_FLOAT(value));
-            if (!strchr(_fb, '.') && !strchr(_fb, 'e') && !strchr(_fb, 'E') &&
-                _fn + 2 < (int) sizeof(_fb)) {
-                _fb[_fn] = '.';
-                _fb[_fn + 1] = '0';
-                _fb[_fn + 2] = '\0';
-            }
+            xr_format_float(_fb, sizeof(_fb), XR_TO_FLOAT(value));
             fprintf(stream, "%s", _fb);
         } else if (XR_IS_BOOL(value))
             fprintf(stream, "%s", XR_TO_BOOL(value) ? "true" : "false");
@@ -356,13 +351,7 @@ static void dump_value_internal(XrValue value, DumpContext *ctx) {
         printf("%lld", (long long) XR_TO_INT(value));
     } else if (XR_IS_FLOAT(value)) {
         char _fb[64];
-        int _fn = snprintf(_fb, sizeof(_fb), "%.15g", XR_TO_FLOAT(value));
-        if (!strchr(_fb, '.') && !strchr(_fb, 'e') && !strchr(_fb, 'E') &&
-            _fn + 2 < (int) sizeof(_fb)) {
-            _fb[_fn] = '.';
-            _fb[_fn + 1] = '0';
-            _fb[_fn + 2] = '\0';
-        }
+        xr_format_float(_fb, sizeof(_fb), XR_TO_FLOAT(value));
         printf("%s", _fb);
     } else if (XR_IS_BOOL(value)) {
         printf("%s", XR_TO_BOOL(value) ? "true" : "false");

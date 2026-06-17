@@ -39,6 +39,7 @@
 #include "../symbol/xsymbol_table.h"
 #include "../xisolate_internal.h"
 #include "../xstdlib_bridge.h"
+#include "../../shared/xr_float_fmt.h"
 #include "xtype_names.h"
 
 #include <inttypes.h>
@@ -173,14 +174,7 @@ void xr_value_to_strbuf(XrayIsolate *isolate, XrStrBuf *sb, XrValue val, int dep
     }
     if (XR_IS_FLOAT(val)) {
         char buf[64];
-        int n = snprintf(buf, sizeof(buf), "%.15g", XR_TO_FLOAT(val));
-        if (!strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E') &&
-            n + 2 < (int) sizeof(buf)) {
-            buf[n] = '.';
-            buf[n + 1] = '0';
-            buf[n + 2] = '\0';
-            n += 2;
-        }
+        int n = xr_format_float(buf, sizeof(buf), XR_TO_FLOAT(val));
         xr_strbuf_append_cstr(sb, buf, (size_t) n);
         return;
     }

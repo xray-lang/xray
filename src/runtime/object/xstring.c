@@ -15,6 +15,7 @@
 
 #include "../value/xtype.h"
 #include "../../base/xmalloc.h"
+#include "../../shared/xr_float_fmt.h"
 #include "../../base/xlog.h"
 #include "../../base/xhash.h"
 #include "xarray.h"
@@ -583,14 +584,7 @@ XrString *xr_string_from_int(XrayIsolate *iso, xr_Integer i) {
 XrString *xr_string_from_float(XrayIsolate *iso, xr_Number n) {
     XR_DCHECK(iso != NULL, "string_from_float: NULL isolate");
     char buffer[64];
-    int len = snprintf(buffer, sizeof(buffer), "%.15g", n);
-    if (!strchr(buffer, '.') && !strchr(buffer, 'e') && !strchr(buffer, 'E') &&
-        len + 2 < (int) sizeof(buffer)) {
-        buffer[len] = '.';
-        buffer[len + 1] = '0';
-        buffer[len + 2] = '\0';
-        len += 2;
-    }
+    int len = xr_format_float(buffer, sizeof(buffer), n);
     return xr_string_intern(iso, buffer, (size_t) len, 0);
 }
 
