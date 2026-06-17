@@ -790,11 +790,17 @@ static bool cg_class_native_value_stmt_is_elided(const XiCgenCtx *ctx, const XiF
 static bool emit_class_native_return_type(XiCgenCtx *ctx, FILE *out, const char *prefix,
                                           const XiFunc *f) {
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
-    if (!info.layout || !info.is_constructor)
-        return false;
-    emit_class_native_type_name(out, prefix, info.class_name);
-    fprintf(out, " *");
-    return true;
+    if (info.layout && info.is_constructor) {
+        emit_class_native_type_name(out, prefix, info.class_name);
+        fprintf(out, " *");
+        return true;
+    }
+    if (cg_func_return_abi_rep(ctx, f) == XR_REP_PTR &&
+        emit_class_native_abi_type_name(ctx, out, prefix, f ? f->return_type : NULL)) {
+        fprintf(out, " *");
+        return true;
+    }
+    return false;
 }
 
 static void emit_class_native_param_decl(XiCgenCtx *ctx, FILE *out, const char *prefix,
@@ -802,6 +808,14 @@ static void emit_class_native_param_decl(XiCgenCtx *ctx, FILE *out, const char *
     CgClassNativeFunc info = cg_class_native_func(ctx, f);
     if (info.layout && param_idx == 0) {
         emit_class_native_type_name(out, prefix, info.class_name);
+        fprintf(out, " *p%u", (unsigned) param_idx);
+        return;
+    }
+    const XrType *param_type = f && f->params && param_idx < f->nparams && f->params[param_idx]
+                                   ? f->params[param_idx]->type
+                                   : NULL;
+    if (cg_func_param_abi_rep(ctx, f, param_idx) == XR_REP_PTR &&
+        emit_class_native_abi_type_name(ctx, out, prefix, param_type)) {
         fprintf(out, " *p%u", (unsigned) param_idx);
         return;
     }
@@ -1145,6 +1159,118 @@ static void emit_class_native_boxed_adapter(XiCgenCtx *ctx, FILE *out, const cha
         fprintf(out, ";\n");
     }
     fprintf(out, "}\n\n");
+}
+
+static const XiClassData *cg_func_param_native_class_data(XiCgenCtx *ctx, const XiFunc *f,
+                                                          uint16_t param_idx) {
+    if (!f || param_idx >= f->nparams || cg_func_param_abi_rep(ctx, f, param_idx) != XR_REP_PTR)
+        return NULL;
+    const XrType *param_type =
+        f->params && f->params[param_idx] ? f->params[param_idx]->type : NULL;
+    return cg_class_native_data_for_abi_type(ctx, param_type);
+}
+
+static bool cg_func_has_native_class_ptr_param(XiCgenCtx *ctx, const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        if (cg_func_param_native_class_data(ctx, f, i))
+            return true;
+    }
+    return false;
+}
+
+static bool emit_class_native_typed_boxed_adapter(XiCgenCtx *ctx, FILE *out, const char *prefix,
+                                                  const XiFunc *f) {
+    if (!cg_func_has_native_class_ptr_param(ctx, f))
+        return false;
+
+    fprintf(out, "static XrValue ");
+    emit_typed_abi_fname(ctx, out, prefix, f);
+    fprintf(out, "(xrt_closure_t *_cl");
+    for (uint16_t i = 0; i < f->nparams; i++)
+        fprintf(out, ", XrValue p%u", i);
+    fprintf(out, ") {\n");
+
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XiClassData *cd = cg_func_param_native_class_data(ctx, f, i);
+        if (!cd)
+            continue;
+        const char *type_prefix = cg_class_native_prefix_for_data(ctx, cd, prefix);
+        fprintf(out, "    ");
+        emit_class_native_type_name(out, type_prefix, cd->class_name);
+        fprintf(out, " _p%u_native;\n", i);
+        fprintf(out, "    ");
+        emit_class_native_type_name(out, type_prefix, cd->class_name);
+        fprintf(out, " *_p%u_ptr = NULL;\n", i);
+        fprintf(out, "    bool _p%u_writeback = false;\n", i);
+        fprintf(out,
+                "    if (p%u.tag == XR_TAG_PTR && p%u.heap_type == XR_TINSTANCE && "
+                "p%u.ptr && xrt_instanceof(p%u, (uint16_t)",
+                i, i, i, i);
+        emit_class_native_type_id_expr(ctx, out, cd);
+        fprintf(out, ")) {\n");
+        fprintf(out, "        _p%u_ptr = (", i);
+        emit_class_native_type_name(out, type_prefix, cd->class_name);
+        fprintf(out, "*)p%u.ptr;\n", i);
+        fprintf(out, "    } else {\n");
+        fprintf(out, "        memset(&_p%u_native, 0, sizeof(_p%u_native));\n", i, i);
+        char native_expr[32];
+        char boxed_expr[32];
+        snprintf(native_expr, sizeof(native_expr), "&_p%u_native", i);
+        snprintf(boxed_expr, sizeof(boxed_expr), "p%u", i);
+        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++)
+            emit_class_native_load_field_from_map(ctx, out, cd, cd->instance_layout, fi,
+                                                  native_expr, boxed_expr);
+        fprintf(out, "        _p%u_ptr = &_p%u_native;\n", i, i);
+        fprintf(out, "        _p%u_writeback = true;\n", i);
+        fprintf(out, "    }\n");
+    }
+
+    XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+    if (ret_rep != XR_REP_TAGGED)
+        fprintf(out, "    %s _result = ", ctype_str(ret_rep));
+    else
+        fprintf(out, "    XrValue _result = ");
+    emit_fname(ctx, out, prefix, f);
+    fprintf(out, "(_cl");
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        fprintf(out, ", ");
+        const XiClassData *cd = cg_func_param_native_class_data(ctx, f, i);
+        if (cd) {
+            fprintf(out, "_p%u_ptr", i);
+            continue;
+        }
+        XrRep rep = cg_func_param_abi_rep(ctx, f, i);
+        const XrType *param_type = f->params && f->params[i] ? f->params[i]->type : NULL;
+        const char *param_suffix = emit_conversion_prefix(out, param_type, XR_REP_TAGGED, rep);
+        fprintf(out, "p%u", i);
+        emit_conversion_suffix(out, param_suffix);
+    }
+    fprintf(out, ");\n");
+
+    for (uint16_t i = 0; i < f->nparams; i++) {
+        const XiClassData *cd = cg_func_param_native_class_data(ctx, f, i);
+        if (!cd)
+            continue;
+        fprintf(out, "    if (_p%u_writeback) {\n", i);
+        char native_expr[32];
+        char boxed_expr[32];
+        snprintf(native_expr, sizeof(native_expr), "_p%u_ptr", i);
+        snprintf(boxed_expr, sizeof(boxed_expr), "p%u", i);
+        for (uint16_t fi = 0; fi < cd->instance_layout->field_count; fi++)
+            emit_class_native_store_field_to_map(ctx, out, cd, cd->instance_layout, fi, native_expr,
+                                                 boxed_expr);
+        fprintf(out, "    }\n");
+    }
+
+    fprintf(out, "    return ");
+    const char *conv_suffix = emit_conversion_prefix(out, f->return_type, ret_rep, XR_REP_TAGGED);
+    fprintf(out, "_result");
+    emit_conversion_suffix(out, conv_suffix);
+    fprintf(out, ";\n");
+    fprintf(out, "}\n\n");
+    return true;
 }
 
 static const XiClassData *cg_class_native_class_for_ctor_target(const XiCgenCtx *ctx,
@@ -1689,7 +1815,7 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
             return false;
         for (uint16_t a = 1; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[a], cg_func_param_abi_rep(ctx, mfunc, a));
+            emit_value_as_rep_ctx(ctx, out, v->args[a], cg_func_param_abi_rep(ctx, mfunc, a));
         }
         fprintf(out, ")");
         if (emit_ctor_stmt_expr)
@@ -1697,12 +1823,13 @@ static bool emit_class_native_method_call_expr(XiCgenCtx *ctx, FILE *out, const 
         else
             emit_conversion_suffix(out, conv_suffix);
     } else {
-        const char *conv_suffix = emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_rep(v));
+        const char *conv_suffix =
+            emit_conversion_prefix(out, v->type, XR_REP_TAGGED, cg_value_plan_storage_rep(ctx, v));
         emit_typed_abi_fname(ctx, out, method_prefix ? method_prefix : prefix, mfunc);
         fprintf(out, "(NULL");
         for (uint16_t a = 0; a < v->nargs; a++) {
             fprintf(out, ", ");
-            emit_value_as_rep(out, v->args[a], XR_REP_TAGGED);
+            emit_value_as_rep_ctx(ctx, out, v->args[a], XR_REP_TAGGED);
         }
         fprintf(out, ")");
         emit_conversion_suffix(out, conv_suffix);

@@ -11,9 +11,13 @@ class Counter {
     }
 }
 
+fn make_counter(value: int) -> Counter {
+    return Counter(value)
+}
+
 fn read_counter(c: Counter) -> int {
     return c.bump()
 }
 
-let c = Counter(41)
+let c = make_counter(41)
 print(read_counter(c))

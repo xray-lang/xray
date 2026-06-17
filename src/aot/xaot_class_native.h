@@ -23,6 +23,8 @@ typedef struct XaotClassNativeFunc {
 } XaotClassNativeFunc;
 
 XR_FUNC XaotClassNativeFunc xaot_class_native_func(const XaotBundle *bundle, const XiFunc *func);
+XR_FUNC const XiClassData *xaot_class_native_data_for_type(const XaotBundle *bundle,
+                                                           const XrType *type);
 XR_FUNC bool xaot_class_native_func_uses_receiver(const XaotBundle *bundle, const XiFunc *func);
 XR_FUNC const XiValue *xaot_class_native_receiver_value(const XaotBundle *bundle,
                                                         const XiFunc *func, const XiValue *value);

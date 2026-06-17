@@ -18,6 +18,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+typedef struct XaotBundle XaotBundle;
+
 typedef enum XaotAbiKind {
     XAOT_ABI_NATIVE = 0,
     XAOT_ABI_TAGGED,
@@ -54,7 +56,8 @@ typedef struct XaotFuncAbi {
     const char *boxed_symbol;
 } XaotFuncAbi;
 
-XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XiFunc *func, bool is_module_init);
+XR_FUNC bool xaot_abi_build_func(XaotFuncAbi *abi, const XaotBundle *bundle, const XiFunc *func,
+                                 bool is_module_init);
 XR_FUNC void xaot_abi_free(XaotFuncAbi *abi);
 XR_FUNC const char *xaot_abi_kind_name(XaotAbiKind kind);
 

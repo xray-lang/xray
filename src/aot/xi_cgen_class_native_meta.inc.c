@@ -116,6 +116,27 @@ static const char *cg_class_native_prefix_for_data(const XiCgenCtx *ctx, const X
     return fallback;
 }
 
+static const XiClassData *cg_class_native_data_for_abi_type(const XiCgenCtx *ctx,
+                                                            const XrType *type) {
+    if (!type || (type->kind != XR_KIND_CLASS && type->kind != XR_KIND_INSTANCE) ||
+        !type->instance.class_name)
+        return NULL;
+    const XiClassData *cd = cg_class_native_data_by_name(ctx, type->instance.class_name);
+    if (!cd || !cd->instance_layout || !cg_class_native_module_for_data(ctx, cd))
+        return NULL;
+    return cd;
+}
+
+static bool emit_class_native_abi_type_name(const XiCgenCtx *ctx, FILE *out, const char *prefix,
+                                            const XrType *type) {
+    const XiClassData *cd = cg_class_native_data_for_abi_type(ctx, type);
+    if (!cd)
+        return false;
+    emit_class_native_type_name(out, cg_class_native_prefix_for_data(ctx, cd, prefix),
+                                cd->class_name);
+    return true;
+}
+
 static bool emit_class_native_type_id_expr(XiCgenCtx *ctx, FILE *out, const XiClassData *cd) {
     const XiModule *module = cg_class_native_module_for_data(ctx, cd);
     if (!module)
