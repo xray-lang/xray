@@ -235,14 +235,21 @@ static bool add_stdlib_manifest_entries(XaotLinkManifest *manifest, XaotStdlibSe
         XaotStdlibSet flag;
         const char *name;
     } table[] = {
-        {XAOT_STDLIB_JSON, "json"},     {XAOT_STDLIB_REGEX, "regex"},
-        {XAOT_STDLIB_MATH, "math"},     {XAOT_STDLIB_TIME, "time"},
-        {XAOT_STDLIB_PATH, "path"},     {XAOT_STDLIB_IO, "io"},
-        {XAOT_STDLIB_OS, "os"},         {XAOT_STDLIB_NET, "net"},
-        {XAOT_STDLIB_HTTP, "http"},     {XAOT_STDLIB_CRYPTO, "crypto"},
-        {XAOT_STDLIB_BASE64, "base64"}, {XAOT_STDLIB_CSV, "csv"},
-        {XAOT_STDLIB_TOML, "toml"},     {XAOT_STDLIB_YAML, "yaml"},
-        {XAOT_STDLIB_XML, "xml"},       {XAOT_STDLIB_COMPRESS, "compress"},
+        {XAOT_STDLIB_JSON, "json"},
+        {XAOT_STDLIB_REGEX, "regex"},
+        {XAOT_STDLIB_TIME, "time"},
+        {XAOT_STDLIB_PATH, "path"},
+        {XAOT_STDLIB_IO, "io"},
+        {XAOT_STDLIB_OS, "os"},
+        {XAOT_STDLIB_NET, "net"},
+        {XAOT_STDLIB_HTTP, "http"},
+        {XAOT_STDLIB_CRYPTO, "crypto"},
+        {XAOT_STDLIB_BASE64, "base64"},
+        {XAOT_STDLIB_CSV, "csv"},
+        {XAOT_STDLIB_TOML, "toml"},
+        {XAOT_STDLIB_YAML, "yaml"},
+        {XAOT_STDLIB_XML, "xml"},
+        {XAOT_STDLIB_COMPRESS, "compress"},
     };
 
     for (uint32_t i = 0; i < (uint32_t) (sizeof(table) / sizeof(table[0])); i++) {

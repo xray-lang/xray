@@ -36,7 +36,8 @@
 #define XAOT_STDLIB_SYMBOL_NAME_MAX 96
 
 /* Bitfield of stdlib modules referenced by the compiled bundle.
- * One bit per module — used to decide which stdlib .o files to link. */
+ * Runtime-backed modules become stdlib_objects in the link manifest; direct-call
+ * core modules such as math are tracked through stdlib_symbols instead. */
 typedef uint32_t XaotStdlibSet;
 
 enum {
