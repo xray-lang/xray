@@ -73,4 +73,38 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))
 #define XR_RC_INIT ((int32_t) 0)
 
+/* ========== Object Type (header.type) ==========
+ *
+ * The object-type tag stored in XrGCHeader.type. Shared so the AOT runtime and
+ * the VM agree on the numeric ids: a header-bearing AOT object (array/map/set)
+ * stores the same id the VM uses, which lets a boxed value carry heap_type and
+ * be type-checked / dispatched identically on both sides. The numeric order is
+ * load-bearing (header type ids, switch tables) — append new types at the end. */
+typedef enum {
+    XR_TNULL = 0,
+    XR_TBOOL,
+    XR_TINT,
+    XR_TFLOAT,
+    XR_TSTRING,
+    XR_TFUNCTION,
+    XR_TCFUNCTION,
+    XR_TARRAY,
+    XR_TSET,
+    XR_TMAP,
+    XR_TCLASS,
+    XR_TINSTANCE,
+    XR_TBOUND_METHOD,
+    XR_TERROR,
+    XR_TMODULE,
+    XR_TCOROUTINE,
+    XR_TCHANNEL,
+    XR_TCOROPOOL,
+    XR_TBLOB,        /* Raw byte buffer on Region heap (no traverse/destroy) */
+    XR_TCELL,        /* Single-slot mutable capture cell (32B) */
+    XR_TTASK,        /* Lightweight GC-managed coroutine handle */
+    XR_TATOMIC,      /* Atomic<T> shared primitive wrapper (system heap) */
+    XR_TWORKQUEUE,   /* WorkQueue<T> shared sharded queue (system heap) */
+    XR_TRESULTGROUP, /* ResultGroup shared scalar reducer (system heap) */
+} XrObjType;
+
 #endif  // XR_OBJ_HEADER_H

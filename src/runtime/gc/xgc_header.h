@@ -60,34 +60,9 @@ static inline uint64_t xr_gc_time_ns(void) {
 struct XrClass;
 typedef struct XrClass XrClass;
 
-/* ========== Object Type Definition ========== */
-
-typedef enum {
-    XR_TNULL = 0,
-    XR_TBOOL,
-    XR_TINT,
-    XR_TFLOAT,
-    XR_TSTRING,
-    XR_TFUNCTION,
-    XR_TCFUNCTION,
-    XR_TARRAY,
-    XR_TSET,
-    XR_TMAP,
-    XR_TCLASS,
-    XR_TINSTANCE,
-    XR_TBOUND_METHOD,
-    XR_TERROR,
-    XR_TMODULE,
-    XR_TCOROUTINE,
-    XR_TCHANNEL,
-    XR_TCOROPOOL,
-    XR_TBLOB,         // Raw byte buffer on Region heap (no traverse/destroy)
-    XR_TCELL,         // Single-slot mutable capture cell (32B)
-    XR_TTASK,         // Lightweight GC-managed coroutine handle (Task/Executor separation)
-    XR_TATOMIC,       // Atomic<T> shared primitive wrapper (lock-free, system heap)
-    XR_TWORKQUEUE,    // WorkQueue<T> shared sharded queue (system heap)
-    XR_TRESULTGROUP,  // ResultGroup shared scalar reducer (system heap)
-} XrObjType;
+/* ========== Object Type Definition ==========
+ * XrObjType (header.type ids) now lives in src/shared/xr_obj_header.h (included
+ * above) so the VM and the AOT runtime share one numbering. */
 
 /* Unified object header (XrGCHeader / XrObjHeader, 16 bytes) +
  * XR_OBJ_HAS_DTOR / XR_OBJ_STORAGE_BUMP now live in the self-contained
