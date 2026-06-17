@@ -40,6 +40,8 @@
  * runtime keeps `source` NULL (slices borrow via arena lifetime) and does not
  * consult the GC-tracking fields. */
 typedef struct {
+    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrArray so
+                    * the two layouts line up (C0 object-header unification) */
     XR_ARRAY_ABI_FIELDS;
     const char *adt_enum_name;
     const char *adt_member_name;
@@ -60,6 +62,7 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
+    xrt_bump_header_init(&a->gc);
     a->length = 0;
     a->capacity = cap;
     a->source = NULL;
@@ -248,6 +251,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
         abort();
     }
+    xrt_bump_header_init(&slice->gc);
     slice->length = end - start;
     slice->capacity = end - start;
     slice->source = NULL;
@@ -346,6 +350,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
             _cap = 4;                                                                              \
         xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                                        \
             sizeof(xrt_array_t) + (size_t) _cap * sizeof(XrValue) + (XRT_DATA_ALIGN - 1));         \
+        xrt_bump_header_init(&_a->gc);                                                             \
         _a->length = 0;                                                                            \
         _a->capacity = _cap;                                                                       \
         _a->source = NULL;                                                                         \
