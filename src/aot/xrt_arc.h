@@ -215,9 +215,11 @@ static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
  * whose XrGCHeader is the struct's first field rather than a prepended block).
  * Mirrors the xrt_arc_alloc bump init: STORAGE_BUMP makes RC dup/drop no-ops
  * and the GC skip the object, and a sticky RC keeps the unified fast paths from
- * mistaking it for a unique thread-local owner. */
-static inline void xrt_bump_header_init(XrGCHeader *h) {
-    h->type = 0;
+ * mistaking it for a unique thread-local owner. The XrObjType id makes the
+ * object self-describing with the same numeric type the VM stores, so a boxed
+ * value can carry heap_type and be type-checked identically on both backends. */
+static inline void xrt_bump_header_init(XrGCHeader *h, uint16_t type) {
+    h->type = type;
     h->extra = XR_OBJ_STORAGE_BUMP;
     atomic_store_explicit(&h->refcount, XR_RC_STICKY, memory_order_relaxed);
     h->objsize = 0;
