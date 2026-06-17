@@ -211,6 +211,19 @@ static inline void xrt_arc_mark_builtin(void *obj, uint32_t kind) {
     hdr->extra |= XR_OBJ_HAS_DTOR;
 }
 
+/* Initialize an embedded object header for an AOT bump-allocated object (one
+ * whose XrGCHeader is the struct's first field rather than a prepended block).
+ * Mirrors the xrt_arc_alloc bump init: STORAGE_BUMP makes RC dup/drop no-ops
+ * and the GC skip the object, and a sticky RC keeps the unified fast paths from
+ * mistaking it for a unique thread-local owner. */
+static inline void xrt_bump_header_init(XrGCHeader *h) {
+    h->type = 0;
+    h->extra = XR_OBJ_STORAGE_BUMP;
+    atomic_store_explicit(&h->refcount, XR_RC_STICKY, memory_order_relaxed);
+    h->objsize = 0;
+    h->_rsv = 0;
+}
+
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
