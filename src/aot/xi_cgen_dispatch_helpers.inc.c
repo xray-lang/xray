@@ -643,26 +643,87 @@ static void xicgen_call(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValu
     emit_codegen_abort_expr(out);
 }
 
-static void xicgen_emit_print_expr(FILE *out, const XiValue *v) {
+static const XiValue *xicgen_native_int_print_source(XiCgenCtx *ctx, const XiValue *v) {
+    if (!ctx || !v || v->nargs != 1)
+        return NULL;
+    const XiValue *arg = v->args[0];
+    if (!arg)
+        return NULL;
+    if (arg->op == XI_BOX && arg->nargs >= 1)
+        arg = arg->args[0];
+    if (!arg->type || arg->type->kind != XR_KIND_INT)
+        return NULL;
+    XrRep rep = cg_value_plan_storage_rep(ctx, arg);
+    if (rep != XR_REP_I64 && rep != XR_REP_TAGGED)
+        return NULL;
+    return arg;
+}
+
+static bool xicgen_box_only_feeds_native_int_print(XiCgenCtx *ctx, const XiFunc *f,
+                                                   const XiValue *box) {
+    if (!ctx || !f || !box || box->op != XI_BOX)
+        return false;
+    bool saw_print = false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == box)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == box)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == box)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != box)
+                    continue;
+                if (user->op == XI_PRINT && ai == 0 &&
+                    xicgen_native_int_print_source(ctx, user) == box->args[0]) {
+                    saw_print = true;
+                    continue;
+                }
+                return false;
+            }
+        }
+    }
+    return saw_print;
+}
+
+static void xicgen_emit_print_expr(XiCgenCtx *ctx, FILE *out, const XiValue *v) {
     XR_DCHECK(v->nargs >= 1, "xicgen_emit_print_expr: missing print value");
     int flags = (int) v->aux_int;
     bool add_space = (flags & 1) != 0;
     bool newline = (flags & 2) != 0;
+    const XiValue *native_int = xicgen_native_int_print_source(ctx, v);
+
     if (add_space)
         fprintf(out, "(putchar(' '), ");
-    fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
-    emit_vref(out, v->args[0]);
-    fprintf(out, ")");
+    if (native_int) {
+        fprintf(out, "printf(\"%%lld\", (long long)");
+        emit_value_as_rep_ctx(ctx, out, native_int, XR_REP_I64);
+        fprintf(out, ")");
+        if (newline)
+            fprintf(out, ", putchar('\\n')");
+    } else {
+        fprintf(out, "%s(", newline ? "xrt_println" : "xrt_print");
+        emit_vref(out, v->args[0]);
+        fprintf(out, ")");
+    }
     if (add_space)
         fprintf(out, ")");
 }
 
 static void xicgen_print(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                          const char *prefix) {
-    (void) ctx;
     (void) f;
     (void) prefix;
-    xicgen_emit_print_expr(out, v);
+    xicgen_emit_print_expr(ctx, out, v);
 }
 
 static void xicgen_reject_unsupported(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
@@ -1078,7 +1139,7 @@ static void xicgen_call_builtin(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
     const char *bn = v->aux ? (const char *) v->aux : "";
 
     if (strcmp(bn, "print") == 0) {
-        xicgen_emit_print_expr(out, v);
+        xicgen_emit_print_expr(ctx, out, v);
     } else if (strcmp(bn, "str_concat") == 0) {
         xicgen_str_concat(ctx, out, f, v, prefix);
     } else if (strcmp(bn, "array_new") == 0) {

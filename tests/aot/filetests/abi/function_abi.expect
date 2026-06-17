@@ -8,6 +8,8 @@ contains=function 3 name=echo_text module=0 depth=1 abi=native boundary=none par
 contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
 contains=function 4 name=same_items module=0 depth=1 abi=native boundary=none params=1 ret=void */ptr/ptr
 contains=  param 0 class=ptr kind=ptr rep=ptr c_type=void *
-c_contains=xr_str_value_from_ptr(function_abi_echo_text_
-c_regex=xr_mkptr\(function_abi_same_items_[0-9]+\(_cl, \(p[0-9]+\)\.ptr\), XR_TAG_ARRAY\)
+c_regex=static XRT_FN_CONST void \* function_abi_echo_text_[0-9]+\(xrt_closure_t \*_cl, void \* p0\)
+c_regex=static XRT_FN_CONST void \* function_abi_same_items_[0-9]+\(xrt_closure_t \*_cl, void \* p0\)
+c_not_contains=xr_str_value_from_ptr(function_abi_echo_text_
+c_not_contains=xr_mkptr(function_abi_same_items_
 contains=stats functions=5 native=4 tagged=1 coro=0

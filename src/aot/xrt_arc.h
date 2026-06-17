@@ -159,7 +159,7 @@ static void xrt_bump_new_block(size_t min_size) {
 }
 
 static inline void *xrt_bump_alloc(size_t size) {
-    if (XR_LIKELY(xrt_bump_cursor + size <= xrt_bump_end)) {
+    if (XR_LIKELY(xrt_bump_cursor && xrt_bump_cursor + size <= xrt_bump_end)) {
         void *p = xrt_bump_cursor;
         xrt_bump_cursor += size;
         return p;
@@ -305,8 +305,7 @@ static inline void xrt_release(XrValue v) {
 }
 
 static inline void xrt_arc_init(void) {
-    if (xrt_bump_enabled)
-        xrt_bump_new_block(0);
+    (void) xrt_bump_enabled;
 }
 
 /* =========================================================================

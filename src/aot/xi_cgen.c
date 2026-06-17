@@ -874,6 +874,170 @@ static bool cg_shared_static_function_ownership_is_noop(XiCgenCtx *ctx, const Xi
     return call.func && !call.is_class_constructor && call.func->ncaptures == 0;
 }
 
+static const XiFunc *cg_shared_function_slot_target(XiCgenCtx *ctx, const XiFunc *current,
+                                                    int slot) {
+    if (slot < 0)
+        return NULL;
+    if (current && current->shared_slot_funcs && slot < (int) current->shared_slot_func_count)
+        return current->shared_slot_funcs[slot];
+    if (ctx && ctx->module && ctx->module->slot_funcs && slot < (int) ctx->module->nslots)
+        return ctx->module->slot_funcs[slot];
+    return NULL;
+}
+
+static bool cg_shared_function_target_can_elide(XiCgenCtx *ctx, const XiFunc *target) {
+    return target && target->ncaptures == 0 && !cg_func_needs_aot_coro_ctx(ctx, target);
+}
+
+static bool cg_shared_static_function_value_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
+                                                            const XiValue *value,
+                                                            const XiFunc *target, int depth) {
+    if (!ctx || !owner || !value || !target || depth > 8)
+        return false;
+
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_CALL: {
+                        if (ai != 0)
+                            return false;
+                        CgStaticFunctionCall call =
+                            cg_resolve_static_function_call(ctx, owner, user->args[0]);
+                        if (call.func != target || call.is_class_constructor)
+                            return false;
+                        break;
+                    }
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0 || !cg_shared_static_function_value_uses_are_direct(
+                                           ctx, owner, user, target, depth + 1))
+                            return false;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_shared_static_function_slot_uses_are_direct(XiCgenCtx *ctx, const XiFunc *owner,
+                                                           int slot, const XiFunc *target) {
+    if (!ctx || !owner || slot < 0 || !target)
+        return false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_GET_SHARED || (int) v->aux_int != slot)
+                continue;
+            if (!cg_shared_static_function_value_uses_are_direct(ctx, owner, v, target, 0))
+                return false;
+        }
+    }
+    for (uint16_t ci = 0; ci < owner->nchildren; ci++) {
+        if (!cg_shared_static_function_slot_uses_are_direct(ctx, owner->children[ci], slot, target))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_shared_static_function_slot_can_elide(XiCgenCtx *ctx, const XiFunc *current,
+                                                     int slot, const XiFunc *target) {
+    if (!ctx || !ctx->module || !ctx->module->init || slot < 0 || !target)
+        return false;
+    if (ctx->all_nmodules > 1)
+        return false;
+    if (cg_shared_function_slot_target(ctx, current, slot) != target)
+        return false;
+    if (!cg_shared_function_target_can_elide(ctx, target))
+        return false;
+    return cg_shared_static_function_slot_uses_are_direct(ctx, ctx->module->init, slot, target);
+}
+
+static bool cg_shared_static_function_set_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                    const XiValue *v) {
+    if (!ctx || !v || v->op != XI_SET_SHARED || v->nargs < 1)
+        return false;
+    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    if (!arg ||
+        (arg->op != XI_CLOSURE_NEW &&
+         !(arg->op == XI_STACK_ALLOC && arg->aux_int == XI_CLOSURE_NEW)) ||
+        !arg->aux)
+        return false;
+    return cg_shared_static_function_slot_can_elide(ctx, current, (int) v->aux_int,
+                                                    (const XiFunc *) arg->aux);
+}
+
+static bool cg_shared_static_function_closure_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                        const XiValue *v) {
+    if (!ctx || !current || !v ||
+        (v->op != XI_CLOSURE_NEW && !(v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW)) ||
+        !v->aux)
+        return false;
+    const XiFunc *target = (const XiFunc *) v->aux;
+    bool saw_store = false;
+    for (uint32_t bi = 0; bi < current->nblocks; bi++) {
+        const XiBlock *blk = current->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != v)
+                    continue;
+                if (user->op == XI_SET_SHARED && ai == 0 &&
+                    cg_shared_static_function_slot_can_elide(ctx, current, (int) user->aux_int,
+                                                             target)) {
+                    saw_store = true;
+                    continue;
+                }
+                if ((user->op == XI_RETAIN || user->op == XI_RELEASE) && ai == 0)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return saw_store;
+}
+
+static bool cg_shared_static_function_get_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                    const XiValue *v) {
+    if (!ctx || !v || v->op != XI_GET_SHARED)
+        return false;
+    int slot = (int) v->aux_int;
+    const XiFunc *target = cg_shared_function_slot_target(ctx, current, slot);
+    return cg_shared_static_function_slot_can_elide(ctx, current, slot, target);
+}
+
+static bool cg_shared_static_function_value_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                      const XiValue *v) {
+    return cg_shared_static_function_get_is_elided(ctx, current, v) ||
+           cg_shared_static_function_set_is_elided(ctx, current, v) ||
+           cg_shared_static_function_closure_is_elided(ctx, current, v);
+}
+
 /* Write a value reference: v<id> or phi<id> for phi nodes */
 static void emit_vref(FILE *out, const XiValue *v) {
     if (v->op == XI_PHI)
@@ -921,6 +1085,248 @@ static void emit_value_source_line(XiCgenCtx *ctx, FILE *out, const XiValue *v) 
 static bool cg_has_exception_handling(const XiFunc *f);
 #include "xi_cgen_class_native_helpers.inc.c"
 #include "xi_cgen_array_helpers.inc.c"
+
+static bool cg_class_native_ref_stack_return_consumes_ctor(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *ctor_call);
+
+static bool cg_class_descriptor_slot_can_elide_depth(XiCgenCtx *ctx, const XiFunc *current,
+                                                     int slot, const XiClassData *cd, int depth);
+static bool cg_class_descriptor_create_is_elided_depth(XiCgenCtx *ctx, const XiFunc *current,
+                                                       const XiValue *v, int depth);
+
+static const XiClassData *cg_class_descriptor_slot_data(XiCgenCtx *ctx, int slot) {
+    if (!ctx || slot < 0)
+        return NULL;
+    if (ctx->module && ctx->module->slot_classes && slot < (int) ctx->module->nslots)
+        return ctx->module->slot_classes[slot];
+    if (slot < ctx->shared_cap)
+        return ctx->shared_class[slot];
+    return NULL;
+}
+
+static int cg_class_descriptor_slot_for_data(XiCgenCtx *ctx, const XiClassData *cd) {
+    if (!ctx || !ctx->module || !cd)
+        return -1;
+    int slot = cg_class_native_slot_in_module(ctx->module, cd);
+    if (slot < 0)
+        return -1;
+    const XiClassData *slot_cd = cg_class_descriptor_slot_data(ctx, slot);
+    return cg_class_native_data_matches(slot_cd, cd) ? slot : -1;
+}
+
+static bool cg_class_descriptor_native_stack_only_data(const XiClassData *cd) {
+    return cd && cd->instance_layout && !cd->is_monomorphized &&
+           !cg_class_native_layout_has_ref_fields(cd->instance_layout);
+}
+
+static bool cg_class_descriptor_elidable_native_data(const XiClassData *cd) {
+    return cd && cd->instance_layout && !cd->is_monomorphized;
+}
+
+static bool cg_class_descriptor_ctor_call_is_elidable(XiCgenCtx *ctx, const XiFunc *owner,
+                                                      const XiValue *call, const XiClassData *cd) {
+    if (!ctx || !owner || !call || !cd || call->op != XI_CALL || call->nargs < 1)
+        return false;
+    const XiFunc *ctor = NULL;
+    const XiClassData *call_cd = cg_class_native_ctor_call_data(ctx, owner, call, &ctor, NULL);
+    if (!ctor || !cg_class_native_data_matches(call_cd, cd) ||
+        !cg_class_descriptor_elidable_native_data(call_cd))
+        return false;
+    if (cg_class_descriptor_native_stack_only_data(call_cd))
+        return cg_class_native_ctor_can_inline(ctx, owner, call);
+    return cg_class_native_layout_has_ref_fields(call_cd->instance_layout) &&
+           cg_class_native_ref_stack_return_consumes_ctor(ctx, owner, call);
+}
+
+static bool cg_class_descriptor_value_uses_are_elidable(XiCgenCtx *ctx, const XiFunc *owner,
+                                                        const XiValue *value, const XiClassData *cd,
+                                                        int depth, bool *saw_elidable_use) {
+    if (!ctx || !owner || !value || !cd || depth > 8)
+        return false;
+
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == value)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == value)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == value)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != value)
+                    continue;
+                switch ((XiOp) user->op) {
+                    case XI_CALL:
+                        if (ai != 0 ||
+                            !cg_class_descriptor_ctor_call_is_elidable(ctx, owner, user, cd))
+                            return false;
+                        if (saw_elidable_use)
+                            *saw_elidable_use = true;
+                        break;
+                    case XI_CLASS_CREATE:
+                        if (ai != 0 || !cg_class_descriptor_create_is_elided_depth(ctx, owner, user,
+                                                                                   depth + 1))
+                            return false;
+                        if (saw_elidable_use)
+                            *saw_elidable_use = true;
+                        break;
+                    case XI_BOX:
+                    case XI_UNBOX:
+                    case XI_COPY:
+                    case XI_MOVE:
+                        if (ai != 0 || !cg_class_descriptor_value_uses_are_elidable(
+                                           ctx, owner, user, cd, depth + 1, saw_elidable_use))
+                            return false;
+                        break;
+                    case XI_RETAIN:
+                    case XI_RELEASE:
+                        if (ai != 0)
+                            return false;
+                        break;
+                    default:
+                        return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_class_descriptor_slot_uses_are_elidable(XiCgenCtx *ctx, const XiFunc *owner,
+                                                       int slot, const XiClassData *cd, int depth,
+                                                       bool *saw_elidable_use) {
+    if (!ctx || !owner || slot < 0 || !cd || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!v || v->op != XI_GET_SHARED || (int) v->aux_int != slot)
+                continue;
+            if (!cg_class_descriptor_value_uses_are_elidable(ctx, owner, v, cd, depth,
+                                                             saw_elidable_use))
+                return false;
+        }
+    }
+    for (uint16_t ci = 0; ci < owner->nchildren; ci++) {
+        if (!cg_class_descriptor_slot_uses_are_elidable(ctx, owner->children[ci], slot, cd,
+                                                        depth + 1, saw_elidable_use))
+            return false;
+    }
+    return true;
+}
+
+static bool cg_class_descriptor_slot_can_elide_depth(XiCgenCtx *ctx, const XiFunc *current,
+                                                     int slot, const XiClassData *cd, int depth) {
+    (void) current;
+    if (!ctx || !ctx->module || !ctx->module->init || ctx->all_nmodules > 1 || slot < 0 ||
+        depth > 8)
+        return false;
+    const XiClassData *slot_cd = cg_class_descriptor_slot_data(ctx, slot);
+    if (!cg_class_native_data_matches(slot_cd, cd) ||
+        !cg_class_descriptor_elidable_native_data(slot_cd))
+        return false;
+    bool saw_elidable_use = false;
+    return cg_class_descriptor_slot_uses_are_elidable(ctx, ctx->module->init, slot, slot_cd,
+                                                      depth + 1, &saw_elidable_use) &&
+           saw_elidable_use;
+}
+
+static bool cg_class_descriptor_slot_can_elide(XiCgenCtx *ctx, const XiFunc *current, int slot,
+                                               const XiClassData *cd) {
+    return cg_class_descriptor_slot_can_elide_depth(ctx, current, slot, cd, 0);
+}
+
+static bool cg_class_descriptor_set_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                              const XiValue *v) {
+    if (!ctx || !v || v->op != XI_SET_SHARED || v->nargs < 1)
+        return false;
+    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    if (!arg || arg->op != XI_CLASS_CREATE || !arg->aux)
+        return false;
+    return cg_class_descriptor_slot_can_elide(ctx, current, (int) v->aux_int,
+                                              (const XiClassData *) arg->aux);
+}
+
+static bool cg_class_descriptor_create_is_elided_depth(XiCgenCtx *ctx, const XiFunc *current,
+                                                       const XiValue *v, int depth) {
+    if (!ctx || !current || !v || v->op != XI_CLASS_CREATE || !v->aux || depth > 8)
+        return false;
+    const XiClassData *cd = (const XiClassData *) v->aux;
+    int slot = cg_class_descriptor_slot_for_data(ctx, cd);
+    if (!cg_class_descriptor_slot_can_elide_depth(ctx, current, slot, cd, depth + 1))
+        return false;
+
+    bool saw_store = false;
+    for (uint32_t bi = 0; bi < current->nblocks; bi++) {
+        const XiBlock *blk = current->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == v)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != v)
+                    continue;
+                if (user->op == XI_SET_SHARED && ai == 0 && (int) user->aux_int == slot) {
+                    saw_store = true;
+                    continue;
+                }
+                if ((user->op == XI_RETAIN || user->op == XI_RELEASE) && ai == 0)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return saw_store;
+}
+
+static bool cg_class_descriptor_create_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                 const XiValue *v) {
+    return cg_class_descriptor_create_is_elided_depth(ctx, current, v, 0);
+}
+
+static bool cg_class_descriptor_get_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                              const XiValue *v) {
+    if (!ctx || !v || v->op != XI_GET_SHARED)
+        return false;
+    int slot = (int) v->aux_int;
+    const XiClassData *cd = cg_class_descriptor_slot_data(ctx, slot);
+    return cg_class_descriptor_slot_can_elide(ctx, current, slot, cd);
+}
+
+static bool cg_class_descriptor_ownership_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                    const XiValue *v) {
+    if (!ctx || !v || (v->op != XI_RETAIN && v->op != XI_RELEASE) || v->nargs < 1)
+        return false;
+    const XiValue *arg = cg_unwrap_identity_value(v->args[0]);
+    if (!arg)
+        return false;
+    if (arg->op == XI_GET_SHARED)
+        return cg_class_descriptor_get_is_elided(ctx, current, arg);
+    if (arg->op == XI_CLASS_CREATE)
+        return cg_class_descriptor_create_is_elided(ctx, current, arg);
+    return false;
+}
+
+static bool cg_class_descriptor_value_is_elided(XiCgenCtx *ctx, const XiFunc *current,
+                                                const XiValue *v) {
+    return cg_class_descriptor_get_is_elided(ctx, current, v) ||
+           cg_class_descriptor_set_is_elided(ctx, current, v) ||
+           cg_class_descriptor_create_is_elided(ctx, current, v) ||
+           cg_class_descriptor_ownership_is_elided(ctx, current, v);
+}
 
 static const char *local_ctype_str_ctx(XiCgenCtx *ctx, const XiFunc *f, const XiValue *v) {
     if (cg_array_value_uses_native_local(ctx, f, v))
@@ -1055,6 +1461,192 @@ static void emit_value_rhs(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiV
     ctx->error = true;
 }
 
+typedef struct CgClassNativeRefStackReturn {
+    const XiValue *ctor_call;
+    const XiValue *return_call;
+    const XiClassData *class_data;
+    const XiFunc *ctor;
+    const char *ctor_prefix;
+} CgClassNativeRefStackReturn;
+
+static bool cg_func_has_defer_stmt(const XiFunc *f) {
+    if (!f)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (v && v->op == XI_DEFER)
+                return true;
+        }
+    }
+    return false;
+}
+
+static bool cg_class_native_ref_stack_ctor_uses_only_return_call(XiCgenCtx *ctx, const XiFunc *f,
+                                                                 const XiValue *target,
+                                                                 const XiValue *return_call,
+                                                                 uint8_t depth,
+                                                                 bool *saw_return_call) {
+    (void) ctx;
+    if (!f || !target || !return_call || depth > 8)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk)
+            continue;
+        if (blk->control == target)
+            return false;
+        for (const XiPhi *phi = blk->phis; phi; phi = phi->next) {
+            for (uint16_t ai = 0; ai < phi->value.nargs; ai++) {
+                if (phi->value.args[ai] == target)
+                    return false;
+            }
+        }
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *user = blk->values[vi];
+            if (!user || user == target)
+                continue;
+            for (uint16_t ai = 0; ai < user->nargs; ai++) {
+                if (user->args[ai] != target)
+                    continue;
+                if (user == return_call && ai == 0) {
+                    if (saw_return_call)
+                        *saw_return_call = true;
+                    continue;
+                }
+                if ((user->op == XI_COPY || user->op == XI_MOVE) && ai == 0) {
+                    if (!cg_class_native_ref_stack_ctor_uses_only_return_call(
+                            ctx, f, user, return_call, (uint8_t) (depth + 1), saw_return_call))
+                        return false;
+                    continue;
+                }
+                if ((user->op == XI_RETAIN || user->op == XI_RELEASE) && ai == 0)
+                    continue;
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+static bool cg_class_native_ref_stack_return_info(XiCgenCtx *ctx, const XiFunc *f,
+                                                  const XiValue *return_call,
+                                                  CgClassNativeRefStackReturn *out_info) {
+    if (out_info)
+        memset(out_info, 0, sizeof(*out_info));
+    if (!ctx || !f || !return_call ||
+        (return_call->op != XI_CALL_METHOD && return_call->op != XI_CALL_METHOD_DIRECT) ||
+        return_call->nargs < 1 || !return_call->block ||
+        return_call->block->kind != XI_BLOCK_RETURN || return_call->block->control != return_call ||
+        cg_has_exception_handling(f) || cg_func_has_defer_stmt(f))
+        return false;
+
+    const XiValue *ctor_call = cg_class_native_trace_ctor_origin(ctx, f, return_call->args[0], 0);
+    if (!ctor_call || ctor_call->block != return_call->block)
+        return false;
+    const XiFunc *ctor = NULL;
+    const char *ctor_prefix = NULL;
+    const XiClassData *cd = cg_class_native_ctor_call_data(ctx, f, ctor_call, &ctor, &ctor_prefix);
+    if (!cd || !ctor || !cd->instance_layout ||
+        !cg_class_native_layout_has_ref_fields(cd->instance_layout) ||
+        !cg_class_native_ctor_can_inline(ctx, f, ctor_call))
+        return false;
+
+    const char *method_prefix = NULL;
+    const XiFunc *method = cg_class_native_resolve_method_call(ctx, f, return_call, &method_prefix);
+    (void) method_prefix;
+    if (!method || !cg_class_func_uses_native_receiver(ctx, method) ||
+        !cg_class_native_call_is_nothrow_direct(ctx, f, return_call))
+        return false;
+    CgClassNativeFunc method_info = cg_class_native_func(ctx, method);
+    if (!cg_class_native_can_pass_instance_as(ctx, cd, method_info.class_data))
+        return false;
+
+    bool saw_return_call = false;
+    if (!cg_class_native_ref_stack_ctor_uses_only_return_call(ctx, f, ctor_call, return_call, 0,
+                                                              &saw_return_call) ||
+        !saw_return_call)
+        return false;
+    if (out_info) {
+        out_info->ctor_call = ctor_call;
+        out_info->return_call = return_call;
+        out_info->class_data = cd;
+        out_info->ctor = ctor;
+        out_info->ctor_prefix = ctor_prefix;
+    }
+    return true;
+}
+
+static bool cg_class_native_ref_stack_return_consumes_ctor(XiCgenCtx *ctx, const XiFunc *f,
+                                                           const XiValue *ctor_call) {
+    if (!ctx || !f || !ctor_call || ctor_call->op != XI_CALL)
+        return false;
+    for (uint32_t bi = 0; bi < f->nblocks; bi++) {
+        const XiBlock *blk = f->blocks[bi];
+        if (!blk || blk->kind != XI_BLOCK_RETURN || !blk->control)
+            continue;
+        CgClassNativeRefStackReturn info;
+        if (cg_class_native_ref_stack_return_info(ctx, f, blk->control, &info) &&
+            info.ctor_call == ctor_call)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_class_native_ref_stack_return_takes_value(XiCgenCtx *ctx, const XiFunc *f,
+                                                         const XiValue *v) {
+    if (!ctx || !f || !v)
+        return false;
+    if ((v->op == XI_CALL_METHOD || v->op == XI_CALL_METHOD_DIRECT) &&
+        cg_class_native_ref_stack_return_info(ctx, f, v, NULL))
+        return true;
+    return v->op == XI_CALL && cg_class_native_ref_stack_return_consumes_ctor(ctx, f, v);
+}
+
+static bool emit_class_native_ref_stack_return_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
+                                                    const XiBlock *blk, const char *prefix) {
+    CgClassNativeRefStackReturn info;
+    if (!blk || !cg_class_native_ref_stack_return_info(ctx, f, blk->control, &info))
+        return false;
+    const char *class_prefix = info.ctor_prefix ? info.ctor_prefix : prefix;
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, class_prefix, info.class_data->class_name);
+    fprintf(out, " _ci%u;\n", info.ctor_call->id);
+    fprintf(out, "    memset(&_ci%u, 0, sizeof(_ci%u));\n", info.ctor_call->id, info.ctor_call->id);
+    fprintf(out, "    ");
+    emit_class_native_type_name(out, class_prefix, info.class_data->class_name);
+    fprintf(out, " *");
+    emit_vref(out, info.ctor_call);
+    fprintf(out, " = &_ci%u;\n", info.ctor_call->id);
+    fprintf(out, "    (void)");
+    emit_fname(ctx, out, class_prefix, info.ctor);
+    fprintf(out, "(NULL, ");
+    emit_vref(out, info.ctor_call);
+    for (uint16_t i = 1; i < info.ctor_call->nargs; i++) {
+        fprintf(out, ", ");
+        emit_value_as_rep(out, info.ctor_call->args[i], cg_func_param_abi_rep(ctx, info.ctor, i));
+    }
+    fprintf(out, ");\n");
+
+    XrRep ret_rep = cg_func_return_abi_rep(ctx, f);
+    fprintf(out, "    %s _ret%u = ", ctype_str(ret_rep), info.return_call->id);
+    const char *conv_suffix = emit_conversion_prefix(
+        out, info.return_call->type, cg_value_plan_storage_rep(ctx, info.return_call), ret_rep);
+    emit_value_rhs(ctx, out, f, info.return_call, prefix);
+    emit_conversion_suffix(out, conv_suffix);
+    fprintf(out, ";\n");
+    if (cg_class_native_layout_has_arc_ref_fields(info.class_data->instance_layout)) {
+        fprintf(out, "    ");
+        emit_class_native_dtor_name(out, class_prefix, info.class_data);
+        fprintf(out, "(&_ci%u);\n", info.ctor_call->id);
+    }
+    fprintf(out, "    return _ret%u;\n", info.return_call->id);
+    return true;
+}
+
 static void emit_deferred_calls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const char *prefix) {
     const XiValue *deferred_vals[32];
     int ndeferred = 0;
@@ -1137,6 +1729,11 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
         return;
     if (cg_ownership_op_is_noop(v) || cg_shared_static_function_ownership_is_noop(ctx, f, v))
         return;
+    if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
+        cg_class_descriptor_value_is_elided(ctx, f, v))
+        return;
+    if (xicgen_box_only_feeds_native_int_print(ctx, f, v))
+        return;
 
     if (cg_class_native_value_stmt_is_elided(ctx, f, v))
         return;
@@ -1163,6 +1760,8 @@ static void emit_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const Xi
     if (emit_class_native_map_method_call_stmt(ctx, out, f, v))
         return;
     if (emit_class_native_set_method_call_stmt(ctx, out, f, v))
+        return;
+    if (cg_class_native_ref_stack_return_takes_value(ctx, f, v))
         return;
 
     if (cg_array_typed_push_value_is_elided(ctx, f, v)) {
@@ -1295,6 +1894,8 @@ static void emit_block(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiBlock
             emit_value_source_line(ctx, out, blk->control);
             emit_class_field_cache_flush(ctx, out);
             emit_deferred_calls(ctx, out, f, prefix);
+            if (emit_class_native_ref_stack_return_stmt(ctx, out, f, blk, prefix))
+                break;
             if (emit_class_native_return_stmt(ctx, out, f, blk))
                 break;
             if (blk->control) {
@@ -1390,7 +1991,10 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
     if ((v->op == XI_COPY || v->op == XI_MOVE) && (cg_value_traces_to_inlined_struct(f, v) ||
                                                    cg_value_is_elided_heap_struct_alias(ctx, f, v)))
         return true;
-    if (cg_class_native_value_stmt_is_elided(ctx, f, v) ||
+    if (cg_shared_static_function_value_is_elided(ctx, f, v) ||
+        cg_class_descriptor_value_is_elided(ctx, f, v) ||
+        xicgen_box_only_feeds_native_int_print(ctx, f, v) ||
+        cg_class_native_value_stmt_is_elided(ctx, f, v) ||
         cg_class_native_ctor_can_inline(ctx, f, v) ||
         cg_class_shared_native_ctor_value_is_elided(ctx, f, v, NULL) ||
         cg_class_shared_native_set_is_elided(ctx, f, v) ||
@@ -1404,6 +2008,8 @@ static bool cg_value_skips_predecl(XiCgenCtx *ctx, const XiFunc *f, const XiValu
         return true;
     if (cg_class_native_map_method_call_value_is_elided(ctx, f, v) ||
         cg_class_native_set_method_call_value_is_elided(ctx, f, v))
+        return true;
+    if (cg_class_native_ref_stack_return_takes_value(ctx, f, v))
         return true;
     if (cg_array_typed_push_value_is_elided(ctx, f, v))
         return true;
@@ -1510,6 +2116,16 @@ static bool cg_func_is_shared_slot_value(const XiCgenCtx *ctx, const XiFunc *f) 
     return false;
 }
 
+static int cg_shared_slot_for_func(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !ctx->module || !ctx->module->slot_funcs || !f)
+        return -1;
+    for (uint16_t i = 0; i < ctx->module->nslots; i++) {
+        if (ctx->module->slot_funcs[i] == f)
+            return (int) i;
+    }
+    return -1;
+}
+
 static bool cg_value_allocates_closure_for_func(const XiValue *v, const XiFunc *target) {
     if (!v || !target || v->aux != target)
         return false;
@@ -1528,6 +2144,9 @@ static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc 
         for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
             const XiValue *v = blk->values[vi];
             if (!cg_value_allocates_closure_for_func(v, target))
+                continue;
+            if (!cg_func_needs_aot_coro_ctx(ctx, owner) &&
+                cg_shared_static_function_closure_is_elided(ctx, owner, v))
                 continue;
             if (!cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
                 return true;
@@ -1592,6 +2211,8 @@ static bool cg_func_has_native_receiver_boxed_use(XiCgenCtx *ctx, const XiFunc *
             if (!v)
                 continue;
             if (cg_value_allocates_closure_for_func(v, target) &&
+                (cg_func_needs_aot_coro_ctx(ctx, owner) ||
+                 !cg_shared_static_function_closure_is_elided(ctx, owner, v)) &&
                 !cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
                 return true;
             if (cg_native_receiver_method_call_needs_boxed_adapter(ctx, owner, v, target) ||
@@ -1632,10 +2253,17 @@ static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const c
     if (!typed_abi && !native_receiver)
         return false;
 
-    if (cg_func_is_shared_slot_value(ctx, f))
-        return true;
-
     const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
+    if (cg_func_is_shared_slot_value(ctx, f)) {
+        int func_slot = cg_shared_slot_for_func(ctx, f);
+        if (func_slot >= 0) {
+            if (!cg_shared_static_function_slot_can_elide(ctx, root, func_slot, f))
+                return true;
+        } else if (!native_receiver) {
+            return true;
+        }
+    }
+
     if (native_receiver)
         return cg_func_has_native_receiver_boxed_use_in_bundle(ctx, f, prefix);
 

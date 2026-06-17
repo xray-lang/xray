@@ -1,0 +1,43 @@
+class Shape {
+    kind: int
+
+    constructor(kind: int) {
+        this.kind = kind
+    }
+
+    kind_plus() -> int {
+        return this.kind + 7
+    }
+}
+
+class Rect extends Shape {
+    w: int
+    h: int
+
+    constructor(w: int, h: int) {
+        super(1)
+        this.w = w
+        this.h = h
+    }
+
+    area() -> int {
+        return this.w * this.h
+    }
+
+    kind_plus() -> int {
+        return this.kind + this.w
+    }
+}
+
+fn run(n: int) -> int {
+    let total = 0
+    let i = 0
+    while (i < n) {
+        let r = Rect(i, i + 1)
+        total = total + r.area() + r.kind_plus()
+        i = i + 1
+    }
+    return total
+}
+
+print(run(10))
