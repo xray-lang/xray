@@ -1267,11 +1267,14 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     touch = strstr(touch + 1, "static int64_t test_touch_");
     assert(touch != NULL && "touch function definition should follow its declaration");
     const char *touch_end = next_static_after(touch);
-    assert(count_between(touch, touch_end, "heap_type == XR_TINSTANCE") >= 2 &&
-           "field load/store in a non-direct class parameter should fast-path heap instances");
-    assert(count_between(touch, touch_end, "xrt_getprop_name(") >= 1 &&
-           count_between(touch, touch_end, "xrt_setprop_name(") >= 1 &&
-           "temporary fallback remains only for old map-backed class values");
+    assert(count_between(touch, touch_end, "xrt_getprop_name(") == 0 &&
+           count_between(touch, touch_end, "xrt_setprop_name(") == 0 &&
+           count_between(touch, touch_end, "xrt_map_get(") == 0 &&
+           count_between(touch, touch_end, "xrt_map_set(") == 0 &&
+           "native class pointer parameters must not fall back to Map field access");
+    assert(count_between(touch, touch_end, "test_get_") >= 1 &&
+           count_between(touch, touch_end, "test_get_3_boxed(") == 0 &&
+           "native class pointer method calls should use the typed method entry directly");
 
     const char *bump_boxed = strstr(code, "static XrValue test_bump_");
     while (bump_boxed) {
@@ -1285,6 +1288,9 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     assert(count_between(bump_boxed, next_static_after(bump_boxed), "heap_type == XR_TINSTANCE") >
                0 &&
            "boxed method adapter should call the typed method for heap native instances");
+    assert(count_between(bump_boxed, next_static_after(bump_boxed), "xrt_map_get(") == 0 &&
+           count_between(bump_boxed, next_static_after(bump_boxed), "xrt_map_set(") == 0 &&
+           "boxed method adapter must not retain the old Map-backed class fallback");
 
     printf("  Generated heap native class instance path %zu bytes of C code\n", strlen(code));
     xr_free(code);
@@ -1355,8 +1361,12 @@ TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
     swap = strstr(swap + 1, "static int64_t test_swap_");
     assert(swap != NULL && "swap function definition should follow its declaration");
     const char *swap_end = next_static_after(swap);
-    assert(count_between(swap, swap_end, "heap_type == XR_TINSTANCE") >= 2 &&
-           "heap native instance field store/load should keep the TINSTANCE fast path");
+    assert(count_between(swap, swap_end, "heap_type == XR_TINSTANCE") == 0 &&
+           count_between(swap, swap_end, "xrt_getprop_name(") == 0 &&
+           count_between(swap, swap_end, "xrt_setprop_name(") == 0 &&
+           count_between(swap, swap_end, "xrt_map_get(") == 0 &&
+           count_between(swap, swap_end, "xrt_map_set(") == 0 &&
+           "native class pointer parameters should access ref fields without Map fallback");
     retain = strstr(swap, "xrt_retain(_new);");
     release = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));");
     assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");

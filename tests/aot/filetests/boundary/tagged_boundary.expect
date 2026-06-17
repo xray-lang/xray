@@ -17,5 +17,9 @@ c_regex=static xrt_native_tagged_boundary_Counter \* tagged_boundary_make_counte
 c_regex=static int64_t tagged_boundary_read_counter_[0-9]+\(xrt_closure_t \*_cl, xrt_native_tagged_boundary_Counter \*p0\)
 c_regex=return xrt_box_obj\(tagged_boundary_make_counter_[0-9]+
 c_regex=tagged_boundary_read_counter_[0-9]+\(NULL, \(v[0-9]+\)\.ptr\)
-c_regex=tagged_boundary_bump_[0-9]+_boxed\(NULL, xrt_box_obj\(v[0-9]+\)\)
+c_regex=tagged_boundary_bump_[0-9]+\(NULL, \(\(xrt_native_tagged_boundary_Counter\*\)v[0-9]+\)\)
+c_not_contains=xrt_getprop_name(
+c_not_contains=xrt_setprop_name(
+c_not_contains=xrt_map_get(
+c_not_contains=xrt_map_set(
 contains=stats functions=5 native=3 tagged=2 coro=0
