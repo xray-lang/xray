@@ -611,6 +611,8 @@ static inline int64_t xrt_swiss_find_free(const uint8_t *ctrl, int64_t slots, ui
  * ========================================================================= */
 
 typedef struct xrt_map_t {
+    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrMap (C0
+                    * object-header unification) */
     XR_MAP_ABI_FIELDS;
 
     /* Typed scalar storage (key_type/value_type != XR_ELEM_ANY). */
@@ -647,6 +649,7 @@ static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t ma
 }
 
 static inline void xrt_map_init_header(xrt_map_t *m) {
+    xrt_bump_header_init(&m->gc);
     m->count = 0;
     m->nentries = 0;
     m->entries_cap = 0;
@@ -947,6 +950,8 @@ static inline void xrt_map_set(xrt_map_t *m, XrValue key, XrValue val) {
  * ========================================================================= */
 
 typedef struct xrt_set_t {
+    XrGCHeader gc; /* embedded-at-0 header: same placement as the VM XrSet (C0
+                    * object-header unification) */
     XR_SET_ABI_FIELDS;
 
     /* Typed scalar storage (elem_type != XR_ELEM_ANY). */
@@ -962,6 +967,7 @@ typedef struct xrt_set_t {
 } xrt_set_t;
 
 static inline void xrt_set_init_header(xrt_set_t *s, uint8_t elem_type) {
+    xrt_bump_header_init(&s->gc);
     s->count = 0;
     s->nentries = 0;
     s->entries_cap = 0;
