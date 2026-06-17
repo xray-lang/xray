@@ -1,0 +1,28 @@
+// anchor: coro-await-over-array
+// `await all [...]` / `await any [...]` over an array of tasks must produce
+// identical results on VM and AOT. Regression: the AOT tasks-array reader cast
+// the runtime array through a struct whose field order did not match the shared
+// array ABI, so it read a garbage length, returned no tasks, and the awaits
+// silently produced nothing on AOT while the VM printed the results.
+fn compute(n: int) -> int {
+    return n * 100
+}
+
+// await all over an array bound to a variable
+let a = go compute(1)
+let b = go compute(2)
+let c = go compute(3)
+let group = [a, b, c]
+print(await all group)
+
+// await all over an array literal
+let d = go compute(4)
+let e = go compute(5)
+print(await all [d, e])
+
+// await any over an array literal; both already resolved -> array-order first
+let f = go compute(6)
+let g = go compute(7)
+await f
+await g
+print(await any [f, g])

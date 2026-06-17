@@ -50,14 +50,6 @@ enum {
     XR_AOT_VALUE_TAG_ENUM = 24,
 };
 
-typedef struct XrAotArrayView {
-    int64_t len;
-    int64_t cap;
-    void *data;
-    uint8_t elem_type;
-    uint8_t elem_size;
-} XrAotArrayView;
-
 static XrAotCoroState *aot_state_from_coro(XrCoroutine *coro) {
     if (!coro || !coro->backend_state)
         return NULL;
@@ -723,20 +715,24 @@ static XrArray *aot_tasks_array_from_value(const XrAotContext *ctx, XrValue task
     if (tasks_value.tag != XR_AOT_VALUE_TAG_ARRAY || !tasks_value.ptr)
         return NULL;
 
-    XrAotArrayView *view = (XrAotArrayView *) tasks_value.ptr;
-    if (view->len < 0 || view->len > INT32_MAX)
+    /* An AOT array embeds the unified XrGCHeader and the shared
+     * XR_ARRAY_ABI_FIELDS, so it is layout-compatible with the VM XrArray and is
+     * read through it directly. Elements are copied into a coroutine-owned VM
+     * array because the source is bump storage owned by the generated frame. */
+    const XrArray *src = (const XrArray *) tasks_value.ptr;
+    int64_t len = src->length;
+    if (len < 0 || len > INT32_MAX)
         return NULL;
-    if (view->elem_type >= XR_ELEM_COUNT)
+    if (src->elem_type >= XR_ELEM_COUNT)
         return NULL;
 
-    XrArray *tasks = xr_array_with_capacity(ctx->coro, (int) view->len);
+    XrArray *tasks = xr_array_with_capacity(ctx->coro, (int) len);
     if (!tasks)
         return NULL;
 
-    for (int64_t i = 0; i < view->len; i++) {
-        XrValue item = XR_NULL_VAL;
-        if (view->data)
-            item = xr_typed_get(view->data, (int32_t) i, view->elem_type);
+    for (int64_t i = 0; i < len; i++) {
+        XrValue item =
+            src->data ? xr_typed_get(src->data, (int32_t) i, src->elem_type) : XR_NULL_VAL;
         xr_array_push(tasks, item);
     }
     return tasks;
