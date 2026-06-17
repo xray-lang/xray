@@ -1499,9 +1499,7 @@ static void xicgen_call_method(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
 
 static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const XiValue *v,
                                 const char *prefix) {
-    (void) ctx;
     (void) f;
-    (void) prefix;
     const XiClassData *cd = (const XiClassData *) v->aux;
     if (!cd) {
         fprintf(out, "XR_NULL_VAL /* class descriptor: no data */");
@@ -1518,7 +1516,9 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
             }
             fprintf(out, "}; ");
         }
-        fprintf(out, "uint16_t _tid = xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0); ", name);
+        fprintf(out, "uint16_t _tid = ");
+        emit_class_native_type_register_expr(ctx, out, cd, prefix);
+        fprintf(out, "; ");
         fprintf(out,
                 "uint16_t _orig = 0; "
                 "for (uint16_t _i = 1; _i < xrt_type_count; _i++) "
@@ -1533,7 +1533,9 @@ static void xicgen_class_create(XiCgenCtx *ctx, FILE *out, const XiFunc *f, cons
         }
         fprintf(out, "); XR_FROM_INT(_tid); })");
     } else {
-        fprintf(out, "XR_FROM_INT(xrt_type_register(\"%s\", 0, NULL, 0, NULL, 0))", name);
+        fprintf(out, "XR_FROM_INT(");
+        emit_class_native_type_register_expr(ctx, out, cd, prefix);
+        fprintf(out, ")");
     }
 }
 

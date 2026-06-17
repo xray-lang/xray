@@ -1285,6 +1285,94 @@ TEST(cgen_class_constructor_returns_heap_native_instance) {
     xi_func_free(ir);
 }
 
+TEST(cgen_native_class_ref_fields_register_destructor_and_store_rc) {
+    const char *src = "class Bag {\n"
+                      "    values: Array<int>\n"
+                      "    constructor(values: Array<int>) {\n"
+                      "        this.values = values\n"
+                      "    }\n"
+                      "    replace(next: Array<int>) -> int {\n"
+                      "        this.values = next\n"
+                      "        return this.values.length\n"
+                      "    }\n"
+                      "}\n"
+                      "fn make(values: Array<int>) -> Bag {\n"
+                      "    return Bag(values)\n"
+                      "}\n"
+                      "fn swap(b: Bag, next: Array<int>) -> int {\n"
+                      "    b.values = next\n"
+                      "    return b.values.length\n"
+                      "}\n"
+                      "fn local(values: Array<int>) -> int {\n"
+                      "    let bag = Bag(values)\n"
+                      "    return bag.values.length\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let a = [1]\n"
+                      "    let b = [2, 3]\n"
+                      "    let bag = make(a)\n"
+                      "    return bag.replace(b) + swap(bag, a) + local(a)\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "native class ref field ownership path should generate");
+
+    assert(contains(code, "static void xrt_native_test_Bag_dtor(void *obj)") &&
+           "native class ref fields should generate a type destructor");
+    assert(contains(code, "xrt_release(xr_mkptr((self)->f0, XR_TAG_ARRAY));") &&
+           "native class destructor should release pointer ref fields");
+    assert(contains(code, "xrt_type_register(\"Bag\", 0, NULL, 0, xrt_native_test_Bag_dtor, "
+                          "(uint32_t)sizeof(xrt_native_test_Bag))") &&
+           "class type registration should wire the native destructor and instance size");
+
+    const char *replace = strstr(code, "static int64_t test_replace_");
+    assert(replace != NULL && "replace method should use typed ABI");
+    replace = strstr(replace + 1, "static int64_t test_replace_");
+    assert(replace != NULL && "replace method definition should follow its declaration");
+    const char *replace_end = next_static_after(replace);
+    const char *retain = strstr(replace, "xrt_retain(_new);");
+    const char *release = strstr(replace, "xrt_release(xr_mkptr((p0)->f0, XR_TAG_ARRAY));");
+    const char *assign = strstr(replace, "(p0)->f0 = (xrt_array_t *)_new.ptr");
+    assert(retain && release && assign && retain < release && release < assign &&
+           release < replace_end &&
+           "direct native receiver ref stores must retain new, release "
+           "old, then assign");
+
+    const char *swap = strstr(code, "static int64_t test_swap_");
+    assert(swap != NULL && "swap function should use typed scalar return ABI");
+    swap = strstr(swap + 1, "static int64_t test_swap_");
+    assert(swap != NULL && "swap function definition should follow its declaration");
+    const char *swap_end = next_static_after(swap);
+    assert(count_between(swap, swap_end, "heap_type == XR_TINSTANCE") >= 2 &&
+           "heap native instance field store/load should keep the TINSTANCE fast path");
+    retain = strstr(swap, "xrt_retain(_new);");
+    release = strstr(swap, "xrt_release(xr_mkptr((_native)->f0, XR_TAG_ARRAY));");
+    assign = strstr(swap, "(_native)->f0 = (xrt_array_t *)_new.ptr");
+    assert(retain && release && assign && retain < release && release < assign &&
+           release < swap_end &&
+           "heap native instance ref stores must retain new, release old, "
+           "then assign");
+
+    const char *local = strstr(code, "static int64_t test_local_");
+    assert(local != NULL && "local function should use typed scalar return ABI");
+    local = strstr(local + 1, "static int64_t test_local_");
+    assert(local != NULL && "local function definition should follow its declaration");
+    const char *local_end = next_static_after(local);
+    assert(count_between(local, local_end, "xrt_obj_alloc(") == 1 &&
+           count_between(local, local_end, "_ci") == 0 &&
+           "ref-field native classes should not stack-inline without stack destructors");
+
+    printf("  Generated native class ref field ownership path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *src = "class Bag {\n"
                       "    values: Set<int>\n"
@@ -3883,6 +3971,7 @@ int main(void) {
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_constructor_returns_heap_native_instance();
+    run_cgen_native_class_ref_fields_register_destructor_and_store_rc();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();

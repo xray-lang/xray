@@ -1,0 +1,40 @@
+class Bag {
+    values: Array<int>
+
+    constructor(values: Array<int>) {
+        this.values = values
+    }
+
+    sum() -> int {
+        let i = 0
+        let total = 0
+        while (i < this.values.length) {
+            total = total + this.values[i]
+            i = i + 1
+        }
+        return total
+    }
+
+    replace(next: Array<int>) -> int {
+        this.values = next
+        return this.sum()
+    }
+}
+
+fn make(values: Array<int>) -> Bag {
+    return Bag(values)
+}
+
+fn swap(b: Bag, next: Array<int>) -> int {
+    b.values = next
+    return b.sum()
+}
+
+let first = [1, 2, 3]
+let second = [10, 20]
+let bag = make(first)
+
+print(bag.sum())
+print(bag.replace(second))
+print(swap(bag, first))
+print(bag.sum())
