@@ -246,6 +246,48 @@ static void xrt_print_value(XrValue v, int depth) {
             putchar(')');
             return;
         }
+        case XR_TAG_MAP: {
+            xrt_map_t *m = (xrt_map_t *) v.ptr;
+            int64_t total = m ? xrt_map_len(m) : 0;
+            int64_t n_slots = !m ? 0 : (xrt_map_is_typed(m) ? m->order_len : (int64_t) m->nentries);
+            int64_t count = 0;
+            fputs("#{", stdout);
+            for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
+                int64_t slot = xrt_map_is_typed(m) ? m->order[i] : i;
+                if (!xrt_map_slot_is_full(m, slot))
+                    continue;
+                if (count > 0)
+                    fputs(", ", stdout);
+                xrt_print_value(xrt_map_slot_key(m, slot), depth + 1);
+                fputs(": ", stdout);
+                xrt_print_value(xrt_map_slot_value(m, slot), depth + 1);
+                count++;
+            }
+            if (total > count)
+                printf(", ...(%lld more)", (long long) (total - count));
+            putchar('}');
+            return;
+        }
+        case XR_TAG_SET: {
+            xrt_set_t *s = (xrt_set_t *) v.ptr;
+            int64_t total = s ? xrt_set_len(s) : 0;
+            int64_t n_slots = !s ? 0 : (xrt_set_is_typed(s) ? s->order_len : (int64_t) s->nentries);
+            int64_t count = 0;
+            fputs("#[", stdout);
+            for (int64_t i = 0; i < n_slots && count < XRT_FORMAT_MAX_ELEMENTS; i++) {
+                int64_t slot = xrt_set_is_typed(s) ? s->order[i] : i;
+                if (!xrt_set_slot_is_full(s, slot))
+                    continue;
+                if (count > 0)
+                    fputs(", ", stdout);
+                xrt_print_value(xrt_set_slot_item(s, slot), depth + 1);
+                count++;
+            }
+            if (total > count)
+                printf(", ...(%lld more)", (long long) (total - count));
+            putchar(']');
+            return;
+        }
         default:
             printf("<object@%p>", v.ptr);
             return;
