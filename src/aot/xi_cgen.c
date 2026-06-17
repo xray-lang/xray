@@ -1499,6 +1499,66 @@ static void cg_record_function_stats(XiCgenCtx *ctx, const XiFunc *f, bool typed
     cg_record_ir_conversion_stats(ctx, f);
 }
 
+static bool cg_func_is_shared_slot_value(const XiCgenCtx *ctx, const XiFunc *f) {
+    if (!ctx || !f)
+        return false;
+    int limit = ctx->nshared < ctx->shared_cap ? ctx->nshared : ctx->shared_cap;
+    for (int i = 0; i < limit; i++) {
+        if (ctx->shared_funcs[i] == f)
+            return true;
+    }
+    return false;
+}
+
+static bool cg_value_allocates_closure_for_func(const XiValue *v, const XiFunc *target) {
+    if (!v || !target || v->aux != target)
+        return false;
+    return v->op == XI_CLOSURE_NEW || (v->op == XI_STACK_ALLOC && v->aux_int == XI_CLOSURE_NEW);
+}
+
+static bool cg_func_has_unelided_closure_value_use(XiCgenCtx *ctx, const XiFunc *owner,
+                                                   const XiFunc *target, const char *prefix) {
+    if (!ctx || !owner || !target)
+        return false;
+
+    for (uint32_t bi = 0; bi < owner->nblocks; bi++) {
+        const XiBlock *blk = owner->blocks[bi];
+        if (!blk)
+            continue;
+        for (uint32_t vi = 0; vi < blk->nvalues; vi++) {
+            const XiValue *v = blk->values[vi];
+            if (!cg_value_allocates_closure_for_func(v, target))
+                continue;
+            if (!cg_array_closure_value_only_used_by_inline_map(ctx, owner, prefix, v))
+                return true;
+        }
+    }
+
+    for (uint16_t i = 0; i < owner->nchildren; i++) {
+        if (cg_func_has_unelided_closure_value_use(ctx, owner->children[i], target, prefix))
+            return true;
+    }
+    return false;
+}
+
+static bool cg_func_needs_boxed_adapter(XiCgenCtx *ctx, const XiFunc *f, const char *prefix,
+                                        bool typed_abi, bool native_receiver) {
+    if (!typed_abi && !native_receiver)
+        return false;
+
+    if (native_receiver) {
+        /* Dynamic map-backed receiver calls still enter through the boxed
+         * adapter until the class receiver boundary stops using Map marshalling. */
+        return true;
+    }
+
+    if (cg_func_is_shared_slot_value(ctx, f))
+        return true;
+
+    const XiFunc *root = ctx && ctx->module ? ctx->module->init : NULL;
+    return cg_func_has_unelided_closure_value_use(ctx, root, f, prefix);
+}
+
 /* Emit the purity attribute proven by prepare (no-op without a plan).
  * Placed between `static` and the return type on definitions and forward
  * declarations so clang/gcc can CSE / LICM across call sites. */
@@ -1536,6 +1596,7 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
     bool needs_aot_coro = cg_func_needs_aot_coro_ctx(ctx, f);
     bool typed_abi = cg_func_uses_typed_abi(ctx, f);
     bool native_receiver = cg_class_func_uses_native_receiver(ctx, f);
+    bool boxed_adapter = cg_func_needs_boxed_adapter(ctx, f, prefix, typed_abi, native_receiver);
     cg_record_function_stats(ctx, f, typed_abi, native_receiver, needs_aot_coro);
 
     if (needs_aot_coro) {
@@ -1583,10 +1644,10 @@ static void xi_cgen_func(XiCgenCtx *ctx, FILE *out, XiFunc *f, const char *prefi
 
     fprintf(out, "}\n\n");
 
-    if (native_receiver) {
+    if (native_receiver && boxed_adapter) {
         ctx->stats.boxed_adapters++;
         emit_class_native_boxed_adapter(ctx, out, prefix, f);
-    } else if (typed_abi) {
+    } else if (typed_abi && boxed_adapter) {
         ctx->stats.boxed_adapters++;
         fprintf(out, "static XrValue ");
         emit_typed_abi_fname(ctx, out, prefix, f);
@@ -1651,8 +1712,10 @@ static void emit_forward_decls(XiCgenCtx *ctx, FILE *out, const XiFunc *f, const
     }
     fprintf(out, ");\n");
 
+    bool typed_abi = cg_func_uses_typed_abi(ctx, f);
+    bool native_receiver = cg_class_func_uses_native_receiver(ctx, f);
     if (!needs_aot_coro &&
-        (cg_class_func_uses_native_receiver(ctx, f) || cg_func_uses_typed_abi(ctx, f))) {
+        cg_func_needs_boxed_adapter(ctx, f, prefix, typed_abi, native_receiver)) {
         fprintf(out, "static XrValue ");
         emit_typed_abi_fname(ctx, out, prefix, f);
         fprintf(out, "(xrt_closure_t *_cl");
