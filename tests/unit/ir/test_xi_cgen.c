@@ -279,6 +279,13 @@ static size_t count_between(const char *start, const char *end, const char *need
     return count;
 }
 
+static const char *next_static_after(const char *fn) {
+    assert(fn != NULL);
+    const char *next = strstr(fn + 1, "\nstatic ");
+    assert(next != NULL && "generated function should be followed by another static declaration");
+    return next;
+}
+
 static bool nonzero_state_precedes_call(const char *code, const char *call) {
     const char *call_pos = strstr(code, call);
     const char *last_state = NULL;
@@ -1123,8 +1130,7 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
     assert(fn != NULL && "bump method should use typed ABI");
     fn = strstr(fn + 1, "static int64_t test_bump_");
     assert(fn != NULL && "bump method definition should follow its declaration");
-    const char *fn_end = strstr(fn, "static XrValue test_bump_");
-    assert(fn_end != NULL && "boxed bump adapter should follow typed method");
+    const char *fn_end = next_static_after(fn);
 
     assert(contains(code, "typedef struct xrt_native_test_Counter") &&
            "primitive-layout classes should emit an AOT native receiver type");
@@ -1144,6 +1150,55 @@ TEST(cgen_class_method_caches_receiver_scalar_fields) {
            "method body should not box scalar field store temporaries");
 
     printf("  Generated class receiver field cache %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
+TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
+    const char *src = "class Counter {\n"
+                      "    value: int\n"
+                      "    constructor(init: int) { this.value = init }\n"
+                      "    bump(n: int) -> int {\n"
+                      "        this.value = this.value + n\n"
+                      "        return this.value\n"
+                      "    }\n"
+                      "    get() -> int { return this.value }\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let c = Counter(2)\n"
+                      "    let a = c.bump(5)\n"
+                      "    return a + c.get()\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "local direct native class method path should generate");
+
+    assert(contains(code, "typedef struct xrt_native_test_Counter") &&
+           "local class should still use a native receiver layout");
+    assert(contains(code, "int64_t test_bump_") && contains(code, "int64_t test_get_") &&
+           "direct native methods should keep typed entry points");
+    assert(!contains(code, "static XrValue test_bump_") &&
+           !contains(code, "static XrValue test_get_") &&
+           "pure local native class flow must not emit dead boxed method adapters");
+
+    const char *run = strstr(code, "static int64_t test_run_");
+    assert(run != NULL && "run function should use typed ABI");
+    run = strstr(run + 1, "static int64_t test_run_");
+    assert(run != NULL && "run function definition should follow its declaration");
+    const char *run_end = strstr(run, "static XrValue test_run_");
+    assert(run_end != NULL && "boxed run adapter should follow run definition");
+    assert(count_between(run, run_end, "xrt_map_new(") == 0 &&
+           count_between(run, run_end, "xrt_map_get(") == 0 &&
+           count_between(run, run_end, "xrt_map_set(") == 0 &&
+           "pure local native class flow must stay out of the map boundary");
+
+    printf("  Generated local direct native class method path %zu bytes of C code\n", strlen(code));
     xr_free(code);
     xi_func_free(ir);
 }
@@ -1178,8 +1233,7 @@ TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     assert(fn != NULL && "fill method should use typed ABI");
     fn = strstr(fn + 1, "static int64_t test_fill_");
     assert(fn != NULL && "fill method definition should follow its declaration");
-    const char *fn_end = strstr(fn, "static XrValue test_fill_");
-    assert(fn_end != NULL && "boxed fill adapter should follow typed method");
+    const char *fn_end = next_static_after(fn);
 
     assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_I64)") &&
            "Set<int> class field constructor should use typed int64 set storage");
@@ -1252,20 +1306,17 @@ TEST(cgen_class_set_u8_uses_typed_direct_helpers) {
     assert(fill != NULL && "fill method should use typed ABI");
     fill = strstr(fill + 1, "static int64_t test_fill_");
     assert(fill != NULL && "fill method definition should follow its declaration");
-    const char *fill_end = strstr(fill, "static XrValue test_fill_");
-    assert(fill_end != NULL && "boxed fill adapter should follow typed method");
+    const char *fill_end = next_static_after(fill);
     const char *scan = strstr(code, "static int64_t test_scan_");
     assert(scan != NULL && "scan method should use typed ABI");
     scan = strstr(scan + 1, "static int64_t test_scan_");
     assert(scan != NULL && "scan method definition should follow its declaration");
-    const char *scan_end = strstr(scan, "static XrValue test_scan_");
-    assert(scan_end != NULL && "boxed scan adapter should follow typed method");
+    const char *scan_end = next_static_after(scan);
     const char *prune = strstr(code, "static int64_t test_prune_");
     assert(prune != NULL && "prune method should use typed ABI");
     prune = strstr(prune + 1, "static int64_t test_prune_");
     assert(prune != NULL && "prune method definition should follow its declaration");
-    const char *prune_end = strstr(prune, "static XrValue test_prune_");
-    assert(prune_end != NULL && "boxed prune adapter should follow typed method");
+    const char *prune_end = next_static_after(prune);
 
     assert(contains(code, "xrt_set_new_typed(0, XR_ELEM_U8)") &&
            "Set<uint8> class field constructor should use byte set storage");
@@ -1335,20 +1386,17 @@ TEST(cgen_class_map_i64_i64_uses_typed_direct_helpers) {
     assert(fill != NULL && "fill method should use typed ABI");
     fill = strstr(fill + 1, "static int64_t test_fill_");
     assert(fill != NULL && "fill method definition should follow its declaration");
-    const char *fill_end = strstr(fill, "static XrValue test_fill_");
-    assert(fill_end != NULL && "boxed fill adapter should follow typed method");
+    const char *fill_end = next_static_after(fill);
     const char *scan = strstr(code, "static int64_t test_scan_");
     assert(scan != NULL && "scan method should use typed ABI");
     scan = strstr(scan + 1, "static int64_t test_scan_");
     assert(scan != NULL && "scan method definition should follow its declaration");
-    const char *scan_end = strstr(scan, "static XrValue test_scan_");
-    assert(scan_end != NULL && "boxed scan adapter should follow typed method");
+    const char *scan_end = next_static_after(scan);
     const char *prune = strstr(code, "static int64_t test_prune_");
     assert(prune != NULL && "prune method should use typed ABI");
     prune = strstr(prune + 1, "static int64_t test_prune_");
     assert(prune != NULL && "prune method definition should follow its declaration");
-    const char *prune_end = strstr(prune, "static XrValue test_prune_");
-    assert(prune_end != NULL && "boxed prune adapter should follow typed method");
+    const char *prune_end = next_static_after(prune);
 
     assert(contains(code, "xrt_map_new_typed(0, XR_ELEM_I64, XR_ELEM_I64)") &&
            "Map<int,int> class field constructor should use typed map storage");
@@ -1441,8 +1489,7 @@ TEST(cgen_class_map_bool_value_guarded_condition_uses_native) {
     assert(count != NULL && "count method should use typed ABI");
     count = strstr(count + 1, "static int64_t test_count_");
     assert(count != NULL && "count method definition should follow its declaration");
-    const char *count_end = strstr(count, "static XrValue test_count_");
-    assert(count_end != NULL && "boxed count adapter should follow typed method");
+    const char *count_end = next_static_after(count);
     assert(count_between(code, code_end, "xrt_map_find_i64_typed(") >= 1 &&
            count_between(code, code_end, "xrt_map_get_i64_value_typed(") >= 1 &&
            "Map<int,bool>.get guarded by has should keep typed storage");
@@ -1470,8 +1517,7 @@ TEST(cgen_class_map_bool_value_unguarded_condition_uses_truthy) {
     assert(count != NULL && "count method should use typed ABI");
     count = strstr(count + 1, "static int64_t test_count_");
     assert(count != NULL && "count method definition should follow its declaration");
-    const char *count_end = strstr(count, "static XrValue test_count_");
-    assert(count_end != NULL && "boxed count adapter should follow typed method");
+    const char *count_end = next_static_after(count);
     assert(count_between(count, count_end, "XrValue ") >= 1 &&
            count_between(count, count_end, "XR_FROM_BOOL(") >= 1 &&
            count_between(count, count_end, "xr_truthy(") >= 1 &&
@@ -1535,8 +1581,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
     assert(area != NULL && "area method should use typed ABI");
     area = strstr(area + 1, "int64_t test_area_");
     assert(area != NULL && "area method definition should follow its declaration");
-    const char *area_end = strstr(area, "static XrValue test_area_");
-    assert(area_end != NULL && "boxed area adapter should follow typed method");
+    const char *area_end = next_static_after(area);
     assert(contains(area, "xrt_native_test_Rect *p0") &&
            "derived method receiver should use native pointer ABI");
     assert(count_between(area, area_end, "p0->f1") > 0 &&
@@ -1548,8 +1593,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
 
     const char *kind = strstr(area_end, "int64_t test_kind_plus_");
     assert(kind != NULL && "derived kind_plus method should follow area adapter");
-    const char *kind_end = strstr(kind, "static XrValue test_kind_plus_");
-    assert(kind_end != NULL && "boxed kind_plus adapter should follow typed method");
+    const char *kind_end = next_static_after(kind);
     assert(contains(kind, "xrt_native_test_Rect *p0") &&
            "derived override receiver should use native pointer ABI");
     assert(count_between(kind, kind_end, "p0->base.f0") > 0 &&
@@ -1562,8 +1606,7 @@ TEST(cgen_inherited_class_uses_native_base_layout) {
 
     const char *score = strstr(kind_end, "int64_t test_score_with_area_");
     assert(score != NULL && "score_with_area method should follow kind_plus adapter");
-    const char *score_end = strstr(score, "static XrValue test_score_with_area_");
-    assert(score_end != NULL && "boxed score_with_area adapter should follow typed method");
+    const char *score_end = next_static_after(score);
     assert(count_between(score, score_end, "test_area_") > 0 &&
            "nested native method call should remain a direct C call");
     assert(count_between(score, score_end, "base.f0") > 0 &&
@@ -3756,6 +3799,7 @@ int main(void) {
     run_cgen_fixed_array_struct_field_uses_embedded_heap_native_storage();
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
+    run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();
