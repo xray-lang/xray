@@ -284,7 +284,7 @@ static void xrt_vsort(XrValue *a, int64_t n, xrt_closure_t *cl) {
  * boxed scratch buffer so the callback sees XrValue.
  * Returns recv (matches `sort` returning the array). */
 static XrValue xrt_array_sort(XrValue recv, xrt_closure_t *cl) {
-    if (recv.tag != XR_TAG_ARRAY || !recv.ptr)
+    if (!XR_IS_ARRAY(recv) || !recv.ptr)
         return recv;
     xrt_array_t *arr = (xrt_array_t *) recv.ptr;
     int64_t n = arr->length;

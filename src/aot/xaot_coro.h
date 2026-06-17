@@ -126,7 +126,12 @@ static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value) {
         return enum_value;
     if (value.heap_type == XR_TSTRING)
         return xr_aot_bridge_string_to_xrt(value);
-    if (value.heap_type == XR_TARRAY)
+    /* Only VM-layout arrays need representation conversion. AOT arrays carry the
+     * same byte layout (a shared XrGCHeader at offset 0) and are bump-tagged, so
+     * they pass through; the per-coroutine isolation deep-copy is handled
+     * separately by xrt_value_clone_for_coro. */
+    if (value.heap_type == XR_TARRAY && value.ptr &&
+        !(((const XrGCHeader *) value.ptr)->extra & XR_OBJ_STORAGE_BUMP))
         return xr_aot_bridge_array_to_xrt(value);
     return value;
 }

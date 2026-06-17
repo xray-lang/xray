@@ -19,7 +19,7 @@ static inline void xrt_array_write_preallocated(xrt_array_t *a, int64_t index, X
 
 static inline XrValue xrt_array_map_typed(XrValue recv, XrValue callback,
                                           uint8_t result_elem_type) {
-    if (recv.tag != XR_TAG_ARRAY || callback.tag != XR_TAG_CLOSURE)
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
         return XR_NULL_VAL;
     if (result_elem_type >= XR_ELEM_COUNT)
         result_elem_type = XR_ELEM_ANY;
@@ -38,7 +38,7 @@ static inline XrValue xrt_array_map_typed(XrValue recv, XrValue callback,
 }
 
 static inline XrValue xrt_array_filter_typed(XrValue recv, XrValue callback) {
-    if (recv.tag != XR_TAG_ARRAY || callback.tag != XR_TAG_CLOSURE)
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
         return XR_NULL_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;
@@ -57,7 +57,7 @@ static inline XrValue xrt_array_filter_typed(XrValue recv, XrValue callback) {
 }
 
 static inline XrValue xrt_array_reduce_typed(XrValue recv, XrValue callback, XrValue initial) {
-    if (recv.tag != XR_TAG_ARRAY || callback.tag != XR_TAG_CLOSURE)
+    if (!XR_IS_ARRAY(recv) || callback.tag != XR_TAG_CLOSURE)
         return XR_NULL_VAL;
     xrt_array_t *a = (xrt_array_t *) recv.ptr;
     xrt_closure_t *cl = (xrt_closure_t *) callback.ptr;

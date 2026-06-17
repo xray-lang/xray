@@ -109,7 +109,7 @@ static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_t
                 xrt_fixed_array_set(dst, native_type, i,
                                     xrt_fixed_array_get(src.ptr, XR_ARRAY_REF_ELEM_TYPE(src), i));
         }
-    } else if (src.tag == XR_TAG_ARRAY && src.ptr) {
+    } else if (XR_IS_ARRAY(src) && src.ptr) {
         xrt_array_t *arr = (xrt_array_t *) src.ptr;
         count = arr->length < elem_count ? arr->length : elem_count;
         for (int64_t i = 0; i < count; i++)
@@ -164,7 +164,7 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
                 (unsigned) count);
         abort();
     }
-    if (obj.tag == XR_TAG_ARRAY && key.tag == XR_TAG_I64) {
+    if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
@@ -177,9 +177,9 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         bool ok = false;
         int64_t value = xrt_range_index_ptr((const xrt_range_t *) obj.ptr, key.i, &ok);
         return ok ? XR_FROM_INT(value) : XR_NULL_VAL;
-    } else if (obj.tag == XR_TAG_MAP) {
+    } else if (XR_IS_MAP(obj)) {
         return xrt_map_get((xrt_map_t *) obj.ptr, key);
-    } else if (obj.tag == XR_TAG_SET && key.tag == XR_TAG_I64) {
+    } else if (XR_IS_SET(obj) && key.tag == XR_TAG_I64) {
         // Positional access into the set's insertion order (used by for-in).
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         return xrt_set_value_at(s, key.i);
@@ -199,7 +199,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
                 (unsigned) count);
         abort();
     }
-    if (obj.tag == XR_TAG_ARRAY && key.tag == XR_TAG_I64) {
+    if (XR_IS_ARRAY(obj) && key.tag == XR_TAG_I64) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
@@ -211,7 +211,7 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
                 xrt_array_push(obj, XR_NULL_VAL);
             xrt_array_push(obj, val);
         }
-    } else if (obj.tag == XR_TAG_MAP) {
+    } else if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, key, val);
     }
 }

@@ -29,6 +29,7 @@
 
 #include "xrt_hash.h"
 #include "../shared/xr_float_fmt.h"
+#include "../shared/xr_obj_header.h" /* XrObjType ids shared with the VM */
 
 /* =========================================================================
  * Branch expectation and code-layout hints.
@@ -162,6 +163,13 @@ static inline const char *xrt_enum_to_cstr(XrValue v, char *buf, size_t bufsz) {
 /* String type check (both literal and bump-allocated) */
 #define XR_IS_STR(v) ((v).tag == XR_TAG_STR || (v).tag == XR_TAG_STR_ARC)
 
+/* Header-bearing container type checks. These containers box as a tagged
+ * pointer carrying the XrObjType id in heap_type, identical to the VM, so the
+ * same predicate works on both backends. */
+#define XR_IS_ARRAY(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TARRAY)
+#define XR_IS_MAP(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TMAP)
+#define XR_IS_SET(v) ((v).tag == XR_TAG_PTR && (v).heap_type == XR_TSET)
+
 /* =========================================================================
  * String object — every AOT string value points at an xrt_str_t header.
  *
@@ -243,11 +251,60 @@ static inline uint32_t xrt_str_hash(XrValue v) {
  * Internal helpers — construct XrValue with explicit tag
  * ========================================================================= */
 
+/* Box a heap pointer as a tagged value with an explicit object subtype.
+ * tag is XR_TAG_PTR; heap_type carries the XrObjType id, exactly like the VM.
+ * This is the canonical form for the header-bearing container types so both
+ * backends discriminate them identically (XR_IS_ARRAY/MAP/SET). */
+static inline XrValue xr_mkheap(void *p, uint16_t heap_type) {
+    XrValue r = {0};
+    r.tag = XR_TAG_PTR;
+    r.heap_type = heap_type;
+    r.ptr = p;
+    return r;
+}
+
+/* Box a heap pointer. The three header-bearing container selectors
+ * (XR_TAG_ARRAY/MAP/SET) are normalized to the shared tagged-pointer form
+ * (tag=PTR, heap_type=XR_T*) the VM also uses, so a boxed container is
+ * discriminated identically on both backends; every other tag is stored
+ * verbatim. The selector argument is a compile-time constant at all call
+ * sites (runtime and generated C), so the switch folds away. */
 static inline XrValue xr_mkptr(void *p, uint8_t tag) {
+    switch (tag) {
+        case XR_TAG_ARRAY:
+            return xr_mkheap(p, XR_TARRAY);
+        case XR_TAG_MAP:
+            return xr_mkheap(p, XR_TMAP);
+        case XR_TAG_SET:
+            return xr_mkheap(p, XR_TSET);
+        default:
+            break;
+    }
     XrValue r = {0};
     r.tag = tag;
     r.ptr = p;
     return r;
+}
+
+/* Logical object-kind tag used by kind-dispatch switches. The header-bearing
+ * containers box as XR_TAG_PTR + heap_type, so map them back to their
+ * XR_TAG_ARRAY/MAP/SET kind; every other value's physical tag is already its
+ * kind. This keeps kind-dispatch switches expressed with their case labels
+ * while the physical representation matches the VM's tagged-pointer form. */
+static inline uint8_t xrt_value_kind(XrValue v) {
+    if (v.tag == XR_TAG_PTR) {
+        switch (v.heap_type) {
+            case XR_TARRAY:
+                return XR_TAG_ARRAY;
+            case XR_TMAP:
+                return XR_TAG_MAP;
+            case XR_TSET:
+                return XR_TAG_SET;
+            default:
+                return XR_TAG_PTR;
+        }
+    }
+    return v.tag;
 }
 
 static inline XrValue xr_array_ref(void *ptr, uint8_t elem_native_type, uint16_t elem_count) {

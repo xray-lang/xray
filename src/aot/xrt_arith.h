@@ -199,7 +199,7 @@ static void xrt_print_value(XrValue v, int depth) {
         return;
     }
 
-    switch (v.tag) {
+    switch (xrt_value_kind(v)) {
         case XR_TAG_ARRAY: {
             xrt_array_t *a = (xrt_array_t *) v.ptr;
             if (a && a->adt_enum_name && a->adt_member_name) {
@@ -308,7 +308,7 @@ static inline void xrt_println(XrValue v) {
  * XR_TID_STRING=12, XR_TID_FUNCTION=13, XR_TID_ARRAY=14, XR_TID_SET=15,
  * XR_TID_MAP=16. */
 static inline int64_t xrt_typeof_id(XrValue v) {
-    switch (v.tag) {
+    switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
             return 8; /* XR_TID_INT */
         case XR_TAG_F64:
@@ -352,7 +352,7 @@ static inline XrValue xrt_typeof_str(XrValue v) {
     XRT_STR_LIT_DEF(xs_tuple, "tuple");
     XRT_STR_LIT_DEF(xs_range, "Range");
     XRT_STR_LIT_DEF(xs_object, "object");
-    switch (v.tag) {
+    switch (xrt_value_kind(v)) {
         case XR_TAG_I64:
             return xr_str_lit(&xs_int);
         case XR_TAG_F64:

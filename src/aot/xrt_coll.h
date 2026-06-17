@@ -195,7 +195,7 @@ static inline XrValue xrt_bytes_new_fill(XrValue len_value, XrValue fill_value) 
 }
 
 static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
-    if (src_value.tag != XR_TAG_ARRAY || !src_value.ptr)
+    if (!XR_IS_ARRAY(src_value) || !src_value.ptr)
         return XR_NULL_VAL;
     xrt_array_t *src = (xrt_array_t *) src_value.ptr;
     XrValue arr = xrt_bytes_new_len(src->length);
@@ -212,7 +212,7 @@ static inline XrValue xrt_bytes_new_copy(XrValue src_value) {
 }
 
 static inline XrValue xrt_bytes_new_1(XrValue arg) {
-    if (arg.tag == XR_TAG_ARRAY)
+    if (XR_IS_ARRAY(arg))
         return xrt_bytes_new_copy(arg);
     return xrt_bytes_new_len(xr_value_to_int64_coerce(arg));
 }
@@ -234,7 +234,7 @@ static inline int64_t xrt_array_len(XrValue arr) {
 }
 
 static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t end) {
-    if (arr.tag != XR_TAG_ARRAY || !arr.ptr)
+    if (!XR_IS_ARRAY(arr) || !arr.ptr)
         return XR_NULL_VAL;
     xrt_array_t *src = (xrt_array_t *) arr.ptr;
     if (start < 0)
@@ -308,7 +308,7 @@ static inline XrValue xrt_tuple_get(XrValue tuple, int64_t index) {
 static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end_value) {
     int64_t start = xr_value_to_int64_coerce(start_value);
     int64_t end = xr_value_to_int64_coerce(end_value);
-    if (source.tag == XR_TAG_ARRAY)
+    if (XR_IS_ARRAY(source))
         return xrt_array_slice_view(source, start, end);
     if (XR_IS_STR(source)) {
         const char *s = xr_str_data(source);
@@ -1403,7 +1403,7 @@ static inline XrValue xrt_iterator_new(XrValue coll, uint8_t kind) {
 
 // Park cursor at the next live entry/order[] slot; return 1 if one exists.
 static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
-    if (it->coll.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         if (xrt_map_is_typed(m)) {
             while (it->cursor < m->order_len) {
@@ -1420,7 +1420,7 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
         }
         return 0;
     }
-    if (it->coll.tag == XR_TAG_SET) {
+    if (XR_IS_SET(it->coll)) {
         xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
         if (xrt_set_is_typed(s)) {
             while (it->cursor < s->order_len) {
@@ -1443,7 +1443,7 @@ static inline int xrt_iterator_has_next(xrt_iterator_t *it) {
 static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
     if (!xrt_iterator_has_next(it))
         return XR_NULL_VAL;
-    if (it->coll.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(it->coll)) {
         xrt_map_t *m = (xrt_map_t *) it->coll.ptr;
         int64_t slot = xrt_map_is_typed(m) ? m->order[it->cursor++] : it->cursor++;
         if (it->kind == XRT_ITER_PAIRS) {
@@ -1454,7 +1454,7 @@ static inline XrValue xrt_iterator_next(xrt_iterator_t *it) {
             return xrt_map_slot_value(m, slot);
         return xrt_map_slot_key(m, slot);
     }
-    if (it->coll.tag == XR_TAG_SET) {
+    if (XR_IS_SET(it->coll)) {
         xrt_set_t *s = (xrt_set_t *) it->coll.ptr;
         int64_t slot = xrt_set_is_typed(s) ? s->order[it->cursor++] : it->cursor++;
         return xrt_set_slot_item(s, slot);
@@ -1571,13 +1571,13 @@ static inline XrValue xrt_json_set_name(XrValue obj, const char *name, XrValue v
 }
 
 static inline XrValue xrt_getprop_name(XrValue obj, const char *name) {
-    if (obj.tag == XR_TAG_MAP)
+    if (XR_IS_MAP(obj))
         return xrt_map_get((xrt_map_t *) obj.ptr, xr_box_str(name));
     return XR_NULL_VAL;
 }
 
 static inline XrValue xrt_setprop_name(XrValue obj, const char *name, XrValue val) {
-    if (obj.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(obj)) {
         xrt_map_set((xrt_map_t *) obj.ptr, xr_box_str(name), val);
         return val;
     }
@@ -1714,7 +1714,7 @@ static inline void xrt_dispatch_builtin_destructor(uint32_t kind, void *obj) {
 }
 
 static inline XrValue xrt_value_clone_for_coro(XrValue val) {
-    switch (val.tag) {
+    switch (xrt_value_kind(val)) {
         case XR_TAG_ARRAY: {
             xrt_array_t *src = (xrt_array_t *) val.ptr;
             if (!src)

@@ -30,7 +30,7 @@
 static inline int xrt_weak_value_is_heap_object(XrValue v) {
     if (!v.ptr)
         return 0;
-    switch (v.tag) {
+    switch (xrt_value_kind(v)) {
         case XR_TAG_PTR:
         case XR_TAG_STR:
         case XR_TAG_ARRAY:
@@ -146,11 +146,11 @@ static XrValue xrt_to_bool(XrValue val) {
         return XR_FROM_BOOL(XR_TO_FLOAT(val) != 0.0);
     if (XR_IS_STR(val))
         return XR_FROM_BOOL((xr_str_data(val))[0] != '\0');
-    if (val.tag == XR_TAG_ARRAY)
+    if (XR_IS_ARRAY(val))
         return XR_FROM_BOOL(((xrt_array_t *) val.ptr)->length > 0);
-    if (val.tag == XR_TAG_MAP)
+    if (XR_IS_MAP(val))
         return XR_FROM_BOOL(((xrt_map_t *) val.ptr)->len > 0);
-    if (val.tag == XR_TAG_SET)
+    if (XR_IS_SET(val))
         return XR_FROM_BOOL(((xrt_set_t *) val.ptr)->len > 0);
     return XR_TRUE_VAL;
 }
@@ -233,7 +233,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
     if (XR_IS_STR(recv)) {
         return xrt_str_method_0(xr_str_data(recv), xr_str_len(recv), recv, sym);
     }
-    if (recv.tag == XR_TAG_ARRAY) {
+    if (XR_IS_ARRAY(recv)) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
             return XR_FROM_INT(a->length);
@@ -266,7 +266,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_SORT)
             return xrt_array_sort(recv, NULL);
     }
-    if (recv.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
             return XR_FROM_INT(xrt_map_len(m));
@@ -283,7 +283,7 @@ static inline XrValue xrt_method_0(XrValue recv, int sym) {
         if (sym == XRT_SYM_ENTRIES_ITERATOR)
             return xrt_iterator_new(recv, XRT_ITER_PAIRS);
     }
-    if (recv.tag == XR_TAG_SET) {
+    if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
         if (sym == XRT_SYM_LENGTH || sym == XRT_SYM_SIZE)
             return XR_FROM_INT(xrt_set_len(s));
@@ -525,7 +525,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
     if (XR_IS_STR(recv)) {
         return xrt_str_method_1(xr_str_data(recv), xr_str_len(recv), recv, sym, arg0);
     }
-    if (recv.tag == XR_TAG_ARRAY) {
+    if (XR_IS_ARRAY(recv)) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         if (sym == XRT_SYM_PUSH) {
             xrt_array_push(recv, arg0);
@@ -635,7 +635,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
             }
         }
     }
-    if (recv.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(recv)) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if (sym == XRT_SYM_GET)
             return xrt_map_get(m, arg0);
@@ -644,7 +644,7 @@ static inline XrValue xrt_method_1(XrValue recv, int sym, XrValue arg0) {
         if (sym == XRT_SYM_DELETE)
             return XR_FROM_BOOL(xrt_map_delete(m, arg0));
     }
-    if (recv.tag == XR_TAG_SET) {
+    if (XR_IS_SET(recv)) {
         xrt_set_t *s = (xrt_set_t *) recv.ptr;
         if (sym == XRT_SYM_SET) {
             if ((s->flags & XR_SET_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
@@ -788,7 +788,7 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
         r[rlen] = 0;
         return sv;
     }
-    if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_SLICE) {
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_SLICE) {
         xrt_array_t *a = (xrt_array_t *) recv.ptr;
         int64_t start = (arg0.tag == XR_TAG_I64) ? arg0.i : 0;
         int64_t end = (arg1.tag == XR_TAG_I64) ? arg1.i : a->length;
@@ -802,11 +802,11 @@ static inline XrValue xrt_method_2(XrValue recv, int sym, XrValue arg0, XrValue 
             end = a->length;
         return xrt_array_slice_view(recv, start, end);
     }
-    if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_REDUCE && arg0.tag == XR_TAG_CLOSURE)
         return xrt_array_reduce_typed(recv, arg0, arg1);
-    if (recv.tag == XR_TAG_ARRAY && sym == XRT_SYM_RESIZE)
+    if (XR_IS_ARRAY(recv) && sym == XRT_SYM_RESIZE)
         return xrt_array_resize_value(recv, arg0, arg1);
-    if (recv.tag == XR_TAG_MAP && sym == XRT_SYM_SET) {
+    if (XR_IS_MAP(recv) && sym == XRT_SYM_SET) {
         xrt_map_t *m = (xrt_map_t *) recv.ptr;
         if ((m->flags & XR_MAP_FLAG_WEAK) && !xrt_weak_value_is_heap_object(arg0))
             return XR_NULL_VAL;

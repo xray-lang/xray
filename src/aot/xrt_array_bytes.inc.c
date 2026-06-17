@@ -21,7 +21,7 @@ static inline XrValue xrt_array_with_capacity_value(XrValue cap_value, uint8_t e
 
 static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_value,
                                              XrValue fill_value) {
-    if (arr_value.tag != XR_TAG_ARRAY || !arr_value.ptr)
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
     xrt_array_t *a = (xrt_array_t *) arr_value.ptr;
     int64_t len = xr_value_to_int64_coerce(len_value);
@@ -36,7 +36,7 @@ static inline XrValue xrt_array_resize_value(XrValue arr_value, XrValue len_valu
 }
 
 static inline XrValue xrt_array_reserve_value(XrValue arr_value, XrValue cap_value) {
-    if (arr_value.tag == XR_TAG_ARRAY && arr_value.ptr)
+    if (XR_IS_ARRAY(arr_value) && arr_value.ptr)
         xrt_array_reserve_raw((xrt_array_t *) arr_value.ptr, xr_value_to_int64_coerce(cap_value));
     return arr_value;
 }
@@ -110,14 +110,14 @@ static inline xrt_array_t *xrt_bytes_repeat_from_raw(xrt_array_t *a, int64_t dst
 }
 
 static inline XrValue xrt_bytes_load_u32_le(XrValue arr_value, XrValue offset_value) {
-    if (arr_value.tag != XR_TAG_ARRAY || !arr_value.ptr)
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return XR_FROM_INT(0);
     int64_t off = xr_value_to_int64_coerce(offset_value);
     return XR_FROM_INT((int64_t) xrt_bytes_load_u32_le_raw((xrt_array_t *) arr_value.ptr, off));
 }
 
 static inline XrValue xrt_bytes_load_u64_le(XrValue arr_value, XrValue offset_value) {
-    if (arr_value.tag != XR_TAG_ARRAY || !arr_value.ptr)
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return XR_FROM_INT(0);
     int64_t off = xr_value_to_int64_coerce(offset_value);
     return XR_FROM_INT((int64_t) xrt_bytes_load_u64_le_raw((xrt_array_t *) arr_value.ptr, off));
@@ -125,7 +125,7 @@ static inline XrValue xrt_bytes_load_u64_le(XrValue arr_value, XrValue offset_va
 
 static inline XrValue xrt_bytes_copy_within_value(XrValue arr_value, XrValue dst_value,
                                                   XrValue src_value, XrValue count_value) {
-    if (arr_value.tag != XR_TAG_ARRAY || !arr_value.ptr)
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
     int64_t dst = xr_value_to_int64_coerce(dst_value);
     int64_t src = xr_value_to_int64_coerce(src_value);
@@ -137,8 +137,7 @@ static inline XrValue xrt_bytes_copy_within_value(XrValue arr_value, XrValue dst
 static inline XrValue xrt_bytes_copy_from_value(XrValue dst_value, XrValue src_value,
                                                 XrValue src_offset_value, XrValue dst_offset_value,
                                                 XrValue count_value) {
-    if (dst_value.tag != XR_TAG_ARRAY || src_value.tag != XR_TAG_ARRAY || !dst_value.ptr ||
-        !src_value.ptr)
+    if (!XR_IS_ARRAY(dst_value) || !XR_IS_ARRAY(src_value) || !dst_value.ptr || !src_value.ptr)
         return dst_value;
     int64_t src_offset = xr_value_to_int64_coerce(src_offset_value);
     int64_t dst_offset = xr_value_to_int64_coerce(dst_offset_value);
@@ -150,7 +149,7 @@ static inline XrValue xrt_bytes_copy_from_value(XrValue dst_value, XrValue src_v
 
 static inline XrValue xrt_bytes_repeat_from_value(XrValue arr_value, XrValue dst_value,
                                                   XrValue distance_value, XrValue count_value) {
-    if (arr_value.tag != XR_TAG_ARRAY || !arr_value.ptr)
+    if (!XR_IS_ARRAY(arr_value) || !arr_value.ptr)
         return arr_value;
     int64_t dst = xr_value_to_int64_coerce(dst_value);
     int64_t distance = xr_value_to_int64_coerce(distance_value);
