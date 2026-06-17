@@ -89,7 +89,7 @@ static inline int64_t xrt_int_mod(int64_t a, int64_t b) {
 
 /* Shifts: the language defines the count as taken mod 64 (spec: "shift count
  * is taken modulo 64 — unlike C, xray shifts are always defined"). Matches
- * xi_opt constant folding and JIT hardware behavior (x64 SHL/SAR with CL,
+ * xi_opt constant folding and AOT hardware behavior (x64 SHL/SAR with CL,
  * ARM64 LSL/ASR, RISC-V SLL/SRA all mask to 6 bits). Left shift goes through
  * uint64_t because shifting into/past the sign bit is UB on signed in C. */
 static inline int64_t xrt_i64_shl(int64_t a, int64_t b) {

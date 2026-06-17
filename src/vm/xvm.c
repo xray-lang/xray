@@ -721,7 +721,7 @@ startfunc:
 
     // Record defer start position for current frame.
     // Only on first entry (pc at proto start).  Re-entries (GO_CHILD
-    // continuation, exception handler, OSR) must keep the original mark
+    // continuation, exception handler) must keep the original mark
     // so defers registered before the suspension point are not lost.
     if (vm_ctx->defer_frame_marks && pc == PROTO_CODE_BASE(cl->proto)) {
         vm_ctx->defer_frame_marks[VM_FRAME_COUNT - 1] = vm_ctx->defer_count;

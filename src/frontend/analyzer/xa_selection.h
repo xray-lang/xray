@@ -21,7 +21,7 @@
  *
  *   The lowerer and backends read these facts instead of re-discovering
  *   member resolution at each stage, eliminating duplicated logic and
- *   ensuring consistency across VM/JIT/AOT.
+ *   ensuring consistency across VM/AOT.
  *
  * OWNERSHIP:
  *   One selection table per XaAnalyzer, freed with the analyzer.

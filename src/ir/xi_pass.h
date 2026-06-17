@@ -17,7 +17,7 @@
  *   Three optimization levels control which passes fire:
  *     XI_OPT_NONE  — verification only (check pipelines, AOT dry-run)
  *     XI_OPT_LIGHT — cheap cleanup (VM default: constfold, copy_prop, DCE)
- *     XI_OPT_FULL  — all passes including SCCP, GVN, LICM (JIT Tier 2, AOT)
+ *     XI_OPT_FULL  — all passes including SCCP, GVN, LICM (AOT)
  *
  * INVARIANTS:
  *   1. Every pass preserves SSA form.

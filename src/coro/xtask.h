@@ -15,7 +15,7 @@
  *
  * WHY THIS DESIGN:
  *   - Decouples user handle (runtime-managed, ~128B) from executor
- *     (pool-managed VM/JIT/AOT execution context)
+ *     (pool-managed VM/AOT execution context)
  *   - Parent-child hierarchy enables linked/monitored go and scope blocks
  *   - CompletionNode allows multiple listeners (monitor channels, callbacks)
  *   - 6-state machine tracks Completing/Cancelling transitions for children

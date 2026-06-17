@@ -654,7 +654,7 @@ XR_FUNC void xi_emit_closure_new(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         }
     }
 
-    /* Transfer Xi IR ownership to child proto for JIT direct lowering */
+    /* Transfer Xi IR ownership to child proto for AOT direct lowering */
     xi_emit_attach_ir(child_proto, child_func);
     uint16_t cidx = (uint16_t) v->aux_int;
     if (cidx < ctx->func->nchildren && ctx->func->children[cidx] == child_func) {

@@ -123,7 +123,6 @@ static inline bool xr_gc_ptrset_slot_live(XrGCHeader *slot) {
 typedef struct XrCoroGC {
     // === Cache line 0: Region allocator hot path ===
     // cursor/limit/current_block are the first 3 fields of XrRegionHeap.
-    // JIT inline allocation reads cursor/limit at fixed offsets.
     XrRegionHeap region;
 
     // === Allocation accounting ===
@@ -179,17 +178,6 @@ typedef struct XrCoroGC {
     uint32_t cycle_root_cap;           // capacity of cycle_roots array
     uint32_t cycle_collect_threshold;  // auto-trigger fullgc when root count reaches this
 } XrCoroGC;
-
-/* ========== JIT Struct Offsets (compile-time constants) ========== */
-/* Only the Region bump fields and totalbytes are read by JIT inline alloc now;
- * the tracing offsets (gcstate / currentwhite / GCdebt / gc_requested) were
- * removed along with the fields. */
-
-#define XR_COROGC_OFFSET_REGION offsetof(XrCoroGC, region)
-#define XR_COROGC_OFFSET_TOTALBYTES offsetof(XrCoroGC, totalbytes)
-
-#define XR_REGION_OFFSET_CURSOR offsetof(XrRegionHeap, cursor)
-#define XR_REGION_OFFSET_LIMIT offsetof(XrRegionHeap, limit)
 
 /* ========== Coroutine GC Lifecycle API ========== */
 
@@ -279,11 +267,11 @@ XR_FUNC void xr_cycle_roots_destroy(XrCoroGC *gc);
 /* ========== Unified Compile-Time RC Primitives ==========
  *
  * The single authoritative dup/drop entry points. EVERY reference-counting
- * site routes through these: the VM OP_DUP/OP_DROP dispatch, the JIT
- * dup/drop helpers, and the container/field element retain/release in the
- * object runtime. Keeping one implementation means the DEAD guard and the
- * cycle-root bookkeeping cannot drift apart between paths (the historical
- * bug: OP_DROP/JIT bypassed cycle-root tracking that only the container
+ * site routes through these: the VM OP_DUP/OP_DROP dispatch and the
+ * container/field element retain/release in the object runtime. Keeping one
+ * implementation means the DEAD guard and the cycle-root bookkeeping cannot
+ * drift apart between paths (the historical bug: OP_DROP bypassed cycle-root
+ * tracking that only the container
  * path performed, so local-variable cycles leaked and stale freelist
  * entries could alias back into cycle_roots).
  *

@@ -12,7 +12,7 @@
  *     inlines them at the call site. The address-take inside
  *     xr_float_method_table[] forces a single out-of-line copy for
  *     the VM dispatcher.
- *   - Pure / no-GC predicates carry the matching flags so JIT and AOT
+ *   - Pure / no-GC predicates carry the matching flags so AOT
  *     specializers can hoist them above safepoints.
  */
 

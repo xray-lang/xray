@@ -8,21 +8,20 @@
  * xi.h - Typed SSA IR core data structures
  *
  * KEY CONCEPT:
- *   Mid-level typed SSA IR that all three backends (VM/JIT/AOT) consume.
+ *   Mid-level typed SSA IR that both backends (VM/AOT) consume.
  *   Every SSA value carries an authoritative XrType* from the semantic
  *   analyzer, and XrRep is derived from it via xr_type_rep().
  *
  *   Design follows Go SSA: Value = instruction (def + op + args combined
  *   in one struct). This eliminates the split between "instruction" and
- *   "virtual register" that the legacy JIT IR uses.
+ *   "virtual register" common to lower-level IRs.
  *
  *   Operation granularity is mid-level: high-level semantics preserved
  *   (XI_CALL_METHOD, XI_ITER_NEXT) while control flow is explicit
  *   (basic blocks + branch/jump terminators, phi nodes for merges).
  *
  * NAMING:
- *   Xi prefix (Xray IR, new generation) avoids collision with the legacy
- *   Xm prefix in src/jit/ (Xray Machine IR, low-level SSA for JIT).
+ *   Xi prefix (Xray IR) names this typed SSA layer.
  *
  * INVARIANTS:
  *   1. SSA form: each XiValue has exactly one definition point.
@@ -106,8 +105,6 @@ typedef uint32_t XiInvariantMask;
 #define XI_INV_MEM_SSA ((XiInvariantMask) (1u << 10)) /* memory phi / version chain built */
 #define XI_INV_RANGE_ANNOTATED                                                                     \
     ((XiInvariantMask) (1u << 11)) /* integer values carry [lo, hi] range */
-#define XI_INV_IC_ATTACHED                                                                         \
-    ((XiInvariantMask) (1u << 12)) /* call-site values carry IC snapshot metadata */
 
 typedef uint16_t XiVarId;
 
@@ -179,9 +176,9 @@ static inline XiInvariantMask xi_stage_invariants(XiStage s) {
  *  XI_GET_BUILTIN   name string (char*)  global index
  *  XI_IMPORT_REF    XiImportRef*         resolved shared slot (-1=unresolved)
  *
- *  Consumers: xi_emit.c (VM bytecode), xi_to_xm.c (JIT), xi_cgen.c (AOT).
+ *  Consumers: xi_emit.c (VM bytecode), xi_cgen.c (AOT).
  *  XI_CALL_METHOD.aux_int carries SymbolId (resolved at lowering time).
- *  xi_emit reads it for OP_INVOKE; xi_to_xm reads it for JIT dispatch.
+ *  xi_emit reads it for OP_INVOKE.
  */
 
 typedef enum {
@@ -425,14 +422,6 @@ typedef enum {
      * Emits dedicated opcodes (OP_SET_LOCAL, OP_GET_LOCAL, OP_LOCK_THREAD,
      * OP_UNLOCK_THREAD) or OP_CORO_CTRL with sub-opcode. */
     XI_CORO_OP,
-
-    /* Speculative guard: deopt if runtime type ≠ expected type.
-     * args[0] = guarded value (tagged object).
-     * aux     = expected XrClass* (cast from pointer).
-     * Result  = args[0] re-typed to the narrower type.
-     * Inserted by xi_opt_spec_narrow when mono IC indicates a dominant
-     * receiver type.  Backend emits a type check + deopt side exit. */
-    XI_GUARD_TYPE,
 
     /* SIMD / Vector ops for SLP vectorization.
      * VF (vector factor) is encoded in aux_int.
@@ -821,9 +810,6 @@ typedef struct XiFunc {
 
     /* Opaque side-tables owned by analysis passes. */
     void *analysis_data[2];
-
-    /* Inline-cache snapshot metadata attached before speculative passes. */
-    struct XiIcTable *ic_table;
 } XiFunc;
 
 #include "xi_core_api.h"

@@ -6,7 +6,7 @@
  * Licensed under the MIT License
  *
  * xr_obj_header.h - Single source of truth for the object header layout shared
- * by the VM, JIT, and AOT runtimes.
+ * by the VM and AOT runtimes.
  *
  * Self-contained: depends only on <stdint.h>/<stdatomic.h> so the AOT runtime
  * prelude can adopt the same header without pulling in any runtime translation
@@ -67,8 +67,8 @@ typedef struct XrGCHeader XrObjHeader;
 #define XR_OBJ_STORAGE_BUMP 0x0800
 #define XR_OBJ_STORAGE_STACK 0x1000
 
-/* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so VM,
- * JIT, and AOT fast paths never mistake them for unique thread-local objects. */
+/* Shared signed-RC sentinels. Bump/immortal objects store XR_RC_STICKY so the
+ * VM and AOT fast paths never mistake them for unique thread-local objects. */
 #define XR_RC_STICKY ((int32_t) INT32_MIN)
 #define XR_RC_STICKY_BAND ((int32_t) (INT32_MIN + 1024))
 #define XR_RC_INIT ((int32_t) 0)

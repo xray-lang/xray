@@ -11,13 +11,13 @@
  *   Inline caches (field IC, method IC, Json shape IC) are kept on each
  *   XrVMContext rather than the shared, immutable XrProto. This file owns
  *   the bookkeeping: lazy allocation per (proto_id), deep-copy snapshots
- *   for JIT/AOT consumers, and full teardown on coroutine release.
+ *   for AOT/debug consumers, and full teardown on coroutine release.
  *
  * INVARIANTS:
  *   - ic_field_tables / ic_method_tables grow in lockstep; both arrays are
  *     always sized to ic_tables_capacity.
  *   - A NULL slot means "no IC recorded yet for this proto in this ctx".
- *   - Snapshots returned to JIT are independently owned and never alias
+ *   - Snapshots are independently owned and never alias
  *     live ctx storage; they are safe to read from a background thread
  *     after the ctx mutates further.
  */
@@ -154,7 +154,10 @@ XrICMethodTable *xr_vm_ctx_get_ic_methods(const XrVMContext *ctx, const XrProto 
     return ctx->ic_method_tables[pid];
 }
 
-/* ========== Snapshot API for JIT/AOT consumers ========== */
+/* ========== Snapshot API ========== */
+/* Deep-copy the current IC state for `proto` so a consumer (AOT profile-guided
+ * optimization, IC inspection/debugging) gets a table independent of the live
+ * ctx. Returns NULL when no IC has been recorded. */
 
 XrICFieldTable *xr_vm_ic_fields_snapshot(XrVMContext *ctx, XrProto *proto) {
     XrICFieldTable *src = xr_vm_ctx_get_ic_fields(ctx, proto);
@@ -200,8 +203,8 @@ XrICMethodTable *xr_vm_ic_methods_snapshot(XrVMContext *ctx, XrProto *proto) {
             }
             XrMegaCache *mc_dst = (XrMegaCache *) xr_malloc(sizeof(XrMegaCache));
             if (!mc_dst) {
-                // Best-effort: drop the mega cache on this entry; the JIT
-                // consumer can fall back to poly entries / class lookup.
+                // Best-effort: drop the mega cache on this entry; the consumer
+                // can fall back to poly entries / class lookup.
                 dst->caches[i].mega_cache = NULL;
                 continue;
             }

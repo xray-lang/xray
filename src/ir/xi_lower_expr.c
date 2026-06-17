@@ -2805,7 +2805,7 @@ static XiValue *lower_as_expr(XiLower *l, AstNode *node) {
      * complement, bit[0]=is_safe. The intermediate uint32_t cast is
      * required because `tid` can be -1 (unrecognised generic name); a
      * signed left shift of a negative value is undefined behaviour and
-     * would surface as UBSan failure under jit-force-pr (linux-asan).
+     * would surface as a UBSan failure (linux-asan).
      * The corresponding decode in xi_emit_arith.c uses the signed shift
      * `aux_int >> 1` and reads the low 32 bits back into `int`, which
      * round-trips the sentinel on every two's-complement target. */

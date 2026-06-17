@@ -10,8 +10,8 @@
  *
  * KEY CONCEPT:
  *   These types model the *runtime* execution state. The VM interpreter
- *   (src/vm/) and JIT engine (src/jit/) read and write these structures but
- *   do not own their public shape; the isolate fallback and VM coroutine
+ *   (src/vm/) reads and writes these structures but
+ *   does not own their public shape; the isolate fallback and VM coroutine
  *   backend state carry concrete instances. Lives at the runtime layer so GC,
  *   reflection and error handling never reverse-include into vm/.
  */
@@ -81,7 +81,7 @@ typedef enum {
     XR_CFUNC_BLOCKED,
     XR_CFUNC_ERROR,
     XR_CFUNC_CALL_CLOSURE,  // closure frame pushed, execute it
-    XR_CFUNC_WOULD_BLOCK    // JIT try-mode: would block, no side effects
+    XR_CFUNC_WOULD_BLOCK    // try-mode: would block, no side effects
 } XrCFuncResult;
 #define XR_CFUNC_RESULT_DEFINED
 #endif

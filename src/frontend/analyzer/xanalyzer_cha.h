@@ -15,7 +15,7 @@
  *
  * THREAD SAFETY:
  *   The CHA structure is built once during module analysis and is
- *   read-only thereafter.  JIT compilation threads can query it
+ *   read-only thereafter.  Analysis and codegen threads can query it
  *   concurrently without synchronization.
  *
  * INVALIDATION:

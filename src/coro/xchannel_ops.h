@@ -9,7 +9,7 @@
  *
  * All non-blocking channel operations (tryRecv, trySend) are defined
  * here exactly once, then called from VM instruction dispatch, VM cold
- * call dispatch, and JIT runtime helpers.  This eliminates the class of
+ * call dispatch, and runtime helpers.  This eliminates the class of
  * bugs where one path diverges from another (missing deep copy, missing
  * ok flag, missing unbuffered rendezvous, etc.).
  *

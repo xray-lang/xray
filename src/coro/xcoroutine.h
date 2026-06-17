@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   - XrCoroutine: scheduler-owned coroutine shell plus backend payload
- *   - VM/JIT/AOT execution state lives behind backend_state
+ *   - VM/AOT execution state lives behind backend_state
  *   - Reduction-based fair scheduling
  *
  * SCHEDULING INVARIANTS:
@@ -158,9 +158,8 @@ struct XrCoroutine {
     _Atomic uint32_t flags;  //  4 bytes: state flags (every dispatch)
     /* Relaxed atomic: owner decrements on back-edges; preempt/cancel pokes
      * it to 0 cross-thread (xr_coro_request_yield). A lost poke is benign —
-     * the atomic CANCEL_REQUESTED flag is the authoritative signal. JIT
-     * code accesses it by raw offset (same 4-byte layout). */
-    _Atomic int32_t reductions;      //  4 bytes: remaining before yield (JIT: check <= 0)
+     * the atomic CANCEL_REQUESTED flag is the authoritative signal. */
+    _Atomic int32_t reductions;      //  4 bytes: remaining before yield
     struct XrCoroutine *sched_link;  //  8 bytes: MPSC/steal queue linkage
     struct XrCoroutine *next;        //  8 bytes: blocked/ready list linkage
     struct XrCoroutine *prev;        //  8 bytes: blocked/ready list linkage
@@ -184,7 +183,7 @@ struct XrCoroutine {
      * WARM ZONE — GC/result hot fields and backend-owned cold state
      * ================================================================ */
     struct XrCoroGC *coro_gc;     // GC safepoint: checked every loop back-edge
-    struct XrayIsolate *isolate;  // JIT runtime helpers use 22+ times
+    struct XrayIsolate *isolate;  // isolate handle (hot: used throughout execution)
     XrValue result;
     XrValue error;
     /* true: `error` came from the value-return channel (user `throw <enum>`);
@@ -433,8 +432,7 @@ static inline int32_t xr_coro_consume_reds(XrCoroutine *coro, int32_t cost) {
     return next;
 }
 
-// Check if coroutine should yield (for JIT loop back-edges)
-// JIT only needs: load coro->reductions; cmp 0; jle yield_stub
+// Check if coroutine should yield (at loop back-edges).
 static inline bool xr_coro_should_yield(XrCoroutine *coro) {
     return xr_coro_reds(coro) <= 0;
 }

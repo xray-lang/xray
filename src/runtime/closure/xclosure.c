@@ -19,8 +19,7 @@
 
 /*
  * Create a closure with a flat upvalue array sized from proto->upvalues.
- * Upvalues are zero-initialised to null; callers populate them via OP_CLOSURE
- * or the JIT closure-creation path.
+ * Upvalues are zero-initialised to null; callers populate them via OP_CLOSURE.
  */
 XrClosure *xr_closure_new(XrayIsolate *isolate, XrProto *proto, struct XrCoroutine *coro) {
     XR_DCHECK(isolate != NULL, "closure_new: NULL isolate");

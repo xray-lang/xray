@@ -11,7 +11,7 @@
  *
  *   The legacy dispatcher inlined push to skip a function call
  *   inside a hot loop. Per-type table dispatch incurs one indirect
- *   call (slot->fn), which is what the JIT and invoke-IC will
+ *   call (slot->fn), which is what the invoke-IC will
  *   eventually constant-fold. Until that lands, push uses the
  *   same fast path (capacity check + direct write + GC back
  *   barrier) inside the method body — equivalent code, just

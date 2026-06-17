@@ -28,7 +28,7 @@ typedef struct XrErrorSet XrErrorSet;
 
 /* ========== XrRep - Machine Representation ========== */
 /*
- * Replaces XmType. Derived from XrType via xr_type_rep().
+ * Derived from XrType via xr_type_rep().
  * Only 5 values — no value-level hints (NULL/TRUE/FALSE are xr_tag).
  */
 typedef enum {
@@ -355,7 +355,7 @@ XR_FUNC XrType *xr_type_new_int_width(XrayIsolate *X, int width);    // XrNative
 XR_FUNC XrType *xr_type_new_float_width(XrayIsolate *X, int width);  // XrNativeType value
 
 // API: Derive XrSlotType from XrType for the unified type pipeline.
-// Returns the storage slot type — used by GC scanning, JIT guards, and AOT thunks.
+// Returns the storage slot type — used by GC scanning and AOT codegen.
 // native_width stores XrNativeType; widen all int variants to I64, float variants to F64.
 static inline uint8_t xr_type_to_slot_type(XrType *type) {
     if (!type)
@@ -775,7 +775,7 @@ static inline XrType **xr_type_get_param_types(XrType *t) {
 }
 
 // ============================================================================
-// SlotType → XrType* Conversion (for JIT feedback → type unification)
+// SlotType → XrType* Conversion (for type unification)
 // ============================================================================
 
 // Convert XrSlotType to XrType* singleton. Returns NULL for ANY/unknown.

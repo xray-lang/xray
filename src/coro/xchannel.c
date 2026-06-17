@@ -44,7 +44,7 @@ static void channel_wake_coro_kind(XrCoroutine *coro, XrChannelKind kind, bool w
 // skip the instruction replay. Gated per value: heap values that need a
 // receive-side deep copy keep the replay protocol (the copy must run on
 // the receiver's own thread). Waiters without the registered capability
-// (timeout variants, cfunc/JIT, method-call paths) re-execute the
+// (timeout variants, cfunc, method-call paths) re-execute the
 // channel instruction and derive ok from resume_status.
 static inline void chan_try_deliver_recv(XrCoroutine *receiver, XrValue v) {
     XrCoroExt *ext = receiver->ext;

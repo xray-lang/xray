@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Workers schedule backend-neutral coroutine run results. This file owns the
- *   VM-shaped execution state, maps VM/JIT/CFunc outcomes into the coroutine
+ *   VM-shaped execution state, maps VM/CFunc outcomes into the coroutine
  *   ABI, and keeps interpreter frame details out of the worker hot path.
  */
 
@@ -1416,11 +1416,10 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *
 #endif
 }
 
-// ========== run_first_exec: Frame Setup + JIT Entry + Interpreter ==========
+// ========== run_first_exec: Frame Setup + Interpreter ==========
 //
-// Builds the coroutine's first bytecode frame (VM stack/frame/args), then tries
-// the JIT entry fast path (if proto has compiled code and hasn't deopted)
-// before falling back to the interpreter.
+// Builds the coroutine's first bytecode frame (VM stack/frame/args), then runs
+// the interpreter.
 //
 // Precondition: caller has already set RUNNING|STARTED on coro->flags and
 // bound current_coro on both ctx and coro_ctx. VM state must carry a
@@ -1479,7 +1478,6 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
 //
 // Handles every resume case except the inline channel-resume fast path that
 // xr_coro_run_on_worker handles directly.  Supports:
-//   - JIT suspend/resume (run_jit_resume re-enters compiled code)
 //   - XR_RESUME_CONTINUATION / XR_RESUME_DEBUG (run() directly)
 //   - Default unroll via VM continuation unroll then run()
 static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoroutine *coro,
@@ -1538,7 +1536,7 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 // ========== Thin Dispatch Shell ==========
 //
 // vm_backend_resume_on_worker is the VM backend dispatch hub combining
-// entry checks, channel-resume fast path, first-execution setup, JIT+unroll
+// entry checks, channel-resume fast path, first-execution setup, unroll
 // resume, and result finalization. It is now a thin dispatch shell that
 // hands off to run_first_exec / run_resume_path / run_cfunc_coro /
 // run_finalize as appropriate.
@@ -1573,8 +1571,6 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
     // Most common resume case: channel wake of a started coroutine. Acquire-
     // load of flags establishes happens-before with sender's flag swap so
     // recv_slot is visible before we enter run().
-    // Handles both VM bytecode and JIT coroutines (the redundant separate
-    // !jit_resume_entry exclusion — JIT now uses run_jit_resume directly).
     if ((_fast_resume == XR_RESUME_CHANNEL || is_select_channel_resume(coro, _fast_resume)) &&
         (_fast_flags & XR_CORO_FLG_STARTED)) {
         ctx->current_coro = coro;

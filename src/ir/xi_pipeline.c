@@ -71,7 +71,7 @@ XR_FUNC XiPipelineConfig xi_pipeline_default_config(void) {
     cfg.run_emit = true;
     cfg.dump_ir_before = false;
     cfg.dump_ir_after = false;
-    cfg.budget_ns = XI_BUDGET_JIT_TIER1_NS;
+    cfg.budget_ns = XI_BUDGET_OPT_NS;
     cfg.rep_policy = xi_rep_policy_tagged_boundary();
     return cfg;
 }
@@ -168,7 +168,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
     /* Stack alloc rewrite: replace NO_ESCAPE heap allocs with XI_STACK_ALLOC.
      * Must run after escape analysis and before ARC insertion (STACK_ALLOC
      * values don't need retain/release since they have frame lifetime).
-     * Gated on run_backend_lower because only backend codegen (AOT/JIT)
+     * Gated on run_backend_lower because only backend codegen (AOT)
      * consumes XI_STACK_ALLOC; the VM emitter has no handler for it. */
     if (cfg->run_escape && cfg->run_backend_lower) {
         xi_stack_alloc_rewrite(ir);
@@ -242,7 +242,7 @@ static XiPipelineResult run_pipeline(XiFunc *ir, struct XrayIsolate *X,
             return res;
         }
         res.proto = proto;
-        /* Transfer Xi IR ownership to proto for JIT direct lowering.
+        /* Transfer Xi IR ownership to proto for AOT direct lowering.
          * Null res.ir so xi_pipeline_result_free won't double-free. */
         xi_emit_attach_ir(proto, ir);
         res.ir = NULL;
@@ -339,7 +339,7 @@ XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isol
         return NULL;
     }
 
-    /* Transfer IR ownership to proto for JIT direct lowering */
+    /* Transfer IR ownership to proto for AOT direct lowering */
     xi_emit_attach_ir(proto, ir);
     return proto;
 }

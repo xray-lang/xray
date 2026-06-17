@@ -60,7 +60,7 @@ static void crash_handler(int sig) {
 int main(int argc, char **argv) {
     /* MSVC's CRT (and most libc implementations) fully buffer stdout when
      * it is connected to a pipe — exactly the configuration the regression
-     * runner uses. If a JIT-compiled coroutine traps or aborts before the
+     * runner uses. If a coroutine traps or aborts before the
      * test framework can flush, every "0301 + 1 passed" line stays in the
      * 4 KB user buffer and the dump that XRAY_TEST_DUMP_FAILED=1 prints
      * on CI is empty. Disable buffering on the standard streams so a

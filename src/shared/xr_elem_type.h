@@ -7,7 +7,7 @@
  *
  * xr_elem_type.h - Shared typed-array element type enum and size table.
  *
- * Used by VM runtime (xarray.h), JIT runtime, and AOT runtime (xrt_coll.h)
+ * Used by VM runtime (xarray.h) and AOT runtime (xrt_coll.h)
  * to agree on storage layout for typed arrays.
  *
  * Dependency: <stdint.h> only. Caller provides XrValue definition.

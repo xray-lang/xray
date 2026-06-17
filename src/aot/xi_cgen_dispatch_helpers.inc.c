@@ -1444,7 +1444,7 @@ static const XiFunc *cg_lookup_class_ctor_global(XiCgenCtx *ctx, const char *cla
  * object (typed `any`) as the receiver, so the receiver-based method dispatch
  * cannot recover the class. Resolve the constructor from the call's result type
  * (always the constructed instance type) and emit it exactly like a bare class
- * call `X(args)`, keeping AOT consistent with VM/JIT for the `new` form. */
+ * call `X(args)`, keeping AOT consistent with the VM for the `new` form. */
 static bool xicgen_emit_user_constructor(XiCgenCtx *ctx, FILE *out, const XiFunc *f,
                                          const XiValue *v, const char *prefix) {
     const char *class_name = v->type ? xr_type_get_class_name(v->type) : NULL;

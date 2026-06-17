@@ -56,7 +56,7 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
 /* Human-readable error string for emit status. */
 XR_FUNC const char *xi_emit_status_str(XiEmitStatus s);
 
-/* Attach Xi IR to proto for JIT direct lowering.
+/* Attach Xi IR to proto for AOT direct lowering.
  * Transfers XiFunc ownership: proto will free it in xr_proto_free().
  * Must only be called once per proto. */
 XR_FUNC void xi_emit_attach_ir(struct XrProto *proto, XiFunc *ir);

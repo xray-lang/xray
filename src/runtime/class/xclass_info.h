@@ -10,7 +10,7 @@
  * KEY CONCEPT:
  *   XrClassInfo is the canonical class metadata structure. It is populated
  *   by the analyzer during compilation and read by runtime/type, runtime/class
- *   and VM/JIT during execution.
+ *   and VM/AOT during execution.
  *
  * WHY THIS LAYER:
  *   Previously defined in frontend/analyzer and caused runtime/value -> frontend
@@ -38,8 +38,8 @@ typedef struct XaScope XaScope;
 struct XrHashMap;
 struct XrStructLayout;
 
-// Virtual method slot for JIT devirtualization.
-// Populated by the analyzer (Pass 1.5); consumed by JIT.
+// Virtual method slot for static (compile-time) devirtualization.
+// Populated by the analyzer (Pass 1.5); consumed by the xi_opt_devirt pass.
 typedef struct XaMethodSlot {
     const char *name;    // Method name
     XaSymbol *symbol;    // Method symbol (analyzer-owned)
@@ -76,7 +76,7 @@ struct XrClassInfo {
     XrType **constructor_params;
     int constructor_param_count;
 
-    // Virtual method table (built in Pass 1.5 for JIT devirtualization)
+    // Virtual method table (built in Pass 1.5 for static devirtualization)
     XaMethodSlot *vtable;  // Virtual method slots (NULL if not built)
     int vtable_size;       // Number of vtable entries
     bool has_subclass;     // true if any class extends this one

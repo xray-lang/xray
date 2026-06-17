@@ -82,7 +82,7 @@ static inline void *xrt_alloc_aligned_impl(size_t size) {
  *          ^--- hdr pointer (via XRT_ARC_HDR macro)
  *
  * AOT objects carry the unified XrGCHeader (src/shared/xr_obj_header.h), the
- * same 16-byte header the VM/JIT runtime uses, so a value crossing the
+ * same 16-byte header the VM/AOT runtime uses, so a value crossing the
  * coroutine boundary needs no re-shelling. `type` is the type-table tag for
  * destructor dispatch; `extra` carries XR_OBJ_STORAGE_BUMP (bump vs heap) and
  * XR_OBJ_HAS_DTOR; `refcount` is the 0-based RC (rc == N means N+1 live refs).
@@ -231,7 +231,7 @@ static inline void xrt_retain(XrValue v) {
 }
 
 /* ARC release: release one owning reference, free on the LAST one.
- * 0-based RC (matching the VM/JIT unified header): rc == 0 means a single
+ * 0-based RC (matching the VM/AOT unified header): rc == 0 means a single
  * owner, so a release at rc == 0 frees; otherwise it just decrements. The
  * old `--rc <= 0` form freed one reference too early for multi-owner objects
  * (rc == 1 means two owners, but `--rc == 0 <= 0` would have freed it).

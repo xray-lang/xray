@@ -8,8 +8,8 @@
  * test_xi_intrinsic.c - Verify xi_intrinsic.def and xi_method_sym.def
  *
  * Self-contained test that generates enum/name/arity checks directly
- * from the .def files without linking against xm_intrinsic.c (which
- * pulls in AOT sentinel symbols unavailable in unit-test builds).
+ * from the .def files without linking against AOT sentinel symbols that
+ * are unavailable in unit-test builds.
  */
 
 #include <stdio.h>

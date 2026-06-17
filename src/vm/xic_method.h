@@ -48,7 +48,7 @@ typedef struct XrMegaCache {
 typedef struct XrICEntry {
     XrClass *klass;
     XrMethod *method;
-    uint32_t hit_count;  // per-entry hit counter (always-on, JIT type feedback)
+    uint32_t hit_count;  // per-entry hit counter (always-on)
 } XrICEntry;
 
 // Per-call-site polymorphic inline cache
@@ -194,11 +194,11 @@ static inline XrMethod *xr_ic_method_lookup(XrICMethod *cache, XrClass *klass, i
     return method;
 }
 
-/* ========== Type Feedback API (for JIT/AOT consumers) ========== */
+/* ========== Type Feedback API (for the optimizer/PGO and debugging) ========== */
 
 /*
- * IC state classification for JIT decision making.
- * JIT reads IC state to decide specialization strategy:
+ * IC state classification.
+ * A consumer reads IC state to decide specialization strategy:
  *   UNINIT  → no data, skip optimization
  *   MONO    → single type, best candidate for speculative devirtualization
  *   POLY    → 2-4 types, generate type-check chain

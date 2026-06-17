@@ -39,8 +39,8 @@
  *
  *   The legacy split APIs remain exported as thin wrappers so
  *   downstream code that hasn't migrated still compiles, but every
- *   throw site inside the VM, the cold paths and the JIT runtime
- *   has been pointed at the unified function.
+ *   throw site inside the VM and the cold paths has been pointed at
+ *   the unified function.
  */
 
 #include "xvm_internal.h"

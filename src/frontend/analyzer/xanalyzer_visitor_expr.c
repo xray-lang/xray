@@ -378,7 +378,7 @@ static XrType *binary_arith_distribute(XaInferContext *ctx, int op, XrType *left
             if (!r) {
                 // Skip incompatible pairs (e.g. string + int when both
                 // sides are int|string) — runtime narrowing eliminates
-                // these at the JIT/VM level.
+                // these at the VM level.
                 continue;
             }
             acc = acc ? xr_type_union(X, acc, r) : r;

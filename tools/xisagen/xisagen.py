@@ -267,7 +267,6 @@ def parse_sexpr(tokens: list, path: str = '<input>') -> list[SExpr]:
 
 VALID_XI_EFFECTS = {
     'allocates',
-    'may-deopt',
     'may-suspend',
     'may-throw',
     'memory-read',

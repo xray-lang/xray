@@ -438,7 +438,7 @@ vmcase(OP_CALL_KEEP) {
 vmcase(OP_CALL_STATIC) {
     /* OP_CALL_STATIC A B: call R[A] with B args, result to R[A]
     ** Emitted when codegen knows R[A] is a plain closure. It reuses
-    ** OP_CALL's closure frame/JIT path while skipping dynamic callable
+    ** OP_CALL's closure frame path while skipping dynamic callable
     ** classification (cfunc / enum / class / ADT constructor).
     */
     goto op_call_entry;

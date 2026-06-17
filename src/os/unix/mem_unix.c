@@ -11,8 +11,7 @@
  * anonymous pages, which is the contract callers expect. We
  * translate the xray PROT bitset onto POSIX PROT_* and ignore
  * unsupported combinations rather than fail; a request for
- * EXEC|WRITE is legal on POSIX (W^X enforcement is a JIT
- * concern that lives outside this layer).
+ * EXEC|WRITE is legal on POSIX and is not policed here.
  */
 
 #include "../os_mem.h"

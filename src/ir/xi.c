@@ -13,7 +13,6 @@
  */
 
 #include "xi.h"
-#include "xi_ic.h"
 #include "xi_loop.h"
 #include "xi_module.h"
 #include "xi_effect.h"
@@ -232,12 +231,6 @@ void xi_func_free(XiFunc *f) {
     if (f->loop_cache) {
         xi_loopinfo_free(f->loop_cache);
         f->loop_cache = NULL;
-    }
-
-    /* Free IC snapshot metadata table, if any. */
-    if (f->ic_table) {
-        xi_ic_table_free(f->ic_table);
-        f->ic_table = NULL;
     }
 
     /* Arena owns all XiValues, XiPhis, XiBlocks, and arg arrays.

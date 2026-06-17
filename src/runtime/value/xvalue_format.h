@@ -11,12 +11,12 @@
  *   Single canonical runtime formatter: given an XrValue of any kind
  *   (primitive, container, class instance, builtin object), produce an
  *   XrString suitable for user output, toString() and string concatenation.
- *   Used by VM, JIT runtime helpers and xvalue_print fallbacks.
+ *   Used by VM runtime helpers and xvalue_print fallbacks.
  *
  * LAYERING:
  *   Lives alongside xvalue_print in runtime/value. All type lookups go
  *   through runtime/object, runtime/class, coro and module headers —
- *   no dependency on vm/ or jit/.
+ *   no dependency on vm/.
  */
 
 #ifndef XVALUE_FORMAT_H

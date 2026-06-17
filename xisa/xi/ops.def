@@ -1356,15 +1356,6 @@
   :observable ()
   :targets (vm-bytecode aot-verify))
 
-(define-xi-op xi.guard.type
-  :class guard
-  :arity 1
-  :effects (side-effect may-deopt may-throw)
-  :requires ()
-  :observable ()
-  :targets (vm-bytecode aot-c aot-verify)
-  :lowering-policy pass-local)
-
 (define-xi-op xi.vec.load
   :class vector
   :arity 2

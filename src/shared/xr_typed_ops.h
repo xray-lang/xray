@@ -9,7 +9,7 @@
  *
  * These operate on a raw `void *data` buffer + `XrArrayElemType`, independent
  * of the container struct (XrArray, xrt_array_t, etc.). All consumers
- * (VM, JIT, AOT) include this to get consistent typed storage semantics.
+ * (VM, AOT) include this to get consistent typed storage semantics.
  *
  * Dependency: caller must include their own XrValue header first, providing:
  *   XrValue, XR_FROM_INT/XR_TO_INT, XR_FROM_FLOAT/XR_TO_FLOAT,

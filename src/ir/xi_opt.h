@@ -97,7 +97,7 @@ static inline XiRepPolicy xi_rep_policy_native_boundary(void) {
  * BOX wraps them to TAGGED for calls, stores, returns.
  * UNBOX unwraps TAGGED values for arithmetic consumers.
  * Opt-in: not part of xi_opt_run (adds overhead for VM bytecode backend).
- * Intended for JIT/AOT backends that benefit from unboxed values. */
+ * Intended for the AOT backend, which benefits from unboxed values. */
 XR_FUNC XiPassChange xi_opt_select_rep(XiFunc *f);
 XR_FUNC XiPassChange xi_opt_select_rep_with_policy(XiFunc *f, const XiRepPolicy *policy);
 

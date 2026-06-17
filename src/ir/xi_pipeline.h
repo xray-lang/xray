@@ -53,17 +53,17 @@ typedef enum {
 
 /* ========== Pipeline Configuration ========== */
 
-/* Time budget for JIT Tier 1 optimization: 5 ms in nanoseconds. */
-#define XI_BUDGET_JIT_TIER1_NS (5ULL * 1000 * 1000)
+/* Default optimizer time budget: 5 ms in nanoseconds. */
+#define XI_BUDGET_OPT_NS (5ULL * 1000 * 1000)
 
 typedef struct XiPipelineConfig {
     XiPipelineMode mode;    /* selects default pass sequence (can be overridden) */
     bool run_verify;        /* run IR verification after lowering (default: true) */
     bool run_optimize;      /* run optimization passes (default: true) */
     XiOptLevel opt_level;   /* optimization aggressiveness (XI_OPT_LIGHT for VM,
-                             * XI_OPT_FULL for AOT/JIT Tier 2) */
+                             * XI_OPT_FULL for AOT) */
     bool run_select_rep;    /* run SelectRepresentations pass (BOX/UNBOX insertion,
-                             * needed by AOT/JIT backends for unboxed values;
+                             * needed by the AOT backend for unboxed values;
                              * default: false for VM, true for AOT) */
     bool run_backend_lower; /* lower high-level ops to XI_CALL_BUILTIN, advancing
                              * to STAGE_BACKEND (default: false for VM, true for AOT) */
@@ -78,7 +78,7 @@ typedef struct XiPipelineConfig {
     bool dump_ir_before;    /* dump IR to stderr before optimization */
     bool dump_ir_after;     /* dump IR to stderr after optimization */
     uint64_t budget_ns;     /* optimization time budget in nanoseconds
-                             * (0 = unlimited; use XI_BUDGET_JIT_TIER1_NS for JIT) */
+                             * (0 = unlimited; default XI_BUDGET_OPT_NS) */
     bool repl_mode;         /* REPL incremental compilation: top-level bindings
                              * are lowered to XI_GET/SET_GLOBAL (name-keyed dict)
                              * instead of XI_GET/SET_SHARED (slot-indexed array).
@@ -121,7 +121,7 @@ XR_FUNC XiPipelineResult xi_pipeline_compile_program(struct AstNode *program_nod
 /* Emit bytecode from a pre-lowered XiFunc* (for split compilation).
  * The IR must have been lowered and optimized (via compile_program with
  * run_emit=false, or the AOT pipeline).  Returns XrProto on success, NULL
- * on emission failure.  Attaches the IR to the proto for JIT reuse. */
+ * on emission failure.  Attaches the IR to the proto for AOT reuse. */
 XR_FUNC struct XrProto *xi_pipeline_emit_ir(XiFunc *ir, struct XrayIsolate *isolate);
 
 /* Free pipeline result (frees IR, does NOT free proto). */

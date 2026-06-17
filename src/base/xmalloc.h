@@ -224,7 +224,7 @@ static inline void xr_mem_dump_stats(void) {
 
 /*
  * XR_MALLOC_OR_ABORT / XR_CALLOC_OR_ABORT — analogues of
- * XR_REALLOC_OR_ABORT for fresh allocations in compiler / JIT
+ * XR_REALLOC_OR_ABORT for fresh allocations in the compiler
  * infrastructure where a proper error propagation path would
  * require a larger refactor and OOM is effectively unrecoverable.
  */

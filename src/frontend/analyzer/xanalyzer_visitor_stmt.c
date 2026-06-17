@@ -303,23 +303,15 @@ void xa_visit_var_decl_stmt(XaInferContext *ctx, AstNode *node) {
     // Variables with type annotations are initialized to the type zero value.
     links->is_definitely_assigned = (var->initializer != NULL) || (links->declared_type != NULL);
 
-    // JIT metadata: certainty level and const-foldable detection
-    if (links->declared_type && !XR_TYPE_IS_UNKNOWN(links->declared_type)) {
-        links->jit_certainty = XA_JIT_DECLARED;
-    } else if (var_type && !XR_TYPE_IS_UNKNOWN(var_type)) {
-        links->jit_certainty = XA_JIT_INFERRED;
-    }
-    // const with literal initializer = proven, can be constant-folded by JIT
+    // A const with a literal initializer can be constant-folded downstream.
     if (sym->is_const && var->initializer) {
         AstNodeType init_t = var->initializer->type;
         if (init_t == AST_LITERAL_INT || init_t == AST_LITERAL_FLOAT ||
             init_t == AST_LITERAL_STRING || init_t == AST_LITERAL_TRUE ||
             init_t == AST_LITERAL_FALSE || init_t == AST_LITERAL_NULL) {
-            links->jit_certainty = XA_JIT_PROVEN;
             links->is_const_foldable = true;
         }
     }
-    links->type_stability = XA_TYPE_STABLE;  // initial assignment is stable
     links->assign_count = var->initializer ? 1 : 0;
 
     // Detect loop variable context
@@ -398,17 +390,10 @@ void xa_visit_assignment_stmt(XaInferContext *ctx, AstNode *node) {
     XrType *value_type = xa_visit_infer_expr(ctx, assign->value);
     ctx->expected_type = saved_expected;
 
-    // Mark as definitely assigned + track type stability for JIT
+    // Mark as definitely assigned.
     if (links) {
         links->is_definitely_assigned = true;
         links->assign_count++;
-        // Detect type polymorphism: if assigned type differs from current type
-        if (var_type && value_type && !XR_TYPE_IS_UNKNOWN(var_type) &&
-            !XR_TYPE_IS_UNKNOWN(value_type)) {
-            if (!xr_type_equals(var_type, value_type)) {
-                links->type_stability = XA_TYPE_POLYMORPHIC;
-            }
-        }
     }
 
     xa_assign_check_type(ctx, node, var_type, value_type, assign->name, NULL);

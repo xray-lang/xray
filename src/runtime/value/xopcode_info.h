@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Single source of truth for per-opcode metadata. Located in the value
- *   layer next to OpCode so both runtime and tooling (disassembler, JIT)
+ *   layer next to OpCode so both runtime and tooling (disassembler)
  *   consume it without reverse dependencies.
  */
 

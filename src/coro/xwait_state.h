@@ -9,7 +9,7 @@
  *
  * KEY CONCEPT:
  *   Blocking state is owned by the coroutine runtime, not by any execution
- *   backend. VM, JIT, AOT, and yieldable C functions all suspend through the
+ *   backend. VM, AOT, and yieldable C functions all suspend through the
  *   same wait records and resume with backend-specific continuation state.
  */
 
