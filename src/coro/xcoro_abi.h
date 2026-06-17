@@ -45,7 +45,6 @@ typedef XrCFuncResult (*XrCoroCFuncEntry)(XrayIsolate *isolate, XrValue *args, i
 
 typedef enum {
     XR_CORO_BACKEND_VM,
-    XR_CORO_BACKEND_JIT,
     XR_CORO_BACKEND_AOT,
     XR_CORO_BACKEND_CFUNC,
     XR_CORO_BACKEND_NATIVE,
@@ -112,9 +111,6 @@ typedef struct XrCoroBackendVTable {
     void (*trace_roots)(XrCoroutine *coro, void *visitor);
     bool (*prepare_recycle)(XrCoroutine *coro, XrWorker *worker);
     void (*reset_reusable)(XrCoroutine *coro);
-    void (*on_safepoint)(XrCoroutine *coro);
-    void (*detach_worker_state)(XrCoroutine *coro);
-    bool (*is_try_mode)(const XrCoroutine *coro);
     bool (*setup_yield_continuation)(XrayIsolate *isolate, XrCoroutine *coro, void *continuation,
                                      void *user_data);
     bool (*has_continuation)(const XrCoroutine *coro);

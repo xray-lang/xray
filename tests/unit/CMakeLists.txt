@@ -15,8 +15,6 @@ macro(add_xray_unit_test name source)
     add_test(NAME ${name} COMMAND ${name})
 endmacro()
 
-set_source_files_properties(${XRAY_GEN_XM_C_SRC} PROPERTIES GENERATED TRUE)
-
 # ============================================================================
 # value/ — Value system
 # ============================================================================
@@ -127,31 +125,6 @@ add_xray_unit_test(test_vm_exception vm/test_vm_exception.c)
 add_xray_unit_test(test_symbol symbol/test_symbol.c)
 
 # ============================================================================
-# jit/ — XIR, ARM64 codegen, passes, liveness
-# ============================================================================
-
-add_xray_unit_test(test_xm jit/test_xm.c)
-add_xray_unit_test(test_xm_bset jit/test_xm_bset.c)
-add_xray_unit_test(test_xm_defuse jit/test_xm_defuse.c)
-add_xray_unit_test(test_xm_fold jit/test_xm_fold.c)
-add_xray_unit_test(test_xm_liveness2 jit/test_xm_liveness2.c)
-add_xray_unit_test(test_xm_pass jit/test_xm_pass.c)
-add_xray_unit_test(test_xm_eligibility jit/test_xm_eligibility.c)
-add_xray_unit_test(test_xm_tfa jit/test_xm_tfa.c)
-add_xray_unit_test(test_jit_debug jit/test_jit_debug.c)
-# ARM64-specific tests (instruction encoding, peephole)
-if(XR_TARGET_ARCH MATCHES "arm64|aarch64")
-    add_xray_unit_test(test_arm64_emit jit/test_arm64_emit.c)
-    add_xray_unit_test(test_arm64_dispatch jit/test_arm64_dispatch.c)
-    add_xray_unit_test(test_peephole jit/test_peephole.c)
-endif()
-# x86-64-specific tests
-if(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
-    add_xray_unit_test(test_x64_emit jit/test_x64_emit.c)
-endif()
-add_xray_unit_test(test_code_alloc jit/test_code_alloc.c)
-
-# ============================================================================
 # ir/ — New typed SSA IR (Xi)
 # ============================================================================
 
@@ -165,10 +138,6 @@ add_xray_unit_test(test_xi_emit ir/test_xi_emit.c)
 add_xray_unit_test(test_xi_pipeline ir/test_xi_pipeline.c)
 add_xray_unit_test(test_xi_compare ir/test_xi_compare.c)
 add_xray_unit_test(test_xi_cgen ir/test_xi_cgen.c)
-add_xray_unit_test(test_xi_to_xm ir/test_xi_to_xm.c)
-if(NOT WIN32)
-    add_xray_unit_test(test_xi_to_xm_e2e ir/test_xi_to_xm_e2e.c)
-endif()
 add_xray_unit_test(test_xi_lower_hardfail ir/test_xi_lower_hardfail.c)
 add_xray_unit_test(test_xi_stage ir/test_xi_stage.c)
 add_xray_unit_test(test_xi_intrinsic ir/test_xi_intrinsic.c)
@@ -198,7 +167,6 @@ add_xray_unit_test(test_xi_block_layout ir/test_xi_block_layout.c)
 add_xray_unit_test(test_xi_spec_const ir/test_xi_spec_const.c)
 add_xray_unit_test(test_xi_slp ir/test_xi_slp.c)
 add_xray_unit_test(test_xi_vec_scalar ir/test_xi_vec_scalar.c)
-add_xray_unit_test(test_xi_jit_profile ir/test_xi_jit_profile.c)
 add_xray_unit_test(test_xi_vec_cost ir/test_xi_vec_cost.c)
 add_xray_unit_test(test_xi_loop_vec ir/test_xi_loop_vec.c)
 add_xray_unit_test(test_xi_reduction ir/test_xi_reduction.c)
@@ -217,16 +185,6 @@ add_xray_unit_test(test_xi_inline ir/test_xi_inline.c)
 add_xray_unit_test(test_xi_tail_call ir/test_xi_tail_call.c)
 add_xray_unit_test(test_xi_verify_ext ir/test_xi_verify_ext.c)
 add_xray_unit_test(test_xi_shuffle ir/test_xi_shuffle.c)
-
-# E2E tests: require full JIT runtime (coro + jit_ctx), excluded from default build
-# Covered by regression tests (scripts/run_regression_tests.sh)
-# add_xray_unit_test(test_aot_e2e jit/test_aot_e2e.c)
-# test_jit_e2e: covers IR -> codegen -> execute end-to-end with a minimal
-# fake coro/jit_ctx env (see jit_env_init() in the test file). Includes the
-# §10.1-§10.6 hardening regressions from docs/tasks/010-x64-jit-hardening.md.
-if(NOT WIN32)
-    add_xray_unit_test(test_jit_e2e jit/test_jit_e2e.c)
-endif()
 
 # ============================================================================
 # base/ — Config, logging, SIMD, SWAR, mutex, intmap, mem_profiler
@@ -572,187 +530,6 @@ set_tests_properties(harness_no_tests PROPERTIES WILL_FAIL TRUE)
 add_test(NAME harness_mixed_pass_fail
          COMMAND $<TARGET_FILE:xray> test ${_HARNESS_DIR}/mixed_pass_fail.xr)
 set_tests_properties(harness_mixed_pass_fail PROPERTIES WILL_FAIL TRUE)
-
-set_source_files_properties(
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_golden_gen.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_golden_gen.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_golden_gen.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_disasm_gen.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_disasm_gen.c
-    ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
-    PROPERTIES GENERATED TRUE
-)
-
-# ============================================================================
-# jit/ — x64 golden-bytes encoding verification (x86_64 only)
-# ============================================================================
-
-if(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
-    add_custom_command(
-        OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_golden_gen.c
-        COMMAND ${XRAY_PYTHON} ${XISAGEN} golden
-                ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-                ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_golden_gen.c
-        DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-        COMMENT "xisagen: generating test_x64_golden_gen.c"
-    )
-    add_executable(test_x64_golden jit/test_x64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c)
-    add_dependencies(test_x64_golden gen-xm-ops)
-    target_include_directories(test_x64_golden PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/jit
-        ${CMAKE_SOURCE_DIR}/src
-    )
-    add_test(NAME test_x64_golden COMMAND test_x64_golden)
-endif()
-
-# ============================================================================
-# jit/ — arm64 golden-bytes encoding verification (aarch64 only)
-# ============================================================================
-
-if(XR_TARGET_ARCH MATCHES "aarch64|arm64|ARM64")
-    add_custom_command(
-        OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_golden_gen.c
-        COMMAND ${XRAY_PYTHON} ${XISAGEN} golden
-                ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-                ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_golden_gen.c
-        DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-        COMMENT "xisagen: generating test_arm64_golden_gen.c"
-    )
-    add_executable(test_arm64_golden jit/test_arm64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c)
-    add_dependencies(test_arm64_golden gen-xm-ops)
-    target_include_directories(test_arm64_golden PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/jit
-        ${CMAKE_SOURCE_DIR}/src
-    )
-    add_test(NAME test_arm64_golden COMMAND test_arm64_golden)
-endif()
-
-# ============================================================================
-# jit/ — riscv64 golden-bytes encoding verification (cross-platform, pure math)
-# ============================================================================
-
-add_custom_command(
-    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_golden_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} golden
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_golden_gen.c
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: generating test_riscv64_golden_gen.c"
-)
-add_executable(test_riscv64_golden jit/test_riscv64_golden_gen.c ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c)
-add_dependencies(test_riscv64_golden gen-xm-ops)
-add_test(NAME test_riscv64_golden COMMAND test_riscv64_golden)
-
-# ============================================================================
-# jit/ — generated disasm round-trip tests (cross-platform, pure table lookup)
-# ============================================================================
-# These tests run on every host because the generated decoder is a plain
-# array-of-(mask,value) linear scan with no CPU-specific operations.
-
-add_custom_command(
-    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_disasm_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm-test
-            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_arm64_disasm_gen.c
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-    COMMENT "xisagen: generating test_arm64_disasm_gen.c"
-)
-add_executable(test_arm64_disasm
-    jit/test_arm64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
-)
-add_dependencies(test_arm64_disasm gen-xm-ops)
-target_include_directories(test_arm64_disasm PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-add_test(NAME test_arm64_disasm COMMAND test_arm64_disasm)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_disasm_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm-test
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_riscv64_disasm_gen.c
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: generating test_riscv64_disasm_gen.c"
-)
-add_executable(test_riscv64_disasm
-    jit/test_riscv64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
-)
-add_dependencies(test_riscv64_disasm gen-xm-ops)
-target_include_directories(test_riscv64_disasm PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-add_test(NAME test_riscv64_disasm COMMAND test_riscv64_disasm)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_disasm_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm-test
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_x64_disasm_gen.c
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-    COMMENT "xisagen: generating test_x64_disasm_gen.c"
-)
-add_executable(test_x64_disasm
-    jit/test_x64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
-)
-add_dependencies(test_x64_disasm gen-xm-ops)
-target_include_directories(test_x64_disasm PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-add_test(NAME test_x64_disasm COMMAND test_x64_disasm)
-
-add_test(
-    NAME test_xisagen_cli
-    COMMAND ${XRAY_PYTHON}
-        ${CMAKE_CURRENT_SOURCE_DIR}/jit/test_xisagen_cli.py
-        --xisagen ${XISAGEN}
-)
-
-add_executable(test_dispatch_meta jit/test_dispatch_meta.c)
-add_dependencies(test_dispatch_meta gen-xm-ops)
-target_include_directories(test_dispatch_meta PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-target_link_libraries(test_dispatch_meta PRIVATE xray_core)
-add_test(NAME test_dispatch_meta COMMAND test_dispatch_meta)
-
-add_xray_unit_test(test_xm_pic jit/test_xm_pic.c)
-add_xray_unit_test(test_xm_pic_emit jit/test_xm_pic_emit.c)
-
-add_executable(test_dispatch_emit jit/test_dispatch_emit.c)
-add_dependencies(test_dispatch_emit gen-xm-ops)
-target_include_directories(test_dispatch_emit PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-target_link_libraries(test_dispatch_emit PRIVATE xray_core)
-add_test(NAME test_dispatch_emit COMMAND test_dispatch_emit)
-
-add_executable(test_runtime_stubs jit/test_runtime_stubs.c)
-add_dependencies(test_runtime_stubs gen-xm-ops)
-target_include_directories(test_runtime_stubs PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-add_test(NAME test_runtime_stubs COMMAND test_runtime_stubs)
-
-add_xray_unit_test(test_runtime_stub_entries jit/test_runtime_stub_entries.c)
-add_xray_unit_test(test_call_protocol jit/test_call_protocol.c)
-
-add_executable(test_patch_verify jit/test_patch_verify.c)
-add_dependencies(test_patch_verify gen-xm-ops)
-target_include_directories(test_patch_verify PRIVATE
-    ${CMAKE_SOURCE_DIR}/src/jit
-)
-add_test(NAME test_patch_verify COMMAND test_patch_verify)
-
-add_xray_unit_test(test_metadata_verify jit/test_metadata_verify.c)
 
 # ============================================================================
 # Reverse-invariant checks for the Xi IR layer (static grep-based gates).

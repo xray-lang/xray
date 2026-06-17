@@ -109,6 +109,10 @@
     _(DIVK, FMT_ABC, KOP_ABC_BIN_K, "R[A] = R[B] / K[C]")                                          \
     _(MOD, FMT_ABC, KOP_ABC_BIN, "R[A] = R[B] % R[C]")                                             \
     _(MODK, FMT_ABC, KOP_ABC_BIN_K, "R[A] = R[B] % K[C]")                                          \
+    _(ADD_F32, FMT_ABC, KOP_ABC_BIN, "R[A] = f32(R[B] + R[C])")                                    \
+    _(SUB_F32, FMT_ABC, KOP_ABC_BIN, "R[A] = f32(R[B] - R[C])")                                    \
+    _(MUL_F32, FMT_ABC, KOP_ABC_BIN, "R[A] = f32(R[B] * R[C])")                                    \
+    _(DIV_F32, FMT_ABC, KOP_ABC_BIN, "R[A] = f32(R[B]) / f32(R[C])")                               \
     _(UNM, FMT_AB, KOP_AB_UNARY, "R[A] = -R[B]")                                                   \
     _(NOT, FMT_AB, KOP_AB_UNARY, "R[A] = !R[B]")                                                   \
     _(STRBUF_NEW, FMT_A, KOP_A_LOAD, "R[A] = new_strbuf()")                                        \

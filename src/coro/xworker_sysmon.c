@@ -18,30 +18,6 @@
 #include "../os/os_time.h"
 #include "../base/xlog.h"
 #include "xblock.h"
-#include "xjit_hooks.h"
-
-/* Arm guard pages for all running workers so JIT back-edges trigger safepoints.
- * Called by sysmon every ~2ms. Workers that are parked or in syscall are skipped. */
-static void sysmon_arm_guard_pages(XrRuntime *runtime) {
-    if (!XR_JIT_AVAILABLE())
-        return;
-    for (int i = 0; i < runtime->worker_count; i++) {
-        XrWorker *w = &runtime->workers[i];
-        XrMachine *wm = w->m;
-        if (!wm)
-            continue;
-
-        int st = atomic_load_explicit(&wm->state, memory_order_relaxed);
-        if (st != M_RUNNING)
-            continue;
-
-        void *page = xr_jit_hooks->worker_safepoint_page
-                         ? xr_jit_hooks->worker_safepoint_page(w->p.backend_worker_storage)
-                         : NULL;
-        if (page)
-            xr_jit_hooks->guard_page_arm(page);
-    }
-}
 
 static void sysmon_check(XrRuntime *runtime) {
     XR_DCHECK(runtime != NULL, "sysmon_check: NULL runtime");
@@ -236,7 +212,6 @@ void *sysmon_thread_func(void *arg) {
         xr_time_sleep_ns((uint64_t) interval_ns);
         sysmon_check(runtime);
         sysmon_assist(runtime);
-        sysmon_arm_guard_pages(runtime);
     }
     return NULL;
 }

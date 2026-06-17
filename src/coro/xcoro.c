@@ -52,34 +52,11 @@ int xr_coro_gc_safepoint(XrCoroutine *coro) {
     // Reset reductions for next safepoint interval
     xr_coro_set_reds(coro, XR_CORO_REDUCTIONS);
 
-    xr_coro_backend_on_safepoint(coro);
-
     // Cancel check: watchdog sets this via xr_runtime_force_stop
     if (xr_coro_flags_has(coro, XR_CORO_FLG_CANCEL_REQUESTED)) {
         return 1;
     }
     return 0;
-}
-
-void xr_coro_backend_on_safepoint(XrCoroutine *coro) {
-    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
-    if (!backend || !backend->on_safepoint)
-        return;
-    backend->on_safepoint(coro);
-}
-
-void xr_coro_detach_worker_state(XrCoroutine *coro) {
-    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
-    if (!backend || !backend->detach_worker_state)
-        return;
-    backend->detach_worker_state(coro);
-}
-
-bool xr_coro_backend_in_try_mode(const XrCoroutine *coro) {
-    const XrCoroBackendVTable *backend = coro ? coro->backend : NULL;
-    if (!backend || !backend->is_try_mode)
-        return false;
-    return backend->is_try_mode(coro);
 }
 
 bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
@@ -88,20 +65,6 @@ bool xr_coro_reset_execution_state(XrCoroutine *coro, XrayIsolate *X) {
         return false;
     backend->reset_execution_state(coro, X);
     return true;
-}
-
-// Forward write barrier for JIT: retired (RC owns reclamation, no tri-color
-// invariant). Kept as a no-op so the JIT runtime-stub table symbol resolves.
-void xr_jit_barrier_fwd(XrCoroutine *coro, void *parent, void *child) {
-    (void) coro;
-    (void) parent;
-    (void) child;
-}
-
-// Back write barrier for JIT: retired. Kept as a no-op (see xr_jit_barrier_fwd).
-void xr_jit_barrier_back(XrCoroutine *coro, void *container) {
-    (void) coro;
-    (void) container;
 }
 
 XrScopeContext *xr_coro_parent_scope(const XrCoroutine *coro) {
@@ -251,9 +214,6 @@ static const XrCoroBackendVTable native_backend_vtable = {
     .trace_roots = NULL,
     .prepare_recycle = NULL,
     .reset_reusable = NULL,
-    .on_safepoint = NULL,
-    .detach_worker_state = NULL,
-    .is_try_mode = NULL,
     .setup_yield_continuation = NULL,
     .has_continuation = NULL,
     .call_closure = NULL,

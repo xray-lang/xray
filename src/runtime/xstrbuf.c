@@ -213,13 +213,21 @@ void xr_strbuf_append_int(XrStrBuf *sb, int64_t val) {
 }
 
 void xr_strbuf_append_float(XrStrBuf *sb, double val) {
-    // Format float
-    char buf[32];
-    int len = snprintf(buf, sizeof(buf), "%.14g", val);
-
-    if (len > 0) {
-        xr_strbuf_append_cstr(sb, buf, (size_t) len);
+    // Match the canonical float formatter (xr_string_from_float /
+    // xr_value_to_strbuf) so string concatenation renders floats identically to
+    // print/toString and to the AOT backend: 15 significant digits, with a
+    // ".0" suffix when the result carries no decimal point or exponent.
+    char buf[64];
+    int len = snprintf(buf, sizeof(buf), "%.15g", val);
+    if (len > 0 && !strchr(buf, '.') && !strchr(buf, 'e') && !strchr(buf, 'E') &&
+        len + 2 < (int) sizeof(buf)) {
+        buf[len] = '.';
+        buf[len + 1] = '0';
+        buf[len + 2] = '\0';
+        len += 2;
     }
+    if (len > 0)
+        xr_strbuf_append_cstr(sb, buf, (size_t) len);
 }
 
 /* ========== Convert and Reset ========== */

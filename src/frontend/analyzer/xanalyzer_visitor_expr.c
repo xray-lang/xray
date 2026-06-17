@@ -300,9 +300,24 @@ static XrType *binary_arith_pair(int op, XrType *left, XrType *right) {
     }
 
     if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_FLOAT(right)) {
-        if (XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_INT(left)) {
-            if (XR_TYPE_IS_FLOAT(right) || XR_TYPE_IS_INT(right))
-                return xr_type_new_float(NULL);
+        if ((XR_TYPE_IS_FLOAT(left) || XR_TYPE_IS_INT(left)) &&
+            (XR_TYPE_IS_FLOAT(right) || XR_TYPE_IS_INT(right))) {
+            // Preserve float32 width when no operand forces float64, so the
+            // emitter selects single-precision opcodes that match AOT's
+            // per-operand float narrowing. Like C, an int operand promotes to
+            // the float operand's type (float32 * int -> float32), while any
+            // float64 operand widens the result to float64. Scoped to the ops
+            // that have single-precision opcodes (+, -, *, /).
+            if (op == AST_BINARY_ADD || op == AST_BINARY_SUB || op == AST_BINARY_MUL ||
+                op == AST_BINARY_DIV) {
+                bool left_f32 = XR_TYPE_IS_FLOAT(left) && left->native_width == XR_NATIVE_F32;
+                bool right_f32 = XR_TYPE_IS_FLOAT(right) && right->native_width == XR_NATIVE_F32;
+                bool left_f64 = XR_TYPE_IS_FLOAT(left) && left->native_width != XR_NATIVE_F32;
+                bool right_f64 = XR_TYPE_IS_FLOAT(right) && right->native_width != XR_NATIVE_F32;
+                if ((left_f32 || right_f32) && !left_f64 && !right_f64)
+                    return xr_type_new_float_width(NULL, XR_NATIVE_F32);
+            }
+            return xr_type_new_float(NULL);
         }
         return NULL;
     }

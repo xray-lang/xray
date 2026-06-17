@@ -282,11 +282,7 @@ struct XrayIsolate {
 //   isolate->vm.frame_count
 //   ...
 //
-// JIT fields (if enabled) are in the same struct:
-//   #ifdef XRAY_HAS_JIT
-//   isolate->vm.jit              // XmJitState* (compile queue, code cache)
-//   isolate->vm.jit_threshold    // Tier 1 trigger threshold
-//   #endif // ========== Compilation and Execution API ==========
+// ========== Compilation and Execution API ==========
 
 // Compile AST to bytecode (no source file info)
 XR_FUNC XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
@@ -294,17 +290,7 @@ XR_FUNC XrProto *xr_compile_ast(XrayIsolate *isolate, AstNode *ast);
 // xr_compile_ast_with_source, xr_execute, xr_free_code, xr_compile_source_with_path
 // declared in xisolate_api.h
 
-#ifdef XRAY_HAS_JIT
-// JIT compile hot function (VM+JIT config only)
-// Returns compiled native function pointer, or NULL on failure
-// Implemented in: src/backends/jit/xr_jit_compiler.c
-typedef XrValue (*XrNativeFunc)(XrayIsolate *, XrValue *, int);
-XR_FUNC XrNativeFunc xr_jit_compile(XrayIsolate *isolate, XrProto *proto);
-
-// Check if function should be JIT compiled
-// Returns true if should compile, false to continue interpreting
-XR_FUNC bool xr_jit_should_compile(XrayIsolate *isolate, XrProto *proto);
-#endif  // ========== Internal Helper Functions ==========
+// ========== Internal Helper Functions ==========
 
 // Initialize common state (called by xray_isolate_new)
 // Returns 0 on success, -1 on failure

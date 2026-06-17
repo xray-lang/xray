@@ -609,12 +609,3 @@ XR_FUNC void xi_module_free(XiModule *mod) {
     xr_free(mod->closure_metas);
     xr_free(mod);
 }
-
-/* ========== Slot Map ========== */
-
-XR_FUNC void xi_slot_map_free(XiSlotMap *map) {
-    if (!map)
-        return;
-    xr_free(map->entries);
-    xr_free(map);
-}

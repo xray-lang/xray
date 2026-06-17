@@ -1,0 +1,20 @@
+// anchor: float-fma-contraction
+// Each arithmetic op must round independently on every backend. If AOT fused
+// a*b+c*d into hardware FMAs it would round once and diverge from the VM's
+// per-op rounding; the build pins -ffp-contract=off so the same source stays
+// bit-identical between VM and AOT.
+let a = 0.1
+let b = 0.2
+let c = 0.3
+let d = 0.4
+print(a * b + c * d)
+print(a * b - c * d)
+print(a * a + b * b + c * c + d * d)
+
+let x = 1.7
+print(((2.5 * x + 1.25) * x + 0.75) * x + 3.125)
+
+let big = 123456789.123456789
+let small = 0.000123456789
+print(big * small + a * b)
+print(big * a - small * d)

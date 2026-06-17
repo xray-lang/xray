@@ -125,15 +125,12 @@ XR_FUNC void xi_emit_err_check(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     /* Two modes based on result type:
      * - bool type: used as IF condition (try body) → OP_ERR_HAS into dst
      * - unit type: unconditional propagation → OP_ERR_CHECK */
-    int pc = current_pc(ctx);
     if (v->type && v->type->kind == XR_KIND_BOOL) {
         emit_inst(ctx, CREATE_ABC(OP_ERR_HAS, dst, 0, 0));
     } else {
         (void) dst;
         emit_inst(ctx, CREATE_ABC(OP_ERR_CHECK, 0, 0, 0));
     }
-    if (ctx->value_pc && v && v->id < ctx->reg_map_size)
-        ctx->value_pc[v->id] = pc;
 }
 
 XR_FUNC void xi_emit_err_catch(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {

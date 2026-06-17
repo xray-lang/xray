@@ -17,7 +17,6 @@
 #include "coro/xtask.h"
 #include "coro/xworker_internal.h"
 #include "coro/xyieldable.h"
-#include "jit/xjit_coro_state.h"
 #include "runtime/object/xarray.h"
 #include "runtime/gc/xsystem_heap.h"
 #include "runtime/xisolate_internal.h"
@@ -937,59 +936,6 @@ TEST(coro_channel_recv_sets_recv_slot_only_when_blocking) {
     XrCoroBlockResult resumed = xr_coro_chan_recv_resume(
         &f.isolate_storage, &receiver, xr_slot_xvalue_ptr(&recv_value), xr_slot_none());
     ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_CLOSED);
-
-    xr_channel_destroy(ch);
-    xr_sysheap_free_shared(ch, sizeof(XrChannel));
-    close_fixture_cleanup(&f);
-}
-
-TEST(coro_channel_recv_jit_suspend_slot_writes_result_on_wake) {
-    CloseFixture f;
-    ASSERT_TRUE(close_fixture_init(&f));
-
-    XrChannel *ch = xr_channel_new(&f.isolate_storage, 0);
-    ASSERT_NOT_NULL(ch);
-
-    XrCoroutine receiver;
-    memset(&receiver, 0, sizeof(receiver));
-    receiver.id = 404;
-    receiver.isolate = &f.isolate_storage;
-    atomic_store(&receiver.flags, XR_CORO_FLG_RUNNING);
-    atomic_store(&receiver.resume_status, XR_RESUME_OK);
-    atomic_store(&receiver.affinity_p, 0);
-
-    XrJitSuspendState suspend;
-    memset(&suspend, 0, sizeof(suspend));
-    suspend.result = -1;
-    suspend.result_tag = -1;
-    XrSlotRef result_slot = xr_slot_jit_suspend(
-        &suspend, (uint32_t) offsetof(XrJitSuspendState, result), XR_REP_TAGGED);
-
-    ASSERT_NULL(receiver.ext);
-    XrCoroBlockResult blocked = xr_coro_chan_recv(&f.isolate_storage, &receiver, ch, result_slot,
-                                                  xr_slot_none(), -1, false);
-    ASSERT_EQ_INT((int) blocked.kind, (int) XR_CORO_BLOCK_BLOCKED);
-    ASSERT_NOT_NULL(receiver.ext);
-    ASSERT_NULL(receiver.ext->recv_slot);
-    ASSERT_EQ_INT((int) receiver.ext->recv_slot_ref.kind, (int) XR_SLOT_JIT_SUSPEND);
-    ASSERT_EQ_PTR(receiver.ext->recv_slot_ref.base, &suspend);
-    ASSERT_EQ_INT((int) receiver.ext->recv_slot_ref.offset,
-                  (int) offsetof(XrJitSuspendState, result));
-    ASSERT_EQ_INT((int) receiver.ext->recv_slot_ref.type_id, (int) XR_REP_TAGGED);
-
-    XrCoroBlockResult sent =
-        xr_coro_chan_send(&f.isolate_storage, NULL, ch, xr_int(77), xr_slot_none(), -1);
-    ASSERT_EQ_INT((int) sent.kind, (int) XR_CORO_BLOCK_READY);
-    ASSERT_EQ_INT((int) suspend.result, 77);
-    ASSERT_EQ_INT((int) suspend.result_tag, (int) XR_TAG_I64);
-    ASSERT_EQ_INT(xr_coro_resume_load(&receiver), XR_RESUME_CHANNEL);
-    ASSERT_EQ_PTR(xr_worker_pop(&f.worker), &receiver);
-
-    XrCoroBlockResult resumed =
-        xr_coro_chan_recv_resume(&f.isolate_storage, &receiver, result_slot, xr_slot_none());
-    ASSERT_EQ_INT((int) resumed.kind, (int) XR_CORO_BLOCK_READY);
-    ASSERT_EQ_INT((int) suspend.result, 77);
-    ASSERT_EQ_INT((int) suspend.result_tag, (int) XR_TAG_I64);
 
     xr_channel_destroy(ch);
     xr_sysheap_free_shared(ch, sizeof(XrChannel));
@@ -2093,7 +2039,6 @@ RUN_TEST(worker_block_clears_stale_bucket_link_before_reblock);
 RUN_TEST(channel_shape_op_metrics_track_logical_and_worker_kinds);
 RUN_TEST(coro_channel_buffer_fast_paths_do_not_allocate_ext);
 RUN_TEST(coro_channel_recv_sets_recv_slot_only_when_blocking);
-RUN_TEST(coro_channel_recv_jit_suspend_slot_writes_result_on_wake);
 RUN_TEST(coro_channel_recv_delivered_wake_writes_value_and_ok_slots);
 RUN_TEST(coro_channel_recv_delivery_gated_for_deep_copy_values);
 RUN_TEST(coro_channel_recv_close_wake_stays_on_replay_protocol);

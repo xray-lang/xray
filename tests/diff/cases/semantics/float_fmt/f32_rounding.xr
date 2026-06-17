@@ -1,0 +1,14 @@
+// anchor: float-f32-rounding
+// float32 values are computed in double then narrowed to single precision on
+// store; VM and AOT must apply the same narrowing for identical observable
+// results.
+let a: float32 = 0.1
+let b: float32 = 0.2
+let c: float32 = a * b
+print(c)
+let d: float32 = a + b
+print(d)
+let e: float32 = a * a + b * b
+print(e)
+let f: float32 = 1.0 / 3.0
+print(f)

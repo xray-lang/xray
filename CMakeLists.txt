@@ -43,27 +43,6 @@ configure_file(
 
 set(XISAGEN ${CMAKE_SOURCE_DIR}/tools/xisagen/xisagen.py)
 
-set(XRAY_GEN_XM_C_SRC
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
-)
-
-set(XRAY_GEN_XM_OPS_DEPS
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
-    ${XRAY_GEN_XM_C_SRC}
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
-    ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
-)
-set_source_files_properties(${XRAY_GEN_XM_C_SRC} PROPERTIES GENERATED TRUE)
-
 set(XRAY_GEN_XI_OPS_DEPS
     ${CMAKE_SOURCE_DIR}/src/ir/xi_ops_gen.h
 )
@@ -82,7 +61,6 @@ set(XRAY_GEN_XI_LOWERING_DEPS
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_arith_binary_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_shift_gen.inc.c
     ${CMAKE_SOURCE_DIR}/src/vm/xvm_template_compare_gen.inc.c
-    ${CMAKE_SOURCE_DIR}/src/jit/xi_to_xm_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_dispatch_gen.h
     ${CMAKE_SOURCE_DIR}/src/aot/xi_to_c_stmt_dispatch_gen.h
 )
@@ -159,163 +137,6 @@ add_custom_command(
     COMMENT "xisagen: generating xaot_layout_gen.h from layout.def"
 )
 
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} ops
-            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_ops_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-    COMMENT "xisagen: generating xm_ops_gen.h from ops.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} helpers
-            ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_helpers_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/helpers.def
-    COMMENT "xisagen: generating xm_helpers_gen.h from helpers.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} runtime-stubs
-            ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_runtime_stubs_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/runtime_stubs.def
-    COMMENT "xisagen: generating xm_runtime_stubs_gen.h from runtime_stubs.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} x64impl
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-    COMMENT "xisagen: generating xm_x64_gen.c from x64.isa"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} arm64impl
-            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-    COMMENT "xisagen: generating xm_arm64_gen.c from arm64.isa"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_gen.c
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} riscv64impl
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: generating xm_riscv64_gen.c from riscv64.isa"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_BINARY_DIR}/isel_validated.stamp
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} isel
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_BINARY_DIR}/isel_validated.stamp
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: validating isel.def coverage (ops × 3 backends, mcinsn xref)"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-coverage
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_coverage_gen.h
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-    COMMENT "xisagen: generating xm_dispatch_coverage_gen.h from isel.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-meta
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_meta_gen.h
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/xisa/xm/ops.def
-    COMMENT "xisagen: generating xm_dispatch_meta_gen.h from isel.def"
-)
-
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} dispatch-emit
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_dispatch_emit_gen.h
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/xm/isel.def
-    COMMENT "xisagen: generating xm_dispatch_emit_gen.h from isel.def"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} patch-ranges
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_patch_ranges_gen.h
-            x64=${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            arm64=${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            riscv64=${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    DEPENDS ${XISAGEN}
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: generating xm_patch_ranges_gen.h from .isa branch immediates"
-)
-
-# Disassembler tables (fixed-32 archs only). Generates header+impl pairs
-# exporting xm_<short>_disasm() / xm_<short>_insn_name() for runtime
-# patch verification, deopt logs, and S4 external-diff scaffolding.
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.c
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_arm64_disasm_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
-            ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/arm64.isa
-    COMMENT "xisagen: generating xm_arm64_disasm_gen.{c,h} from arm64.isa"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.c
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_riscv64_disasm_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
-            ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/riscv64.isa
-    COMMENT "xisagen: generating xm_riscv64_disasm_gen.{c,h} from riscv64.isa"
-)
-
-add_custom_command(
-    OUTPUT  ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.c
-            ${CMAKE_SOURCE_DIR}/src/jit/xm_x64_disasm_gen.h
-    COMMAND ${XRAY_PYTHON} ${XISAGEN} disasm
-            ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-            ${CMAKE_SOURCE_DIR}/src/jit
-    DEPENDS ${XISAGEN} ${CMAKE_SOURCE_DIR}/xisa/arch/x64.isa
-    COMMENT "xisagen: generating xm_x64_disasm_gen.{c,h} from x64.isa"
-)
-
-list(APPEND XRAY_GEN_XM_OPS_DEPS ${CMAKE_BINARY_DIR}/isel_validated.stamp)
-
-add_custom_target(gen-xm-ops DEPENDS
-    ${XRAY_GEN_XM_OPS_DEPS}
-)
-
 add_custom_target(gen-xi-ops DEPENDS
     ${XRAY_GEN_XI_OPS_DEPS}
 )
@@ -366,6 +187,12 @@ endif()
 # Compiler options
 if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang|AppleClang")
     add_compile_options(-Wall -Wextra)
+
+    # Disable floating-point contraction (FMA fusion). The interpreter rounds
+    # every arithmetic op independently, so a*b+c must not fuse into a single
+    # rounding here either, or the same .xr would observably diverge between
+    # the VM and an AOT binary built by the host compiler.
+    add_compile_options(-ffp-contract=off)
 
     # Debug mode options
     if(CMAKE_BUILD_TYPE STREQUAL "Debug")
@@ -586,23 +413,13 @@ if(XR_DEBUG_REGALLOC)
     message(STATUS "Register allocator statistics output enabled")
 endif()
 
-# JIT compiler (ARM64 and x86-64)
+# Target architecture detection.
 # When cross-compiling on macOS (CMAKE_OSX_ARCHITECTURES), use that instead of
 # CMAKE_SYSTEM_PROCESSOR which always reports the host CPU.
 if(CMAKE_OSX_ARCHITECTURES)
     set(XR_TARGET_ARCH "${CMAKE_OSX_ARCHITECTURES}")
 else()
     set(XR_TARGET_ARCH "${CMAKE_SYSTEM_PROCESSOR}")
-endif()
-
-if(XR_TARGET_ARCH MATCHES "arm64|aarch64")
-    add_compile_definitions(XRAY_HAS_JIT=1)
-    message(STATUS "JIT: enabled (ARM64)")
-elseif(XR_TARGET_ARCH MATCHES "x86_64|AMD64")
-    add_compile_definitions(XRAY_HAS_JIT=1)
-    message(STATUS "JIT: enabled (x86-64)")
-else()
-    message(STATUS "JIT: disabled (unsupported architecture: ${XR_TARGET_ARCH})")
 endif()
 
 # VM Profiler configuration
@@ -673,7 +490,6 @@ set(XRAY_COMMON_INCLUDES
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/canonical
     ${CMAKE_CURRENT_SOURCE_DIR}/src/frontend/format
     ${CMAKE_CURRENT_SOURCE_DIR}/src/vm
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/jit
     ${CMAKE_CURRENT_SOURCE_DIR}/src/module
     ${CMAKE_CURRENT_SOURCE_DIR}/src/aot
     ${CMAKE_CURRENT_SOURCE_DIR}/src/api
@@ -723,9 +539,6 @@ file(GLOB FRONTEND_ANALYZER_SRC "src/frontend/analyzer/*.c")
 file(GLOB FRONTEND_CANONICAL_SRC "src/frontend/canonical/*.c")
 file(GLOB FRONTEND_FORMAT_SRC "src/frontend/format/*.c")
 file(GLOB VM_SRC "src/vm/*.c")
-file(GLOB JIT_SRC "src/jit/*.c")
-list(APPEND JIT_SRC ${XRAY_GEN_XM_C_SRC} "${CMAKE_CURRENT_SOURCE_DIR}/src/jit/xm_dispatch_meta.c")
-list(REMOVE_DUPLICATES JIT_SRC)
 file(GLOB IR_SRC "src/ir/*.c")
 file(GLOB MODULE_SRC "src/module/*.c")
 file(GLOB AOT_SRC "src/aot/*.c")
@@ -849,7 +662,7 @@ foreach(XRAY_SRC_LIST
         RUNTIME_CLOSURE_SRC RUNTIME_SYMBOL_SRC CORO_SRC IO_SRC
         FRONTEND_LEXER_SRC FRONTEND_PARSER_SRC FRONTEND_CODEGEN_SRC
         FRONTEND_ANALYZER_SRC FRONTEND_CANONICAL_SRC FRONTEND_FORMAT_SRC
-        VM_SRC JIT_SRC IR_SRC MODULE_SRC AOT_SRC API_SRC NEW_CLI_SRC
+        VM_SRC IR_SRC MODULE_SRC AOT_SRC API_SRC NEW_CLI_SRC
         STDLIB_CORE_SRC STDLIB_SRC)
     xray_exclude_include_fragments(${XRAY_SRC_LIST})
 endforeach()
@@ -877,7 +690,6 @@ set(CORE_ALL_SOURCES
     ${FRONTEND_CANONICAL_SRC}
     ${FRONTEND_FORMAT_SRC}
     ${VM_SRC}
-    ${JIT_SRC}
     ${IR_SRC}
     ${MODULE_SRC}
     ${AOT_SRC}
@@ -886,7 +698,7 @@ set(CORE_ALL_SOURCES
 )
 
 add_library(xray_core STATIC ${CORE_ALL_SOURCES})
-add_dependencies(xray_core gen-xm-ops gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
+add_dependencies(xray_core gen-xi-ops gen-xi-verify gen-xi-lowering gen-aot-metadata)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release" AND MSVC)
     set_source_files_properties(

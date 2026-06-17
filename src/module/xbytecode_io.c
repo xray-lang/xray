@@ -841,11 +841,6 @@ XrProto **xr_proto_children(XrProto *p, int *count) {
     return (XrProto **) p->protos.data;
 }
 
-void xr_proto_set_jit_entry(XrProto *p, void *entry) {
-    if (p)
-        p->jit_entry = entry;
-}
-
 void xr_proto_set_param_types(XrProto *p, const uint8_t *ptypes, int nparams, uint8_t return_type) {
     if (!p)
         return;

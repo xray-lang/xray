@@ -171,13 +171,6 @@ typedef struct XrVMState {
     XrCtorCallEntry ctor_call_stack[XR_CTOR_CALL_STACK_MAX];
     int ctor_call_depth;
 
-#ifdef XRAY_HAS_JIT
-    // JIT compiler state (v3: self-hosted Xm pipeline)
-    struct XmJitState *jit;  // JIT compiler state (compile queue, code cache)
-    int jit_threshold;       // call count threshold for Tier 1 compilation
-    int jit_opt_threshold;   // exec count threshold for Tier 2 optimization
-#endif
-
     // Coroutine support
     void *coro_state;           // XrCoroState* (single-thread scheduler + bookkeeping)
     void *current_coro;         // currently running coroutine

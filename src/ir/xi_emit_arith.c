@@ -27,6 +27,26 @@ XR_FUNC void xi_emit_arith(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
     XiValue *lhs = v->args[0];
     XiValue *rhs = v->args[1];
 
+    /* float32 arithmetic: emit dedicated single-precision opcodes with both
+     * operands in registers (no immediate/const fusion). This keeps the VM
+     * bit-identical with AOT, which narrows each f32 operand to native `float`
+     * and rounds every op at single precision. */
+    if (v->type && v->type->kind == XR_KIND_FLOAT && v->type->native_width == XR_NATIVE_F32) {
+        OpCode fop = v->op == XI_ADD   ? OP_ADD_F32
+                     : v->op == XI_SUB ? OP_SUB_F32
+                     : v->op == XI_MUL ? OP_MUL_F32
+                     : v->op == XI_DIV ? OP_DIV_F32
+                                       : OP_NOP;
+        if (fop != OP_NOP) {
+            XiEmitReg b = reg_of(ctx, lhs);
+            XiEmitReg c = reg_of(ctx, rhs);
+            if (ctx->status != XI_EMIT_OK)
+                return;
+            emit_inst(ctx, CREATE_ABC(fop, dst, b, c));
+            return;
+        }
+    }
+
     /* Try fused immediate form: OP_ADDI/SUBI/MULI with signed 16-bit C */
     bool rhs_is_small_int = (rhs->op == XI_CONST && rhs->type && rhs->type->kind == XR_KIND_INT &&
                              rhs->aux_int >= -32768 && rhs->aux_int <= 32767);

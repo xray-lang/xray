@@ -16,7 +16,6 @@
 #include "../coro/xworker_internal.h"
 #include "../coro/xblock.h"
 #include "../coro/xdeep_copy.h"
-#include "../coro/xjit_hooks.h"
 #include "../coro/xtask.h"
 #include "../coro/xyieldable.h"
 #include "../runtime/xexec_frame.h"
@@ -54,11 +53,6 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
 
 static XrVMResult run_cfunc_coro(XrWorker *worker, XrCoroutine *coro, XrayIsolate *isolate);
 
-static bool jit_resume_returns_to_vm_call(XrJitCoroState *jit_state);
-static XrVMResult finish_jit_vm_call_resume(XrayIsolate *isolate, XrWorker *worker,
-                                            XrCoroutine *coro, XrVMContext *ctx,
-                                            XrVMContext *coro_ctx, XrValue jit_result);
-
 static XrVMResult try_recover_via_closure_continuation(XrayIsolate *isolate, XrWorker *worker,
                                                        XrCoroutine *coro, XrVMContext *ctx,
                                                        XrVMContext *coro_ctx);
@@ -82,9 +76,6 @@ static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfun
                                         int arg_count);
 static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker);
 static void vm_backend_reset_reusable(XrCoroutine *coro);
-static void vm_backend_on_safepoint(XrCoroutine *coro);
-static void vm_backend_detach_worker_state(XrCoroutine *coro);
-static bool vm_backend_in_try_mode(const XrCoroutine *coro);
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
                                                 void *continuation, void *user_data);
 static bool vm_backend_has_continuation(const XrCoroutine *coro);
@@ -98,9 +89,6 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .trace_roots = NULL,
     .prepare_recycle = vm_backend_prepare_recycle,
     .reset_reusable = vm_backend_reset_reusable,
-    .on_safepoint = vm_backend_on_safepoint,
-    .detach_worker_state = vm_backend_detach_worker_state,
-    .is_try_mode = vm_backend_in_try_mode,
     .setup_yield_continuation = vm_backend_setup_yield_continuation,
     .has_continuation = vm_backend_has_continuation,
     .call_closure = vm_backend_call_closure,
@@ -116,73 +104,6 @@ static const XrCoroBackendVTable vm_backend_vtable = {
     .debug_name = vm_backend_debug_name,
     .debug_snapshot = vm_backend_debug_snapshot,
 };
-
-static uint8_t jit_slot_type_from_value(XrValue value) {
-    switch (value.tag) {
-        case XR_TAG_I64:
-            return XR_SLOT_I64;
-        case XR_TAG_BOOL:
-            return XR_SLOT_BOOL;
-        case XR_TAG_F64:
-            return XR_SLOT_F64;
-        case XR_TAG_PTR:
-        case XR_TAG_STRUCT_REF:
-            return XR_SLOT_PTR;
-        default:
-            return XR_SLOT_ANY;
-    }
-}
-
-static XrType *jit_type_from_value(XrayIsolate *isolate, XrValue value) {
-    if (xr_value_is_channel(value))
-        return xr_type_new_channel(isolate, xr_type_new_unknown(isolate));
-    return xr_slot_type_to_type(isolate, jit_slot_type_from_value(value));
-}
-
-static void jit_seed_entry_param_types_from_args(XrayIsolate *isolate, XrProto *proto,
-                                                 XrValue *args, int arg_count) {
-    if (!proto || !args || arg_count <= 0 || proto->numparams != arg_count)
-        return;
-    if (!proto->param_types) {
-        proto->param_types =
-            (struct XrType **) xr_calloc((size_t) proto->numparams, sizeof(struct XrType *));
-        if (!proto->param_types)
-            return;
-        proto->param_types_count = proto->numparams;
-    }
-    for (int i = 0; i < arg_count && i < proto->param_types_count; i++) {
-        if (proto->param_types[i])
-            continue;
-        XrType *type = jit_type_from_value(isolate, args[i]);
-        if (type)
-            proto->param_types[i] = type;
-    }
-}
-
-static bool vm_backend_cached_env_flag(_Atomic int *cache, const char *name) {
-    int value = atomic_load_explicit(cache, memory_order_acquire);
-    if (value >= 0)
-        return value != 0;
-
-    int enabled = getenv(name) != NULL ? 1 : 0;
-    int expected = -1;
-    if (atomic_compare_exchange_strong_explicit(cache, &expected, enabled, memory_order_release,
-                                                memory_order_acquire)) {
-        return enabled != 0;
-    }
-    return atomic_load_explicit(cache, memory_order_acquire) != 0;
-}
-
-static bool vm_coro_entry_jit_enabled(void) {
-    /*
-     * Coroutine entry JIT still assumes the pre-096 await/channel result protocol.
-     * Keep ordinary function JIT enabled, but run go-spawned entry frames through
-     * the interpreter by default until the suspend/resume ABI is taught the new
-     * result types. XRAY_JIT_CORO_ENTRY=1 enables the experimental VM/JIT path.
-     */
-    static _Atomic int cached = -1;
-    return vm_backend_cached_env_flag(&cached, "XRAY_JIT_CORO_ENTRY");
-}
 
 const XrCoroBackendVTable *xr_coro_vm_backend_vtable(void) {
     return &vm_backend_vtable;
@@ -559,95 +480,6 @@ static bool vm_backend_bind_cfunc_entry(XrCoroutine *coro, XrCoroCFuncEntry cfun
     return true;
 }
 
-static XrJitScratch *vm_worker_jit_scratch(XrWorker *worker) {
-    if (!worker || !XR_JIT_AVAILABLE() || !xr_jit_hooks->worker_scratch)
-        return NULL;
-    return (XrJitScratch *) xr_jit_hooks->worker_scratch(worker->p.backend_worker_storage);
-}
-
-static void vm_bind_worker_jit_scratch(XrWorker *worker, XrJitCoroState *jit_state) {
-    if (!jit_state)
-        return;
-    XrJitScratch *scratch = vm_worker_jit_scratch(worker);
-    jit_state->scratch = scratch;
-    if (scratch && worker && worker->m && xr_jit_hooks->worker_set_heartbeat) {
-        xr_jit_hooks->worker_set_heartbeat(worker->p.backend_worker_storage, &worker->m->heartbeat);
-    }
-}
-
-XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro) {
-    if (!coro || !vm_backend_ensure_state(coro))
-        return NULL;
-    XrVmCoroState *state = vm_state_for_coro(coro);
-    if (!state)
-        return NULL;
-    if (state->jit_state)
-        return state->jit_state;
-    state->jit_state = (XrJitCoroState *) xr_calloc(1, sizeof(XrJitCoroState));
-    return state->jit_state;
-}
-
-XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_ensure_jit_state(coro);
-    if (!jit_state)
-        return NULL;
-    XrWorker *worker = xr_current_worker();
-    vm_bind_worker_jit_scratch(worker, jit_state);
-    return jit_state->scratch ? jit_state : NULL;
-}
-
-static void vm_backend_on_safepoint(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (jit_state && jit_state->scratch && jit_state->scratch->heartbeat_ptr) {
-        atomic_fetch_add_explicit(jit_state->scratch->heartbeat_ptr, 1, memory_order_relaxed);
-    }
-}
-
-static void vm_backend_detach_worker_state(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (jit_state) {
-        jit_state->scratch = NULL;
-    }
-}
-
-static bool vm_backend_in_try_mode(const XrCoroutine *coro) {
-    const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
-    return state && state->jit_state && state->jit_state->try_mode;
-}
-
-bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled) {
-    if (!coro)
-        return false;
-    XrJitCoroState *current = xr_coro_peek_jit_state(coro);
-    if (!enabled && !current)
-        return true;
-    XrJitCoroState *state = enabled ? xr_coro_ensure_jit_state(coro) : current;
-    if (!state)
-        return false;
-    state->try_mode = enabled;
-    return true;
-}
-
-static void vm_coro_reset_jit_state(XrCoroutine *coro) {
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (!jit_state)
-        return;
-    XrJitSuspendState *suspend = jit_state->suspend;
-    memset(jit_state, 0, sizeof(*jit_state));
-    jit_state->suspend = suspend;
-}
-
-static void vm_coro_free_jit_state(XrCoroutine *coro) {
-    XrVmCoroState *state = vm_state_for_coro(coro);
-    if (!state || !state->jit_state)
-        return;
-    XrJitCoroState *jit_state = state->jit_state;
-    if (jit_state->suspend)
-        xr_free(jit_state->suspend);
-    xr_free(jit_state);
-    state->jit_state = NULL;
-}
-
 static bool vm_backend_alloc_stack_frames(XrCoroutine *coro, XrVMContext *ctx, XrWorker *worker) {
     (void) worker;
     if (!coro || !ctx)
@@ -701,7 +533,6 @@ static bool vm_backend_prepare_execution_state(XrCoroutine *coro, XrayIsolate *X
         ctx->handlers = saved_handlers ? saved_handlers : ctx->handler_inline;
         ctx->handler_capacity = saved_handler_cap ? saved_handler_cap : XR_HANDLER_INLINE_CAP;
         vm_entry_reset_no_free(state);
-        vm_coro_reset_jit_state(coro);
     }
 
     if (need_storage) {
@@ -808,7 +639,6 @@ static bool vm_backend_prepare_recycle(XrCoroutine *coro, XrWorker *worker) {
         vm_backend_free_struct_storage(ctx);
     }
     vm_backend_clear_entry_state(coro);
-    vm_coro_reset_jit_state(coro);
     return true;
 }
 
@@ -816,7 +646,6 @@ static void vm_backend_reset_reusable(XrCoroutine *coro) {
     if (!vm_state_for_coro(coro))
         return;
     vm_backend_clear_entry_state(coro);
-    vm_coro_reset_jit_state(coro);
 }
 
 static bool vm_backend_setup_yield_continuation(XrayIsolate *X, XrCoroutine *coro,
@@ -928,7 +757,6 @@ static void vm_backend_destroy(XrCoroutine *coro) {
     vm_backend_free_struct_storage(ctx);
     vm_backend_free_defer_state(ctx);
     xr_vm_ctx_free_ic_tables(ctx);
-    vm_coro_free_jit_state(coro);
     vm_backend_clear_entry_state(coro);
 
     if (coro->gc_flags & XR_CORO_GC_BACKEND_STATE_OWNED) {
@@ -1504,8 +1332,6 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *
     XrBcCallFrame *tf = &next_ctx->frames[next_ctx->frame_count - 1];
     if ((tf->call_status & XR_CALL_C) || !tf->closure || !tf->closure->proto)
         return NULL;
-    if (next_state->jit_state && next_state->jit_state->resume_entry)
-        return NULL;
     int resume = xr_coro_resume_load(next);
     bool chan_resume = (resume == XR_RESUME_CHANNEL);
     if (resume != XR_RESUME_OK && resume != XR_RESUME_CONTINUATION && !chan_resume)
@@ -1553,7 +1379,6 @@ XR_FUNC XrVMContext *xr_vm_try_direct_switch(XrayIsolate *isolate, XrVMContext *
          * like the unroll path does for a bytecode top frame. */
         tf->call_status &= ~XR_CALL_YIELDED;
     }
-    vm_bind_worker_jit_scratch(worker, next_state->jit_state);
 
     /* Worker/machine bookkeeping. */
     XrMachine *m = worker->m;
@@ -1647,167 +1472,10 @@ static XrVMResult run_first_exec(XrayIsolate *isolate, XrWorker *worker, XrCorou
     coro_ctx->stack_top = coro_ctx->stack + frame->base_offset + proto->maxstacksize;
     coro_ctx->module_base_frame = 0;
 
-    // JIT fast path for coroutine entry. go-spawned coroutines bypass OP_CALL,
-    // so seed param types from the actual entry args and trigger compilation
-    // here once the proto reaches the JIT threshold.
-    bool jit_entry_ok = vm_coro_entry_jit_enabled() && XR_JIT_AVAILABLE() &&
-                        proto->numparams == vm_state->arg_count;
-    if (jit_entry_ok &&
-        atomic_load_explicit(&proto->jit_static_blocked, memory_order_relaxed) != 0) {
-        jit_entry_ok = false;
-    }
-    if (jit_entry_ok && xr_jit_hooks->proto_has_exception_control &&
-        xr_jit_hooks->proto_has_exception_control(proto)) {
-        jit_entry_ok = false;
-    }
-    if (jit_entry_ok) {
-        if (!proto->jit_entry) {
-            void *pending = atomic_load_explicit(&proto->jit_entry_pending, memory_order_acquire);
-            if (pending && (uintptr_t) pending > 1) {
-                xr_jit_hooks->install_bg_result(proto);
-            }
-        }
-        if (!proto->jit_entry && proto->deopt_count <= 3 && xr_jit_hooks->try_compile) {
-            uint32_t threshold =
-                isolate->vm.jit_threshold > 0 ? (uint32_t) isolate->vm.jit_threshold : 1;
-            uint32_t calls =
-                atomic_fetch_add_explicit(&proto->call_count, 1, memory_order_relaxed) + 1;
-            if (calls >= threshold) {
-                jit_seed_entry_param_types_from_args(isolate, proto, func_base,
-                                                     vm_state->arg_count);
-                (void) xr_jit_hooks->try_compile(isolate, proto);
-            }
-        }
-        if (proto->jit_entry && proto->deopt_count < 20) {
-            XrJitCoroState *jit_state = xr_coro_prepare_jit_state(coro);
-            if (jit_state) {
-                jit_state->scratch->call_proto = proto;
-                jit_state->scratch->call_closure = closure;
-                jit_state->scratch->call_base_offset = (int32_t) (func_base - coro_ctx->stack);
-                jit_state->vm_call_base_offset = 0;
-                XrValue jit_result;
-                int _jrc =
-                    xr_jit_hooks->call(proto->jit_entry, coro, func_base, vm_state->arg_count,
-                                       proto->return_type_info, &jit_result);
-                if (_jrc == XR_JIT_OK) {
-                    coro_ctx->stack[0] = jit_result;
-                    return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
-                }
-                if (_jrc == XR_JIT_SUSPEND) {
-                    return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
-                }
-                // JIT deopt: disable fast path for this proto.
-                proto->deopt_count++;
-            }
-        }
-    }
-
     return run_dispatch_and_finalize(isolate, worker, coro, ctx, coro_ctx);
 }
 
-// ========== run_jit_resume: Extracted JIT Resume Logic ==========
-//
-// Prepares resume state (channel recv value or await task result) in
-// jit_suspend, then re-enters compiled code via xm_jit_resume.
-//
-// Returns: XR_JIT_OK, XR_JIT_SUSPEND, or XR_JIT_DEOPT.
-static int run_jit_resume(XrayIsolate *isolate, XrCoroutine *coro, XrVMContext *coro_ctx,
-                          XrValue *jit_result_out) {
-    (void) coro_ctx;
-    XrJitCoroState *jit_state = xr_coro_jit_state(coro);
-    XR_DCHECK(jit_state->resume_entry != NULL, "run_jit_resume: no resume entry");
-    XR_DCHECK(jit_state->scratch != NULL, "run_jit_resume: no jit_ctx");
-    XR_DCHECK(XR_JIT_AVAILABLE(), "run_jit_resume: JIT hooks not registered");
-
-    int resume_reason = xr_coro_resume_load(coro);
-
-    if (resume_reason == XR_RESUME_CHANNEL_CLOSED) {
-        jit_state->suspend->result = xr_null().i;
-        jit_state->suspend->result_tag = XR_TAG_NULL;
-        jit_state->suspend->result_status = jit_state->suspend->result_closed_status;
-    }
-
-    // Channel recv resume: value is already in jit_suspend.result/result_tag.
-    // Apply receive-side copy rules in place before the JIT continuation reads it.
-    if (resume_reason == XR_RESUME_CHANNEL) {
-        XrSlotRef result_slot = xr_slot_jit_suspend(
-            jit_state->suspend, (uint32_t) offsetof(XrJitSuspendState, result), XR_REP_TAGGED);
-        XrValue rv = xr_null();
-        if (!xr_slot_load_value(result_slot, &rv)) {
-            rv = xr_null();
-        }
-        if (XR_IS_PTR(rv) && xr_value_needs_copy(rv)) {
-            rv = xr_deep_copy_to_coro(isolate, rv, coro);
-        }
-        (void) xr_slot_store_value(result_slot, rv);
-    }
-    if (resume_reason == XR_RESUME_CHANNEL || resume_reason == XR_RESUME_CHANNEL_CLOSED) {
-        int64_t status = jit_state->suspend->result_status;
-        jit_state->scratch->call_args[XR_JIT_CHAN_RECV_STATUS_SLOT] =
-            status == XR_JIT_CHAN_METHOD_RECV_CLOSED ? XR_JIT_CHAN_RECV_CLOSED : status;
-        jit_state->scratch->call_args[XR_JIT_CHAN_METHOD_RECV_STATUS_SLOT] = status;
-        finish_channel_resume_tokens(coro);
-    }
-
-    // AWAIT resume: xr_task_wake_waiter only marks coro ready but does
-    // NOT propagate the result — do it here to avoid stale register reads.
-    if (resume_reason != XR_RESUME_CHANNEL && resume_reason != XR_RESUME_CHANNEL_CLOSED) {
-        XrCoroWaitState *wait = xr_coro_wait_state(coro);
-        XrTask *await_task =
-            wait ? atomic_load_explicit(&wait->await_task, memory_order_acquire) : NULL;
-        if (await_task) {
-            uint8_t tstate = atomic_load_explicit(&await_task->state, memory_order_acquire);
-            XrValue res = xr_null();
-            if (tstate == XR_TASK_COMPLETED) {
-                res = xr_coro_await_result_value(isolate, coro, await_task, false);
-            }
-            jit_state->suspend->result = res.i;
-            jit_state->suspend->result_tag = res.tag;
-            atomic_store_explicit(&wait->await_task, NULL, memory_order_relaxed);
-        }
-    }
-
-    xr_coro_resume_store(coro, XR_RESUME_OK);
-    return xr_jit_hooks->resume(coro, jit_result_out);
-}
-
-static bool jit_resume_returns_to_vm_call(XrJitCoroState *jit_state) {
-    return jit_state && jit_state->vm_call_base_offset > 0;
-}
-
-static XrVMResult finish_jit_vm_call_resume(XrayIsolate *isolate, XrWorker *worker,
-                                            XrCoroutine *coro, XrVMContext *ctx,
-                                            XrVMContext *coro_ctx, XrValue jit_result) {
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    int32_t callee_base = jit_state ? jit_state->vm_call_base_offset : 0;
-    if (callee_base <= 0)
-        return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
-
-    int32_t result_slot = callee_base - 1;
-    if (!coro_ctx || !coro_ctx->stack || result_slot < 0 ||
-        result_slot >= coro_ctx->stack_capacity) {
-        return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_RUNTIME_ERROR);
-    }
-
-    /* A JIT callee can suspend while serving a normal OP_CALL. When it resumes,
-     * the coroutine is not done: the result belongs in the caller's destination
-     * register and execution must continue at the saved caller PC. */
-    coro_ctx->stack[result_slot] = jit_result;
-    if (XR_JIT_AVAILABLE() && xr_jit_hooks->read_multi_ret && jit_state->scratch &&
-        jit_state->scratch->ret_count > 1) {
-        xr_jit_hooks->read_multi_ret(coro, &coro_ctx->stack[result_slot],
-                                     (int) jit_state->scratch->ret_count);
-    }
-    jit_state->vm_call_base_offset = 0;
-    if (jit_state->scratch)
-        jit_state->scratch->call_base_offset = 0;
-    coro_ctx->current_coro = coro;
-    ctx->current_coro = coro;
-    coro_ctx->module_base_frame = 0;
-    return run_dispatch_and_finalize(isolate, worker, coro, ctx, coro_ctx);
-}
-
-// ========== run_resume_path: JIT Resume + Continuation + Unroll ==========
+// ========== run_resume_path: Continuation + Unroll ==========
 //
 // Handles every resume case except the inline channel-resume fast path that
 // xr_coro_run_on_worker handles directly.  Supports:
@@ -1821,22 +1489,6 @@ static XrVMResult run_resume_path(XrayIsolate *isolate, XrWorker *worker, XrCoro
     XR_DBG_CORO("run_on_worker: resuming coro id=%d", coro->id);
 
     XrVMResult result;
-
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry && jit_state->scratch) {
-        XrValue jit_result;
-        int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
-        if (jrc == XR_JIT_OK) {
-            if (jit_resume_returns_to_vm_call(jit_state))
-                return finish_jit_vm_call_resume(isolate, worker, coro, ctx, coro_ctx, jit_result);
-            coro_ctx->stack[0] = jit_result;
-            return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
-        }
-        if (jrc == XR_JIT_SUSPEND) {
-            return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
-        }
-        // XR_JIT_DEOPT falls through to interpreter recovery.
-    }
 
     // Continuation stealing resume: vm_ctx already set, just call run().
     if (xr_coro_resume_load(coro) == XR_RESUME_CONTINUATION) {
@@ -1914,9 +1566,6 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
         return XR_VM_RUNTIME_ERROR;
     XrVMContext *coro_ctx = &vm_state->ctx;
 
-    XrJitCoroState *bound_jit_state = xr_coro_peek_jit_state(coro);
-    vm_bind_worker_jit_scratch(worker, bound_jit_state);
-
     uint32_t _fast_flags = xr_coro_flags_load(coro);
     int _fast_resume = xr_coro_resume_load(coro);
 
@@ -1933,29 +1582,7 @@ static XrVMResult vm_backend_resume_on_worker(XrWorker *worker, XrCoroutine *cor
         coro->next = NULL;
         coro->prev = NULL;
         xr_coro_transition_to_running(coro);
-        bool select_resume = consume_select_channel_resume(coro);
-
-        // JIT channel resume: receive value is already in jit_suspend.result/result_tag;
-        // run_jit_resume only applies receive-side copy rules before re-entry.
-        XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-        if (!select_resume && XR_JIT_AVAILABLE() && jit_state && jit_state->resume_entry &&
-            jit_state->scratch) {
-            XrValue jit_result;
-            int jrc = run_jit_resume(isolate, coro, coro_ctx, &jit_result);
-            if (jrc == XR_JIT_OK) {
-                if (jit_resume_returns_to_vm_call(jit_state))
-                    return finish_jit_vm_call_resume(isolate, worker, coro, ctx, coro_ctx,
-                                                     jit_result);
-                coro_ctx->stack[0] = jit_result;
-                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_OK);
-            }
-            if (jrc == XR_JIT_SUSPEND) {
-                return run_finalize(isolate, worker, coro, ctx, coro_ctx, XR_VM_BLOCKED);
-            }
-            // Deopt: jit_resume_entry already cleared.
-            // Deopt needs full unroll recovery → delegate to run_resume_path.
-            return run_resume_path(isolate, worker, coro, ctx, coro_ctx);
-        }
+        consume_select_channel_resume(coro);
 
         // VM bytecode channel resume
         if (coro_ctx->frame_count > 0) {

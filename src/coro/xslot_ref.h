@@ -30,8 +30,7 @@ typedef enum {
     XR_SLOT_NONE = 0,
     XR_SLOT_XVALUE_PTR,
     XR_SLOT_NATIVE_PTR,
-    XR_SLOT_AOT_FRAME_OFFSET,
-    XR_SLOT_JIT_SUSPEND
+    XR_SLOT_AOT_FRAME_OFFSET
 } XrSlotKind;
 
 typedef struct {
@@ -58,11 +57,6 @@ static inline XrSlotRef xr_slot_native_ptr(void *ptr, uint16_t type_id) {
 
 static inline XrSlotRef xr_slot_aot_frame_offset(void *base, uint32_t offset, uint16_t type_id) {
     XrSlotRef slot = {XR_SLOT_AOT_FRAME_OFFSET, base, offset, type_id};
-    return slot;
-}
-
-static inline XrSlotRef xr_slot_jit_suspend(void *base, uint32_t offset, uint16_t type_id) {
-    XrSlotRef slot = {XR_SLOT_JIT_SUSPEND, base, offset, type_id};
     return slot;
 }
 

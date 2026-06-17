@@ -17,7 +17,6 @@
 
 #include "../coro/xcoroutine.h"
 #include "../runtime/xexec_frame.h"
-#include "../jit/xjit_coro_state.h"
 
 typedef struct XrVmCoroState XrVmCoroState;
 
@@ -37,7 +36,6 @@ typedef union {
 } XrCoroEntry;
 
 struct XrVmCoroState {
-    XrJitCoroState *jit_state;
     XrVMContext ctx;
     XrCoroEntryType entry_type;
     XrCoroEntry entry;
@@ -50,10 +48,6 @@ struct XrVmCoroState {
     int arg_count;
     XrValue inline_args[4];
 };
-
-XR_FUNC XrJitCoroState *xr_coro_ensure_jit_state(XrCoroutine *coro);
-XR_FUNC XrJitCoroState *xr_coro_prepare_jit_state(XrCoroutine *coro);
-XR_FUNC bool xr_coro_set_jit_try_mode(XrCoroutine *coro, bool enabled);
 
 static inline XrVmCoroState *xr_coro_maybe_vm_state(XrCoroutine *coro) {
     if (!xr_coro_backend_is_vm(coro))
@@ -79,22 +73,6 @@ static inline const XrVMContext *xr_coro_vm_ctx_const(const XrCoroutine *coro) {
     const XrVmCoroState *state = xr_coro_maybe_vm_state_const(coro);
     XR_DCHECK(state != NULL, "coro_vm_ctx_const: missing VM state");
     return &state->ctx;
-}
-
-static inline XrJitCoroState *xr_coro_peek_jit_state(XrCoroutine *coro) {
-    XrVmCoroState *state = xr_coro_maybe_vm_state(coro);
-    return state ? state->jit_state : NULL;
-}
-
-static inline XrJitCoroState *xr_coro_jit_state(XrCoroutine *coro) {
-    XR_DCHECK(coro != NULL, "coro_jit_state: NULL coro");
-    XrJitCoroState *jit_state = xr_coro_peek_jit_state(coro);
-    if (!jit_state || !jit_state->scratch) {
-        XrJitCoroState *state = xr_coro_prepare_jit_state(coro);
-        XR_DCHECK(state != NULL, "coro_jit_state: missing JIT state");
-        return state;
-    }
-    return jit_state;
 }
 
 #endif /* XVM_CORO_STATE_H */

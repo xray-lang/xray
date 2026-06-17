@@ -62,9 +62,6 @@ XR_FUNC void xi_emit_load_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, sym_arg));
-        /* Record IC-relevant instruction offset for JIT */
-        if (v->id < ctx->reg_map_size)
-            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     } else {
         uint16_t field_arg = 0;
         if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
@@ -93,8 +90,6 @@ XR_FUNC void xi_emit_store_field(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, sym_arg, val));
-        if (v->id < ctx->reg_map_size)
-            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     } else {
         uint16_t field_arg = 0;
         if (!xi_emit_index_to_arg(ctx, v->aux_int, XI_EMIT_ERR_INTERNAL, &field_arg))
@@ -274,8 +269,6 @@ XR_FUNC void xi_emit_struct_get(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_GETPROP, dst, obj, sym_arg));
-        if (v->id < ctx->reg_map_size)
-            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
 }
 
@@ -318,8 +311,6 @@ XR_FUNC void xi_emit_struct_set(EmitCtx *ctx, XiValue *v, XiEmitReg dst) {
         if (!xi_emit_symbol_index_to_arg(ctx, sym, &sym_arg))
             return;
         emit_inst(ctx, CREATE_ABC(OP_SETPROP, obj, sym_arg, val));
-        if (v->id < ctx->reg_map_size)
-            ctx->value_pc[v->id] = current_pc(ctx) - 1;
     }
 }
 
