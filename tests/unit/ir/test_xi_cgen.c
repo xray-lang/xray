@@ -1203,6 +1203,88 @@ TEST(cgen_local_class_direct_native_methods_omit_boxed_adapters) {
     xi_func_free(ir);
 }
 
+TEST(cgen_class_constructor_returns_heap_native_instance) {
+    const char *src = "class Counter {\n"
+                      "    value: int\n"
+                      "    constructor(init: int) { this.value = init }\n"
+                      "    bump(n: int) -> int {\n"
+                      "        this.value = this.value + n\n"
+                      "        return this.value\n"
+                      "    }\n"
+                      "    get() -> int { return this.value }\n"
+                      "}\n"
+                      "fn make(n: int) -> Counter {\n"
+                      "    return Counter(n)\n"
+                      "}\n"
+                      "fn touch(c: Counter) -> int {\n"
+                      "    c.value = c.value + 1\n"
+                      "    return c.get()\n"
+                      "}\n"
+                      "fn run() -> int {\n"
+                      "    let c = make(2)\n"
+                      "    let a = c.bump(5)\n"
+                      "    let b = c.value\n"
+                      "    let d = touch(c)\n"
+                      "    return a + b + d + c.get()\n"
+                      "}\n"
+                      "print(run())\n";
+
+    XiFunc *ir = compile_to_ir(src);
+    assert(ir != NULL && "IR compilation failed");
+
+    bool had_error = false;
+    char *code = generate_c_with_status(ir, "test", &had_error);
+    assert(code != NULL && "C code generation failed");
+    assert(!had_error && "heap native class instance path should generate");
+
+    assert(contains(code, "xrt_obj_alloc((uint16_t)") &&
+           "escaping native class constructor should allocate a typed heap object");
+    assert(contains(code, "xrt_box_obj(_inst)") &&
+           "escaping native class constructor should box as XR_TINSTANCE");
+    assert(contains(code, "heap_type == XR_TINSTANCE") &&
+           "boxed method and field paths should discriminate native class instances");
+    assert(contains(code, "xrt_instanceof(") &&
+           "boxed native class paths should guard the concrete class id");
+
+    const char *make = strstr(code, "static XrValue test_make_");
+    assert(make != NULL && "make function should return a tagged class value");
+    make = strstr(make + 1, "static XrValue test_make_");
+    assert(make != NULL && "make function definition should follow its declaration");
+    const char *make_end = next_static_after(make);
+    assert(count_between(make, make_end, "xrt_obj_alloc(") == 1 &&
+           "make should allocate exactly one heap native instance");
+    assert(count_between(make, make_end, "xrt_map_new(") == 0 &&
+           "escaping native class constructor must not allocate a map instance");
+
+    const char *touch = strstr(code, "static int64_t test_touch_");
+    assert(touch != NULL && "touch function should use typed scalar return ABI");
+    touch = strstr(touch + 1, "static int64_t test_touch_");
+    assert(touch != NULL && "touch function definition should follow its declaration");
+    const char *touch_end = next_static_after(touch);
+    assert(count_between(touch, touch_end, "heap_type == XR_TINSTANCE") >= 2 &&
+           "field load/store in a non-direct class parameter should fast-path heap instances");
+    assert(count_between(touch, touch_end, "xrt_getprop_name(") >= 1 &&
+           count_between(touch, touch_end, "xrt_setprop_name(") >= 1 &&
+           "temporary fallback remains only for old map-backed class values");
+
+    const char *bump_boxed = strstr(code, "static XrValue test_bump_");
+    while (bump_boxed) {
+        const char *bump_end = next_static_after(bump_boxed);
+        const char *body = strstr(bump_boxed, ") {");
+        if (body && body < bump_end)
+            break;
+        bump_boxed = strstr(bump_boxed + 1, "static XrValue test_bump_");
+    }
+    assert(bump_boxed != NULL && "non-direct method call should keep a boxed adapter definition");
+    assert(count_between(bump_boxed, next_static_after(bump_boxed), "heap_type == XR_TINSTANCE") >
+               0 &&
+           "boxed method adapter should call the typed method for heap native instances");
+
+    printf("  Generated heap native class instance path %zu bytes of C code\n", strlen(code));
+    xr_free(code);
+    xi_func_free(ir);
+}
+
 TEST(cgen_class_set_length_size_sum_uses_native_arithmetic) {
     const char *src = "class Bag {\n"
                       "    values: Set<int>\n"
@@ -3800,6 +3882,7 @@ int main(void) {
     run_cgen_shared_struct_alias_elides_tagged_hot_locals();
     run_cgen_class_method_caches_receiver_scalar_fields();
     run_cgen_local_class_direct_native_methods_omit_boxed_adapters();
+    run_cgen_class_constructor_returns_heap_native_instance();
     run_cgen_class_set_length_size_sum_uses_native_arithmetic();
     run_cgen_class_set_u8_uses_typed_direct_helpers();
     run_cgen_class_map_i64_i64_uses_typed_direct_helpers();

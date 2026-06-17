@@ -24,7 +24,7 @@
  *   _tid_Point = xrt_type_register("Point", 0, NULL, 0, NULL, nfields*16);
  *
  *   // --- constructor call ---
- *   { XrValue _inst = xr_mkptr(xrt_obj_alloc(_tid_Point, nfields*16), XR_TAG_PTR);
+ *   { XrValue _inst = xrt_box_obj(xrt_obj_alloc(_tid_Point, nfields*16));
  *     xr_constructor(xrt_ctx, _inst, ...);
  *     v5 = _inst; }
  *
@@ -165,10 +165,7 @@ static inline void *xrt_obj_alloc(uint16_t type_id, uint32_t size) {
 
 /* Box an object pointer into XrValue */
 static inline XrValue xrt_box_obj(void *obj) {
-    XrValue v = {0};
-    v.ptr = obj;
-    v.tag = obj ? XR_TAG_PTR : XR_TAG_NULL;
-    return v;
+    return obj ? xr_mkheap(obj, XR_TINSTANCE) : XR_NULL_VAL;
 }
 
 /* Unbox XrValue to object pointer (no type check) */
@@ -192,7 +189,7 @@ static inline const char *xrt_type_display_name(uint16_t type_id) {
  * or any subclass whose parent chain reaches target_tid. Also checks
  * generic_origin at each level for monomorphized classes. */
 static inline int xrt_instanceof(XrValue val, uint16_t target_tid) {
-    if (val.tag != XR_TAG_PTR || !val.ptr)
+    if (val.tag != XR_TAG_PTR || val.heap_type != XR_TINSTANCE || !val.ptr)
         return 0;
     XrGCHeader *h = XRT_ARC_HDR(val.ptr);
     uint16_t cur = h->type;

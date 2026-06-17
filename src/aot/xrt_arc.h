@@ -229,6 +229,8 @@ static inline void xrt_bump_header_init(XrGCHeader *h, uint16_t type) {
 static inline int xrt_arc_value_has_header(XrValue v) {
     if (!v.ptr)
         return 0;
+    if (v.tag == XR_TAG_PTR)
+        return v.heap_type == XR_TINSTANCE;
     return v.tag == XR_TAG_STR_ARC || v.tag == XR_TAG_CLOSURE || v.tag == XR_TAG_CELL ||
            v.tag == XR_TAG_STRUCT_REF;
 }
