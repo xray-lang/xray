@@ -1,7 +1,7 @@
 /* Inline property access for known AOT values. */
 
 static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
-    if (obj.tag == XR_TAG_ARRAY) {
+    if (XR_IS_ARRAY(obj)) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
             return XR_FROM_INT(a->length);
@@ -10,14 +10,14 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(a->length == 0);
     }
-    if (obj.tag == XR_TAG_MAP) {
+    if (XR_IS_MAP(obj)) {
         xrt_map_t *m = (xrt_map_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
             return XR_FROM_INT(xrt_map_len(m));
         if (symbol_id == XRT_SYM_IS_EMPTY)
             return XR_FROM_INT(xrt_map_len(m) == 0);
     }
-    if (obj.tag == XR_TAG_SET) {
+    if (XR_IS_SET(obj)) {
         xrt_set_t *s = (xrt_set_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
             return XR_FROM_INT(xrt_set_len(s));
