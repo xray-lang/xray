@@ -107,7 +107,7 @@ static void test_small_array_uses_inline_storage(void) {
     xrt_array_t *a = (xrt_array_t *) value.ptr;
 
     ASSERT_TRUE(a != NULL, "array allocated");
-    ASSERT_EQ_INT(a->cap, 4, "plain array minimum cap is 4");
+    ASSERT_EQ_INT(a->capacity, 4, "plain array minimum cap is 4");
     ASSERT_TRUE(xrt_array_data_is_inline(a), "plain array starts with inline data");
     ASSERT_TRUE(ptr_is_aligned(a->data), "inline plain array data is XRT_DATA_ALIGN-aligned");
     ASSERT_EQ_INT(g_malloc_count, 1, "plain array uses one malloc for header plus data");
@@ -123,7 +123,7 @@ static void test_typed_exact_zero_uses_header_only(void) {
     xrt_array_t *a = (xrt_array_t *) value.ptr;
 
     ASSERT_TRUE(a != NULL, "exact zero typed array allocated");
-    ASSERT_EQ_INT(a->cap, 0, "exact zero typed array keeps cap 0");
+    ASSERT_EQ_INT(a->capacity, 0, "exact zero typed array keeps cap 0");
     ASSERT_TRUE(xrt_array_data_is_inline(a), "exact zero typed array is inline storage domain");
     ASSERT_TRUE(a->data == NULL, "exact zero typed array has no data pointer");
     ASSERT_EQ_INT(g_malloc_count, 1, "exact zero typed array uses one header allocation");
@@ -141,7 +141,7 @@ static void test_growth_spills_inline_to_heap_and_preserves_values(void) {
         xrt_array_push(value, XR_FROM_INT(i + 10));
 
     ASSERT_TRUE(xrt_array_data_is_heap(a), "first growth spills inline data to heap");
-    ASSERT_EQ_INT(a->cap, 8, "first growth doubles cap");
+    ASSERT_EQ_INT(a->capacity, 8, "first growth doubles cap");
     ASSERT_EQ_INT(g_aligned_alloc_count, 1, "first growth allocates one heap data buffer");
     ASSERT_EQ_INT(g_aligned_free_count, 0, "first growth does not free inline data");
     ASSERT_TRUE(ptr_is_aligned(a->data), "grown data is XRT_DATA_ALIGN-aligned");
@@ -152,7 +152,7 @@ static void test_growth_spills_inline_to_heap_and_preserves_values(void) {
         xrt_array_push(value, XR_FROM_INT(i + 10));
 
     ASSERT_TRUE(xrt_array_data_is_heap(a), "second growth remains heap storage");
-    ASSERT_EQ_INT(a->cap, 16, "second growth doubles cap");
+    ASSERT_EQ_INT(a->capacity, 16, "second growth doubles cap");
     ASSERT_EQ_INT(g_aligned_alloc_count, 2, "second growth allocates replacement heap buffer");
     ASSERT_EQ_INT(g_aligned_free_count, 1, "second growth frees previous heap buffer");
     ASSERT_EQ_INT(((XrValue *) a->data)[8].i, 18, "value survives second growth");
@@ -170,7 +170,7 @@ static void test_slice_marks_borrowed_storage(void) {
     XrValue slice_value = xrt_array_slice_view(value, 1, 3);
     xrt_array_t *slice = (xrt_array_t *) slice_value.ptr;
     ASSERT_TRUE(slice != NULL, "slice allocated");
-    ASSERT_EQ_INT(slice->data_storage, XRT_ARRAY_DATA_BORROWED, "slice marked BORROWED");
+    ASSERT_EQ_INT(slice->data_storage, XR_ARRAY_DATA_BORROWED, "slice marked BORROWED");
     ASSERT_TRUE(xrt_array_data_is_borrowed(slice), "slice data is borrowed");
     ASSERT_EQ_INT(((XrValue *) slice->data)[0].i, 1, "slice points into source data");
 

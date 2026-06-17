@@ -204,9 +204,9 @@ static void xrt_print_value(XrValue v, int depth) {
             xrt_array_t *a = (xrt_array_t *) v.ptr;
             if (a && a->adt_enum_name && a->adt_member_name) {
                 printf("%s.%s", a->adt_enum_name, a->adt_member_name);
-                if (a->len > 1) {
+                if (a->length > 1) {
                     printf("(");
-                    for (int64_t i = 1; i < a->len; i++) {
+                    for (int64_t i = 1; i < a->length; i++) {
                         if (i > 1)
                             printf(", ");
                         xrt_print_value(xr_typed_get(a->data, (int32_t) i, a->elem_type),
@@ -216,7 +216,7 @@ static void xrt_print_value(XrValue v, int depth) {
                 }
                 return;
             }
-            int64_t len = a ? a->len : 0;
+            int64_t len = a ? a->length : 0;
             int64_t limit = len > XRT_FORMAT_MAX_ELEMENTS ? XRT_FORMAT_MAX_ELEMENTS : len;
             putchar('[');
             for (int64_t i = 0; i < limit; i++) {

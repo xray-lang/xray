@@ -221,7 +221,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     if (!XR_IS_NULL(cached))
         return cached;
 
-    int32_t length = array->length;
+    int64_t length = array->length;
     XrArray *new_arr = (XrArray *) copy_ctx_alloc(ctx, sizeof(XrArray), XR_TARRAY);
     if (!new_arr)
         return XR_NULL_VAL;
@@ -230,6 +230,7 @@ XrValue xr_deep_copy_array_with_ctx(XrCopyContext *ctx, XrGCHeader *obj) {
     new_arr->capacity = length > 0 ? length : XR_ARRAY_INIT_CAPACITY;
     XR_DCHECK(new_arr->length <= new_arr->capacity, "deep_copy_array: length > capacity");
     new_arr->source = NULL;
+    new_arr->data_storage = XR_ARRAY_DATA_HEAP;
     new_arr->elem_type = array->elem_type;
     new_arr->elem_size = array->elem_size;
     new_arr->elem_tid = array->elem_tid;
@@ -546,14 +547,15 @@ void xr_chan_transit_release(XrValue value) {
  * allocated per side; only the (potentially large) data buffer moves. Every
  * unsafe shape falls back (returns false) to the normal deep-copy path:
  *   - ANY arrays / has_gc_ptrs : interior pointers, not self-contained.
- *   - slices (source != NULL / capacity == 0) : share a backing store.
+ *   - slices (data_storage == BORROWED) : share a backing store.
  *   - data_on_gc_heap : Region-blob data is bound to its owner heap and is
  *     freed on heap teardown — it must never escape to another heap.
  *   - aliased transit (refc != 1) : another holder needs the live buffer.
  */
 static bool array_is_movable_scalar(const XrArray *a) {
-    return a && a->elem_type != XR_ELEM_ANY && !a->has_gc_ptrs && a->source == NULL &&
-           a->capacity > 0 && !a->data_on_gc_heap && a->data != NULL && a->length > 0;
+    return a && a->elem_type != XR_ELEM_ANY && !a->has_gc_ptrs &&
+           a->data_storage == XR_ARRAY_DATA_HEAP && a->source == NULL && a->capacity > 0 &&
+           !a->data_on_gc_heap && a->data != NULL && a->length > 0;
 }
 
 bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrValue *out) {
@@ -581,6 +583,7 @@ bool xr_chan_try_move_array_to_transit(struct XrayIsolate *X, XrValue value, XrV
     t->length = src->length;
     t->capacity = src->capacity;
     t->source = NULL;
+    t->data_storage = XR_ARRAY_DATA_HEAP;
     t->elem_type = src->elem_type;
     t->elem_size = src->elem_size;
     t->elem_tid = src->elem_tid;
@@ -629,6 +632,7 @@ bool xr_chan_try_adopt_array_from_transit(struct XrayIsolate *X, XrValue value,
     r->length = t->length;
     r->capacity = t->capacity;
     r->source = NULL;
+    r->data_storage = XR_ARRAY_DATA_HEAP;
     r->elem_type = t->elem_type;
     r->elem_size = t->elem_size;
     r->elem_tid = t->elem_tid;

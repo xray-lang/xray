@@ -4,11 +4,11 @@ static inline XrValue xrt_getprop(XrValue obj, int64_t symbol_id) {
     if (obj.tag == XR_TAG_ARRAY) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         if (symbol_id == XRT_SYM_LENGTH || symbol_id == XRT_SYM_SIZE)
-            return XR_FROM_INT(a->len);
+            return XR_FROM_INT(a->length);
         if (symbol_id == XRT_SYM_CAPACITY)
-            return XR_FROM_INT(a->cap);
+            return XR_FROM_INT(a->capacity);
         if (symbol_id == XRT_SYM_IS_EMPTY)
-            return XR_FROM_INT(a->len == 0);
+            return XR_FROM_INT(a->length == 0);
     }
     if (obj.tag == XR_TAG_MAP) {
         xrt_map_t *m = (xrt_map_t *) obj.ptr;

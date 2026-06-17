@@ -99,6 +99,7 @@ XrArray *xr_array_with_capacity_typed(struct XrCoroutine *coro, int capacity,
     arr->length = 0;
     arr->capacity = capacity;
     arr->source = NULL;
+    arr->data_storage = XR_ARRAY_DATA_HEAP;
     arr->elem_type = (uint8_t) elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
@@ -137,6 +138,7 @@ void xr_array_init_inplace(XrArray *arr, int capacity, uint8_t elem_type) {
     arr->length = 0;
     arr->capacity = capacity;
     arr->source = NULL;
+    arr->data_storage = XR_ARRAY_DATA_HEAP;
     arr->elem_type = elem_type;
     arr->elem_size = esz;
     arr->elem_tid = 0;
@@ -989,8 +991,8 @@ void xr_array_grow(XrArray *arr) {
         return;
     }
 
-    int32_t old_capacity = arr->capacity;
-    int32_t new_capacity = old_capacity == 0 ? XR_ARRAY_INIT_CAPACITY : old_capacity * 2;
+    int64_t old_capacity = arr->capacity;
+    int64_t new_capacity = old_capacity == 0 ? XR_ARRAY_INIT_CAPACITY : old_capacity * 2;
 
     size_t old_bytes = (size_t) arr->elem_size * old_capacity;
     size_t new_bytes = (size_t) arr->elem_size * new_capacity;
@@ -1040,8 +1042,8 @@ void xr_array_ensure_capacity(XrArray *arr, int min_capacity) {
         return;
     }
 
-    int32_t old_capacity = arr->capacity;
-    int32_t new_capacity = old_capacity;
+    int64_t old_capacity = arr->capacity;
+    int64_t new_capacity = old_capacity;
     if (new_capacity == 0) {
         new_capacity = XR_ARRAY_INIT_CAPACITY;
     }
@@ -1120,23 +1122,23 @@ struct XrString *xr_array_join(XrayIsolate *iso, XrArray *arr, struct XrString *
 /* ====== Slice Operations (zero-copy) ====== */
 
 // Create array slice with direct data pointer offset
-// capacity = 0 marks slice as non-resizable
+// data_storage == XR_ARRAY_DATA_BORROWED marks the slice as non-resizable
 XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, int32_t end) {
     if (!coro || !arr)
         return NULL;
 
-    int32_t len = arr->length;
+    int64_t len = arr->length;
 
     // Normalize indices
     if (start < 0)
         start = 0;
     if (end < 0 || end > len)
-        end = len;
+        end = (int32_t) len;
     if (start > end)
         start = end;
 
-    // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by capacity==0 &&
-    // source!=NULL
+    // Allocate slice as XR_TARRAY — slices share Array layout, distinguished by
+    // data_storage == XR_ARRAY_DATA_BORROWED.
     XrArray *slice = (XrArray *) xr_alloc(coro, sizeof(XrArray), XR_TARRAY);
     if (!slice)
         return NULL;
@@ -1144,10 +1146,11 @@ XrArray *xr_array_slice(struct XrCoroutine *coro, XrArray *arr, int32_t start, i
     // Direct pointer offset (zero-copy, using elem_size)
     slice->data = (uint8_t *) arr->data + (size_t) start * arr->elem_size;
     slice->length = end - start;
-    slice->capacity = 0;  // Mark as non-resizable
+    slice->capacity = end - start;  // Pure capacity; growth is gated by data_storage
+    slice->data_storage = XR_ARRAY_DATA_BORROWED;
 
     // Track source for GC (chase to original if source is also a slice)
-    slice->source = arr->source ? arr->source : arr;
+    slice->source = arr->source ? arr->source : (void *) arr;
     xr_rc_retain_value(XR_FROM_PTR(slice->source));
 
     // Inherit elem_type, elem_tid, and has_gc_ptrs from source
@@ -1166,8 +1169,8 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
     if (!coro || !slice)
         return xr_array_new(coro);
 
-    // If already independent array, return self
-    if (slice->source == NULL && slice->capacity > 0) {
+    // If already an independent (owning) array, return self
+    if (!xr_array_is_slice(slice)) {
         return slice;
     }
 
@@ -1192,8 +1195,8 @@ XrArray *xr_array_slice_to_array(struct XrCoroutine *coro, XrArray *slice) {
 void xr_gc_destroy_array(XrGCHeader *obj, struct XrCoroGC *owning_gc) {
     XrArray *arr = (XrArray *) obj;
     xr_array_release_elements(arr, owning_gc);
-    // Only free data if this is not a slice (capacity > 0 means owns data)
-    if (arr->data && arr->capacity > 0) {
+    // Only free data if this array owns its buffer (slices borrow it)
+    if (arr->data && !xr_array_is_slice(arr)) {
         if (arr->data_on_gc_heap) {
             // GC blob: RC owns reclamation (no sweep), release it explicitly
             xr_coro_free_blob(owning_gc, arr->data);

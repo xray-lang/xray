@@ -12,7 +12,7 @@ static inline XrValue xrt_range_method_0(XrValue recv, int sym) {
         int64_t len = xrt_range_length_ptr(r);
         XrValue arr = xrt_array_new_typed(len, XR_ELEM_I64);
         xrt_array_t *a = (xrt_array_t *) arr.ptr;
-        a->len = len;
+        a->length = len;
         int64_t value = r ? r->start : 0;
         for (int64_t i = 0; i < len; i++) {
             xr_typed_set(a->data, (int32_t) i, XR_FROM_INT(value), a->elem_type);

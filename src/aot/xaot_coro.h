@@ -24,18 +24,14 @@ typedef struct XrAotRuntimeStringView {
     char data[];
 } XrAotRuntimeStringView;
 
+/* Byte-compatible mirror of VM XrArray (see src/runtime/object/xarray.h): the
+ * bridge reads VM-layout arrays through this view, so it must embed the exact
+ * same shared field macro plus the VM-only data_on_gc_heap tail. */
 typedef struct XrAotRuntimeArrayView {
     XrGCHeader gc;
-    void *data;
-    int32_t length;
-    int32_t capacity;
-    void *source;
-    uint8_t elem_type;
-    uint8_t elem_size;
-    uint8_t elem_tid;
-    uint8_t has_gc_ptrs;
+    XR_ARRAY_ABI_FIELDS;
     uint8_t data_on_gc_heap;
-    uint8_t pad[3];
+    uint8_t pad[2];
 } XrAotRuntimeArrayView;
 
 static inline XrValue xr_aot_bridge_value_to_xrt(XrValue value);
@@ -104,7 +100,7 @@ static inline XrValue xr_aot_bridge_array_to_xrt(XrValue value) {
     uint8_t elem_type = src->elem_type < XR_ELEM_COUNT ? src->elem_type : XR_ELEM_ANY;
     XrValue dst_value = xrt_array_new_typed((int64_t) src->length, elem_type);
     xrt_array_t *dst = (xrt_array_t *) dst_value.ptr;
-    dst->len = (int64_t) src->length;
+    dst->length = (int64_t) src->length;
     if (src->length == 0 || !src->data)
         return dst_value;
 

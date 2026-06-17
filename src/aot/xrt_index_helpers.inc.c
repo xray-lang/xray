@@ -111,7 +111,7 @@ static inline void xrt_fixed_array_copy(void *dst, XrValue src, uint8_t native_t
         }
     } else if (src.tag == XR_TAG_ARRAY && src.ptr) {
         xrt_array_t *arr = (xrt_array_t *) src.ptr;
-        count = arr->len < elem_count ? arr->len : elem_count;
+        count = arr->length < elem_count ? arr->length : elem_count;
         for (int64_t i = 0; i < count; i++)
             xrt_fixed_array_set(dst, native_type, i,
                                 xr_typed_get(arr->data, (int32_t) i, arr->elem_type));
@@ -168,8 +168,8 @@ static inline XrValue xrt_index_get(XrValue obj, XrValue key) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
-            idx += a->len;
-        if (XR_LIKELY(idx >= 0 && idx < a->len))
+            idx += a->length;
+        if (XR_LIKELY(idx >= 0 && idx < a->length))
             return xr_typed_get(a->data, (int32_t) idx, a->elem_type);
     } else if (XR_IS_STR(obj) && key.tag == XR_TAG_I64) {
         return xrt_string_index_get(obj, key.i);
@@ -203,11 +203,11 @@ static inline void xrt_index_set(XrValue obj, XrValue key, XrValue val) {
         xrt_array_t *a = (xrt_array_t *) obj.ptr;
         int64_t idx = key.i;
         if (idx < 0)
-            idx += a->len;
-        if (XR_LIKELY(idx >= 0 && idx < a->len)) {
+            idx += a->length;
+        if (XR_LIKELY(idx >= 0 && idx < a->length)) {
             xr_typed_set(a->data, (int32_t) idx, val, a->elem_type);
         } else if (idx >= 0) {
-            while (a->len < idx)
+            while (a->length < idx)
                 xrt_array_push(obj, XR_NULL_VAL);
             xrt_array_push(obj, val);
         }
