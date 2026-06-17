@@ -150,14 +150,35 @@ class Gen:
         op = self.rng.choice(["<", "<=", ">", ">=", "==", "!="])
         return f"({a} {op} {b})"
 
+    def array_literal(self):
+        # Homogeneous array of a random scalar type (>=1 element so the
+        # element type is inferable without an annotation).
+        ty = self.rng.choice(["int", "float", "bool", "string"])
+        n = self.rng.randint(1, 4)
+        elems = []
+        for _ in range(n):
+            if ty == "int":
+                elems.append(rand_int_literal(self.rng, "int"))
+            elif ty == "float":
+                elems.append(rand_float_literal(self.rng))
+            elif ty == "bool":
+                elems.append(self.rng.choice(["true", "false"]))
+            else:
+                elems.append('"' + "".join(
+                    self.rng.choice("abAB0_ ") for _ in range(self.rng.randint(0, 3))
+                ) + '"')
+        return "[" + ", ".join(elems) + "]"
+
     def print_stmt(self):
-        kind = self.rng.choice(["int", "float", "bool", "concat"])
+        kind = self.rng.choice(["int", "float", "bool", "concat", "array"])
         if kind == "int":
             expr = self.int_expr()
         elif kind == "float":
             expr = self.float_expr()
         elif kind == "bool":
             expr = self.bool_expr()
+        elif kind == "array":
+            expr = self.array_literal()
         else:
             inner = self.rng.choice([self.int_expr(), self.float_expr()])
             expr = f'("" + {inner})'
