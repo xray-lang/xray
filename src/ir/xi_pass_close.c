@@ -13,7 +13,7 @@
  * Advances function stage to XI_STAGE_CLOSED.
  *
  * This pass runs after lowering and canonicalization but before
- * optimization.  All backends (VM/JIT/AOT) read the resulting
+ * optimization.  All backends (VM/AOT) read the resulting
  * XiClosureMeta for env layout and capture decisions.
  */
 

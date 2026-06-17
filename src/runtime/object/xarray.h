@@ -27,7 +27,7 @@
 // Array initial capacity
 #define XR_ARRAY_INIT_CAPACITY 8
 
-/* Element type enum and typed-storage ops are shared across VM/JIT/AOT.
+/* Element type enum and typed-storage ops are shared across VM/AOT.
  * Canonical definitions live in src/shared/. */
 #include "../../shared/xr_elem_type.h"
 #include "../../shared/xr_typed_ops.h"

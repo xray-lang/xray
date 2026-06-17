@@ -1130,7 +1130,7 @@ XR_FUNC XrCoroutine *xr_worker_try_steal_once(XrWorker *worker, XrRuntime *runti
             }
         }
 
-        // Continuation deque: no freshness check. Critical for JIT
+        // Continuation deque: no freshness check. Critical for
         // parallelism when a parent waits behind a non-yielding child.
         if (!coro && candidates != 0) {
             coro = worker_try_steal_continuation(worker, runtime, candidates);

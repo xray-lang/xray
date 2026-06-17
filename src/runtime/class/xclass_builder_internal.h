@@ -15,7 +15,7 @@
  * WHY SPLIT:
  *   The build items (XrFieldBuildItem, XrMethodBuildItem, ...) and
  *   the builder struct itself are transient, mutable scaffolding.
- *   Letting VM, JIT or reflection modules reach into them would
+ *   Letting VM or reflection modules reach into them would
  *   leak mutable state into code paths that only ever need to call
  *   xr_class_builder_new + add_* + finalize.
  */

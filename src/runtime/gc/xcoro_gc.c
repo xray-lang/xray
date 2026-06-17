@@ -33,7 +33,6 @@
 #include <stdio.h>
 #include "../../base/xmalloc.h"
 #include "../../os/os_mem.h"
-#include "xstackmap.h"  // XrStackMapTable, XrStackMapEntry
 #include "../../os/os_thread.h"
 
 /* ========== GC Struct Two-Level Pool ========== */
@@ -578,7 +577,7 @@ static void rc_destroy_one(XrCoroGC *gc, XrGCHeader *obj) {
     obj->extra |= XR_OBJ_DEAD;
 
     /* Destroy is the single convergence point for every drop path (VM
-     * OP_DROP, the JIT helper, container/field release, and the cycle
+     * OP_DROP, container/field release, and the cycle
      * collector), so unlink a cycle-tracked object from cycle_roots here
      * while its memory is still valid. A stale pointer left in cycle_roots
      * would be aliased by a later same-size-class freelist reuse, putting
@@ -733,7 +732,7 @@ XrGCHeader *xr_coro_gc_newobj(XrCoroGC *gc, uint8_t type, size_t size) {
      * definition site). The count is 0-based and sign-tagged, so the unique
      * value is XR_RC_INIT (0). Region memory is reused/uninitialized, so this
      * must be set explicitly. Relaxed store: a fresh object is not yet shared
-     * across threads, so no ordering is needed (matches the JIT inline init). */
+     * across threads, so no ordering is needed. */
     atomic_store_explicit(&obj->refcount, XR_RC_INIT, memory_order_relaxed);
     if (use_mmap)
         XR_GC_SET_MMAP(obj);

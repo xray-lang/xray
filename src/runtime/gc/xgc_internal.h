@@ -107,7 +107,7 @@ XR_FUNC bool xr_gc_type_may_need_finalize(uint8_t type);
 
 /* Compile-time RC dup/drop primitives are inline in xcoro_gc.h
  * (xr_rc_retain_value / xr_rc_release_value): one shared implementation
- * for the VM, JIT, and container runtime. */
+ * for the VM and container runtime. */
 
 /* ========== Compile-Time Type Function Tables ========== */
 

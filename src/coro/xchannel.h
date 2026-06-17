@@ -341,7 +341,7 @@ XR_FUNC XrChanResult xr_channel_recv(XrChannel *ch, XrValue *out, struct XrCorou
  * the NEXT instruction — no instruction replay (kotlinx resume-with-value
  * shape). Values that need a receive-side deep copy fall back to the
  * replay/resume protocol per wake. deliver=false keeps that protocol
- * contract for timeout variants, cfunc/JIT/AOT continuations and
+ * contract for timeout variants, cfunc/AOT continuations and
  * method-call paths. */
 XR_FUNC XrChanResult xr_channel_recv_slot(XrChannel *ch, XrValue *out, struct XrCoroutine *coro,
                                           int64_t timeout_ms, XrSlotRef recv_slot,

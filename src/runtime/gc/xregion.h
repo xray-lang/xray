@@ -63,11 +63,10 @@ struct XrSystemHeap;
 typedef struct XrRegionBlock {
     struct XrRegionBlock *next;   // 8B  @0
     uint32_t alloc_count;         // 4B  @8  - distinct slots bump-allocated in this block
-    int64_t alloc_bytes;          // 8B  @16 - total allocated bytes in the block (JIT-read)
+    int64_t alloc_bytes;          // 8B  @16 - total allocated bytes in the block
     uint32_t reclaim_dead_count;  // 4B  @24 - transient: dead-slot tally during whole-block
                                   //      reclaim (see xr_coro_gc_reclaim_blocks).
-    // alloc_count/alloc_bytes offsets are JIT-hardcoded (xm_offsets.h); keep
-    // their layout stable. Fits in Line 0 (128B).
+    // Keep this layout within Line 0 (128B).
 } XrRegionBlock;
 
 _Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must fit in Line 0");
@@ -87,9 +86,9 @@ _Static_assert(sizeof(XrRegionBlock) <= XR_REGION_LINE_SIZE, "XrRegionBlock must
  * list to maintain.
  */
 typedef struct XrRegionHeap {
-    // Hot path: bump allocation (JIT inline candidates)
-    char *cursor;                  // offset 0 — JIT hardcoded
-    char *limit;                   // offset 8 — JIT hardcoded
+    // Hot path: bump allocation
+    char *cursor;                  // offset 0
+    char *limit;                   // offset 8
     XrRegionBlock *current_block;  // offset 16
 
     // Cold path: block list management

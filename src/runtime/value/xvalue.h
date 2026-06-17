@@ -354,10 +354,10 @@ static inline XrValue xr_float(xr_Number n) {
     return XR_FROM_FLOAT(n);
 }
 
-/* Integer wrap helpers shared by VM and JIT runtime.
+/* Integer wrap helpers shared by VM and AOT runtime.
  * INT64_MIN / -1 and INT64_MIN % -1 are signed-overflow UB in C; both
- * crash IDIV on x86-64. Define them as wrap on every backend so VM,
- * JIT (ARM64 SDIV / x64 inline branch), AOT and xi_opt fold agree:
+ * crash IDIV on x86-64. Define them as wrap on every backend so the VM,
+ * AOT and xi_opt fold agree:
  *   INT64_MIN / -1 = INT64_MIN  (unsigned negate is well-defined)
  *   INT64_MIN % -1 = 0
  * Caller must have rejected divisor == 0 before calling these. */
@@ -374,9 +374,9 @@ static inline xr_Integer xr_int_mod_wrap(xr_Integer a, xr_Integer b) {
 
 /* Shift helpers: the language defines the shift count as taken mod 64
  * (spec "Expressions": unlike C, xray shifts are always defined). This is
- * also what JIT codegen produces for free (x64 SHL/SAR with CL, ARM64
- * LSL/ASR, RISC-V SLL/SRA all mask the count to 6 bits) and what xi_opt /
- * Xm constant folding implement, so the VM must match. Left shift goes
+ * also what the host C compiler produces (hardware shift instructions mask
+ * the count) and what xi_opt constant folding implements, so the VM must
+ * match. Left shift goes
  * through uint64_t because shifting into/past the sign bit is UB on signed
  * in C; right shift is arithmetic (sign-extending — implementation-defined
  * in C but guaranteed on every compiler xray supports). */

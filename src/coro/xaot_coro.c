@@ -965,7 +965,7 @@ XrValue xr_aot_time_after(const XrAotContext *ctx, int64_t milliseconds) {
 // reference the compiler omits across the select.block suspend, and cancels the
 // still-armed wheel timer when on its owner worker. Mirrors the VM
 // OP_CHAN_TIMER_DISPOSE handler; the underlying xr_channel_timer_dispose is
-// shared with the VM/JIT backends.
+// shared with the VM backend.
 void xr_aot_chan_timer_dispose(const XrAotContext *ctx, XrValue ch_value) {
     (void) ctx;
     if (xr_value_is_channel(ch_value))

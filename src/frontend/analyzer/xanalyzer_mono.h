@@ -14,7 +14,7 @@
  *
  * WHY THIS DESIGN:
  *   - Type erasure forces TAGGED (16B boxed) for all generic params
- *   - Monomorphization enables native types (I64/F64) in JIT and AOT
+ *   - Monomorphization enables native types (I64/F64) in AOT
  *   - Duck-typing avoids trait declaration overhead for a scripting language
  */
 

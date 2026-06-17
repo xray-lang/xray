@@ -22,7 +22,7 @@
  *        focused on the "class as a value" contract.
  *
  * WHY THIS DESIGN:
- *   Public consumers (vm/, jit/, frontend/, api/) only need
+ *   Public consumers (vm/, frontend/, api/) only need
  *   xclass.h: it carries the inline instanceof, public API
  *   signatures, operator flags, and the opaque XrClass struct they
  *   embed into values. Moving the above into xclass_internal.h

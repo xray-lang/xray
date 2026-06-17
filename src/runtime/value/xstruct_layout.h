@@ -27,7 +27,7 @@
  *   - Zero GC overhead: structs live on the stack frame
  *   - Native field access: base_ptr + compile-time offset
  *   - Minimal copy cost: memcpy(total_size) for value semantics
- *   - JIT/AOT friendly: direct C struct mapping
+ *   - AOT-friendly: direct C struct mapping
  */
 
 #ifndef XSTRUCT_LAYOUT_H

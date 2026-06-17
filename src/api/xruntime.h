@@ -12,7 +12,7 @@
  *   It provides memory allocation, object creation, type checking, and GC control.
  *
  * WHY THIS DESIGN:
- *   - Backend-agnostic: Works with VM, LLVM JIT, or WASM backends
+ *   - Backend-agnostic: works with the VM and AOT backends
  *   - Clean interface: Simple, consistent API for embedders
  *   - High performance: Minimal overhead, direct access to core functions
  *

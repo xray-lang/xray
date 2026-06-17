@@ -9,8 +9,7 @@
  *
  * Extracted from xi.h to keep the main IR header within the 800-line limit.
  * XiModule holds per-module compilation metadata (exports, slot mappings,
- * closure metadata).  XiSlotMap bridges Xi IR values to bytecode registers
- * for JIT deopt snapshot generation.
+ * closure metadata).  XiSlotMap bridges Xi IR values to bytecode registers.
  */
 
 #ifndef XI_MODULE_H

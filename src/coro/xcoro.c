@@ -39,12 +39,10 @@
 
 // Note: blocked queue moved to XrRuntime, see xworker.c
 
-// ========== JIT Integration ==========
+// ========== GC Safepoint ==========
 
-// GC safepoint for JIT code: GC step + cancel check.
-// Returns 0 to continue, non-zero to request deopt exit.
-// Each backend's safepoint stub checks return value and jumps to deopt_stub
-// if non-zero — only 1-2 extra instructions per platform.
+// GC safepoint: runs a GC step and checks for cancellation.
+// Returns 0 to continue, non-zero to request the coroutine to stop.
 int xr_coro_gc_safepoint(XrCoroutine *coro) {
     if (!coro)
         return 0;

@@ -986,7 +986,7 @@ static bool value_has_native_width_result(const XiValue *v, uint8_t native_width
 /* XI_INDEX_SET on a sub-width typed array (Array<int8>, Array<uint16>, etc.)
  * must have a value argument whose op declares the matching native result width.
  * Without width-specific narrowing, a full-width int64/f64 can be stored into a
- * narrow slot, silently losing high bits at the VM/JIT level but not at AOT. */
+ * narrow slot, silently losing high bits at the VM level but not at AOT. */
 static void verify_narrow_before_typed_store(VerifyCtx *ctx, const XiFunc *f) {
     if (ctx->failed)
         return;
@@ -1163,13 +1163,6 @@ XR_FUNC bool xi_verify(const XiFunc *f, char *errbuf, int errbuf_size) {
                          v->id, xi_op_name(v->op), v->mem_group);
                 }
             }
-        }
-    }
-
-    /* IC metadata table consistency (only when invariant bit is set) */
-    if (!ctx.failed && (f->invariant_mask & XI_INV_IC_ATTACHED)) {
-        if (!f->ic_table) {
-            verr(&ctx, "func '%s': XI_INV_IC_ATTACHED set but ic_table is NULL", f->name);
         }
     }
 

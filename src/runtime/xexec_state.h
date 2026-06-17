@@ -11,10 +11,9 @@
  * KEY CONCEPT:
  *   XrVMState is the isolate's storage host: it embeds the fixed-size
  *   value stack, frame array, exception-handler array, builtin globals,
- *   shared variables, GC counters, JIT state (when enabled), defer
- *   stack, and the isolate-wide singletons (coro_state, runtime,
- *   strings_map). Living at the runtime layer means gc/, class/,
- *   reflection and JIT-free builds can all consume it without
+ *   shared variables, GC counters, defer stack, and the isolate-wide
+ *   singletons (coro_state, runtime, strings_map). Living at the runtime
+ *   layer means gc/, class/, and reflection can all consume it without
  *   reverse-depending on vm/.
  *
  *   IMPORTANT: XrVMState and XrVMContext (xexec_frame.h) are
@@ -22,7 +21,7 @@
  *
  *     - XrVMState owns the storage. The fields stack[], frames[],
  *       exception_handlers[], strings_map, builtins[], shared,
- *       defer_stack, jit, runtime, coro_state, ctor_call_stack are
+ *       defer_stack, runtime, coro_state, ctor_call_stack are
  *       the actual backing memory.
  *     - XrVMContext is the access path (xexec_frame.h). It carries
  *       pointers (stack / frames / handlers / ic_*_tables) that the
@@ -31,7 +30,7 @@
  *       access; per-coroutine mode has each XrCoroutine carrying its
  *       own XrVMContext with independently allocated buffers.
  *
- *   Code accessing isolate-wide configuration (jit, runtime, builtins,
+ *   Code accessing isolate-wide configuration (runtime, builtins,
  *   shared, coro_state, multicore_enabled) goes through isolate->vm.*
  *   directly. Code accessing per-execution-entity state (current
  *   stack/frames/handlers/IC tables) MUST go through a XrVMContext --

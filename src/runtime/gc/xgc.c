@@ -362,7 +362,7 @@ XrGCHeader *xr_gc_newobj(XrGC *gc, uint8_t type, size_t size) {
 
 /* The compile-time RC dup/drop primitives (xr_rc_retain_value /
  * xr_rc_release_value) are inline in xcoro_gc.h: a single implementation
- * shared by the VM, JIT, and container runtime so the DEAD guard and
+ * shared by the VM and container runtime so the DEAD guard and
  * cycle-root bookkeeping cannot drift between paths. */
 
 /* ========== Debug ========== */

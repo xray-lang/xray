@@ -651,7 +651,7 @@ void xr_runtime_stop(XrRuntime *runtime) {
 // Force-stop Runtime without joining threads.
 // Safe to call from external watchdog thread while main thread is in worker_loop.
 // Also sets CANCEL_REQUESTED on all currently running coroutines so that
-// JIT safepoints and interpreter back-edges can detect and bail out.
+// Interpreter back-edges can detect and bail out.
 void xr_runtime_force_stop(XrRuntime *runtime) {
     if (!runtime)
         return;

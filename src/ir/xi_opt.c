@@ -31,12 +31,6 @@
 #include "xi_opt_loop_unroll.h"
 #include "xi_opt_loop_split.h"
 #include "xi_opt_loop_inv_branch.h"
-#include "xi_opt_spec_narrow.h"
-#include "xi_opt_guard_combine.h"
-#include "xi_opt_guard_motion.h"
-#include "xi_opt_spec_inline.h"
-#include "xi_guard_cost.h"
-#include "xi_opt_spec_const.h"
 #include "xi_block_layout.h"
 #include "xi_opt_slp.h"
 #include "xi_opt_loop_vec.h"
@@ -124,7 +118,7 @@ static void block_remove_value(XiBlock *blk, uint32_t idx) {
  * cast back to int64_t (implementation-defined but well-defined on every
  * two's-complement target xray supports: x64, arm64, riscv64).
  * INT64_MIN / -1 and INT64_MIN %% -1 are special-cased to match the
- * runtime VM and JIT, which also produce INT64_MIN / 0 respectively.
+ * runtime VM and AOT, which also produce INT64_MIN / 0 respectively.
  */
 static bool fold_int_binary(uint16_t op, int64_t a, int64_t b, int64_t *result) {
     switch (op) {
@@ -327,7 +321,7 @@ XR_FUNC XiPassChange xi_opt_const_fold(XiFunc *f) {
 
             /* Fold unary NEG on const int.
              * -INT64_MIN is UB on signed; negate on uint64_t then cast back
-             * to preserve wrap-on-overflow semantics (matches VM and JIT). */
+             * to preserve wrap-on-overflow semantics (matches VM and AOT). */
             if (v->op == XI_NEG && v->nargs == 1 && is_const_int(v->args[0])) {
                 rewrite_to_const_int(v, (int64_t) (0u - (uint64_t) v->args[0]->aux_int));
                 chg.values_changed = true;
@@ -1172,7 +1166,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_PARAM: {
             if (sr_param_uses_default_sentinel(v))
                 return XR_REP_TAGGED;
-            /* Typed boundary params get concrete rep.  The JIT/AOT can
+            /* Typed boundary params get concrete rep.  The AOT backend can
              * use this directly instead of re-inferring from type->kind. */
             return sr_type_native_boundary_rep(v->type);
         }
@@ -1208,7 +1202,7 @@ static XrRep sr_def_rep(const XiValue *v, const XiRepPolicy *policy) {
         case XI_CHAN_IS_CLOSED:
         case XI_CHAN_RECV_STATUS:
             /* bool result (recv_is_value): unboxed i64, never an XrValue.
-             * Matches the JIT helper rep and the ISNULL/IS_CLOSED siblings;
+             * Matches the runtime helper rep and the ISNULL/IS_CLOSED siblings;
              * the select_rep boundary inserts XI_BOX if a tagged use needs it. */
             return XR_REP_I64;
         case XI_SELECT: {
@@ -1729,17 +1723,6 @@ static const XiPassDesc xi_pass_table[] = {
      0, 0},
     {"block_simplify", xi_opt_block_simplify, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW,
      0, 0},
-    {"spec_narrow", xi_opt_spec_narrow, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     0},
-    {"guard_combine", xi_opt_guard_combine, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
-     XI_STAGE_RAW, 0, 0},
-    {"guard_motion", xi_opt_guard_motion, XI_OPT_FULL, XI_PASS_NEEDS_DOM | XI_PASS_NEEDS_LOOP,
-     XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
-    {"spec_inline", xi_opt_spec_inline, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW, XI_STAGE_RAW,
-     0, 0},
-    {"guard_cost", xi_guard_cost_fill, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0,
-     XI_INV_GUARD_COST},
-    {"spec_const", xi_opt_spec_const, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},
     {"block_layout", xi_opt_block_layout, XI_OPT_FULL, XI_PASS_NEEDS_DOM, XI_STAGE_RAW,
      XI_STAGE_RAW, 0, 0},
     {"slp", xi_opt_slp, XI_OPT_FULL, XI_PASS_NONE, XI_STAGE_RAW, XI_STAGE_RAW, 0, 0},

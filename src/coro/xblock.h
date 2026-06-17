@@ -61,7 +61,7 @@ XR_FUNC XrCoroBlockResult xr_coro_chan_send(struct XrayIsolate *isolate, struct 
  * the woken value needs no receive-side deep copy, the waker stores value+ok
  * directly and the coroutine can resume without replaying the channel
  * operation. Values that need a receive-side deep copy, timeout variants,
- * method-call, cfunc, and JIT continuations keep the replay/resume protocol
+ * method-call and cfunc continuations keep the replay/resume protocol
  * and must pass deliver=false. */
 XR_FUNC XrCoroBlockResult xr_coro_chan_recv(struct XrayIsolate *isolate, struct XrCoroutine *coro,
                                             XrChannel *ch, XrSlotRef value_slot, XrSlotRef ok_slot,

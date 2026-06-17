@@ -5,17 +5,15 @@
  * Copyright (c) 2026 Xinglei Xu <xingleixu@gmail.com>
  * Licensed under the MIT License
  *
- * xi_opt_comptime.c - Partial evaluation for comptime functions
+ * xi_opt_comptime.c - Compile-time constant evaluation
  *
- * Iterates lightweight constant propagation passes until fixpoint or
- * round limit.  Integrates spec_const (guard-based specialization) to
- * propagate IC-observed constants through the guarded path.
+ * Iterates lightweight constant-propagation passes (const-fold, copy-prop,
+ * SCCP, DCE) until fixpoint or round limit.
  */
 
 #include "xi_opt_comptime.h"
 #include "xi_opt.h"
 #include "xi_opt_sccp.h"
-#include "xi_opt_spec_const.h"
 #include "xi_pass.h"
 
 XR_FUNC XiPassChange xi_opt_comptime_eval(XiFunc *f) {
@@ -24,10 +22,7 @@ XR_FUNC XiPassChange xi_opt_comptime_eval(XiFunc *f) {
 
     XiPassChange total = xi_pass_no_change();
 
-    /* Phase 1: IC-guided specialization injects guards + narrows types. */
-    total = xi_pass_merge(total, xi_opt_spec_const(f));
-
-    /* Phase 2: Fixpoint of const-fold + copy-prop + SCCP + DCE. */
+    /* Fixpoint of const-fold + copy-prop + SCCP + DCE. */
     for (int round = 0; round < XI_COMPTIME_MAX_ROUNDS; round++) {
         XiPassChange round_chg = xi_pass_no_change();
 

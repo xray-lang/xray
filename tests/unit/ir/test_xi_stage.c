@@ -398,7 +398,6 @@ static void test_backend_policy_generated_metadata(void) {
     assert(xi_op_is_backend_legal(XI_ERR_RETURN));
     assert(xi_op_is_backend_legal(XI_ERR_CATCH));
     assert(xi_op_is_backend_legal(XI_BOUNDS_CHECK));
-    assert(xi_op_is_backend_legal(XI_GUARD_TYPE));
 
     assert(!xi_op_is_backend_legal(XI_EXTRACT));
     assert(!xi_op_is_backend_legal(XI_MULTI_RET));

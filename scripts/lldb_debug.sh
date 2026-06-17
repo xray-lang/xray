@@ -1,14 +1,13 @@
 #!/bin/bash
-# lldb_debug.sh - Debug xray with lldb without crash handler interference
+# lldb_debug.sh - Debug xray with lldb
 #
 # Usage:
-#   scripts/lldb_debug.sh tests/jit/052_map_loop.xr
-#   scripts/lldb_debug.sh --bt tests/jit/052_map_loop.xr   # auto backtrace & quit
+#   scripts/lldb_debug.sh path/to/script.xr
+#   scripts/lldb_debug.sh --bt path/to/script.xr   # auto backtrace & quit
 #
 # The script:
-#   1. Disables JIT crash handler via XRAY_NO_JIT_CRASH_HANDLER
-#   2. Configures lldb signal handling properly
-#   3. Supports --bt mode for quick crash diagnosis
+#   1. Configures lldb signal handling properly
+#   2. Supports --bt mode for quick crash diagnosis
 
 BUILD=${XRAY_BUILD:-build-release}
 XRAY="$BUILD/xray"
@@ -28,8 +27,6 @@ if [ $# -eq 0 ]; then
     echo "Usage: $0 [--bt] <script.xr> [args...]"
     exit 1
 fi
-
-export XRAY_NO_JIT_CRASH_HANDLER=1
 
 if [ $AUTO_BT -eq 1 ]; then
     # Batch mode: run, get backtrace on crash, quit

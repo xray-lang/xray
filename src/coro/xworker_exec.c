@@ -552,7 +552,7 @@ exec_fast:  // Fast re-dispatch entry: local_active_coros already correct
             xr_worker_push(worker, coro);
         } else {
             // Wake an idle worker so it can steal the continuation.
-            // Without this, JIT-compiled children that never yield
+            // Without this, children that never yield
             // monopolize the current worker, and parked workers
             // never discover the parent continuation in cont_deque.
             XrRuntime *_rt = p->runtime;

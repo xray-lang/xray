@@ -190,9 +190,9 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
 /* ========== Signed RC Encoding ==========
  *
  * The refcount field is a 0-based, sign-tagged count shared verbatim by the
- * VM, JIT, and AOT runtimes. The sign routes every object to one of two
- * paths with a single load and a single branch — the property that lets the
- * JIT inline dup/drop down to a handful of instructions (Koka's kklib
+ * VM and AOT runtimes. The sign routes every object to one of two
+ * paths with a single load and a single branch — the property that keeps
+ * dup/drop down to a handful of instructions (Koka's kklib
  * signed scheme, refcount.c, inspired this).
  *
  *   rc >= 0   THREAD-LOCAL (non-atomic, the common fast path).
@@ -222,7 +222,7 @@ static inline bool xr_objtype_is_runtime_managed(XrObjType t) {
 
 /* XR_RC_STICKY / XR_RC_STICKY_BAND / XR_RC_INIT live in
  * src/shared/xr_obj_header.h so standalone AOT bump objects can use the same
- * sentinel as the VM/JIT RC fast paths. */
+ * sentinel as the VM/AOT RC fast paths. */
 
 static inline bool xr_rc_is_sticky(int32_t rc) {
     return rc <= XR_RC_STICKY_BAND;

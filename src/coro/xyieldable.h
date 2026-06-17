@@ -49,7 +49,7 @@ typedef enum {
     XR_CFUNC_BLOCKED,       // Blocked waiting for I/O
     XR_CFUNC_ERROR,         // Error
     XR_CFUNC_CALL_CLOSURE,  // Closure frame pushed, execute it
-    XR_CFUNC_WOULD_BLOCK    // JIT try-mode: would block, no side effects
+    XR_CFUNC_WOULD_BLOCK    // try-mode: would block, no side effects
 } XrCFuncResult;
 #define XR_CFUNC_RESULT_DEFINED
 #endif

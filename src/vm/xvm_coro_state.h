@@ -8,8 +8,8 @@
  * xvm_coro_state.h - VM coroutine backend state layout
  *
  * KEY CONCEPT:
- *   Scheduler-owned coroutine shells keep backend_state opaque. VM and JIT
- *   code include this header when they need the VM-shaped execution payload.
+ *   Scheduler-owned coroutine shells keep backend_state opaque. VM code
+ *   includes this header when it needs the VM-shaped execution payload.
  */
 
 #ifndef XVM_CORO_STATE_H

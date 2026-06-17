@@ -2066,7 +2066,7 @@ static void emit_coro_value_stmt(XiCgenCtx *ctx, FILE *out, const XiFunc *f, con
         if (cg_coro_value_has_storage(f, v)) {
             // CHAN_RECV_STATUS carries an unboxed i64 rep (sr_def_rep), so the C
             // bool from xr_aot_recv_is_value assigns straight into the i64 slot;
-            // no XrValue boxing is needed, matching the JIT helper and ISNULL.
+            // no XrValue boxing is needed, matching the runtime helper and ISNULL.
             fprintf(out, "    ");
             emit_vref(out, v);
             if (v->args[0] && v->args[0]->op == XI_CHAN_TRY_RECV) {

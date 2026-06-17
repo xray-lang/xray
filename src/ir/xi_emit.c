@@ -936,9 +936,9 @@ XR_FUNC XiEmitStatus xi_emit(XiFunc *f, struct XrayIsolate *isolate, struct XrPr
     ctx.proto->struct_area_size = (uint16_t) (ctx.struct_area_offset * 16);
     ctx.proto->test_attr = f->test_attr;
     ctx.proto->test_timeout = f->test_timeout;
-    /* Propagate the declared return type so downstream pipelines (JIT
-     * codegen RET, xm_jit_call result reconstruction, eligibility) can
-     * tag values precisely instead of falling back to UNKNOWN → I64.
+    /* Propagate the declared return type so downstream AOT codegen (RET
+     * tagging) can tag values precisely instead of falling back to
+     * UNKNOWN → I64.
      * Skip VOID: anonymous / arrow functions inherit the void default
      * when no annotation exists, and forcing VOID onto the proto would
      * make the RET codegen emit XR_TAG_NULL even when the body actually

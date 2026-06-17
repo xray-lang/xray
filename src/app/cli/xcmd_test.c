@@ -10,15 +10,15 @@
  * KEY CONCEPT:
  *   Unified execution model: @test functions run on the same main_coro
  *   as top-level code (via xr_coro_reset_for_call), ensuring identical
- *   semantics with direct execution (xray file.xr). This makes JIT
+ *   semantics with direct execution (xray file.xr). This keeps execution
  *   behavior consistent between test and direct modes.
  *
  *   Parallel execution: test files run concurrently on a thread pool
  *   (each file gets its own isolate). -j N controls parallelism.
  *
  * WHY THIS DESIGN:
- *   - Previous design created a new coroutine per @test, causing JIT
- *     context mismatch and making JIT diff testing impossible.
+ *   - Previous design created a new coroutine per @test, causing context
+ *     mismatch and divergence from direct execution.
  *   - Reusing main_coro matches xr_execute() semantics exactly.
  *   - File-level parallelism is natural (each isolate is independent).
  */

@@ -28,7 +28,6 @@
 
 #include "xi_opt_inline.h"
 #include "xi_cfg_edit.h"
-#include "xi_ic.h"
 #include "xi_tbaa.h"
 #include "../base/xchecks.h"
 #include "../base/xmalloc.h"
@@ -115,26 +114,12 @@ XR_FUNC int xi_inline_benefit(const XiInlineCostModel *cost, const XiInlineCallS
     if (site->single_call_site)
         score += 10;
 
-    /* IC-guided bonuses: hot monomorphic sites are strongly favoured. */
-    if (site->ic_kind == 1 /* XI_IC_MONO */) {
-        score += 20;
-        if (site->ic_hit_count > 100)
-            score += 10;
-    } else if (site->ic_kind == 2 /* XI_IC_POLY */) {
-        score += 5;
-    }
-
     score -= (int) cost->call_count * 3;
     score -= (int) cost->branch_count * 2;
     if (cost->has_loop)
         score -= 20;
     if (site->caller_size > 300)
         score -= 15;
-
-    /* Deopt cost penalty: high guard miss-rate sites are less attractive.
-     * A penalty > 50 strongly discourages inlining unstable speculations. */
-    if (site->guard_penalty > 0.0f)
-        score -= (int) (site->guard_penalty * 0.1f);
 
     return score;
 }
@@ -346,8 +331,8 @@ static bool inline_call_site(XiFunc *caller, XiBlock *call_blk, uint32_t call_id
              * would overwrite that binding with a fresh PARAM(aux_int=i) that
              * aliases the CALLER's i-th parameter — a wrong-value, often
              * wrong-type reference (e.g. a channel argument degrading into the
-             * caller's int param 0, which then miscompiles in the AOT/JIT
-             * backends). Skip params so their uses keep resolving to the real
+             * caller's int param 0, which then miscompiles in the AOT
+             * backend). Skip params so their uses keep resolving to the real
              * arguments. */
             if (src_v->op == XI_PARAM)
                 continue;
@@ -550,7 +535,7 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 continue;
             /* The current CFG cloner is reliable for straight-line helpers.
              * Multi-block inlining needs a dedicated repair pass for cloned
-             * branch predecessor metadata before it is safe for VM/JIT/AOT. */
+             * branch predecessor metadata before it is safe for VM/AOT. */
             if (cm.branch_count > 0)
                 continue;
             /* callee == f is filtered above; calls_self stays false here.
@@ -561,17 +546,7 @@ XR_FUNC XiPassChange xi_opt_inline(XiFunc *f) {
                 .all_args_const = all_args_are_const(v),
                 .single_call_site = false, /* conservative: unknown */
                 .caller_size = caller_size,
-                .ic_kind = 0,
-                .ic_hit_count = 0,
-                .guard_penalty = 0.0f,
             };
-
-            /* Populate IC profile data when available. */
-            const XiIcMeta *ic = xi_ic_lookup(f, v->id);
-            if (ic) {
-                si.ic_kind = (uint8_t) ic->kind;
-                si.ic_hit_count = ic->total_count;
-            }
 
             if (xi_inline_benefit(&cm, &si) <= 0)
                 continue;

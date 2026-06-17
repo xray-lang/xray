@@ -9,7 +9,7 @@
  *
  * The parser produces XrTypeRef; the analyzer resolves each ref into the
  * corresponding runtime XrType* for downstream consumption (codegen,
- * JIT, formatter, LSP).
+ * formatter, LSP).
  */
 
 #ifndef XTYPE_REF_RESOLVE_H

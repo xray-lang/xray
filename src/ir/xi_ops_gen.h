@@ -15,14 +15,13 @@
 
 #define XI_EFFECT_NONE 0
 #define XI_EFFECT_ALLOCATES (1u << 0)
-#define XI_EFFECT_MAY_DEOPT (1u << 1)
-#define XI_EFFECT_MAY_SUSPEND (1u << 2)
-#define XI_EFFECT_MAY_THROW (1u << 3)
-#define XI_EFFECT_MEMORY_READ (1u << 4)
-#define XI_EFFECT_MEMORY_WRITE (1u << 5)
-#define XI_EFFECT_RELEASES (1u << 6)
-#define XI_EFFECT_RETAINS (1u << 7)
-#define XI_EFFECT_SIDE_EFFECT (1u << 8)
+#define XI_EFFECT_MAY_SUSPEND (1u << 1)
+#define XI_EFFECT_MAY_THROW (1u << 2)
+#define XI_EFFECT_MEMORY_READ (1u << 3)
+#define XI_EFFECT_MEMORY_WRITE (1u << 4)
+#define XI_EFFECT_RELEASES (1u << 5)
+#define XI_EFFECT_RETAINS (1u << 6)
+#define XI_EFFECT_SIDE_EFFECT (1u << 7)
 
 /* ========== Target Flags ========== */
 
@@ -173,7 +172,7 @@ typedef enum {
 #define XI_GEN_ALGEBRAIC_ASSOCIATIVE (1u << 0)
 #define XI_GEN_ALGEBRAIC_COMMUTATIVE (1u << 1)
 
-enum { XI_GEN_OP_COUNT = 134 };
+enum { XI_GEN_OP_COUNT = 133 };
 typedef char xi_generated_op_count_must_match_XiOp[
     ((int) XI_OP_COUNT == (int) XI_GEN_OP_COUNT) ? 1 : -1];
 
@@ -335,7 +334,6 @@ typedef struct {
     X(MOVE, "xi.move", XI_GEN_CLASS_PURE, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_NONE, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(STACK_ALLOC, "xi.stack.alloc", XI_GEN_CLASS_ALLOCATION, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES, XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(CORO_OP, "xi.coro.op", XI_GEN_CLASS_COROUTINE, XI_OP_ARITY_VARIADIC, 0, 0, XI_GEN_RESULT_DYNAMIC, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_GENERATED, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_READ | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_VERIFY, NULL, NULL) \
-    X(GUARD_TYPE, "xi.guard.type", XI_GEN_CLASS_GUARD, 1, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_PASS_LOCAL, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_DEOPT | XI_EFFECT_MAY_THROW, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(VEC_LOAD, "xi.vec.load", XI_GEN_CLASS_VECTOR, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_PASS_LOCAL, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_READS_MEM, 0, XI_EFFECT_MEMORY_READ, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(VEC_STORE, "xi.vec.store", XI_GEN_CLASS_VECTOR, 3, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_PASS_LOCAL, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM, 0, XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
     X(VEC_ADD, "xi.vec.add", XI_GEN_CLASS_VECTOR, 2, 0, 0, XI_GEN_RESULT_VALUE, XI_GEN_RESULT_OWNERSHIP_OWNED, XI_GEN_LOWERING_PASS_LOCAL, XI_GEN_SPECULATION_NEVER, XI_GEN_VN_NONE, XI_GEN_TBAA_NONE, XI_GEN_BACKEND_REWRITE_NONE, XI_GEN_ESCAPE_USE_NONE, XI_GEN_ESCAPE_ALLOC_NONE, XI_GEN_OWN_USE_CONSUME, XI_GEN_IC_SITE_NONE, XI_OP_COUNT, 0, 0, 0, XI_TARGET_VM_BYTECODE | XI_TARGET_AOT_C | XI_TARGET_AOT_VERIFY, NULL, NULL) \
@@ -473,7 +471,6 @@ static inline const char *xi_generated_op_name(uint16_t op) {
         case XI_MOVE: return "MOVE";
         case XI_STACK_ALLOC: return "STACK_ALLOC";
         case XI_CORO_OP: return "CORO_OP";
-        case XI_GUARD_TYPE: return "GUARD_TYPE";
         case XI_VEC_LOAD: return "VEC_LOAD";
         case XI_VEC_STORE: return "VEC_STORE";
         case XI_VEC_ADD: return "VEC_ADD";
@@ -614,7 +611,6 @@ static inline uint8_t xi_generated_op_arity(uint16_t op) {
         case XI_MOVE: return 1;
         case XI_STACK_ALLOC: return XI_OP_ARITY_VARIADIC;
         case XI_CORO_OP: return XI_OP_ARITY_VARIADIC;
-        case XI_GUARD_TYPE: return 1;
         case XI_VEC_LOAD: return 2;
         case XI_VEC_STORE: return 3;
         case XI_VEC_ADD: return 2;
@@ -755,7 +751,6 @@ static inline uint8_t xi_generated_op_class(uint16_t op) {
         case XI_MOVE: return XI_GEN_CLASS_PURE;
         case XI_STACK_ALLOC: return XI_GEN_CLASS_ALLOCATION;
         case XI_CORO_OP: return XI_GEN_CLASS_COROUTINE;
-        case XI_GUARD_TYPE: return XI_GEN_CLASS_GUARD;
         case XI_VEC_LOAD: return XI_GEN_CLASS_VECTOR;
         case XI_VEC_STORE: return XI_GEN_CLASS_VECTOR;
         case XI_VEC_ADD: return XI_GEN_CLASS_VECTOR;
@@ -896,7 +891,6 @@ static inline uint8_t xi_generated_op_result_kind(uint16_t op) {
         case XI_MOVE: return XI_GEN_RESULT_VALUE;
         case XI_STACK_ALLOC: return XI_GEN_RESULT_VALUE;
         case XI_CORO_OP: return XI_GEN_RESULT_DYNAMIC;
-        case XI_GUARD_TYPE: return XI_GEN_RESULT_VALUE;
         case XI_VEC_LOAD: return XI_GEN_RESULT_VALUE;
         case XI_VEC_STORE: return XI_GEN_RESULT_VALUE;
         case XI_VEC_ADD: return XI_GEN_RESULT_VALUE;
@@ -1037,7 +1031,6 @@ static inline uint8_t xi_generated_op_result_ownership(uint16_t op) {
         case XI_MOVE: return XI_GEN_RESULT_OWNERSHIP_NONE;
         case XI_STACK_ALLOC: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_CORO_OP: return XI_GEN_RESULT_OWNERSHIP_OWNED;
-        case XI_GUARD_TYPE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_VEC_LOAD: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_VEC_STORE: return XI_GEN_RESULT_OWNERSHIP_OWNED;
         case XI_VEC_ADD: return XI_GEN_RESULT_OWNERSHIP_OWNED;
@@ -1178,7 +1171,6 @@ static inline const char *xi_generated_op_result_native_type(uint16_t op) {
         case XI_MOVE: return NULL;
         case XI_STACK_ALLOC: return NULL;
         case XI_CORO_OP: return NULL;
-        case XI_GUARD_TYPE: return NULL;
         case XI_VEC_LOAD: return NULL;
         case XI_VEC_STORE: return NULL;
         case XI_VEC_ADD: return NULL;
@@ -1319,7 +1311,6 @@ static inline uint8_t xi_generated_op_lowering_policy(uint16_t op) {
         case XI_MOVE: return XI_GEN_LOWERING_GENERATED;
         case XI_STACK_ALLOC: return XI_GEN_LOWERING_GENERATED;
         case XI_CORO_OP: return XI_GEN_LOWERING_GENERATED;
-        case XI_GUARD_TYPE: return XI_GEN_LOWERING_PASS_LOCAL;
         case XI_VEC_LOAD: return XI_GEN_LOWERING_PASS_LOCAL;
         case XI_VEC_STORE: return XI_GEN_LOWERING_PASS_LOCAL;
         case XI_VEC_ADD: return XI_GEN_LOWERING_PASS_LOCAL;
@@ -1460,7 +1451,6 @@ static inline uint8_t xi_generated_op_speculation(uint16_t op) {
         case XI_MOVE: return XI_GEN_SPECULATION_NEVER;
         case XI_STACK_ALLOC: return XI_GEN_SPECULATION_NEVER;
         case XI_CORO_OP: return XI_GEN_SPECULATION_NEVER;
-        case XI_GUARD_TYPE: return XI_GEN_SPECULATION_NEVER;
         case XI_VEC_LOAD: return XI_GEN_SPECULATION_NEVER;
         case XI_VEC_STORE: return XI_GEN_SPECULATION_NEVER;
         case XI_VEC_ADD: return XI_GEN_SPECULATION_NEVER;
@@ -1601,7 +1591,6 @@ static inline uint8_t xi_generated_op_value_numbering(uint16_t op) {
         case XI_MOVE: return XI_GEN_VN_NONE;
         case XI_STACK_ALLOC: return XI_GEN_VN_NONE;
         case XI_CORO_OP: return XI_GEN_VN_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_VN_NONE;
         case XI_VEC_LOAD: return XI_GEN_VN_NONE;
         case XI_VEC_STORE: return XI_GEN_VN_NONE;
         case XI_VEC_ADD: return XI_GEN_VN_NONE;
@@ -1742,7 +1731,6 @@ static inline uint8_t xi_generated_op_tbaa_group(uint16_t op) {
         case XI_MOVE: return XI_GEN_TBAA_NONE;
         case XI_STACK_ALLOC: return XI_GEN_TBAA_NONE;
         case XI_CORO_OP: return XI_GEN_TBAA_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_TBAA_NONE;
         case XI_VEC_LOAD: return XI_GEN_TBAA_NONE;
         case XI_VEC_STORE: return XI_GEN_TBAA_NONE;
         case XI_VEC_ADD: return XI_GEN_TBAA_NONE;
@@ -1883,7 +1871,6 @@ static inline uint8_t xi_generated_op_backend_rewrite(uint16_t op) {
         case XI_MOVE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_STACK_ALLOC: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_CORO_OP: return XI_GEN_BACKEND_REWRITE_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_VEC_LOAD: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_VEC_STORE: return XI_GEN_BACKEND_REWRITE_NONE;
         case XI_VEC_ADD: return XI_GEN_BACKEND_REWRITE_NONE;
@@ -2024,7 +2011,6 @@ static inline const char *xi_generated_op_backend_rewrite_name(uint16_t op) {
         case XI_MOVE: return NULL;
         case XI_STACK_ALLOC: return NULL;
         case XI_CORO_OP: return NULL;
-        case XI_GUARD_TYPE: return NULL;
         case XI_VEC_LOAD: return NULL;
         case XI_VEC_STORE: return NULL;
         case XI_VEC_ADD: return NULL;
@@ -2170,7 +2156,6 @@ static inline uint8_t xi_generated_op_escape_use(uint16_t op) {
         case XI_MOVE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_STACK_ALLOC: return XI_GEN_ESCAPE_USE_NONE;
         case XI_CORO_OP: return XI_GEN_ESCAPE_USE_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_VEC_LOAD: return XI_GEN_ESCAPE_USE_NONE;
         case XI_VEC_STORE: return XI_GEN_ESCAPE_USE_NONE;
         case XI_VEC_ADD: return XI_GEN_ESCAPE_USE_NONE;
@@ -2311,7 +2296,6 @@ static inline uint8_t xi_generated_op_escape_alloc(uint16_t op) {
         case XI_MOVE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_STACK_ALLOC: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_CORO_OP: return XI_GEN_ESCAPE_ALLOC_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_VEC_LOAD: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_VEC_STORE: return XI_GEN_ESCAPE_ALLOC_NONE;
         case XI_VEC_ADD: return XI_GEN_ESCAPE_ALLOC_NONE;
@@ -2452,7 +2436,6 @@ static inline uint8_t xi_generated_op_own_use(uint16_t op) {
         case XI_MOVE: return XI_GEN_OWN_USE_CONSUME;
         case XI_STACK_ALLOC: return XI_GEN_OWN_USE_CONSUME;
         case XI_CORO_OP: return XI_GEN_OWN_USE_CONSUME;
-        case XI_GUARD_TYPE: return XI_GEN_OWN_USE_CONSUME;
         case XI_VEC_LOAD: return XI_GEN_OWN_USE_CONSUME;
         case XI_VEC_STORE: return XI_GEN_OWN_USE_CONSUME;
         case XI_VEC_ADD: return XI_GEN_OWN_USE_CONSUME;
@@ -2593,7 +2576,6 @@ static inline uint8_t xi_generated_op_ic_site(uint16_t op) {
         case XI_MOVE: return XI_GEN_IC_SITE_NONE;
         case XI_STACK_ALLOC: return XI_GEN_IC_SITE_NONE;
         case XI_CORO_OP: return XI_GEN_IC_SITE_NONE;
-        case XI_GUARD_TYPE: return XI_GEN_IC_SITE_NONE;
         case XI_VEC_LOAD: return XI_GEN_IC_SITE_NONE;
         case XI_VEC_STORE: return XI_GEN_IC_SITE_NONE;
         case XI_VEC_ADD: return XI_GEN_IC_SITE_NONE;
@@ -2734,7 +2716,6 @@ static inline XiOp xi_generated_op_negates_to(uint16_t op) {
         case XI_MOVE: return XI_OP_COUNT;
         case XI_STACK_ALLOC: return XI_OP_COUNT;
         case XI_CORO_OP: return XI_OP_COUNT;
-        case XI_GUARD_TYPE: return XI_OP_COUNT;
         case XI_VEC_LOAD: return XI_OP_COUNT;
         case XI_VEC_STORE: return XI_OP_COUNT;
         case XI_VEC_ADD: return XI_OP_COUNT;
@@ -2875,7 +2856,6 @@ static inline uint32_t xi_generated_op_algebraic_traits(uint16_t op) {
         case XI_MOVE: return 0;
         case XI_STACK_ALLOC: return 0;
         case XI_CORO_OP: return 0;
-        case XI_GUARD_TYPE: return 0;
         case XI_VEC_LOAD: return 0;
         case XI_VEC_STORE: return 0;
         case XI_VEC_ADD: return 0;
@@ -3016,7 +2996,6 @@ static inline uint8_t xi_generated_op_default_flags(uint16_t op) {
         case XI_MOVE: return 0;
         case XI_STACK_ALLOC: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_CORO_OP: return XI_FLAG_SIDE_EFFECT | XI_FLAG_READS_MEM | XI_FLAG_WRITES_MEM;
-        case XI_GUARD_TYPE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_MAY_THROW;
         case XI_VEC_LOAD: return XI_FLAG_READS_MEM;
         case XI_VEC_STORE: return XI_FLAG_SIDE_EFFECT | XI_FLAG_WRITES_MEM;
         case XI_VEC_ADD: return 0;
@@ -3157,7 +3136,6 @@ static inline uint32_t xi_generated_op_effects(uint16_t op) {
         case XI_MOVE: return 0;
         case XI_STACK_ALLOC: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE | XI_EFFECT_ALLOCATES;
         case XI_CORO_OP: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_READ | XI_EFFECT_MEMORY_WRITE;
-        case XI_GUARD_TYPE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MAY_DEOPT | XI_EFFECT_MAY_THROW;
         case XI_VEC_LOAD: return XI_EFFECT_MEMORY_READ;
         case XI_VEC_STORE: return XI_EFFECT_SIDE_EFFECT | XI_EFFECT_MEMORY_WRITE;
         case XI_VEC_ADD: return 0;

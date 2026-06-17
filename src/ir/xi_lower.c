@@ -612,7 +612,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
      * syntax); resolve it to a runtime XrType* via the analyzer's
      * resolver — assigning the XrTypeRef directly mixes up two unrelated
      * struct layouts and produces garbage values for every downstream
-     * type lookup (JIT codegen RET tag, TFA, etc.). */
+     * type lookup (AOT codegen RET tag, TFA, etc.). */
     struct XrType *ret_type =
         fdecl->return_type ? xr_tref_resolve(isolate, fdecl->return_type) : l.type_unit;
     if (!ret_type)
@@ -671,7 +671,7 @@ XR_FUNC XiFunc *xi_lower_func_impl(AstNode *func_node, struct XaAnalyzer *analyz
         /* p->type is XrTypeRef* (AST syntax), not XrType* — resolve it
          * before handing to the IR layer.  Treating the ref directly as
          * XrType* puts an unrelated struct layout into XiValue->type and
-         * downstream readers (struct_layout_of, JIT codegen, TFA) read
+         * downstream readers (struct_layout_of, AOT codegen, TFA) read
          * garbage bytes for every field. */
         struct XrType *ptype = p->type ? xr_tref_resolve(isolate, p->type) : l.type_any;
         if (!ptype)
@@ -991,7 +991,7 @@ static void prescan_top_level_bindings(XiLower *l, AstNode **stmts, int count,
  * Recursively decorate capture metadata on the function tree.
  * Sets capture_kind and is_mutable based on the already-computed needs_cell
  * flag from the lowering-time closure analysis.  This finalizes the metadata
- * so downstream passes (emit, JIT, AOT) can read XiCapture.capture_kind
+ * so downstream passes (emit, AOT) can read XiCapture.capture_kind
  * instead of interpreting needs_cell + source heuristically.
  */
 static void finalize_capture_metadata(XiFunc *f) {
