@@ -1,7 +1,8 @@
 contains=xaot-plan v0
 contains="generated_c_files": ["<aot-generated-c>"]
 contains="runtime_objects": []
-contains="stdlib_objects": ["math"]
+contains="stdlib_objects": []
+not_contains="stdlib_objects": ["math"]
 contains="stdlib_symbols": ["math.sqrt", "math.pow"]
 contains="system_libs": ["m"]
 contains="defines": ["XRT_IMPL"]
