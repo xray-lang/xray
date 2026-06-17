@@ -62,7 +62,7 @@ static inline size_t xrt_array_data_bytes_or_abort(int64_t cap, uint8_t elem_siz
 
 static inline void xrt_array_init_header(xrt_array_t *a, int64_t cap, uint8_t etype,
                                          uint8_t elem_size) {
-    xrt_bump_header_init(&a->gc);
+    xrt_bump_header_init(&a->gc, XR_TARRAY);
     a->length = 0;
     a->capacity = cap;
     a->source = NULL;
@@ -251,7 +251,7 @@ static inline XrValue xrt_array_slice_view(XrValue arr, int64_t start, int64_t e
         fprintf(stderr, "xrt_array_slice_view: out of memory\n");
         abort();
     }
-    xrt_bump_header_init(&slice->gc);
+    xrt_bump_header_init(&slice->gc, XR_TARRAY);
     slice->length = end - start;
     slice->capacity = end - start;
     slice->source = NULL;
@@ -350,7 +350,7 @@ static inline XrValue xrt_slice(XrValue source, XrValue start_value, XrValue end
             _cap = 4;                                                                              \
         xrt_array_t *_a = (xrt_array_t *) __builtin_alloca(                                        \
             sizeof(xrt_array_t) + (size_t) _cap * sizeof(XrValue) + (XRT_DATA_ALIGN - 1));         \
-        xrt_bump_header_init(&_a->gc);                                                             \
+        xrt_bump_header_init(&_a->gc, XR_TARRAY);                                                  \
         _a->length = 0;                                                                            \
         _a->capacity = _cap;                                                                       \
         _a->source = NULL;                                                                         \
@@ -649,7 +649,7 @@ static inline uint32_t xrt_ordered_indices_size_for(uint32_t needed, uint32_t ma
 }
 
 static inline void xrt_map_init_header(xrt_map_t *m) {
-    xrt_bump_header_init(&m->gc);
+    xrt_bump_header_init(&m->gc, XR_TMAP);
     m->count = 0;
     m->nentries = 0;
     m->entries_cap = 0;
@@ -967,7 +967,7 @@ typedef struct xrt_set_t {
 } xrt_set_t;
 
 static inline void xrt_set_init_header(xrt_set_t *s, uint8_t elem_type) {
-    xrt_bump_header_init(&s->gc);
+    xrt_bump_header_init(&s->gc, XR_TSET);
     s->count = 0;
     s->nentries = 0;
     s->entries_cap = 0;
